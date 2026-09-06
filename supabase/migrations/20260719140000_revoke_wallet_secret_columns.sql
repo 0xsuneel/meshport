@@ -1,0 +1,46 @@
+-- ============================================================
+-- MeshPort: revoke direct client access to wallet-recovery secrets
+--
+-- WHY THIS EXISTS: users_select currently reads `for select using (true)`
+-- — a ROW-level policy allowing every row, which is correct intent
+-- ("usernames/avatars are meant to be discoverable for payments"), but
+-- Postgres RLS is row-level only. It does nothing to restrict COLUMNS.
+-- That meant encrypted_private_key and mnemonic_hint — the encrypted
+-- private key and encrypted seed phrase used for wallet recovery — were
+-- readable by ANY caller holding the app's public anon key (which is
+-- embedded in the client bundle, not a secret), not just the row's owner
+-- and not just admins. Anyone could run
+--   select encrypted_private_key, mnemonic_hint from users;
+-- and get every user's encrypted backup material.
+--
+-- This can't be fixed with RLS alone: there is no "only the owner can read
+-- this column" policy — RLS scopes ROWS, not columns, and column-level
+-- GRANTs are role-level, not row-conditional. The only correct fix is
+-- REVOKING these two columns from anon/authenticated entirely, making them
+-- reachable only through a server endpoint (api/wallet-backup.ts) that
+-- verifies the caller's identity via their own session token before
+-- fetching via the service role (which bypasses this revoke, same as it
+-- bypasses RLS). See that file's own comment for the full reasoning.
+--
+-- auth_uid is revoked too — it's an internal linking column (which real
+-- Supabase Auth session belongs to which app user), not something any
+-- client legitimately needs to read directly; every feature that needs to
+-- check it does so via `auth.uid()` inside RLS policies themselves; no
+-- known call site actually selects it client-side.
+--
+-- Encrypted key/mnemonic can still be WRITTEN by the owner via the normal
+-- update path (saveWalletToCloud, handleClaim's cloud-backup save) —
+-- this only revokes SELECT, not UPDATE. Writing a value you can't read
+-- back yourself is exactly the intended shape here: the client encrypts
+-- locally and stores blind; only the verified-identity endpoint can read
+-- it back for restoration.
+-- ============================================================
+
+revoke select (encrypted_private_key, mnemonic_hint, auth_uid) on public.users from anon, authenticated;
+
+-- Sanity check after running — should return an empty error for anon/
+-- authenticated trying to read these columns directly, while a plain
+-- `select id, username from users limit 1;` still works normally:
+--   set role anon;
+--   select encrypted_private_key from users limit 1; -- should now fail
+--   reset role;

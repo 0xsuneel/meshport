@@ -1,0 +1,428 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body { height: 100%; }
+  /* #root (React's actual mount point) had no height rule of its own — CSS
+     percentage heights only resolve against a parent with a real (non-auto)
+     height, so any page using h-full/min-h-full directly under #root
+     (routes outside AppLayout's own fixed shell, e.g. the passcode lock
+     screen) would silently collapse to fit its content instead of filling
+     the screen, breaking vertical centering (content clustering near the
+     top with empty space below). */
+  #root { height: 100%; }
+  * {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    background-color: var(--bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, sans-serif;
+    /* Without these, light text on a dark background anti-aliases heavier
+       by default in WebKit/Blink — reads as blurry/"weak" compared to the
+       platform-native font rendering apps like this are being compared
+       against. Crisps up text in both themes, not just dark. */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    /* Was `overscroll-behavior: none` (blocks ALL overscroll effects,
+       including the browser's native vertical pull-to-refresh gesture —
+       which meant a stuck page couldn't be manually recovered by pulling
+       down to reload). Scoping to horizontal-only keeps the original intent
+       (stopping the iOS edge-swipe back/forward gesture and the page
+       bouncing to reveal background color) without taking away the user's
+       manual escape hatch when something goes wrong. */
+    overscroll-behavior-x: none;
+    overscroll-behavior-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  ::-webkit-scrollbar { display: none; }
+  * { scrollbar-width: none; -ms-overflow-style: none; }
+
+  /* Respect the OS-level "reduce motion" accessibility setting app-wide —
+     collapses (near-)instant any animation/transition that isn't already
+     scoped tighter, rather than requiring every single component to check
+     this individually. Framer Motion components read this natively via
+     useReducedMotion()/MotionConfig where that finer control is needed
+     (e.g. skipping a spring entirely rather than just speeding it up);
+     this is the CSS-side backstop for everything else. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ── MeshPort Design Tokens ─────────────────────────────────────────────────
+   Two full palettes, switched at runtime by toggling `data-theme` on <html>
+   (see src/store/themeStore.ts + the pre-paint bootstrap script in
+   index.html — nothing here decides the theme, it only defines the two
+   value sets).
+   Dark palette uses a Binance-style near-black surface hierarchy
+   (#0B0E11 page / #181A20 elevated surface / #2B3139 border) instead of
+   pure #000000 — pure black gives every card/border/icon the same flat
+   value, so surfaces stop reading as separate elevated layers and icons
+   drawn in a fixed white lose their intended contrast the moment they sit
+   on anything lighter than the page. This mirrors how professional dark-mode
+   fintech UIs (Binance, etc.) avoid true black for the same reason.
+   :root (no attribute) mirrors the dark palette as a safety-net fallback
+   so nothing can ever render fully unthemed. ───────────────────────────── */
+:root {
+  color-scheme: dark;
+  --brand:          #12665F;
+  --header:         #12665F;
+  --header-text:    #FFFFFF;
+  --header-subtext: #CDEDE2;
+  --accent:         #1FB88A;
+  --accent-text:    #5DCAA5;
+  --success:        #1FB88A;
+  --warning:        #F59E0B;
+  --danger:         #EF4444;
+  --text-primary:   #EAECEF;
+  --text-secondary: #9CA3AE;
+  --text-muted:     #767D89;
+  --bg:             #0B0E11;
+  --surface:        #181A20;
+  --card:           #181A20;
+  --border:         #2B3139;
+  --link:           #5DCAA5;
+  --avatar-1: #1D9E75; --avatar-2: #97C459; --avatar-3: #7F77DD; --avatar-4: #F0997B;
+  --usdc-bg:   #0C447C33;
+  --usdc-icon: #85B7EB;
+  /* RGB-channel companions (space-separated, no rgb() wrapper) for every
+     token above — this is what lets Tailwind's opacity modifiers
+     (bg-brand/20, text-danger/10, border-border/50, …) work against a
+     runtime CSS-variable color. Tailwind can only apply `/<alpha>` to a
+     color function it controls (`rgb(var(--x) / <alpha-value>)`); it
+     can't parse an arbitrary hex string held in a var(). Every direct
+     `var(--brand)` etc. usage elsewhere (plain inline styles, the
+     utility classes below) keeps using the hex vars above, untouched —
+     these are purely additive for the Tailwind color config. */
+  --brand-rgb: 18 102 95;      --header-rgb: 18 102 95;
+  --header-text-rgb: 255 255 255; --header-subtext-rgb: 205 237 226;
+  --accent-rgb: 31 184 138;    --accent-text-rgb: 93 202 165;
+  --success-rgb: 31 184 138;   --warning-rgb: 245 158 11; --danger-rgb: 239 68 68;
+  --text-primary-rgb: 234 236 239; --text-secondary-rgb: 156 163 174; --text-muted-rgb: 118 125 137;
+  --bg-rgb: 11 14 17; --surface-rgb: 24 26 32; --card-rgb: 24 26 32; --border-rgb: 43 49 57;
+  --link-rgb: 93 202 165;
+  --avatar-1-rgb: 29 158 117; --avatar-2-rgb: 151 196 89; --avatar-3-rgb: 127 119 221; --avatar-4-rgb: 240 153 123;
+  --usdc-icon-rgb: 133 183 235;
+  /* Soft elevation — no glow anywhere. Alpha-black shadows read correctly
+     on both a white and a near-black surface without a separate dark
+     variant of each. */
+  --shadow-1: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  --shadow-2: 0 4px 16px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
+  --shadow-3: 0 12px 32px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.08);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --brand:          #12665F;
+  --header:         #12665F;
+  --header-text:    #FFFFFF;
+  --header-subtext: #CDEDE2;
+  --accent:         #1FB88A;
+  --accent-text:    #5DCAA5;
+  --success:        #1FB88A;
+  --warning:        #F59E0B;
+  --danger:         #EF4444;
+  --text-primary:   #EAECEF;
+  --text-secondary: #9CA3AE;
+  --text-muted:     #767D89;
+  --bg:             #0B0E11;
+  --surface:        #181A20;
+  --card:           #181A20;
+  --border:         #2B3139;
+  --link:           #5DCAA5;
+  --avatar-1: #1D9E75; --avatar-2: #97C459; --avatar-3: #7F77DD; --avatar-4: #F0997B;
+  --usdc-bg:   #0C447C33;
+  --usdc-icon: #85B7EB;
+  --brand-rgb: 18 102 95;      --header-rgb: 18 102 95;
+  --header-text-rgb: 255 255 255; --header-subtext-rgb: 205 237 226;
+  --accent-rgb: 31 184 138;    --accent-text-rgb: 93 202 165;
+  --success-rgb: 31 184 138;   --warning-rgb: 245 158 11; --danger-rgb: 239 68 68;
+  --text-primary-rgb: 234 236 239; --text-secondary-rgb: 156 163 174; --text-muted-rgb: 118 125 137;
+  --bg-rgb: 11 14 17; --surface-rgb: 24 26 32; --card-rgb: 24 26 32; --border-rgb: 43 49 57;
+  --link-rgb: 93 202 165;
+  --avatar-1-rgb: 29 158 117; --avatar-2-rgb: 151 196 89; --avatar-3-rgb: 127 119 221; --avatar-4-rgb: 240 153 123;
+  --usdc-icon-rgb: 133 183 235;
+  --shadow-1: 0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.24);
+  --shadow-2: 0 4px 16px rgba(0,0,0,0.40), 0 2px 6px rgba(0,0,0,0.24);
+  --shadow-3: 0 12px 32px rgba(0,0,0,0.50), 0 4px 12px rgba(0,0,0,0.30);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --brand:          #0F5C57;
+  --header:         #0F5C57;
+  --header-text:    #FFFFFF;
+  --header-subtext: #CDEDE2;
+  --accent:         #1FB88A;
+  --accent-text:    #1FB88A;
+  --success:        #1FB88A;
+  --warning:        #F59E0B;
+  --danger:         #EF4444;
+  --text-primary:   #1A1A1A;
+  --text-secondary: #666B73;
+  --text-muted:     #5F5E5A;
+  --bg:             #F5F6F8;
+  --surface:        #FFFFFF;
+  --card:           #FFFFFF;
+  --border:         #D8DBE0;
+  --link:           #0F5C57;
+  --avatar-1: #1D9E75; --avatar-2: #639922; --avatar-3: #534AB7; --avatar-4: #D85A30;
+  --usdc-bg:   #E6F1FB;
+  --usdc-icon: #0C447C;
+  --brand-rgb: 15 92 87;       --header-rgb: 15 92 87;
+  --header-text-rgb: 255 255 255; --header-subtext-rgb: 205 237 226;
+  --accent-rgb: 31 184 138;    --accent-text-rgb: 31 184 138;
+  --success-rgb: 31 184 138;   --warning-rgb: 245 158 11; --danger-rgb: 239 68 68;
+  --text-primary-rgb: 26 26 26; --text-secondary-rgb: 102 107 115; --text-muted-rgb: 95 94 90;
+  --bg-rgb: 245 246 248; --surface-rgb: 255 255 255; --card-rgb: 255 255 255; --border-rgb: 216 219 224;
+  --link-rgb: 15 92 87;
+  --avatar-1-rgb: 29 158 117; --avatar-2-rgb: 99 153 34; --avatar-3-rgb: 83 74 183; --avatar-4-rgb: 216 90 48;
+  --usdc-icon-rgb: 12 68 124;
+  --shadow-1: 0 1px 3px rgba(16,24,32,0.06), 0 1px 2px rgba(16,24,32,0.04);
+  --shadow-2: 0 4px 16px rgba(16,24,32,0.08), 0 2px 6px rgba(16,24,32,0.04);
+  --shadow-3: 0 12px 32px rgba(16,24,32,0.12), 0 4px 12px rgba(16,24,32,0.06);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────────── */
+.btn-primary {
+  background: var(--brand);
+  color: #fff;
+  font-weight: 600;
+  border-radius: 16px;
+  border: none;
+  box-shadow: var(--shadow-2);
+  transition: transform 0.12s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  font-family: -apple-system, sans-serif;
+}
+.btn-primary:active   { transform: scale(0.98); box-shadow: var(--shadow-1); }
+.btn-primary:disabled { opacity: 0.4; box-shadow: none; }
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--text-primary);
+  font-weight: 600;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  transition: transform 0.12s ease, background 0.15s ease;
+}
+.btn-secondary:active { transform: scale(0.98); background: var(--bg); }
+
+/* ── Cards ───────────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-1);
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.card-surface {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+}
+
+/* ── Bottom Nav ──────────────────────────────────────────────────────────────── */
+.bottom-nav {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  height: 80px;
+  padding-bottom: env(safe-area-inset-bottom, 18px);
+  z-index: 30;
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  cursor: pointer;
+  flex: 1;
+  padding-bottom: 4px;
+}
+.nav-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+}
+.nav-label {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  line-height: 1;
+  font-family: -apple-system, sans-serif;
+}
+.nav-label.active { color: var(--brand); }
+.nav-scanner-btn {
+  width: 46px; height: 46px;
+  border-radius: 14px;
+  background: var(--brand);
+  border: none;
+  display: flex; align-items: center; justify-content: center;
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-2);
+}
+
+/* ── Page wrapper ────────────────────────────────────────────────────────────── */
+.page-bg {
+  min-height: 100vh;
+  background: var(--bg);
+  padding-bottom: 90px;
+}
+.page-header {
+  position: sticky; top: 0; z-index: 20;
+  background: color-mix(in srgb, var(--bg) 95%, transparent);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 20px;
+  display: flex; align-items: center; gap: 12px;
+}
+
+/* ── Header Spacing System ───────────────────────────────────────────────────
+   Single source of truth for top spacing across every screen.
+   22px of breathing room above header content (reduced ~10% from 24px),
+   stacked on top of whatever the device's safe area already reserves
+   (notch / status bar / Dynamic Island), so headers never sit too close
+   to the top edge.
+   .pt-safe / .pt-safe-top are aliased to the same rule so every screen,
+   regardless of which class it already had, ends up with identical spacing.
+   ──────────────────────────────────────────────────────────────────────────── */
+.pt-header,
+.pt-safe,
+.pt-safe-top {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 22px);
+}
+
+/* Uniform header height: title/icon size differences across screens no
+   longer change how tall the header block is. Pairs with pb-header below
+   for consistent bottom padding. */
+.header-row {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.pb-header { padding-bottom: 18px; }
+
+/* Canonical header title size — every screen's <h1>/title uses this so
+   font sizes line up exactly across the whole app. */
+.header-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+  margin: 0;
+  letter-spacing: -0.2px;
+}
+.back-btn {
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity 0.15s;
+}
+.back-btn:active {
+  opacity: 0.6;
+}
+
+/* ── Input ───────────────────────────────────────────────────────────────────── */
+.arc-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--text-primary);
+  padding: 14px 16px;
+  font-size: 15px;
+  width: 100%;
+  outline: none;
+  font-family: -apple-system, sans-serif;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.arc-input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 16%, transparent); }
+.arc-input::placeholder { color: var(--text-secondary); }
+
+/* ── Toast ───────────────────────────────────────────────────────────────────── */
+.arc-toast {
+  position: fixed;
+  bottom: 92px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 20px;
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-2);
+  z-index: 200;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── Brand fills — flat brand color, no gradients/glow per design spec ────── */
+.bg-brand-gradient,
+.bg-balance-gradient { background: var(--brand); }
+.shadow-glow-purple { box-shadow: var(--shadow-2); }
+
+/* ── Chip / tag ──────────────────────────────────────────────────────────────── */
+.chip {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+.chip.active {
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+/* ── Misc ────────────────────────────────────────────────────────────────────── */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
+.divider { height: 1px; background: var(--border); }
+
+/* ── Desktop-only hover polish ─────────────────────────────────────────────────
+   Used by DesktopSidebar/DesktopHeader/HomePage/ActivityPage's desktop-only
+   markup. These elements set background/border-color inline (this codebase's
+   convention), which normally has higher specificity than any stylesheet
+   :hover rule — so each inline declaration below references a CSS custom
+   property (`var(--x-hover-bg, <default>)`) instead of a literal value, and
+   the rules here only set that custom property on :hover. Custom-property
+   cascade isn't subject to the inline-style specificity trump card, so this
+   reliably re-resolves the inline value on hover without fighting it.
+   Gated on (hover: hover) so touch devices never trigger these. */
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-nav-item:hover { --sb-hover-bg: color-mix(in srgb, var(--text-primary) 6%, transparent); }
+  .desktop-header-btn:hover { --dh-hover-border: color-mix(in srgb, var(--brand) 45%, var(--border)); }
+  .desktop-table-row:hover { --dt-hover-bg: color-mix(in srgb, var(--text-primary) 4%, transparent); }
+  .asset-row-hover:hover { --ar-hover-bg: color-mix(in srgb, var(--text-primary) 4%, transparent); }
+}
+
+/* ── Mobile-first: no tablet or desktop breakpoint overrides ─────────────────
+   MeshPort renders the mobile experience on all screen sizes.
+   On large screens the AppLayout wrapper centers the 430px shell.
+   ──────────────────────────────────────────────────────────────────────────── */
