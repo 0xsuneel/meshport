@@ -316,7 +316,14 @@ function ActivityRow({ record, isFirst, isLast, onSelect }: {
         ) : null}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: subtitle ? 2 : 2 }}>
           <span style={{ fontSize: 11, color: statusColor, fontWeight: 600 }}>{statusLabel}</span>
-          {chain ? <><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{chain}</span></> : null}
+          {/* BUG FIX: claim rows already show the source chain as the
+              subtitle right above ("Claimed from" / "Linea") — showing it
+              again here duplicated the chain name on the same card, and
+              the two ended up visually overlapping on narrow screens.
+              Every other row type doesn't repeat itself this way (their
+              subtitle is the counterparty/swap pair/etc., not the chain),
+              so this only needed to be suppressed for claims specifically. */}
+          {(chain && !isClaim) ? <><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{chain}</span></> : null}
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {timeAgo(createdAt)}</span>
         </div>
       </div>
