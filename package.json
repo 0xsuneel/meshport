@@ -19,6 +19,7 @@
     "install:win": "npm install --ignore-scripts"
   },
   "dependencies": {
+    "@noble/curves": "^1.4.2",
     "@circle-fin/adapter-ethers-v6": "^1.0.0",
     "@circle-fin/adapter-viem-v2": "^1.0.0",
     "@circle-fin/app-kit": "^1.0.0",
