@@ -18,7 +18,8 @@
 // only the "how do two people agree on this key" step is skipped.
 
 import { describe, it, expect } from 'vitest'
-import { encryptText, decryptText, encryptBlob, decryptBlob, isEncryptedPayload } from './chatCrypto'
+import { encryptText, decryptText, encryptBlob, decryptBlob, isEncryptedPayload, deriveMyChatIdentity } from './chatCrypto'
+import { x25519 } from '@noble/curves/ed25519'
 
 async function makeAesKey(): Promise<CryptoKey> {
   return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
@@ -32,6 +33,79 @@ describe('isEncryptedPayload', () => {
     expect(isEncryptedPayload('hey, are you free tonight?')).toBe(false)
     expect(isEncryptedPayload('')).toBe(false)
     expect(isEncryptedPayload('[IMAGE](https://example.com/x.jpg)')).toBe(false)
+  })
+})
+
+describe('deriveMyChatIdentity — the multi-device fix', () => {
+  const walletKeyA = '0x' + '11'.repeat(32)
+  const walletKeyB = '0x' + '22'.repeat(32)
+
+  it('derives the exact same key pair from the same wallet key every time — the core "any device" property', () => {
+    // Simulates the SAME wallet being re-imported on a second device: this
+    // is called completely independently twice, with no shared state
+    // between the calls (no localStorage, no cache) — exactly what happens
+    // across two real devices. If this ever produced different output, the
+    // whole multi-device fix would be broken.
+    const identity1 = deriveMyChatIdentity(walletKeyA)
+    const identity2 = deriveMyChatIdentity(walletKeyA)
+    expect(Array.from(identity1.publicKey)).toEqual(Array.from(identity2.publicKey))
+    expect(Array.from(identity1.privateKey)).toEqual(Array.from(identity2.privateKey))
+  })
+
+  it('derives a DIFFERENT identity for a different wallet — not the same key for everyone', () => {
+    const identityA = deriveMyChatIdentity(walletKeyA)
+    const identityB = deriveMyChatIdentity(walletKeyB)
+    expect(Array.from(identityA.publicKey)).not.toEqual(Array.from(identityB.publicKey))
+  })
+
+  it('handles a private key with or without the 0x prefix identically', () => {
+    const withPrefix = deriveMyChatIdentity('0x' + 'ab'.repeat(32))
+    const withoutPrefix = deriveMyChatIdentity('ab'.repeat(32))
+    expect(Array.from(withPrefix.publicKey)).toEqual(Array.from(withoutPrefix.publicKey))
+  })
+
+  it('two independently-derived identities can still agree on a shared secret via X25519 — proves getConversationKey\'s actual DH step works with this derivation', () => {
+    // This is the actual end-to-end property that matters: two different
+    // "people" (wallets), each independently deriving their own identity,
+    // must still be able to agree on the same shared secret from each
+    // other's public key — exactly what getConversationKey relies on.
+    const alice = deriveMyChatIdentity(walletKeyA)
+    const bob   = deriveMyChatIdentity(walletKeyB)
+    const sharedByAlice = x25519.getSharedSecret(alice.privateKey, bob.publicKey)
+    const sharedByBob   = x25519.getSharedSecret(bob.privateKey, alice.publicKey)
+    expect(Array.from(sharedByAlice)).toEqual(Array.from(sharedByBob))
+  })
+
+  it('simulates a real device change: re-deriving on a fresh "device" still decrypts a message encrypted on the old one', async () => {
+    // Alice sends a message from "device 1". Bob's public key is whatever
+    // Bob most recently derived (also deterministic, so this doesn't need
+    // to simulate Bob separately for both sides of this specific check).
+    const bob = deriveMyChatIdentity(walletKeyB)
+
+    // "Device 1": Alice derives her identity and encrypts a message to Bob.
+    const aliceDevice1 = deriveMyChatIdentity(walletKeyA)
+    const sharedSecret1 = x25519.getSharedSecret(aliceDevice1.privateKey, bob.publicKey)
+    const hkdfKey1 = await crypto.subtle.importKey('raw', new Uint8Array(sharedSecret1), 'HKDF', false, ['deriveKey'])
+    const aesKey1 = await crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode('meshport-chat-e2e-v1') },
+      hkdfKey1, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'],
+    )
+    const encrypted = await encryptText('see you at the same time tomorrow?', aesKey1)
+
+    // "Device 2": Alice reinstalls / switches phones, re-imports the SAME
+    // wallet (same private key), and opens the same conversation with Bob.
+    // No localStorage, no prior state carried over — this is the whole
+    // point of the fix.
+    const aliceDevice2 = deriveMyChatIdentity(walletKeyA)
+    const sharedSecret2 = x25519.getSharedSecret(aliceDevice2.privateKey, bob.publicKey)
+    const hkdfKey2 = await crypto.subtle.importKey('raw', new Uint8Array(sharedSecret2), 'HKDF', false, ['deriveKey'])
+    const aesKey2 = await crypto.subtle.deriveKey(
+      { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode('meshport-chat-e2e-v1') },
+      hkdfKey2, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'],
+    )
+    const decrypted = await decryptText(encrypted, aesKey2)
+
+    expect(decrypted).toBe('see you at the same time tomorrow?')
   })
 })
 

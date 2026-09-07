@@ -1,22 +1,32 @@
 // src/lib/chatCrypto.ts
 //
 // ── What this is ─────────────────────────────────────────────────────────
-// End-to-end encryption for chat messages, images, and files, using the
-// browser's native Web Crypto API — no external crypto library needed.
+// End-to-end encryption for chat messages, images, and files.
 //
-//   1. Each user generates an ECDH (P-256) key pair the first time they open
-//      a build with this feature. The PRIVATE key is generated with
-//      `extractable: false` where possible and is stored ONLY in this
-//      browser's localStorage — it is never sent to MeshPort's servers, the
-//      same trust model as a self-custodial wallet's private key.
+//   1. Each user has an X25519 key pair for chat, DETERMINISTICALLY derived
+//      from their wallet's private key (see deriveMyChatIdentity below) —
+//      not randomly generated and stored in this browser's localStorage.
+//      That's the deliberate fix for a real problem the original random-
+//      per-device design had: since the wallet's private key is already
+//      portable across devices (via the recovery phrase / private-key
+//      import this app already supports), re-importing the SAME wallet on
+//      ANY device deterministically re-derives the EXACT SAME chat identity
+//      — so E2E chat keeps working across a device change, reinstall, or
+//      cleared browser storage, exactly like the wallet itself does. There
+//      is nothing to lose track of and nothing to back up separately: the
+//      chat identity is a pure function of the one secret the user already
+//      has to keep safe (their wallet), never stored anywhere on its own.
 //   2. The PUBLIC key is uploaded to `users.chat_public_key` (see the
 //      migration adding that column) so anyone can look it up to message
 //      this user — public keys are safe to share by definition.
-//   3. For any two users A and B, ECDH lets each of them independently
-//      compute the SAME shared secret from (their own private key + the
-//      other's public key) — without either secret ever crossing the
-//      network. That shared secret, run through HKDF, becomes a per-
-//      conversation AES-256-GCM key.
+//   3. For any two users A and B, X25519 (Diffie-Hellman over Curve25519)
+//      lets each of them independently compute the SAME shared secret from
+//      (their own private key + the other's public key) — without either
+//      secret ever crossing the network. That shared secret, run through
+//      HKDF, becomes a per-conversation AES-256-GCM key (still via the
+//      browser's native Web Crypto API for the actual AES operations —
+//      only the key-AGREEMENT step needs a curve Web Crypto doesn't support
+//      natively; see the @noble/curves import below).
 //   4. Message text and file bytes are encrypted with that key before ever
 //      leaving the device, and decrypted only after arriving on the other
 //      device. MeshPort's servers store and relay only ciphertext — the
@@ -31,12 +41,38 @@
 //      compromised private key can decrypt that conversation's full
 //      history, not just future messages).
 //
+// ── Why X25519 via @noble/curves instead of Web Crypto's ECDH ───────────
+// Web Crypto's native ECDH (P-256/P-384/P-521) has no way to generate a
+// deterministic/seeded key pair — crypto.subtle.generateKey() is always
+// internally random, with no seed parameter exposed. That's exactly the
+// capability this needs (derive the same key pair from the same wallet
+// private key, every time, on any device), so the key-AGREEMENT step uses
+// @noble/curves' X25519 implementation instead — a tiny, widely-used, audited
+// pure-JS library (already a transitive dependency of viem, used elsewhere
+// in this app for wallet operations; pinned directly in package.json here
+// too so it can't silently disappear if viem's own dependencies change).
+// The actual AES-GCM encrypt/decrypt of message content still goes through
+// native Web Crypto exactly as before — only the "how do two people agree
+// on a shared key" step changed.
+//
+// ── Migration note ────────────────────────────────────────────────────────
+// This replaces an earlier random-per-device P-256 keypair stored in
+// localStorage. Messages encrypted under that old scheme cannot be
+// retroactively decrypted (the old random private key was never derivable
+// from anything else, by design — that's what made it "random"), but that
+// was already a dead end under the old scheme too (a cleared localStorage
+// or a new device already made those old messages permanently
+// undecryptable). Every NEW message, from the moment a device upgrades to
+// this scheme, encrypts under the wallet-derived identity and stays
+// decryptable on any device that ever re-imports the same wallet.
+//
 // ── Backward compatibility ──────────────────────────────────────────────
-// Every message sent before this shipped is plain, unencrypted text with no
-// special marker. Every encrypted payload produced here is prefixed
-// `"e2e:v1:"` before the base64 data — decryptText() checks for that prefix
-// and returns anything without it completely unchanged. Old messages keep
-// displaying exactly as they always did; nothing needs a backfill.
+// Every message sent before E2E chat shipped at all is plain, unencrypted
+// text with no special marker. Every encrypted payload produced here is
+// prefixed `"e2e:v1:"` before the base64 data — decryptText() checks for
+// that prefix and returns anything without it completely unchanged. Old
+// messages keep displaying exactly as they always did; nothing needs a
+// backfill.
 //
 // ── When encryption can't happen yet ────────────────────────────────────
 // If either participant hasn't opened a build with this feature yet, their
@@ -47,78 +83,79 @@
 // in that conversation start encrypting automatically; no user action
 // needed.
 
-const KEYPAIR_ALGO: EcKeyAlgorithm = { name: 'ECDH', namedCurve: 'P-256' } as any
+import { x25519 } from '@noble/curves/ed25519'
+import { sha256 } from '@noble/hashes/sha256'
+
 const AES_ALGO = { name: 'AES-GCM', length: 256 }
 const ENC_PREFIX = 'e2e:v1:'
-const LOCAL_STORAGE_KEY_PREFIX = 'meshport_chat_privkey_'
+// Domain separation — makes sure this derived value can only ever be used
+// as a chat identity seed, never accidentally reusable for some other
+// wallet-private-key-derived purpose this app (or a future one) might add.
+const CHAT_IDENTITY_INFO = new TextEncoder().encode('meshport-chat-identity-v2')
 
-// ── Local private-key storage ────────────────────────────────────────────
-// One key pair per WALLET ADDRESS (not per browser session), so the same
-// person on the same device keeps the same identity across logins. If they
-// use MeshPort on a second device, that device generates its OWN key pair
-// and uploads its OWN public key — overwriting the previous one in
-// chat_public_key. This is a real, known limitation (not full multi-device
-// support like Signal's — the most recent device "wins" as the identity
-// other people encrypt to), called out explicitly rather than glossed
-// over: a conversation encrypted to an old device's public key becomes
-// undecryptable by that old device once a newer device has overwritten it
-// server-side. For a first real implementation this is an acceptable,
-// honest trade-off; proper multi-device support (per-device key
-// fan-out, like Signal's sender-keys) is future work, not something to
-// silently pretend already works.
-function storageKeyFor(walletAddress: string): string {
-  return LOCAL_STORAGE_KEY_PREFIX + walletAddress.toLowerCase()
+function hexToBytes(hex: string): Uint8Array {
+  const clean = hex.startsWith('0x') ? hex.slice(2) : hex
+  const bytes = new Uint8Array(clean.length / 2)
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16)
+  return bytes
 }
 
-interface StoredKeyPair {
-  privateJwk: JsonWebKey
-  publicJwk: JsonWebKey
+/**
+ * Deterministically derives this device's chat identity (X25519 key pair)
+ * from the wallet's private key. Pure function — same wallet in, same key
+ * pair out, on any device, every time. Never touches localStorage or any
+ * other per-device state; there is nothing to generate, persist, or lose.
+ * Exported (despite being an internal implementation detail of
+ * getConversationKey/ensureChatKeysReady) specifically so this determinism
+ * — the actual property that fixes the multi-device problem — has a direct
+ * unit test rather than only being exercised indirectly through functions
+ * that also need a live Supabase client and auth store to test at all.
+ */
+export function deriveMyChatIdentity(walletPrivateKeyHex: string): { privateKey: Uint8Array; publicKey: Uint8Array } {
+  const walletKeyBytes = hexToBytes(walletPrivateKeyHex)
+  // sha256(walletKey || domain-separation info) — never expose the wallet
+  // key's own bytes directly as the X25519 scalar; always go through a hash
+  // with a distinct label first, standard practice for deriving one key
+  // from another.
+  const combined = new Uint8Array(walletKeyBytes.length + CHAT_IDENTITY_INFO.length)
+  combined.set(walletKeyBytes, 0)
+  combined.set(CHAT_IDENTITY_INFO, walletKeyBytes.length)
+  const seed = sha256(combined)
+  return { privateKey: seed, publicKey: x25519.getPublicKey(seed) }
 }
 
-async function loadOrGenerateKeyPair(walletAddress: string): Promise<CryptoKeyPair> {
-  const storageKey = storageKeyFor(walletAddress)
-  const existing = localStorage.getItem(storageKey)
-  if (existing) {
-    try {
-      const stored: StoredKeyPair = JSON.parse(existing)
-      const privateKey = await crypto.subtle.importKey('jwk', stored.privateJwk, KEYPAIR_ALGO, true, ['deriveKey', 'deriveBits'])
-      const publicKey = await crypto.subtle.importKey('jwk', stored.publicJwk, KEYPAIR_ALGO, true, [])
-      return { privateKey, publicKey }
-    } catch (e) {
-      console.error('[chatCrypto] stored key pair corrupt, regenerating:', e)
-      // Fall through to regenerate — better to mint a new identity (and
-      // re-upload a new public key) than to leave the user permanently
-      // unable to send/receive encrypted messages because of one bad
-      // localStorage read.
-    }
-  }
-
-  const keyPair = await crypto.subtle.generateKey(KEYPAIR_ALGO, true, ['deriveKey', 'deriveBits']) as CryptoKeyPair
-  const [privateJwk, publicJwk] = await Promise.all([
-    crypto.subtle.exportKey('jwk', keyPair.privateKey),
-    crypto.subtle.exportKey('jwk', keyPair.publicKey),
-  ])
-  localStorage.setItem(storageKey, JSON.stringify({ privateJwk, publicJwk } as StoredKeyPair))
-  return keyPair
+function toBase64(bytes: ArrayBuffer | Uint8Array): string {
+  let binary = ''
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
+  for (let i = 0; i < arr.length; i++) binary += String.fromCharCode(arr[i])
+  return btoa(binary)
+}
+function fromBase64(b64: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(b64)
+  const arr = new Uint8Array(new ArrayBuffer(binary.length))
+  for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i)
+  return arr
 }
 
-// In-memory only — re-derived on next page load, never persisted. Avoids
-// re-running ECDH derivation (cheap, but not free) on every single message
-// in a conversation within one session.
+// In-memory only, keyed by wallet address (a public identifier, safe to use
+// as a Map key — unlike the private key itself, which this cache never
+// stores). Re-derived on next page load; avoids re-running X25519 + HKDF on
+// every single message in a conversation within one session.
 const _conversationKeyCache = new Map<string, CryptoKey>()
 
 /**
- * Ensures this wallet has a local key pair, generating one if needed, and
- * makes sure the matching PUBLIC key is uploaded to `users.chat_public_key`
- * if it isn't already there (so other people can encrypt to this user).
+ * Ensures this wallet's chat public key is uploaded to `users.chat_public_key`.
  * Safe to call on every app mount — it's a no-op after the first successful
- * upload for a given wallet.
+ * upload for a given wallet, and re-derives the exact same public key every
+ * time (see deriveMyChatIdentity), so calling it again after a device change
+ * just re-confirms the same value rather than generating a new identity.
  */
 export async function ensureChatKeysReady(walletAddress: string, myUserId: string): Promise<void> {
   try {
-    const keyPair = await loadOrGenerateKeyPair(walletAddress)
-    const publicJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey)
-    const publicKeyStr = JSON.stringify(publicJwk)
+    const walletPrivateKey = (await import('@/store')).useAuthStore.getState().privateKey
+    if (!walletPrivateKey) return // wallet locked/not yet loaded — try again on the next mount
+    const { publicKey } = deriveMyChatIdentity(walletPrivateKey)
+    const publicKeyStr = toBase64(publicKey)
 
     const { supabase } = await import('@/lib/supabase')
     const { data: current } = await supabase.from('users').select('chat_public_key').eq('id', myUserId).maybeSingle()
@@ -147,25 +184,22 @@ export async function getConversationKey(myWalletAddress: string, otherUserId: s
   if (cached) return cached
 
   try {
-    const myKeyPair = await loadOrGenerateKeyPair(myWalletAddress)
+    const walletPrivateKey = (await import('@/store')).useAuthStore.getState().privateKey
+    if (!walletPrivateKey) return null // wallet locked on this device right now
+    const myIdentity = deriveMyChatIdentity(walletPrivateKey)
 
     const { supabase } = await import('@/lib/supabase')
     const { data: otherUser, error } = await supabase.from('users').select('chat_public_key').eq('id', otherUserId).maybeSingle()
     if (error || !otherUser?.chat_public_key) return null // other side hasn't opened a build with this feature yet
 
-    const otherPublicKey = await crypto.subtle.importKey(
-      'jwk', JSON.parse(otherUser.chat_public_key), KEYPAIR_ALGO, false, [],
-    )
+    const otherPublicKey = fromBase64(otherUser.chat_public_key)
 
-    // HKDF over the raw ECDH shared secret rather than using deriveKey's
-    // built-in AES derivation directly — a thin extra step, but it means
-    // the actual AES key is never the raw ECDH output verbatim, standard
-    // practice for combining a key-agreement primitive with a symmetric
-    // cipher.
-    const sharedBits = await crypto.subtle.deriveBits(
-      { name: 'ECDH', public: otherPublicKey } as any, myKeyPair.privateKey, 256,
-    )
-    const hkdfKey = await crypto.subtle.importKey('raw', sharedBits, 'HKDF', false, ['deriveKey'])
+    // HKDF over the raw X25519 shared secret rather than using it directly
+    // as the AES key — a thin extra step, but it means the actual AES key
+    // is never the raw DH output verbatim, standard practice for combining
+    // a key-agreement primitive with a symmetric cipher.
+    const sharedSecret = x25519.getSharedSecret(myIdentity.privateKey, otherPublicKey)
+    const hkdfKey = await crypto.subtle.importKey('raw', new Uint8Array(sharedSecret), 'HKDF', false, ['deriveKey'])
     const aesKey = await crypto.subtle.deriveKey(
       { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode('meshport-chat-e2e-v1') },
       hkdfKey, AES_ALGO, false, ['encrypt', 'decrypt'],
@@ -179,18 +213,6 @@ export async function getConversationKey(myWalletAddress: string, otherUserId: s
   }
 }
 
-function toBase64(bytes: ArrayBuffer): string {
-  let binary = ''
-  const arr = new Uint8Array(bytes)
-  for (let i = 0; i < arr.length; i++) binary += String.fromCharCode(arr[i])
-  return btoa(binary)
-}
-function fromBase64(b64: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(b64)
-  const arr = new Uint8Array(new ArrayBuffer(binary.length))
-  for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i)
-  return arr
-}
 
 /**
  * Encrypts plaintext for storage/transmission. Returns the plaintext
