@@ -1355,6 +1355,103 @@ function OrderAlertPopup({ title, body, isPaymentMarked, onOpen, onDismiss }: {
   )
 }
 
+// ── Multichain Hub hero card — second slide of the mobile hero carousel ────
+// Mirrors the Balance hero card's sizing exactly (same parent gives both
+// cards the same width) so the swipe feels like one continuous pill, not
+// two differently-sized cards. Available To Transfer reads the same Arc/
+// USDC `balance` MultichainPage's Transfer card uses; Available To Claim
+// reads the same `unifiedBalance` (readExternalTotal scan) the small
+// Multichain Hub row further down this page already shows — no new data
+// fetching, both numbers are already live on this page.
+function MultichainHubCard({
+  arcAvailable, claimAvailable, balanceHidden, onToggleHidden, fmt, navigate,
+}: {
+  arcAvailable: number
+  claimAvailable: number
+  balanceHidden: boolean
+  onToggleHidden: () => void
+  fmt: (n: number, symbol?: string) => string
+  navigate: NavigateFunction
+}) {
+  return (
+    <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '14px 16px 16px', height: '100%', boxSizing: 'border-box' }}>
+      {/* Header — title centered, eye toggle shares the same hidden state as the Balance card */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+        <span style={{ fontSize: 17, color: '#fff', fontWeight: 700 }}>Multichain Hub</span>
+        <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
+          style={{ position: 'absolute', right: 0, width: 26, height: 26, borderRadius: '50%', background: 'transparent',
+            border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+          {balanceHidden ? (
+            <svg width="16" height="13" viewBox="0 0 22 18" fill="none">
+              <path d="M2 2l18 14" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="11" cy="9" r="3" stroke="#fff" strokeWidth="1.5"/>
+            </svg>
+          ) : (
+            <svg width="16" height="12" viewBox="0 0 22 16" fill="none">
+              <ellipse cx="11" cy="8" rx="10" ry="7" stroke="#fff" strokeWidth="1.5"/>
+              <circle cx="11" cy="8" r="3" stroke="#fff" strokeWidth="1.5"/>
+            </svg>
+          )}
+        </button>
+      </div>
+
+      {/* Stat pill — Available To Transfer / Available To Claim */}
+      <div style={{ background: 'var(--surface)', borderRadius: 14, display: 'flex', alignItems: 'stretch', padding: '13px 0', marginBottom: 14 }}>
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 12, color: 'var(--brand)', fontWeight: 600, marginBottom: 4 }}>Available To Transfer</div>
+          <div style={{ fontSize: 21, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
+            {balanceHidden ? '••••' : `$${fmt(arcAvailable)}`}
+          </div>
+        </div>
+        <div style={{ width: 1, background: 'var(--border)', margin: '2px 0' }} />
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 12, color: 'var(--brand)', fontWeight: 600, marginBottom: 4 }}>Available To Claim</div>
+          <div style={{ fontSize: 21, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>
+            {balanceHidden ? '••••' : `$${fmt(claimAvailable)}`}
+          </div>
+        </div>
+      </div>
+
+      {/* Actions — Transfer (Arc → other chains) / Claim (other chains → Arc) */}
+      <div style={{ display: 'flex', alignItems: 'stretch' }}>
+        <div onClick={() => navigate('/multichain-transfer')}
+          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', minWidth: 0 }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M4 12L12 4M12 4H6M12 4V10" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: '#fff', lineHeight: 1.28 }}>
+            Transfer from Arc to Across Chains
+          </div>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+            <path d="M6 3.5l5 4.5-5 4.5" stroke="rgba(255,255,255,0.85)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+        <div style={{ width: 1, background: 'rgba(255,255,255,0.25)', margin: '0 10px' }} />
+        <div onClick={() => navigate('/multichain-claim')}
+          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', minWidth: 0 }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M12 4L4 12M4 12H10M4 12V6" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: '#fff', lineHeight: 1.28 }}>
+            Bring Cross Chain Funds To Arc
+          </div>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+            <path d="M6 3.5l5 4.5-5 4.5" stroke="rgba(255,255,255,0.85)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function HomePage() {
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
@@ -1478,6 +1575,25 @@ export function HomePage() {
       return next
     })
   }
+
+  // ── Hero carousel (mobile only) — Balance card / Multichain Hub card ───────
+  // Two slides sharing one motion.x — dragging past ~18% of the measured
+  // card width snaps to the other slide, otherwise it springs back. Width is
+  // measured off the wrapper (not hardcoded) so it stays correct across
+  // devices/orientation changes; a resize listener keeps it live.
+  const [heroCardIndex, setHeroCardIndex] = useState(0)
+  const heroCarouselRef = useRef<HTMLDivElement>(null)
+  const heroCarouselX = useMotionValue(0)
+  const [heroCardWidth, setHeroCardWidth] = useState(0)
+  useEffect(() => {
+    const measure = () => { if (heroCarouselRef.current) setHeroCardWidth(heroCarouselRef.current.offsetWidth) }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
+  useEffect(() => {
+    animate(heroCarouselX, -heroCardIndex * heroCardWidth, { type: 'spring', stiffness: 380, damping: 38 })
+  }, [heroCardIndex, heroCardWidth])
 
   // ── Home header search: People + Services ──────────────────────────────────
   // Two different matching rules, merged:
@@ -2966,7 +3082,26 @@ export function HomePage() {
             </div>
           </div>
         ) : (
-        <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '12px 16px 0', overflow: 'hidden', width: '95%', margin: '0 auto' }}>
+        <div ref={heroCarouselRef} style={{ width: '95%', margin: '0 auto', overflow: 'hidden' }}>
+        <motion.div
+          drag="x"
+          dragElastic={0.12}
+          dragConstraints={{ left: -heroCardWidth, right: 0 }}
+          dragMomentum={false}
+          style={{ display: 'flex', x: heroCarouselX, touchAction: 'pan-y', cursor: 'grab' }}
+          onDragEnd={(_e, info) => {
+            const threshold = heroCardWidth * 0.18
+            let next = heroCardIndex
+            if (info.offset.x < -threshold) next = 1
+            else if (info.offset.x > threshold) next = 0
+            setHeroCardIndex(next)
+          }}
+        >
+        {/* ── SLIDE 1 — Available Balance (byte-identical content to before this
+             change; only the outer width:'95%'/margin wrapper moved onto the
+             new carousel container above). ─────────────────────────────────── */}
+        <div style={{ width: heroCardWidth || '100%', flexShrink: 0 }}>
+        <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '12px 16px 0', overflow: 'hidden' }}>
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 2 }}>
             <span style={{ fontSize: 16, color: '#fff', fontWeight: 500 }}>Available Balance</span>
             <button onClick={toggleBalanceHidden}
@@ -3046,6 +3181,34 @@ export function HomePage() {
           </div>
           )
         })()}
+        </div>
+        </div>
+
+        {/* ── SLIDE 2 — Multichain Hub (swipe left to reveal) ─────────────────── */}
+        <div style={{ width: heroCardWidth || '100%', flexShrink: 0, paddingLeft: 8, boxSizing: 'border-box' }}>
+          <MultichainHubCard
+            arcAvailable={balance}
+            claimAvailable={unifiedBalance ?? 0}
+            balanceHidden={balanceHidden}
+            onToggleHidden={toggleBalanceHidden}
+            fmt={fmt}
+            navigate={navigate}
+          />
+        </div>
+        </motion.div>
+
+        {/* ── Dot indicators — tap either to jump slides ──────────────────────── */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
+          {[0, 1].map(i => (
+            <button key={i} aria-label={i === 0 ? 'Show balance card' : 'Show multichain hub card'}
+              onClick={() => setHeroCardIndex(i)}
+              style={{
+                width: heroCardIndex === i ? 16 : 6, height: 6, borderRadius: 3, border: 'none', padding: 0,
+                background: heroCardIndex === i ? 'var(--brand)' : 'var(--border)', cursor: 'pointer',
+                transition: 'width 0.2s, background 0.2s',
+              }} />
+          ))}
+        </div>
         </div>
         )}
 
