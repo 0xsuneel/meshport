@@ -1388,33 +1388,37 @@ function MultichainHubCard({
 }) {
   // Auto-shrink each stat figure independently by its own whole-digit count —
   // same tiering approach as the Balance hero card's amountFontSize, just
-  // starting from this card's smaller 19px base and stepping down a tier
+  // starting from this card's own 26px base and stepping down a tier
   // earlier (5 digits already), since each figure only has half the card's
   // width to live in (two side-by-side columns) rather than the full card.
   const statFontSize = (n: number) => {
     const digitCount = Math.trunc(Math.abs(n)).toString().length
-    return digitCount >= 9 ? 11 : digitCount >= 8 ? 12 : digitCount >= 7 ? 14 : digitCount >= 6 ? 15 : digitCount >= 5 ? 17 : 19
+    return digitCount >= 9 ? 15 : digitCount >= 8 ? 17 : digitCount >= 7 ? 19 : digitCount >= 6 ? 21 : digitCount >= 5 ? 23 : 26
   }
   const transferFontSize = statFontSize(arcAvailable)
   const claimFontSize = statFontSize(claimAvailable)
+  // Safety net kept regardless of card size — a line can never silently
+  // wrap into a 3rd/4th line and inflate the card's height; it just
+  // truncates with "…" in the (now unlikely, given the card is back to
+  // full size) case it doesn't fit.
   const ellipsisLine: CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
   return (
-    <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '12px 11px 12px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+    <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '16px 16px 18px', height: '100%', boxSizing: 'border-box', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       {/* Header — title centered, eye toggle shares the same hidden state as the Balance card */}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: 15, color: '#fff', fontWeight: 700, letterSpacing: '-0.1px' }}>Multichain Hub</span>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+        <span style={{ fontSize: 19, color: '#fff', fontWeight: 800, letterSpacing: '-0.2px' }}>Multichain Hub</span>
         <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
-          style={{ position: 'absolute', right: 0, width: 22, height: 22, borderRadius: '50%', background: 'transparent',
+          style={{ position: 'absolute', right: 0, width: 26, height: 26, borderRadius: '50%', background: 'transparent',
             border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
           {balanceHidden ? (
-            <svg width="15" height="12" viewBox="0 0 22 18" fill="none">
+            <svg width="17" height="14" viewBox="0 0 22 18" fill="none">
               <path d="M2 2l18 14" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
               <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
               <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
               <circle cx="11" cy="9" r="3" stroke="#fff" strokeWidth="1.5"/>
             </svg>
           ) : (
-            <svg width="15" height="11" viewBox="0 0 22 16" fill="none">
+            <svg width="17" height="13" viewBox="0 0 22 16" fill="none">
               <ellipse cx="11" cy="8" rx="10" ry="7" stroke="#fff" strokeWidth="1.5"/>
               <circle cx="11" cy="8" r="3" stroke="#fff" strokeWidth="1.5"/>
             </svg>
@@ -1426,61 +1430,59 @@ function MultichainHubCard({
           font size shrinks independently via statFontSize() above, so a
           large transfer balance doesn't force the (possibly small) claim
           figure to shrink too, and vice-versa. */}
-      <div style={{ background: 'var(--surface)', borderRadius: 12, display: 'flex', alignItems: 'stretch', padding: '9px 0', marginBottom: 8 }}>
+      <div style={{ background: 'var(--surface)', borderRadius: 14, display: 'flex', alignItems: 'stretch', padding: '16px 0', marginBottom: 16 }}>
         <div style={{ flex: 1, textAlign: 'center', minWidth: 0, padding: '0 4px' }}>
-          <div style={{ fontSize: 10.5, color: 'var(--brand)', fontWeight: 700, marginBottom: 3, ...ellipsisLine }}>Available To Transfer</div>
-          <div style={{ fontSize: transferFontSize, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.4px', lineHeight: 1.15, ...ellipsisLine }}>
+          <div style={{ fontSize: 12.5, color: 'var(--brand)', fontWeight: 700, marginBottom: 6, ...ellipsisLine }}>Available To Transfer</div>
+          <div style={{ fontSize: transferFontSize, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15, ...ellipsisLine }}>
             {balanceHidden ? '••••' : `$${fmt(arcAvailable)}`}
           </div>
         </div>
         <div style={{ width: 1, background: 'var(--border)', margin: '2px 0' }} />
         <div style={{ flex: 1, textAlign: 'center', minWidth: 0, padding: '0 4px' }}>
-          <div style={{ fontSize: 10.5, color: 'var(--brand)', fontWeight: 700, marginBottom: 3, ...ellipsisLine }}>Available To Claim</div>
-          <div style={{ fontSize: claimFontSize, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.4px', lineHeight: 1.15, ...ellipsisLine }}>
+          <div style={{ fontSize: 12.5, color: 'var(--brand)', fontWeight: 700, marginBottom: 6, ...ellipsisLine }}>Available To Claim</div>
+          <div style={{ fontSize: claimFontSize, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15, ...ellipsisLine }}>
             {balanceHidden ? '••••' : `$${fmt(claimAvailable)}`}
           </div>
         </div>
       </div>
 
       {/* Actions — Transfer (Arc → other chains) / Claim (other chains → Arc).
-          Text is two explicit lines, each capped with whiteSpace:'nowrap' +
-          ellipsis. The wording itself was also shortened ("Transfer from Arc
-          to Across Chains" → "Transfer Arc" / "to other chains") because
-          the original phrasing was simply too long to fit two side-by-side
-          half-width columns at any readable font size without truncating —
-          this guarantees both lines render in full, never an ellipsis cut,
-          and never a silent 3rd/4th line inflating the card's height. */}
+          Card is back to full (original Balance-card-matching) width, so
+          the fuller original wording comfortably fits two lines again —
+          each line still capped with whiteSpace:'nowrap' + ellipsis as a
+          permanent safety net against ever silently wrapping to a 3rd
+          line, regardless of screen width. */}
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <div onClick={() => navigate('/multichain-transfer')}
-          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', minWidth: 0 }}>
-          <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
+          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', minWidth: 0 }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
               <path d="M4 12L12 4M12 4H6M12 4V10" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 700, color: '#fff', lineHeight: 1.25 }}>
-            <div style={ellipsisLine}>Transfer Arc</div>
-            <div style={ellipsisLine}>to other chains</div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>
+            <div style={ellipsisLine}>Transfer from Arc</div>
+            <div style={ellipsisLine}>to Across Chains</div>
           </div>
-          <svg width="9" height="9" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
             <path d="M6 3.5l5 4.5-5 4.5" stroke="rgba(255,255,255,0.85)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.25)', margin: '0 5px' }} />
+        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.25)', margin: '0 8px' }} />
         <div onClick={() => navigate('/multichain-claim')}
-          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', minWidth: 0 }}>
-          <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
+          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', minWidth: 0 }}>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
               <path d="M12 4L4 12M4 12H10M4 12V6" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 700, color: '#fff', lineHeight: 1.25 }}>
-            <div style={ellipsisLine}>Claim funds</div>
-            <div style={ellipsisLine}>back to Arc</div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>
+            <div style={ellipsisLine}>Bring Cross Chain</div>
+            <div style={ellipsisLine}>Funds To Arc</div>
           </div>
-          <svg width="9" height="9" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
             <path d="M6 3.5l5 4.5-5 4.5" stroke="rgba(255,255,255,0.85)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
@@ -1739,11 +1741,15 @@ export function HomePage() {
   // PEEK = width of each ghost's visible sliver at rest; PEEK_GAP = blank
   // space between that sliver and the centered card, so the two never
   // touch (matches the reference: gap, then a visible card edge).
-  // Kept intentionally small — every px spent on PEEK+PEEK_GAP comes
-  // straight out of CARD_W (the actual card's rendered width), and the
-  // card's real size takes priority over a wider peek.
-  const PEEK = 7
-  const PEEK_GAP = 4
+  // BUG FIX: these used to be SUBTRACTED from the card's own width (peek
+  // wider = card narrower), which is why the card kept shrinking below its
+  // original size every time the peek was made more visible. The outer
+  // wrapper now adds this same amount of EXTRA width on top of the
+  // original 95% instead (see below), so PEEK/PEEK_GAP cost nothing — the
+  // card renders at its true original size regardless of how wide these
+  // are.
+  const PEEK = 11
+  const PEEK_GAP = 6
   const CARD_W = Math.max(0, heroCardWidth - 2 * PEEK - 2 * PEEK_GAP)
   const HERO_REST_X = PEEK - CARD_W
   const heroRowX = useMotionValue(HERO_REST_X)
@@ -3281,20 +3287,25 @@ export function HomePage() {
             </div>
           </div>
         ) : (
-        <div style={{ width: '95%', margin: '0 auto' }}>
-        {/* ── HERO ROW — the viewport is the FULL 95%-width box (no separate
-             narrower inset), overflow:hidden, and the row inside it is what
-             gets dragged. Geometry (all derived from CARD_W/PEEK/PEEK_GAP
-             above): the row lays out [leftGhost: CARD_W][gapA: PEEK_GAP]
-             [center: CARD_W][gapB: PEEK_GAP][rightGhost: CARD_W]
-             contiguously; translating the row by HERO_REST_X puts center's
-             left edge at exactly PEEK px from the viewport's left edge (and
-             its right edge at PEEK px from the viewport's right edge, by
-             symmetry) — leaving exactly PEEK px of each ghost visible and a
-             PEEK_GAP-wide blank strip between each ghost and center. Both
-             ghosts always render "the other" card (only 2 cards exist), so
-             whichever way you drag, real content — not a placeholder — is
-             what grows into view. ───────────────────────────────────────── */}
+        <div style={{ width: `calc(95% + ${2 * (PEEK + PEEK_GAP)}px)`, margin: '0 auto' }}>
+        {/* ── HERO ROW — the outer wrapper is `95% + 2×(PEEK+PEEK_GAP)` wide
+             (see the ternary's opening div above), i.e. the ORIGINAL 95%
+             every other card on this page uses, PLUS extra room on top
+             specifically to fit the peeks — so the center card itself ends
+             up exactly the original 95%-equivalent size, never narrower.
+             The viewport here is 100% of that (already-widened) wrapper,
+             overflow:hidden, and the row inside it is what gets dragged.
+             Geometry (all derived from CARD_W/PEEK/PEEK_GAP above): the row
+             lays out [leftGhost: CARD_W][gapA: PEEK_GAP][center: CARD_W]
+             [gapB: PEEK_GAP][rightGhost: CARD_W] contiguously; translating
+             the row by HERO_REST_X puts center's left edge at exactly PEEK
+             px from the viewport's left edge (and its right edge at PEEK
+             px from the viewport's right edge, by symmetry) — leaving
+             exactly PEEK px of each ghost visible and a PEEK_GAP-wide
+             blank strip between each ghost and center. Both ghosts always
+             render "the other" card (only 2 cards exist), so whichever way
+             you drag, real content — not a placeholder — is what grows
+             into view. ───────────────────────────────────────────────── */}
         <div ref={heroCarouselRef} style={{ width: '100%', overflow: 'hidden', position: 'relative' }}>
           <motion.div
             drag="x"
