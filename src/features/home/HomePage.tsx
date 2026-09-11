@@ -1739,8 +1739,11 @@ export function HomePage() {
   // PEEK = width of each ghost's visible sliver at rest; PEEK_GAP = blank
   // space between that sliver and the centered card, so the two never
   // touch (matches the reference: gap, then a visible card edge).
-  const PEEK = 11
-  const PEEK_GAP = 6
+  // Kept intentionally small — every px spent on PEEK+PEEK_GAP comes
+  // straight out of CARD_W (the actual card's rendered width), and the
+  // card's real size takes priority over a wider peek.
+  const PEEK = 7
+  const PEEK_GAP = 4
   const CARD_W = Math.max(0, heroCardWidth - 2 * PEEK - 2 * PEEK_GAP)
   const HERO_REST_X = PEEK - CARD_W
   const heroRowX = useMotionValue(HERO_REST_X)
