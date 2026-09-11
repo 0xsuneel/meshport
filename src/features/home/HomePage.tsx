@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useRef, useState, type RefObject, type CSSProperties} from 'react'
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
 import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
-import { useMotionValue, animate, motion, AnimatePresence } from 'framer-motion'
+import { useMotionValue, animate, motion } from 'framer-motion'
 import { parseUnits } from 'viem'
 import { ARC } from '@/blockchain/chains'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore } from '@/store'
@@ -1399,7 +1399,7 @@ function MultichainHubCard({
   const claimFontSize = statFontSize(claimAvailable)
   const ellipsisLine: CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
   return (
-    <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '12px 14px 12px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+    <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '12px 11px 12px', height: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
       {/* Header — title centered, eye toggle shares the same hidden state as the Balance card */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
         <span style={{ fontSize: 15, color: '#fff', fontWeight: 700, letterSpacing: '-0.1px' }}>Multichain Hub</span>
@@ -1444,43 +1444,143 @@ function MultichainHubCard({
 
       {/* Actions — Transfer (Arc → other chains) / Claim (other chains → Arc).
           Text is two explicit lines, each capped with whiteSpace:'nowrap' +
-          ellipsis — this always breaks the same way as the reference design
-          AND can never silently grow into a 3rd/4th line on a narrow
-          column, which is what was inflating the card's height before. */}
+          ellipsis. The wording itself was also shortened ("Transfer from Arc
+          to Across Chains" → "Transfer Arc" / "to other chains") because
+          the original phrasing was simply too long to fit two side-by-side
+          half-width columns at any readable font size without truncating —
+          this guarantees both lines render in full, never an ellipsis cut,
+          and never a silent 3rd/4th line inflating the card's height. */}
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <div onClick={() => navigate('/multichain-transfer')}
-          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minWidth: 0 }}>
-          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
+          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', minWidth: 0 }}>
+          <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
               <path d="M4 12L12 4M12 4H6M12 4V10" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 10.5, fontWeight: 700, color: '#fff', lineHeight: 1.25 }}>
-            <div style={ellipsisLine}>Transfer from Arc</div>
-            <div style={ellipsisLine}>to Across Chains</div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 700, color: '#fff', lineHeight: 1.25 }}>
+            <div style={ellipsisLine}>Transfer Arc</div>
+            <div style={ellipsisLine}>to other chains</div>
           </div>
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+          <svg width="9" height="9" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
             <path d="M6 3.5l5 4.5-5 4.5" stroke="rgba(255,255,255,0.85)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.25)', margin: '0 6px' }} />
+        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.25)', margin: '0 5px' }} />
         <div onClick={() => navigate('/multichain-claim')}
-          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minWidth: 0 }}>
-          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
+          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', minWidth: 0 }}>
+          <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
               <path d="M12 4L4 12M4 12H10M4 12V6" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 10.5, fontWeight: 700, color: '#fff', lineHeight: 1.25 }}>
-            <div style={ellipsisLine}>Bring Cross Chain</div>
-            <div style={ellipsisLine}>Funds To Arc</div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 11, fontWeight: 700, color: '#fff', lineHeight: 1.25 }}>
+            <div style={ellipsisLine}>Claim funds</div>
+            <div style={ellipsisLine}>back to Arc</div>
           </div>
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+          <svg width="9" height="9" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
             <path d="M6 3.5l5 4.5-5 4.5" stroke="rgba(255,255,255,0.85)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Available Balance hero card — extracted so it can be rendered in
+// whichever of the carousel's 3 slots (left ghost / center / right ghost)
+// currently needs it, without duplicating this JSX three times inline. See
+// the hero carousel render below for how the 3 slots work. `cardRef` is
+// optional — only the instance used for height measurement passes one.
+function AvailableBalanceCard({
+  displayedBalance, balanceHidden, onToggleHidden, walletAddress, shortAddr, showToastMessage, navigate, fmt, cardRef,
+}: {
+  displayedBalance: number
+  balanceHidden: boolean
+  onToggleHidden: () => void
+  walletAddress: string | null
+  shortAddr: string
+  showToastMessage: (msg: string, kind: 'success' | 'error') => void
+  navigate: NavigateFunction
+  fmt: (n: number, symbol?: string) => string
+  cardRef?: RefObject<HTMLDivElement>
+}) {
+  // Auto-shrink the balance figure so large amounts (6+ digits) stay inside
+  // the white pill instead of overflowing past it — normal balances (up to
+  // 5 digits before the decimal) keep the original 38px untouched.
+  // fmt() adds thousand-separator commas (e.g. "1,420") for the
+  // asset-history table elsewhere in this file, where that reads
+  // naturally — but this hero figure is meant to show the plain number, so
+  // strip the commas back out here specifically rather than changing
+  // fmt() itself and affecting every other caller.
+  const formattedBalance = fmt(displayedBalance).replace(/,/g, '')
+  const wholePart = formattedBalance.split('.')[0].replace(/[^0-9]/g, '')
+  const digitCount = wholePart.length
+  const amountFontSize = digitCount >= 9 ? 20 : digitCount >= 8 ? 24 : digitCount >= 7 ? 27 : digitCount >= 6 ? 30 : 34
+  // BUG FIX: fmt() already trims a whole-number balance down to "1,420"
+  // (no decimal point at all, see trimTrailingZeros in lib/utils.ts) — but
+  // this split-into-two-spans layout always rendered a literal "." before
+  // the decimal-part span regardless of whether one actually existed.
+  // React renders {undefined} as nothing, so that hardcoded "." was the
+  // ONLY thing left behind: a whole-number balance showed as "$1,420."
+  // with a dangling dot and no digits after it. Only render the decimal
+  // span (and its leading dot) when there's a real decimal part to show.
+  const decimalPart = formattedBalance.split('.')[1]
+  return (
+    <div ref={cardRef} style={{ background: 'var(--brand)', borderRadius: 16, padding: '12px 16px 0', overflow: 'hidden', height: '100%', boxSizing: 'border-box' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 2 }}>
+        <span style={{ fontSize: 16, color: '#fff', fontWeight: 500 }}>Available Balance</span>
+        <button onClick={onToggleHidden}
+          style={{ position: 'absolute', right: 0, width: 26, height: 26, borderRadius: '50%', background: 'transparent',
+            border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+          {balanceHidden ? (
+            <svg width="16" height="13" viewBox="0 0 22 18" fill="none">
+              <path d="M2 2l18 14" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="11" cy="9" r="3" stroke="#fff" strokeWidth="1.5"/>
+            </svg>
+          ) : (
+            <svg width="16" height="12" viewBox="0 0 22 16" fill="none">
+              <ellipse cx="11" cy="8" rx="10" ry="7" stroke="#fff" strokeWidth="1.5"/>
+              <circle cx="11" cy="8" r="3" stroke="#fff" strokeWidth="1.5"/>
+            </svg>
+          )}
+        </button>
+      </div>
+      <div onClick={() => { copyText(walletAddress || ''); showToastMessage('Address copied', 'success') }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', marginBottom: 11 }}>
+        <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', fontFamily: 'monospace', letterSpacing: '0.2px' }}>
+          {shortAddr}
+        </span>
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <rect x="5" y="1" width="10" height="10" rx="2" stroke="rgba(255,255,255,0.75)" strokeWidth="1.4"/>
+          <path d="M1 5v9a1 1 0 001 1h9" stroke="rgba(255,255,255,0.75)" strokeWidth="1.4" strokeLinecap="round"/>
+        </svg>
+      </div>
+      <div style={{ background: 'var(--surface)', borderRadius: '12px 12px 0 0', padding: '10px 16px 1px', margin: '0 16%', textAlign: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4, marginBottom: 0, lineHeight: 1 }}>
+          <span style={{ fontSize: amountFontSize, fontWeight: 700, lineHeight: 1, color: 'var(--text-primary)' }}>$</span>
+          {balanceHidden ? (
+            <span style={{ fontSize: amountFontSize, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1, color: 'var(--text-primary)' }}>••••••</span>
+          ) : (
+            <>
+              <span style={{ fontSize: amountFontSize, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1, color: 'var(--text-primary)' }}>
+                {formattedBalance.split('.')[0]}
+              </span>
+              {decimalPart ? (
+                <span style={{ fontSize: amountFontSize, fontWeight: 700, lineHeight: 1, color: 'var(--text-primary)' }}>
+                  .{decimalPart}
+                </span>
+              ) : null}
+            </>
+          )}
+        </div>
+        <span onClick={() => navigate('/activity')} style={{ fontSize: 14, color: 'var(--brand)', fontWeight: 500, cursor: 'pointer', display: 'inline-block', marginTop: 1 }}>
+          View Transactions
+        </span>
       </div>
     </div>
   )
@@ -1611,15 +1711,23 @@ export function HomePage() {
   }
 
   // ── Hero carousel (mobile only) — Balance card / Multichain Hub card ───────
-  // Direction-aware swap: only ONE of the two cards is mounted at a time
-  // (AnimatePresence), and heroDir controls which side the incoming card
-  // slides in from — swiping left (finger moves left) enters the new card
-  // from the LEFT edge; swiping right enters it from the RIGHT edge. Width
-  // is measured off the wrapper (not hardcoded) so the slide distance stays
-  // correct across devices/orientation changes; a resize listener keeps it
-  // live.
+  // TRUE continuous strip, not a decorative-peek-plus-separate-swap: the
+  // viewport (heroCarouselRef, full width, overflow:hidden) contains ONE
+  // flex row of 5 children laid out contiguously — [leftGhost][gap][center]
+  // [gap][rightGhost] — and dragging the row's x directly is what makes the
+  // ghost slivers grow/shrink live under your finger. Left/right ghost
+  // always show "the other" card (there are only 2 cards total), so
+  // whichever direction you drag, the correctly-sized real card content is
+  // right there to be pulled into center — nothing pops in from
+  // off-screen. `CARD_W` is each slot's width, `T` is the row's resting
+  // translateX that centers the `center` slot with exactly PEEK px of each
+  // ghost visible on either side (see the geometry comment further down at
+  // the render). Dragging past ~15% of CARD_W animates the row the REST of
+  // the way to the next full-reveal position, then relabels which card is
+  // "center" and resets the row's x back to T in the same frame — visually
+  // seamless because the just-arrived-at position and the fresh T are
+  // defined to be pixel-identical (the "infinite 2-item loop" trick).
   const [heroCardIndex, setHeroCardIndex] = useState(0)
-  const [heroDir, setHeroDir] = useState<1 | -1>(1)
   const heroCarouselRef = useRef<HTMLDivElement>(null)
   const [heroCardWidth, setHeroCardWidth] = useState(0)
   useEffect(() => {
@@ -1628,26 +1736,60 @@ export function HomePage() {
     window.addEventListener('resize', measure)
     return () => window.removeEventListener('resize', measure)
   }, [])
-  // heroDir: -1 = entering from the left (triggered by a left-swipe or the
-  // left peek), +1 = entering from the right (right-swipe or right peek).
-  const heroSlideVariants = {
-    enter: (dir: 1 | -1) => ({ x: dir === -1 ? -heroCardWidth : heroCardWidth }),
-    center: { x: 0 },
-    exit: (dir: 1 | -1) => ({ x: dir === -1 ? heroCardWidth : -heroCardWidth }),
+  // PEEK = width of each ghost's visible sliver at rest; PEEK_GAP = blank
+  // space between that sliver and the centered card, so the two never
+  // touch (matches the reference: gap, then a visible card edge).
+  const PEEK = 11
+  const PEEK_GAP = 6
+  const CARD_W = Math.max(0, heroCardWidth - 2 * PEEK - 2 * PEEK_GAP)
+  const HERO_REST_X = PEEK - CARD_W
+  const heroRowX = useMotionValue(HERO_REST_X)
+  // Keep the row's rest position correct if the viewport is resized (e.g.
+  // orientation change) while sitting idle — skipped while a drag/reveal
+  // animation might be in flight isn't tracked here since resize mid-drag
+  // is rare enough that a small jump is an acceptable trade-off for
+  // simplicity.
+  useEffect(() => { heroRowX.set(HERO_REST_X) }, [HERO_REST_X])
+  // Both cards render at this EXACT same fixed height, measured off
+  // whichever instance of the Balance card is currently in the DOM (it's
+  // always present somewhere — as `center` when heroCardIndex is 0, or as
+  // both ghosts when heroCardIndex is 1 — and every slot shares the same
+  // CARD_W width, so its rendered height is the same regardless of which
+  // slot it's in). The Multichain Hub card's own root is already
+  // `height:'100%'` + `justifyContent:'center'`, so once every slot has
+  // this real pixel height to resolve against, its shorter content centers
+  // neatly inside instead of the row just being however tall its own
+  // content happens to be.
+  const balanceCardRef = useRef<HTMLDivElement>(null)
+  const [heroCardHeight, setHeroCardHeight] = useState<number | null>(null)
+  useEffect(() => {
+    const measure = () => { if (balanceCardRef.current) setHeroCardHeight(balanceCardRef.current.offsetHeight) }
+    measure()
+    const ro = new ResizeObserver(measure)
+    if (balanceCardRef.current) ro.observe(balanceCardRef.current)
+    window.addEventListener('resize', measure)
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure) }
+  }, [heroCardIndex])
+  // Animates the row all the way to a full reveal of one ghost, THEN
+  // relabels which card is "center" and resets x to the fresh rest
+  // position — both in the same instant, so nothing visibly jumps (the
+  // position the animation just reached and the fresh T are, by
+  // construction, the same pixel position).
+  const heroRevealing = useRef(false)
+  const revealHeroSide = (side: 'left' | 'right') => {
+    if (heroRevealing.current || CARD_W <= 0) return
+    heroRevealing.current = true
+    const target = side === 'left' ? HERO_REST_X + (CARD_W + PEEK_GAP) : HERO_REST_X - (CARD_W + PEEK_GAP)
+    animate(heroRowX, target, {
+      type: 'spring', stiffness: 380, damping: 38,
+      onComplete: () => {
+        setHeroCardIndex(i => (i === 0 ? 1 : 0))
+        heroRowX.set(HERO_REST_X)
+        heroRevealing.current = false
+      },
+    })
   }
-  // Tapping either edge peek (see PEEK STRIPS in the render below) jumps to
-  // the other slide — with only 2 slides, "the other one" is unambiguous.
-  // dir picks which side it visibly enters from (left peek → enters from
-  // the left; right peek → enters from the right), matching a real swipe.
-  const toggleHeroCard = (dir: 1 | -1) => {
-    setHeroDir(dir)
-    setHeroCardIndex(i => (i === 0 ? 1 : 0))
-  }
-  // PEEK = width of the full-height edge sliver on each side; PEEK_GAP =
-  // blank space between that sliver and the centered card, so the two
-  // never touch (matches the reference: gap, then a visible card edge).
-  const PEEK = 14
-  const PEEK_GAP = 8
+  const snapHeroBack = () => animate(heroRowX, HERO_REST_X, { type: 'spring', stiffness: 380, damping: 38 })
 
   // ── Home header search: People + Services ──────────────────────────────────
   // Two different matching rules, merged:
@@ -3137,166 +3279,88 @@ export function HomePage() {
           </div>
         ) : (
         <div style={{ width: '95%', margin: '0 auto' }}>
-        {/* ── PEEK STRIPS — full-height rounded edges pinned to the outer
-             sides, with a visible blank gap between each peek and the
-             centered card (not flush against it). Always visible on BOTH
-             sides regardless of which slide is centered — with only 2
-             slides, the slide that's NOT currently centered is always "the
-             other one" on both left and right, so a static green edge on
-             each side correctly hints at it. Tapping the LEFT peek jumps to
-             the other slide entering from the left; tapping the RIGHT peek
-             enters it from the right (see toggleHeroCard). Sit at zIndex 0,
-             behind the viewport (zIndex 1), so they only show in the
-             gutter the narrower viewport leaves around itself — PEEK + GAP
-             reserved on each side. ─────────────────────────────────────── */}
-        <div style={{ position: 'relative', width: '100%' }}>
-          <div onClick={() => toggleHeroCard(-1)} aria-label="Show multichain hub card"
-            style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: PEEK, background: 'var(--brand)',
-              borderRadius: '0 16px 16px 0', cursor: 'pointer', zIndex: 0 }} />
-          <div onClick={() => toggleHeroCard(1)} aria-label="Show multichain hub card"
-            style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: PEEK, background: 'var(--brand)',
-              borderRadius: '16px 0 0 16px', cursor: 'pointer', zIndex: 0 }} />
-        <div ref={heroCarouselRef} style={{ width: `calc(100% - ${2 * (PEEK + PEEK_GAP)}px)`, margin: '0 auto', overflow: 'hidden', position: 'relative', zIndex: 1 }}>
-        {/* ── Direction-aware swap — only ONE card is mounted at a time.
-             heroDir controls which edge the incoming card slides in from:
-             swiping (or tapping the peek) LEFT enters the new card from the
-             LEFT edge; swiping/tapping RIGHT enters it from the RIGHT edge
-             — a real swipe, not just a snap-to-place toggle. AnimatePresence
-             plays the outgoing card's exit (opposite edge) and the incoming
-             card's enter animation together. `initial={false}` skips any
-             slide-in animation on first page load. ─────────────────────── */}
-        <AnimatePresence initial={false} custom={heroDir} mode="popLayout">
+        {/* ── HERO ROW — the viewport is the FULL 95%-width box (no separate
+             narrower inset), overflow:hidden, and the row inside it is what
+             gets dragged. Geometry (all derived from CARD_W/PEEK/PEEK_GAP
+             above): the row lays out [leftGhost: CARD_W][gapA: PEEK_GAP]
+             [center: CARD_W][gapB: PEEK_GAP][rightGhost: CARD_W]
+             contiguously; translating the row by HERO_REST_X puts center's
+             left edge at exactly PEEK px from the viewport's left edge (and
+             its right edge at PEEK px from the viewport's right edge, by
+             symmetry) — leaving exactly PEEK px of each ghost visible and a
+             PEEK_GAP-wide blank strip between each ghost and center. Both
+             ghosts always render "the other" card (only 2 cards exist), so
+             whichever way you drag, real content — not a placeholder — is
+             what grows into view. ───────────────────────────────────────── */}
+        <div ref={heroCarouselRef} style={{ width: '100%', overflow: 'hidden', position: 'relative' }}>
           <motion.div
-            key={heroCardIndex}
-            custom={heroDir}
-            variants={heroSlideVariants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={{ type: 'spring', stiffness: 380, damping: 38 }}
             drag="x"
-            dragElastic={0.2}
-            dragConstraints={{ left: 0, right: 0 }}
-            style={{ touchAction: 'pan-y', cursor: 'grab' }}
+            dragElastic={0.15}
+            dragConstraints={{ left: HERO_REST_X - (CARD_W + PEEK_GAP), right: HERO_REST_X + (CARD_W + PEEK_GAP) }}
+            dragMomentum={false}
+            style={{ display: 'flex', alignItems: 'stretch', x: heroRowX, touchAction: 'pan-y', cursor: 'grab', height: heroCardHeight ?? undefined }}
             onDragEnd={(_e, info) => {
-              const threshold = heroCardWidth * 0.15
-              if (Math.abs(info.offset.x) > threshold) {
-                toggleHeroCard(info.offset.x < 0 ? -1 : 1)
-              }
-              // Below threshold: dragConstraints (left:0,right:0) already
-              // elastically snaps the card straight back to rest on
-              // release — no manual animate needed.
+              const threshold = CARD_W * 0.15
+              if (info.offset.x < -threshold) revealHeroSide('right')
+              else if (info.offset.x > threshold) revealHeroSide('left')
+              else snapHeroBack()
             }}
           >
-        {heroCardIndex === 0 ? (
-        /* ── Available Balance (byte-identical content to before this
-             change). ─────────────────────────────────────────────────── */
-        <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '12px 16px 0', overflow: 'hidden' }}>
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 2 }}>
-            <span style={{ fontSize: 16, color: '#fff', fontWeight: 500 }}>Available Balance</span>
-            <button onClick={toggleBalanceHidden}
-              style={{ position: 'absolute', right: 0, width: 26, height: 26, borderRadius: '50%', background: 'transparent',
-                border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-              {balanceHidden ? (
-                <svg width="16" height="13" viewBox="0 0 22 18" fill="none">
-                  <path d="M2 2l18 14" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
-                  <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
-                  <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
-                  <circle cx="11" cy="9" r="3" stroke="#fff" strokeWidth="1.5"/>
-                </svg>
+            {/* ── LEFT GHOST — shows "the other" card, only its rightmost
+                 PEEK px actually visible (clipped by the viewport). Tap to
+                 pull it fully into center (same as dragging it there). ── */}
+            <div onClick={() => revealHeroSide('left')} style={{ width: CARD_W, flexShrink: 0, cursor: 'pointer' }}>
+              {heroCardIndex === 0 ? (
+                <MultichainHubCard
+                  arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
+                  balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} fmt={fmt} navigate={navigate}
+                />
               ) : (
-                <svg width="16" height="12" viewBox="0 0 22 16" fill="none">
-                  <ellipse cx="11" cy="8" rx="10" ry="7" stroke="#fff" strokeWidth="1.5"/>
-                  <circle cx="11" cy="8" r="3" stroke="#fff" strokeWidth="1.5"/>
-                </svg>
-              )}
-            </button>
-          </div>
-          <div onClick={() => { copyText(walletAddress || ''); showToastMessage('Address copied', 'success') }}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', marginBottom: 11 }}>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', fontFamily: 'monospace', letterSpacing: '0.2px' }}>
-              {shortAddr}
-            </span>
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-              <rect x="5" y="1" width="10" height="10" rx="2" stroke="rgba(255,255,255,0.75)" strokeWidth="1.4"/>
-              <path d="M1 5v9a1 1 0 001 1h9" stroke="rgba(255,255,255,0.75)" strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
-          </div>
-        {(() => {
-          // Auto-shrink the balance figure so large amounts (6+ digits)
-          // stay inside the white pill instead of overflowing past it —
-          // normal balances (up to 5 digits before the decimal) keep the
-          // original 38px untouched.
-          // fmt() adds thousand-separator commas (e.g. "1,420") for the
-          // asset-history table elsewhere in this file, where that reads
-          // naturally — but this hero figure is meant to show the plain
-          // number, so strip the commas back out here specifically rather
-          // than changing fmt() itself and affecting every other caller.
-          const formattedBalance = fmt(displayedBalance).replace(/,/g, '')
-          const wholePart = formattedBalance.split('.')[0].replace(/[^0-9]/g, '')
-          const digitCount = wholePart.length
-          const amountFontSize = digitCount >= 9 ? 20 : digitCount >= 8 ? 24 : digitCount >= 7 ? 27 : digitCount >= 6 ? 30 : 34
-          // BUG FIX: fmt() already trims a whole-number balance down to
-          // "1,420" (no decimal point at all, see trimTrailingZeros in
-          // lib/utils.ts) — but this split-into-two-spans layout always
-          // rendered a literal "." before the decimal-part span regardless
-          // of whether one actually existed. React renders {undefined} as
-          // nothing, so that hardcoded "." was the ONLY thing left behind:
-          // a whole-number balance showed as "$1,420." with a dangling dot
-          // and no digits after it. Only render the decimal span (and its
-          // leading dot) when there's a real decimal part to show.
-          const decimalPart = formattedBalance.split('.')[1]
-          return (
-        <div style={{ background: 'var(--surface)', borderRadius: '12px 12px 0 0', padding: '10px 16px 1px', margin: '0 16%', textAlign: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4, marginBottom: 0, lineHeight: 1 }}>
-              <span style={{ fontSize: amountFontSize, fontWeight: 700, lineHeight: 1, color: 'var(--text-primary)' }}>$</span>
-              {balanceHidden ? (
-                <span style={{ fontSize: amountFontSize, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1, color: 'var(--text-primary)' }}>••••••</span>
-              ) : (
-                <>
-                  <span style={{ fontSize: amountFontSize, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1, color: 'var(--text-primary)' }}>
-                    {formattedBalance.split('.')[0]}
-                  </span>
-                  {decimalPart ? (
-                    <span style={{ fontSize: amountFontSize, fontWeight: 700, lineHeight: 1, color: 'var(--text-primary)' }}>
-                      .{decimalPart}
-                    </span>
-                  ) : null}
-                </>
+                <AvailableBalanceCard
+                  displayedBalance={displayedBalance} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
+                  walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+                />
               )}
             </div>
-            <span onClick={() => navigate('/activity')} style={{ fontSize: 14, color: 'var(--brand)', fontWeight: 500, cursor: 'pointer', display: 'inline-block', marginTop: 1 }}>
-              View Transactions
-            </span>
-          </div>
-          )
-        })()}
-        </div>
-        ) : (
-        /* ── Multichain Hub ──────────────────────────────────────────────── */
-          <MultichainHubCard
-            arcAvailable={balance}
-            claimAvailable={unifiedBalance ?? 0}
-            balanceHidden={balanceHidden}
-            onToggleHidden={toggleBalanceHidden}
-            fmt={fmt}
-            navigate={navigate}
-          />
-        )}
+            <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
+            {/* ── CENTER — the fully visible, currently-active card. ──── */}
+            <div style={{ width: CARD_W, flexShrink: 0 }}>
+              {heroCardIndex === 0 ? (
+                <AvailableBalanceCard
+                  displayedBalance={displayedBalance} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
+                  walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+                  cardRef={balanceCardRef}
+                />
+              ) : (
+                <MultichainHubCard
+                  arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
+                  balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} fmt={fmt} navigate={navigate}
+                />
+              )}
+            </div>
+            <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
+            {/* ── RIGHT GHOST — mirror of the left ghost. ──────────────── */}
+            <div onClick={() => revealHeroSide('right')} style={{ width: CARD_W, flexShrink: 0, cursor: 'pointer' }}>
+              {heroCardIndex === 0 ? (
+                <MultichainHubCard
+                  arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
+                  balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} fmt={fmt} navigate={navigate}
+                />
+              ) : (
+                <AvailableBalanceCard
+                  displayedBalance={displayedBalance} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
+                  walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+                />
+              )}
+            </div>
           </motion.div>
-        </AnimatePresence>
-        </div>
         </div>
 
-        {/* ── Dot indicators — tap either to jump slides, entering from the
-             side that matches the direction of travel (dot to the right of
-             current → enters from the right; dot to the left → enters from
-             the left). Sits below the peek zone (sibling of it, not
-             inside), so the peek strips never stretch down over these. ── */}
+        {/* ── Dot indicators — tap either to jump slides. ─────────────────── */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
           {[0, 1].map(i => (
             <button key={i} aria-label={i === 0 ? 'Show balance card' : 'Show multichain hub card'}
-              onClick={() => { if (i !== heroCardIndex) { setHeroDir(i > heroCardIndex ? 1 : -1); setHeroCardIndex(i) } }}
+              onClick={() => { if (i !== heroCardIndex) revealHeroSide(i > heroCardIndex ? 'right' : 'left') }}
               style={{
                 width: heroCardIndex === i ? 16 : 6, height: 6, borderRadius: 3, border: 'none', padding: 0,
                 background: heroCardIndex === i ? 'var(--brand)' : 'var(--border)', cursor: 'pointer',
