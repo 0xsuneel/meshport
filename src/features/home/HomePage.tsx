@@ -1403,10 +1403,10 @@ function MultichainHubCard({
   // full size) case it doesn't fit.
   const ellipsisLine: CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
   return (
-    <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '16px 16px 18px', height: '100%', boxSizing: 'border-box', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+    <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '12px 14px 12px', boxSizing: 'border-box', overflow: 'hidden' }}>
       {/* Header — title centered, eye toggle shares the same hidden state as the Balance card */}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-        <span style={{ fontSize: 19, color: '#fff', fontWeight: 800, letterSpacing: '-0.2px' }}>Multichain Hub</span>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+        <span style={{ fontSize: 17, color: '#fff', fontWeight: 800, letterSpacing: '-0.2px' }}>Multichain Hub</span>
         <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
           style={{ position: 'absolute', right: 0, width: 26, height: 26, borderRadius: '50%', background: 'transparent',
             border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
@@ -1430,16 +1430,16 @@ function MultichainHubCard({
           font size shrinks independently via statFontSize() above, so a
           large transfer balance doesn't force the (possibly small) claim
           figure to shrink too, and vice-versa. */}
-      <div style={{ background: 'var(--surface)', borderRadius: 14, display: 'flex', alignItems: 'stretch', padding: '16px 0', marginBottom: 16 }}>
+      <div style={{ background: 'var(--surface)', borderRadius: 12, display: 'flex', alignItems: 'stretch', padding: '9px 0', marginBottom: 9 }}>
         <div style={{ flex: 1, textAlign: 'center', minWidth: 0, padding: '0 4px' }}>
-          <div style={{ fontSize: 12.5, color: 'var(--brand)', fontWeight: 700, marginBottom: 6, ...ellipsisLine }}>Available To Transfer</div>
+          <div style={{ fontSize: 11, color: 'var(--brand)', fontWeight: 700, marginBottom: 3, ...ellipsisLine }}>Available To Transfer</div>
           <div style={{ fontSize: transferFontSize, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15, ...ellipsisLine }}>
             {balanceHidden ? '••••' : `$${fmt(arcAvailable)}`}
           </div>
         </div>
         <div style={{ width: 1, background: 'var(--border)', margin: '2px 0' }} />
         <div style={{ flex: 1, textAlign: 'center', minWidth: 0, padding: '0 4px' }}>
-          <div style={{ fontSize: 12.5, color: 'var(--brand)', fontWeight: 700, marginBottom: 6, ...ellipsisLine }}>Available To Claim</div>
+          <div style={{ fontSize: 11, color: 'var(--brand)', fontWeight: 700, marginBottom: 3, ...ellipsisLine }}>Available To Claim</div>
           <div style={{ fontSize: claimFontSize, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15, ...ellipsisLine }}>
             {balanceHidden ? '••••' : `$${fmt(claimAvailable)}`}
           </div>
@@ -1455,13 +1455,13 @@ function MultichainHubCard({
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <div onClick={() => navigate('/multichain-transfer')}
           style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', minWidth: 0 }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
+          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
               <path d="M4 12L12 4M12 4H6M12 4V10" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 700, color: '#fff', lineHeight: 1.25 }}>
             <div style={ellipsisLine}>Transfer from Arc</div>
             <div style={ellipsisLine}>to Across Chains</div>
           </div>
@@ -1472,13 +1472,13 @@ function MultichainHubCard({
         <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.25)', margin: '0 8px' }} />
         <div onClick={() => navigate('/multichain-claim')}
           style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', minWidth: 0 }}>
-          <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
+          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
               <path d="M12 4L4 12M4 12H10M4 12V6" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 700, color: '#fff', lineHeight: 1.25 }}>
             <div style={ellipsisLine}>Bring Cross Chain</div>
             <div style={ellipsisLine}>Funds To Arc</div>
           </div>
@@ -1531,7 +1531,7 @@ function AvailableBalanceCard({
   // span (and its leading dot) when there's a real decimal part to show.
   const decimalPart = formattedBalance.split('.')[1]
   return (
-    <div ref={cardRef} style={{ background: 'var(--brand)', borderRadius: 16, padding: '12px 16px 0', overflow: 'hidden', height: '100%', boxSizing: 'border-box' }}>
+    <div ref={cardRef} style={{ background: 'var(--brand)', borderRadius: 16, padding: '12px 16px 0', overflow: 'hidden', boxSizing: 'border-box' }}>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 2 }}>
         <span style={{ fontSize: 16, color: '#fff', fontWeight: 500 }}>Available Balance</span>
         <button onClick={onToggleHidden}
@@ -3337,7 +3337,7 @@ export function HomePage() {
                  height is applied explicitly to EACH slot below instead of
                  to the row, so Balance is measured at its true, un-
                  inflated size and Hub is then fit to that real number. ── */}
-            <div onClick={() => revealHeroSide('left')} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer' }}>
+            <div onClick={() => revealHeroSide('left')} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               {heroCardIndex === 0 ? (
                 <MultichainHubCard
                   arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
@@ -3352,7 +3352,7 @@ export function HomePage() {
             </div>
             <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
             {/* ── CENTER — the fully visible, currently-active card. ──── */}
-            <div style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0 }}>
+            <div style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               {heroCardIndex === 0 ? (
                 <AvailableBalanceCard
                   displayedBalance={displayedBalance} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
@@ -3368,7 +3368,7 @@ export function HomePage() {
             </div>
             <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
             {/* ── RIGHT GHOST — mirror of the left ghost. ──────────────── */}
-            <div onClick={() => revealHeroSide('right')} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer' }}>
+            <div onClick={() => revealHeroSide('right')} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               {heroCardIndex === 0 ? (
                 <MultichainHubCard
                   arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
