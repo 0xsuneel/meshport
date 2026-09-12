@@ -1843,25 +1843,41 @@ export function HomePage() {
   // flag, so guarding here would make it silently never fire after a real
   // drag. Callers that aren't a drag release (peek taps, dot buttons)
   // check the flag themselves before calling this.
+  // BUG FIX (sustained ~250-300ms missing edge, confirmed via frame-by-frame
+  // video analysis — not a paint/GPU glitch, a real structural gap): the
+  // index used to flip only in `onComplete`, at the very END of the settle
+  // animation. But for the ENTIRE animation before that, the row's 3 DOM
+  // slots were still labeled with the OLD (pre-flip) assignment — and under
+  // the old labels, the content destined to become "the far-side ghost"
+  // after the flip doesn't exist at that position yet (it's still busy
+  // being the thing sliding INTO center). So there is genuinely nothing
+  // assigned to that edge for the whole tail of the animation — not a
+  // rendering delay, an actual absence — until the flip finally happens and
+  // relabels it. Fixed by flipping the index IMMEDIATELY (the moment a
+  // swipe or tap decides its outcome), then re-basing the row's `x` by
+  // exactly one reveal-offset so the CURRENT on-screen position is
+  // unchanged under the new labeling (this is the same "infinite 2-item
+  // loop" pixel-identity trick as before, just applied at the START of the
+  // settle instead of the end) — every frame of the settle animation now
+  // renders with the CORRECT final labels from the very first frame, so
+  // there's never a gap where an edge has nothing assigned to it.
   const revealHeroSide = (side: 'left' | 'right') => {
     if (CARD_W <= 0) return
     heroGestureActive.current = true
-    const target = side === 'left' ? HERO_REST_X + (CARD_W + PEEK_GAP) : HERO_REST_X - (CARD_W + PEEK_GAP)
-    animate(heroRowX, target, {
+    const revealOffset = side === 'left' ? (CARD_W + PEEK_GAP) : -(CARD_W + PEEK_GAP)
+    const currentX = heroRowX.get()
+    // `setHeroCardIndex` (React state, re-renders which card is in which
+    // slot) and `heroRowX.set(...)` (a Framer Motion value, applied outside
+    // React's render cycle) have no ordering guarantee otherwise — React 18
+    // can defer the actual DOM commit, so for one frame the position could
+    // update before the DOM reflects the new card assignment. flushSync
+    // forces the index flip to commit immediately, so both land in the
+    // same frame.
+    flushSync(() => { setHeroCardIndex(i => (i === 0 ? 1 : 0)) })
+    heroRowX.set(currentX - revealOffset)
+    animate(heroRowX, HERO_REST_X, {
       type: 'spring', stiffness: 380, damping: 38,
-      onComplete: () => {
-        // `setHeroCardIndex` (React state, re-renders which card is in
-        // which slot) and `heroRowX.set(...)` (a Framer Motion value,
-        // applied outside React's render cycle) have no ordering
-        // guarantee otherwise — React 18 can defer the actual DOM commit,
-        // so for one frame the position could reset before the DOM
-        // reflects the new card assignment. flushSync forces the index
-        // flip to commit immediately, so both changes land in the same
-        // frame — no flash of the wrong card in the wrong slot.
-        flushSync(() => { setHeroCardIndex(i => (i === 0 ? 1 : 0)) })
-        heroRowX.set(HERO_REST_X)
-        heroGestureActive.current = false
-      },
+      onComplete: () => { heroGestureActive.current = false },
     })
   }
   const snapHeroBack = () => {
@@ -3504,7 +3520,7 @@ export function HomePage() {
             { label: 'Pay',     path: '/pay-send',    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
             { label: 'Receive', path: '/receive', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M12 19l-6-6M12 19l6-6" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
             { label: 'Swap',    path: '/swap',    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 7h13M4 7l3-3M4 7l3 3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M20 17H7M20 17l-3 3M20 17l-3-3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-            { label: 'More',    path: null,       icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="4" height="4" rx="0.75" fill="#fff"/><rect x="15" y="4" width="4" height="4" rx="0.75" fill="#fff"/><rect x="5" y="10" width="4" height="4" rx="0.75" fill="#fff"/><rect x="15" y="10" width="4" height="4" rx="0.75" fill="#fff"/><rect x="5" y="16" width="4" height="4" rx="0.75" fill="#fff"/><rect x="15" y="16" width="4" height="4" rx="0.75" fill="#fff"/></svg> },
+            { label: 'More',    path: null,       icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="6.5" height="6.5" rx="1.2" fill="#fff"/><rect x="14.5" y="3" width="6.5" height="6.5" rx="1.2" fill="#fff"/><rect x="3" y="14.5" width="6.5" height="6.5" rx="1.2" fill="#fff"/><rect x="14.5" y="14.5" width="6.5" height="6.5" rx="1.2" fill="#fff"/></svg> },
           ].map(a => (
             <div key={a.label}
               onClick={() => a.path ? navigate(a.path) : setShowMore(true)}
@@ -3536,13 +3552,13 @@ export function HomePage() {
           style={{
             background: 'var(--surface)', borderRadius: isDesktop ? 16 : 16,
             border: '1px solid var(--border)',
-            padding: isDesktop ? '12px 16px' : '14px 16px',
+            padding: isDesktop ? '12px 16px' : '11px 16px',
             boxShadow: isDesktop ? 'var(--shadow-1)' : undefined,
             display: 'flex', alignItems: 'center', gap: 12,
             cursor: 'pointer',
           }}>
           <div style={{
-            width: isDesktop ? 34 : 42, height: isDesktop ? 34 : 42, borderRadius: '50%',
+            width: isDesktop ? 34 : 38, height: isDesktop ? 34 : 38, borderRadius: '50%',
             background: 'var(--brand)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}>
@@ -3560,11 +3576,11 @@ export function HomePage() {
                 amount once a balance appeared, hiding the action
                 description right when it became most relevant. */}
             {unifiedBalance !== null && unifiedBalance > 0 && (
-              <div style={{ fontSize: 13, color: 'var(--success)', fontWeight: 600, marginTop: 2 }}>
+              <div style={{ fontSize: 13, color: 'var(--success)', fontWeight: 600, marginTop: 1 }}>
                 ${fmt(unifiedBalance)} available
               </div>
             )}
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 1 }}>
               Claim & transfer across chains
             </div>
           </div>
