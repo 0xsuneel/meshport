@@ -1454,12 +1454,15 @@ function MultichainHubCard({
       </div>
 
       {/* Actions — Transfer (Arc → other chains) / Claim (other chains → Arc).
+          Each now sits inside its own rounded box (like a mini button/card)
+          instead of just floating text separated by a thin divider line.
           Each line still capped with whiteSpace:'nowrap' + ellipsis as a
           permanent safety net against ever silently wrapping to a 3rd
           line, regardless of screen width. */}
-      <div style={{ display: 'flex', alignItems: 'center' }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
         <div onClick={() => navigate('/multichain-transfer')}
-          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minWidth: 0 }}>
+          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minWidth: 0,
+            background: 'rgba(255,255,255,0.12)', borderRadius: 10, padding: '6px 7px' }}>
           <div style={{ width: 21, height: 21, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
@@ -1474,9 +1477,9 @@ function MultichainHubCard({
             <path d="M6 3.5l5 4.5-5 4.5" stroke="rgba(255,255,255,0.85)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.25)', margin: '0 6px' }} />
         <div onClick={() => navigate('/multichain-claim')}
-          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minWidth: 0 }}>
+          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minWidth: 0,
+            background: 'rgba(255,255,255,0.12)', borderRadius: 10, padding: '6px 7px' }}>
           <div style={{ width: 21, height: 21, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
