@@ -3344,14 +3344,14 @@ export function HomePage() {
             </div>
           </div>
         ) : (
-        <div style={{ width: `calc(92.15% + ${2 * (PEEK + PEEK_GAP)}px)`, margin: '0 auto' }}>
-        {/* ── HERO ROW — the outer wrapper is `92.15% + 2×(PEEK+PEEK_GAP)` wide
-             (see the ternary's opening div above) — 92.15% = 95% × 0.97,
-             a deliberate 3% narrower than the original 95% every other
-             card on this page uses (explicit request), PLUS extra room on
-             top specifically to fit the peeks — so the center card itself
-             ends up exactly 3% narrower than the page's normal 95% cards,
-             not narrower still from the peek math on top of that.
+        <div style={{ width: `calc(89.39% + ${2 * (PEEK + PEEK_GAP)}px)`, margin: '0 auto' }}>
+        {/* ── HERO ROW — the outer wrapper is `89.39% + 2×(PEEK+PEEK_GAP)` wide
+             (see the ternary's opening div above) — 89.39% = 95% × 0.97 × 0.97,
+             two successive explicit 3%-narrower requests stacked on the
+             original 95% every other card on this page uses, PLUS extra
+             room on top specifically to fit the peeks — so the center card
+             itself ends up exactly that percentage of the page's normal
+             95% cards, not narrower still from the peek math on top of that.
              The viewport here is 100% of that (already-widened) wrapper,
              overflow:hidden, and the row inside it is what gets dragged.
              Geometry (all derived from CARD_W/PEEK/PEEK_GAP above): the row
@@ -3364,7 +3364,16 @@ export function HomePage() {
              blank strip between each ghost and center. Both ghosts always
              render "the other" card (only 2 cards exist), so whichever way
              you drag, real content — not a placeholder — is what grows
-             into view. ───────────────────────────────────────────────── */}
+             into view. REVERTED: each slot div was briefly also given its
+             own static `transform`/GPU-layer hints, to try to fix edge
+             shimmer — but a child with a STATIC transform, nested inside a
+             parent whose transform is actively driven by Framer Motion
+             every frame, is a known trigger for a Chrome repaint/
+             invalidation bug where the child can stop repainting correctly
+             after the parent's transform settles (manifesting as one edge
+             going completely missing after a swipe, not just shimmering).
+             Reverted — only the row itself (below) gets GPU-layer
+             promotion now. ───────────────────────────────────────────── */}
         <div ref={heroCarouselRef} style={{ width: '100%', overflow: 'hidden', position: 'relative', isolation: 'isolate', WebkitBackfaceVisibility: 'hidden', backfaceVisibility: 'hidden' }}>
           <motion.div
             drag="x"
