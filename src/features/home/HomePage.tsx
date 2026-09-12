@@ -3414,50 +3414,68 @@ export function HomePage() {
           >
             {/* ── LEFT GHOST — shows "the other" card, only its rightmost
                  PEEK px actually visible (clipped by the viewport). Tap to
-                 pull it fully into center (same as dragging it there). ── */}
-            <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('left') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              {heroCardIndex === 0 ? (
+                 pull it fully into center (same as dragging it there).
+                 BUG FIX (blink right as a swipe settles): this used to
+                 conditionally render EITHER <MultichainHubCard/> OR
+                 <AvailableBalanceCard/> based on heroCardIndex — a
+                 different COMPONENT TYPE at the same JSX position forces
+                 React to fully unmount one and mount the other the instant
+                 the index flips. That's a genuine DOM tear-down/rebuild at
+                 all 3 slots simultaneously on every single swipe, not just
+                 a style update — very plausibly the "blink" right as the
+                 card takes its new position. Fixed by keeping BOTH card
+                 types permanently mounted in every slot and only toggling
+                 which one is visible via plain CSS `display` — the JSX
+                 position of each component type is now fixed, so a flip
+                 never unmounts or remounts anything, just hides/shows. ── */}
+            <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('left') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden' }}>
+              <div style={{ display: heroCardIndex === 0 ? 'flex' : 'none', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
                 <MultichainHubCard
                   arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
                   balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} fmt={fmt} navigate={navigate}
                 />
-              ) : (
+              </div>
+              <div style={{ display: heroCardIndex === 0 ? 'none' : 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
                 <AvailableBalanceCard
                   portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
                   walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+                  cardRef={heroCardIndex === 0 ? undefined : balanceCardRef}
                 />
-              )}
+              </div>
             </div>
             <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
-            {/* ── CENTER — the fully visible, currently-active card. ──── */}
-            <div style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              {heroCardIndex === 0 ? (
+            {/* ── CENTER — the fully visible, currently-active card. Same
+                 both-types-always-mounted fix as the ghosts above. ────── */}
+            <div style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, overflow: 'hidden' }}>
+              <div style={{ display: heroCardIndex === 0 ? 'flex' : 'none', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
                 <AvailableBalanceCard
                   portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
                   walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
-                  cardRef={balanceCardRef}
+                  cardRef={heroCardIndex === 0 ? balanceCardRef : undefined}
                 />
-              ) : (
+              </div>
+              <div style={{ display: heroCardIndex === 0 ? 'none' : 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
                 <MultichainHubCard
                   arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
                   balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} fmt={fmt} navigate={navigate}
                 />
-              )}
+              </div>
             </div>
             <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
             {/* ── RIGHT GHOST — mirror of the left ghost. ──────────────── */}
-            <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('right') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              {heroCardIndex === 0 ? (
+            <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('right') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden' }}>
+              <div style={{ display: heroCardIndex === 0 ? 'flex' : 'none', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
                 <MultichainHubCard
                   arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
                   balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} fmt={fmt} navigate={navigate}
                 />
-              ) : (
+              </div>
+              <div style={{ display: heroCardIndex === 0 ? 'none' : 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
                 <AvailableBalanceCard
                   portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
                   walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
                 />
-              )}
+              </div>
             </div>
           </motion.div>
         </div>
