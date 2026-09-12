@@ -1521,6 +1521,30 @@ function MultichainHubCard({
 // currently needs it, without duplicating this JSX three times inline. See
 // the hero carousel render below for how the 3 slots work. `cardRef` is
 // optional — only the instance used for height measurement passes one.
+// ── Hero ghost preview — cheap placeholder for the two peek slots ─────────
+// The left/right ghosts only ever show a `PEEK`-px sliver at rest, and even
+// mid-drag they're a means to an end (something to see while pulling the
+// real card into center), not the final resting content. Rendering the
+// FULL rich component there too — with its digit-count font math, ellipsis
+// calculations, and live-updating balance figures — three times over,
+// re-evaluated on every drag frame, is real per-frame render cost on a
+// mobile device, and is a very plausible source of the "hide and show
+// again" jank during swipe (as opposed to a pure CSS/paint bug, which the
+// last few fixes targeted without resolving it). This placeholder has none
+// of that — just static text on the card's own brand color — so it's
+// essentially free to have mounted and animating. The real, full component
+// only ever renders in the CENTER slot below.
+function HeroGhostPreview({ variant }: { variant: 'hub' | 'balance' }) {
+  return (
+    <div style={{ background: 'var(--brand)', borderRadius: 16, height: '100%', boxSizing: 'border-box',
+      display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <span style={{ fontSize: 14, color: '#fff', fontWeight: 800, letterSpacing: '-0.2px', opacity: 0.9 }}>
+        {variant === 'hub' ? 'Multichain Hub' : 'Available Balance'}
+      </span>
+    </div>
+  )
+}
+
 function AvailableBalanceCard({
   displayedBalance, balanceHidden, onToggleHidden, walletAddress, shortAddr, showToastMessage, navigate, fmt, cardRef,
 }: {
@@ -3423,17 +3447,7 @@ export function HomePage() {
                  to the row, so Balance is measured at its true, un-
                  inflated size and Hub is then fit to that real number. ── */}
             <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('left') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              {heroCardIndex === 0 ? (
-                <MultichainHubCard
-                  arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
-                  balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} fmt={fmt} navigate={navigate}
-                />
-              ) : (
-                <AvailableBalanceCard
-                  displayedBalance={displayedBalance} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
-                  walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
-                />
-              )}
+              <HeroGhostPreview variant={heroCardIndex === 0 ? 'hub' : 'balance'} />
             </div>
             <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
             {/* ── CENTER — the fully visible, currently-active card. ──── */}
@@ -3454,17 +3468,7 @@ export function HomePage() {
             <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
             {/* ── RIGHT GHOST — mirror of the left ghost. ──────────────── */}
             <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('right') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              {heroCardIndex === 0 ? (
-                <MultichainHubCard
-                  arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
-                  balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} fmt={fmt} navigate={navigate}
-                />
-              ) : (
-                <AvailableBalanceCard
-                  displayedBalance={displayedBalance} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
-                  walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
-                />
-              )}
+              <HeroGhostPreview variant={heroCardIndex === 0 ? 'hub' : 'balance'} />
             </div>
           </motion.div>
         </div>
