@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useRef, useState, type RefObject, type CSSProperties} from 'react'
+import { flushSync } from 'react-dom'
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
 import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
 import { useMotionValue, animate, motion } from 'framer-motion'
@@ -1388,37 +1389,43 @@ function MultichainHubCard({
 }) {
   // Auto-shrink each stat figure independently by its own whole-digit count —
   // same tiering approach as the Balance hero card's amountFontSize, just
-  // starting from this card's own 26px base and stepping down a tier
-  // earlier (5 digits already), since each figure only has half the card's
-  // width to live in (two side-by-side columns) rather than the full card.
+  // starting from this card's own 21px base (scaled down 20% from the
+  // previous 26px per explicit request — see the 20%-across-the-board note
+  // below) and stepping down a tier earlier (5 digits already), since each
+  // figure only has half the card's width to live in (two side-by-side
+  // columns) rather than the full card.
   const statFontSize = (n: number) => {
     const digitCount = Math.trunc(Math.abs(n)).toString().length
-    return digitCount >= 9 ? 15 : digitCount >= 8 ? 17 : digitCount >= 7 ? 19 : digitCount >= 6 ? 21 : digitCount >= 5 ? 23 : 26
+    return digitCount >= 9 ? 12 : digitCount >= 8 ? 14 : digitCount >= 7 ? 15 : digitCount >= 6 ? 17 : digitCount >= 5 ? 18 : 21
   }
   const transferFontSize = statFontSize(arcAvailable)
   const claimFontSize = statFontSize(claimAvailable)
   // Safety net kept regardless of card size — a line can never silently
   // wrap into a 3rd/4th line and inflate the card's height; it just
-  // truncates with "…" in the (now unlikely, given the card is back to
-  // full size) case it doesn't fit.
+  // truncates with "…" if it doesn't fit.
   const ellipsisLine: CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+  // Every size below (padding, fonts, icons, gaps) is exactly 20% smaller
+  // than the previous pass — the outer card's own footprint is NOT
+  // touched (it's still governed entirely by the parent slot's CARD_W +
+  // heroCardHeight, unchanged) — only what's INSIDE it got smaller, so
+  // it fits within the same fixed height without clipping the actions row.
   return (
-    <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '12px 14px 12px', boxSizing: 'border-box', overflow: 'hidden' }}>
+    <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '10px 11px 10px', boxSizing: 'border-box', overflow: 'hidden' }}>
       {/* Header — title centered, eye toggle shares the same hidden state as the Balance card */}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: 17, color: '#fff', fontWeight: 800, letterSpacing: '-0.2px' }}>Multichain Hub</span>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+        <span style={{ fontSize: 14, color: '#fff', fontWeight: 800, letterSpacing: '-0.2px' }}>Multichain Hub</span>
         <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
-          style={{ position: 'absolute', right: 0, width: 26, height: 26, borderRadius: '50%', background: 'transparent',
+          style={{ position: 'absolute', right: 0, width: 21, height: 21, borderRadius: '50%', background: 'transparent',
             border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
           {balanceHidden ? (
-            <svg width="17" height="14" viewBox="0 0 22 18" fill="none">
+            <svg width="14" height="11" viewBox="0 0 22 18" fill="none">
               <path d="M2 2l18 14" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
               <path d="M6.5 5.5A9.7 9.7 0 011 9c2 3.5 5.5 6 10 6a9.5 9.5 0 005.5-1.8" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
               <path d="M9 3.5A10 10 0 0121 9a10.3 10.3 0 01-2.5 3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
               <circle cx="11" cy="9" r="3" stroke="#fff" strokeWidth="1.5"/>
             </svg>
           ) : (
-            <svg width="17" height="13" viewBox="0 0 22 16" fill="none">
+            <svg width="14" height="10" viewBox="0 0 22 16" fill="none">
               <ellipse cx="11" cy="8" rx="10" ry="7" stroke="#fff" strokeWidth="1.5"/>
               <circle cx="11" cy="8" r="3" stroke="#fff" strokeWidth="1.5"/>
             </svg>
@@ -1430,59 +1437,57 @@ function MultichainHubCard({
           font size shrinks independently via statFontSize() above, so a
           large transfer balance doesn't force the (possibly small) claim
           figure to shrink too, and vice-versa. */}
-      <div style={{ background: 'var(--surface)', borderRadius: 12, display: 'flex', alignItems: 'stretch', padding: '9px 0', marginBottom: 9 }}>
-        <div style={{ flex: 1, textAlign: 'center', minWidth: 0, padding: '0 4px' }}>
-          <div style={{ fontSize: 11, color: 'var(--brand)', fontWeight: 700, marginBottom: 3, ...ellipsisLine }}>Available To Transfer</div>
-          <div style={{ fontSize: transferFontSize, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15, ...ellipsisLine }}>
+      <div style={{ background: 'var(--surface)', borderRadius: 10, display: 'flex', alignItems: 'stretch', padding: '7px 0', marginBottom: 7 }}>
+        <div style={{ flex: 1, textAlign: 'center', minWidth: 0, padding: '0 3px' }}>
+          <div style={{ fontSize: 9, color: 'var(--brand)', fontWeight: 700, marginBottom: 2, ...ellipsisLine }}>Available To Transfer</div>
+          <div style={{ fontSize: transferFontSize, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.4px', lineHeight: 1.15, ...ellipsisLine }}>
             {balanceHidden ? '••••' : `$${fmt(arcAvailable)}`}
           </div>
         </div>
         <div style={{ width: 1, background: 'var(--border)', margin: '2px 0' }} />
-        <div style={{ flex: 1, textAlign: 'center', minWidth: 0, padding: '0 4px' }}>
-          <div style={{ fontSize: 11, color: 'var(--brand)', fontWeight: 700, marginBottom: 3, ...ellipsisLine }}>Available To Claim</div>
-          <div style={{ fontSize: claimFontSize, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px', lineHeight: 1.15, ...ellipsisLine }}>
+        <div style={{ flex: 1, textAlign: 'center', minWidth: 0, padding: '0 3px' }}>
+          <div style={{ fontSize: 9, color: 'var(--brand)', fontWeight: 700, marginBottom: 2, ...ellipsisLine }}>Available To Claim</div>
+          <div style={{ fontSize: claimFontSize, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.4px', lineHeight: 1.15, ...ellipsisLine }}>
             {balanceHidden ? '••••' : `$${fmt(claimAvailable)}`}
           </div>
         </div>
       </div>
 
       {/* Actions — Transfer (Arc → other chains) / Claim (other chains → Arc).
-          Card is back to full (original Balance-card-matching) width, so
-          the fuller original wording comfortably fits two lines again —
-          each line still capped with whiteSpace:'nowrap' + ellipsis as a
+          Each line still capped with whiteSpace:'nowrap' + ellipsis as a
           permanent safety net against ever silently wrapping to a 3rd
           line, regardless of screen width. */}
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <div onClick={() => navigate('/multichain-transfer')}
-          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', minWidth: 0 }}>
-          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
+          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minWidth: 0 }}>
+          <div style={{ width: 21, height: 21, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
               <path d="M4 12L12 4M12 4H6M12 4V10" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 700, color: '#fff', lineHeight: 1.25 }}>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 9, fontWeight: 700, color: '#fff', lineHeight: 1.25 }}>
             <div style={ellipsisLine}>Transfer from Arc</div>
             <div style={ellipsisLine}>to Across Chains</div>
           </div>
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
             <path d="M6 3.5l5 4.5-5 4.5" stroke="rgba(255,255,255,0.85)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
-        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.25)', margin: '0 8px' }} />
+        <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.25)', margin: '0 6px' }} />
         <div onClick={() => navigate('/multichain-claim')}
-          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', minWidth: 0 }}>
-          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
+          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', minWidth: 0 }}>
+          <div style={{ width: 21, height: 21, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="none">
               <path d="M12 4L4 12M4 12H10M4 12V6" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 700, color: '#fff', lineHeight: 1.25 }}>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 9, fontWeight: 700, color: '#fff', lineHeight: 1.25 }}>
             <div style={ellipsisLine}>Bring Cross Chain</div>
             <div style={ellipsisLine}>Funds To Arc</div>
           </div>
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
             <path d="M6 3.5l5 4.5-5 4.5" stroke="rgba(255,255,255,0.85)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
@@ -1792,7 +1797,19 @@ export function HomePage() {
     animate(heroRowX, target, {
       type: 'spring', stiffness: 380, damping: 38,
       onComplete: () => {
-        setHeroCardIndex(i => (i === 0 ? 1 : 0))
+        // BUG FIX (flicker on swipe): `setHeroCardIndex` (a React state
+        // update, which re-renders which card is in which slot) and
+        // `heroRowX.set(...)` (a Framer Motion value, applied directly to
+        // the DOM outside React's render cycle) used to run back-to-back
+        // with no ordering guarantee — React 18 batches/defers the actual
+        // DOM commit, so for one frame the motion value could already be
+        // at the reset position while the DOM still showed the PRE-flip
+        // card assignment (or vice versa), flashing the wrong card in the
+        // wrong slot for a frame. flushSync forces the index-flip's DOM
+        // update to commit immediately, so by the time the motion value
+        // resets, the DOM already reflects the new assignment — both
+        // changes land in the same frame, no flicker.
+        flushSync(() => { setHeroCardIndex(i => (i === 0 ? 1 : 0)) })
         heroRowX.set(HERO_REST_X)
         heroRevealing.current = false
       },
