@@ -1411,9 +1411,26 @@ function MultichainHubCard({
   // it fits within the same fixed height without clipping the actions row.
   return (
     <div style={{ background: 'var(--brand)', borderRadius: 16, padding: '10px 11px 10px', boxSizing: 'border-box', overflow: 'hidden' }}>
-      {/* Header — title centered, eye toggle shares the same hidden state as the Balance card */}
+      {/* Header — logo badge (same globe glyph as the "Multichain Hub" row
+          card below the quick actions) + title, both centered as one
+          group; eye toggle shares the same hidden state as the Balance
+          card. Badge uses the translucent white circle style already used
+          by the action-row icons further down in THIS card (rather than
+          the solid brand-green badge the row card uses), since a
+          brand-green badge would be invisible against this card's own
+          brand-green background. */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-        <span style={{ fontSize: 14, color: '#fff', fontWeight: 800, letterSpacing: '-0.2px' }}>Multichain Hub</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <div style={{ width: 18, height: 18, borderRadius: '50%', background: 'rgba(255,255,255,0.18)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="10" height="10" viewBox="0 0 18 18" fill="none">
+              <circle cx="9" cy="9" r="8" stroke="#fff" strokeWidth="1.4"/>
+              <ellipse cx="9" cy="9" rx="4" ry="8" stroke="#fff" strokeWidth="1.4"/>
+              <line x1="1" y1="9" x2="17" y2="9" stroke="#fff" strokeWidth="1.4"/>
+            </svg>
+          </div>
+          <span style={{ fontSize: 14, color: '#fff', fontWeight: 800, letterSpacing: '-0.2px' }}>Multichain Hub</span>
+        </div>
         <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
           style={{ position: 'absolute', right: 0, width: 21, height: 21, borderRadius: '50%', background: 'transparent',
             border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
@@ -3326,13 +3343,29 @@ export function HomePage() {
              render "the other" card (only 2 cards exist), so whichever way
              you drag, real content — not a placeholder — is what grows
              into view. ───────────────────────────────────────────────── */}
-        <div ref={heroCarouselRef} style={{ width: '100%', overflow: 'hidden', position: 'relative' }}>
+        <div ref={heroCarouselRef} style={{ width: '100%', overflow: 'hidden', position: 'relative', isolation: 'isolate', WebkitBackfaceVisibility: 'hidden', backfaceVisibility: 'hidden' }}>
           <motion.div
             drag="x"
             dragElastic={0.15}
             dragConstraints={{ left: HERO_REST_X - (CARD_W + PEEK_GAP), right: HERO_REST_X + (CARD_W + PEEK_GAP) }}
             dragMomentum={false}
-            style={{ display: 'flex', alignItems: 'flex-start', x: heroRowX, touchAction: 'pan-y', cursor: 'grab' }}
+            style={{
+              display: 'flex', alignItems: 'flex-start', x: heroRowX, touchAction: 'pan-y', cursor: 'grab',
+              // Fixes edge flicker during drag: rounded corners + overflow:hidden
+              // clipping on an element being transformed every frame is a known
+              // mobile-Chrome repaint glitch — forcing this row onto its own GPU
+              // compositor layer (rather than being repainted/rasterized on the
+              // main thread each frame) makes the drag render smoothly instead.
+              // `z: 0` (a Framer Motion style prop, not raw CSS) rather than a
+              // manual `transform: translateZ(0)` — Framer computes the actual
+              // `transform` CSS property itself from x/y/z, so setting `z`
+              // through it (instead of fighting it with a raw transform) is
+              // what actually promotes this to its own layer.
+              z: 0,
+              willChange: 'transform',
+              WebkitBackfaceVisibility: 'hidden',
+              backfaceVisibility: 'hidden',
+            }}
             onDragEnd={(_e, info) => {
               const threshold = CARD_W * 0.15
               if (info.offset.x < -threshold) revealHeroSide('right')
