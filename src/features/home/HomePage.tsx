@@ -3312,7 +3312,7 @@ export function HomePage() {
             dragElastic={0.15}
             dragConstraints={{ left: HERO_REST_X - (CARD_W + PEEK_GAP), right: HERO_REST_X + (CARD_W + PEEK_GAP) }}
             dragMomentum={false}
-            style={{ display: 'flex', alignItems: 'stretch', x: heroRowX, touchAction: 'pan-y', cursor: 'grab', height: heroCardHeight ?? undefined }}
+            style={{ display: 'flex', alignItems: 'flex-start', x: heroRowX, touchAction: 'pan-y', cursor: 'grab' }}
             onDragEnd={(_e, info) => {
               const threshold = CARD_W * 0.15
               if (info.offset.x < -threshold) revealHeroSide('right')
@@ -3322,8 +3322,22 @@ export function HomePage() {
           >
             {/* ── LEFT GHOST — shows "the other" card, only its rightmost
                  PEEK px actually visible (clipped by the viewport). Tap to
-                 pull it fully into center (same as dragging it there). ── */}
-            <div onClick={() => revealHeroSide('left')} style={{ width: CARD_W, flexShrink: 0, cursor: 'pointer' }}>
+                 pull it fully into center (same as dragging it there).
+                 BUG FIX: the row used to be `alignItems:'stretch'` (flex's
+                 own default), which silently stretched EVERY slot —
+                 including Balance's — to match whichever slot's natural
+                 content was tallest. Since Balance's own root is
+                 `height:'100%'`, that stretch inflated its rendered height
+                 to match Hub's taller content BEFORE the height-measuring
+                 effect ever ran — so the "original size" being measured
+                 and locked in was already wrong (too tall), which is
+                 exactly the big empty green gap in the screenshot. Row is
+                 now `alignItems:'flex-start'` (no auto-stretch — every
+                 slot sizes to its own real content), and the measured
+                 height is applied explicitly to EACH slot below instead of
+                 to the row, so Balance is measured at its true, un-
+                 inflated size and Hub is then fit to that real number. ── */}
+            <div onClick={() => revealHeroSide('left')} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer' }}>
               {heroCardIndex === 0 ? (
                 <MultichainHubCard
                   arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
@@ -3338,7 +3352,7 @@ export function HomePage() {
             </div>
             <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
             {/* ── CENTER — the fully visible, currently-active card. ──── */}
-            <div style={{ width: CARD_W, flexShrink: 0 }}>
+            <div style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0 }}>
               {heroCardIndex === 0 ? (
                 <AvailableBalanceCard
                   displayedBalance={displayedBalance} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
@@ -3354,7 +3368,7 @@ export function HomePage() {
             </div>
             <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
             {/* ── RIGHT GHOST — mirror of the left ghost. ──────────────── */}
-            <div onClick={() => revealHeroSide('right')} style={{ width: CARD_W, flexShrink: 0, cursor: 'pointer' }}>
+            <div onClick={() => revealHeroSide('right')} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer' }}>
               {heroCardIndex === 0 ? (
                 <MultichainHubCard
                   arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
