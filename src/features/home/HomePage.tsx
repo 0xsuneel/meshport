@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useRef, useState, type RefObject, type CSSProperties} from 'react'
+import {useEffect, useMemo, useRef, useState, type RefObject, type CSSProperties, type ReactNode} from 'react'
 import { flushSync } from 'react-dom'
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
 import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
@@ -1521,10 +1521,37 @@ function MultichainHubCard({
 // currently needs it, without duplicating this JSX three times inline. See
 // the hero carousel render below for how the 3 slots work. `cardRef` is
 // optional — only the instance used for height measurement passes one.
+// ── Animated balance text — isolates the count-up animation's re-renders ───
+// The count-up animation used to live as state directly on HomePage itself
+// (`useState` + a Framer `animate(...)` calling `setDisplayedBalance` on
+// EVERY animation frame). Since that state lived on the top-level HomePage
+// component, every single frame of that ~0.6s animation re-rendered the
+// ENTIRE HomePage tree — including all THREE hero-carousel card instances
+// (center + both real-content ghosts), each redoing its digit-count font
+// math and ellipsis calculations. If that animation happened to fire while
+// the user was mid-swipe (e.g. from a routine balance-polling tick), you'd
+// get React's per-frame re-render fighting Framer's per-frame drag update
+// on the same frame budget — a very plausible source of "flicker" that's
+// really render-thrashing, not a paint/CSS bug (which is what every
+// previous fix targeted). Moving this state into its OWN small component
+// means each `setDisplayed` call only re-renders THIS tiny subtree — not
+// HomePage, not the hero carousel three levels away — regardless of how
+// many times this component is mounted (all 3 hero slots can each run
+// their own independent copy of this animation safely).
+function AnimatedBalanceText({ target, children }: { target: number; children: (displayed: number) => ReactNode }) {
+  const motionVal = useMotionValue(target)
+  const [displayed, setDisplayed] = useState(target)
+  useEffect(() => {
+    const controls = animate(motionVal, target, { duration: 0.6, ease: 'easeOut', onUpdate: setDisplayed })
+    return () => controls.stop()
+  }, [target])
+  return <>{children(displayed)}</>
+}
+
 function AvailableBalanceCard({
-  displayedBalance, balanceHidden, onToggleHidden, walletAddress, shortAddr, showToastMessage, navigate, fmt, cardRef,
+  portfolioTotal, balanceHidden, onToggleHidden, walletAddress, shortAddr, showToastMessage, navigate, fmt, cardRef,
 }: {
-  displayedBalance: number
+  portfolioTotal: number
   balanceHidden: boolean
   onToggleHidden: () => void
   walletAddress: string | null
@@ -1534,27 +1561,6 @@ function AvailableBalanceCard({
   fmt: (n: number, symbol?: string) => string
   cardRef?: RefObject<HTMLDivElement>
 }) {
-  // Auto-shrink the balance figure so large amounts (6+ digits) stay inside
-  // the white pill instead of overflowing past it — normal balances (up to
-  // 5 digits before the decimal) keep the original 38px untouched.
-  // fmt() adds thousand-separator commas (e.g. "1,420") for the
-  // asset-history table elsewhere in this file, where that reads
-  // naturally — but this hero figure is meant to show the plain number, so
-  // strip the commas back out here specifically rather than changing
-  // fmt() itself and affecting every other caller.
-  const formattedBalance = fmt(displayedBalance).replace(/,/g, '')
-  const wholePart = formattedBalance.split('.')[0].replace(/[^0-9]/g, '')
-  const digitCount = wholePart.length
-  const amountFontSize = digitCount >= 9 ? 20 : digitCount >= 8 ? 24 : digitCount >= 7 ? 27 : digitCount >= 6 ? 30 : 34
-  // BUG FIX: fmt() already trims a whole-number balance down to "1,420"
-  // (no decimal point at all, see trimTrailingZeros in lib/utils.ts) — but
-  // this split-into-two-spans layout always rendered a literal "." before
-  // the decimal-part span regardless of whether one actually existed.
-  // React renders {undefined} as nothing, so that hardcoded "." was the
-  // ONLY thing left behind: a whole-number balance showed as "$1,420."
-  // with a dangling dot and no digits after it. Only render the decimal
-  // span (and its leading dot) when there's a real decimal part to show.
-  const decimalPart = formattedBalance.split('.')[1]
   return (
     <div ref={cardRef} style={{ background: 'var(--brand)', borderRadius: 16, padding: '12px 16px 0', overflow: 'hidden', boxSizing: 'border-box' }}>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 2 }}>
@@ -1587,28 +1593,57 @@ function AvailableBalanceCard({
           <path d="M1 5v9a1 1 0 001 1h9" stroke="rgba(255,255,255,0.75)" strokeWidth="1.4" strokeLinecap="round"/>
         </svg>
       </div>
-      <div style={{ background: 'var(--surface)', borderRadius: '12px 12px 0 0', padding: '10px 16px 1px', margin: '0 16%', textAlign: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4, marginBottom: 0, lineHeight: 1 }}>
-          <span style={{ fontSize: amountFontSize, fontWeight: 700, lineHeight: 1, color: 'var(--text-primary)' }}>$</span>
-          {balanceHidden ? (
-            <span style={{ fontSize: amountFontSize, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1, color: 'var(--text-primary)' }}>••••••</span>
-          ) : (
-            <>
-              <span style={{ fontSize: amountFontSize, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1, color: 'var(--text-primary)' }}>
-                {formattedBalance.split('.')[0]}
-              </span>
-              {decimalPart ? (
-                <span style={{ fontSize: amountFontSize, fontWeight: 700, lineHeight: 1, color: 'var(--text-primary)' }}>
-                  .{decimalPart}
-                </span>
-              ) : null}
-            </>
-          )}
-        </div>
-        <span onClick={() => navigate('/activity')} style={{ fontSize: 14, color: 'var(--brand)', fontWeight: 500, cursor: 'pointer', display: 'inline-block', marginTop: 1 }}>
-          View Transactions
-        </span>
-      </div>
+      <AnimatedBalanceText target={portfolioTotal}>
+        {(displayedBalance) => {
+          // Auto-shrink the balance figure so large amounts (6+ digits)
+          // stay inside the white pill instead of overflowing past it —
+          // normal balances (up to 5 digits before the decimal) keep the
+          // original 38px untouched.
+          // fmt() adds thousand-separator commas (e.g. "1,420") for the
+          // asset-history table elsewhere in this file, where that reads
+          // naturally — but this hero figure is meant to show the plain
+          // number, so strip the commas back out here specifically rather
+          // than changing fmt() itself and affecting every other caller.
+          const formattedBalance = fmt(displayedBalance).replace(/,/g, '')
+          const wholePart = formattedBalance.split('.')[0].replace(/[^0-9]/g, '')
+          const digitCount = wholePart.length
+          const amountFontSize = digitCount >= 9 ? 20 : digitCount >= 8 ? 24 : digitCount >= 7 ? 27 : digitCount >= 6 ? 30 : 34
+          // BUG FIX: fmt() already trims a whole-number balance down to
+          // "1,420" (no decimal point at all, see trimTrailingZeros in
+          // lib/utils.ts) — but this split-into-two-spans layout always
+          // rendered a literal "." before the decimal-part span regardless
+          // of whether one actually existed. React renders {undefined} as
+          // nothing, so that hardcoded "." was the ONLY thing left behind:
+          // a whole-number balance showed as "$1,420." with a dangling dot
+          // and no digits after it. Only render the decimal span (and its
+          // leading dot) when there's a real decimal part to show.
+          const decimalPart = formattedBalance.split('.')[1]
+          return (
+        <div style={{ background: 'var(--surface)', borderRadius: '12px 12px 0 0', padding: '10px 16px 1px', margin: '0 16%', textAlign: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4, marginBottom: 0, lineHeight: 1 }}>
+              <span style={{ fontSize: amountFontSize, fontWeight: 700, lineHeight: 1, color: 'var(--text-primary)' }}>$</span>
+              {balanceHidden ? (
+                <span style={{ fontSize: amountFontSize, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1, color: 'var(--text-primary)' }}>••••••</span>
+              ) : (
+                <>
+                  <span style={{ fontSize: amountFontSize, fontWeight: 700, letterSpacing: '-0.5px', lineHeight: 1, color: 'var(--text-primary)' }}>
+                    {formattedBalance.split('.')[0]}
+                  </span>
+                  {decimalPart ? (
+                    <span style={{ fontSize: amountFontSize, fontWeight: 700, lineHeight: 1, color: 'var(--text-primary)' }}>
+                      .{decimalPart}
+                    </span>
+                  ) : null}
+                </>
+              )}
+            </div>
+            <span onClick={() => navigate('/activity')} style={{ fontSize: 14, color: 'var(--brand)', fontWeight: 500, cursor: 'pointer', display: 'inline-block', marginTop: 1 }}>
+              View Transactions
+            </span>
+          </div>
+          )
+        }}
+      </AnimatedBalanceText>
     </div>
   )
 }
@@ -1996,19 +2031,14 @@ export function HomePage() {
   // CHANGE 4: Total portfolio = USDC + EURC (in USD) + cirBTC (in USD)
   const portfolioTotal = balance + eurcBalance * 1.08 + cirBtcBalance * btcPrice
 
-  // Animated count-up for the balance display — purely visual, never used
-  // for anything computed. Balance visibility toggle (below) bypasses this
-  // entirely and shows the masked dots straight away, so hiding the
-  // balance never has to wait on an in-flight animation.
-  const balanceMotion = useMotionValue(portfolioTotal)
-  const [displayedBalance, setDisplayedBalance] = useState(portfolioTotal)
-  useEffect(() => {
-    const controls = animate(balanceMotion, portfolioTotal, {
-      duration: 0.6, ease: 'easeOut',
-      onUpdate: (v) => setDisplayedBalance(v),
-    })
-    return () => controls.stop()
-  }, [portfolioTotal])
+  // Animated count-up for the balance display now lives in its own small
+  // `AnimatedBalanceText` component (see above), not as state here — see
+  // that component's comment for why: this used to be `useState` directly
+  // on HomePage, so every frame of the count-up re-rendered the entire
+  // HomePage tree (all 3 hero-carousel card instances included), which is
+  // a very plausible source of "flicker" that's really render-thrashing —
+  // React's per-frame re-render fighting Framer's per-frame drag update on
+  // the same frame budget if the animation happened to fire mid-swipe.
 
   const [assetSheet,   setAssetSheet]   = useState<'USDC'|'EURC'|'cirBTC'|null>(null)
   // Desktop's Recent Activity panel — tapping a row used to navigate away to
@@ -3299,10 +3329,14 @@ export function HomePage() {
               {balanceHidden ? (
                 <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-1.5px', lineHeight: 1, color: 'var(--text-primary)' }}>••••••</span>
               ) : (
-                <>
-                  <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-1.5px', lineHeight: 1 }}>${fmt(displayedBalance).split('.')[0]}</span>
-                  <span style={{ fontSize: 20, fontWeight: 400, color: 'var(--text-secondary)', marginLeft: 1 }}>.{fmt(displayedBalance).split('.')[1]}</span>
-                </>
+                <AnimatedBalanceText target={portfolioTotal}>
+                  {(displayedBalance) => (
+                    <>
+                      <span style={{ fontSize: 36, fontWeight: 700, letterSpacing: '-1.5px', lineHeight: 1 }}>${fmt(displayedBalance).split('.')[0]}</span>
+                      <span style={{ fontSize: 20, fontWeight: 400, color: 'var(--text-secondary)', marginLeft: 1 }}>.{fmt(displayedBalance).split('.')[1]}</span>
+                    </>
+                  )}
+                </AnimatedBalanceText>
               )}
             </div>
             {!balanceHidden && (
@@ -3389,7 +3423,7 @@ export function HomePage() {
                 />
               ) : (
                 <AvailableBalanceCard
-                  displayedBalance={displayedBalance} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
+                  portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
                   walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
                 />
               )}
@@ -3399,7 +3433,7 @@ export function HomePage() {
             <div style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               {heroCardIndex === 0 ? (
                 <AvailableBalanceCard
-                  displayedBalance={displayedBalance} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
+                  portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
                   walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
                   cardRef={balanceCardRef}
                 />
@@ -3420,7 +3454,7 @@ export function HomePage() {
                 />
               ) : (
                 <AvailableBalanceCard
-                  displayedBalance={displayedBalance} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
+                  portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
                   walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
                 />
               )}
