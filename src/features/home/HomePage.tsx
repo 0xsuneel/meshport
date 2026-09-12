@@ -1778,12 +1778,21 @@ export function HomePage() {
   const CARD_W = Math.max(0, heroCardWidth - 2 * PEEK - 2 * PEEK_GAP)
   const HERO_REST_X = PEEK - CARD_W
   const heroRowX = useMotionValue(HERO_REST_X)
-  // Keep the row's rest position correct if the viewport is resized (e.g.
-  // orientation change) while sitting idle — skipped while a drag/reveal
-  // animation might be in flight isn't tracked here since resize mid-drag
-  // is rare enough that a small jump is an acceptable trade-off for
-  // simplicity.
-  useEffect(() => { heroRowX.set(HERO_REST_X) }, [HERO_REST_X])
+  // Tracks whether the user currently has a finger on the row, or a
+  // reveal/snap-back animation is actively playing. BUG FIX (intermittent
+  // flicker/"drop" mid-swipe): an unrelated background re-render elsewhere
+  // on this page (e.g. a balance-polling tick) recomputes HERO_REST_X fresh
+  // every render — if it came out even a fraction of a pixel different due
+  // to sub-pixel layout rounding, the effect below would fire and SNAP the
+  // row straight to that position, interrupting whatever gesture/animation
+  // was actively playing at that exact moment. Guarding the effect so it
+  // never touches the position while a gesture or animation owns it stops
+  // that snap from ever landing mid-swipe.
+  const heroGestureActive = useRef(false)
+  useEffect(() => {
+    if (heroGestureActive.current) return
+    heroRowX.set(HERO_REST_X)
+  }, [HERO_REST_X])
   // Both cards render at this EXACT same fixed height, measured off
   // whichever instance of the Balance card is currently in the DOM (it's
   // always present somewhere — as `center` when heroCardIndex is 0, or as
@@ -1809,10 +1818,16 @@ export function HomePage() {
   // position — both in the same instant, so nothing visibly jumps (the
   // position the animation just reached and the fresh T are, by
   // construction, the same pixel position).
-  const heroRevealing = useRef(false)
+  // NOTE: this does NOT itself guard against being called while
+  // heroGestureActive is already true — onDragEnd always calls this AFTER
+  // onDragStart has already set that flag, so guarding here would make it
+  // silently never fire after a real drag. Callers that aren't a drag
+  // release (the peek taps, the dot buttons) check the flag themselves
+  // before calling this, to avoid double-triggering a second reveal while
+  // one is still animating.
   const revealHeroSide = (side: 'left' | 'right') => {
-    if (heroRevealing.current || CARD_W <= 0) return
-    heroRevealing.current = true
+    if (CARD_W <= 0) return
+    heroGestureActive.current = true
     const target = side === 'left' ? HERO_REST_X + (CARD_W + PEEK_GAP) : HERO_REST_X - (CARD_W + PEEK_GAP)
     animate(heroRowX, target, {
       type: 'spring', stiffness: 380, damping: 38,
@@ -1831,11 +1846,16 @@ export function HomePage() {
         // changes land in the same frame, no flicker.
         flushSync(() => { setHeroCardIndex(i => (i === 0 ? 1 : 0)) })
         heroRowX.set(HERO_REST_X)
-        heroRevealing.current = false
+        heroGestureActive.current = false
       },
     })
   }
-  const snapHeroBack = () => animate(heroRowX, HERO_REST_X, { type: 'spring', stiffness: 380, damping: 38 })
+  const snapHeroBack = () => {
+    animate(heroRowX, HERO_REST_X, {
+      type: 'spring', stiffness: 380, damping: 38,
+      onComplete: () => { heroGestureActive.current = false },
+    })
+  }
 
   // ── Home header search: People + Services ──────────────────────────────────
   // Two different matching rules, merged:
@@ -3324,12 +3344,14 @@ export function HomePage() {
             </div>
           </div>
         ) : (
-        <div style={{ width: `calc(95% + ${2 * (PEEK + PEEK_GAP)}px)`, margin: '0 auto' }}>
-        {/* ── HERO ROW — the outer wrapper is `95% + 2×(PEEK+PEEK_GAP)` wide
-             (see the ternary's opening div above), i.e. the ORIGINAL 95%
-             every other card on this page uses, PLUS extra room on top
-             specifically to fit the peeks — so the center card itself ends
-             up exactly the original 95%-equivalent size, never narrower.
+        <div style={{ width: `calc(92.15% + ${2 * (PEEK + PEEK_GAP)}px)`, margin: '0 auto' }}>
+        {/* ── HERO ROW — the outer wrapper is `92.15% + 2×(PEEK+PEEK_GAP)` wide
+             (see the ternary's opening div above) — 92.15% = 95% × 0.97,
+             a deliberate 3% narrower than the original 95% every other
+             card on this page uses (explicit request), PLUS extra room on
+             top specifically to fit the peeks — so the center card itself
+             ends up exactly 3% narrower than the page's normal 95% cards,
+             not narrower still from the peek math on top of that.
              The viewport here is 100% of that (already-widened) wrapper,
              overflow:hidden, and the row inside it is what gets dragged.
              Geometry (all derived from CARD_W/PEEK/PEEK_GAP above): the row
@@ -3349,6 +3371,7 @@ export function HomePage() {
             dragElastic={0.15}
             dragConstraints={{ left: HERO_REST_X - (CARD_W + PEEK_GAP), right: HERO_REST_X + (CARD_W + PEEK_GAP) }}
             dragMomentum={false}
+            onDragStart={() => { heroGestureActive.current = true }}
             style={{
               display: 'flex', alignItems: 'flex-start', x: heroRowX, touchAction: 'pan-y', cursor: 'grab',
               // Fixes edge flicker during drag: rounded corners + overflow:hidden
@@ -3390,7 +3413,7 @@ export function HomePage() {
                  height is applied explicitly to EACH slot below instead of
                  to the row, so Balance is measured at its true, un-
                  inflated size and Hub is then fit to that real number. ── */}
-            <div onClick={() => revealHeroSide('left')} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('left') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               {heroCardIndex === 0 ? (
                 <MultichainHubCard
                   arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
@@ -3421,7 +3444,7 @@ export function HomePage() {
             </div>
             <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
             {/* ── RIGHT GHOST — mirror of the left ghost. ──────────────── */}
-            <div onClick={() => revealHeroSide('right')} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('right') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               {heroCardIndex === 0 ? (
                 <MultichainHubCard
                   arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
@@ -3441,7 +3464,7 @@ export function HomePage() {
         <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
           {[0, 1].map(i => (
             <button key={i} aria-label={i === 0 ? 'Show balance card' : 'Show multichain hub card'}
-              onClick={() => { if (i !== heroCardIndex) revealHeroSide(i > heroCardIndex ? 'right' : 'left') }}
+              onClick={() => { if (i !== heroCardIndex && !heroGestureActive.current) revealHeroSide(i > heroCardIndex ? 'right' : 'left') }}
               style={{
                 width: heroCardIndex === i ? 16 : 6, height: 6, borderRadius: 3, border: 'none', padding: 0,
                 background: heroCardIndex === i ? 'var(--brand)' : 'var(--border)', cursor: 'pointer',
