@@ -1648,6 +1648,297 @@ function AvailableBalanceCard({
   )
 }
 
+// ── Mobile Hero Carousel — Balance card / Multichain Hub card, swipeable ───
+// BUG FIX (swipe required twice + visible flicker): this carousel's state
+// (heroCardIndex, heroRowX, the drag handlers) used to live directly on
+// HomePage itself. Every single swipe calls revealHeroSide(), which — for
+// good reason (see that function's own comment) — wraps its index flip in
+// flushSync() to force an IMMEDIATE, synchronous re-render. flushSync
+// doesn't just re-render the two small cards here — it forced React to
+// synchronously re-render the ENTIRE HomePage tree (Assets list, Recent
+// Activity, the Insights column's charts, every search/notification bit
+// of state) in the middle of the touch-release event handler, every time.
+// That is a large, expensive render to force synchronously at exactly the
+// moment a smooth spring animation needs to start — a dropped frame right
+// there reads as "the swipe did nothing" (so the next instinct is to swipe
+// again), and the delayed render finally landing a beat later is the
+// flicker. Moving this whole carousel — state, refs, drag handlers, and
+// the two cards — into its own small component means flushSync's forced
+// render only ever touches this tiny subtree, never HomePage's, regardless
+// of how large the rest of the page's state graph is. Same category of
+// isolation fix as AnimatedBalanceText above, applied to the other place
+// on this page with the same render-thrashing risk.
+function MobileHeroCarousel({
+  portfolioTotal, balanceHidden, onToggleHidden, walletAddress, shortAddr, showToastMessage, navigate, fmt,
+  arcAvailable, claimAvailable,
+}: {
+  portfolioTotal: number
+  balanceHidden: boolean
+  onToggleHidden: () => void
+  walletAddress: string | null
+  shortAddr: string
+  showToastMessage: (msg: string, kind: 'success' | 'error') => void
+  navigate: NavigateFunction
+  fmt: (n: number, symbol?: string) => string
+  arcAvailable: number
+  claimAvailable: number
+}) {
+  // ── Hero carousel — Balance card / Multichain Hub card ─────────────────
+  // The peek edges are REAL card content, not a decorative hint — the
+  // viewport (heroCarouselRef, overflow:hidden) contains ONE flex row of 5
+  // children laid out contiguously — [leftGhost][gap][center][gap]
+  // [rightGhost] — and dragging the row's x directly is what makes the
+  // ghost slivers grow/shrink live under your finger. Left/right ghost
+  // always show "the other" card (only 2 cards total), so whichever
+  // direction you drag, the correctly-sized real card content is right
+  // there to be pulled into center — nothing pops in from off-screen.
+  // `CARD_W` is each slot's width, `HERO_REST_X` is the row's resting
+  // translateX that centers the `center` slot with exactly PEEK px of each
+  // ghost visible on either side (see the geometry comment at the render).
+  // Dragging past ~15% of CARD_W animates the row the REST of the way to
+  // the next full-reveal position, then relabels which card is "center"
+  // and resets the row's x back to HERO_REST_X in the same frame — the
+  // just-arrived-at position and the fresh rest position are, by
+  // construction, pixel-identical (the "infinite 2-item loop" trick), so
+  // nothing visibly jumps.
+  const [heroCardIndex, setHeroCardIndex] = useState(0)
+  const heroCarouselRef = useRef<HTMLDivElement>(null)
+  const [heroCardWidth, setHeroCardWidth] = useState(0)
+  useEffect(() => {
+    const measure = () => { if (heroCarouselRef.current) setHeroCardWidth(heroCarouselRef.current.offsetWidth) }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [])
+  // PEEK = width of each ghost's visible sliver at rest; PEEK_GAP = blank
+  // space between that sliver and the centered card, so the two never
+  // touch. These cost the card nothing — the outer wrapper (see the
+  // render) adds this same amount of EXTRA width on top of the page's
+  // normal 89.39% card width instead of subtracting it.
+  const PEEK = 11
+  const PEEK_GAP = 6
+  const CARD_W = Math.max(0, heroCardWidth - 2 * PEEK - 2 * PEEK_GAP)
+  const HERO_REST_X = PEEK - CARD_W
+  const heroRowX = useMotionValue(HERO_REST_X)
+  // Tracks whether the user currently has a finger on the row, or a
+  // reveal/snap-back animation is actively playing — guards the effect
+  // below so an unrelated background re-render (e.g. a balance-polling
+  // tick, which recomputes HERO_REST_X fresh every render) can't snap the
+  // row's position out from under an active gesture or animation.
+  const heroGestureActive = useRef(false)
+  useEffect(() => {
+    if (heroGestureActive.current) return
+    heroRowX.set(HERO_REST_X)
+  }, [HERO_REST_X])
+  // Both cards render at this EXACT same fixed height, measured off
+  // whichever instance of the Balance card is currently in the DOM (it's
+  // always present somewhere — as `center` when heroCardIndex is 0, or as
+  // both ghosts when heroCardIndex is 1 — and every slot shares the same
+  // CARD_W width, so its rendered height is the same regardless of which
+  // slot it's in).
+  const balanceCardRef = useRef<HTMLDivElement>(null)
+  const [heroCardHeight, setHeroCardHeight] = useState<number | null>(null)
+  useEffect(() => {
+    const measure = () => { if (balanceCardRef.current) setHeroCardHeight(balanceCardRef.current.offsetHeight) }
+    measure()
+    const ro = new ResizeObserver(measure)
+    if (balanceCardRef.current) ro.observe(balanceCardRef.current)
+    window.addEventListener('resize', measure)
+    return () => { ro.disconnect(); window.removeEventListener('resize', measure) }
+  }, [heroCardIndex])
+  // Animates the row all the way to a full reveal of one ghost, THEN
+  // relabels which card is "center" and resets x to the fresh rest
+  // position — both in the same instant. NOTE: this does NOT guard
+  // against being called while heroGestureActive is already true —
+  // onDragEnd always calls this AFTER onDragStart has already set that
+  // flag, so guarding here would make it silently never fire after a real
+  // drag. Callers that aren't a drag release (peek taps, dot buttons)
+  // check the flag themselves before calling this.
+  // BUG FIX (sustained ~250-300ms missing edge, confirmed via frame-by-frame
+  // video analysis — not a paint/GPU glitch, a real structural gap): the
+  // index used to flip only in `onComplete`, at the very END of the settle
+  // animation. But for the ENTIRE animation before that, the row's 3 DOM
+  // slots were still labeled with the OLD (pre-flip) assignment — and under
+  // the old labels, the content destined to become "the far-side ghost"
+  // after the flip doesn't exist at that position yet (it's still busy
+  // being the thing sliding INTO center). So there is genuinely nothing
+  // assigned to that edge for the whole tail of the animation — not a
+  // rendering delay, an actual absence — until the flip finally happens and
+  // relabels it. Fixed by flipping the index IMMEDIATELY (the moment a
+  // swipe or tap decides its outcome), then re-basing the row's `x` by
+  // exactly one reveal-offset so the CURRENT on-screen position is
+  // unchanged under the new labeling (this is the same "infinite 2-item
+  // loop" pixel-identity trick as before, just applied at the START of the
+  // settle instead of the end) — every frame of the settle animation now
+  // renders with the CORRECT final labels from the very first frame, so
+  // there's never a gap where an edge has nothing assigned to it.
+  const revealHeroSide = (side: 'left' | 'right') => {
+    if (CARD_W <= 0) return
+    heroGestureActive.current = true
+    const revealOffset = side === 'left' ? (CARD_W + PEEK_GAP) : -(CARD_W + PEEK_GAP)
+    const currentX = heroRowX.get()
+    // `setHeroCardIndex` (React state, re-renders which card is in which
+    // slot) and `heroRowX.set(...)` (a Framer Motion value, applied outside
+    // React's render cycle) have no ordering guarantee otherwise — React 18
+    // can defer the actual DOM commit, so for one frame the position could
+    // update before the DOM reflects the new card assignment. flushSync
+    // forces the index flip to commit immediately, so both land in the
+    // same frame. Now that this component is isolated (see the file-level
+    // comment above), that forced render only touches this small subtree.
+    flushSync(() => { setHeroCardIndex(i => (i === 0 ? 1 : 0)) })
+    heroRowX.set(currentX - revealOffset)
+    animate(heroRowX, HERO_REST_X, {
+      type: 'spring', stiffness: 380, damping: 38,
+      onComplete: () => { heroGestureActive.current = false },
+    })
+  }
+  const snapHeroBack = () => {
+    animate(heroRowX, HERO_REST_X, {
+      type: 'spring', stiffness: 380, damping: 38,
+      onComplete: () => { heroGestureActive.current = false },
+    })
+  }
+
+  return (
+    <div style={{ width: `calc(89.39% + ${2 * (PEEK + PEEK_GAP)}px)`, margin: '0 auto' }}>
+      {/* ── HERO ROW — the outer wrapper is `89.39% + 2×(PEEK+PEEK_GAP)`
+           wide (89.39% = the page's normal 95% card width × 0.97 × 0.97,
+           two explicit 3%-narrower requests), PLUS extra room on top
+           specifically to fit the peeks — so the center card itself ends
+           up exactly the page's normal card width, not narrower still
+           from the peek math on top of that. The viewport here is 100%
+           of that (already-widened) wrapper, overflow:hidden, and the
+           row inside it is what gets dragged. Geometry (all derived from
+           CARD_W/PEEK/PEEK_GAP above): the row lays out [leftGhost:
+           CARD_W][gapA: PEEK_GAP][center: CARD_W][gapB: PEEK_GAP]
+           [rightGhost: CARD_W] contiguously; translating the row by
+           HERO_REST_X puts center's left edge at exactly PEEK px from
+           the viewport's left edge (and its right edge at PEEK px from
+           the viewport's right edge, by symmetry) — leaving exactly PEEK
+           px of each ghost visible and a PEEK_GAP-wide blank strip
+           between each ghost and center. Both ghosts always render "the
+           other" card (only 2 cards exist), so whichever way you drag,
+           real content — not a placeholder — is what grows into view. ── */}
+      <div ref={heroCarouselRef} style={{ width: '100%', overflow: 'hidden', position: 'relative' }}>
+        <motion.div
+          drag="x"
+          dragElastic={0.15}
+          dragConstraints={{ left: HERO_REST_X - (CARD_W + PEEK_GAP), right: HERO_REST_X + (CARD_W + PEEK_GAP) }}
+          dragMomentum={false}
+          onDragStart={() => { heroGestureActive.current = true }}
+          style={{
+            display: 'flex', alignItems: 'flex-start', x: heroRowX, touchAction: 'pan-y', cursor: 'grab',
+            // Promotes the row to its own GPU compositor layer, since
+            // rounded corners + overflow:hidden clipping on an element
+            // being transformed every frame is a known mobile-Chrome
+            // repaint glitch. `z: 0` (a Framer Motion style prop, not raw
+            // CSS) rather than a manual `transform: translateZ(0)` —
+            // Framer computes the actual `transform` CSS property itself
+            // from x/y/z, so setting `z` through it (instead of fighting
+            // it with a raw transform) is what actually promotes this to
+            // its own layer. NOTE: this GPU hint stays on the ROW only —
+            // a previous attempt to ALSO give the individual slot divs
+            // their own static `transform` caused a worse bug (one edge
+            // going completely missing after a swipe, a known Chrome
+            // repaint-invalidation issue when a child has a static
+            // transform inside a parent whose transform is animated) —
+            // do not add per-slot transforms again.
+            z: 0,
+            willChange: 'transform',
+            WebkitBackfaceVisibility: 'hidden',
+            backfaceVisibility: 'hidden',
+          }}
+          onDragEnd={(_e, info) => {
+            const threshold = CARD_W * 0.15
+            if (info.offset.x < -threshold) revealHeroSide('right')
+            else if (info.offset.x > threshold) revealHeroSide('left')
+            else snapHeroBack()
+          }}
+        >
+          {/* ── LEFT GHOST — shows "the other" card, only its rightmost
+               PEEK px actually visible (clipped by the viewport). Tap to
+               pull it fully into center (same as dragging it there).
+               BUG FIX (blink right as a swipe settles): this used to
+               conditionally render EITHER <MultichainHubCard/> OR
+               <AvailableBalanceCard/> based on heroCardIndex — a
+               different COMPONENT TYPE at the same JSX position forces
+               React to fully unmount one and mount the other the instant
+               the index flips. That's a genuine DOM tear-down/rebuild at
+               all 3 slots simultaneously on every single swipe, not just
+               a style update — very plausibly the "blink" right as the
+               card takes its new position. Fixed by keeping BOTH card
+               types permanently mounted in every slot and only toggling
+               which one is visible via plain CSS `display` — the JSX
+               position of each component type is now fixed, so a flip
+               never unmounts or remounts anything, just hides/shows. ── */}
+          <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('left') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden' }}>
+            <div style={{ display: heroCardIndex === 0 ? 'flex' : 'none', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
+              <MultichainHubCard
+                arcAvailable={arcAvailable} claimAvailable={claimAvailable}
+                balanceHidden={balanceHidden} onToggleHidden={onToggleHidden} fmt={fmt} navigate={navigate}
+              />
+            </div>
+            <div style={{ display: heroCardIndex === 0 ? 'none' : 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
+              <AvailableBalanceCard
+                portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={onToggleHidden}
+                walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+                cardRef={heroCardIndex === 0 ? undefined : balanceCardRef}
+              />
+            </div>
+          </div>
+          <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
+          {/* ── CENTER — the fully visible, currently-active card. Same
+               both-types-always-mounted fix as the ghosts above. ────── */}
+          <div style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, overflow: 'hidden' }}>
+            <div style={{ display: heroCardIndex === 0 ? 'flex' : 'none', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
+              <AvailableBalanceCard
+                portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={onToggleHidden}
+                walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+                cardRef={heroCardIndex === 0 ? balanceCardRef : undefined}
+              />
+            </div>
+            <div style={{ display: heroCardIndex === 0 ? 'none' : 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
+              <MultichainHubCard
+                arcAvailable={arcAvailable} claimAvailable={claimAvailable}
+                balanceHidden={balanceHidden} onToggleHidden={onToggleHidden} fmt={fmt} navigate={navigate}
+              />
+            </div>
+          </div>
+          <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
+          {/* ── RIGHT GHOST — mirror of the left ghost. ──────────────── */}
+          <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('right') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden' }}>
+            <div style={{ display: heroCardIndex === 0 ? 'flex' : 'none', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
+              <MultichainHubCard
+                arcAvailable={arcAvailable} claimAvailable={claimAvailable}
+                balanceHidden={balanceHidden} onToggleHidden={onToggleHidden} fmt={fmt} navigate={navigate}
+              />
+            </div>
+            <div style={{ display: heroCardIndex === 0 ? 'none' : 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
+              <AvailableBalanceCard
+                portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={onToggleHidden}
+                walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+              />
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* ── Dot indicators — tap either to jump slides. ─────────────────── */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
+        {[0, 1].map(i => (
+          <button key={i} aria-label={i === 0 ? 'Show balance card' : 'Show multichain hub card'}
+            onClick={() => { if (i !== heroCardIndex && !heroGestureActive.current) revealHeroSide(i > heroCardIndex ? 'right' : 'left') }}
+            style={{
+              width: heroCardIndex === i ? 16 : 6, height: 6, borderRadius: 3, border: 'none', padding: 0,
+              background: heroCardIndex === i ? 'var(--brand)' : 'var(--border)', cursor: 'pointer',
+              transition: 'width 0.2s, background 0.2s',
+            }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function HomePage() {
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
@@ -1769,121 +2060,6 @@ export function HomePage() {
       const next = !h
       try { localStorage.setItem('meshport_balance_hidden', next ? '1' : '0') } catch {}
       return next
-    })
-  }
-
-  // ── Hero carousel (mobile only) — Balance card / Multichain Hub card ───────
-  // The peek edges are REAL card content, not a decorative hint — the
-  // viewport (heroCarouselRef, overflow:hidden) contains ONE flex row of 5
-  // children laid out contiguously — [leftGhost][gap][center][gap]
-  // [rightGhost] — and dragging the row's x directly is what makes the
-  // ghost slivers grow/shrink live under your finger. Left/right ghost
-  // always show "the other" card (only 2 cards total), so whichever
-  // direction you drag, the correctly-sized real card content is right
-  // there to be pulled into center — nothing pops in from off-screen.
-  // `CARD_W` is each slot's width, `HERO_REST_X` is the row's resting
-  // translateX that centers the `center` slot with exactly PEEK px of each
-  // ghost visible on either side (see the geometry comment at the render).
-  // Dragging past ~15% of CARD_W animates the row the REST of the way to
-  // the next full-reveal position, then relabels which card is "center"
-  // and resets the row's x back to HERO_REST_X in the same frame — the
-  // just-arrived-at position and the fresh rest position are, by
-  // construction, pixel-identical (the "infinite 2-item loop" trick), so
-  // nothing visibly jumps.
-  const [heroCardIndex, setHeroCardIndex] = useState(0)
-  const heroCarouselRef = useRef<HTMLDivElement>(null)
-  const [heroCardWidth, setHeroCardWidth] = useState(0)
-  useEffect(() => {
-    const measure = () => { if (heroCarouselRef.current) setHeroCardWidth(heroCarouselRef.current.offsetWidth) }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [])
-  // PEEK = width of each ghost's visible sliver at rest; PEEK_GAP = blank
-  // space between that sliver and the centered card, so the two never
-  // touch. These cost the card nothing — the outer wrapper (see the
-  // render) adds this same amount of EXTRA width on top of the page's
-  // normal 89.39% card width instead of subtracting it.
-  const PEEK = 11
-  const PEEK_GAP = 6
-  const CARD_W = Math.max(0, heroCardWidth - 2 * PEEK - 2 * PEEK_GAP)
-  const HERO_REST_X = PEEK - CARD_W
-  const heroRowX = useMotionValue(HERO_REST_X)
-  // Tracks whether the user currently has a finger on the row, or a
-  // reveal/snap-back animation is actively playing — guards the effect
-  // below so an unrelated background re-render (e.g. a balance-polling
-  // tick, which recomputes HERO_REST_X fresh every render) can't snap the
-  // row's position out from under an active gesture or animation.
-  const heroGestureActive = useRef(false)
-  useEffect(() => {
-    if (heroGestureActive.current) return
-    heroRowX.set(HERO_REST_X)
-  }, [HERO_REST_X])
-  // Both cards render at this EXACT same fixed height, measured off
-  // whichever instance of the Balance card is currently in the DOM (it's
-  // always present somewhere — as `center` when heroCardIndex is 0, or as
-  // both ghosts when heroCardIndex is 1 — and every slot shares the same
-  // CARD_W width, so its rendered height is the same regardless of which
-  // slot it's in).
-  const balanceCardRef = useRef<HTMLDivElement>(null)
-  const [heroCardHeight, setHeroCardHeight] = useState<number | null>(null)
-  useEffect(() => {
-    const measure = () => { if (balanceCardRef.current) setHeroCardHeight(balanceCardRef.current.offsetHeight) }
-    measure()
-    const ro = new ResizeObserver(measure)
-    if (balanceCardRef.current) ro.observe(balanceCardRef.current)
-    window.addEventListener('resize', measure)
-    return () => { ro.disconnect(); window.removeEventListener('resize', measure) }
-  }, [heroCardIndex])
-  // Animates the row all the way to a full reveal of one ghost, THEN
-  // relabels which card is "center" and resets x to the fresh rest
-  // position — both in the same instant. NOTE: this does NOT guard
-  // against being called while heroGestureActive is already true —
-  // onDragEnd always calls this AFTER onDragStart has already set that
-  // flag, so guarding here would make it silently never fire after a real
-  // drag. Callers that aren't a drag release (peek taps, dot buttons)
-  // check the flag themselves before calling this.
-  // BUG FIX (sustained ~250-300ms missing edge, confirmed via frame-by-frame
-  // video analysis — not a paint/GPU glitch, a real structural gap): the
-  // index used to flip only in `onComplete`, at the very END of the settle
-  // animation. But for the ENTIRE animation before that, the row's 3 DOM
-  // slots were still labeled with the OLD (pre-flip) assignment — and under
-  // the old labels, the content destined to become "the far-side ghost"
-  // after the flip doesn't exist at that position yet (it's still busy
-  // being the thing sliding INTO center). So there is genuinely nothing
-  // assigned to that edge for the whole tail of the animation — not a
-  // rendering delay, an actual absence — until the flip finally happens and
-  // relabels it. Fixed by flipping the index IMMEDIATELY (the moment a
-  // swipe or tap decides its outcome), then re-basing the row's `x` by
-  // exactly one reveal-offset so the CURRENT on-screen position is
-  // unchanged under the new labeling (this is the same "infinite 2-item
-  // loop" pixel-identity trick as before, just applied at the START of the
-  // settle instead of the end) — every frame of the settle animation now
-  // renders with the CORRECT final labels from the very first frame, so
-  // there's never a gap where an edge has nothing assigned to it.
-  const revealHeroSide = (side: 'left' | 'right') => {
-    if (CARD_W <= 0) return
-    heroGestureActive.current = true
-    const revealOffset = side === 'left' ? (CARD_W + PEEK_GAP) : -(CARD_W + PEEK_GAP)
-    const currentX = heroRowX.get()
-    // `setHeroCardIndex` (React state, re-renders which card is in which
-    // slot) and `heroRowX.set(...)` (a Framer Motion value, applied outside
-    // React's render cycle) have no ordering guarantee otherwise — React 18
-    // can defer the actual DOM commit, so for one frame the position could
-    // update before the DOM reflects the new card assignment. flushSync
-    // forces the index flip to commit immediately, so both land in the
-    // same frame.
-    flushSync(() => { setHeroCardIndex(i => (i === 0 ? 1 : 0)) })
-    heroRowX.set(currentX - revealOffset)
-    animate(heroRowX, HERO_REST_X, {
-      type: 'spring', stiffness: 380, damping: 38,
-      onComplete: () => { heroGestureActive.current = false },
-    })
-  }
-  const snapHeroBack = () => {
-    animate(heroRowX, HERO_REST_X, {
-      type: 'spring', stiffness: 380, damping: 38,
-      onComplete: () => { heroGestureActive.current = false },
     })
   }
 
@@ -3373,142 +3549,18 @@ export function HomePage() {
             </div>
           </div>
         ) : (
-        <div style={{ width: `calc(89.39% + ${2 * (PEEK + PEEK_GAP)}px)`, margin: '0 auto' }}>
-        {/* ── HERO ROW — the outer wrapper is `89.39% + 2×(PEEK+PEEK_GAP)`
-             wide (89.39% = the page's normal 95% card width × 0.97 × 0.97,
-             two explicit 3%-narrower requests), PLUS extra room on top
-             specifically to fit the peeks — so the center card itself ends
-             up exactly the page's normal card width, not narrower still
-             from the peek math on top of that. The viewport here is 100%
-             of that (already-widened) wrapper, overflow:hidden, and the
-             row inside it is what gets dragged. Geometry (all derived from
-             CARD_W/PEEK/PEEK_GAP above): the row lays out [leftGhost:
-             CARD_W][gapA: PEEK_GAP][center: CARD_W][gapB: PEEK_GAP]
-             [rightGhost: CARD_W] contiguously; translating the row by
-             HERO_REST_X puts center's left edge at exactly PEEK px from
-             the viewport's left edge (and its right edge at PEEK px from
-             the viewport's right edge, by symmetry) — leaving exactly PEEK
-             px of each ghost visible and a PEEK_GAP-wide blank strip
-             between each ghost and center. Both ghosts always render "the
-             other" card (only 2 cards exist), so whichever way you drag,
-             real content — not a placeholder — is what grows into view. ── */}
-        <div ref={heroCarouselRef} style={{ width: '100%', overflow: 'hidden', position: 'relative' }}>
-          <motion.div
-            drag="x"
-            dragElastic={0.15}
-            dragConstraints={{ left: HERO_REST_X - (CARD_W + PEEK_GAP), right: HERO_REST_X + (CARD_W + PEEK_GAP) }}
-            dragMomentum={false}
-            onDragStart={() => { heroGestureActive.current = true }}
-            style={{
-              display: 'flex', alignItems: 'flex-start', x: heroRowX, touchAction: 'pan-y', cursor: 'grab',
-              // Promotes the row to its own GPU compositor layer, since
-              // rounded corners + overflow:hidden clipping on an element
-              // being transformed every frame is a known mobile-Chrome
-              // repaint glitch. `z: 0` (a Framer Motion style prop, not raw
-              // CSS) rather than a manual `transform: translateZ(0)` —
-              // Framer computes the actual `transform` CSS property itself
-              // from x/y/z, so setting `z` through it (instead of fighting
-              // it with a raw transform) is what actually promotes this to
-              // its own layer. NOTE: this GPU hint stays on the ROW only —
-              // a previous attempt to ALSO give the individual slot divs
-              // their own static `transform` caused a worse bug (one edge
-              // going completely missing after a swipe, a known Chrome
-              // repaint-invalidation issue when a child has a static
-              // transform inside a parent whose transform is animated) —
-              // do not add per-slot transforms again.
-              z: 0,
-              willChange: 'transform',
-              WebkitBackfaceVisibility: 'hidden',
-              backfaceVisibility: 'hidden',
-            }}
-            onDragEnd={(_e, info) => {
-              const threshold = CARD_W * 0.15
-              if (info.offset.x < -threshold) revealHeroSide('right')
-              else if (info.offset.x > threshold) revealHeroSide('left')
-              else snapHeroBack()
-            }}
-          >
-            {/* ── LEFT GHOST — shows "the other" card, only its rightmost
-                 PEEK px actually visible (clipped by the viewport). Tap to
-                 pull it fully into center (same as dragging it there).
-                 BUG FIX (blink right as a swipe settles): this used to
-                 conditionally render EITHER <MultichainHubCard/> OR
-                 <AvailableBalanceCard/> based on heroCardIndex — a
-                 different COMPONENT TYPE at the same JSX position forces
-                 React to fully unmount one and mount the other the instant
-                 the index flips. That's a genuine DOM tear-down/rebuild at
-                 all 3 slots simultaneously on every single swipe, not just
-                 a style update — very plausibly the "blink" right as the
-                 card takes its new position. Fixed by keeping BOTH card
-                 types permanently mounted in every slot and only toggling
-                 which one is visible via plain CSS `display` — the JSX
-                 position of each component type is now fixed, so a flip
-                 never unmounts or remounts anything, just hides/shows. ── */}
-            <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('left') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden' }}>
-              <div style={{ display: heroCardIndex === 0 ? 'flex' : 'none', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
-                <MultichainHubCard
-                  arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
-                  balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} fmt={fmt} navigate={navigate}
-                />
-              </div>
-              <div style={{ display: heroCardIndex === 0 ? 'none' : 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
-                <AvailableBalanceCard
-                  portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
-                  walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
-                  cardRef={heroCardIndex === 0 ? undefined : balanceCardRef}
-                />
-              </div>
-            </div>
-            <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
-            {/* ── CENTER — the fully visible, currently-active card. Same
-                 both-types-always-mounted fix as the ghosts above. ────── */}
-            <div style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, overflow: 'hidden' }}>
-              <div style={{ display: heroCardIndex === 0 ? 'flex' : 'none', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
-                <AvailableBalanceCard
-                  portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
-                  walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
-                  cardRef={heroCardIndex === 0 ? balanceCardRef : undefined}
-                />
-              </div>
-              <div style={{ display: heroCardIndex === 0 ? 'none' : 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
-                <MultichainHubCard
-                  arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
-                  balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} fmt={fmt} navigate={navigate}
-                />
-              </div>
-            </div>
-            <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
-            {/* ── RIGHT GHOST — mirror of the left ghost. ──────────────── */}
-            <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('right') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, cursor: 'pointer', overflow: 'hidden' }}>
-              <div style={{ display: heroCardIndex === 0 ? 'flex' : 'none', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
-                <MultichainHubCard
-                  arcAvailable={balance} claimAvailable={unifiedBalance ?? 0}
-                  balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} fmt={fmt} navigate={navigate}
-                />
-              </div>
-              <div style={{ display: heroCardIndex === 0 ? 'none' : 'flex', flexDirection: 'column', justifyContent: 'center', height: '100%' }}>
-                <AvailableBalanceCard
-                  portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
-                  walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
-                />
-              </div>
-            </div>
-          </motion.div>
-        </div>
-
-        {/* ── Dot indicators — tap either to jump slides. ─────────────────── */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
-          {[0, 1].map(i => (
-            <button key={i} aria-label={i === 0 ? 'Show balance card' : 'Show multichain hub card'}
-              onClick={() => { if (i !== heroCardIndex && !heroGestureActive.current) revealHeroSide(i > heroCardIndex ? 'right' : 'left') }}
-              style={{
-                width: heroCardIndex === i ? 16 : 6, height: 6, borderRadius: 3, border: 'none', padding: 0,
-                background: heroCardIndex === i ? 'var(--brand)' : 'var(--border)', cursor: 'pointer',
-                transition: 'width 0.2s, background 0.2s',
-              }} />
-          ))}
-        </div>
-        </div>
+          <MobileHeroCarousel
+            portfolioTotal={portfolioTotal}
+            balanceHidden={balanceHidden}
+            onToggleHidden={toggleBalanceHidden}
+            walletAddress={walletAddress}
+            shortAddr={shortAddr}
+            showToastMessage={showToastMessage}
+            navigate={navigate}
+            fmt={fmt}
+            arcAvailable={balance}
+            claimAvailable={unifiedBalance ?? 0}
+          />
         )}
 
         {/* ── QUICK ACTIONS — all 4, above the Multichain Hub card ──────────── */}
