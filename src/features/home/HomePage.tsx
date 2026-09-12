@@ -1787,14 +1787,18 @@ function MobileHeroCarousel({
     // comment above), that forced render only touches this small subtree.
     flushSync(() => { setHeroCardIndex(i => (i === 0 ? 1 : 0)) })
     heroRowX.set(currentX - revealOffset)
+    // Use one linear slide for the entire 3-card row. No spring/bounce.
     animate(heroRowX, HERO_REST_X, {
-      type: 'spring', stiffness: 380, damping: 38,
+      duration: 0.28,
+      ease: 'easeOut',
       onComplete: () => { heroGestureActive.current = false },
     })
   }
   const snapHeroBack = () => {
+    // Use one linear slide for the entire 3-card row. No spring/bounce.
     animate(heroRowX, HERO_REST_X, {
-      type: 'spring', stiffness: 380, damping: 38,
+      duration: 0.28,
+      ease: 'easeOut',
       onComplete: () => { heroGestureActive.current = false },
     })
   }
@@ -1822,7 +1826,7 @@ function MobileHeroCarousel({
       <div ref={heroCarouselRef} style={{ width: '100%', overflow: 'hidden', position: 'relative' }}>
         <motion.div
           drag="x"
-          dragElastic={0.15}
+          dragElastic={0}
           dragConstraints={{ left: HERO_REST_X - (CARD_W + PEEK_GAP), right: HERO_REST_X + (CARD_W + PEEK_GAP) }}
           dragMomentum={false}
           onDragStart={() => { heroGestureActive.current = true }}
