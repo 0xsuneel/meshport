@@ -1,0 +1,53 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- MeshPort: retire the redundant, untracked deposit-activity-consumer-sweep
+--
+-- CONTEXT: a cron job named 'deposit-activity-consumer-sweep' (jobid 32 at
+-- the time of this audit) exists live in production, calling
+-- blockchain-indexer's mode='deposit-activity-consume'
+-- (depositActivityConsumer.ts). It was added directly to the database --
+-- NOT through any file in supabase/migrations/, and not mentioned anywhere
+-- in docs/ -- first observed run 2026-08-29 11:00 UTC.
+--
+-- This duplicates the ALREADY-canonical, already-documented
+-- 'activity-consumer' Edge Function/cron (active since 2026-08-08, see
+-- docs/PHASE_3_REAL_STATE_AUDIT.md), which reads the exact same chain_events
+-- rows and writes the exact same recv_<hash> Activity identity. Verified
+-- live production data (2026-08-30): this job produced exactly 2 Activity
+-- rows in its first 24 hours, both of which would have been produced by
+-- activity-consumer anyway (same UNIQUE(tx_hash, wallet_address) upsert
+-- target) -- it has caused zero duplicates (the unique index prevents
+-- that), but it is pure redundant load with no observed benefit.
+--
+-- grep-verified: metadata.source = 'chain_events_consumer' (the tag unique
+-- to this job's writes) is not read anywhere else in src/ or supabase/ --
+-- no monitoring, notification, or downstream logic depends on it.
+--
+-- This migration ONLY unschedules the cron job. It does NOT delete
+-- blockchain-indexer/depositActivityConsumer.ts or
+-- depositActivityConsumerLive.ts, and does NOT touch the 'mode=deposit-
+-- activity-consume' branch in blockchain-indexer/index.ts -- the code stays
+-- in place, simply uninvoked, per instructions not to remove functionality
+-- that hasn't been proven both unused AND safe to delete outright.
+--
+-- Does NOT touch 'activity-consumer-sweep', 'blockchain-indexer-shadow',
+-- 'blockchain-indexer-compare', or any Pay/BulkPay/Swap cron job.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+SELECT cron.unschedule('deposit-activity-consumer-sweep')
+WHERE EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'deposit-activity-consumer-sweep');
+
+-- To restore, if ever needed:
+--   SELECT cron.schedule(
+--     'deposit-activity-consumer-sweep',
+--     '*/5 * * * *',
+--     $$
+--     SELECT net.http_post(
+--       url     := 'https://cvvpzfvzweszuuxvaayb.supabase.co/functions/v1/blockchain-indexer',
+--       headers := jsonb_build_object(
+--         'Content-Type',  'application/json',
+--         'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'claim_worker_service_key')
+--       ),
+--       body    := jsonb_build_object('mode', 'deposit-activity-consume')
+--     );
+--     $$
+--   );
