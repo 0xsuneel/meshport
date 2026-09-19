@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ArcScan Address Audit</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0d1a; color: #e2e8f0; font-family: 'Courier New', monospace; padding: 20px; }
+  h1 { color: #a78bfa; margin-bottom: 4px; font-size: 18px; }
+  .sub { color: #64748b; font-size: 12px; margin-bottom: 20px; }
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: flex-end; }
+  input { background: #111827; border: 1px solid #374151; color: #e2e8f0; padding: 8px 12px;
+          border-radius: 8px; font-family: monospace; font-size: 12px; flex: 1; min-width: 300px; }
+  button { background: #7c3aed; border: none; color: white; padding: 9px 20px;
+           border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; white-space: nowrap; }
+  button:hover { background: #6d28d9; }
+  button:disabled { background: #374151; cursor: not-allowed; }
+  .section { background: #111827; border: 1px solid #1e293b; border-radius: 12px;
+             padding: 16px; margin-bottom: 16px; }
+  .section-title { color: #94a3b8; font-size: 11px; font-weight: 700; text-transform: uppercase;
+                   letter-spacing: 1px; margin-bottom: 12px; }
+  .stat-row { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 12px; }
+  .stat { background: #1e293b; border-radius: 8px; padding: 10px 16px; text-align: center; }
+  .stat-val { font-size: 22px; font-weight: 700; color: #a78bfa; }
+  .stat-lbl { font-size: 11px; color: #64748b; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { background: #1e293b; padding: 8px 10px; text-align: left; color: #64748b;
+       font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 7px 10px; border-bottom: 1px solid #1e293b; vertical-align: top; }
+  tr:hover td { background: #1e293b44; }
+  .addr { font-family: monospace; font-size: 10px; color: #94a3b8; }
+  .hash { font-family: monospace; font-size: 10px; color: #60a5fa; }
+  .hash a { color: #60a5fa; text-decoration: none; }
+  .hash a:hover { text-decoration: underline; }
+  .type-sent { color: #60a5fa; font-weight: 700; }
+  .type-received { color: #34d399; font-weight: 700; }
+  .type-multichain { color: #c084fc; font-weight: 700; }
+  .type-unknown { color: #f87171; font-weight: 700; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px;
+           font-size: 10px; font-weight: 700; }
+  .badge-new { background: #ef444420; color: #f87171; border: 1px solid #ef444440; }
+  .badge-known { background: #22c55e20; color: #4ade80; border: 1px solid #22c55e40; }
+  .badge-rewards { background: #f59e0b20; color: #fbbf24; border: 1px solid #f59e0b40; }
+  .alert { background: #ef444415; border: 1px solid #ef444440; border-radius: 8px;
+           padding: 12px 16px; margin-top: 12px; }
+  .alert-title { color: #f87171; font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+  .alert-addr { font-family: monospace; font-size: 11px; color: #fca5a5; margin: 4px 0; }
+  .ok { background: #22c55e15; border: 1px solid #22c55e40; border-radius: 8px;
+        padding: 10px 16px; color: #4ade80; font-size: 13px; }
+  .log { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px;
+         padding: 12px; font-size: 11px; color: #64748b; max-height: 200px; overflow-y: auto; }
+  .log-line { padding: 2px 0; border-bottom: 1px solid #1e293b11; }
+  .log-line.warn { color: #fbbf24; }
+  .log-line.info { color: #60a5fa; }
+  .log-line.good { color: #34d399; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #7c3aed;
+             border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .source-tag { font-size: 9px; color: #475569; margin-left: 4px; }
+</style>
+</head>
+<body>
+
+<h1>🔍 ArcScan Address Audit</h1>
+<p class="sub">Fetches last 100 transactions for a wallet and audits every address against MULTICHAIN_ADDRESSES.</p>
+
+<div class="controls">
+  <input id="walletInput" type="text" placeholder="Wallet address: 0x..." value="0x5bdE7CcEf5D54F24beB9a0ac10037Eaf22d49559" />
+  <button id="runBtn" onclick="runAudit()">Run Audit</button>
+</div>
+
+<div id="output" style="display:none">
+  <div class="section">
+    <div class="section-title">Fetch Stats</div>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-val" id="s-txns">—</div><div class="stat-lbl">Raw /transactions</div></div>
+      <div class="stat"><div class="stat-val" id="s-emitter">—</div><div class="stat-lbl">Raw /token-transfers (EMITTER)</div></div>
+      <div class="stat"><div class="stat-val" id="s-usdc">—</div><div class="stat-lbl">Raw /token-transfers (USDC)</div></div>
+      <div class="stat"><div class="stat-val" id="s-total">—</div><div class="stat-lbl">Unique tx hashes</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">All Unique Counterparty Addresses</div>
+    <table>
+      <thead><tr>
+        <th>Address</th><th>Role</th><th>Tx Count</th><th>In MULTICHAIN_ADDRESSES?</th><th>Sample Tx Hash</th>
+      </tr></thead>
+      <tbody id="addrTable"></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-title">All Transactions (last 100, deduplicated)</div>
+    <table>
+      <thead><tr>
+        <th>#</th><th>Hash</th><th>From</th><th>To</th><th>Amount USDC</th><th>Type</th><th>Src</th>
+      </tr></thead>
+      <tbody id="txTable"></tbody>
+    </table>
+  </div>
+
+  <div id="alertSection"></div>
+
+  <div class="section">
+    <div class="section-title">Console Log</div>
+    <div class="log" id="logBox"></div>
+  </div>
+</div>
+
+<script>
+const ARCSCAN    = 'https://testnet.arcscan.app/api/v2'
+// Blockscout Pro API key — required for browser requests (HTTP 422 without it)
+const API_KEY    = 'proapi_c3PkKyqwB1Yh4zdfB1VZ526jc0g8gbbVxSPmyGxSBiT8PjcD7MudL2CUca3bH3YTu_ejReQ6'
+const EMITTER    = '0xfffffffffffffffffffffffffffffffffffffffe'
+const USDC_ADDR  = '0x3600000000000000000000000000000000000000'
+const REWARDS    = '0x33cc6bdabe3feb78895d1bb59b9ff989f104353c'
+
+// Current registered multichain addresses
+const MULTICHAIN_ADDRESSES = new Set([
+  '0x0077777d7eba4688bdef3e311b846f25870a19b9',
+])
+
+const MULTICHAIN_LABELS = {
+  '0x0077777d7eba4688bdef3e311b846f25870a19b9': 'Circle UB Gateway',
+}
+
+const logs = []
+function log(msg, level='info') {
+  logs.push({ msg, level })
+  const el = document.getElementById('logBox')
+  if (el) {
+    el.innerHTML += `<div class="log-line ${level}">${msg}</div>`
+    el.scrollTop = el.scrollHeight
+  }
+}
+
+function weiToUsdc(wei) {
+  if (!wei || wei === '0' || wei === '0x0' || wei === '0x') return 0
+  try { return Number(BigInt(String(wei))) / 1e18 } catch { return 0 }
+}
+
+async function arcFetch(url) {
+  try {
+    const headers = { 'Content-Type': 'application/json' }
+    if (API_KEY) headers['x-api-key'] = API_KEY
+    const r = await fetch(url, { headers, signal: AbortSignal.timeout(12000) })
+    if (!r.ok) {
+      let body = ''
+      try { body = await r.text() } catch {}
+      log(`HTTP ${r.status} ${url.split('?')[0].split('/').slice(-2).join('/')}: ${body.slice(0,200)}`, 'warn')
+      return null
+    }
+    const d = await r.json()
+    return d?.items ?? []
+  } catch(e) {
+    log(`Fetch failed: ${e.message || e}`, 'warn')
+    return null
+  }
+}
+
+async function runAudit() {
+  const walletRaw = document.getElementById('walletInput').value.trim()
+  const wallet    = walletRaw.toLowerCase()  // lowercase for comparisons only
+  if (!wallet || !/^0x[0-9a-f]{40}$/i.test(wallet)) { alert('Enter a valid 0x address'); return }
+
+  const btn = document.getElementById('runBtn')
+  btn.innerHTML = '<span class="spinner"></span> Fetching...'
+  btn.disabled = true
+  document.getElementById('output').style.display = 'block'
+  document.getElementById('logBox').innerHTML = ''
+  logs.length = 0
+
+  // Blockscout v2 requires EIP-55 checksummed address in URL path — use original casing
+  const base = `${ARCSCAN}/addresses/${walletRaw}`
+  log(`Wallet: ${walletRaw}`)
+  log('Fetching 3 ArcScan endpoints in parallel...')
+
+  // Pre-flight: fetch address info to confirm it exists and check API format
+  log('Pre-flight: checking address exists on ArcScan...')
+  try {
+    const checkHeaders = API_KEY ? {'x-api-key': API_KEY} : {}
+    const checkRes = await fetch(`${ARCSCAN}/addresses/${walletRaw}`, { headers: checkHeaders, signal: AbortSignal.timeout(8000) })
+    const checkBody = await checkRes.text()
+    if (!checkRes.ok) {
+      log(`Pre-flight FAILED HTTP ${checkRes.status}: ${checkBody.slice(0,200)}`, 'warn')
+      log('Trying without /api/v2 prefix...', 'info')
+      const alt = await fetch(`https://testnet.arcscan.app/api?module=account&action=txlist&address=${walletRaw}&page=1&offset=10`, { signal: AbortSignal.timeout(8000) })
+      const altBody = await alt.text()
+      log(`Etherscan-compat API: HTTP ${alt.status} — ${altBody.slice(0,200)}`, alt.ok ? 'good' : 'warn')
+    } else {
+      let parsed; try { parsed = JSON.parse(checkBody) } catch {}
+      log(`Pre-flight OK — tx_count: ${parsed?.transaction_count ?? 'n/a'}, token_transfers: ${parsed?.token_transfers_count ?? 'n/a'}`, 'good')
+    }
+  } catch(e) { log(`Pre-flight error: ${e.message}`, 'warn') }
+
+  const [txItems, emitterItems, usdcItems] = await Promise.all([
+    arcFetch(`${base}/transactions?page=1&limit=100`),
+    arcFetch(`${base}/token-transfers?token=${EMITTER}&page=1&limit=100`),
+    arcFetch(`${base}/token-transfers?token=${USDC_ADDR}&page=1&limit=100`),
+  ])
+
+  log(`Raw counts — txns: ${txItems?.length ?? 'err'}, emitter: ${emitterItems?.length ?? 'err'}, usdc: ${usdcItems?.length ?? 'err'}`)
+  document.getElementById('s-txns').textContent    = txItems?.length    ?? 'err'
+  document.getElementById('s-emitter').textContent = emitterItems?.length ?? 'err'
+  document.getElementById('s-usdc').textContent    = usdcItems?.length  ?? 'err'
+
+  // Build deduplicated record list
+  const seen = new Map()  // hash → record
+  const allRecords = []
+
+  // SOURCE A: /transactions
+  for (const tx of txItems ?? []) {
+    const hash = (tx.hash ?? '').toLowerCase()
+    if (!hash || seen.has(hash)) continue
+    const from = (tx.from?.hash ?? '').toLowerCase()
+    const to   = (tx.to?.hash   ?? '').toLowerCase()
+    const amt  = weiToUsdc(tx.value)
+    const isM  = MULTICHAIN_ADDRESSES.has(from) || MULTICHAIN_ADDRESSES.has(to)
+    let type
+    if (from === REWARDS || to === REWARDS) type = 'rewards'
+    else if (isM) type = 'multichain'
+    else if (from === wallet) type = 'sent'
+    else if (to === wallet)   type = 'received'
+    else type = 'unknown'
+    const rec = { hash, from, to, amt, type, src: 'A' }
+    seen.set(hash, rec)
+    allRecords.push(rec)
+  }
+
+  // SOURCE B+C: /token-transfers
+  for (const tx of [...(emitterItems ?? []), ...(usdcItems ?? [])]) {
+    const hash = (tx.tx_hash ?? tx.transaction_hash ?? '').toLowerCase()
+    if (!hash || seen.has(hash)) continue
+    const from = (tx.from?.hash ?? '').toLowerCase()
+    const to   = (tx.to?.hash   ?? '').toLowerCase()
+    const amt  = weiToUsdc(tx.total?.value ?? tx.value)
+    const isM  = MULTICHAIN_ADDRESSES.has(from) || MULTICHAIN_ADDRESSES.has(to)
+    let type
+    if (from === REWARDS || to === REWARDS) type = 'rewards'
+    else if (isM) type = 'multichain'
+    else if (from === wallet) type = 'sent'
+    else if (to === wallet)   type = 'received'
+    else type = 'unknown'
+    const rec = { hash, from, to, amt, type, src: 'B' }
+    seen.set(hash, rec)
+    allRecords.push(rec)
+  }
+
+  document.getElementById('s-total').textContent = allRecords.length
+  log(`Unique tx hashes: ${allRecords.length}`, 'good')
+
+  // Build counterparty address map
+  const addrMap = new Map()  // addr → { roles: Set, count, sampleHash }
+  for (const rec of allRecords) {
+    const counterparty = rec.from === wallet ? rec.to : rec.from
+    const role = rec.from === wallet ? 'to' : 'from'
+    if (!addrMap.has(counterparty)) addrMap.set(counterparty, { roles: new Set(), count: 0, sampleHash: rec.hash })
+    const e = addrMap.get(counterparty)
+    e.count++
+    e.roles.add(rec.type)
+    // Label the role more specifically
+    if (rec.type === 'multichain') {
+      if (rec.from === counterparty) e.roles.add('multichain-from')
+      else e.roles.add('multichain-to')
+    }
+  }
+
+  // Collect addresses that participate in multichain/unknown but aren't registered
+  const unregistered = []
+  const addrRows = [...addrMap.entries()].sort((a,b) => b[1].count - a[1].count)
+
+  const addrTbody = document.getElementById('addrTable')
+  addrTbody.innerHTML = ''
+  for (const [addr, info] of addrRows) {
+    const isKnownMultichain = MULTICHAIN_ADDRESSES.has(addr)
+    const isRewards = addr === REWARDS
+    const isEmitter = addr === EMITTER.toLowerCase()
+    const isUsdc    = addr === USDC_ADDR.toLowerCase()
+
+    // Detect if this address is involved in multichain-looking activity but not registered
+    const hasMultichainActivity = [...info.roles].some(r => r.includes('multichain') || r === 'unknown')
+    if (hasMultichainActivity && !isKnownMultichain && !isRewards && !isEmitter && !isUsdc) {
+      unregistered.push({ addr, info })
+    }
+
+    let roleStr = [...new Set([...info.roles]
+      .filter(r => !r.includes('multichain-'))
+      .map(r => r)
+    )].join(', ')
+
+    let mcIndicator
+    if (isEmitter) mcIndicator = '<span class="badge badge-known">NATIVE USDC EMITTER</span>'
+    else if (isUsdc) mcIndicator = '<span class="badge badge-known">USDC CONTRACT</span>'
+    else if (isRewards) mcIndicator = '<span class="badge badge-rewards">REWARDS CONTRACT</span>'
+    else if (isKnownMultichain) mcIndicator = `<span class="badge badge-known">✅ REGISTERED — ${MULTICHAIN_LABELS[addr] || 'multichain'}</span>`
+    else if (hasMultichainActivity) mcIndicator = '<span class="badge badge-new">⚠️ NOT REGISTERED</span>'
+    else mcIndicator = '—'
+
+    const shortAddr = addr.slice(0,10) + '...' + addr.slice(-6)
+    const shortHash = info.sampleHash.slice(0,12) + '...'
+    addrTbody.innerHTML += `<tr>
+      <td class="addr" title="${addr}">${shortAddr}</td>
+      <td>${roleStr}</td>
+      <td style="color:#94a3b8">${info.count}</td>
+      <td>${mcIndicator}</td>
+      <td class="hash"><a href="https://testnet.arcscan.app/tx/${info.sampleHash}" target="_blank">${shortHash}</a></td>
+    </tr>`
+  }
+
+  // Render tx table
+  const txTbody = document.getElementById('txTable')
+  txTbody.innerHTML = ''
+  allRecords.forEach((rec, i) => {
+    const shortHash = rec.hash.slice(0,12) + '...' + rec.hash.slice(-6)
+    const shortFrom = rec.from.slice(0,8) + '...' + rec.from.slice(-4)
+    const shortTo   = rec.to.slice(0,8) + '...' + rec.to.slice(-4)
+    const typeClass = `type-${rec.type === 'bulk_payment' ? 'multichain' : rec.type}`
+    const fromMark  = MULTICHAIN_ADDRESSES.has(rec.from) ? ' 🔷' : rec.from === REWARDS ? ' 🎁' : ''
+    const toMark    = MULTICHAIN_ADDRESSES.has(rec.to)   ? ' 🔷' : rec.to   === REWARDS ? ' 🎁' : ''
+    txTbody.innerHTML += `<tr>
+      <td style="color:#475569">${i+1}</td>
+      <td class="hash"><a href="https://testnet.arcscan.app/tx/${rec.hash}" target="_blank">${shortHash}</a></td>
+      <td class="addr" title="${rec.from}">${shortFrom}${fromMark}</td>
+      <td class="addr" title="${rec.to}">${shortTo}${toMark}</td>
+      <td style="color:${rec.amt > 0 ? '#e2e8f0' : '#475569'}">${rec.amt > 0 ? rec.amt.toFixed(4) : '0 (bridge)'}</td>
+      <td class="${typeClass}">${rec.type}</td>
+      <td class="source-tag">${rec.src}</td>
+    </tr>`
+  })
+
+  // Alert section
+  const alertEl = document.getElementById('alertSection')
+  if (unregistered.length > 0) {
+    let html = `<div class="alert">
+      <div class="alert-title">⚠️ ${unregistered.length} address(es) with multichain activity NOT in MULTICHAIN_ADDRESSES</div>
+      <p style="color:#94a3b8;font-size:12px;margin-bottom:10px">
+        These addresses appear in transactions classified as multichain or unknown but are not registered.
+        Add them to <code>MULTICHAIN_ADDRESSES</code> in <code>activityService.ts</code> if they are Circle contracts.
+      </p>`
+    for (const { addr, info } of unregistered) {
+      html += `<div class="alert-addr">
+        <strong>${addr}</strong>
+        &nbsp;—&nbsp; ${info.count} tx(s), roles: ${[...info.roles].join(', ')}
+        &nbsp;<a href="https://testnet.arcscan.app/address/${addr}" target="_blank" style="color:#93c5fd;font-size:10px">[explorer →]</a>
+      </div>`
+    }
+    html += `<div style="margin-top:12px;background:#1e293b;padding:10px;border-radius:6px;font-size:11px">
+      <div style="color:#94a3b8;margin-bottom:6px">Add to activityService.ts:</div>
+      <code style="color:#c084fc">const MULTICHAIN_ADDRESSES = new Set([<br>
+      &nbsp;&nbsp;'0x0077777d7eba4688bdef3e311b846f25870a19b9', // Circle UB Gateway<br>
+      ${unregistered.map(u => `&nbsp;&nbsp;'${u.addr}', // ← DISCOVERED — verify on explorer`).join('<br>\n  ')}<br>
+      ])</code>
+    </div></div>`
+    alertEl.innerHTML = html
+  } else {
+    alertEl.innerHTML = '<div class="ok">✅ All multichain-involved addresses are registered in MULTICHAIN_ADDRESSES. No gaps found.</div>'
+  }
+
+  log(`Audit complete. Unregistered multichain addresses: ${unregistered.length}`,
+    unregistered.length > 0 ? 'warn' : 'good')
+
+  btn.textContent = 'Run Audit'
+  btn.disabled = false
+}
+</script>
+</body>
+</html>
