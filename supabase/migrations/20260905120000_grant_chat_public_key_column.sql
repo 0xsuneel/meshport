@@ -1,0 +1,42 @@
+-- ============================================================
+-- MeshPort: grant anon/authenticated access to users.chat_public_key
+--
+-- WHY THIS EXISTS: users.chat_public_key (the E2E chat encryption public
+-- key column read/written by src/lib/chatCrypto.ts) was added directly to
+-- the live database at some point -- there is no earlier migration file in
+-- this repo that creates it (grep-verified, same "added outside of
+-- supabase/migrations/" drift pattern documented in
+-- docs/PHASE_3_REAL_STATE_AUDIT.md for a cron job). Whatever added the
+-- column never ran the column-level GRANTs every other client-writable
+-- `users` column already has.
+--
+-- Verified live (2026-09-05, /investigate): every other user-editable
+-- column on `users` (username, display_name, avatar_url, wallet_address,
+-- etc.) grants INSERT/SELECT/UPDATE to both anon and authenticated.
+-- chat_public_key had NONE of the three for either role -- only postgres
+-- and service_role could touch it. The `users_update`/`users_select` RLS
+-- policies both evaluate to `true` (row-level access was never the
+-- blocker), so every client call reading or writing this column failed at
+-- the column-privilege layer with Postgres's generic
+-- "permission denied for table users" -- reproduced live via the browser
+-- console: "[chatCrypto] failed to upload public key: permission denied
+-- for table users" (src/lib/chatCrypto.ts:127's update() call).
+--
+-- Effect of the gap: ensureChatKeysReady() (chatCrypto.ts) could never
+-- upload ANY user's public key, and the read side (chatCrypto.ts:153) could
+-- never fetch one either. Every chat conversation therefore silently fell
+-- back to plaintext for 100% of users -- each encrypt/decrypt call already
+-- tolerates a missing key by design (see chatCrypto.ts's own comment), so
+-- this degraded silently instead of erroring loudly anywhere but the
+-- console, which is how it went unnoticed until now.
+--
+-- Matches the exact grant shape already in place for every other
+-- client-writable column on this table -- not a new permission model.
+-- ============================================================
+
+grant select, insert, update (chat_public_key) on public.users to anon, authenticated;
+
+-- Sanity check after running:
+--   set role authenticated;
+--   update users set chat_public_key = chat_public_key where id = '00000000-0000-0000-0000-000000000000'; -- should no longer raise "permission denied"
+--   reset role;

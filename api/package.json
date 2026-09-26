@@ -1,0 +1,8 @@
+{
+  "type": "commonjs",
+  "dependencies": {
+    "@vercel/node": "^5.8.23",
+    "@vercel/og": "^0.6.4",
+    "typescript": "^5.9.3"
+  }
+}
