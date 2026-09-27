@@ -26,6 +26,28 @@ const SUPABASE_SERVICE_KEY = (
   ''
 ).trim()
 
+// ── Access control (fixes /cso finding #5 — recordCompletion had NO caller
+// check at all: anyone could POST an arbitrary walletAddress + fabricated
+// txHash/amounts and it would write a fake "completed swap" into that
+// wallet's activity feed via the service-role key, or inject a fake
+// tx_hash into another user's in-flight transaction_attempts row). Same
+// verify-session-owns-address pattern as api/relay-gas.ts.
+async function verifyOwnsAddress(req, walletAddress) {
+  const token = String((req.headers && req.headers.authorization) || '').replace(/^Bearer\s+/i, '')
+  if (!token) return false
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${token}` } })
+  if (!r.ok) return false
+  const u = await r.json().catch(() => null)
+  const authUid = (u && typeof u.id === 'string') ? u.id : ''
+  if (!authUid) return false
+  const ur = await fetch(`${SUPABASE_URL}/rest/v1/users?auth_uid=eq.${authUid}&select=wallet_address`, {
+    headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+  })
+  const rows = ur.ok ? await ur.json().catch(() => []) : []
+  const row = Array.isArray(rows) ? rows[0] : null
+  return !!(row && row.wallet_address && String(row.wallet_address).toLowerCase() === walletAddress.toLowerCase())
+}
+
 // Writes the swap's own 'swap' activity row the moment the swap completes.
 //
 // WHY THIS EXISTS: deposit-scan-all (supabase/functions/deposit-scan-all)
@@ -87,11 +109,13 @@ async function recordSwapActivity(walletAddress, txHash, amountIn, amountOut, to
 // redundant write — harmless, because both go through the identical
 // idempotent guard below (`status=eq.CREATED&tx_hash=is.null`), so
 // whichever lands first wins and the second is simply a no-op.
-async function markAttemptSubmittedServerSide(attemptId, txHash) {
+async function markAttemptSubmittedServerSide(attemptId, txHash, walletAddress) {
   if (!SUPABASE_SERVICE_KEY || !attemptId || !txHash) return
   try {
+    // wallet_address=eq. scopes this to an attempt the verified caller
+    // actually owns — closes the "guess someone else's attemptId" injection.
     const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/transaction_attempts?id=eq.${encodeURIComponent(attemptId)}&status=eq.CREATED&tx_hash=is.null`,
+      `${SUPABASE_URL}/rest/v1/transaction_attempts?id=eq.${encodeURIComponent(attemptId)}&status=eq.CREATED&tx_hash=is.null&wallet_address=eq.${encodeURIComponent(walletAddress.toLowerCase())}`,
       {
         method: 'PATCH',
         headers: {
@@ -130,10 +154,14 @@ module.exports = async function handler(req, res) {
     if (!walletAddress || !txHash) {
       return res.status(400).json({ error: 'Missing required fields: walletAddress, txHash' })
     }
+    if (!(await verifyOwnsAddress(req, walletAddress))) {
+      console.warn('[swap-proxy] rejected: no session, or session does not own', walletAddress)
+      return res.status(403).json({ error: 'Not signed in to this wallet' })
+    }
 
     await Promise.all([
       recordSwapActivity(walletAddress, txHash, amountIn, amountOut, tokenIn, tokenOut, intentId),
-      markAttemptSubmittedServerSide(attemptId, txHash),
+      markAttemptSubmittedServerSide(attemptId, txHash, walletAddress),
     ])
 
     return res.status(200).json({ success: true })

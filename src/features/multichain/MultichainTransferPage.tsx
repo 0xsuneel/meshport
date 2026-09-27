@@ -2339,11 +2339,11 @@ export function MultichainTransferPage({ embedded = false, onClose }: { embedded
       // and await both, instead of one after the other.
       const gasTopUpPromise: Promise<void> = useForwarder
         ? Promise.resolve()
-        : fetch('/api/relay-gas', {
+        : import('@/lib/supabase').then(({ authApiHeaders }) => authApiHeaders()).then(headers => fetch('/api/relay-gas', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ chainId: chain.sdk, userAddress: senderAddress }),
-          }).then(() => undefined).catch((gasErr) => {
+          })).then(() => undefined).catch((gasErr) => {
             // Best-effort: if funding fails (chain not configured server-side,
             // relay underfunded, etc.) we still attempt the bridge — the
             // wallet may already hold gas from a prior top-up.

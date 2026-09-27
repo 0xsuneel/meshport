@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, Fingerprint, ScanFace } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore, useUIStore } from '@/store'
-import { hashPasscode, verifyPasscode } from '@/lib/security'
+import { hashPasscode, verifyPasscode, getPasscodeLockoutRemainingMs, clearPasscodeLockout } from '@/lib/security'
 import { hasBiometricRegistered, verifyBiometricAndGetPasscode, biometricLabel, isBiometricSupported, wasBiometricOfferSkippedRecently } from '@/lib/biometric'
 
 function PasscodeDots({ filled, error }: { filled: number; error: boolean }) {
@@ -313,6 +313,7 @@ export function PasscodeLockPage() {
   const [input,     setInput]     = useState('')
   const [error,     setError]     = useState(false)
   const [attempts,  setAttempts]  = useState(0)
+  const [lockoutMs, setLockoutMs] = useState(0)
   const [checking,  setChecking]  = useState(false)
   const [biometricTrying, setBiometricTrying] = useState(false)
 
@@ -339,8 +340,12 @@ export function PasscodeLockPage() {
     setChecking(true)
     let correct = false
     if (passcode) {
+      // No `val === passcode` fallback here on purpose: verifyPasscode()
+      // already has its own last-resort plaintext comparison for legacy
+      // stored passcodes, and — unlike this call site — it's gated by the
+      // brute-force lockout (see security.ts). A duplicate check here would
+      // bypass that lockout entirely for legacy plaintext-format accounts.
       try { correct = await verifyPasscode(val, passcode) } catch {}
-      if (!correct) correct = val === passcode
     }
     if (correct) {
       // Unlock and navigate the instant the passcode is confirmed — don't
@@ -387,6 +392,7 @@ export function PasscodeLockPage() {
     } else {
       setChecking(false)
       setAttempts(a => a + 1)
+      setLockoutMs(getPasscodeLockoutRemainingMs())
       setError(true); setInput('')
       setTimeout(() => setError(false), 800)
     }
@@ -400,7 +406,16 @@ export function PasscodeLockPage() {
     // A cancelled/failed biometric check just falls back to the normal
     // passcode entry already on screen — no error shown, since cancelling
     // is an entirely normal choice here, not a mistake.
-    if (pc) handleUnlock(pc)
+    if (pc) {
+      // Fixed (/cso follow-up): a real OS-verified Face ID/fingerprint
+      // success recovers the true passcode via a device-bound credential —
+      // it isn't a guess, so it must not be blocked by the brute-force
+      // lockout on the manual-entry path below. Without this, a user
+      // locked out from a few mistyped passcodes would find biometric
+      // unlock "broken" too, even though they just authenticated for real.
+      clearPasscodeLockout()
+      handleUnlock(pc)
+    }
   }
 
   // Biometric only ever triggers on an explicit tap now — no auto-prompt on
@@ -447,7 +462,9 @@ export function PasscodeLockPage() {
               {error && (
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                   className="text-danger text-sm text-center -mt-2">
-                  Incorrect passcode{attempts > 1 ? ` · ${attempts} attempts` : ''}
+                  {lockoutMs > 0
+                    ? `Too many attempts — try again in ${Math.ceil(lockoutMs / 1000)}s`
+                    : `Incorrect passcode${attempts > 1 ? ` · ${attempts} attempts` : ''}`}
                 </motion.p>
               )}
             </AnimatePresence>

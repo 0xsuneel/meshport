@@ -119,6 +119,18 @@ export function syncAuthUidToProfile(userId: string, privateKey?: string | null)
 
 
 /**
+ * Headers for server routes that only need to prove "this request comes from
+ * a real signed-in session bound to a specific wallet" (relay-gas,
+ * relay-deposit) — no chat-specific auth_uid sync needed, unlike
+ * chatApiHeaders() below.
+ */
+export async function authApiHeaders(): Promise<Record<string, string>> {
+  let token = ''
+  try { token = (await supabase.auth.getSession()).data.session?.access_token || '' } catch { /* none */ }
+  return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+}
+
+/**
  * Headers for the /api/chat server routes: the caller's session token, after
  * making sure this session is linked to the signed-in account (the server
  * only accepts a sender id that is linked to the calling session).

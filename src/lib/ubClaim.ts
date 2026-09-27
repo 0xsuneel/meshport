@@ -134,8 +134,9 @@ export const GATEWAY_SELF_MINT_CHAINS = new Set(['Sei_Testnet'])
 /** Tops up the signer's native gas on `chain` (MeshPort relay) so it can submit the destination mint. */
 export async function fundDestinationGas(chain: string, signerAddress: string): Promise<void> {
   try {
+    const { authApiHeaders } = await import('./supabase')
     await fetch('/api/relay-gas', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: await authApiHeaders(),
       body: JSON.stringify({ chainId: chain, userAddress: signerAddress }),
     })
   } catch (e) {

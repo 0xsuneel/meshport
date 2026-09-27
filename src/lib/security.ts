@@ -60,8 +60,73 @@ export async function hashPasscode(passcode: string): Promise<string> {
   return `v2:${toBase64(salt)}:${toBase64(new Uint8Array(ciphertext))}`
 }
 
+// ─── Brute-force lockout for the app-lock passcode ───────────────────────────
+// /cso finding: verifyPasscode() had no attempt limiting at all — a script
+// with devtools/localStorage access could exhaust all 10^6 six-digit codes
+// well within an hour (each PBKDF2-100k check is single-digit milliseconds).
+// State is per-device (localStorage), same threat model as the passcode hash
+// itself: this stops a scripted brute force, not someone who has already
+// fully compromised the device.
+const LOCKOUT_KEY = 'meshport_passcode_lockout'
+const LOCKOUT_THRESHOLD = 5          // failures allowed before the first lockout
+const LOCKOUT_BASE_MS = 30_000       // 30s, doubling per subsequent lockout
+const LOCKOUT_MAX_MS = 15 * 60_000   // capped at 15 minutes
+
+interface LockoutState { failCount: number; lockedUntil: number }
+
+function readLockoutState(): LockoutState {
+  try {
+    const raw = localStorage.getItem(LOCKOUT_KEY)
+    if (!raw) return { failCount: 0, lockedUntil: 0 }
+    const parsed = JSON.parse(raw)
+    return { failCount: Number(parsed.failCount) || 0, lockedUntil: Number(parsed.lockedUntil) || 0 }
+  } catch { return { failCount: 0, lockedUntil: 0 } }
+}
+function writeLockoutState(state: LockoutState): void {
+  try { localStorage.setItem(LOCKOUT_KEY, JSON.stringify(state)) } catch { /* storage blocked */ }
+}
+
+/** Milliseconds remaining before the next passcode attempt is allowed (0 if not locked). */
+export function getPasscodeLockoutRemainingMs(): number {
+  const { lockedUntil } = readLockoutState()
+  return Math.max(0, lockedUntil - Date.now())
+}
+
+/**
+ * Clears the passcode lockout. Callers must only invoke this after a
+ * check at least as strong as the passcode itself — e.g. a successful
+ * platform biometric assertion (Face ID / fingerprint), which recovers the
+ * real passcode via a device-bound credential rather than guessing it, and
+ * so isn't subject to the brute-force threat this lockout defends against.
+ * Never call this from a passcode-guessing path.
+ */
+export function clearPasscodeLockout(): void {
+  writeLockoutState({ failCount: 0, lockedUntil: 0 })
+}
+
 // ─── Verify passcode against stored hash ─────────────────────────────────────
 export async function verifyPasscode(passcode: string, storedHash: string): Promise<boolean> {
+  const lockout = readLockoutState()
+  if (lockout.lockedUntil > Date.now()) return false
+
+  const result = await verifyPasscodeUnthrottled(passcode, storedHash)
+
+  if (result) {
+    writeLockoutState({ failCount: 0, lockedUntil: 0 })
+  } else {
+    const failCount = lockout.failCount + 1
+    let lockedUntil = 0
+    if (failCount >= LOCKOUT_THRESHOLD) {
+      const lockoutsPast = failCount - LOCKOUT_THRESHOLD
+      const durationMs = Math.min(LOCKOUT_BASE_MS * 2 ** lockoutsPast, LOCKOUT_MAX_MS)
+      lockedUntil = Date.now() + durationMs
+    }
+    writeLockoutState({ failCount, lockedUntil })
+  }
+  return result
+}
+
+async function verifyPasscodeUnthrottled(passcode: string, storedHash: string): Promise<boolean> {
   try {
 
     // v2 format: "v2:<salt>:<hash>" — portable, works across devices

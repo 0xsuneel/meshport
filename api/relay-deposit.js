@@ -119,8 +119,50 @@ const CHAIN_ID_TO_SDK = {
 const SUPPORTED_CHAINS = new Set(Object.keys(CHAIN_ID_TO_SDK))
 const MAX_AMOUNT = parseFloat(process.env.RELAY_MAX_AMOUNT_USDC || '1000')
 
+// ── Access control (fixes /cso finding #2 — this route had NO caller-identity
+// check at all: anyone could trigger a real relay-signed depositFor() call for
+// any address). Same pattern as relay-gas.ts: verify the caller's session,
+// require it to own userAddress, and cap cumulative usage via
+// relay_funding_log (service-role only, migration 20260927120000).
+const SUPABASE_URL = (process.env.SUPABASE_URL || 'https://cvvpzfvzweszuuxvaayb.supabase.co').trim()
+const SERVICE_KEY  = (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+const USER_DAILY_CAP_USDC = parseFloat(process.env.RELAY_DEPOSIT_USER_DAILY_CAP_USDC || '2000')
+
 function isValidAddress(addr) {
   return /^0x[0-9a-fA-F]{40}$/.test(addr)
+}
+
+async function supaFetch(path, init) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
+    ...(init || {}),
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...((init && init.headers) || {}) },
+  })
+  const text = await r.text()
+  let json
+  try { json = JSON.parse(text) } catch { json = text }
+  return { ok: r.ok, status: r.status, data: json }
+}
+
+/** Verifies the caller's session and that they own `userAddress`. */
+async function verifyOwnsAddress(req, userAddress) {
+  const token = String((req.headers && req.headers.authorization) || '').replace(/^Bearer\s+/i, '')
+  if (!token) return { ok: false }
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` } })
+  if (!r.ok) return { ok: false }
+  const u = await r.json().catch(() => null)
+  const authUid = (u && typeof u.id === 'string') ? u.id : ''
+  if (!authUid) return { ok: false }
+  const ur = await supaFetch(`/users?auth_uid=eq.${authUid}&select=wallet_address`)
+  const row = ur.ok && Array.isArray(ur.data) ? ur.data[0] : null
+  if (!row || !row.wallet_address || String(row.wallet_address).toLowerCase() !== userAddress.toLowerCase()) return { ok: false }
+  return { ok: true, authUid }
+}
+
+/** Sum of USDC deposited for this user in the last 24h, via relay-deposit. */
+async function userDaySpendUsdc(authUid, sinceIso) {
+  const r = await supaFetch(`/relay_funding_log?kind=eq.deposit&auth_uid=eq.${authUid}&created_at=gte.${encodeURIComponent(sinceIso)}&select=amount_usdc`)
+  if (!r.ok || !Array.isArray(r.data)) return 0
+  return r.data.reduce((sum, row) => sum + Number(row.amount_usdc || 0), 0)
 }
 
 async function buildRelayAdapter(privateKey) {
@@ -175,6 +217,18 @@ module.exports = async function handler(req, res) {
   if (!userAddress || !isValidAddress(userAddress))
     return res.status(400).json({ error: 'Invalid userAddress' })
 
+  const auth = await verifyOwnsAddress(req, userAddress)
+  if (!auth.ok) {
+    console.warn('[relay-deposit] rejected: no session, or session does not own', userAddress)
+    return res.status(403).json({ error: 'Not signed in to this wallet' })
+  }
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const spentToday = await userDaySpendUsdc(auth.authUid, dayAgo)
+  if (spentToday + amtNum > USER_DAILY_CAP_USDC) {
+    console.warn('[relay-deposit] daily cap reached for user', auth.authUid, spentToday, amtNum)
+    return res.status(429).json({ error: `Daily relay-deposit limit of ${USER_DAILY_CAP_USDC} USDC reached — try again tomorrow.` })
+  }
+
   let relayKey = (process.env.RELAY_PRIVATE_KEY || '').trim()
   if (!relayKey) {
     console.error('[relay-deposit] RELAY_PRIVATE_KEY not set')
@@ -200,6 +254,17 @@ module.exports = async function handler(req, res) {
     })
 
     console.log('[relay-deposit] depositFor succeeded:', JSON.stringify(result))
+
+    // Logged BEFORE responding — same fire-and-forget reliability fix as
+    // relay-gas.ts: unawaited writes can be silently dropped when Vercel
+    // freezes the function right after the response is sent, defeating the
+    // rate limit. Still non-fatal: a logging failure never fails the
+    // response, since the deposit already happened.
+    await supaFetch('/relay_funding_log', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ kind: 'deposit', auth_uid: auth.authUid, address: userAddress.toLowerCase(), chain_id: chainId, amount_usdc: amountStr }),
+    }).catch(e => console.error('[relay-deposit] audit log write failed (non-fatal):', e && e.message))
 
     return res.status(200).json({
       success:     true,

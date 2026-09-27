@@ -14,12 +14,29 @@ const SERVICE_KEY = (
 ).trim()
 
 // ── action=subscribe — save a device's Web Push subscription ────────────────
+//
+// Fixed (/cso audit): this accepted a client-supplied userId with no check
+// at all, then wrote it with the service key (bypasses RLS). Anyone could
+// POST { userId: <victim>, subscription: { endpoint: <attacker's own> } }
+// and every push meant for that victim (payment received, trade updates,
+// dispute resolutions — real transaction content) would also be delivered
+// to the attacker's device from then on. Same fix as handleSend below:
+// require the caller's own session to resolve to this exact userId.
 async function handleSubscribe(req: VercelRequest, res: VercelResponse) {
   if (!SERVICE_KEY) return res.status(500).json({ error: 'Server misconfigured' })
 
   const { userId, subscription } = req.body || {}
   if (!userId || !subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
     return res.status(400).json({ error: 'Missing userId or subscription' })
+  }
+
+  const subscribeAuthHeader = req.headers['authorization'] || ''
+  const subscribeToken = Array.isArray(subscribeAuthHeader)
+    ? subscribeAuthHeader[0]?.replace(/^Bearer\s+/i, '')
+    : subscribeAuthHeader.replace(/^Bearer\s+/i, '')
+  const subscribeCaller = await resolveUserFromToken(subscribeToken)
+  if (!subscribeCaller || subscribeCaller.appUserId !== userId) {
+    return res.status(403).json({ error: 'Not authorized to subscribe this user' })
   }
 
   try {

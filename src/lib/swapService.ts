@@ -205,9 +205,10 @@ async function recordCompletion(params: {
   tokenIn: string; tokenOut: string; intentId?: string | null; attemptId?: string | null
 }): Promise<void> {
   try {
+    const { authApiHeaders } = await import('./supabase')
     await fetch('/api/swap-proxy', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await authApiHeaders(),
       body: JSON.stringify({ action: 'recordCompletion', ...params }),
     })
   } catch (e: any) {

@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, Loader2 } from 'lucide-react'
-import { cachedMedia, loadMedia, metaOf, fmtBytes, extOf, mimeOf, saveNameFor } from './chatMedia'
+import { cachedMedia, loadMedia, metaOf, fmtBytes, extOf, mimeOf, saveNameFor } from './chatMediaStore'
 
 // ── progress ring ───────────────────────────────────────────────────────────
 export function ProgressRing({ progress, size = 46, onCancel, label }: { progress: number; size?: number; onCancel?: () => void; label?: string }) {

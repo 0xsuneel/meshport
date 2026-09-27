@@ -37,6 +37,18 @@ const CHAIN_DEFS: Record<string, { id: number; name: string; rpc: string; symbol
 const TARGET_BALANCE = BigInt('20000000000000000')  // 0.020 ETH
 const MIN_SEND       = BigInt('500000000000000')    // 0.0005 ETH — top-up even small deficits
 
+// ── Rate limiting / cumulative cap (fixes /cso finding #1 — this route had
+// zero access control at all: anyone could drain the relay wallet by looping
+// with fresh addresses). Backed by relay_funding_log (service-role only,
+// see migration 20260927120000). Per-(user,chain) and per-(address,chain)
+// hourly caps stop one account looping; the per-chain daily cap stops many
+// legitimate-looking accounts jointly draining a single chain.
+const HOURLY_LIMIT_PER_KEY = 5
+const CHAIN_DAILY_CAP_WEI  = BigInt(process.env.RELAY_GAS_CHAIN_DAILY_CAP_WEI || '1000000000000000000') // 1 native unit/chain/day, override via env
+
+const SUPABASE_URL = (process.env.SUPABASE_URL || 'https://cvvpzfvzweszuuxvaayb.supabase.co').trim()
+const SERVICE_KEY  = (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+
 function isValidAddress(a: string) { return /^0x[0-9a-fA-F]{40}$/.test(a) }
 
 async function rpcCall(rpc: string, method: string, params: any[]): Promise<any> {
@@ -51,6 +63,44 @@ async function rpcCall(rpc: string, method: string, params: any[]): Promise<any>
   return j.result
 }
 
+async function supaFetch(path: string, init?: RequestInit) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1${path}`, {
+    ...init,
+    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json', ...(init?.headers || {}) },
+  })
+  const text = await r.text()
+  let json: any
+  try { json = JSON.parse(text) } catch { json = text }
+  return { ok: r.ok, status: r.status, data: json }
+}
+
+/** Verifies the caller's session and that they own `userAddress` — the only real fix here: without this, this route funded ANY address for ANYONE. */
+async function verifyOwnsAddress(req: VercelRequest, userAddress: string): Promise<{ ok: boolean; authUid?: string }> {
+  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
+  if (!token) return { ok: false }
+  const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` } })
+  if (!r.ok) return { ok: false }
+  const u = await r.json().catch(() => null)
+  const authUid = typeof u?.id === 'string' ? u.id : ''
+  if (!authUid) return { ok: false }
+
+  const ur = await supaFetch(`/users?auth_uid=eq.${authUid}&select=wallet_address`)
+  const row = ur.ok && Array.isArray(ur.data) ? ur.data[0] : null
+  if (!row?.wallet_address || String(row.wallet_address).toLowerCase() !== userAddress.toLowerCase()) return { ok: false }
+  return { ok: true, authUid }
+}
+
+/** Counts/sums relay_funding_log rows matching a filter within a lookback window. */
+async function windowCount(filterCol: 'auth_uid' | 'address' | 'chain_id', filterVal: string, sinceIso: string): Promise<number> {
+  const r = await supaFetch(`/relay_funding_log?kind=eq.gas&${filterCol}=eq.${encodeURIComponent(filterVal)}&created_at=gte.${encodeURIComponent(sinceIso)}&select=id`)
+  return r.ok && Array.isArray(r.data) ? r.data.length : 0
+}
+async function windowSumWei(chainId: string, sinceIso: string): Promise<bigint> {
+  const r = await supaFetch(`/relay_funding_log?kind=eq.gas&chain_id=eq.${encodeURIComponent(chainId)}&created_at=gte.${encodeURIComponent(sinceIso)}&select=amount_wei`)
+  if (!r.ok || !Array.isArray(r.data)) return BigInt(0)
+  return r.data.reduce((sum: bigint, row: any) => sum + BigInt(row.amount_wei ?? 0), BigInt(0))
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Content-Type', 'application/json')
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -62,6 +112,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: `Unsupported chain: ${chainId}` })
     if (!userAddress || !isValidAddress(userAddress))
       return res.status(400).json({ error: 'Invalid address' })
+
+    const auth = await verifyOwnsAddress(req, userAddress)
+    if (!auth.ok) {
+      console.warn('[relay-gas] rejected: no session, or session does not own', userAddress)
+      return res.status(403).json({ error: 'Not signed in to this wallet' })
+    }
+
+    const now = Date.now()
+    const hourAgo = new Date(now - 60 * 60 * 1000).toISOString()
+    const dayAgo  = new Date(now - 24 * 60 * 60 * 1000).toISOString()
+
+    const [byUser, byAddr, chainSpentToday] = await Promise.all([
+      windowCount('auth_uid', auth.authUid!, hourAgo),
+      windowCount('address', userAddress.toLowerCase(), hourAgo),
+      windowSumWei(chainId, dayAgo),
+    ])
+    if (byUser >= HOURLY_LIMIT_PER_KEY || byAddr >= HOURLY_LIMIT_PER_KEY) {
+      console.warn('[relay-gas] rate limited', { authUid: auth.authUid, userAddress, byUser, byAddr })
+      return res.status(429).json({ error: 'Too many gas top-up requests — please wait and try again.' })
+    }
+    if (chainSpentToday >= CHAIN_DAILY_CAP_WEI) {
+      console.warn('[relay-gas] chain daily cap reached', chainId, chainSpentToday.toString())
+      return res.status(429).json({ funded: false, reason: 'daily_cap_reached', chain: chainId })
+    }
 
     let relayKey = (process.env.RELAY_PRIVATE_KEY ?? '').trim()
     if (!relayKey)
@@ -81,6 +155,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (sendAmount < MIN_SEND) {
       console.log('[relay-gas] user already funded — skipping')
       return res.status(200).json({ funded: false, reason: 'sufficient', userBalance: userBal.toString() })
+    }
+    if (chainSpentToday + sendAmount > CHAIN_DAILY_CAP_WEI) {
+      console.warn('[relay-gas] this top-up would exceed the chain daily cap', chainId)
+      return res.status(429).json({ funded: false, reason: 'daily_cap_reached', chain: chainId })
     }
 
     const { privateKeyToAccount } = await import('viem/accounts')
@@ -113,6 +191,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('[relay-gas] ✓ ETH sent, txHash:', txHash)
     console.log('[relay-gas] returning immediately — deposit() will retry internally until ETH lands')
+
+    // Logged BEFORE responding — /cso follow-up: this used to be
+    // fire-and-forget (unawaited), which is unreliable on Vercel's
+    // serverless runtime: the function can freeze immediately after the
+    // response is sent, silently dropping the write and never counting
+    // this funding toward the rate limit at all (confirmed in testing — the
+    // 6th same-hour request still succeeded because the log row from a
+    // fire-and-forget write hadn't landed yet). A funding failure here must
+    // still not fail the response (the funding already happened), so
+    // errors are caught and logged, never thrown.
+    await supaFetch('/relay_funding_log', {
+      method: 'POST',
+      headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ kind: 'gas', auth_uid: auth.authUid, address: userAddress.toLowerCase(), chain_id: chainId, amount_wei: sendAmount.toString() }),
+    }).catch(e => console.error('[relay-gas] audit log write failed (non-fatal):', e?.message))
 
     // ── FIRE AND FORGET ──────────────────────────────────────────────────────
     // Do NOT wait for receipt. The Circle SDK deposit() has internal retry

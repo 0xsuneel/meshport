@@ -35,3 +35,7 @@ Thumbs.db
 # Coverage
 coverage/
 .nyc_output/
+
+# gstack local security reports / session state
+.gstack/
+.vercel

@@ -70,9 +70,10 @@ export async function enablePushNotifications(userId: string): Promise<{ ok: boo
       })
     }
 
+    const { authApiHeaders } = await import('./supabase')
     await fetch('/api/push?action=subscribe', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await authApiHeaders(),
       body: JSON.stringify({ userId, subscription: subscription.toJSON() }),
     })
 
