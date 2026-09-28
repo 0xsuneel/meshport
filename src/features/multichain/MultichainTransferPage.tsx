@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode, type CSSProperties } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/motion'
 import { useStepDirection, stepMotion } from '@/hooks/useStepDirection'
 import { createPortal } from 'react-dom'
@@ -8,10 +8,10 @@ import { AmountKeypad } from '@/components/ui/AmountKeypad'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
+import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import {
   ArrowLeft, QrCode, Lock, CheckCircle, XCircle, AlertCircle, Loader2, ChevronDown, Clock,
-  Check, Copy, Zap, FileText, Globe, ExternalLink, Home, RotateCcw, ArrowUpFromLine, Receipt,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
@@ -528,88 +528,6 @@ function makeUBSteps(destName: string): BridgeStepState[] {
   }))
 }
 
-// ── Success-screen building blocks — mirrors MultichainClaimPage's own
-// success screen exactly (same sparkle glyph, same row/step components,
-// same flash→hero travel mechanic) so a completed transfer looks and
-// behaves just like a completed claim ────────────────────────────────────
-const TRANSFER_SPARKLE_PATH = 'M12 0 L14.2 9.8 L24 12 L14.2 14.2 L12 24 L9.8 14.2 L0 12 L9.8 9.8 Z'
-function TransferSparkle({ size, style }: { size: number; style?: CSSProperties }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" style={{ position: 'absolute', ...style }}>
-      <path d={TRANSFER_SPARKLE_PATH} fill="rgba(255,255,255,0.55)" />
-    </svg>
-  )
-}
-
-// One row of the Transaction details card (icon-in-circle + label on the
-// left, value on the right), with an optional copy button and an optional
-// bottom divider for every row but the last.
-function TransferDetailRow({ icon, label, value, mono, onCopy, copied, showDivider, last }: {
-  icon: ReactNode; label: string; value: ReactNode; mono?: boolean
-  onCopy?: () => void; copied?: boolean; showDivider?: boolean; last?: boolean
-}) {
-  return (
-    <div>
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10.6,
-        paddingTop: 'clamp(7.4px, 1.591vh, 10.6px)',
-        paddingBottom: last ? 'clamp(6.7px, 1.432vh, 9.6px)' : 'clamp(7.4px, 1.591vh, 10.6px)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(9.6px, 2.44vw, 11.6px)', minWidth: 0 }}>
-          <div style={{
-            width: 'clamp(29.7px, 7.83vw, 34px)', height: 'clamp(29.7px, 7.83vw, 34px)', borderRadius: '50%', flexShrink: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--brand)',
-          }}>
-            {icon}
-          </div>
-          <span style={{ fontSize: 'clamp(13.8px, 3.5vw, 15.3px)', color: 'var(--text-secondary)' }}>{label}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6.4, minWidth: 0 }}>
-          <span style={{
-            fontSize: 'clamp(13.3px, 3.4vw, 14.8px)', fontWeight: mono ? 500 : 700, color: 'color-mix(in srgb, var(--text-primary) 100%, white 12%)',
-            fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>{value}</span>
-          {onCopy && (
-            <button onClick={onCopy} title="Copy" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, color: 'var(--text-secondary)', display: 'flex' }}>
-              {copied ? <Check className="w-3.5 h-3.5" style={{ color: 'var(--success)' }} /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
-          )}
-        </div>
-      </div>
-      {showDivider && <div style={{ height: 1, background: 'var(--border)' }} />}
-    </div>
-  )
-}
-
-// One row of the "Process" checklist shown inside the success screen's
-// "More details" expansion — the actual bridge steps this transfer went
-// through (approve/burn/attestation/mint for CCTP chains, or deposit/sign/
-// attestation/mint for ub chains), with each step's tx hash when it has one, always shown done since this only ever
-// renders after the transfer already succeeded.
-function TransferProcessStep({ text, last, hash, href }: { text: ReactNode; last?: boolean; hash?: string; href?: string | null }) {
-  const shortTx = hash ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : ''
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10.6, paddingBottom: last ? 0 : 'clamp(10.6px, 2.34vh, 14.8px)' }}>
-      <div style={{
-        width: 21.2, height: 21.2, borderRadius: '50%', flexShrink: 0, marginTop: 1,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--brand)', color: '#fff',
-      }}>
-        <Check className="w-3 h-3" strokeWidth={3} />
-      </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-        <span style={{ fontSize: 'clamp(13.8px, 3.6vw, 15.3px)', color: 'var(--text-primary)', lineHeight: 1.4 }}>{text}</span>
-        {shortTx && (href ? (
-          <a href={href} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: 'var(--brand)', fontFamily: 'monospace', textDecoration: 'none' }}>{shortTx}</a>
-        ) : (
-          <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{shortTx}</span>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 export function MultichainTransferPage({ embedded = false, onClose }: { embedded?: boolean; onClose?: () => void } = {}) {
   // Inside the Hub sheet the page always uses its phone layout.
   const isDesktopMq = useMediaQuery('(min-width: 980px)')
@@ -737,7 +655,6 @@ export function MultichainTransferPage({ embedded = false, onClose }: { embedded
   // panel shrinks away while the traveling checkmark bridges into the
   // detailed hero card that fades in underneath.
   const [successPhase, setSuccessPhase] = useState<'flash' | 'collapsed'>('flash')
-  const [showProcessDetails, setShowProcessDetails] = useState(false)
   const [hashCopied, setHashCopied] = useState(false)
   // Whether THIS transfer's passcode came from a biometric check vs typed
   // manually — drives which icon (checkmark vs fingerprint/Face ID) shows
@@ -3389,8 +3306,6 @@ export function MultichainTransferPage({ embedded = false, onClose }: { embedded
             // hash exists to link to — surface a one-liner instead of just
             // silently dropping the button.
             const forwarderMint = !destHref
-            const sourceLabel = chain.ub ? 'View on\nArc Explorer' : 'View Burn on\nArc Explorer'
-            const destLabel = chain.ub ? `View on\n${chain.name}` : `View Mint on\n${chain.name}`
             // All fee components (bridge/protocol fee + forwarder fee +
             // network gas) rolled into one number — successInfo.totalFees
             // is set from feeEstimate.totalFee at the moment this transfer
@@ -3412,170 +3327,44 @@ export function MultichainTransferPage({ embedded = false, onClose }: { embedded
 )}
 
               {travelRect && !travelDone && (
-                <TravelingCheckmark from={travelRect.from} to={travelRect.to} />
+                <TravelingCheckmark from={travelRect.from} to={travelRect.to} toStroke="var(--success)" />
               )}
 
               {successPhase === 'collapsed' && (
-              <div style={{ margin: '0 -12px', transform: isDesktop ? 'scale(0.9)' : undefined, transformOrigin: 'top center' }}>
-                {/* Hidden SVG def: smooth elliptical-arc clip path for the
-                    hero's scalloped bottom border — same curve Claim's own
-                    hero card uses. */}
-                <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
-                  <defs>
-                    <clipPath id="transferHeroBottomClip" clipPathUnits="objectBoundingBox">
-                      <path d="M0,0 L1,0 L1,0.75 L0.826,0.75 C0.805,0.75 0.805,0.859 0.755,0.859 L0.245,0.859 C0.195,0.859 0.195,0.75 0.174,0.75 L0,0.75 Z" />
-                    </clipPath>
-                  </defs>
-                </svg>
-
-                {/* ─── Hero: back + title, success badge, Delivered, amount, network, completion pill ─── */}
-                <div style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  background: 'var(--brand)',
-                  paddingTop: 'calc(env(safe-area-inset-top, 0px) + clamp(10.6px, 2.34vh, 17.5px))', paddingBottom: 'clamp(34px, 6.15vh, 48.8px)',
-                  paddingLeft: 'clamp(16px, 4.78vw, 21.2px)', paddingRight: 'clamp(16px, 4.78vw, 21.2px)',
-                  clipPath: 'url(#transferHeroBottomClip)',
-                }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr 44px', alignItems: 'center', width: '100%', marginBottom: 'clamp(2px, 1vh, 10px)' }}>
-                    {!isDesktop ? (
-                      <button onClick={() => navigate('/multichain')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#FFFFFF', display: 'flex', justifySelf: 'start' }}>
-                        <ArrowLeft style={{ width: 24, height: 24 }} />
-                      </button>
-                    ) : <span />}
-                    <h1 style={{ fontSize: 'clamp(16.5px, 4.8vw, 22px)', fontWeight: 700, color: '#FFFFFF', textAlign: 'center', margin: 0 }}>Transfer Successful!</h1>
-                    <span />
-                  </div>
-
-                  <div ref={heroCheckRef} style={{ position: 'relative', width: 'clamp(51px, 13.3vw, 60px)', height: 'clamp(51px, 13.3vw, 60px)', borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, margin: 'clamp(2px, 0.8vh, 8px) 0', opacity: travelDone ? 1 : 0 }}>
-                    <TransferSparkle size={11} style={{ top: '4%', left: '-40%' }} />
-                    <TransferSparkle size={7} style={{ top: '70%', left: '-32%' }} />
-                    <TransferSparkle size={11} style={{ top: '2%', right: '-42%' }} />
-                    <TransferSparkle size={7} style={{ top: '68%', right: '-30%' }} />
-                    {paidViaBiometric && travelDone ? (
-                      <FlashAuthIcon key="landing-toggle" viaBiometric loop size={25} color="var(--brand)" />
-                    ) : (
-                      <svg viewBox="0 0 24 24" width="46%" height="46%" fill="none" stroke="var(--brand)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                  </div>
-
-                  <motion.div initial={false} animate={travelDone ? { opacity: 1, y: 0 } : { opacity: 0, y: -14 }} transition={{ duration: 0.4, delay: travelDone ? 0.1 : 0, ease: [0.2, 0.8, 0.2, 1] }}
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 'clamp(3.2px, 0.958vh, 10.6px)', paddingBottom: 'clamp(3.2px, 0.958vh, 10.6px)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8.4, color: 'rgba(255,255,255,0.92)' }}>
-                      <ArrowUpFromLine style={{ width: 20.2, height: 20.2 }} />
-                      <span style={{ fontSize: 'clamp(14.3px, 4.09vw, 16.5px)', fontWeight: 600 }}>Delivered</span>
-                    </div>
-
-                    <p style={{ fontSize: 'clamp(26.6px, 8.17vw, 36.1px)', fontWeight: 800, color: '#FFFFFF', margin: 'clamp(6.4px, 1.28vh, 11.6px) 0 0', lineHeight: 1 }}>{fmtAmount}</p>
-
-                    <p style={{ fontSize: 'clamp(13.8px, 3.82vw, 16.5px)', color: 'rgba(255,255,255,0.75)', margin: 'clamp(5.4px,1.06vh,10.6px) 0 0', textAlign: 'center', lineHeight: 1.35 }}>
-                      has been delivered to the<br/>recipient on {chain.name}.
-                    </p>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7.4, background: 'rgba(255,255,255,0.14)', padding: 'clamp(4.78px,1.06vh,5.84px) clamp(9.55px,2.54vw,12.2px)', borderRadius: 999, marginTop: 'clamp(8.4px,1.6vh,13.8px)' }}>
-                      <Zap style={{ width: 14.8, height: 14.8, color: '#FFD54A' }} fill="#FFD54A" />
-                      <span style={{ fontSize: 'clamp(11.1px, 2.91vw, 12.8px)', fontWeight: 600, color: '#FFFFFF' }}>Completed in {transferElapsedSeconds} Seconds</span>
-                    </div>
-                  </motion.div>
-                </div>
-
-                {/* ─── Transaction details card followed by success actions. Details expand naturally; actions remain in normal flow. ─── */}
-                <motion.div initial={false} animate={travelDone ? { opacity: 1, y: 0 } : { opacity: 0, y: -14 }} transition={{ duration: 0.4, delay: travelDone ? 0.2 : 0, ease: [0.2, 0.8, 0.2, 1] }}
-                  style={{ paddingLeft: 'clamp(17px, 4.78vw, 21.2px)', paddingRight: 'clamp(17px, 4.78vw, 21.2px)', marginTop: 'calc(-1 * clamp(34px, 6.15vh, 48.8px) + 17px)' }}>
-
-                  <div className="shadow-elevation-1" style={{
-                    background: 'var(--surface)', border: '1px solid var(--border)',
-                    borderTopLeftRadius: 'clamp(17px, 4.24vw, 21.2px)', borderTopRightRadius: 'clamp(17px, 4.24vw, 21.2px)',
-                    borderBottomLeftRadius: 'clamp(14.8px, 3.82vw, 19.1px)', borderBottomRightRadius: 'clamp(14.8px, 3.82vw, 19.1px)',
-                    padding: '0 clamp(14.8px, 3.82vw, 19.1px)', marginBottom: 'clamp(14.8px, 3.18vh, 21.2px)',
-                  }}>
-                    <TransferDetailRow icon={<FileText className="w-4 h-4" />} label="Transaction Hash" value={shortHash} mono onCopy={txHash ? () => copyTransferHash(txHash) : undefined} copied={hashCopied} showDivider />
-                    <TransferDetailRow icon={<Globe className="w-4 h-4" />} label="From" value="Arc Testnet" showDivider />
-                    <TransferDetailRow icon={<ChainLogoImg id={chain.id} size={21.2} />} label="To" value={chain.name} showDivider />
-                    <TransferDetailRow icon={<Clock className="w-4 h-4" />} label="Time" value={timeLabel} showDivider last />
-
-                    {/* Expandable "Process" checklist — total fees charged
-                        (all fee components rolled into one figure) plus the
-                        actual bridge steps this transfer went through,
-                        shown as already-completed steps. */}
-                    <AnimatePresence initial={false}>
-                      {showProcessDetails && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }} style={{ overflow: 'hidden' }}>
-                          <div style={{ borderTop: '1px solid var(--border)' }}>
-                            <TransferDetailRow icon={<Receipt className="w-4 h-4" />} label="Total Fees" value={totalFeesLabel} />
-                          </div>
-                          <div style={{ paddingTop: 'clamp(10.6px, 2.34vh, 14.8px)', paddingBottom: 'clamp(9.6px, 2.12vh, 13.3px)', borderTop: '1px solid var(--border)' }}>
-                            <p style={{ fontSize: 'clamp(11.6px, 3.18vw, 12.8px)', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '0 0 clamp(8.4px, 1.8vh, 11.6px)' }}>Process</p>
-                            {processSteps.map((s, i) => (
-                              <TransferProcessStep key={s.name} text={<>{s.label}</>} last={i === processSteps.length - 1}
-                                hash={s.txHash}
-                                href={s.txHash ? (s.name === 'mint' || s.name === 'spend' ? explorerTxUrl(chain.sdk, s.txHash) : arcExplorerTxUrl(s.txHash)) : null} />
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    <button onClick={() => setShowProcessDetails(v => !v)}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6.4, background: 'none', border: 'none', cursor: 'pointer', padding: 'clamp(8.4px, 1.8vh, 10.6px) 0', borderTop: showProcessDetails ? '1px solid var(--border)' : 'none' }}>
-                      <span style={{ fontSize: 'clamp(12.8px, 3.4vw, 13.8px)', fontWeight: 600, color: 'var(--text-primary)' }}>{showProcessDetails ? 'Hide details' : 'More details'}</span>
-                      <ChevronDown className="w-4 h-4" style={{ color: 'var(--text-secondary)', transform: showProcessDetails ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
-                    </button>
-                  </div>
-
-                  {/* ─── Success actions + explorer links ─── */}
-                  <div style={{ position: 'relative', background: 'var(--bg)', paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + clamp(14.8px, 3.18vh, 21.2px))' }}>
-                    {/* Source (burn/deposit on Arc) + destination (mint/spend
-                        on the chosen chain) explorer links, each rendered as
-                        a circular icon button matching Claim's own
-                        explorer-link style. */}
-                    {(sourceHref || destHref) && (
-                      <div style={{ display: 'flex', justifyContent: 'center', gap: 'clamp(42.4px, 14.8vw, 72.1px)', paddingTop: 'clamp(14.8px, 3.18vh, 21.2px)', marginBottom: 'clamp(12.8px, 2.54vh, 19.1px)' }}>
-                        {sourceHref && (
-                          <a href={sourceHref} target="_blank" rel="noopener noreferrer"
-                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6.4, textDecoration: 'none' }}>
-                            <span style={{ width: 'clamp(42.4px, 11.6vw, 48.8px)', height: 'clamp(42.4px, 11.6vw, 48.8px)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand)' }}>
-                              <ExternalLink className="w-4 h-4" />
-                            </span>
-                            <span style={{ fontSize: 'clamp(11.6px, 3.08vw, 12.8px)', color: 'var(--text-primary)', textAlign: 'center', lineHeight: 1.3 }}>{sourceLabel.split('\n').map((l, i) => <React.Fragment key={i}>{i > 0 && <br />}{l}</React.Fragment>)}</span>
-                          </a>
-                        )}
-                        {destHref && (
-                          <a href={destHref} target="_blank" rel="noopener noreferrer"
-                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6.4, textDecoration: 'none' }}>
-                            <span style={{ width: 'clamp(42.4px, 11.6vw, 48.8px)', height: 'clamp(42.4px, 11.6vw, 48.8px)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand)' }}>
-                              <ExternalLink className="w-4 h-4" />
-                            </span>
-                            <span style={{ fontSize: 'clamp(11.6px, 3.08vw, 12.8px)', color: 'var(--text-primary)', textAlign: 'center', lineHeight: 1.3 }}>{destLabel.split('\n').map((l, i) => <React.Fragment key={i}>{i > 0 && <br />}{l}</React.Fragment>)}</span>
-                          </a>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Forwarder transfers have no destination-side tx hash to
-                        link to (Circle's Forwarding Service submits the mint).
-                        Say so plainly instead of leaving a lone Arc button
-                        looking like something is missing. */}
-                    {forwarderMint && sourceHref && (
-                      <p style={{ fontSize: 'clamp(10.6px, 2.9vw, 11.6px)', color: 'var(--text-muted)', textAlign: 'center', margin: '0 0 clamp(12.8px, 2.54vh, 19.1px)', paddingLeft: 24, paddingRight: 24, lineHeight: 1.4 }}>
-                        {formatAmount(successInfo?.receiverGets || 0)} USDC was delivered on {chain.name} by Circle's Forwarding Service — there's no separate destination transaction hash to view.
-                      </p>
-                    )}
-
-                    {/* View in Hub / Back to Home */}
-                    <div style={{ display: 'flex', gap: 'clamp(8.4px, 2.76vw, 12.8px)', width: '100%', maxWidth: isDesktop ? 560 : 'none', margin: '0 auto', boxSizing: 'border-box' }}>
-                      <button onClick={() => navigate('/multichain', { state: { tab: 'activity' } })}
-                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7.4, height: 'clamp(44.6px, 11.6vw, 50.9px)', borderRadius: 14.8, border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--brand)', fontSize: 'clamp(13.8px, 3.6vw, 14.8px)', fontWeight: 700, cursor: 'pointer' }}>
-                        <RotateCcw className="w-4 h-4" /> View in Hub
-                      </button>
-                      <button onClick={() => navigate('/')}
-                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7.4, height: 'clamp(44.6px, 11.6vw, 50.9px)', borderRadius: 14.8, border: '1px solid color-mix(in srgb, black 12%, transparent)', background: 'var(--brand)', color: '#FFFFFF', fontSize: 'clamp(13.8px, 3.6vw, 14.8px)', fontWeight: 700, cursor: 'pointer' }}>
-                        <Home className="w-4 h-4" /> Back to Home
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
+              <div style={{ margin: '0 -12px' }}>
+                <SuccessReceipt
+                  title="Transfer Complete"
+                  subtitle={<>{fmtAmount} moved from Arc to {chain.name}</>}
+                  pill={`Completed in ${transferElapsedSeconds} Seconds`}
+                  rows={[
+                    { label: 'You Sent', value: fmtAmount },
+                    { label: 'You Received', value: `${formatAmount(successInfo?.receiverGets || 0)} USDC`, positive: true },
+                    { label: 'To', value: address ? `${chain.name} · ${address.slice(0, 6)}…${address.slice(-4)}` : chain.name },
+                    ...(txHash ? [{ label: 'Transaction Hash', value: shortHash, onCopy: () => copyTransferHash(txHash), copied: hashCopied }] : []),
+                    { label: 'Time', value: timeLabel },
+                  ]}
+                  steps={processSteps.map(s => s.label)}
+                  detailRows={[
+                    { label: 'Status', value: 'Confirmed', positive: true },
+                    { label: 'From', value: 'Arc Testnet' },
+                    { label: 'To', value: chain.name },
+                    { label: 'Bridge', value: chain.ub ? 'Circle Gateway' : 'Circle CCTP' },
+                    { label: 'Total Fees', value: totalFeesLabel },
+                  ]}
+                  links={[
+                    ...(sourceHref ? [{ title: chain.ub ? 'View on Arc Explorer' : 'View Burn on Arc Explorer', explorer: 'ArcScan', hash: sourceHash, href: sourceHref }] : []),
+                    ...(destHref ? [{ title: chain.ub ? `View on ${chain.name}` : `View Mint on ${chain.name}`, explorer: chain.name, hash: destMintHash, href: destHref }] : []),
+                  ]}
+                  linksNote={forwarderMint && sourceHref
+                    ? `${formatAmount(successInfo?.receiverGets || 0)} USDC was delivered on ${chain.name} by Circle's Forwarding Service — there's no separate destination transaction hash to view.`
+                    : undefined}
+                  onPrimary={() => navigate('/')}
+                  checkRef={heroCheckRef}
+                  revealed={travelDone}
+                  checkContent={paidViaBiometric && travelDone
+                    ? <FlashAuthIcon key="landing-toggle" viaBiometric loop size={34} color="var(--success)" />
+                    : undefined}
+                />
               </div>
               )}
             </motion.div>

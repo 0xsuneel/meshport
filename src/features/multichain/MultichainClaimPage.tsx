@@ -13,7 +13,7 @@
  * MeshPort V2: Inspired by PayPal/Revolut/Cash App
  * "Sending money to friends" not "Managing blockchain infrastructure"
  */
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type ReactNode, type CSSProperties } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
 import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
@@ -21,14 +21,15 @@ import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { backgroundBridge, buildClaimDestTarget, cctpSpeedForSource } from '@/lib/backgroundBridge'
 import { notifyClaimArrived, requestPushPermission } from '@/lib/bridgeTracker'
 import {
-  ArrowLeft, RefreshCw, XCircle, Globe, ArrowDownToLine, Check, Copy, Zap, FileText, Receipt,
-  ChevronDown, ExternalLink, Clock, Home, RotateCcw, Activity as ActivityIcon, Fuel,
+  ArrowLeft, RefreshCw, XCircle, Globe,
+  Activity as ActivityIcon,
 } from 'lucide-react'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
+import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { UbProgressTracker } from '@/components/multichain/UbProgressTracker'
@@ -190,80 +191,6 @@ function ChainLogo({ chainId, size = 36 }: { chainId: string; size?: number }) {
     </div>
   )
 }
-
-// ── Success-screen building blocks (mirrors SwapPage's own success screen
-// exactly — same sparkle glyph, same row/step components, same flash→hero
-// travel mechanic) so a completed claim looks and behaves just like a
-// completed swap ───────────────────────────────────────────────────────────
-const CLAIM_SPARKLE_PATH = 'M12 0 L14.2 9.8 L24 12 L14.2 14.2 L12 24 L9.8 14.2 L0 12 L9.8 9.8 Z'
-function ClaimSparkle({ size, style }: { size: number; style?: CSSProperties }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" style={{ position: 'absolute', ...style }}>
-      <path d={CLAIM_SPARKLE_PATH} fill="rgba(255,255,255,0.55)" />
-    </svg>
-  )
-}
-
-// One row of the Transaction details card (icon-in-circle + label on the
-// left, value on the right), with an optional copy button and an optional
-// bottom divider for every row but the last.
-function ClaimDetailRow({ icon, label, value, mono, onCopy, copied, showDivider, last }: {
-  icon: ReactNode; label: string; value: ReactNode; mono?: boolean
-  onCopy?: () => void; copied?: boolean; showDivider?: boolean; last?: boolean
-}) {
-  return (
-    <div>
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 9,
-        paddingTop: 'clamp(8.1px, 1.71vh, 10.8px)',
-        paddingBottom: last ? 'clamp(7.3px, 1.54vh, 9.7px)' : 'clamp(8.1px, 1.71vh, 10.8px)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(9px, 2.34vw, 11.7px)', minWidth: 0 }}>
-          <div style={{
-            width: 'clamp(28.8px, 7.65vw, 34.2px)', height: 'clamp(28.8px, 7.65vw, 34.2px)', borderRadius: '50%', flexShrink: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--brand)',
-          }}>
-            {icon}
-          </div>
-          <span style={{ fontSize: 'clamp(13.8px, 3.5vw, 15.3px)', color: 'var(--text-secondary)' }}>{label}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <span style={{
-            fontSize: 'clamp(13.3px, 3.4vw, 14.8px)', fontWeight: mono ? 500 : 700, color: 'color-mix(in srgb, var(--text-primary) 100%, white 12%)',
-            fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>{value}</span>
-          {onCopy && (
-            <button onClick={onCopy} title="Copy" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, color: 'var(--text-secondary)', display: 'flex' }}>
-              {copied ? <Check className="w-3.5 h-3.5" style={{ color: 'var(--success)' }} /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
-          )}
-        </div>
-      </div>
-      {showDivider && <div style={{ height: 1, background: 'var(--border)' }} />}
-    </div>
-  )
-}
-
-// One row of the "Process" checklist shown inside the success screen's
-// "More details" expansion — same stages the Track Progress screen's own
-// checklist tracks (bridging → verifying → settling → completed), always
-// shown done since this only ever renders after the claim already succeeded.
-function ClaimProcessStep({ text, last }: { text: ReactNode; last?: boolean }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, paddingBottom: last ? 0 : 'clamp(10px, 2.2vh, 14px)' }}>
-      <div style={{
-        width: 20, height: 20, borderRadius: '50%', flexShrink: 0, marginTop: 1,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--brand)', color: '#fff',
-      }}>
-        <Check className="w-3 h-3" strokeWidth={3} />
-      </div>
-      <span style={{ fontSize: 'clamp(13.8px, 3.6vw, 15.3px)', color: 'var(--text-primary)', lineHeight: 1.4 }}>{text}</span>
-    </div>
-  )
-}
-
 
 // ── Per-chain config for direct wallet balance queries ────────────────────────
 const RPC_BY_CHAIN_NAME: Record<string, string[]> = {
@@ -825,7 +752,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   // that panel shrinks away while the traveling checkmark bridges into
   // the detailed hero card that fades in underneath.
   const [successPhase, setSuccessPhase] = useState<'flash' | 'collapsed'>('flash')
-  const [showProcessDetails, setShowProcessDetails] = useState(false)
   const [hashCopied, setHashCopied] = useState(false)
   const { showToastMessage } = useUIStore()
   // Whether THIS claim's passcode came from a biometric check vs typed
@@ -2708,189 +2634,56 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
 )}
 
               {travelRect && !travelDone && (
-                <TravelingCheckmark from={travelRect.from} to={travelRect.to} />
+                <TravelingCheckmark from={travelRect.from} to={travelRect.to} toStroke="var(--success)" />
               )}
 
-              {successPhase === 'collapsed' && (
-              <div style={{ margin: isDesktop ? 0 : '0', height: '100%', overflowY: 'auto' }}>
-                {/* Hidden SVG def: smooth elliptical-arc clip path for the
-                    hero's scalloped bottom border — same curve Swap's own
-                    hero card uses. */}
-                <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
-                  <defs>
-                    <clipPath id="claimHeroBottomClip" clipPathUnits="objectBoundingBox">
-                      <path d="M0,0 L1,0 L1,0.75 L0.826,0.75 C0.805,0.75 0.805,0.859 0.755,0.859 L0.245,0.859 C0.195,0.859 0.195,0.75 0.174,0.75 L0,0.75 Z" />
-                    </clipPath>
-                  </defs>
-                </svg>
-
-                {/* ─── Hero: back + title, success badge, Credited, amount, network, completion pill ─── */}
-                <div style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  background: 'var(--brand)',
-                  paddingTop: 'calc(env(safe-area-inset-top, 0px) + clamp(12px, 2.5vh, 20px))', paddingBottom: 'clamp(37px, 6.7vh, 52px)',
-                  paddingLeft: 'clamp(13px, 3.7vw, 16px)', paddingRight: 'clamp(13px, 3.7vw, 16px)',
-                  clipPath: 'url(#claimHeroBottomClip)',
-                }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '40px 1fr 40px', alignItems: 'center', width: '100%', marginBottom: 'clamp(4px, 1.3vh, 13px)' }}>
-                    {!isDesktop ? (
-                      <button onClick={() => navigate('/multichain', { state: { tab: 'bring' } })} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#FFFFFF', display: 'flex', justifySelf: 'start' }}>
-                        <ArrowLeft style={{ width: 24, height: 24 }} />
-                      </button>
-                    ) : <span />}
-                    <h1 style={{ fontSize: 'clamp(16.5px, 4.8vw, 22px)', fontWeight: 700, color: '#FFFFFF', textAlign: 'center', margin: 0 }}>Claim Successful!</h1>
-                    <span />
-                  </div>
-
-                  <div ref={heroCheckRef} style={{ position: 'relative', width: 'clamp(55px, 14.5vw, 67px)', height: 'clamp(55px, 14.5vw, 67px)', borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, margin: 'clamp(4px, 0.9vh, 8px) 0', opacity: travelDone ? 1 : 0 }}>
-                    <ClaimSparkle size={11} style={{ top: '4%', left: '-40%' }} />
-                    <ClaimSparkle size={6.6} style={{ top: '70%', left: '-32%' }} />
-                    <ClaimSparkle size={11} style={{ top: '2%', right: '-42%' }} />
-                    <ClaimSparkle size={6.6} style={{ top: '68%', right: '-30%' }} />
-                    {paidViaBiometric && travelDone ? (
-                      <FlashAuthIcon key="landing-toggle" viaBiometric loop size={28} color="var(--brand)" />
-                    ) : (
-                      <svg viewBox="0 0 24 24" width="46%" height="46%" fill="none" stroke="var(--brand)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                  </div>
-
-                  <motion.div initial={false} animate={travelDone ? { opacity: 1, y: 0 } : { opacity: 0, y: -14 }} transition={{ duration: 0.4, delay: travelDone ? 0.1 : 0, ease: [0.2, 0.8, 0.2, 1] }}
-                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 'clamp(5.4px, 1.08vh, 10.8px)', paddingBottom: 'clamp(5.4px, 1.08vh, 10.8px)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'rgba(255,255,255,0.92)' }}>
-                      <ArrowDownToLine style={{ width: 16, height: 16 }} />
-                      <span style={{ fontSize: 'clamp(14.3px, 4.09vw, 16.5px)', fontWeight: 600 }}>Credited</span>
-                    </div>
-
-                    <p style={{ fontSize: 'clamp(26.6px, 8.17vw, 36.1px)', fontWeight: 800, color: '#FFFFFF', margin: 'clamp(7.2px, 1.44vh, 12.6px) 0 0', lineHeight: 1 }}>{fmtAmount}</p>
-
-                    <p style={{ fontSize: 'clamp(13.8px, 3.82vw, 16.5px)', color: 'rgba(255,255,255,0.75)', margin: 'clamp(5.4px,1.08vh,10.8px) 0 0', textAlign: 'center', lineHeight: 1.4 }}>
-                      has been credited to your<br/>Arc Testnet balance.
-                    </p>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.14)', padding: 'clamp(4.3px,0.94vh,5.1px) clamp(7.8px,2.1vw,10.2px)', borderRadius: 999, marginTop: 'clamp(9px,1.8vh,14.4px)' }}>
-                      <Zap style={{ width: 12, height: 12, color: '#FFD54A' }} fill="#FFD54A" />
-                      <span style={{ fontSize: 'clamp(11.1px, 2.91vw, 12.8px)', fontWeight: 600, color: '#FFFFFF' }}>Completed in {claimElapsedSeconds} Seconds</span>
-                    </div>
-                  </motion.div>
-                </div>
-
-                {/* ─── Transaction details card followed by success actions. Details expand naturally; actions remain in normal flow. ─── */}
-                <motion.div initial={false} animate={travelDone ? { opacity: 1, y: 0 } : { opacity: 0, y: -14 }} transition={{ duration: 0.4, delay: travelDone ? 0.2 : 0, ease: [0.2, 0.8, 0.2, 1] }}
-                  style={{ paddingLeft: 'clamp(16px, 4.5vw, 20px)', paddingRight: 'clamp(16px, 4.5vw, 20px)', marginTop: 'calc(-1 * clamp(37px, 6.7vh, 52px) + 20px)' }}>
-
-                  <div className="shadow-elevation-1" style={{
-                    background: 'var(--surface)', border: '1px solid var(--border)',
-                    borderTopLeftRadius: 'clamp(16.2px, 4.05vw, 19.8px)', borderTopRightRadius: 'clamp(16.2px, 4.05vw, 19.8px)',
-                    borderBottomLeftRadius: 'clamp(14.4px, 3.6vw, 18px)', borderBottomRightRadius: 'clamp(14.4px, 3.6vw, 18px)',
-                    padding: '0 clamp(14.4px, 3.6vw, 18px)', marginBottom: 'clamp(20px, 4vh, 28px)',
-                  }}>
-                    <ClaimDetailRow icon={<FileText className="w-4 h-4" />} label="Transaction Hash" value={shortHash} mono onCopy={txHash ? () => copyClaimHash(txHash) : undefined} copied={hashCopied} showDivider />
-                    <ClaimDetailRow
-                      icon={fromChainIds.length === 1 ? <ChainLogo chainId={fromChainIds[0]} size={20} /> : <Globe className="w-4 h-4" />}
-                      label={fromChainIds.length === 1 ? 'From Chain' : 'From Chains'}
-                      value={fromChainIds.length === 1 ? getMeta(fromChainIds[0]).label : `${fromChainIds.length} chains`}
-                      showDivider
-                    />
-                    <ClaimDetailRow icon={<Globe className="w-4 h-4" />} label="To Chain" value="Arc Testnet" showDivider />
-                    <ClaimDetailRow icon={<Clock className="w-4 h-4" />} label="Time" value={timeLabel} showDivider last />
-
-                    {/* Expandable "Process" checklist — same stages the
-                        Track Progress screen tracks (bridging → verifying →
-                        settling → completed), shown as already-completed
-                        steps. */}
-                    <AnimatePresence initial={false}>
-                      {showProcessDetails && (
-                        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }} style={{ overflow: 'hidden' }}>
-                          <div style={{ borderTop: '1px solid var(--border)' }}>
-                            <ClaimDetailRow icon={<Receipt className="w-4 h-4" />} label="Total Fees" value={totalFeesLabel} showDivider={!!gasCoveredLabel} />
-                            {/* Label explicitly names MeshPort — "Gas
-                                Covered" alone didn't say WHO covered it.
-                                Shared by both mobile and desktop: this
-                                whole `flow` tree (including this row) is
-                                the same JSX rendered in both, desktop just
-                                places it in the left column next to Recent
-                                History (see `if (!isDesktop) return flow`
-                                below and its desktop branch right after —
-                                neither branches or duplicates this block). */}
-                            {gasCoveredLabel && (
-                              <ClaimDetailRow icon={<Fuel className="w-4 h-4" />} label="Gas Covered by MeshPort" value={gasCoveredLabel} />
-                            )}
-                          </div>
-                          <div style={{ paddingTop: 'clamp(11.7px, 2.565vh, 16.2px)', paddingBottom: 'clamp(10.5px, 2.31vh, 14.6px)', borderTop: '1px solid var(--border)' }}>
-                            <p style={{ fontSize: 'clamp(11.6px, 3.18vw, 12.8px)', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '0 0 clamp(9px, 2vh, 12.6px)' }}>Process</p>
-                            {processSteps.map((s, i) => (
-                              <ClaimProcessStep key={s.key} text={<>{s.subtitle}</>} last={i === processSteps.length - 1} />
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    <button onClick={() => setShowProcessDetails(v => !v)}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: 'clamp(9px, 2vh, 11.7px) 0', borderTop: showProcessDetails ? '1px solid var(--border)' : 'none' }}>
-                      <span style={{ fontSize: 'clamp(12.8px, 3.4vw, 13.8px)', fontWeight: 600, color: 'var(--text-primary)' }}>{showProcessDetails ? 'Hide details' : 'More details'}</span>
-                      <ChevronDown style={{ width: 14, height: 14, color: 'var(--text-secondary)', transform: showProcessDetails ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
-                    </button>
-                  </div>
-
-                  {/* ─── Success actions + explorer links ─── */}
-                  <div style={{ position: 'relative', background: COLORS.bg, paddingBottom: 'clamp(20px, 4vh, 28px)' }}>
-                    {/* One source (burn) + destination (Arc mint) link pair per
-                        claimed chain, each rendered as a circular icon button
-                        matching Swap's own explorer-link style. */}
-                    {chainProgress.map(p => {
-                      const burnHref = explorerTxUrl(p.chainId, p.txHash)
-                      // ONLY link the mint when there's a genuine Arc-side mint
-                      // hash. p.txHash is the SOURCE-chain burn hash, so the
-                      // old `|| p.txHash` fallback produced an Arc-explorer
-                      // link to a tx that only exists on the source chain
-                      // ("transaction not found"). claim-worker fills
-                      // destination_tx_hash (→ p.mintTxHash) once it sees the
-                      // mint land on Arc; until then, just show the burn link.
-                      const mintHref = arcExplorerTxUrl(p.mintTxHash)
-                      if (!burnHref && !mintHref) return null
-                      const label = getMeta(p.chainId).label
-                      return (
-                        <div key={p.chainId} style={{ display: 'flex', justifyContent: 'center', gap: 'clamp(43.2px, 15.3vw, 72px)', paddingTop: 'clamp(16.2px, 3.06vh, 23.4px)', marginBottom: 'clamp(16.2px, 3.06vh, 23.4px)' }}>
-                          {burnHref && (
-                            <a href={burnHref} target="_blank" rel="noopener noreferrer"
-                              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, textDecoration: 'none' }}>
-                              <span style={{ width: 'clamp(43.2px, 11.7vw, 50.4px)', height: 'clamp(43.2px, 11.7vw, 50.4px)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand)' }}>
-                                <ExternalLink style={{ width: 18, height: 18 }} />
-                              </span>
-                              <span style={{ fontSize: 'clamp(11.6px, 3.08vw, 12.8px)', color: 'var(--text-primary)', textAlign: 'center', lineHeight: 1.35 }}>View Burn on<br />{label}</span>
-                            </a>
-                          )}
-                          {mintHref && (
-                            <a href={mintHref} target="_blank" rel="noopener noreferrer"
-                              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, textDecoration: 'none' }}>
-                              <span style={{ width: 'clamp(43.2px, 11.7vw, 50.4px)', height: 'clamp(43.2px, 11.7vw, 50.4px)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand)' }}>
-                                <ExternalLink style={{ width: 18, height: 18 }} />
-                              </span>
-                              <span style={{ fontSize: 'clamp(11.6px, 3.08vw, 12.8px)', color: 'var(--text-primary)', textAlign: 'center', lineHeight: 1.35 }}>View Mint on<br />Arc Explorer</span>
-                            </a>
-                          )}
-                        </div>
-                      )
-                    })}
-
-                    {/* View in Hub / Back to Home */}
-                    <div style={{ display: 'flex', gap: 'clamp(10px, 3vw, 14px)', width: '100%', maxWidth: isDesktop ? 560 : 'none', margin: '0 auto', boxSizing: 'border-box' }}>
-                      <button onClick={() => navigate('/multichain', { state: { tab: 'activity' } })}
-                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 'clamp(48px, 13vw, 56px)', borderRadius: 16, border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--brand)', fontSize: 'clamp(13.8px, 3.6vw, 14.8px)', fontWeight: 700, cursor: 'pointer' }}>
-                        <RotateCcw className="w-4 h-4" /> View in Hub
-                      </button>
-                      <button onClick={() => navigate('/')}
-                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 'clamp(48px, 13vw, 56px)', borderRadius: 16, border: '1px solid color-mix(in srgb, black 12%, transparent)', background: 'var(--brand)', color: '#FFFFFF', fontSize: 'clamp(13.8px, 3.6vw, 14.8px)', fontWeight: 700, cursor: 'pointer' }}>
-                        <Home className="w-4 h-4" /> Back to Home
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
-              )}
+              {successPhase === 'collapsed' && (() => {
+                const fromLabel = fromChainIds.length === 1 ? getMeta(fromChainIds[0]).label : `${fromChainIds.length} chains`
+                const links = chainProgress.flatMap(p => {
+                  const label = getMeta(p.chainId).label
+                  const burnHref = explorerTxUrl(p.chainId, p.txHash)
+                  // ONLY link the mint when there's a genuine Arc-side mint
+                  // hash — p.txHash is the SOURCE-chain burn hash, which
+                  // doesn't exist on Arc's explorer. claim-worker fills
+                  // destination_tx_hash (→ p.mintTxHash) once the mint lands.
+                  const mintHref = arcExplorerTxUrl(p.mintTxHash)
+                  return [
+                    ...(burnHref && p.txHash ? [{ title: `View Burn on ${label}`, explorer: label, hash: p.txHash, href: burnHref }] : []),
+                    ...(mintHref && p.mintTxHash ? [{ title: 'View Mint on Arc Explorer', explorer: 'ArcScan', hash: p.mintTxHash, href: mintHref }] : []),
+                  ]
+                })
+                const mintPending = chainProgress.some(p => !p.mintTxHash)
+                return (
+                <SuccessReceipt
+                  title="Funds Arrived"
+                  subtitle={<>{fmtAmount} from {fromLabel} is now on Arc</>}
+                  pill={`Completed in ${claimElapsedSeconds} Seconds`}
+                  rows={[
+                    { label: 'Claimed', value: fmtAmount, positive: true },
+                    { label: fromChainIds.length === 1 ? 'From' : 'From Chains', value: fromLabel },
+                    { label: 'Destination', value: 'Arc Testnet' },
+                    ...(txHash ? [{ label: 'Transaction Hash', value: shortHash, onCopy: () => copyClaimHash(txHash), copied: hashCopied }] : []),
+                    { label: 'Time', value: timeLabel },
+                  ]}
+                  steps={processSteps.map(s => s.subtitle)}
+                  detailRows={[
+                    { label: 'Status', value: 'Confirmed', positive: true },
+                    { label: 'From', value: fromLabel },
+                    { label: 'To', value: 'Arc Testnet' },
+                    { label: 'Total Fees', value: totalFeesLabel },
+                    ...(gasCoveredLabel ? [{ label: 'Gas Covered by MeshPort', value: gasCoveredLabel, positive: true }] : []),
+                  ]}
+                  links={links}
+                  linksNote={mintPending && links.length > 0 ? 'The Arc mint link appears once the mint lands on Arc.' : undefined}
+                  onPrimary={() => navigate('/')}
+                  checkRef={heroCheckRef}
+                  revealed={travelDone}
+                  checkContent={paidViaBiometric && travelDone
+                    ? <FlashAuthIcon key="landing-toggle" viaBiometric loop size={34} color="var(--success)" />
+                    : undefined}
+                />
+                )
+              })()}
             </motion.div>
             )
           })()}

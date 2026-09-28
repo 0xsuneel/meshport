@@ -7,7 +7,7 @@ import { ChatImage, ChatFile, QuoteThumb, FileTypeTile, MediaPreview, ChatImageV
 import { preparePhoto, uploadWithProgress, withMeta, metaOf, putCachedMedia, mimeOf } from './chatMediaStore'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
-import { Search, Send, ArrowLeft, CheckCheck, Paperclip, Image, FileText, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, SquarePen, Trash2, ArrowDownToLine, Users, UserPlus, User, Zap, Globe, Clock, ExternalLink, Activity as ActivityIcon, Receipt } from 'lucide-react'
+import { Search, Send, ArrowLeft, CheckCheck, Paperclip, Image, FileText, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, SquarePen, Trash2, ArrowDownToLine, Users, UserPlus, Globe, Clock, Receipt } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
@@ -18,6 +18,7 @@ import { Sheet } from '@/components/ui/Sheet'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
+import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import {formatAmount} from '@/lib/utils'
 import { amountFontSize } from '@/lib/amountFontSize'
@@ -4854,124 +4855,45 @@ export function ChatConversationPage() {
               )}
 
               {payTravelRect && !payTravelDone && (
-                <TravelingCheckmark from={payTravelRect.from} to={payTravelRect.to} />
+                <TravelingCheckmark from={payTravelRect.from} to={payTravelRect.to} toStroke="var(--success)" />
               )}
 
               {payStep === 'success' && paySuccessPhase === 'collapsed' && (() => {
-                const shortHash = payTxHash ? `${payTxHash.slice(0, 6)}...${payTxHash.slice(-4)}` : '—'
                 const timeLabel = new Date().toLocaleString('en-US', {
                   month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
-                }).replace(',', ' ·')
+                })
                 const closeNow = () => { setPayStep('closed'); setMessagesReady(true); setTimeout(() => scrollToBottom(false), 50) }
-                const chatSparklePath = 'M12 0 L14.2 9.8 L24 12 L14.2 14.2 L12 24 L9.8 14.2 L0 12 L9.8 9.8 Z'
+                const amountLabel = `${formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} ${payToken}`
+                const toLabel = `${recipientClean}.arc`
                 return (
-                <div className="flex-1 flex flex-col" style={{ minHeight: 0 }}>
-                  {/* Same hero design as the Send success screen (title,
-                      sparkle-ringed checkmark, "Paid $X to Y", the
-                      "Completed in Ns" pill) — compressed with fixed px
-                      sizing instead of Send's clamp()/vw-based full-page
-                      scale. Now also matches Send's scalloped middle-bottom
-                      clip-path edge instead of a plain rounded-bottom
-                      block: a few extra px of bottom padding are reserved
-                      purely so the notch has room to dip into, clipped
-                      away everywhere except the centered tab. */}
-                  <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
-                    <defs>
-                      <clipPath id="chatHeroBottomClip" clipPathUnits="objectBoundingBox">
-                        <path d="M0,0 L1,0 L1,0.955 L0.826,0.955 C0.805,0.955 0.805,0.99 0.755,0.99 L0.245,0.99 C0.195,0.99 0.195,0.955 0.174,0.955 L0,0.955 Z" />
-                      </clipPath>
-                    </defs>
-                  </svg>
-                  <div style={{ background: 'var(--brand)', padding: '18px 16px 30px', display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, clipPath: 'url(#chatHeroBottomClip)' }}>
-                    <h2 style={{ fontSize: 15, fontWeight: 700, color: '#fff', margin: '0 0 10px', textAlign: 'center' }}>Payment Successful!</h2>
-
-                    <div ref={paySuccessCheckRef} style={{
-                      position: 'relative', width: 60, height: 60, borderRadius: '50%', background: '#fff',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, margin: '4px 0',
-                      opacity: payTravelDone ? 1 : 0,
-                    }}>
-                      <svg width={11} height={11} viewBox="0 0 24 24" style={{ position: 'absolute', top: '4%', left: '-40%' }}><path d={chatSparklePath} fill="rgba(255,255,255,0.55)" /></svg>
-                      <svg width={7} height={7} viewBox="0 0 24 24" style={{ position: 'absolute', top: '70%', left: '-32%' }}><path d={chatSparklePath} fill="rgba(255,255,255,0.55)" /></svg>
-                      <svg width={11} height={11} viewBox="0 0 24 24" style={{ position: 'absolute', top: '2%', right: '-42%' }}><path d={chatSparklePath} fill="rgba(255,255,255,0.55)" /></svg>
-                      <svg width={7} height={7} viewBox="0 0 24 24" style={{ position: 'absolute', top: '68%', right: '-30%' }}><path d={chatSparklePath} fill="rgba(255,255,255,0.55)" /></svg>
-                      {payViaBiometric && payTravelDone ? (
-                        <FlashAuthIcon key="landing-toggle" viaBiometric loop size={28} color="var(--brand)" />
-                      ) : (
-                        <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      )}
-                    </div>
-
-                    <motion.div initial={false} animate={payTravelDone ? { opacity: 1, y: 0 } : { opacity: 0, y: -14 }} transition={{ duration: 0.4, delay: payTravelDone ? 0.1 : 0, ease: [0.2, 0.8, 0.2, 1] }}
-                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: 'rgba(255,255,255,0.92)' }}>
-                        <User style={{ width: 14, height: 14 }} />
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>Paid</span>
-                      </div>
-                      <p style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: '2px 0 0', lineHeight: 1 }}>
-                        {formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} {payToken}
-                      </p>
-                      <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', margin: '4px 0 0' }}>
-                        to {recipientClean}.arc
-                      </p>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'rgba(255,255,255,0.14)', padding: '4px 9px', borderRadius: 999, marginTop: 8 }}>
-                        <Zap className="w-3 h-3" style={{ color: '#FFD54A' }} fill="#FFD54A" />
-                        <span style={{ fontSize: 10, fontWeight: 600, color: '#fff' }}>Completed in {elapsedSeconds} Seconds</span>
-                      </div>
-                    </motion.div>
-                  </div>
-
-                  <motion.div initial={false} animate={payTravelDone ? { opacity: 1, y: 0 } : { opacity: 0, y: -14 }} transition={{ duration: 0.4, delay: payTravelDone ? 0.2 : 0, ease: [0.2, 0.8, 0.2, 1] }}
-                    style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 16px calc(env(safe-area-inset-bottom, 16px) + 16px)', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)', border: '1px solid var(--border)', borderRadius: 16, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Transaction</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', fontFamily: 'monospace' }}>{shortHash}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>To</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{recipientClean}.arc</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Network</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Arc Testnet</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Time</span>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{timeLabel}</span>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: 40, marginBottom: 20 }}>
-                      {payTxHash && (
-                        <a href={`https://testnet.arcscan.app/tx/${payTxHash}`} target="_blank" rel="noopener noreferrer"
-                          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
-                          <span style={{ width: 42, height: 42, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand)' }}>
-                            <ExternalLink className="w-4 h-4" />
-                          </span>
-                          <span style={{ fontSize: 11, color: 'var(--text-primary)', textAlign: 'center', lineHeight: 1.3 }}>View on<br />Arc Explorer</span>
-                        </a>
-                      )}
-                      <button onClick={() => navigate('/activity')}
-                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                        <span style={{ width: 42, height: 42, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand)' }}>
-                          <ActivityIcon className="w-4 h-4" />
-                        </span>
-                        <span style={{ fontSize: 11, color: 'var(--text-primary)', textAlign: 'center', lineHeight: 1.3 }}>View<br />Activity</span>
-                      </button>
-                    </div>
-
-                    {/* Single Done button - not a two-button Pay again /
-                        Back to Home footer like Send's full page has,
-                        since this is a compact in-chat sheet where "Done"
-                        is the only action that makes sense. */}
-                    <button onClick={closeNow}
-                      style={{ width: '100%', boxSizing: 'border-box', padding: '13px 16px', borderRadius: 14, border: '1px solid color-mix(in srgb, black 12%, transparent)', fontSize: 15, fontWeight: 700, color: '#FFFFFF', background: 'var(--brand)', cursor: 'pointer' }}>
-                      Done
-                    </button>
-                  </motion.div>
-                </div>
+                <SuccessReceipt
+                  style={{ flex: 1, minHeight: 0, height: 'auto', paddingTop: 16 }}
+                  title="Payment Sent"
+                  subtitle={<>Delivered in your chat with {toLabel}</>}
+                  bubble={<>Sent {amountLabel} to {toLabel} ✓✓</>}
+                  pill={`Completed in ${elapsedSeconds} Seconds`}
+                  rows={[
+                    { label: 'Amount', value: amountLabel },
+                    { label: 'To', value: toLabel, positive: true },
+                    ...(payTxHash ? [{ label: 'Transaction Hash', value: `${payTxHash.slice(0, 6)}…${payTxHash.slice(-4)}` }] : []),
+                    { label: 'Time', value: timeLabel },
+                  ]}
+                  detailRows={[
+                    { label: 'Status', value: 'Delivered', positive: true },
+                    { label: 'Chat', value: toLabel },
+                    { label: 'Network', value: 'Arc Testnet' },
+                    { label: 'Network Fee', value: payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free' },
+                  ]}
+                  fullHash={payTxHash || undefined}
+                  links={payTxHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: payTxHash, href: `https://testnet.arcscan.app/tx/${payTxHash}` }] : undefined}
+                  primaryLabel="Back to Chat"
+                  onPrimary={closeNow}
+                  checkRef={paySuccessCheckRef}
+                  revealed={payTravelDone}
+                  checkContent={payViaBiometric && payTravelDone
+                    ? <FlashAuthIcon key="landing-toggle" viaBiometric loop size={34} color="var(--success)" />
+                    : undefined}
+                />
                 )
               })()}
               </>

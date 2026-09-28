@@ -26,11 +26,15 @@ interface SuccessReceiptProps {
   title: string
   subtitle: ReactNode
   pill?: string
+  /** Chat-style bubble under the subtitle (Chat Pay). */
+  bubble?: ReactNode
   rows: ReceiptRow[]
   steps?: ReactNode[]
   detailRows?: ReceiptRow[]
   fullHash?: string
   links?: ReceiptLink[]
+  /** Shown under the explorer links, e.g. why a destination link is missing. */
+  linksNote?: ReactNode
   primaryLabel?: string
   onPrimary: () => void
   checkRef?: Ref<HTMLDivElement>
@@ -38,6 +42,8 @@ interface SuccessReceiptProps {
   revealed: boolean
   /** Replaces the plain tick inside the header circle (e.g. biometric toggle). */
   checkContent?: ReactNode
+  /** Overrides for the scrolling root, e.g. flex sizing inside a sheet. */
+  style?: CSSProperties
 }
 
 /** Size of the header's white check circle — the traveling checkmark's target. */
@@ -97,8 +103,8 @@ function Confetti() {
 }
 
 export function SuccessReceipt({
-  title, subtitle, pill, rows, steps, detailRows, fullHash, links,
-  primaryLabel = 'Done', onPrimary, checkRef, revealed, checkContent,
+  title, subtitle, pill, bubble, rows, steps, detailRows, fullHash, links, linksNote,
+  primaryLabel = 'Done', onPrimary, checkRef, revealed, checkContent, style,
 }: SuccessReceiptProps) {
   const [open, setOpen] = useState(false)
   const [burst, setBurst] = useState(false)
@@ -109,13 +115,14 @@ export function SuccessReceipt({
     return () => clearTimeout(t)
   }, [revealed])
 
-  const hasMore = !!(steps?.length || detailRows?.length || fullHash || links?.length)
+  const hasMore = !!(steps?.length || detailRows?.length || fullHash || links?.length || linksNote)
   const h5 = { fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', margin: '10px 0 2px' } as const
 
   return (
     <div style={{
       height: '100%', overflowY: 'auto', background: 'var(--bg)', boxSizing: 'border-box',
       padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px)',
+      ...style,
     }}>
       <div className="shadow-elevation-1" style={{
         position: 'relative', maxWidth: 480, margin: '0 auto',
@@ -142,6 +149,15 @@ export function SuccessReceipt({
           <Reveal i={1} revealed={revealed}>
             <p style={{ fontSize: 13.5, color: 'var(--text-secondary)', margin: '6px 0 12px', overflowWrap: 'anywhere' }}>{subtitle}</p>
           </Reveal>
+          {bubble && (
+            <Reveal i={1} revealed={revealed} style={{ display: 'flex', marginBottom: 6 }}>
+              <span style={{
+                display: 'inline-block', margin: '0 0 10px auto', padding: '10px 14px', textAlign: 'left',
+                borderRadius: '16px 16px 4px 16px', fontSize: 14, fontWeight: 600,
+                color: GOOD, background: 'color-mix(in srgb, var(--success) 15%, transparent)',
+              }}>{bubble}</span>
+            </Reveal>
+          )}
           {pill && (
             <Reveal i={2} revealed={revealed}>
               <div style={{
@@ -199,10 +215,10 @@ export function SuccessReceipt({
                       <span style={{ display: 'block', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, wordBreak: 'break-all', lineHeight: 1.5, color: 'var(--text-secondary)', padding: '8px 0 4px' }}>{fullHash}</span>
                     </>
                   )}
-                  {!!links?.length && (
+                  {!!(links?.length || linksNote) && (
                     <>
                       <h5 style={h5}>View on explorer</h5>
-                      {links.map(l => (
+                      {links?.map(l => (
                         <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer"
                           style={{
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
@@ -216,6 +232,7 @@ export function SuccessReceipt({
                           <ExternalLink size={16} color="var(--text-secondary)" />
                         </a>
                       ))}
+                      {linksNote && <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.45, margin: 0, padding: '8px 2px 2px' }}>{linksNote}</p>}
                     </>
                   )}
                 </motion.div>
