@@ -19,8 +19,9 @@ import { createPortal } from 'react-dom'
 // center-based delta with a top-left origin was the actual bug behind an
 // earlier version of this animation visibly drifting up-and-left before
 // settling — the two must always agree.
-export function TravelingCheckmark({ from, to }: { from: DOMRect; to: DOMRect }) {
+export function TravelingCheckmark({ from, to, toStroke }: { from: DOMRect; to: DOMRect; toStroke?: string }) {
   const elRef = useRef<HTMLDivElement>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
   useEffect(() => {
     const el = elRef.current
     if (!el) return
@@ -36,8 +37,10 @@ export function TravelingCheckmark({ from, to }: { from: DOMRect; to: DOMRect })
     requestAnimationFrame(() => {
       el.style.transition = 'transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)'
       el.style.transform = `translate(${dx}px, ${dy}px) scale(${scaleX}, ${scaleY})`
+      // Fade the tick into the landing spot's own colour mid-flight.
+      if (toStroke && svgRef.current) svgRef.current.style.stroke = toStroke
     })
-  }, [from, to])
+  }, [from, to, toStroke])
 
   // Portalled straight to <body> — `from`/`to` are viewport-relative
   // coordinates from getBoundingClientRect(), and `position: fixed` only
@@ -61,7 +64,7 @@ export function TravelingCheckmark({ from, to }: { from: DOMRect; to: DOMRect })
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       transformOrigin: 'top left',
     }}>
-      <svg width={from.width * 0.46} height={from.height * 0.46} viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+      <svg ref={svgRef} style={{ transition: 'stroke 0.5s' }} width={from.width * 0.46} height={from.height * 0.46} viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
         <polyline points="20 6 9 17 4 12" />
       </svg>
     </div>,

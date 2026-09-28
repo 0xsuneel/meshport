@@ -1,11 +1,10 @@
-import { useState, useEffect, useLayoutEffect, useRef, useMemo, type ReactNode, type CSSProperties } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import {
-  Search, ChevronRight, ChevronDown, ArrowLeft, Wallet, Copy, Check,
+  Search, ChevronRight, ArrowLeft, Wallet, Check,
   AlertCircle, X, Loader2, CheckCircle2, QrCode,
-  User, Zap, FileText, Globe, Clock, ExternalLink, Activity as ActivityIcon, RotateCcw, Home,
 } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { slideStepVariants, MOBILE_SLIDE_TRANSITION } from '@/lib/motion'
@@ -31,6 +30,7 @@ import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransaction
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
+import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
@@ -66,90 +66,6 @@ interface Recipient {
 }
 
 const QUICK_AMOUNTS = [10, 20, 50, 100]
-
-// Small four-point sparkle glyph (24x24) scattered decoratively around the
-// success badge — purely cosmetic, so it's fine for these few icons to be
-// absolutely positioned inside their own small fixed-size wrapper without
-// that counting as "main layout" absolute positioning.
-const SPARKLE_PATH = 'M12 0 L14.2 9.8 L24 12 L14.2 14.2 L12 24 L9.8 14.2 L0 12 L9.8 9.8 Z'
-function Sparkle({ size, style }: { size: number; style?: CSSProperties }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" style={{ position: 'absolute', ...style }}>
-      <path d={SPARKLE_PATH} fill="rgba(255,255,255,0.55)" />
-    </svg>
-  )
-}
-
-// One row of the Transaction details card (icon-in-circle + label on the
-// left, value on the right), with an optional copy button and an optional
-// bottom divider for every row but the last.
-function TxDetailRow({ icon, label, value, mono, onCopy, copied, showDivider, last }: {
-  icon: ReactNode; label: string; value: string; mono?: boolean
-  onCopy?: () => void; copied?: boolean; showDivider?: boolean; last?: boolean
-}) {
-  return (
-    <div>
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-        // `last` (only the final row, Time — the one with no divider below
-        // it, when the Process checklist is collapsed) gets a smaller
-        // bottom padding than every other row: -10% off the shared value,
-        // top padding untouched. That shaves the card's total height off
-        // its bottom edge only — every row's own top padding, and every
-        // row before this one, stays exactly as it was, so nothing shifts
-        // upward. Nothing inside any row (icon size, font sizes) changed.
-        //
-        // Padding trimmed down from the original clamp(13px, 2.85vh, 18px)
-        // — noticeably tighter, but deliberately kept above the bare
-        // minimum so rows still have breathing room, not a cramped list.
-        paddingTop: 'clamp(9px, 1.9vh, 12px)',
-        paddingBottom: last ? 'clamp(8.1px, 1.71vh, 10.8px)' : 'clamp(9px, 1.9vh, 12px)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(10px, 2.6vw, 13px)', minWidth: 0 }}>
-          <div style={{
-            width: 'clamp(32px, 8.5vw, 38px)', height: 'clamp(32px, 8.5vw, 38px)', borderRadius: '50%', flexShrink: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--brand)',
-          }}>
-            {icon}
-          </div>
-          <span style={{ fontSize: 'clamp(14px, 3.6vw, 16px)', color: 'var(--text-secondary)' }}>{label}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <span style={{
-            fontSize: 'clamp(13.3px, 3.42vw, 15.2px)', fontWeight: mono ? 500 : 700, color: 'color-mix(in srgb, var(--text-primary) 100%, white 12%)',
-            fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>{value}</span>
-          {onCopy && (
-            <button onClick={onCopy} title="Copy" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, flexShrink: 0, color: 'var(--text-secondary)', display: 'flex' }}>
-              {copied ? <Check className="w-3.5 h-3.5" style={{ color: 'var(--success)' }} /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
-          )}
-        </div>
-      </div>
-      {showDivider && <div style={{ height: 1, background: 'var(--border)' }} />}
-    </div>
-  )
-}
-
-// One row of the "Process" checklist shown inside the success screen's
-// "More details" expansion — a completed step, always shown as done
-// (green check circle) since this checklist only ever renders after the
-// payment has already succeeded.
-function ProcessStep({ text, last }: { text: ReactNode; last?: boolean }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, paddingBottom: last ? 0 : 'clamp(10px, 2.2vh, 14px)' }}>
-      <div style={{
-        width: 20, height: 20, borderRadius: '50%', flexShrink: 0, marginTop: 1,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'var(--brand)', color: '#fff',
-      }}>
-        <Check className="w-3 h-3" strokeWidth={3} />
-      </div>
-      <span style={{ fontSize: 'clamp(13px, 3.4vw, 14.5px)', color: 'var(--text-primary)', lineHeight: 1.4 }}>{text}</span>
-    </div>
-  )
-}
 
 // Digit/decimal sanitizing for the desktop "Amount" native input (mirrors
 // AmountKeypad's own internal sanitizer, which isn't exported).
@@ -360,7 +276,6 @@ export function PaySendPage() {
   // initial/animate/exit), which is why this replaces the fancier
   // approaches tried first.
   const [successPhase, setSuccessPhase] = useState<'flash' | 'collapsed'>('flash')
-  const [showProcessDetails, setShowProcessDetails] = useState(false)
   useEffect(() => {
     if (!isDone) { setSuccessPhase('flash'); return }
     const t = setTimeout(() => setSuccessPhase('collapsed'), 1500)
@@ -1552,240 +1467,45 @@ export function PaySendPage() {
                 travelDone so the handoff between clone and real element
                 is seamless. */}
             {travelRect && !travelDone && (
-              <TravelingCheckmark from={travelRect.from} to={travelRect.to} />
+              <TravelingCheckmark from={travelRect.from} to={travelRect.to} toStroke="var(--success)" />
             )}
 
             {isDone && successPhase === 'collapsed' ? (() => {
-              const shortHash = txHash ? `${txHash.slice(0, 6)}...${txHash.slice(-4)}` : '—'
               const timeLabel = new Date().toLocaleString('en-US', {
                 month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
               })
               const recipientLabel = recipient.isUsername ? recipient.display : midShortenAddress(recipient.walletAddress)
               const senderLabel = user?.username || (senderStoredAddress ? midShortenAddress(senderStoredAddress) : 'You')
+              const amountLabel = `${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token}`
               return (
-                <div style={{ height: '100%', overflowY: 'auto' }}>
-                  {/* Hidden SVG def: smooth elliptical-arc clip path for the hero's
-                      scalloped bottom border, replacing the old polygon() version
-                      whose many short straight segments rendered as a faceted,
-                      hand-drawn-looking edge. Same envelope (corners, dip width,
-                      dip depth) — just a true curve instead of a polyline. */}
-                  <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
-                    <defs>
-                      <clipPath id="heroBottomClip" clipPathUnits="objectBoundingBox">
-                        <path d="M0,0 L1,0 L1,0.75 L0.826,0.75 C0.805,0.75 0.805,0.859 0.755,0.859 L0.245,0.859 C0.195,0.859 0.195,0.75 0.174,0.75 L0,0.75 Z" />
-                      </clipPath>
-                    </defs>
-                  </svg>
-                  {/* ─── Hero: back + title, success badge, Paid, amount, recipient, completion pill ─── */}
-                  <div style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    background: 'var(--brand)',
-                    paddingTop: 'calc(env(safe-area-inset-top, 0px) + clamp(3.3px, 0.99vh, 8.8px))',
-                    // Hero card height, bottom padding only (downward-only,
-                    // extends the card further down without moving/resizing
-                    // anything inside it, and without shifting the
-                    // transaction card below — that card's own marginTop is
-                    // untouched, it simply starts a bit lower because the
-                    // hero above it is taller).
-                    //
-                    // clamp(33px, 5.94vh, 46.2px) was already +10% over the
-                    // original clamp(30px, 5.4vh, 42px). This is a further
-                    // +13% on top of THAT (33->37.3, 5.94vh->6.71vh,
-                    // 46.2->52.2), not +13% of the original — so the total
-                    // is +24.3% over the very first value, all of it
-                    // downward via this one bottom-padding value.
-                    paddingBottom: 'clamp(37.3px, 6.71vh, 52.2px)',
-                    paddingLeft: 'clamp(13.2px, 3.74vw, 16.5px)', paddingRight: 'clamp(13.2px, 3.74vw, 16.5px)',
-                    clipPath: 'url(#heroBottomClip)',
-                  }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '47.3px 1fr 47.3px', alignItems: 'center', width: '100%', marginBottom: 'clamp(3.8px, 1.27vh, 12.7px)' }}>
-                      <button onClick={finishDone} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4.4, color: '#FFFFFF', display: 'flex', justifySelf: 'start' }}>
-                        <ArrowLeft style={{ width: 26.4, height: 26.4 }} />
-                      </button>
-                      <h1 style={{ fontSize: 'clamp(15.4px, 4.62vw, 20.9px)', fontWeight: 700, color: '#FFFFFF', textAlign: 'center', margin: 0 }}>Payment Successful!</h1>
-                      <span />
-                    </div>
-
-                    <div ref={heroCheckRef} style={{ position: 'relative', width: 'clamp(55px, 14.52vw, 67.1px)', height: 'clamp(55px, 14.52vw, 67.1px)', borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, margin: 'clamp(3.8px, 0.89vh, 7.6px) 0', opacity: travelDone ? 1 : 0 }}>
-                      <Sparkle size={11} style={{ top: '4%', left: '-40%' }} />
-                      <Sparkle size={6.6} style={{ top: '70%', left: '-32%' }} />
-                      <Sparkle size={11} style={{ top: '2%', right: '-42%' }} />
-                      <Sparkle size={6.6} style={{ top: '68%', right: '-30%' }} />
-                      {paidViaBiometric && travelDone ? (
-                        // Mounted fresh here (not earlier, just hidden) so
-                        // its internal toggle timer starts exactly when
-                        // this becomes visible - mounting it earlier would
-                        // have it finish its whole sequence invisibly
-                        // while opacity was still 0, showing only the
-                        // final checkmark by the time you could see it.
-                        <FlashAuthIcon key="landing-toggle" viaBiometric loop size={28} color="var(--brand)" />
-                      ) : (
-                        <svg viewBox="0 0 24 24" width="46%" height="46%" fill="none" stroke="var(--brand)" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      )}
-                    </div>
-
-                    <motion.div initial={false} animate={travelDone ? { opacity: 1, y: 0 } : { opacity: 0, y: -14 }} transition={{ duration: 0.4, delay: travelDone ? 0.1 : 0, ease: [0.2, 0.8, 0.2, 1] }}
-                      style={{
-                        display: 'flex', flexDirection: 'column', alignItems: 'center',
-                        // paddingTop/Bottom: this whole group (Paid /
-                        // amount / to X / pill) previously had zero
-                        // breathing room above/below itself. First pass was
-                        // +25%; this is a further +25% on top of that
-                        // (+56.25% total over the original) — still only
-                        // this group's own spacing, not the circle/header.
-                        paddingTop: 'clamp(5.94px, 1.19vh, 11.88px)', paddingBottom: 'clamp(5.94px, 1.19vh, 11.88px)',
-                      }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 7.7, color: 'rgba(255,255,255,0.92)' }}>
-                        <User style={{ width: 22, height: 22 }} />
-                        <span style={{ fontSize: 'clamp(13.2px, 3.74vw, 15.4px)', fontWeight: 600 }}>Paid</span>
-                      </div>
-
-                      <p style={{ fontSize: 'clamp(24.2px, 7.04vw, 30.8px)', fontWeight: 800, color: '#FFFFFF', margin: 'clamp(5.94px,1.19vh,11.88px) 0 0', lineHeight: 1 }}>
-                        {formatAmount(numAmount, tokenDisplayDecimals(token))} {token}
-                      </p>
-                      <p style={{ fontSize: 'clamp(12.1px, 3.399vw, 14.52px)', color: 'rgba(255,255,255,0.75)', margin: 'clamp(5.94px,1.19vh,11.88px) 0 0' }}>
-                        to {recipientLabel}
-                      </p>
-
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.14)',
-                        padding: 'clamp(4.75px,1.045vh,5.7px) clamp(8.7px,2.349vw,11.31px)', borderRadius: 999,
-                        // +25% more on top of the prior +25% pass — same
-                        // value now used for every gap in this group
-                        // (Paid->amount, amount->to, to->pill) plus the
-                        // paddingTop/Bottom above, all scaled together.
-                        marginTop: 'clamp(5.94px,1.19vh,11.88px)',
-                      }}>
-                        <Zap className="w-3.5 h-3.5" style={{ color: '#FFD54A' }} fill="#FFD54A" />
-                        <span style={{ fontSize: 'clamp(9px, 2.5vw, 11px)', fontWeight: 600, color: '#FFFFFF' }}>
-                          Completed in {elapsedSeconds} Seconds
-                        </span>
-                      </div>
-                    </motion.div>
-                  </div>
-
-                  {/* ─── Body: transaction card followed by success actions.
-                      "More details" expands naturally; actions stay in normal flow. ─── */}
-                  <motion.div initial={false} animate={travelDone ? { opacity: 1, y: 0 } : { opacity: 0, y: -14 }} transition={{ duration: 0.4, delay: travelDone ? 0.2 : 0, ease: [0.2, 0.8, 0.2, 1] }}
-                    style={{
-                      display: 'flex', flexDirection: 'column',
-                      paddingLeft: 'clamp(16px, 4.5vw, 20px)', paddingRight: 'clamp(16px, 4.5vw, 20px)',
-                      // The negative offset needs to live on this container,
-                      // not on the card inside it. Putting it on the card
-                      // instead pushed the card's top edge above this
-                      // container's own top — since the outer scroll starts
-                      // at the top already, that part (the "Transaction" row
-                      // + hash) just got clipped off and was unreachable.
-                      // Shifting the whole container up avoids that: nothing
-                      // inside it moves relative to its own box, so nothing
-                      // clips.
-                      marginTop: 'calc(-1 * clamp(37.3px, 6.71vh, 52.2px) + 20px)',
-                    }}>
-                    <div className="shadow-elevation-1" style={{
-                      marginTop: 0, background: 'var(--surface)', border: '1px solid var(--border)',
-                      borderTopLeftRadius: 'clamp(18px, 4.5vw, 22px)', borderTopRightRadius: 'clamp(18px, 4.5vw, 22px)',
-                      borderBottomLeftRadius: 'clamp(16.2px, 4.05vw, 19.8px)', borderBottomRightRadius: 'clamp(16.2px, 4.05vw, 19.8px)',
-                      padding: '0 clamp(16px, 4vw, 20px)',
-                    }}>
-                      <TxDetailRow icon={<FileText className="w-4 h-4" />} label="Transaction" value={shortHash} mono onCopy={txHash ? copyHash : undefined} copied={hashCopied} showDivider />
-                      <TxDetailRow icon={<User className="w-4 h-4" />} label="To" value={recipientLabel} showDivider />
-                      <TxDetailRow icon={<Globe className="w-4 h-4" />} label="Network" value="Arc Testnet" showDivider />
-                      <TxDetailRow icon={<Clock className="w-4 h-4" />} label="Time" value={timeLabel} showDivider />
-
-                      {/* Expandable "Process" checklist — how the payment
-                          actually went through, step by step. Lives inside
-                          the same card as the rows above rather than as a
-                          separate card, matching the reference design. */}
-                      <AnimatePresence initial={false}>
-                        {showProcessDetails && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-                            style={{ overflow: 'hidden' }}>
-                            <div style={{ paddingTop: 'clamp(13px, 2.85vh, 18px)', paddingBottom: 'clamp(11.7px, 2.565vh, 16.2px)' }}>
-                              <p style={{ fontSize: 'clamp(12px, 3.2vw, 13px)', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '0 0 clamp(10px, 2.2vh, 14px)' }}>
-                                Process
-                              </p>
-                              <ProcessStep text="Payment approved" />
-                              <ProcessStep text={<>Payment made by <strong>{senderLabel}</strong></>} />
-                              <ProcessStep text={<>Payment received by <strong>{recipientLabel}</strong></>} last />
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-
-                      <button onClick={() => setShowProcessDetails(v => !v)}
-                        style={{
-                          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          padding: 'clamp(10px, 2.2vh, 13px) 0', marginTop: showProcessDetails ? 0 : undefined,
-                          borderTop: showProcessDetails ? '1px solid var(--border)' : 'none',
-                        }}>
-                        <span style={{ fontSize: 'clamp(13px, 3.4vw, 14px)', fontWeight: 600, color: 'var(--text-primary)' }}>{showProcessDetails ? 'Hide details' : 'More details'}</span>
-                        <ChevronDown className="w-4 h-4" style={{ color: 'var(--text-secondary)', transform: showProcessDetails ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
-                      </button>
-                    </div>
-
-                    {/* ─── Success actions + explorer links ─── */}
-                    <div style={{ position: 'relative', background: 'var(--bg)', paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + clamp(12px, 2.5vh, 20px))' }}>
-                      <div style={{ display: 'flex', justifyContent: 'center', gap: 'clamp(58.08px, 20.328vw, 92.4px)', paddingTop: 'clamp(18px, 3.4vh, 26px)', marginBottom: 'clamp(18px, 3.4vh, 26px)' }}>
-                        {txHash && (
-                          <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
-                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-                            <span style={{
-                              width: 'clamp(48px, 13vw, 56px)', height: 'clamp(48px, 13vw, 56px)', borderRadius: '50%',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand)',
-                            }}>
-                              <ExternalLink className="w-5 h-5" />
-                            </span>
-                            <span style={{ fontSize: 'clamp(12px, 3.2vw, 13px)', color: 'var(--text-primary)', textAlign: 'center', lineHeight: 1.35 }}>
-                              View on<br />Arc Explorer
-                            </span>
-                          </a>
-                        )}
-                        <button onClick={() => navigate('/activity')}
-                          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                          <span style={{
-                            width: 'clamp(48px, 13vw, 56px)', height: 'clamp(48px, 13vw, 56px)', borderRadius: '50%',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand)',
-                          }}>
-                            <ActivityIcon className="w-5 h-5" />
-                          </span>
-                          <span style={{ fontSize: 'clamp(12px, 3.2vw, 13px)', color: 'var(--text-primary)', textAlign: 'center', lineHeight: 1.35 }}>
-                            View<br />Activity
-                          </span>
-                        </button>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: 'clamp(10px, 3vw, 14px)', width: '100%', maxWidth: isDesktop ? 560 : 'none', margin: '0 auto', boxSizing: 'border-box' }}>
-                        <button onClick={() => { setAmount(''); setAmountError(''); setProcessStage('idle'); setShowProcessDetails(false); goForward('amount') }}
-                          style={{
-                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                            height: 'clamp(48px, 13vw, 56px)', borderRadius: 16,
-                            border: '1.5px solid var(--brand)', background: 'transparent', color: 'var(--brand)',
-                            fontSize: 'clamp(14px, 3.6vw, 15px)', fontWeight: 700, cursor: 'pointer',
-                          }}>
-                          <RotateCcw className="w-4 h-4" /> Pay again
-                        </button>
-                        <button onClick={finishDone}
-                          style={{
-                            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                            height: 'clamp(48px, 13vw, 56px)', borderRadius: 16,
-                            border: '1px solid color-mix(in srgb, black 12%, transparent)', background: 'var(--brand)', color: '#FFFFFF',
-                            fontSize: 'clamp(14px, 3.6vw, 15px)', fontWeight: 700, cursor: 'pointer',
-                          }}>
-                          <Home className="w-4 h-4" /> Back to Home
-                        </button>
-                      </div>
-                    </div>
-                  </motion.div>
-                </div>
+                <SuccessReceipt
+                  title="Paid Successfully"
+                  subtitle={<>{amountLabel} is now with {recipientLabel}</>}
+                  pill={`Completed in ${elapsedSeconds} Seconds`}
+                  rows={[
+                    { label: 'Amount', value: amountLabel },
+                    { label: 'To', value: recipientLabel, positive: true },
+                    { label: 'Network Fee', value: estimatedFee > 0 ? `~${formatAmount(estimatedFee, 4)} USDC` : 'Free' },
+                    ...(txHash ? [{ label: 'Transaction Hash', value: `${txHash.slice(0, 6)}…${txHash.slice(-4)}`, onCopy: copyHash, copied: hashCopied }] : []),
+                    { label: 'Time', value: timeLabel },
+                  ]}
+                  steps={['Payment approved', <>Payment made by <strong>{senderLabel}</strong></>, <>Payment received by <strong>{recipientLabel}</strong></>]}
+                  detailRows={[
+                    { label: 'Status', value: 'Confirmed', positive: true },
+                    { label: 'Network', value: 'Arc Testnet' },
+                  ]}
+                  fullHash={txHash || undefined}
+                  links={txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: txHash, href: `https://testnet.arcscan.app/tx/${txHash}` }] : undefined}
+                  onPrimary={finishDone}
+                  checkRef={heroCheckRef}
+                  revealed={travelDone}
+                  checkContent={paidViaBiometric && travelDone
+                    // Mounted fresh here (not earlier, just hidden) so its
+                    // internal toggle timer starts exactly when this becomes
+                    // visible.
+                    ? <FlashAuthIcon key="landing-toggle" viaBiometric loop size={34} color="var(--success)" />
+                    : undefined}
+                />
               )
             })() : (
             <>
