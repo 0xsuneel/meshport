@@ -1523,13 +1523,13 @@ function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
 // size, RX/RY the elliptical corner radii, BT how far the top and
 // bottom edges' midpoints bow outward (the sides stay straight).
 function squirclePath(W: number, H: number, RX: number, RY: number, BT: number) {
-  // Reference shape: the top remains gently rounded while the bottom edge
-  // has a clearly visible, continuous outward curve (not a straight line).
-  // The curve is part of the actual SVG silhouette so it renders identically
-  // on Android Chrome and iOS Safari instead of depending on border-radius.
+  // Top and bottom edges are both straight lines between the rounded
+  // corners (the bottom used to bow outward; BT is kept for call-site
+  // compatibility but no longer bends the edge). Drawn as an SVG path so it
+  // renders identically on Android Chrome and iOS Safari.
+  void BT
   const rX = Math.min(RX, W * 0.18)
   const rY = Math.min(RY, H * 0.32)
-  const bow = Math.max(8, Math.min(BT, H * 0.14))
   const kx = rX * 0.55
   const ky = rY * 0.55
   return [
@@ -1538,7 +1538,7 @@ function squirclePath(W: number, H: number, RX: number, RY: number, BT: number) 
     `C ${W - rX + kx},0 ${W},${rY - ky} ${W},${rY}`,
     `L ${W},${H - rY}`,
     `C ${W},${H - rY + ky} ${W - rX + kx},${H} ${W - rX},${H}`,
-    `C ${W * 0.75},${H + bow} ${W * 0.25},${H + bow} ${rX},${H}`,
+    `L ${rX},${H}`,
     `C ${rX - kx},${H} 0,${H - rY + ky} 0,${H - rY}`,
     `L 0,${rY}`,
     `C 0,${rY - ky} ${rX - kx},0 ${rX},0 Z`,
@@ -1592,7 +1592,7 @@ function BowedShapeCard({
   // restore. Keep a normalized fallback path mounted so the card background
   // is visible immediately; once ResizeObserver has the real dimensions the
   // exact responsive path replaces it without changing the card's content.
-  const fallbackPath = 'M 9,0 L 91,0 C 96,0 100,8 100,18 L 100,82 C 100,88 96,100 91,100 C 75,108.5 25,108.5 9,100 C 4,100 0,88 0,82 L 0,18 C 0,8 4,0 9,0 Z'
+  const fallbackPath = 'M 9,0 L 91,0 C 96,0 100,8 100,18 L 100,82 C 100,88 96,100 91,100 L 9,100 C 4,100 0,88 0,82 L 0,18 C 0,8 4,0 9,0 Z'
 
   return (
     <div
