@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { FlashAuthIcon } from './FlashAuthIcon'
 import { EASE_OUT } from '@/lib/motion'
 import { successFeedback } from '@/lib/feedback'
+import { usePopupOpen } from '@/hooks/usePopupOpen'
 
 // The one payment-success moment used by every payment screen (Send, Chat
 // pay, Swap, Transfer, Claim, Contacts, Bulk Pay):
@@ -32,6 +33,7 @@ interface SuccessFlashProps {
 
 export function SuccessFlash({ title, checkRef, viaBiometric, circleReady = true, onCircleReady, portal = true, rect, radius = 20 }: SuccessFlashProps) {
   useEffect(() => { successFeedback() }, [])
+  usePopupOpen()
 
   const box: CSSProperties = portal
     ? { position: 'fixed', ...(rect ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height, borderRadius: radius } : { inset: 0 }) }
@@ -55,7 +57,7 @@ export function SuccessFlash({ title, checkRef, viaBiometric, circleReady = true
           style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid #fff' }} />
         <motion.div ref={checkRef}
           initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.14, type: 'spring', stiffness: 260, damping: 17 }}
+          transition={{ delay: 0.14, type: 'spring', stiffness: 260, damping: 17, opacity: { delay: 0.14, duration: 0.18, ease: EASE_OUT } }}
           onAnimationComplete={onCircleReady}
           style={{ width: SUCCESS_CIRCLE, height: SUCCESS_CIRCLE, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {viaBiometric ? (

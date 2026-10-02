@@ -2,6 +2,7 @@ import { useEffect, type ComponentProps } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { DIALOG_BACKDROP, DIALOG_CARD } from '@/lib/motion'
+import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { SuccessReceipt } from './SuccessReceipt'
 
 // The success screen, reopened from history: tapping any history card
@@ -17,27 +18,15 @@ type ReceiptProps = ComponentProps<typeof SuccessReceipt>
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 
 // While a receipt is open, every backdrop-filter underneath (sticky page
-// headers, cards, the bottom nav…) is switched off via a class on <html>
-// (see `html.receipt-open` in index.css). Android Chrome re-runs each of those
-// blurs on every frame the popup's pop-in spring animates over them, which
-// showed up as the whole screen flickering when a history card was tapped.
+// headers, cards, the bottom nav…) is switched off — see usePopupOpen.
 // The popup's own 68% dim covers the page, so nothing visible is lost.
-// A counter keeps this correct if two receipts are ever mounted at once.
-let openReceipts = 0
 
 export function ReceiptPopup({ onClose, onPrimary, ...receipt }: Omit<ReceiptProps, 'onPrimary' | 'revealed'> & {
   onClose: () => void
   /** Main button action; defaults to closing (Done). */
   onPrimary?: () => void
 }) {
-  useEffect(() => {
-    openReceipts += 1
-    document.documentElement.classList.add('receipt-open')
-    return () => {
-      openReceipts = Math.max(0, openReceipts - 1)
-      if (openReceipts === 0) document.documentElement.classList.remove('receipt-open')
-    }
-  }, [])
+  usePopupOpen()
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }

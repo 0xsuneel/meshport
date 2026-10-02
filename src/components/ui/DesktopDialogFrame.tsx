@@ -13,6 +13,7 @@
 import { motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { POPUP_CARD, DIALOG_BACKDROP } from '@/lib/motion'
+import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { type ReactNode } from 'react'
 
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
@@ -23,6 +24,7 @@ export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex =
   maxWidth?: number
   zIndex?: number
 }) {
+  usePopupOpen()
   return createPortal(
     <motion.div
       initial={{ opacity: 0 }}

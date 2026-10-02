@@ -508,12 +508,14 @@ body { overflow-wrap: break-word; }
 .mp-search-input::placeholder { color: var(--text-muted); opacity: 1; }
 
 
-/* A receipt popup is open (see ReceiptPopup.tsx): drop every backdrop blur
-   beneath it. Android Chrome re-blurs them each frame the popup animates,
-   which made the screen flicker when a history card was tapped. */
-html.receipt-open *,
-html.receipt-open *::before,
-html.receipt-open *::after {
+/* A popup is open (see src/hooks/usePopupOpen.ts): drop every backdrop blur
+   on the page beneath it. Android Chrome re-blurs them each frame the popup
+   animates, which made the screen blink when a popup, a history card's
+   receipt or the payment success screen opened. Popups render into <body>,
+   outside #root, so their own styling is untouched. */
+html.popup-open #root *,
+html.popup-open #root *::before,
+html.popup-open #root *::after {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }

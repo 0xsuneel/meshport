@@ -79,11 +79,14 @@ export const SHEET_BACKDROP = {
 } as const
 
 // ── Centered popups / dialogs ──────────────────────────────────────────────
+/** Popups fade on a plain tween: these springs are underdamped, and on the
+ *  spring the opacity overshoots and dips back, which reads as a blink. */
+const POPUP_FADE: Transition = { duration: 0.18, ease: EASE_OUT }
 export const DIALOG_CARD = {
   initial: { opacity: 0, scale: 0.96, y: 8 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.97, y: 4 },
-  transition: { type: 'spring', stiffness: 380, damping: 30 } as Transition,
+  transition: { type: 'spring', stiffness: 380, damping: 30, opacity: POPUP_FADE } as Transition,
 } as const
 /** Centred popups (DesktopDialogFrame / Sheet): a slightly livelier pop-in
  *  than DIALOG_CARD, which the success receipt keeps. */
@@ -91,7 +94,7 @@ export const POPUP_CARD = {
   initial: { opacity: 0, scale: 0.92, y: 18 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } },
-  transition: { type: 'spring', stiffness: 420, damping: 30 } as Transition,
+  transition: { type: 'spring', stiffness: 420, damping: 30, opacity: POPUP_FADE } as Transition,
 } as const
 export const DIALOG_BACKDROP = {
   initial: { opacity: 0 },
