@@ -749,10 +749,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // "Maximum update depth exceeded"). Gating on [successPhase, isDesktop]
   // makes it fire once per entry into the flash phase instead.
   useLayoutEffect(() => {
-    if (isDesktop && successPhase === 'flash' && desktopColumnRef.current) {
-      setFlashColumnRect(desktopColumnRef.current.getBoundingClientRect())
-    }
-  }, [successPhase, isDesktop])
+    if (successPhase !== 'flash' || !isDesktopMq) return
+    // Embedded in the Hub on desktop: cover just the Hub's own screen (its
+    // scroll area beside the sidebar), not the whole window.
+    const target = isDesktop
+      ? desktopColumnRef.current
+      : (flowRootRef.current?.closest('[data-flow-scroller]') as HTMLElement | null) ?? flowRootRef.current
+    if (target) setFlashColumnRect(target.getBoundingClientRect())
+  }, [successPhase, isDesktop, isDesktopMq])
 
   // Measured in a layout effect (before paint) so the traveling checkmark is
   // already on screen in the receipt's very first frame — no frame where
@@ -2851,7 +2855,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             It stays until the receipt's check circle has mounted, so the
             processing view is never uncovered in between. */}
         {step === 'success' && (successPhase === 'flash' || !heroCheckEl) && (
-          <SuccessFlash title="Transfer Successful" checkRef={flashCheckRef} viaBiometric={paidViaBiometric} circleReady={flashCircleReady} onCircleReady={() => setFlashCircleReady(true)} rect={isDesktop ? flashColumnRect : null} radius={20} />
+          <SuccessFlash title="Transfer Successful" checkRef={flashCheckRef} viaBiometric={paidViaBiometric} circleReady={flashCircleReady} onCircleReady={() => setFlashCircleReady(true)} rect={isDesktopMq ? flashColumnRect : null} radius={20} />
         )}
         <AnimatePresence initial={false} mode="wait">
 

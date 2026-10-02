@@ -855,10 +855,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   // "Maximum update depth exceeded"). Gating on [successPhase, isDesktop]
   // makes it fire once per entry into the flash phase instead.
   useLayoutEffect(() => {
-    if (isDesktop && successPhase === 'flash' && desktopColumnRef.current) {
-      setFlashColumnRect(desktopColumnRef.current.getBoundingClientRect())
-    }
-  }, [successPhase, isDesktop])
+    if (successPhase !== 'flash' || !isDesktopMq) return
+    // Embedded in the Hub on desktop: cover just the Hub's own screen (its
+    // scroll area beside the sidebar), not the whole window.
+    const target = isDesktop
+      ? desktopColumnRef.current
+      : (flowRootRef.current?.closest('[data-flow-scroller]') as HTMLElement | null) ?? flowRootRef.current
+    if (target) setFlashColumnRect(target.getBoundingClientRect())
+  }, [successPhase, isDesktop, isDesktopMq])
 
   // Measured in a layout effect (before paint) so the traveling checkmark is
   // already on screen in the receipt's very first frame — no frame where
@@ -2389,7 +2393,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
               It stays until the receipt's check circle has mounted, so the
               live view is never uncovered in between. */}
           {confirmPhase === 'done' && (successPhase === 'flash' || !heroCheckEl) && (
-            <SuccessFlash title="Claimed Successfully" checkRef={flashCheckRef} viaBiometric={paidViaBiometric} circleReady={flashCircleReady} onCircleReady={() => setFlashCircleReady(true)} rect={isDesktop ? flashColumnRect : null} radius={RADII.card} />
+            <SuccessFlash title="Claimed Successfully" checkRef={flashCheckRef} viaBiometric={paidViaBiometric} circleReady={flashCircleReady} onCircleReady={() => setFlashCircleReady(true)} rect={isDesktopMq ? flashColumnRect : null} radius={RADII.card} />
           )}
           <AnimatePresence mode="wait">
           {(confirmPhase === 'processing' || confirmPhase === 'submitted'
