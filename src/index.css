@@ -493,6 +493,13 @@ body { overflow-wrap: break-word; }
 @keyframes mpProcSpin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
 @keyframes mpProcBreath { 0%, 100% { transform: scale(0.72); opacity: 0.55; } 50% { transform: scale(1); opacity: 1; } }
 
+/* Endless loops done in CSS (ChainScanner, Bring Funds' "Opening <chain>"
+   ring): framer loops under an AnimatePresence initial={false} never start. */
+.mp-ring-spin { animation: mpRingSpin 1.1s linear infinite; }
+@keyframes mpRingSpin { to { transform: rotate(360deg); } }
+@keyframes mpScanStrip { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes mpScanBeam { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
 
 /* Big amount entry (AmountHero): placeholder "0.00" faded like Chat pay's. */
 .mp-amount-input::placeholder { color: color-mix(in srgb, var(--text-primary) 22%, transparent); opacity: 1; }

@@ -39,6 +39,7 @@ import { slideStepVariants, MOBILE_SLIDE_TRANSITION, MOBILE_SLIDE_X, MOBILE_TAB_
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
+import { DesktopAmountInput } from '@/components/ui/DesktopAmountInput'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -563,6 +564,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   // Inside the Hub sheet the page always uses its phone layout.
   const isDesktopMq  = useMediaQuery('(min-width: 980px)')
   const isDesktop    = embedded ? false : isDesktopMq
+  // The amount box and the passcode follow the real screen size even when
+  // embedded in the Hub: on desktop they type with the keyboard (Swap-style
+  // box) and authorise in a centred popup, never the phone keypad sheets.
+  const desktopInput = isDesktopMq
 
   // Embedded in the Multichain Hub's bottom sheet: anything that would go
   // "back to the Hub" closes the sheet instead of changing page.
@@ -1873,7 +1878,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
             // just a short "opening <chain>" state while its balance loads.
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
               <div style={{ position: 'relative', width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <motion.span aria-hidden animate={{ rotate: 360 }} transition={{ duration: 1.1, repeat: Infinity, ease: 'linear' }}
+                {/* CSS animation, not framer: this sits under the
+                    AnimatePresence initial={false} below, which blocks every
+                    descendant motion element's first animation — so a framer
+                    spin here never started and the ring looked frozen. */}
+                <span aria-hidden className="mp-ring-spin"
                   style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2.5px solid transparent', borderTopColor: 'var(--brand)', borderRightColor: 'color-mix(in srgb, var(--brand) 40%, transparent)' }} />
                 <ChainLogo chainId={deepLinkChain} size={46} />
               </div>
@@ -2117,47 +2126,54 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
               {/* Amount */}
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 8 }}>Amount (USDC)</div>
-                <div ref={amountBoxRef}
-                  onClick={e => { if (isDesktop) return; e.stopPropagation(); setAmountConfirmed(false); setKeypadOpen(true) }}
-                  style={{ padding: '14px 16px', borderRadius: 16, cursor: isDesktop ? 'text' : 'pointer',
-                    background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-                    border: `1.5px solid ${keypadOpen ? COLORS.primary : error ? COLORS.error : COLORS.border}` }}>
-                  {isDesktop ? (
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      autoFocus
+                {desktopInput ? (
+                  <div ref={amountBoxRef}>
+                    <DesktopAmountInput
                       value={claimAmounts[selected!] ?? ''}
-                      onChange={e => { setClaimAmounts(prev => ({ ...prev, [selected!]: sanitizeClaimAmount(e.target.value) })); setError('') }}
-                      placeholder="0.00"
-                      aria-label="Amount in USDC"
-                      style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: 0,
-                        fontSize: 34, fontWeight: 800, color: COLORS.text, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.5px' }}
+                      onChange={v => { setClaimAmounts(prev => ({ ...prev, [selected!]: sanitizeClaimAmount(v) })); setError('') }}
+                      onMax={() => {
+                        setClaimAmounts(prev => ({ ...prev, [selected!]: parseFloat(selectedChain.claimable.toFixed(2)).toString() }))
+                        setError('')
+                      }}
+                      invalid={!!error || (claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT)}
+                      ariaLabel="Amount in USDC"
                     />
-                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5 }}>
+                      <span style={{ color: COLORS.muted }}>Available: {formatAmount(selectedChain.claimable)} USDC</span>
+                      {claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT && (
+                        <span style={{ fontWeight: 700, color: COLORS.error }}>Minimum ${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}</span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div ref={amountBoxRef}
+                    onClick={e => { e.stopPropagation(); setAmountConfirmed(false); setKeypadOpen(true) }}
+                    style={{ padding: '14px 16px', borderRadius: 16, cursor: 'pointer',
+                      background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
+                      border: `1.5px solid ${keypadOpen ? COLORS.primary : error ? COLORS.error : COLORS.border}` }}>
                     <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums',
                       color: claimAmounts[selected!] ? COLORS.text : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>
                       {claimAmounts[selected!] || '0.00'}
                     </div>
-                  )}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
-                    <span style={{ fontSize: 13, color: COLORS.muted }}>USDC</span>
-                    {claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT ? (
-                      <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.error }}>Minimum ${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}</span>
-                    ) : (
-                      <button
-                        onClick={e => {
-                          e.stopPropagation()
-                          setClaimAmounts(prev => ({ ...prev, [selected!]: parseFloat(selectedChain.claimable.toFixed(2)).toString() }))
-                          setError('')
-                        }}
-                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: COLORS.primary }}>
-                        Max: {formatAmount(selectedChain.claimable)}
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
+                      <span style={{ fontSize: 13, color: COLORS.muted }}>USDC</span>
+                      {claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT ? (
+                        <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.error }}>Minimum ${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}</span>
+                      ) : (
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            setClaimAmounts(prev => ({ ...prev, [selected!]: parseFloat(selectedChain.claimable.toFixed(2)).toString() }))
+                            setError('')
+                          }}
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: COLORS.primary }}>
+                          Max: {formatAmount(selectedChain.claimable)}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-                {!isDesktop && !amountConfirmed && !keypadOpen && !claimAmt && (
+                )}
+                {!desktopInput && !amountConfirmed && !keypadOpen && !claimAmt && (
                   <p style={{ fontSize: 12, color: COLORS.muted, margin: '6px 0 0' }}>Tap the amount to enter a value</p>
                 )}
               </div>
@@ -2241,7 +2257,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
           </div>
 
           {/* Amount Keypad — mobile only; Done just closes it (Review & Claim is on the card). */}
-          {!isDesktop && (
+          {!desktopInput && (
             <div className="keypad-eraser-fix" onClick={e => e.stopPropagation()}>
               <AmountKeypad
                 open={keypadOpen && !showPasscodeSheet}
@@ -2305,7 +2321,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
                 </>
               )
 
-              if (isDesktop) {
+              if (desktopInput) {
                 return (
                   <DesktopTransactionAuthDialog
                     onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}

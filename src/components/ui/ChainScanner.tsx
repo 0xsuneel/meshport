@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from 'framer-motion'
+import { useReducedMotion } from 'framer-motion'
 
 // "Scanning chains" animation shared by Bring Funds, the Multichain Hub's
 // Bring list and the Merchant Ledger's chains tab. Chain logos glide past a
@@ -33,30 +33,32 @@ export function ChainScanner({ logos, title = 'Scanning chains…', subtitle, co
         WebkitMaskImage: 'linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent)',
         maskImage: 'linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent)',
       }}>
-        <motion.div
-          animate={reduce ? undefined : { x: ['0%', '-50%'] }}
-          transition={{ duration, repeat: Infinity, ease: 'linear' }}
-          style={{ position: 'absolute', top: '50%', left: 0, marginTop: -size / 2, display: 'flex', gap, alignItems: 'center', width: 'max-content' }}>
+        {/* CSS animations, not framer loops: callers mount this under an
+            AnimatePresence initial={false}, which blocks a descendant motion
+            element's first animation — the strip then never moved. */}
+        <div
+          style={{ position: 'absolute', top: '50%', left: 0, marginTop: -size / 2, display: 'flex', gap, alignItems: 'center', width: 'max-content',
+            animation: reduce ? undefined : `mpScanStrip ${duration}s linear infinite` }}>
           {loop.map((l, i) => (
             <img key={i} src={l.src} alt={i < logos.length ? l.alt : ''} width={size} height={size}
               onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }}
               style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, display: 'block', objectFit: 'cover',
                 background: 'var(--surface)', boxShadow: '0 0 0 1px var(--border)' }} />
           ))}
-        </motion.div>
+        </div>
 
         {/* Scan beam: a bright core line, a soft glow and a ring the logos pass through. */}
         <div aria-hidden style={{
           position: 'absolute', top: 0, bottom: 0, left: '50%', width: 44, marginLeft: -22,
           background: 'radial-gradient(closest-side, color-mix(in srgb, var(--success) 28%, transparent), transparent)',
         }} />
-        <motion.div aria-hidden
-          animate={reduce ? undefined : { opacity: [0.55, 1, 0.55] }}
-          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+        <div aria-hidden
           style={{
             position: 'absolute', top: 2, bottom: 2, left: '50%', width: 3, marginLeft: -1.5, borderRadius: 3,
             background: 'linear-gradient(180deg, transparent, var(--success), transparent)',
             boxShadow: '0 0 10px var(--success)',
+            opacity: reduce ? 1 : undefined,
+            animation: reduce ? undefined : 'mpScanBeam 1.4s ease-in-out infinite',
           }} />
         <div aria-hidden style={{
           position: 'absolute', top: '50%', left: '50%', width: size + 12, height: size + 12,

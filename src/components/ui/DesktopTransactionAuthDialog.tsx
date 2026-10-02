@@ -8,8 +8,14 @@
 // Every caller keeps its existing PinKeypad + error text completely
 // unchanged — this is only the chrome around it, swapped in on the
 // isDesktop branch exactly like DesktopDialogFrame was, mobile untouched.
+//
+// Rendered into document.body (like DesktopDialogFrame) so a transformed
+// ancestor — e.g. the Multichain Hub's embedded flows — can't become its
+// containing block: it always centres on the screen.
 import { motion } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import { DIALOG_CARD, DIALOG_BACKDROP } from '@/lib/motion'
+import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { type ReactNode } from 'react'
 
 export function DesktopTransactionAuthDialog({
@@ -27,16 +33,20 @@ export function DesktopTransactionAuthDialog({
   maxWidth?: number
   children: ReactNode
 }) {
-  return (
+  usePopupOpen()
+  return createPortal(
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={DIALOG_BACKDROP.transition}
-      onClick={onClose}
+      // A portal still delivers events to its React ancestors: stop them so
+      // a click here can't also trigger the page's own handlers.
+      onClick={e => { e.stopPropagation(); onClose() }}
       style={{
         position: 'fixed', inset: 0, zIndex: 100,
-        background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+        // A plain dim, no backdrop blur — see usePopupOpen.
+        background: 'rgba(0,0,0,0.6)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       }}
     >
@@ -93,6 +103,7 @@ export function DesktopTransactionAuthDialog({
           </div>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   )
 }

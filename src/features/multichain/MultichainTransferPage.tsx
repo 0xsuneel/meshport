@@ -30,6 +30,7 @@ import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLo
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
+import { DesktopAmountInput } from '@/components/ui/DesktopAmountInput'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { sheetDrag } from '@/lib/sheetDrag'
@@ -532,6 +533,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // Inside the Hub sheet the page always uses its phone layout.
   const isDesktopMq = useMediaQuery('(min-width: 980px)')
   const isDesktop = embedded ? false : isDesktopMq
+  // The amount box and the passcode follow the real screen size even when
+  // embedded in the Hub: on desktop they type with the keyboard (Swap-style
+  // box) and authorise in a centred popup, never the phone keypad sheets.
+  const desktopInput = isDesktopMq
 
   // Embedded in the Multichain Hub's bottom sheet: anything that would go
   // "back to the Hub" closes the sheet instead of changing page.
@@ -2970,41 +2975,51 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 {/* Amount */}
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Amount (USDC)</div>
-                  <div ref={amountBoxRef} onClick={() => { if (!isDesktop) setShowAmountPad(true) }} style={{ padding: '14px 16px', borderRadius: 16, cursor: isDesktop ? 'text' : 'pointer',
-                    background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-                    {isDesktop ? (
-                      <input
-                        inputMode="decimal"
+                  {desktopInput ? (
+                    <div ref={amountBoxRef}>
+                      <DesktopAmountInput
                         value={amount}
-                        onChange={e => setAmount(sanitizeMultichainAmount(e.target.value))}
-                        placeholder="0.00"
-                        aria-label="Amount in USDC"
-                        className="bg-transparent focus:outline-none"
-                        style={{ width: '100%', fontSize: 34, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}
+                        onChange={v => setAmount(sanitizeMultichainAmount(v))}
+                        onMax={() => {
+                          // Same static reserve as the phone Max: no live fee fetch until Review.
+                          const maxAmount = Math.max(0, balance - feeReserveEstimate)
+                          setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
+                        }}
+                        invalid={numAmount > 0 && numAmount < MIN_AMOUNT}
+                        ariaLabel="Amount in USDC"
                       />
-                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5 }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Balance: {formatAmount(balance)} USDC</span>
+                        {numAmount > 0 && numAmount < MIN_AMOUNT
+                          ? <span style={{ fontWeight: 600, color: 'var(--danger)' }}>Minimum $3</span>
+                          : <span style={{ color: 'var(--text-secondary)' }}>~{trimTrailingZeros(feeReserveEstimate.toFixed(2))} USDC fee reserved on Max</span>}
+                      </div>
+                    </div>
+                  ) : (
+                    <div ref={amountBoxRef} onClick={() => setShowAmountPad(true)} style={{ padding: '14px 16px', borderRadius: 16, cursor: 'pointer',
+                      background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
                       <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1.15,
                         color: amount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>
                         {amount || '0.00'}
                       </div>
-                    )}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
-                      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>USDC</span>
-                      {numAmount > 0 && numAmount < MIN_AMOUNT ? (
-                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--danger)' }}>Minimum $3</span>
-                      ) : (
-                        <button onClick={e => {
-                            e.stopPropagation()
-                            // Same static reserve as before: no live fee fetch until Review.
-                            const maxAmount = Math.max(0, balance - feeReserveEstimate)
-                            setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
-                          }}
-                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand)' }}>
-                          Max: {formatAmount(balance)} (−{trimTrailingZeros(feeReserveEstimate.toFixed(2))} est.)
-                        </button>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
+                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>USDC</span>
+                        {numAmount > 0 && numAmount < MIN_AMOUNT ? (
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--danger)' }}>Minimum $3</span>
+                        ) : (
+                          <button onClick={e => {
+                              e.stopPropagation()
+                              // Same static reserve as before: no live fee fetch until Review.
+                              const maxAmount = Math.max(0, balance - feeReserveEstimate)
+                              setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
+                            }}
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand)' }}>
+                            Max: {formatAmount(balance)} (−{trimTrailingZeros(feeReserveEstimate.toFixed(2))} est.)
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {gasWarning && (
@@ -3031,7 +3046,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 </div>
               </motion.div>
 
-              {!isDesktop && (
+              {!desktopInput && (
                   <AmountKeypad
                     open={showAmountPad}
                     value={amount}
@@ -3562,7 +3577,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             {keypadContent}
           </>
         )
-        return isDesktop ? (
+        return desktopInput ? (
           <DesktopTransactionAuthDialog
             onClose={closeSheet}
             title="Authorize Transfer"
