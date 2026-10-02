@@ -1889,18 +1889,20 @@ function AvailableBalanceCard({
       {/* Bottom row — address (with copy) on the left, View
           Transactions on the right, replacing the old centered
           address row + separate white pill. */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 9, lineHeight: '16px' }}>
+      {/* Both sides stay on one line on narrow phones (320–360px): the
+          text scales down with the screen instead of wrapping. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 9, lineHeight: '16px' }}>
         <div onClick={() => { copyText(walletAddress || ''); showToastMessage('Address copied', 'success') }}
-          style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
-          <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.72)', fontFamily: 'monospace', letterSpacing: '0.3px' }}>
+          style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', minWidth: 0 }}>
+          <span style={{ fontSize: 'clamp(10.5px, 3.2vw, 12.5px)', color: 'rgba(255,255,255,0.72)', fontFamily: 'monospace', letterSpacing: '0.3px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {shortAddr}
           </span>
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
             <rect x="5" y="1" width="10" height="10" rx="2" stroke="rgba(255,255,255,0.75)" strokeWidth="1.4"/>
             <path d="M1 5v9a1 1 0 001 1h9" stroke="rgba(255,255,255,0.75)" strokeWidth="1.4" strokeLinecap="round"/>
           </svg>
         </div>
-        <span onClick={() => navigate('/activity')} style={{ fontSize: 13.5, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.2px', cursor: 'pointer' }}>
+        <span onClick={() => navigate('/activity')} style={{ fontSize: 'clamp(11.5px, 3.6vw, 13.5px)', color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.2px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
           View Transactions
         </span>
       </div>

@@ -2897,8 +2897,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 {/* Balance */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '14px 16px', borderRadius: 16,
                   background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Arc Testnet Balance</span>
-                  <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(balance)} USDC</span>
+                  <span style={{ minWidth: 0, fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Arc Testnet Balance</span>
+                  {/* Amount + unit never split across lines on narrow phones. */}
+                  <span style={{ flexShrink: 0, whiteSpace: 'nowrap', fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(balance)} USDC</span>
                 </div>
 
                 {/* Destination chain */}

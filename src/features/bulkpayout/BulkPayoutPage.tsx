@@ -716,18 +716,20 @@ export function BulkPayoutPage() {
       <div className={isDesktop ? "px-4 pt-4 pb-3 border-b border-border flex-shrink-0" : "px-4 pt-4 pb-3 border-b border-border"}>
         <p className="text-sm font-semibold text-text-primary">1. Add Recipients</p>
         {/* Mode tabs */}
-        <div className="flex gap-2 mt-3">
+        {/* One line on every phone: labels never wrap; below 400px the
+            Template link drops to its icon. */}
+        <div className="flex gap-1.5 min-[360px]:gap-2 mt-3">
           <button onClick={() => setEntryMode('manual')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${entryMode === 'manual' ? 'bg-brand/15 text-brand border border-brand/30' : 'text-text-secondary border border-border'}`}>
+            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${entryMode === 'manual' ? 'bg-brand/15 text-brand border border-brand/30' : 'text-text-secondary border border-border'}`}>
             <Plus className="w-3.5 h-3.5" /> Manual Entry
           </button>
           <button onClick={() => setEntryMode('csv')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${entryMode === 'csv' ? 'bg-brand/15 text-brand border border-brand/30' : 'text-text-secondary border border-border'}`}>
+            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${entryMode === 'csv' ? 'bg-brand/15 text-brand border border-brand/30' : 'text-text-secondary border border-border'}`}>
             <Upload className="w-3.5 h-3.5" /> Upload CSV
           </button>
-          <button onClick={downloadCSVTemplate}
-            className="ml-auto flex items-center gap-1 text-xs text-brand hover:text-brand">
-            <Download className="w-3.5 h-3.5" /> Template
+          <button onClick={downloadCSVTemplate} aria-label="Download CSV template" title="Download CSV template"
+            className="ml-auto flex items-center gap-1 text-xs text-brand hover:text-brand whitespace-nowrap">
+            <Download className="w-3.5 h-3.5 flex-shrink-0" /> <span className="max-[399px]:hidden">Template</span>
           </button>
         </div>
       </div>

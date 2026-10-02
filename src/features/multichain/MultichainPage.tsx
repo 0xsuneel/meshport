@@ -256,7 +256,9 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, balanceHidden, on
   const shown = withFunds.slice(0, 4)
   const extra = withFunds.length - shown.length
   const line: React.CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }
-  const label: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.72)', textTransform: 'uppercase', ...line }
+  // Wraps onto a second line on narrow phones rather than being cut off
+  // ("AVAILABLE TO T…" at 320–360px).
+  const label: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', lineHeight: 1.3, color: 'rgba(255,255,255,0.72)', textTransform: 'uppercase', overflowWrap: 'normal', wordBreak: 'normal' }
   const amount = (n: number): React.CSSProperties => ({ fontSize: amountSize(n), fontWeight: 800, letterSpacing: '-0.4px', lineHeight: 1.15, color: '#fff', ...line })
   const sub: React.CSSProperties = { fontSize: 11, color: 'rgba(255,255,255,0.78)', ...line }
   const logo = (overlap: boolean): React.CSSProperties => ({
@@ -328,6 +330,8 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, balanceHidden, on
 
 export function MultichainPage() {
   const isDesktop   = useMediaQuery('(min-width: 980px)')
+  // Phones narrower than ~400px (SE, small Androids): compact tab labels.
+  const narrow      = useMediaQuery('(max-width: 399px)')
   // Approved merchants get the Ledger (UB chains only) instead of Bring Funds.
   const isMerchant  = useMerchant().isMerchant
   const navigate    = useNavigate()
@@ -945,16 +949,17 @@ export function MultichainPage() {
         <div role="tablist" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 16,
           background: 'var(--surface)', border: '1px solid var(--border)' }}>
           {([
-            { id: 'transfer', label: 'Transfer Funds' },
-            { id: 'bring',    label: isMerchant ? 'Ledger' : 'Bring Funds' },
+            // Short labels on narrow phones so all four tabs stay on one line.
+            { id: 'transfer', label: narrow ? 'Transfer' : 'Transfer Funds' },
+            { id: 'bring',    label: isMerchant ? 'Ledger' : narrow ? 'Bring' : 'Bring Funds' },
             ...(isDesktop ? [] : [{ id: 'activity', label: 'Activity', dot: pendingCount > 0 ? 'var(--warning)' : null }]),
             { id: 'recovery', label: 'Recover',  dot: failedCount > 0 ? 'var(--danger)' : null },
           ] as Array<{ id: HubTab; label: string; dot?: string | null }>).map(t => {
             const active = hubTab === t.id
             return (
               <button key={t.id} role="tab" aria-selected={active} onClick={() => { setHubTab(t.id); setClaimChain(null); setTrackUb(null); if (trackClaim) closeTracking() }} style={{
-                flex: 1, position: 'relative', padding: '10px 4px', borderRadius: 12, border: 'none', cursor: 'pointer',
-                fontSize: 13, fontWeight: 600,
+                flex: 1, minWidth: 0, position: 'relative', padding: '10px 4px', borderRadius: 12, border: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                 background: active ? 'var(--brand)' : 'transparent',
                 color: active ? '#fff' : 'var(--text-secondary)',
                 transition: 'background 0.15s, color 0.15s',

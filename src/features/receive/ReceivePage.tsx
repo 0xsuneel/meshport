@@ -208,10 +208,10 @@ export function ReceivePage() {
           onClick={handleDownloadQr}
           disabled={!qrReady}
           style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            background: 'transparent', border: 'none', padding: '12px 8px',
+            flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'clamp(5px, 1.6vw, 8px)',
+            background: 'transparent', border: 'none', padding: '12px 6px', whiteSpace: 'nowrap',
             color: qrReady ? 'var(--text-primary)' : 'var(--text-secondary)',
-            fontSize: 14, fontWeight: 600, cursor: qrReady ? 'pointer' : 'default',
+            fontSize: 'clamp(12.5px, 3.8vw, 14px)', fontWeight: 600, cursor: qrReady ? 'pointer' : 'default',
           }}>
           <Download size={17} />
           Download QR
@@ -221,10 +221,10 @@ export function ReceivePage() {
           onClick={handleShareQr}
           disabled={!qrReady}
           style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            background: 'transparent', border: 'none', padding: '12px 8px',
+            flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'clamp(5px, 1.6vw, 8px)',
+            background: 'transparent', border: 'none', padding: '12px 6px', whiteSpace: 'nowrap',
             color: qrReady ? 'var(--text-primary)' : 'var(--text-secondary)',
-            fontSize: 14, fontWeight: 600, cursor: qrReady ? 'pointer' : 'default',
+            fontSize: 'clamp(12.5px, 3.8vw, 14px)', fontWeight: 600, cursor: qrReady ? 'pointer' : 'default',
           }}>
           <Share2 size={17} />
           Share QR

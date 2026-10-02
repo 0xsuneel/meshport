@@ -237,6 +237,8 @@ function ChainLogo({ name, size = 22 }: { name: string; size?: number }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export function InsightsPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
+  // Phones narrower than ~400px: slimmer period pills so all three fit on one line.
+  const narrow = useMediaQuery('(max-width: 399px)')
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
   const [transactions, setTransactions] = useState<ActivityRecord[]>([])
@@ -579,14 +581,14 @@ export function InsightsPage() {
           <div style={{ position: 'relative', zIndex: 1 }}>
 
             {/* Period selector */}
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', rowGap: 6, marginBottom: 12 }}>
               {['month', 'week', 'year'].map((p) => (
                 <button
                   key={p}
                   onClick={() => setPeriod(p as any)}
                   style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '5px 11px', marginRight: 6,
+                    display: 'inline-flex', alignItems: 'center', gap: narrow ? 3 : 5, whiteSpace: 'nowrap',
+                    padding: narrow ? '5px 9px' : '5px 11px', marginRight: 6,
                     background: period === p ? 'color-mix(in srgb, var(--brand) 25%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
                     border: period === p ? '1px solid color-mix(in srgb, var(--brand) 45%, transparent)' : '1px solid color-mix(in srgb, var(--brand) 20%, transparent)',
                     borderRadius: 22, fontSize: 12, fontWeight: 600,
@@ -594,7 +596,7 @@ export function InsightsPage() {
                     cursor: 'pointer', fontFamily: 'inherit',
                   }}
                 >
-                  {p === period && <Calendar size={12}/>}
+                  {p === period && !narrow && <Calendar size={12}/>}
                   {p === 'month' ? 'This Month' : p === 'week' ? 'This Week' : 'This Year'}
                   {p === period && <ChevronDown size={10} color="var(--brand)"/>}
                 </button>
@@ -627,9 +629,9 @@ export function InsightsPage() {
               </div>
 
               {/* Most Active Contact */}
-              <div style={{ paddingRight: 8 }}>
+              <div style={{ paddingRight: 8, minWidth: 0 }}>
                 <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 5 }}>Most Active Contact</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, minWidth: 0 }}>
                   <div style={{
                     width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
                     background: 'var(--brand)',
@@ -638,7 +640,8 @@ export function InsightsPage() {
                   }}>
                     {(stats.mostActiveContact[0] || 'U').toUpperCase()}
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+                  {/* One line with an ellipsis — breaking mid-name ("tester.ar / c") on narrow phones read as a typo. */}
+                  <span style={{ minWidth: 0, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {stats.mostActiveContact.replace(/\.arc$/, '')}.arc
                   </span>
                 </div>
@@ -738,8 +741,8 @@ export function InsightsPage() {
         }}
       >
         {/* header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <div style={{
               width: 32, height: 32, borderRadius: 10,
               background: 'color-mix(in srgb, var(--brand) 15%, transparent)',
@@ -755,7 +758,7 @@ export function InsightsPage() {
             </div>
           </div>
           <div style={{
-            display: 'flex', gap: 2,
+            display: 'flex', gap: 2, flexShrink: 0,
             background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', borderRadius: 10, padding: 3,
           }}>
             {(['daily', 'weekly', 'monthly'] as const).map(t => (
