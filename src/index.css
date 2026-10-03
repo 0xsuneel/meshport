@@ -31,15 +31,17 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     transition: background-color 0.2s ease, color 0.2s ease;
-    /* No rubber-band bounce anywhere: the page and every scroll area stop
-       dead at their ends (iOS / Android overscroll bounce and glow off).
-       The app has its own refresh, so the browser's pull-to-refresh isn't
-       needed. */
-    overscroll-behavior: none;
+    /* Was `overscroll-behavior: none` (blocks ALL overscroll effects,
+       including the browser's native vertical pull-to-refresh gesture —
+       which meant a stuck page couldn't be manually recovered by pulling
+       down to reload). Scoping to horizontal-only keeps the original intent
+       (stopping the iOS edge-swipe back/forward gesture and the page
+       bouncing to reveal background color) without taking away the user's
+       manual escape hatch when something goes wrong. */
+    overscroll-behavior-x: none;
+    overscroll-behavior-y: auto;
     -webkit-overflow-scrolling: touch;
   }
-  html, body, #root { overscroll-behavior: none; }
-  *, *::before, *::after { overscroll-behavior: none; }
   ::-webkit-scrollbar { display: none; }
   * { scrollbar-width: none; -ms-overflow-style: none; }
 
