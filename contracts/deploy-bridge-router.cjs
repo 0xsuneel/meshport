@@ -10,8 +10,8 @@
 // Afterwards add the printed address to BOTH settings in Vercel:
 //   VITE_BRIDGE_ROUTERS   (app)    {"Base_Sepolia":"0x…","Ethereum_Sepolia":"0x…"}
 //   BRIDGE_ROUTERS        (relayer) same JSON
-// and set BRIDGE_RELAYER_PRIVATE_KEY (a wallet holding a little ETH on each
-// chain for gas; it never holds user funds).
+// The relayer pays gas with BRIDGE_RELAYER_PRIVATE_KEY, or relay-gas's
+// RELAY_PRIVATE_KEY when that isn't set (it never holds user funds).
 
 const { ethers, network } = require('hardhat')
 

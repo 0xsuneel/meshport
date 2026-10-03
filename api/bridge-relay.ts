@@ -20,7 +20,8 @@
 // fee that covers its gas.
 //
 // Env:
-//   BRIDGE_RELAYER_PRIVATE_KEY  relayer key (pays gas; never holds user funds)
+//   BRIDGE_RELAYER_PRIVATE_KEY  relayer key (pays gas; never holds user funds);
+//                               falls back to RELAY_PRIVATE_KEY (relay-gas's wallet)
 //   BRIDGE_ROUTERS              {"Base_Sepolia":"0x…","Ethereum_Sepolia":"0x…"}
 //   BRIDGE_RPC_<CHAIN>          optional RPC override per chain
 //   BRIDGE_NATIVE_USD           optional native-token USD price for the gas fee (default 3000)
@@ -121,7 +122,9 @@ async function clients(chainKey: string) {
   const rpc = process.env[`BRIDGE_RPC_${chainKey.toUpperCase()}`] || c.rpc
   const chain = defineChain({ id: c.id, name: c.name, nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } })
   const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }) })
-  const key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
+  // Falls back to relay-gas's wallet, which already holds gas on these chains.
+  let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || process.env.RELAY_PRIVATE_KEY || '').trim()
+  if (key && !key.startsWith('0x')) key = '0x' + key
   let wallet: any = null
   if (/^0x[0-9a-fA-F]{64}$/.test(key)) {
     const { privateKeyToAccount } = await import('viem/accounts')
