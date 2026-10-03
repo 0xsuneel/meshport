@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { subscribeToClaim, CLAIM_STEPS, TRACK_PROGRESS_STEPS, type Claim } from '@/lib/claimService'
+import { useCctpProgress } from '@/lib/cctpTracker'
 
 const COLORS = {
   surface: 'color-mix(in srgb, var(--text-primary) 3%, transparent)',
@@ -39,7 +40,15 @@ export function ClaimProgressTracker({ claimId, initialClaim }: { claimId: strin
     return unsubscribe
   }, [claimId])
 
-  const status = claim?.status ?? 'submitted'
+  // Circle mints on Arc within seconds, but the claim row only flips to
+  // 'completed' once the server worker spots the mint on a later sweep —
+  // until then the row says 'settling' though the funds already arrived.
+  // So also ask Circle directly and show Completed as soon as it reports
+  // the Arc mint.
+  const rowStatus = claim?.status ?? 'submitted'
+  const rowFinal = rowStatus === 'completed' || rowStatus === 'failed'
+  const iris = useCctpProgress(rowFinal ? undefined : claim?.sourceChain, rowFinal ? undefined : claim?.txHash)
+  const status = !rowFinal && iris?.stage === 'done' ? 'completed' : rowStatus
   const failed = status === 'failed'
   const currentIdx = failed ? -1 : CLAIM_STEPS.findIndex(s => s.key === status)
   const isComplete = status === 'completed'
