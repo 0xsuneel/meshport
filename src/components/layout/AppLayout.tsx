@@ -375,10 +375,15 @@ export function AppLayout() {
   // encrypted messages and shows them locked. Social accounts restore from
   // the server; other wallets from this tab's session cache (silent: if that
   // needs the passcode, the normal unlock flow asks — no banner from here).
+  const navigateApp = useNavigate()
   useEffect(() => {
     if (!walletAddress || useAuthStore.getState().privateKey) return
     import('@/lib/restoreWallet')
-      .then(({ restorePrivateKey }) => restorePrivateKey(undefined, { silent: walletSource !== 'social-auto' }))
+      .then(async ({ restorePrivateKey, needsSocialUnlock }) => {
+        const ok = await restorePrivateKey(undefined, { silent: walletSource !== 'social-auto' })
+        // Google / email wallet that isn't on this device: passkey or Recovery QR.
+        if (!ok && walletSource === 'social-auto' && needsSocialUnlock()) navigateApp('/auth/recover-wallet', { replace: true })
+      })
       .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walletAddress, walletSource])
@@ -387,10 +392,32 @@ export function AppLayout() {
     const interval = setInterval(() => {
       const { walletAddress: addr, privateKey: key, walletSource: src } = useAuthStore.getState()
       if (!addr || key || src !== 'social-auto') return // already restored (or logged out, or not social-auto) — nothing to do
-      import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey()).catch(() => {})
+      import('@/lib/restoreWallet').then(({ restorePrivateKey, needsSocialUnlock }) => {
+        if (needsSocialUnlock()) return // only a tap (passkey / QR) can open it — nothing to retry
+        return restorePrivateKey()
+      }).catch(() => {})
     }, 20000)
     return () => clearInterval(interval)
   }, [walletAddress, privateKey, walletSource])
+
+  // Google / email wallets are self-custodial: until the account has a
+  // passkey or a Recovery QR, losing this device would lose the wallet, so
+  // the user sets one up before using the app. Once it has one, the
+  // server-held copy left from before self-custody is deleted.
+  const loginTypeApp = useAuthStore(s => s.loginType)
+  useEffect(() => {
+    if (loginTypeApp !== 'social' || walletSource !== 'social-auto' || !privateKey || !userId) return
+    let cancelled = false
+    import('@/lib/socialWallet').then(async ({ getWalletSecurityStatus, knownSecured, forgetServerVault }) => {
+      const status = await getWalletSecurityStatus(userId)
+      if (cancelled) return
+      const secured = status ? status.secured : knownSecured(userId)
+      if (!secured) { if (status) navigateApp('/auth/secure-wallet', { replace: true }); return }
+      void forgetServerVault()
+    }).catch(() => {})
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loginTypeApp, walletSource, privateKey, userId])
 
   // ── Real-time deposit detection — REMOVED, superseded by Phase 5/6 ─────────
   // This used to open a persistent Alchemy WebSocket to Arc

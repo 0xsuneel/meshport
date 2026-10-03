@@ -66,6 +66,8 @@ const PasscodeSetupPage     = lazyRetry(() => import('./features/auth/PasscodeSe
 const PasscodeLockPage      = lazyRetry(() => import('./features/auth/PasscodeSetup').then(m => ({ default: m.PasscodeLockPage })), 'PasscodeLockPage')
 const EnableBiometricPage   = lazyRetry(() => import('./features/auth/EnableBiometricPage').then(m => ({ default: m.EnableBiometricPage })), 'EnableBiometricPage')
 const AutoWalletPage        = lazyRetry(() => import('./features/auth/AutoWalletPage').then(m => ({ default: m.AutoWalletPage })), 'AutoWalletPage')
+const SecureWalletPage      = lazyRetry(() => import('./features/auth/SecureWalletPage').then(m => ({ default: m.SecureWalletPage })), 'SecureWalletPage')
+const RecoverWalletPage     = lazyRetry(() => import('./features/auth/SecureWalletPage').then(m => ({ default: m.RecoverWalletPage })), 'RecoverWalletPage')
 const LandingPage           = lazyRetry(() => import('./features/landing/LandingPage').then(m => ({ default: m.LandingPage })), 'LandingPage')
 // PayPage is the one route that most benefits from being kept as light as
 // possible — it's the page a brand-new visitor (no session, nothing cached)
@@ -289,6 +291,13 @@ function RequireNoWallet({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function RequireSocialWallet({ children }: { children: React.ReactNode }) {
+  const s = useAuthStore.getState()
+  if (!s.isAuthenticated || !s.walletAddress) return <Navigate to="/auth" replace />
+  if (s.loginType !== 'social' || s.walletSource !== 'social-auto') return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 function RequireNoUsername({ children }: { children: React.ReactNode }) {
   const s = useAuthStore.getState()
   if (!s.passcode) return <Navigate to="/auth/passcode" replace />
@@ -309,6 +318,10 @@ const router = createBrowserRouter([
   { path: '/auth/enable-biometric', element: <AuthShell><EnableBiometricPage /></AuthShell> },
   { path: '/auth/lock',           element: <AuthShell><PasscodeLockPage /></AuthShell> },
   { path: '/auth/auto-wallet',    element: <AuthShell><RequireNoWallet><AutoWalletPage /></RequireNoWallet></AuthShell> },
+  // Google / email wallets (self-custodial): passkey + Recovery QR setup, and
+  // unlocking on a device that doesn't have the wallet yet.
+  { path: '/auth/secure-wallet',  element: <AuthShell><RequireSocialWallet><SecureWalletPage /></RequireSocialWallet></AuthShell> },
+  { path: '/auth/recover-wallet', element: <AuthShell><RequireSocialWallet><RecoverWalletPage /></RequireSocialWallet></AuthShell> },
   { path: '/auth/wallet-setup',   element: <AuthShell><RequireNoWallet><WalletSetupPage /></RequireNoWallet></AuthShell> },
   { path: '/auth/create-wallet',  element: <AuthShell><CreateWalletPage /></AuthShell> },
   { path: '/auth/import-wallet',  element: <AuthShell><ImportWalletPage /></AuthShell> },

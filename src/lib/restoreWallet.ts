@@ -10,20 +10,16 @@
  * re-enters themselves. That's the accepted tradeoff for these accounts.
  * This module's behavior for these wallet sources is UNCHANGED.
  *
- * social-auto (Google AND Email-OTP accounts, unified) — the private key
- * is generated server-side at creation and envelope-encrypted at rest
- * (random per-wallet MEK, MEK encrypted under a server-only KEK — see
- * AutoWalletPage.tsx / supabase/functions/wallet-key, action=generate-wallet
- * / restore-full-key). The account's identity — proving you're logged into
- * this Google/email account right now, via the live Supabase session — is
- * the ENTIRE recovery mechanism. No passcode, no recovery phrase, no
- * passkey, and — important, this is a deliberate change — NO local
- * passcode-encrypted caching either. The app passcode is an APP LOCK ONLY
- * for these accounts; it is never used to encrypt or decrypt the wallet,
- * so every restore for a social-auto account goes to the server. That's
- * intentional: it's what makes "ask for a brand-new passcode on every
- * login" (see PasscodeSetupPage, ?returning=1) safe to do — there's no
- * locally-cached ciphertext whose passcode could go stale.
+ * social-auto (Google AND Email-OTP accounts, unified) — SELF-CUSTODIAL
+ * since 2026-10-04. The key is made on the device (lib/socialWallet.ts)
+ * and opens with the account's passkey (lib/walletPasskey.ts) or encrypted
+ * Recovery QR (lib/recoveryQr.ts); MeshPort's servers can't open it. This
+ * device keeps a copy sealed with its non-extractable device key, so a
+ * reload restores without a prompt. The app passcode is still an APP LOCK
+ * ONLY for these accounts — it never encrypts the wallet. Accounts from
+ * before the change still have a server-held copy until they set up a
+ * passkey or Recovery QR; that copy is then deleted (wallet-key
+ * forget-vault).
  *
  * Priority order:
  * 1. Already in memory → done
@@ -43,10 +39,11 @@
  *    which may not be the CURRENT passcode if the user just set a new one
  *    on a new device — that's fine, this step is just a fast path and is
  *    allowed to fail). Never attempted for social-auto — see above.
- * 4. social-auto ONLY: fetch the envelope-encrypted wallet from the
- *    server using the current Supabase session; the server decrypts it
- *    (MEK under KEK, then wallet under the derived key) and returns the
- *    plaintext key for this one response. No local re-caching afterward.
+ * 4a. social-auto: this device's sealed copy.
+ * 4b. social-auto accounts not yet moved over: the server-held copy (then
+ *    sealed on this device). With neither, needsSocialUnlock() is true and
+ *    AppLayout sends the user to the Unlock screen (passkey / Recovery QR),
+ *    which needs a tap and so never runs from here.
  *
  * If none of these work, `walletRecoveryNeeded` is set on the UI store,
  * which drives a persistent, app-wide banner (see
@@ -64,6 +61,11 @@ import { useAuthStore, useUIStore } from '@/store'
 // firing automatically on mount. Sharing one in-flight attempt avoids
 // redundant concurrent network calls when multiple components ask at once.
 let inFlightRestore: Promise<boolean> | null = null
+
+// Google / email wallet with no copy on this device and none on the server:
+// it opens only with the passkey or Recovery QR (/auth/recover-wallet).
+let socialUnlockNeeded = false
+export function needsSocialUnlock(): boolean { return socialUnlockNeeded }
 
 // PERF FIX (transaction-speed audit, 2026-09-17): `silent`, used by
 // PaySendPage/ChatPage/SwapPage/MultichainTransferPage/MultichainClaimPage
@@ -220,7 +222,26 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
     }
   }
 
-  // ── 4. social-auto ONLY: server-side envelope-encrypted vault ──────────────
+  // ── 4a. social-auto: this device's sealed copy (self-custodial) ────────────
+  // Google / email wallets are made and kept on the device now (see
+  // lib/socialWallet.ts). A reload opens the device-sealed copy; another
+  // device opens the wallet with the passkey or Recovery QR on the Unlock
+  // screen (/auth/recover-wallet) — those need a tap, so they never run from
+  // here.
+  if (walletSource === 'social-auto') {
+    const { loadDeviceCopy } = await import('@/lib/socialWallet')
+    const local = await loadDeviceCopy(walletAddress)
+    if (local) {
+      socialUnlockNeeded = false
+      setWallet(walletAddress, local, undefined, 'social-auto')
+      return true
+    }
+  }
+
+  // ── 4b. social-auto, accounts not yet moved over: server-side vault ───────
+  // Only accounts from before self-custody still have a vault row; it's
+  // deleted once they set up a passkey or Recovery QR (forget-vault), after
+  // which this answers 404 and the Unlock screen takes over.
   // Deliberately does NOT depend on any passcode — a social account
   // restoring on a new device (or unlocking after setting a brand-new
   // passcode) authorizes purely via the live Supabase session. The
@@ -263,11 +284,15 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
               body: { action: 'restore-full-key', device_id: getDeviceId() },
             })
             if (!error && data?.privateKey) {
+              socialUnlockNeeded = false
               setWallet(walletAddress, data.privateKey, undefined, 'social-auto')
+              const { saveDeviceCopy } = await import('@/lib/socialWallet')
+              await saveDeviceCopy(walletAddress, data.privateKey)
               return true
             }
             if (error) {
               const status = (error as any)?.context?.status
+              if (status === 404) socialUnlockNeeded = true // no server copy: passkey or Recovery QR
               if (typeof status === 'number' && status >= 400 && status < 500) {
                 console.warn('[Restore] wallet-key returned', status, '— not retrying (not a transient failure):', (error as any)?.message)
                 break

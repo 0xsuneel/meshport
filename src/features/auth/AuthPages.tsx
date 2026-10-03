@@ -15,8 +15,8 @@ import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { generateWallet, importFromMnemonic, importFromPrivateKey, validateMnemonic } from '@/lib/arc'
 import { copySensitiveToClipboard } from '@/lib/utils'
 import {
-  supabase, upsertUserProfile, fetchUserProfile,
-  isUsernameTakenDb, getUserByWalletAddress, ensureAnonSession, fetchUserByEmail,
+  supabase, upsertUserProfile,
+  isUsernameTakenDb, getUserByWalletAddress, ensureAnonSession, resolveAccountForSession,
 } from '@/lib/supabase'
 import {encryptPrivateKey, storeEncryptedKey, encryptMnemonic, storeEncryptedMnemonic, markWalletBackedUp} from '@/lib/security'
 import { LoadingDots } from '@/components/ui/LoadingDots'
@@ -222,6 +222,11 @@ export function LoginPage() {
 // and must produce identical account behavior for the same email: same
 // lookup, same wallet, no duplicate account just because a different
 // button was tapped.
+// Another MeshPort account already uses this email, but this sign-in isn't
+// linked to it — never merged silently (see resolveAccountForSession).
+const ACCOUNT_CONFLICT_MESSAGE =
+  'This email already belongs to a MeshPort account that this sign-in isn\'t linked to. Sign in with the method you used to create that account.'
+
 export function GoogleAuthPage() {
   const navigate = useNavigate()
   const setUser = useAuthStore(s => s.setUser)
@@ -241,17 +246,26 @@ export function GoogleAuthPage() {
 
       setLoginType('social')
 
-      // Same dual lookup as verifyOTP — id first, email as the fallback
-      // that actually matters here: Google and Email OTP produce
-      // different auth.users ids unless Supabase's automatic identity
-      // linking has already run for this email, so the email-based
-      // lookup is what actually guarantees "no duplicate account," not
-      // just a defensive extra.
-      const existing = (await fetchUserProfile(supaUser.id)) || (await fetchUserByEmail(supaUser.email || ''))
+      // The account this Google login belongs to — through the session's
+      // own binding only, never by matching emails (see
+      // resolveAccountForSession). Same lookup as the email-code login.
+      const resolved = await resolveAccountForSession(supaUser.id, supaUser.email)
+      if (resolved.kind === 'error') {
+        setError("Couldn't reach MeshPort. Please try again.")
+        setTimeout(() => navigate('/auth', { replace: true }), 2000)
+        return
+      }
+      if (resolved.kind === 'conflict') {
+        await supabase.auth.signOut().catch(() => {})
+        setError(ACCOUNT_CONFLICT_MESSAGE)
+        setTimeout(() => navigate('/auth', { replace: true }), 5000)
+        return
+      }
+      const existing = resolved.kind === 'existing' ? resolved.user : null
 
       if (existing) {
         useWalletStore.getState().setBalance(0)
-        setUser(makeUser(supaUser.id, supaUser.email || '', {
+        setUser(makeUser(existing.id, supaUser.email || '', {
           username:      existing.username ? existing.username + '.arc' : '',
           displayName:   existing.display_name,
           walletAddress: existing.wallet_address,
@@ -363,22 +377,29 @@ export function EmailOTPPage() {
     setLoginType('social')
 
     // ── Returning user: restore full account ────────────────────────────────
-    // Checked by BOTH the Supabase auth id AND email, not just the id.
-    // Supabase Auth automatically links identities sharing the same
-    // verified email to one auth.users row, which should make these two
-    // lookups agree — but that's Supabase's behavior to trust, not this
-    // app's guarantee to lean on alone. This is specifically what stops
-    // the same person getting a second wallet created if they verify the
-    // same email via a different method (Google vs email OTP) than they
-    // used originally, for whatever reason automatic linking didn't
-    // already handle it.
-    const existing = (await fetchUserProfile(supaUser.id)) || (await fetchUserByEmail(supaUser.email || ''))
+    // The account this session is bound to (users.auth_uid). Google and
+    // email-code logins reach the same account when Supabase has linked
+    // them to the same auth user. An account that only has the same email
+    // is never taken over (see resolveAccountForSession).
+    const resolved = await resolveAccountForSession(supaUser.id, supaUser.email)
+    if (resolved.kind === 'error') {
+      setLoading(false)
+      setError("Couldn't reach MeshPort. Please try again.")
+      return
+    }
+    if (resolved.kind === 'conflict') {
+      await supabase.auth.signOut().catch(() => {})
+      setLoading(false)
+      setError(ACCOUNT_CONFLICT_MESSAGE)
+      return
+    }
+    const existing = resolved.kind === 'existing' ? resolved.user : null
 
     if (existing) {
       setLoginType('social')
       // Clear any prior wallet's transaction history before restoring this account
-            useWalletStore.getState().setBalance(0)
-      setUser(makeUser(supaUser.id, supaUser.email || '', {
+      useWalletStore.getState().setBalance(0)
+      setUser(makeUser(existing.id, supaUser.email || '', {
         username:      existing.username ? existing.username + '.arc' : '',
         displayName:   existing.display_name,
         walletAddress: existing.wallet_address,

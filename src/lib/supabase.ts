@@ -453,6 +453,30 @@ export async function fetchUserByEmail(email: string): Promise<DbUser | null> {
   return data as DbUser | null
 }
 
+/**
+ * The MeshPort account for the signed-in Supabase user (Google or email OTP).
+ *
+ * Resolved ONLY through the account this session is bound to (users.auth_uid,
+ * set server-side): Google and email logins reach the same account when
+ * Supabase has linked them to the same auth user. An account that merely
+ * has the same-looking email is never taken over — that's 'conflict', and
+ * the user signs in with the method that account already uses.
+ */
+export async function resolveAccountForSession(authUid: string, email: string | null | undefined): Promise<
+  { kind: 'existing'; user: DbUser } | { kind: 'new' } | { kind: 'conflict' } | { kind: 'error' }
+> {
+  const cols = 'id, username, display_name, email, wallet_address, avatar_url, created_at'
+  const byAuth = await supabase.from('users').select(cols).eq('auth_uid', authUid).maybeSingle()
+  if (byAuth.error) return { kind: 'error' }
+  if (byAuth.data) return { kind: 'existing', user: byAuth.data as DbUser }
+  if (email) {
+    const byEmail = await supabase.from('users').select('id').eq('email', email.toLowerCase()).maybeSingle()
+    if (byEmail.error) return { kind: 'error' }
+    if (byEmail.data) return { kind: 'conflict' }
+  }
+  return { kind: 'new' }
+}
+
 export async function getUserByUsername(username: string): Promise<DbUser | null> {
   const name = username.toLowerCase().replace(/\.arc$/, '').trim()
   const { data } = await supabase

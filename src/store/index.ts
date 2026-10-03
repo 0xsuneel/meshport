@@ -249,6 +249,9 @@ export const useAuthStore = create<AuthStore>()(
           } catch { /* storage blocked */ }
         }
         import('@/lib/chatCrypto').then(({ clearChatSessionSeeds }) => clearChatSessionSeeds()).catch(() => {})
+        // Google / email wallets: this device's sealed copy goes too — signing
+        // back in opens the wallet with the passkey or Recovery QR.
+        import('@/lib/socialWallet').then(({ clearSocialDeviceState }) => clearSocialDeviceState()).catch(() => {})
         // Merchant status is per account — drop the cached one.
         import('@/lib/merchant').then(({ resetMerchant }) => resetMerchant()).catch(() => {})
 

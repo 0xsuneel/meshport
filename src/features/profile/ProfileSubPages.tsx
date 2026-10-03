@@ -14,7 +14,8 @@ function buildProfileUpdateMessage(
     `avatarUrl: ${avatarUrl ?? ''}`,
   ].join('\n')
 }
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Navigate } from 'react-router-dom'
+import { WalletSecuritySection } from '@/features/auth/SecureWalletPage'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import {
   ArrowLeft, Shield, Fingerprint, Lock, KeyRound,
@@ -50,6 +51,7 @@ export function SecurityPage() {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const storedPasscode = useAuthStore(s => s.passcode)
   const lock = useAuthStore(s => s.lock)
+  const isSocialWallet = useAuthStore(s => s.loginType === 'social' && s.walletSource === 'social-auto')
   // Admin Panel → Features → Security. When an admin turns this off, App.tsx
   // (global effect) forces biometricEnabled to false for every session
   // immediately — this local gate additionally locks the toggle itself so
@@ -119,6 +121,7 @@ export function SecurityPage() {
             <p className="text-xs text-text-secondary">Your wallet is protected</p>
           </div>
         </Card>
+        {isSocialWallet && <WalletSecuritySection />}
         <Card className="divide-y divide-border">
           <ToggleItem icon={<Fingerprint className="w-5 h-5 text-brand" />} label={`${label} Login`}
             description={biometricAdminEnabled ? "Optional — uses passcode as fallback" : "Disabled by admin"}
@@ -460,149 +463,18 @@ export function ChangePasscodePage() {
 
 // ─── Backup — routes based on loginType and walletSource ───────────────────────
 // Route map:
-//   social login             → BackupEmailPage
+//   social login             → Secure Your Wallet (passkeys + Recovery QR)
 //   create (generated seed)  → BackupRecoveryPhrasePage  (Seed + Private Key tabs)
 //   import-seed              → BackupRecoveryPhrasePage  (Seed + Private Key tabs)
 //   import-privkey           → BackupPrivateKeyOnlyPage  (Private Key only — no seed)
 export function BackupPage() {
   const loginType = useAuthStore(s => s.loginType)
   const walletSource = useAuthStore(s => s.walletSource)
-  if (loginType === 'social') return <BackupEmailPage />
+  // Google / email wallets: passkeys + encrypted Recovery QR (no key export).
+  if (loginType === 'social') return <Navigate to="/auth/secure-wallet?manage=1" replace />
   if (walletSource === 'import-privkey') return <BackupPrivateKeyOnlyPage />
   // 'create' and 'import-seed' both use BackupRecoveryPhrasePage with both tabs visible
   return <BackupRecoveryPhrasePage />
-}
-
-// ─── Backup Email (Social Login Users only) ────────────────────────────────────
-function BackupEmailPage() {
-  const isDesktop = useMediaQuery('(min-width: 980px)')
-  const navigate = useNavigate()
-  const user = useAuthStore(s => s.user)
-  const backupEmail = useAuthStore(s => s.backupEmail)
-  const setBackupEmail = useAuthStore(s => s.setBackupEmail)
-  const { showToastMessage } = useUIStore()
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [newEmail, setNewEmail] = useState('')
-  const [newEmailError, setNewEmailError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [verifyStep, setVerifyStep] = useState(false)
-  const [otp, setOtp] = useState('')
-
-  const handleSendCode = async () => {
-    if (!newEmail.includes('@')) { setNewEmailError('Enter a valid email address'); return }
-    if (newEmail === user?.email) { setNewEmailError('This is already your primary email'); return }
-    setLoading(true); setNewEmailError('')
-    await new Promise(r => setTimeout(r, 1000))
-    setLoading(false); setVerifyStep(true)
-    showToastMessage('Verification code sent to ' + newEmail, 'success')
-  }
-
-  const handleVerify = async () => {
-    if (otp.length < 6) return
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 800))
-    setBackupEmail(newEmail)
-    setLoading(false); setShowAddForm(false); setVerifyStep(false); setNewEmail(''); setOtp('')
-    showToastMessage('Backup email added!', 'success')
-  }
-
-  const handleRemove = async () => {
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 400))
-    setBackupEmail(null)
-    setLoading(false)
-    showToastMessage('Backup email removed', 'info')
-  }
-
-  return (
-    <div className="flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto">
-      <div className="header-row sticky top-0 z-20 bg-bg/95 backdrop-blur-md gap-3 px-5 pt-header pb-header">
-        {!isDesktop && (
-          <button onClick={() => navigate(-1)} className="back-btn">
-            <ArrowLeft className="w-5 h-5 text-text-primary" />
-          </button>
-        )}
-        <h1 className="text-xl font-bold text-text-primary">Backup Email</h1>
-      </div>
-      <div className="px-4 space-y-4">
-        <div className="p-4 bg-brand/10 border border-brand/30 rounded-2xl">
-          <p className="text-sm text-text-secondary">Add a backup email to recover your account if you lose access to your primary email.</p>
-        </div>
-
-        {/* Primary */}
-        <div>
-          <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3">Primary Email</p>
-          <Card className="p-4 flex items-center gap-3">
-            <div className="w-10 h-10 bg-brand/20 rounded-xl flex items-center justify-center flex-shrink-0">
-              <Mail className="w-5 h-5 text-brand" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-text-primary truncate">{user?.email || 'Not set'}</p>
-              <p className="text-xs text-success">Primary · Verified</p>
-            </div>
-          </Card>
-        </div>
-
-        {/* Backup */}
-        <div>
-          <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3">Backup Email</p>
-          {backupEmail ? (
-            <Card className="p-4 flex items-center gap-3">
-              <div className="w-10 h-10 bg-success/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                <Mail className="w-5 h-5 text-success" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-text-primary truncate">{backupEmail}</p>
-                <p className="text-xs text-success">Backup · Verified</p>
-              </div>
-              <button onClick={handleRemove} className="p-2 text-danger hover:bg-danger/10 rounded-xl flex-shrink-0">
-                <Trash2 className="w-4 h-4" />
-              </button>
-            </Card>
-          ) : !showAddForm ? (
-            <button onClick={() => setShowAddForm(true)}
-              className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-border rounded-2xl text-text-secondary hover:border-brand/50 hover:text-brand transition-colors">
-              <Plus className="w-5 h-5" /><span>Add Backup Email</span>
-            </button>
-          ) : null}
-
-          {showAddForm && !backupEmail && (
-            <Card className="p-4 space-y-3">
-              {!verifyStep ? (
-                <>
-                  <p className="text-sm font-semibold text-text-primary">Add Backup Email</p>
-                  <Input type="email" placeholder="backup@example.com" value={newEmail}
-                    onChange={e => { setNewEmail(e.target.value); setNewEmailError('') }}
-                    error={newEmailError} leftIcon={<Mail className="w-4 h-4" />} />
-                  <div className="flex gap-2">
-                    <Button fullWidth variant="secondary" onClick={() => { setShowAddForm(false); setNewEmail('') }}>Cancel</Button>
-                    <Button fullWidth loading={loading} onClick={handleSendCode}>Send Code</Button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm font-semibold text-text-primary">Verify Email</p>
-                  <p className="text-xs text-text-secondary">6-digit code sent to <span className="text-text-primary">{newEmail}</span></p>
-                  <Input placeholder="000000" value={otp} maxLength={6} inputMode="numeric"
-                    onChange={e => setOtp(e.target.value.replace(/\D/g, ''))} />
-                  <Button fullWidth loading={loading} disabled={otp.length < 6} onClick={handleVerify}>
-                    Verify & Save
-                  </Button>
-                </>
-              )}
-            </Card>
-          )}
-        </div>
-
-        {backupEmail && (
-          <button onClick={() => { setBackupEmail(null); setShowAddForm(true) }}
-            className="w-full py-3 text-sm text-brand font-medium text-center">
-            Change Backup Email
-          </button>
-        )}
-      </div>
-    </div>
-  )
 }
 
 // ─── Backup Private Key Only (Import Private Key Users only) ───────────────────

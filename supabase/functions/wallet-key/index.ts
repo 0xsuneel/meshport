@@ -6,7 +6,19 @@
 // server-side on every call via supabase.auth.getUser(jwt) — the row
 // touched is always the VERIFIED user id, never anything the client claims.
 //
-// ── CHANGELOG (this revision) ────────────────────────────────────────────
+// ── SELF-CUSTODY (2026-10-04) ────────────────────────────────────────────
+// Google / email wallets are now made ON THE DEVICE and protected by the
+// user's passkey and/or encrypted Recovery QR (src/lib/walletPasskey.ts,
+// src/lib/recoveryQr.ts). This function no longer creates wallets:
+//   - generate-wallet only returns an EXISTING vault wallet (an account
+//     from before the change that never finished signup); with no vault
+//     row it answers 404 and the app makes the wallet locally.
+//   - restore-full-key still serves accounts not yet moved over.
+//   - forget-vault deletes the account's vault row once it has a passkey
+//     or a Recovery QR — after that the server holds nothing that can
+//     open the wallet, and restore-full-key answers 404.
+//
+// ── CHANGELOG (earlier revision) ─────────────────────────────────────────
 // Addresses every High/Medium finding in docs/SECURITY_AUDIT_FINAL.md,
 // within the existing server-custodial envelope-encryption architecture —
 // no MPC, no architecture change. See docs/PRODUCTION_READINESS_REPORT.md
@@ -59,8 +71,6 @@
 // concrete, non-MPC path to narrowing that further).
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { getPublicKey, utils as secpUtils } from 'npm:@noble/secp256k1@2.1.0'
-import { keccak_256 } from 'npm:@noble/hashes@1.4.0/sha3'
 import { corsHeadersFor, handleOptionsFor, jsonFor } from '../_shared/cors.ts'
 
 const CURRENT_SCHEME_VERSION = 2
@@ -96,20 +106,6 @@ function getServiceRoleKey(): string {
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = getServiceRoleKey()
-
-// ── Ethereum key generation + address derivation — unchanged ─────────────
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-}
-function generateWalletServerSide(): { address: string; privateKey: string } {
-  const privBytes = secpUtils.randomPrivateKey()
-  const privateKey = '0x' + bytesToHex(privBytes)
-  const pubKey = getPublicKey(privBytes, false)
-  const pubKeyNoPrefix = pubKey.slice(1)
-  const hash = keccak_256(pubKeyNoPrefix)
-  const address = '0x' + bytesToHex(hash.slice(-20))
-  return { address, privateKey }
-}
 
 function toB64(bytes: Uint8Array): string { return btoa(String.fromCharCode(...bytes)) }
 function fromB64(str: string): Uint8Array { return new Uint8Array(atob(str).split('').map(c => c.charCodeAt(0))) }
@@ -305,7 +301,7 @@ function clientSafeError(logPrefix: string, err: unknown): void {
 }
 
 // ── Audit logging ────────────────────────────────────────────────────────
-type AuditOperation = 'generate_wallet' | 'restore_wallet' | 'kek_rotation' | 'legacy_migration' | 'decrypt_failure'
+type AuditOperation = 'generate_wallet' | 'restore_wallet' | 'kek_rotation' | 'legacy_migration' | 'decrypt_failure' | 'vault_deleted'
 async function logAudit(
   supabase: ReturnType<typeof createClient>,
   f: { userId: string | null; walletId: string | null; operation: AuditOperation; success: boolean; deviceId: string | null; ipAddress: string | null }
@@ -449,11 +445,12 @@ Deno.serve(async (req: Request) => {
     userId = authUid // generate-wallet fallback — see comment above
   }
 
-  if (action !== 'generate-wallet' && action !== 'restore-full-key') {
+  if (action !== 'generate-wallet' && action !== 'restore-full-key' && action !== 'forget-vault') {
     return jsonFor(req, { error: `Unknown action: ${action}` }, 400)
   }
 
-  const auditOp: AuditOperation = action === 'generate-wallet' ? 'generate_wallet' : 'restore_wallet'
+  const auditOp: AuditOperation = action === 'generate-wallet' ? 'generate_wallet'
+    : action === 'forget-vault' ? 'vault_deleted' : 'restore_wallet'
 
   const rate = await checkRateLimit(supabase, userId, ipAddress)
   if (!rate.allowed) {
@@ -521,54 +518,6 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // ── Race-safe new-wallet commit ──────────────────────────────────────
-  // wallet_vault write happens FIRST (user_id is its primary key — exactly
-  // one concurrent insert for the same brand-new user can win). Only the
-  // winner goes on to sync users.wallet_address, and that sync is
-  // best-effort: a brand-new social signup legitimately has NO
-  // public.users row yet (one is only created later, at username-claim
-  // time, by upsertUserProfile using the client's already-correct local
-  // state) — so 0 rows matched here is an expected, benign outcome, not a
-  // failure. Only a real Postgres error, or a row that exists but ends up
-  // holding a DIFFERENT address than we just wrote, is treated as fatal.
-  const commitNewWallet = async (address: string, walletId: string, vaultRow: VaultRow): Promise<{ address: string; privateKey: string } | null> => {
-    const { data: inserted, error: insertErr } = await supabase
-      .from('wallet_vault').insert({ user_id: userId, ...vaultRow }).select('user_id')
-
-    if (insertErr || !inserted || inserted.length === 0) {
-      // Most likely: a concurrent request for this same user already won.
-      const { data: winner } = await supabase.from('wallet_vault').select(VAULT_SELECT).eq('user_id', userId).maybeSingle()
-      if (winner) {
-        try {
-          const winnerKey = await decryptByVersion(winner as VaultRow, userId)
-          return { address: (winner as VaultRow).wallet_address, privateKey: winnerKey }
-        } catch (e) {
-          clientSafeError(`[wallet-key] failed to decrypt concurrent-winner row for user ${userId}:`, e)
-        }
-      }
-      clientSafeError(`[wallet-key] wallet_vault insert failed for user ${userId} and no winning row could be recovered:`, insertErr)
-      return null
-    }
-
-    const { error: userUpdateErr } = await supabase.from('users').update({ wallet_address: address, login_type: 'social' }).eq('id', userId)
-    if (userUpdateErr) {
-      clientSafeError(`[wallet-key] users.wallet_address sync failed after vault insert for user ${userId}:`, userUpdateErr)
-      // Not fatal to the wallet itself — wallet_vault is the source of
-      // truth and already committed successfully. users.wallet_address
-      // will be corrected the next time this row is read (rewrapIfStale-
-      // adjacent paths don't touch it, but upsertUserProfile at
-      // claim-username time always writes the correct value from the
-      // client's local state regardless).
-    } else {
-      const { data: verify } = await supabase.from('users').select('wallet_address').eq('id', userId).maybeSingle()
-      if (verify && verify.wallet_address !== address) {
-        clientSafeError(`[wallet-key] users.wallet_address verify mismatch for user ${userId}`, null)
-      }
-    }
-
-    return { address, privateKey: '' } // filled in by the caller, which already holds it
-  }
-
   if (action === 'generate-wallet') {
     const existing = vaultRow
     if (existing) {
@@ -584,26 +533,33 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const { address, privateKey } = generateWalletServerSide()
-    const walletId = crypto.randomUUID()
+    // No server-made wallets any more: the app creates the wallet on the
+    // device (see the SELF-CUSTODY note at the top).
+    return jsonFor(req, { error: 'No wallet on file for this account', code: 'none' }, 404)
+  }
 
-    let newVaultRow: VaultRow
-    try {
-      newVaultRow = await envelopeEncryptWalletV2(privateKey, userId, walletId, address)
-    } catch (e) {
-      clientSafeError(`[wallet-key] encryption failed for user ${userId}:`, e)
-      return jsonFor(req, { error: 'Failed to secure the generated wallet. Please try again.' }, 500)
+  if (action === 'forget-vault') {
+    if (!vaultRow) return jsonFor(req, { ok: true, alreadyGone: true })
+    // Only once the user can open the wallet without the server: a passkey
+    // or a Recovery QR on this account.
+    const [{ count: passkeys }, { data: u }] = await Promise.all([
+      supabase.from('wallet_passkeys').select('id', { count: 'exact', head: true }).eq('user_id', userId),
+      supabase.from('users').select('recovery_qr_at, wallet_address').eq('id', userId).maybeSingle(),
+    ])
+    if (!(passkeys ?? 0) && !u?.recovery_qr_at) {
+      return jsonFor(req, { error: 'Set up a passkey or a Recovery QR first', code: 'not-secured' }, 409)
     }
-
-    const result = await commitNewWallet(address, walletId, newVaultRow)
-    if (!result) {
-      await logAudit(supabase, { userId, walletId, operation: 'generate_wallet', success: false, deviceId, ipAddress })
-      return jsonFor(req, { error: 'Failed to durably store the generated wallet. Please try again.' }, 500)
+    if (u?.wallet_address && u.wallet_address.toLowerCase() !== vaultRow.wallet_address.toLowerCase()) {
+      return jsonFor(req, { error: 'Account wallet does not match', code: 'mismatch' }, 409)
     }
-
-    const finalPrivateKey = result.privateKey || privateKey // '' means we won → use our own key; non-empty means we lost the race → use the winner's
-    await logAudit(supabase, { userId, walletId, operation: 'generate_wallet', success: true, deviceId, ipAddress })
-    return jsonFor(req, { address: result.address, privateKey: finalPrivateKey })
+    const { error: delErr } = await supabase.from('wallet_vault').delete().eq('user_id', userId)
+    if (delErr) {
+      clientSafeError(`[wallet-key] forget-vault delete failed for user ${userId}:`, delErr)
+      await logAudit(supabase, { userId, walletId: vaultRow.wallet_id, operation: 'vault_deleted', success: false, deviceId, ipAddress })
+      return jsonFor(req, { error: 'Could not remove the server copy — try again' }, 500)
+    }
+    await logAudit(supabase, { userId, walletId: vaultRow.wallet_id, operation: 'vault_deleted', success: true, deviceId, ipAddress })
+    return jsonFor(req, { ok: true })
   }
 
   // action === 'restore-full-key'
