@@ -18,7 +18,6 @@ import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
-import { backgroundBridge, buildClaimDestTarget, cctpSpeedForSource } from '@/lib/backgroundBridge'
 import { notifyClaimArrived, requestPushPermission } from '@/lib/bridgeTracker'
 import {
   ArrowLeft, RefreshCw, XCircle, Globe,
@@ -55,8 +54,7 @@ import {
   type Claim as ServerClaim,
 } from '@/lib/claimService'
 import { ClaimProgressTracker } from '@/components/multichain/ClaimProgressTracker'
-import { CCTP_DOMAINS } from '@/lib/cctpTracker'
-import { isGaslessBridgeAvailable, quoteGaslessBridge } from '@/lib/gaslessBridge'
+import { isGaslessBridgeAvailable, quoteGaslessBridge, bringFundsGasless } from '@/lib/gaslessBridge'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFilters'
 import { readExternalBalances, refreshScope, readExternalChainBalance } from '@/blockchain/BlockchainManager'
@@ -442,9 +440,8 @@ async function buildGasSponsoredProvider(rpcList: string[], chainKey: string, wa
             // Real wei MeshPort's relay just transferred to broadcast THIS
             // tx (0 if the wallet was already funded — see api/relay-rpc.js's
             // fundedWei on eth_sendRawTransaction). Feeds the success
-            // screen's "gas MeshPort covered" figure — see onGasFunded's own
-            // doc comment on backgroundBridge.ts's runBridge for why this is
-            // the real, non-guessed number, not an estimate.
+            // screen's "gas MeshPort covered" figure — the real, non-guessed
+            // number, not an estimate.
             if (json.fundedWei) {
               try { onGasFunded?.(chainKey, BigInt(json.fundedWei)) } catch {}
             }
@@ -729,20 +726,18 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
     receiverGets: number
     forKey: string
     // Breakdown for the fee section. networkFee is the source-chain gas
-    // MeshPort's relayer charges in USDC (gasless chains only; elsewhere
-    // MeshPort pays it, so it's 0). bridgeFee is Circle's CCTP fee —
-    // on gasless chains the most Circle can take, usually a little less.
+    // MeshPort's relayer charges in USDC; bridgeFee is the most Circle's
+    // CCTP fee can be (usually a little less).
     networkFee: number
     bridgeFee: number
-    gasless: boolean
-  }>({ loading: false, error: '', totalFee: 0, receiverGets: 0, forKey: '', networkFee: 0, bridgeFee: 0, gasless: false })
+  }>({ loading: false, error: '', totalFee: 0, receiverGets: 0, forKey: '', networkFee: 0, bridgeFee: 0 })
   const [passEntry,      setPassEntry]     = useState('')
   const [passError,      setPassError]     = useState('')
   const [error,          setError]         = useState('')
   const [txRecords,      setTxRecords]     = useState<ActivityRecord[]>([])
   const [chainProgress,  setChainProgress] = useState<ChainProgress[]>([])
-  // Per-chain CCTP fee (the real maxFee each chain's burn ends up signing,
-  // reported live by backgroundBridge once its estimate+clamp resolves) —
+  // Per-chain fee each gasless bring actually signed (MeshPort fee + CCTP
+  // maxFee) —
   // summed for the success screen's "Total Fees" row, mirroring
   // MultichainTransferPage's own transfer success screen.
   const [claimFees,      setClaimFees]     = useState<Record<string, number>>({})
@@ -751,7 +746,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   // since funding can happen in more than one call per chain (an early
   // mp_ensureGasFunded pre-fund, then a top-up at broadcast time if
   // needed). Fed by onGasFunded in buildAdapter/buildGasSponsoredProvider
-  // and backgroundBridge.ts's runBridge — see either's own doc comment.
+  // (Unified Balance route).
   // Converted to USD for the "Gas Covered" row in Total Fees using live
   // native-token prices (claimGasUsd below), never a hardcoded example.
   const [claimGasWei,    setClaimGasWei]    = useState<Record<string, bigint>>({})
@@ -1190,12 +1185,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   }, [])
 
   // ── Pre-claim fee estimate ───────────────────────────────────────────────
-  // Same call shape executeClaim's own estimate (inside backgroundBridge.ts)
-  // ends up making, just fired earlier and read-only here — this never
-  // signs or broadcasts anything. getKey() is cheap after the first call
-  // (scan() on page load already resolved and cached the private key in the
-  // auth store), so this doesn't reprompt for a passcode or restore the
-  // wallet a second time.
+  // The gasless relayer's quote — read-only, signs nothing.
   const fetchClaimFeeEstimate = useCallback(async (chainId: string, amount: number) => {
     const key = `${chainId}|${amount}`
     setFeeEstimate(prev => ({ ...prev, loading: true, error: '' }))
@@ -1205,51 +1195,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
       try {
         const q = await quoteGaslessBridge(chainId, amount)
         const totalFee = q.networkFee + q.bridgeFee
-        setFeeEstimate({ loading: false, error: '', totalFee, receiverGets: Math.max(0, amount - totalFee), forKey: key, networkFee: q.networkFee, bridgeFee: q.bridgeFee, gasless: true })
+        setFeeEstimate({ loading: false, error: '', totalFee, receiverGets: Math.max(0, amount - totalFee), forKey: key, networkFee: q.networkFee, bridgeFee: q.bridgeFee })
       } catch (e: any) {
-        setFeeEstimate({ loading: false, error: e?.message || 'Fee estimate unavailable', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0, gasless: false })
+        setFeeEstimate({ loading: false, error: e?.message || 'Fee estimate unavailable', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0 })
       }
       return
     }
-    try {
-      const wallet = await getKey()
-      if (!wallet) throw new Error('Wallet unavailable')
-      const { AppKit, createEthersAdapterFromPrivateKey } = await loadSdk()
-      const kit = new AppKit({ clientKey: import.meta.env.VITE_KIT_KEY, disableErrorReporting: true } as any)
-      const adapter = await buildAdapter(createEthersAdapterFromPrivateKey, wallet.key)
-      const sdkChainId = toSdkChainId(chainId)
-      const destTarget = buildClaimDestTarget(chainId, sdkChainId, wallet.addr, adapter)
-      const transferSpeed = cctpSpeedForSource(chainId, sdkChainId)
-
-      const estimate: any = await kit.estimateBridge({
-        from:   { adapter, chain: sdkChainId as any },
-        to:     destTarget,
-        amount: amount.toFixed(6),
-        token:  'USDC',
-        config: { transferSpeed: transferSpeed as any },
-      })
-
-      // Same fee-line filter backgroundBridge.ts's own maxFee estimate uses —
-      // provider/forwarder/kit are the fee types that actually reduce what
-      // lands on Arc; a null/error entry means the lookup failed for this
-      // route, not that the fee is zero.
-      const feeEntries: any[] = estimate?.fees ?? []
-      const hadFailedLookup = feeEntries.some((f: any) => f.amount === null || f.error)
-      const feeTotal = feeEntries
-        .filter((f: any) => (f.type === 'provider' || f.type === 'forwarder' || f.type === 'kit') && f.amount !== null)
-        .reduce((sum: number, f: any) => sum + (parseFloat(f.amount) || 0), 0)
-
-      if (hadFailedLookup && feeTotal === 0) {
-        // Don't show "$0 fee" when the lookup actually failed for this route
-        // — that reads as "free" when it's really "unknown".
-        setFeeEstimate({ loading: false, error: 'Fee estimate unavailable for this route', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0, gasless: false })
-        return
-      }
-      setFeeEstimate({ loading: false, error: '', totalFee: feeTotal, receiverGets: Math.max(0, amount - feeTotal), forKey: key, networkFee: 0, bridgeFee: feeTotal, gasless: false })
-    } catch (e: any) {
-      setFeeEstimate({ loading: false, error: 'Fee estimate unavailable', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0, gasless: false })
-    }
-  }, [getKey, loadSdk])
+    setFeeEstimate({ loading: false, error: 'Not available for this chain', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0 })
+  }, [])
 
   // Debounced trigger — fires ~600ms after the user stops typing/adjusting
   // the amount, same cadence MultichainTransferPage.tsx uses for its own
@@ -1261,7 +1214,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
     if (step !== 'select' || !selected) return
     const amt = parseFloat(claimAmounts[selected] ?? '0') || 0
     if (amt < MIN_CLAIM_AMOUNT) {
-      setFeeEstimate({ loading: false, error: '', totalFee: 0, receiverGets: 0, forKey: '', networkFee: 0, bridgeFee: 0, gasless: false })
+      setFeeEstimate({ loading: false, error: '', totalFee: 0, receiverGets: 0, forKey: '', networkFee: 0, bridgeFee: 0 })
       return
     }
     const t = setTimeout(() => { fetchClaimFeeEstimate(selected, amt) }, 600)
@@ -1507,34 +1460,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
       ))
 
     try {
-      const { AppKit, createEthersAdapterFromPrivateKey } = {
-        ...await sdkRef.current ?? await loadSdk(),
-      }
       const onGasFunded = (chainId: string, wei: bigint) => {
         setClaimGasWei(prev => ({ ...prev, [chainId]: (prev[chainId] ?? 0n) + wei }))
       }
-      const adapter = await buildAdapter(createEthersAdapterFromPrivateKey, wallet.key, onGasFunded)
 
       const depositedChains: Array<{ chainId: string; amount: number }> = []
-
-      // Shared table (lib/cctpTracker) — one source for every CCTP domain lookup.
-
-      const fetchIrisAttestation = async (chainId: string, burnTxHash: string): Promise<{ attestation: string, message: string } | null> => {
-        const domain = CCTP_DOMAINS[chainId]
-        if (domain === undefined) return null
-        const url = `https://iris-api-sandbox.circle.com/v2/messages/${domain}?transactionHash=${burnTxHash}`
-        try {
-          const res = await fetch(url)
-          const data = await res.json()
-          const msg = data?.messages?.[0]
-          if (msg?.status === 'complete' && msg?.attestation && msg?.message) {
-            return { attestation: msg.attestation, message: msg.message }
-          }
-          return null
-        } catch (e: any) {
-          return null
-        }
-      }
 
       const claimOneChain = async (chain: typeof selChains[0]) => {
         const inputAmt    = parseFloat((claimAmounts[chain.chainId] ?? '').replace(/[^0-9.]/g, '')) || 0
@@ -1542,9 +1472,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
 
         // MIN_CLAIM_AMOUNT (module-level, shared with the amount screen's own
         // gate and the pre-claim fee estimate) — see its doc comment.
-        // See the safety clamp in backgroundBridge.ts's runBridge() for the
-        // actual per-attempt enforcement — this is the earlier, clearer gate
-        // so a doomed claim never gets attempted in the first place.
         if (claimAmount < MIN_CLAIM_AMOUNT) {
           // Previously just `return`ed here with zero feedback — the
           // chain's progress card stayed on whatever it last showed
@@ -1555,26 +1482,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
         }
 
         try {
-          if (!isGaslessBridgeAvailable(chain.chainId)) setChain(chain.chainId, 'gas', 'Relay funding gas…', 10)
           setChain(chain.chainId, 'approving', `Approving ${formatAmount(claimAmount)} USDC…`, 25)
-
-          // Each selected chain gets its OWN AppKit instance rather than
-          // sharing one across the whole batch. claimOneChain calls below
-          // fire concurrently (the loop that invokes this never awaits
-          // backgroundBridge.runBridge — see its own call site), and
-          // runBridge's bridge.approve/burn/attestation/mint listeners are
-          // registered on whichever `kit` it's given with no per-job
-          // discriminator in the emitted payload. Sharing one kit meant
-          // chain B's burn event would also fire into chain A's still-
-          // attached listeners (and vice versa) whenever 2+ chains were
-          // claimed together, misattributing progress/Activity between
-          // chains. A private kit per chain makes that structurally
-          // impossible instead of trying to filter it after the fact.
-          const kit = new AppKit({ clientKey: import.meta.env.VITE_KIT_KEY, disableErrorReporting: true } as any)
 
           // ── Unified Balance route (Gateway): deposit on source → spend to Arc ──
           const sdkId = toSdkChainId(chain.chainId)
-          if (claimRoute === 'ub' && UB_CLAIM_CHAINS.has(sdkId)) {
+          if ((claimRoute === 'ub' || !isGaslessBridgeAvailable(chain.chainId)) && UB_CLAIM_CHAINS.has(sdkId)) {
+            const { AppKit, createEthersAdapterFromPrivateKey } = sdkRef.current ?? await loadSdk()
+            const kit = new AppKit({ clientKey: import.meta.env.VITE_KIT_KEY, disableErrorReporting: true } as any)
+            const adapter = await buildAdapter(createEthersAdapterFromPrivateKey, wallet.key, onGasFunded)
             setUbClaimChains(prev => prev.includes(chain.chainId) ? prev : [...prev, chain.chainId])
             runUbClaim({
               kit, adapter, walletAddr: wallet.addr, sdkChainId: sdkId,
@@ -1605,7 +1520,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
           }
 
           // Burn confirmed on-chain — record the claim and show "Claim
-          // Submitted" right away (shared by the gasless and the kit flow).
+          // Submitted" right away.
           const handOffBurn = (cid: string, txHash: string, amount: number) => {
             submitClaim({ walletAddress: wallet.addr, sourceChain: cid, amount, txHash }).then(res => {
               if (res.success && res.claimId) {
@@ -1622,84 +1537,21 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
             })
           }
 
-          // ── Gasless route (MeshPortBridgeRouter) — where a router is configured ──
+          // ── Gasless route (MeshPortBridgeRouter) ──
           // One signature, no gas on the source chain: the relayer submits it,
           // MeshPort's fee is taken in the same transaction, and Circle's
-          // forwarder mints on Arc. Off until VITE_BRIDGE_ROUTERS lists the chain.
-          if (isGaslessBridgeAvailable(chain.chainId)) {
-            const { bringFundsGasless } = await import('@/lib/gaslessBridge')
-            const r = await bringFundsGasless({
-              chainId: chain.chainId, amountUsdc: claimAmount, privateKey: wallet.key, walletAddress: wallet.addr,
-              onStatus: msg => setChain(chain.chainId, 'burning', msg, 45),
-            })
-            setClaimFees(prev => ({ ...prev, [chain.chainId]: r.fee + r.maxFee }))
-            setIsSubmitted(true)
-            setChain(chain.chainId, 'attesting', 'Burn confirmed — Circle processing…', 65, { txHash: r.txHash })
-            // The claim is the burned amount: MeshPort's fee was taken before the burn.
-            handOffBurn(chain.chainId, r.txHash, Math.max(0, claimAmount - r.fee))
-            return { chainId: chain.chainId, amount: claimAmount }
-          }
-
-          backgroundBridge.runBridge({
-            chainId:      chain.chainId,
-            sdkChainId:   toSdkChainId(chain.chainId),
-            chainLabel:   getMeta(chain.chainId).label,
-            amount:       claimAmount,
-            kit,
-            adapter,
-            walletAddr:   wallet.addr,
-            setBalance,
-            onSubmitted: (_cid: string) => {
-              setIsSubmitted(true)
-            },
-            onFeeKnown: (cid, fee) => {
-              setClaimFees(prev => ({ ...prev, [cid]: fee }))
-            },
-            onGasFunded: (cid, wei) => {
-              setClaimGasWei(prev => ({ ...prev, [cid]: (prev[cid] ?? 0n) + wei }))
-            },
-            onStepUpdate: (cid, stage, msg, pct, extra) => {
-              setChain(cid, stage as any, msg, pct, extra)
-
-              // Burn confirmed on-chain — hand off to the server-side worker
-              // right now. From this point the claim is a Supabase row being
-              // advanced by claim-worker; the user can safely leave.
-              if (stage === 'attesting' && extra?.txHash) handOffBurn(cid, extra.txHash, claimAmount)
-
-              if (stage === 'done' || stage === 'error') {
-                setChainProgress(prev => {
-                  const updated = prev.map(p => p.chainId === cid ? { ...p, stage: stage as any, msg, pct, ...extra } : p)
-                  const allError    = updated.every(p => p.stage === 'error')
-                  // The ONLY thing that may ever set confirmPhase to 'done' is
-                  // claims.status === 'completed', via the Realtime-driven
-                  // effect above — never this client SDK callback. A prior
-                  // version also flipped confirmPhase to 'done' here whenever
-                  // every chain's local `stage` reached 'done' AND
-                  // claimRecords was still empty — meant as a rare fallback
-                  // for "submitClaim() never fired at all". In practice this
-                  // raced the normal path constantly: Circle's forwarder can
-                  // complete the mint (stage → 'done') before submitClaim()'s
-                  // own POST request resolves and pushes into claimRecords,
-                  // since both happen concurrently after burn confirms. That
-                  // race — not an edge case — was what showed the Success
-                  // screen before claims.status ever reached 'completed',
-                  // while the Hub/Activity/Track Progress (all reading
-                  // claims.status directly) correctly still showed
-                  // "processing". Removed entirely; claims.status is now the
-                  // single source of truth for success, full stop.
-                  //
-                  // Failure is different: if every chain errored out AND no
-                  // claims row exists, submitClaim() never ran (burn itself
-                  // was rejected before ever reaching the server) — there is
-                  // no server row to defer to, so this is the only signal
-                  // that will ever exist for that attempt.
-                  if (allError && claimRecords.length === 0) setTimeout(() => setStep('failed'), 500)
-                  return updated
-                })
-              }
-            },
+          // forwarder mints on Arc. The only CCTP route — chains without a
+          // router (VITE_BRIDGE_ROUTERS) aren't offered.
+          if (!isGaslessBridgeAvailable(chain.chainId)) throw new Error('Bring Funds is not available for this chain')
+          const r = await bringFundsGasless({
+            chainId: chain.chainId, amountUsdc: claimAmount, privateKey: wallet.key, walletAddress: wallet.addr,
+            onStatus: msg => setChain(chain.chainId, 'burning', msg, 45),
           })
-
+          setClaimFees(prev => ({ ...prev, [chain.chainId]: r.fee + r.maxFee }))
+          setIsSubmitted(true)
+          setChain(chain.chainId, 'attesting', 'Burn confirmed — Circle processing…', 65, { txHash: r.txHash })
+          // The claim is the burned amount: MeshPort's fee was taken before the burn.
+          handOffBurn(chain.chainId, r.txHash, Math.max(0, claimAmount - r.fee))
           return { chainId: chain.chainId, amount: claimAmount }
 
         } catch (e: any) {
@@ -1782,7 +1634,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   // Route (CCTP vs Unified Balance) — UB only for chains Gateway supports.
   const selectedSdkId = selected ? toSdkChainId(selected) : ''
   const ubAvailable = UB_CLAIM_CHAINS.has(selectedSdkId)
-  const effectiveRoute: 'cctp' | 'ub' = ubAvailable ? claimRoute : 'cctp'
+  // CCTP here is the gasless router; a chain without one is Unified Balance only.
+  const cctpAvailable = !!selected && isGaslessBridgeAvailable(selected)
+  const effectiveRoute: 'cctp' | 'ub' = !ubAvailable ? 'cctp' : !cctpAvailable ? 'ub' : claimRoute
   const reviewEnabled = claimAmt >= MIN_CLAIM_AMOUNT && claimAmt <= (selectedChain?.claimable ?? 0) && (effectiveRoute === 'ub' || estimateReady)
   // BUG FIX (live report): previously showed the raw, fee-less amount here
   // the instant it was typed while the fee row below still said
@@ -1794,7 +1648,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   const claimReceiveLabel = !showClaimEstimateRow
     ? `$${formatAmount(claimAmt)} on Arc`
     : estimateReady
-    ? `${feeEstimate.gasless ? 'at least ' : ''}$${formatAmount(feeEstimate.receiverGets)} on Arc`
+    ? `at least $${formatAmount(feeEstimate.receiverGets)} on Arc`
     : 'Calculating…'
   const feeRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 11, color: COLORS.muted, fontVariantNumeric: 'tabular-nums' }
   const fmtFee = (n: number) => `$${trimTrailingZeros(n.toFixed(4))} USDC`
@@ -1817,17 +1671,15 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
             <>
               <div style={feeRowStyle}>
                 <span>Network gas</span>
-                {feeEstimate.gasless
-                  ? <span>{fmtFee(feeEstimate.networkFee)}</span>
-                  : <span style={{ color: COLORS.success }}>Free · paid by MeshPort</span>}
+                <span>{fmtFee(feeEstimate.networkFee)}</span>
               </div>
               <div style={feeRowStyle}>
                 <span>Circle bridge fee</span>
-                <span>{feeEstimate.gasless ? `up to ${fmtFee(feeEstimate.bridgeFee)}` : `~${fmtFee(feeEstimate.bridgeFee)}`}</span>
+                <span>up to {fmtFee(feeEstimate.bridgeFee)}</span>
               </div>
               <div style={{ ...feeRowStyle, color: COLORS.text, fontWeight: 600 }}>
                 <span>Total fees</span>
-                <span>{feeEstimate.gasless ? 'up to ' : '~'}{fmtFee(feeEstimate.totalFee)}</span>
+                <span>up to {fmtFee(feeEstimate.totalFee)}</span>
               </div>
             </>
           )}
@@ -1840,6 +1692,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
     .filter(c => c.claimable > 0 || c.pending > 0)
     // Merchants: Unified Balance chains only (no CCTP-only chains).
     .filter(c => !merchantMode || UB_CLAIM_CHAINS.has(toSdkChainId(c.chainId)))
+    // Only chains Bring Funds can actually move: a gasless router, or Unified Balance.
+    .filter(c => isGaslessBridgeAvailable(c.chainId) || UB_CLAIM_CHAINS.has(toSdkChainId(c.chainId)))
     // `chains` only ever contains enabled chains to begin with — scan()
     // above reads via readExternalBalances, which is already settings-aware
     // and never even fetches a disabled chain's balance. This filter is now
@@ -1862,6 +1716,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   const disabledClaimChains = Object.keys(CHAIN_META)
     .filter(id => !isChainEnabledForClaim(settingsMap, id))
     .filter(id => !merchantMode || UB_CLAIM_CHAINS.has(toSdkChainId(id)))
+    .filter(id => isGaslessBridgeAvailable(id) || UB_CLAIM_CHAINS.has(toSdkChainId(id)))
     .map(id => ({
       chainId: id,
       // Lets an admin set a specific reason per chain by putting text in
@@ -2024,22 +1879,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
                           <p style={{ fontSize: 15, fontWeight: 600, color: COLORS.text, margin: 0 }}>
                             {m.label}
                           </p>
-                          {/* CCTP Standard-only chains cannot use FAST mode — Circle's
-                              Iris API returns PRE_FINALITY_UNAVAILABLE for them, so
-                              claims take ~2 min instead of the ~30s FAST path. Show
-                              a badge so users know before they commit. */}
-                          {cctpSpeedForSource(c.chainId) === 'SLOW' && (
-                            <span style={{
-                              fontSize: 10, fontWeight: 700, lineHeight: 1,
-                              padding: '2px 6px', borderRadius: 6,
-                              background: 'color-mix(in srgb, var(--text-secondary) 12%, transparent)',
-                              color: 'var(--text-secondary)',
-                              border: '1px solid color-mix(in srgb, var(--text-secondary) 25%, transparent)',
-                              whiteSpace: 'nowrap',
-                            }}>
-                              ~2 min
-                            </span>
-                          )}
                         </div>
                         <p style={{ fontSize: 13, color: COLORS.muted, margin: 0 }}>
                           {c.claimable > 0 ? `$${formatAmount(c.claimable)} available` : 'No balance'}
@@ -2221,7 +2060,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
                   {([
                     { id: 'ub' as const,   name: 'Unified Balance', text: `Gateway · ${ubClaimEta(selectedSdkId).replace('minutes', 'min').replace('minute', 'min')}`, show: ubAvailable,
                       icon: <path d="M13 2L4 14h7l-1 8 9-12h-7z"/> },
-                    { id: 'cctp' as const, name: 'CCTP',            text: 'Burn-mint · relayed', show: !merchantMode,
+                    { id: 'cctp' as const, name: 'CCTP',            text: 'Gasless · one signature', show: !merchantMode && cctpAvailable,
                       icon: <path d="M4 8h14l-3-3M20 16H6l3 3"/> },
                   ]).filter(r => r.show).map(r => {
                     const on = effectiveRoute === r.id
@@ -2665,8 +2504,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
               month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
             })
             const fmtAmount = `${formatAmount(displayTotal)} USDC`
-            // All per-chain CCTP fees (the real maxFee each chain's burn
-            // signed, reported live by backgroundBridge) rolled into one
+            // All per-chain fees each gasless bring signed rolled into one
             // number for the "Total Fees" row — same treatment
             // MultichainTransferPage's transfer success screen gives its own
             // totalFeesLabel.
