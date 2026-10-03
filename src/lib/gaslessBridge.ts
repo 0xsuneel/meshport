@@ -111,6 +111,29 @@ export function checkQuote(q: BridgeQuote, amount: bigint): { fee: bigint; maxFe
 
 const toUnits = (usdc: number) => BigInt(Math.round(usdc * 1e6))
 
+/** Fetches the relayer's quote for moving `total` units and checks it against the app's limits. */
+async function fetchCheckedQuote(chainId: string, total: bigint): Promise<{ quote: BridgeQuote; fee: bigint; maxFee: bigint }> {
+  const { authApiHeaders } = await import('@/lib/supabase')
+  const qr = await fetch(`/api/bridge-relay?action=quote&chain=${encodeURIComponent(chainId)}&amount=${total}`, { headers: await authApiHeaders() })
+  const quote = await qr.json().catch(() => null) as (BridgeQuote & { error?: string }) | null
+  if (!qr.ok || !quote) throw new Error(quote?.error || 'Could not get a fee quote')
+  const { fee, maxFee } = checkQuote(quote, total)
+  if (fee >= total) throw new Error('Amount too small to cover the network fee')
+  if (maxFee >= total - fee) throw new Error('Amount too small to cover the bridge fee')
+  return { quote, fee, maxFee }
+}
+
+/**
+ * The fees a gasless bridge of `amountUsdc` will charge, in USDC: `networkFee`
+ * is MeshPort's (the relayer's source-chain gas), `bridgeFee` is the most
+ * Circle can take on mint (usually a little less). Read-only — signs nothing.
+ */
+export async function quoteGaslessBridge(chainId: string, amountUsdc: number): Promise<{ networkFee: number; bridgeFee: number }> {
+  if (!gaslessRouter(chainId)) throw new Error('Gasless bridging is not available for this chain')
+  const { fee, maxFee } = await fetchCheckedQuote(chainId, toUnits(amountUsdc))
+  return { networkFee: Number(fee) / 1e6, bridgeFee: Number(maxFee) / 1e6 }
+}
+
 /**
  * Bring `amountUsdc` from `chainId` to the user's Arc wallet. `amountUsdc` is
  * what leaves the user's wallet (so "Max" = the whole balance): MeshPort's
@@ -130,13 +153,7 @@ export async function bringFundsGasless(p: {
   const total = toUnits(p.amountUsdc)
 
   p.onStatus?.('Getting fee…')
-  const { authApiHeaders } = await import('@/lib/supabase')
-  const qr = await fetch(`/api/bridge-relay?action=quote&chain=${encodeURIComponent(p.chainId)}&amount=${total}`, { headers: await authApiHeaders() })
-  const quote = await qr.json().catch(() => null) as (BridgeQuote & { error?: string }) | null
-  if (!qr.ok || !quote) throw new Error(quote?.error || 'Could not get a fee quote')
-  const { fee, maxFee } = checkQuote(quote, total)
-  if (fee >= total) throw new Error('Amount too small to cover the network fee')
-  if (maxFee >= total - fee) throw new Error('Amount too small to cover the bridge fee')
+  const { quote, fee, maxFee } = await fetchCheckedQuote(p.chainId, total)
 
   const { privateKeyToAccount } = await import('viem/accounts')
   const account = privateKeyToAccount((p.privateKey.startsWith('0x') ? p.privateKey : `0x${p.privateKey}`) as Hex)
@@ -167,6 +184,7 @@ export async function bringFundsGasless(p: {
   })
 
   p.onStatus?.('Submitting…')
+  const { authApiHeaders } = await import('@/lib/supabase')
   const rr = await fetch('/api/bridge-relay', {
     method: 'POST',
     headers: await authApiHeaders(),

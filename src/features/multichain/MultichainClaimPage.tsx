@@ -13,7 +13,7 @@
  * MeshPort V2: Inspired by PayPal/Revolut/Cash App
  * "Sending money to friends" not "Managing blockchain infrastructure"
  */
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react'
 import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
@@ -56,7 +56,7 @@ import {
 } from '@/lib/claimService'
 import { ClaimProgressTracker } from '@/components/multichain/ClaimProgressTracker'
 import { CCTP_DOMAINS } from '@/lib/cctpTracker'
-import { isGaslessBridgeAvailable } from '@/lib/gaslessBridge'
+import { isGaslessBridgeAvailable, quoteGaslessBridge } from '@/lib/gaslessBridge'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFilters'
 import { readExternalBalances, refreshScope, readExternalChainBalance } from '@/blockchain/BlockchainManager'
@@ -728,7 +728,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
     totalFee: number
     receiverGets: number
     forKey: string
-  }>({ loading: false, error: '', totalFee: 0, receiverGets: 0, forKey: '' })
+    // Breakdown for the fee section. networkFee is the source-chain gas
+    // MeshPort's relayer charges in USDC (gasless chains only; elsewhere
+    // MeshPort pays it, so it's 0). bridgeFee is Circle's CCTP fee —
+    // on gasless chains the most Circle can take, usually a little less.
+    networkFee: number
+    bridgeFee: number
+    gasless: boolean
+  }>({ loading: false, error: '', totalFee: 0, receiverGets: 0, forKey: '', networkFee: 0, bridgeFee: 0, gasless: false })
   const [passEntry,      setPassEntry]     = useState('')
   const [passError,      setPassError]     = useState('')
   const [error,          setError]         = useState('')
@@ -1192,6 +1199,18 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   const fetchClaimFeeEstimate = useCallback(async (chainId: string, amount: number) => {
     const key = `${chainId}|${amount}`
     setFeeEstimate(prev => ({ ...prev, loading: true, error: '' }))
+    // Gasless chains: the relayer's own quote — the exact fees the claim
+    // will sign, so what's shown here is what's charged.
+    if (isGaslessBridgeAvailable(chainId)) {
+      try {
+        const q = await quoteGaslessBridge(chainId, amount)
+        const totalFee = q.networkFee + q.bridgeFee
+        setFeeEstimate({ loading: false, error: '', totalFee, receiverGets: Math.max(0, amount - totalFee), forKey: key, networkFee: q.networkFee, bridgeFee: q.bridgeFee, gasless: true })
+      } catch (e: any) {
+        setFeeEstimate({ loading: false, error: e?.message || 'Fee estimate unavailable', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0, gasless: false })
+      }
+      return
+    }
     try {
       const wallet = await getKey()
       if (!wallet) throw new Error('Wallet unavailable')
@@ -1223,12 +1242,12 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
       if (hadFailedLookup && feeTotal === 0) {
         // Don't show "$0 fee" when the lookup actually failed for this route
         // — that reads as "free" when it's really "unknown".
-        setFeeEstimate({ loading: false, error: 'Fee estimate unavailable for this route', totalFee: 0, receiverGets: 0, forKey: key })
+        setFeeEstimate({ loading: false, error: 'Fee estimate unavailable for this route', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0, gasless: false })
         return
       }
-      setFeeEstimate({ loading: false, error: '', totalFee: feeTotal, receiverGets: Math.max(0, amount - feeTotal), forKey: key })
+      setFeeEstimate({ loading: false, error: '', totalFee: feeTotal, receiverGets: Math.max(0, amount - feeTotal), forKey: key, networkFee: 0, bridgeFee: feeTotal, gasless: false })
     } catch (e: any) {
-      setFeeEstimate({ loading: false, error: 'Fee estimate unavailable', totalFee: 0, receiverGets: 0, forKey: key })
+      setFeeEstimate({ loading: false, error: 'Fee estimate unavailable', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0, gasless: false })
     }
   }, [getKey, loadSdk])
 
@@ -1242,7 +1261,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
     if (step !== 'select' || !selected) return
     const amt = parseFloat(claimAmounts[selected] ?? '0') || 0
     if (amt < MIN_CLAIM_AMOUNT) {
-      setFeeEstimate({ loading: false, error: '', totalFee: 0, receiverGets: 0, forKey: '' })
+      setFeeEstimate({ loading: false, error: '', totalFee: 0, receiverGets: 0, forKey: '', networkFee: 0, bridgeFee: 0, gasless: false })
       return
     }
     const t = setTimeout(() => { fetchClaimFeeEstimate(selected, amt) }, 600)
@@ -1775,8 +1794,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   const claimReceiveLabel = !showClaimEstimateRow
     ? `$${formatAmount(claimAmt)} on Arc`
     : estimateReady
-    ? `$${formatAmount(feeEstimate.receiverGets)} on Arc`
+    ? `${feeEstimate.gasless ? 'at least ' : ''}$${formatAmount(feeEstimate.receiverGets)} on Arc`
     : 'Calculating…'
+  const feeRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 11, color: COLORS.muted, fontVariantNumeric: 'tabular-nums' }
+  const fmtFee = (n: number) => `$${trimTrailingZeros(n.toFixed(4))} USDC`
   const receiveSummaryCard = (
     <div style={{
       width: '100%', background: COLORS.surfaceSecondary, border: `1px solid ${COLORS.border}`,
@@ -1787,13 +1808,29 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
         <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{claimReceiveLabel}</span>
       </div>
       {showClaimEstimateRow && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, paddingTop: 4, borderTop: `1px solid ${COLORS.border}` }}>
-          <span style={{ fontSize: 11, color: COLORS.muted }}>Estimated fee</span>
-          <span style={{ fontSize: 11, color: feeEstimate.error && claimEstimateIsLive ? COLORS.error : COLORS.muted, fontVariantNumeric: 'tabular-nums' }}>
-            {(!claimEstimateIsLive || feeEstimate.loading) ? 'Estimating…'
-              : feeEstimate.error ? feeEstimate.error
-              : `~$${trimTrailingZeros(feeEstimate.totalFee.toFixed(4))} USDC`}
-          </span>
+        <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${COLORS.border}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {(!claimEstimateIsLive || feeEstimate.loading) ? (
+            <div style={feeRowStyle}><span>Fees</span><span>Calculating…</span></div>
+          ) : feeEstimate.error ? (
+            <div style={{ ...feeRowStyle, color: COLORS.error }}><span>Fees</span><span style={{ textAlign: 'right' }}>{feeEstimate.error}</span></div>
+          ) : (
+            <>
+              <div style={feeRowStyle}>
+                <span>Network gas</span>
+                {feeEstimate.gasless
+                  ? <span>{fmtFee(feeEstimate.networkFee)}</span>
+                  : <span style={{ color: COLORS.success }}>Free · paid by MeshPort</span>}
+              </div>
+              <div style={feeRowStyle}>
+                <span>Circle bridge fee</span>
+                <span>{feeEstimate.gasless ? `up to ${fmtFee(feeEstimate.bridgeFee)}` : `~${fmtFee(feeEstimate.bridgeFee)}`}</span>
+              </div>
+              <div style={{ ...feeRowStyle, color: COLORS.text, fontWeight: 600 }}>
+                <span>Total fees</span>
+                <span>{feeEstimate.gasless ? 'up to ' : '~'}{fmtFee(feeEstimate.totalFee)}</span>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

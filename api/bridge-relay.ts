@@ -175,7 +175,12 @@ async function relayFee(pub: any, chainKey: string): Promise<bigint> {
   const units = (ROUTER_GAS * gasPrice * BigInt(Math.round(nativeUsd * 100))) / 100n / 1_000_000_000_000n
   const withMargin = (units * 130n) / 100n
   const floor = BigInt(process.env.BRIDGE_MIN_FEE_UNITS || '50000')
-  return withMargin > floor ? withMargin : floor
+  // Testnet gas has no real value, but priced at mainnet rates a busy chain
+  // (Ethereum Sepolia) came out over 1 USDC — above the app's 5% fee limit,
+  // so every quote there was rejected. Capped so the fee stays small.
+  const cap = BigInt(process.env.BRIDGE_MAX_FEE_UNITS || '100000')
+  const fee = withMargin > floor ? withMargin : floor
+  return fee > cap ? cap : fee
 }
 
 async function quote(chainKey: string, total: bigint) {
