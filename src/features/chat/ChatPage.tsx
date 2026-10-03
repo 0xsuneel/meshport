@@ -4421,8 +4421,9 @@ export function ChatConversationPage() {
         {/* Input row — attach | textarea | send */}
         <div className="px-3 pt-2.5 pb-2 flex items-end gap-2">
           {/* Attach button */}
-          <button onClick={() => setShowAttach(true)} type="button"
-            className="w-9 h-9 mb-1 rounded-full flex items-center justify-center text-text-secondary active:text-text-primary active:bg-[rgb(var(--text-primary-rgb)/0.10)] flex-shrink-0 transition-colors">
+          <button onClick={() => { setAttachMode('attachments'); setShowAttach(v => !v); messageInputRef.current?.blur() }} type="button"
+            aria-label="Attach" aria-expanded={showAttach && attachMode === 'attachments'}
+            className={`w-9 h-9 mb-1 rounded-full flex items-center justify-center active:bg-[rgb(var(--text-primary-rgb)/0.10)] flex-shrink-0 transition-colors ${showAttach && attachMode === 'attachments' ? 'text-brand' : 'text-text-secondary active:text-text-primary'}`}>
             <Paperclip className="w-6 h-6" />
           </button>
 
@@ -4434,6 +4435,7 @@ export function ChatConversationPage() {
               rows={1}
               onChange={e => { setMessageText(e.target.value); autoResize(); if (e.target.value) notifyTyping() }}
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
+              onFocus={() => { if (showAttach && attachMode === 'attachments') setShowAttach(false) }}
               placeholder={recipientClean ? `Message ${recipientClean}.arc` : 'Message'}
               className="flex-1 bg-transparent text-text-primary placeholder-text-secondary text-[15px] focus:outline-none resize-none leading-[22px] max-h-[110px] transition-[height] duration-150"
               style={{ height: '22px', minHeight: '22px' }}
@@ -4455,51 +4457,74 @@ export function ChatConversationPage() {
                 </svg>}
           </button>
         </div>
+
+        {/* Attach panel — opens right under the typing box in place of the
+            keyboard (WhatsApp-style): a grid of round buttons. */}
+        <AnimatePresence initial={false}>
+          {showAttach && attachMode === 'attachments' && (
+            <motion.div key="attach-panel"
+              initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+              style={{ overflow: 'hidden' }}>
+              <div className="grid grid-cols-4 gap-x-2 gap-y-4 px-4 pt-3 pb-5">
+                {[
+                  { key: 'gallery',  label: 'Gallery',  color: '#3B82F6', icon: <Image className="w-6 h-6" /> },
+                  { key: 'camera',   label: 'Camera',   color: '#EC4899', icon: (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/>
+                    </svg>) },
+                  { key: 'document', label: 'Document', color: '#8B5CF6', icon: <FileText className="w-6 h-6" /> },
+                  { key: 'file',     label: 'File',     color: '#F59E0B', icon: <File className="w-6 h-6" /> },
+                  { key: 'pay',      label: 'Pay',      color: 'var(--brand)', icon: (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6.5v11"/>
+                    </svg>) },
+                  ...(merchant.isMerchant ? [{ key: 'bill', label: 'Bill', color: '#10B981', icon: <Receipt className="w-6 h-6" /> }] : []),
+                ].map(item => (
+                  <button key={item.key} type="button"
+                    onClick={() => {
+                      if (item.key === 'bill') { setAttachMode('bill'); return }
+                      setShowAttach(false)
+                      if (item.key === 'pay') { handlePay(); return }
+                      const input = fileInputRef.current
+                      if (!input) return
+                      pickModeRef.current = item.key === 'gallery' || item.key === 'camera' ? 'image' : item.key === 'document' ? 'document' : 'file'
+                      input.accept = item.key === 'gallery' || item.key === 'camera' ? 'image/*'
+                        : item.key === 'document' ? 'application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt' : '*/*'
+                      // Camera opens the phone camera directly; everything else the picker.
+                      if (item.key === 'camera') input.setAttribute('capture', 'environment'); else input.removeAttribute('capture')
+                      input.value = ''
+                      input.click()
+                    }}
+                    className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform">
+                    <span className="w-[58px] h-[58px] rounded-full flex items-center justify-center"
+                      style={{ color: item.color, background: `color-mix(in srgb, ${item.color} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${item.color} 28%, transparent)` }}>
+                      {item.icon}
+                    </span>
+                    <span className="text-[12px] text-text-primary">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <input ref={fileInputRef} type="file" multiple className="hidden" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt" onChange={handleFileUpload} />
 
-      <Sheet isOpen={showAttach} onClose={() => { setShowAttach(false); setAttachMode('attachments') }} title={attachMode === 'bill' ? 'New bill' : 'Send Attachment'}>
-        {attachMode === 'bill' ? (
-          merchant.isMerchant && (
-            <InvoiceComposer
-              merchantName={merchant.application?.businessName}
-              customerUsername={otherUser?.username ?? null}
-              onCancel={() => { setShowAttach(false); setAttachMode('attachments') }}
-              onSend={async inv => {
-                const lines = (inv.items ?? []).map(i => `${i.name} × ${i.qty}`).join(', ')
-                await handleSend(`🧾 Bill · Order #${orderLabel(inv)} · $${formatAmount(inv.amount)} USDC${lines ? `\n${lines}` : ''}${inv.note ? `\n${inv.note}` : ''}\n${paymentLink(inv.code)}`)
-                setShowAttach(false)
-                setAttachMode('attachments')
-              }}
-            />
-          )
-        ) : (
-          <div className="px-5 py-4 space-y-3">
-            {[
-              { icon: <Image className="w-6 h-6 text-accent-text" />, label: 'Image', sub: 'Photo or image', color: 'bg-accent/20' },
-              { icon: <FileText className="w-6 h-6 text-brand" />, label: 'Document', sub: 'PDF, Word, Excel', color: 'bg-brand/20' },
-              { icon: <File className="w-6 h-6 text-warning" />, label: 'File', sub: 'Any file type', color: 'bg-warning/20' },
-              ...(merchant.isMerchant ? [{ icon: <Receipt className="w-6 h-6 text-success" />, label: 'Bill', sub: 'Products, quantity & price — customer pays in chat', color: 'bg-success/20' }] : []),
-            ].map(item => (
-              <button key={item.label} onClick={() => {
-                  if (item.label === 'Bill') { setAttachMode('bill'); return }
-                  const accept = item.label === 'Image' ? 'image/*' : item.label === 'Document' ? 'application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt' : '*/*'
-                  pickModeRef.current = item.label === 'Image' ? 'image' : item.label === 'Document' ? 'document' : 'file'
-                  setShowAttach(false)
-                  setTimeout(() => {
-                    if (fileInputRef.current) { fileInputRef.current.accept = accept; fileInputRef.current.value = ''; fileInputRef.current.click() }
-                  }, 300)
-                }}
-                className="w-full flex items-center gap-4 p-4 bg-surface border border-border rounded-2xl active:scale-95 transition-transform">
-                <div className={`w-12 h-12 ${item.color} rounded-xl flex items-center justify-center flex-shrink-0`}>{item.icon}</div>
-                <div className="text-left">
-                  <p className="text-text-primary font-semibold">{item.label}</p>
-                  <p className="text-sm text-text-secondary">{item.sub}</p>
-                </div>
-              </button>
-            ))}
-          </div>
+      <Sheet isOpen={showAttach && attachMode === 'bill'} onClose={() => { setShowAttach(false); setAttachMode('attachments') }} title="New bill">
+        {merchant.isMerchant && (
+          <InvoiceComposer
+            merchantName={merchant.application?.businessName}
+            customerUsername={otherUser?.username ?? null}
+            onCancel={() => { setShowAttach(false); setAttachMode('attachments') }}
+            onSend={async inv => {
+              const lines = (inv.items ?? []).map(i => `${i.name} × ${i.qty}`).join(', ')
+              await handleSend(`🧾 Bill · Order #${orderLabel(inv)} · $${formatAmount(inv.amount)} USDC${lines ? `\n${lines}` : ''}${inv.note ? `\n${inv.note}` : ''}\n${paymentLink(inv.code)}`)
+              setShowAttach(false)
+              setAttachMode('attachments')
+            }}
+          />
         )}
       </Sheet>
 

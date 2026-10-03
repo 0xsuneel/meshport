@@ -3541,7 +3541,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       <AnimatePresence>
       {showChainPicker && (() => {
         const chainHeader = (
-          <div className="flex items-center justify-between px-5 pt-5 pb-3" style={{borderBottom:'1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)'}}>
+          <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <p className="text-[19px] font-extrabold tracking-tight text-text-primary">Select Chain</p>
             <button onClick={() => setShowChainPicker(false)} className="mp-popup-close" aria-label="Close">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
@@ -3552,7 +3552,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         )
         const chainList = (
           <div className="overflow-y-auto" style={{maxHeight: isDesktop ? '60vh' : '60vh'}}>
-            {ENABLED_CHAINS.map((ch, i) => {
+            {ENABLED_CHAINS.map((ch) => {
               const isSelected = selectedChain === ch.id
               return (
                 <button key={ch.id}
@@ -3563,7 +3563,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   }}
                   className="w-full flex items-center gap-3 px-5 py-3.5 active:opacity-70 transition-all"
                   style={{
-                    borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 4%, transparent)' : 'none',
                     background: isSelected ? 'color-mix(in srgb, var(--brand) 10%, transparent)' : 'transparent',
                   }}>
                   <ChainLogoImg id={ch.id} size={38}/>

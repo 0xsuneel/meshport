@@ -583,6 +583,10 @@ interface UIStore {
   // which previously meant most of them just failed silently or showed a
   // one-off toast with no path forward for the user.
   walletRecoveryNeeded: boolean
+  // A full-height bottom sheet is open — the bottom navigation hides
+  // underneath it (its space stays reserved, so the page doesn't jump).
+  navHidden: boolean
+  setNavHidden: (hidden: boolean) => void
   showToastMessage: (message: string, type?: ToastType) => void
   clearToast: () => void
   setSendRecipient: (recipient: string | null) => void
@@ -593,6 +597,8 @@ export const useUIStore = create<UIStore>()((set) => ({
   toast: null,
   sendRecipient: null,
   walletRecoveryNeeded: false,
+  navHidden: false,
+  setNavHidden: (hidden) => set({ navHidden: hidden }),
   showToastMessage: (message, type = 'info') => {
     set({ toast: { message, type } })
     setTimeout(() => set({ toast: null }), 3500)

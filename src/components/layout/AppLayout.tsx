@@ -6,7 +6,7 @@ import { DesktopHeader } from './DesktopHeader'
 import { Toast } from '@/components/ui/Toast'
 import { PageTransition } from '@/components/ui/PageTransition'
 import { ModeToggle } from '@/components/admin/ModeToggle'
-import { useAuthStore, useP2PTradesCountStore, useWalletStore } from '@/store'
+import { useAuthStore, useP2PTradesCountStore, useWalletStore, useUIStore } from '@/store'
 import { fetchMyTrades, subscribeToMyTrades, isTradeExpired } from '@/lib/p2pService'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useVisibleViewportHeight } from '@/hooks/useVisibleViewportHeight'
@@ -48,6 +48,7 @@ export function AppLayout() {
   // any search box, form or message field) and the page gets its space back.
   const keyboardOpen = useKeyboardOpen(!isDesktop)
   const navVisible = showNav && !keyboardOpen
+  const navHidden = useUIStore(s => s.navHidden)
   const walletAddress = useAuthStore(s => s.walletAddress)
   const userId = useAuthStore(s => s.user?.id)
   // Real, currently-visible viewport height — see the hook's own comment.
@@ -583,7 +584,7 @@ export function AppLayout() {
             <Outlet />
           </PageTransition>
         </div>
-        {navVisible && <BottomNav />}
+        {navVisible && !navHidden && <BottomNav />}
         <Toast />
         <DeviceKeyNotice />
         <ModeToggle />

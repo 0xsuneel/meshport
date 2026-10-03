@@ -615,7 +615,15 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
 }
 
 // ── Asset History Sheet ───────────────────────────────────────────────────────
-function AssetSheet({ token, history, onClose }: { token: string; history: any[]; onClose: () => void }) {
+function AssetSheet({ token, history, onClose, onOpen }: { token: string; history: any[]; onClose: () => void; onOpen: (item: any) => void }) {
+  const isDesktop = useMediaQuery('(min-width: 980px)')
+  // Phone: a full bottom sheet — hide the bottom navigation while it's up.
+  const setNavHidden = useUIStore(s => s.setNavHidden)
+  useEffect(() => {
+    if (isDesktop) return
+    setNavHidden(true)
+    return () => setNavHidden(false)
+  }, [isDesktop, setNavHidden])
   const headerRow = (
     <div style={{ padding: '16px 20px',
       display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -704,7 +712,9 @@ function AssetSheet({ token, history, onClose }: { token: string; history: any[]
               : formatAmount(amtNum)
 
             return (
-              <div key={item.id || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 20px' }}>
+              <button key={item.id || i} onClick={() => onOpen(item)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '13px 20px', textAlign: 'left',
+                  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', font: 'inherit' }}>
                 <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
                   background: isSent ? 'color-mix(in srgb, var(--danger) 10%, transparent)' : 'color-mix(in srgb, var(--success) 10%, transparent)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -728,19 +738,46 @@ function AssetSheet({ token, history, onClose }: { token: string; history: any[]
                     {dateStr || '—'}
                   </div>
                 </div>
-              </div>
+              </button>
             )
           })}
         </div>
   )
 
-  return (
-    <DesktopDialogFrame onClose={onClose} maxWidth={440}>
-      <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '70vh' }}>
+  if (isDesktop) {
+    return (
+      <DesktopDialogFrame onClose={onClose} maxWidth={440}>
+        <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '70vh' }}>
+          {headerRow}
+          {listBody}
+        </div>
+      </DesktopDialogFrame>
+    )
+  }
+  // Phone: slides up from the bottom (same sheet as the More actions), over
+  // where the navigation was. Portaled for the same iOS stacking reason.
+  return createPortal(
+    <>
+      <motion.div key="asset-backdrop"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SHEET_BACKDROP.transition}
+        onClick={onClose}
+        style={{ position: 'fixed', inset: 0, maxWidth: 430, margin: '0 auto', zIndex: 9990, background: 'rgba(0,0,0,0.32)' }} />
+      <motion.div key="asset-sheet" role="dialog" aria-modal="true" aria-label={`${token} history`}
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={SHEET_SPRING}
+        style={{
+          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 9991,
+          maxWidth: 430, margin: '0 auto', maxHeight: '82dvh',
+          display: 'flex', flexDirection: 'column',
+          background: 'var(--surface)', borderRadius: '28px 28px 0 0',
+          borderTop: '1px solid var(--border)', boxShadow: 'var(--shadow-3)',
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)', margin: '10px auto 0', flexShrink: 0 }} />
         {headerRow}
         {listBody}
-      </div>
-    </DesktopDialogFrame>
+      </motion.div>
+    </>,
+    document.body,
   )
 }
 
@@ -4347,9 +4384,13 @@ export function HomePage() {
       )}
 
       {/* ── ASSET HISTORY SHEET ─────────────────────────────────────────────── */}
-      {assetSheet && (
-        <AssetSheet token={assetSheet} history={assetHistory} onClose={() => setAssetSheet(null)} />
-      )}
+      <AnimatePresence>
+        {assetSheet && (
+          <AssetSheet key="asset-sheet" token={assetSheet} history={assetHistory} onClose={() => setAssetSheet(null)}
+            // Tap a row → Activity, with that transaction opened.
+            onOpen={item => { setAssetSheet(null); navigate('/activity', { state: { openActivity: item } }) }} />
+        )}
+      </AnimatePresence>
       {selectedActivity && (
         <DetailSheet record={selectedActivity} onClose={() => setSelectedActivity(null)} />
       )}

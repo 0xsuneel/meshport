@@ -716,7 +716,14 @@ export function ActivityPage() {
       : searchParams.get('filter') === 'merchant' ? 'merchant'
       : 'all'
   )
-  const [selected, setSelected] = useState<ActivityRecord | null>(null)
+  // Opened from elsewhere (e.g. Home's asset history) with one transaction
+  // to show: open its details straight away.
+  const [selected, setSelected] = useState<ActivityRecord | null>(() => (location.state as any)?.openActivity ?? null)
+  useEffect(() => {
+    // Consume it, so Back/refresh doesn't reopen the same transaction.
+    if ((location.state as any)?.openActivity) window.history.replaceState({ ...window.history.state, usr: null }, '')
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [filterOpen, setFilterOpen] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   // Search box tucks away while scrolling down the list, back on scroll up.

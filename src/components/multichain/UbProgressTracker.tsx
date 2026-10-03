@@ -18,13 +18,21 @@ export type UbTrackerProgress = {
 //   Verifying = Circle Gateway confirms the deposit (source finality)
 //   Settling  = Gateway mints to the user's Arc wallet
 //   Completed = arrived on Arc
-// `steps` swaps the four labels (the CCTP track view uses its own wording);
-// the stages and the look stay the same.
-export function UbProgressTracker({ progress, chainLabel, steps: customSteps, safeNote }: {
+// `steps` swaps the subtitles; the stages and the look stay the same. Every
+// Track Progress screen (CCTP claim, CCTP transfer, Unified Balance) uses
+// this one component, so they all read and move the same way.
+//
+// `loading`: the status isn't known yet — every step stays neutral instead
+// of guessing "step 1 in progress" and then jumping. Once it's known, the
+// finished steps' checkmarks draw in top to bottom.
+export function UbProgressTracker({ progress, chainLabel, steps: customSteps, safeNote, loading = false, note }: {
   progress: UbTrackerProgress; chainLabel: string
   steps?: Array<{ label: string; subtitle: string }>
   /** Shown instead of the Unified Balance note when a failed move is still safe. */
   safeNote?: string
+  loading?: boolean
+  /** Extra line under the steps (e.g. "taking longer than usual"). */
+  note?: string
 }) {
   const steps = customSteps ?? [
     { label: 'Bridging',  subtitle: `Deposit confirmed on ${chainLabel}` },
@@ -33,9 +41,10 @@ export function UbProgressTracker({ progress, chainLabel, steps: customSteps, sa
     { label: 'Completed', subtitle: 'Balance updated' },
   ]
   const order: Record<string, number> = { waiting: 0, gas: 0, approving: 0, burning: 0, attesting: 1, minting: 2, done: 3 }
-  const failed = progress.stage === 'error'
-  const isComplete = progress.stage === 'done'
-  const currentIdx = failed ? -1 : order[progress.stage] ?? 0
+  const failed = !loading && progress.stage === 'error'
+  const isComplete = !loading && progress.stage === 'done'
+  const currentIdx = loading || failed ? -1 : order[progress.stage] ?? 0
+  const STAGGER = 0.14 // seconds between consecutive checkmarks drawing in
   const heldInUb = failed && !!progress.txHash
 
   return (
@@ -66,7 +75,7 @@ export function UbProgressTracker({ progress, chainLabel, steps: customSteps, sa
                 )}
                 {stepDone ? (
                   <motion.svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative' }}>
-                    <motion.polyline points="20 6 9 17 4 12" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.3 }} />
+                    <motion.polyline points="20 6 9 17 4 12" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.3, delay: i * STAGGER }} />
                   </motion.svg>
                 ) : active ? (
                   <div style={{ position: 'relative', width: 7, height: 7, borderRadius: '50%', background: 'var(--brand)' }}/>
@@ -75,9 +84,9 @@ export function UbProgressTracker({ progress, chainLabel, steps: customSteps, sa
               {!isLast && (
                 <div style={{ position: 'relative', width: 1.5, flex: 1, minHeight: 22, margin: '2px 0', background: 'var(--border)', overflow: 'hidden' }}>
                   <motion.div
-                    initial={false}
+                    initial={{ scaleY: 0 }}
                     animate={{ scaleY: stepDone ? 1 : 0 }}
-                    transition={{ duration: 0.35, ease: 'easeOut' }}
+                    transition={{ duration: 0.35, ease: 'easeOut', delay: stepDone ? i * STAGGER + 0.15 : 0 }}
                     style={{ position: 'absolute', inset: 0, background: 'var(--success)', transformOrigin: 'top' }}
                   />
                 </div>
@@ -94,6 +103,10 @@ export function UbProgressTracker({ progress, chainLabel, steps: customSteps, sa
           </div>
         )
       })}
+
+      {note && !failed && !isComplete && (
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '12px 0 0', lineHeight: 1.45 }}>{note}</p>
+      )}
 
       {failed && (
         <p style={{ fontSize: 12, color: heldInUb ? 'var(--text-secondary)' : 'var(--danger)', margin: '12px 0 0', lineHeight: 1.45 }}>

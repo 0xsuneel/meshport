@@ -293,7 +293,7 @@ function trackDetailRows(p: { route: string; chainId: string; amount: number; cr
   ]
 }
 
-export function MultichainClaimPage({ embedded = false, onClose, initialChain, trackClaimId, merchantMode = false, onFocusChange }: { embedded?: boolean; onClose?: () => void; initialChain?: string; trackClaimId?: string; merchantMode?: boolean; onFocusChange?: (f: 'none' | 'processing' | 'result') => void } = {}) {
+export function MultichainClaimPage({ embedded = false, onClose, initialChain, initialBalance, trackClaimId, merchantMode = false, onFocusChange }: { embedded?: boolean; onClose?: () => void; initialChain?: string; initialBalance?: number; trackClaimId?: string; merchantMode?: boolean; onFocusChange?: (f: 'none' | 'processing' | 'result') => void } = {}) {
   // Inside the Hub sheet the page always uses its phone layout.
   const isDesktopMq  = useMediaQuery('(min-width: 980px)')
   const isDesktop    = embedded ? false : isDesktopMq
@@ -356,7 +356,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
     ((location.state as any)?.trackClaimId as string | undefined) ??
     (searchParams.get('claim') || undefined)
 
-  const [step,           setStep]          = useState<Step>(() => trackClaimIdFromHub ? 'confirm' : 'loading')
+  // Opened from a Hub chain row that already knows the balance: start right
+  // on the amount form (like Transfer) — no "opening…" spinner, no slide-in.
+  // The balance scan still runs, quietly, in the background.
+  const prefilledFromHub = !trackClaimIdFromHub && !!initialChain && (initialBalance ?? 0) > 0
+  const [step,           setStep]          = useState<Step>(() => trackClaimIdFromHub ? 'confirm' : prefilledFromHub ? 'select' : 'loading')
   const [confirmPhase,   setConfirmPhase]  = useState<ConfirmPhase>(() => trackClaimIdFromHub ? 'tracking' : 'processing')
   // The live view that was up before 'done' (processing/submitted or
   // tracking) — kept on screen underneath the success flash so the screen is
@@ -429,9 +433,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   const amountBoxRef = useRef<HTMLDivElement>(null)
   const keypadLift = useKeypadLift(keypadOpen && !showPasscodeSheet, amountBoxRef, !isDesktop)
   const [isSubmitted,    setIsSubmitted]   = useState(false)
-  const [chains,         setChains]        = useState<ChainEntry[]>([])
+  const [chains,         setChains]        = useState<ChainEntry[]>(() => prefilledFromHub
+    ? [{ chainId: initialChain!, claimable: Math.floor((initialBalance ?? 0) * 100) / 100, pending: 0 }] : [])
   const [claimableTotal, setClaimableTotal] = useState(0)
-  const [selected,       setSelected]      = useState<string | null>(null)
+  const [selected,       setSelected]      = useState<string | null>(() => prefilledFromHub ? initialChain! : null)
   // Which way the chain-select <-> amount-entry slide should travel — set on
   // every navigation between the two so back mirrors forward instead of
   // always animating the same direction regardless of which way you went.
@@ -949,7 +954,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   }, [refreshCooldownUntil])
   const refreshCooldownSecsLeft = Math.max(0, Math.ceil((refreshCooldownUntil - (refreshCooldownNow || Date.now())) / 1000))
 
-  const scan = useCallback(async (force?: boolean) => {
+  const scan = useCallback(async (force?: boolean, quiet?: boolean) => {
     // Deep-linking into an existing claim's Track Progress (from the Hub's
     // "Tap to view") has nothing to do with scanning for NEW claimable
     // balances. Previously this ran unconditionally on every mount and
@@ -962,9 +967,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
     // Funds" bug. Skip the scan entirely in this case.
     if (trackClaimIdFromHub) return
 
-    setStep('loading'); setError('')
+    // `quiet`: the amount form is already showing — refresh balances
+    // without flipping to the loading screen or touching the step.
+    if (!quiet) { setStep('loading'); setError('') }
     const wallet = await getKey()
-    if (!wallet) { setError('Wallet not available'); setStep('failed'); return }
+    if (!wallet) { if (!quiet) { setError('Wallet not available'); setStep('failed') } return }
     // BUG FIX (2026-09-21): the manual refresh button called this same scan()
     // with no way to bypass readExternalBalances' own 90s cache (raised from
     // 20s after a real Alchemy 429 incident — see externalBalanceReader.ts's
@@ -999,13 +1006,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
       setClaimableTotal(Math.floor(total * 100) / 100)
 
     } catch (e) {
-      setChains(
+      // Quiet refresh: keep the balance the form already shows.
+      if (!quiet) setChains(
         Object.keys(CHAIN_META)
           .filter(id => isChainEnabledForClaim(settingsMap, id))
           .map(id => ({ chainId: id, claimable: 0, pending: 0 }))
       )
     }
-    setStep('select')
+    if (!quiet) setStep('select')
   }, [getKey, trackClaimIdFromHub, settingsMap, settingsLoaded])
 
   const handleManualRefresh = useCallback(() => {
@@ -1063,7 +1071,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   }, [walletAddress])
 
   useEffect(() => {
-    scan()
+    scan(false, prefilledFromHub)
     const loadTxRecords = async () => {
       const addr = (walletAddress || '').toLowerCase()
       if (!addr) { console.warn('[MultichainClaim] no walletAddress'); return }
@@ -1109,7 +1117,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
 
   // Deep link from Multichain Hub → Bring in (?chain=<id>): open that chain's
   // amount step directly once balances are loaded. Back then returns to the Hub.
-  const openedFromHubRef = useRef(false)
+  const openedFromHubRef = useRef(prefilledFromHub)
   const deepLinkChain = initialChain ?? searchParams.get('chain')
   useEffect(() => {
     if (!deepLinkChain || openedFromHubRef.current || step !== 'select') return

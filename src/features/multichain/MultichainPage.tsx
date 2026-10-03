@@ -7,6 +7,7 @@ function InlineSpinner() {
   return <div style={{ padding: 32, display: 'flex', justifyContent: 'center' }}><div style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid var(--brand)', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }}/></div>
 }
 import { UB_CLAIM_CHAINS } from '@/lib/ubClaim'
+import { isGaslessBridgeAvailable } from '@/lib/gaslessBridge'
 import { useMerchant } from '@/lib/merchant'
 import { MerchantLedger } from '@/features/merchant/MerchantLedger'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -251,6 +252,8 @@ function HubCctpTrackView({ item, onBack, onHome, onDone }: {
   useEffect(() => { if (done) onDone(item.id, p?.mintTxHash) }, [done]) // eslint-disable-line react-hooks/exhaustive-deps
   const progress: UbTrackerProgress = !p ? { stage: 'burning' }
     : p.stage === 'error' ? { stage: 'error', msg: p.msg } : { stage: p.stage }
+  // Before Circle answers the status is unknown — keep the steps neutral.
+  const loading = !p
   const when = new Date(item.timestamp)
   const src = item.sourceTxHash
   const mint = p?.mintTxHash || item.destinationTxHash
@@ -267,11 +270,12 @@ function HubCctpTrackView({ item, onBack, onHome, onDone }: {
     ...(src ? [{ label: 'Burn Tx', value: `${src.slice(0, 10)}…${src.slice(-8)}`, copy: src, href: srcHref }] : []),
     ...(mint ? [{ label: 'Mint Tx', value: `${mint.slice(0, 10)}…${mint.slice(-8)}`, copy: mint, href: mintHref }] : []),
   ]
+  // Same four steps as every other Track Progress screen.
   const steps = [
-    { label: 'Burned',    subtitle: `USDC burned on ${from}` },
-    { label: 'Attested',  subtitle: p?.delayReason ? `Circle is holding it (${p.delayReason.replace(/_/g, ' ')})` : 'Circle confirms the burn' },
-    { label: 'Minting',   subtitle: `Circle mints on ${to}` },
-    { label: 'Completed', subtitle: `Arrived on ${to}` },
+    { label: 'Bridging',  subtitle: `Burn confirmed on ${from}` },
+    { label: 'Verifying', subtitle: p?.delayReason ? `Circle is holding it (${p.delayReason.replace(/_/g, ' ')})` : 'Circle attested the transfer' },
+    { label: 'Settling',  subtitle: `Funds landing on ${to}` },
+    { label: 'Completed', subtitle: 'Balance updated' },
   ]
   return (
     <div style={{ margin: '0 -12px', display: 'flex', flexDirection: 'column' }}>
@@ -291,7 +295,7 @@ function HubCctpTrackView({ item, onBack, onHome, onDone }: {
               onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{chain}</span>
           </div>
-          <UbProgressTracker progress={progress} chainLabel={chain} steps={steps} />
+          <UbProgressTracker progress={progress} chainLabel={chain} steps={steps} loading={loading} />
         </div>
         <TrackDetails rows={rows} />
       </div>
@@ -829,9 +833,12 @@ export function MultichainPage() {
 
   const cardS = { background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)' }
   // Merchant Ledger: UB chains only (their payments show in the Hub's Activity).
+  const isUbChain = (id: string) => UB_CLAIM_CHAINS.has(id === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : id)
+  // Only chains Bring Funds can actually move: the gasless router (CCTP) or
+  // Unified Balance. Merchants: Unified Balance only.
   const bringRows = isMerchant
-    ? allChainRows.filter(c => UB_CLAIM_CHAINS.has(c.id === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : c.id))
-    : allChainRows
+    ? allChainRows.filter(c => isUbChain(c.id))
+    : allChainRows.filter(c => isGaslessBridgeAvailable(c.id) || isUbChain(c.id))
 
   // Desktop has no Activity tab (the list is always on the right), so a
   // link that opens the Hub on Activity lands on Transfer Funds instead.
@@ -1123,7 +1130,9 @@ export function MultichainPage() {
         {hubTab === 'bring' && !trackCctp && !trackUb && !trackClaim && claimChain && (
           <div style={{ margin: '0 -12px', minHeight: flowFocused ? '100dvh' : undefined }}>
             <Suspense fallback={<InlineSpinner />}>
-              <ClaimSheetBody key={claimChain} embedded initialChain={claimChain} onClose={() => setClaimChain(null)} merchantMode={isMerchant} onFocusChange={setFlowFocus} />
+              <ClaimSheetBody key={claimChain} embedded initialChain={claimChain}
+                initialBalance={bringRows.find(c => c.id === claimChain)?.balance}
+                onClose={() => setClaimChain(null)} merchantMode={isMerchant} onFocusChange={setFlowFocus} />
             </Suspense>
           </div>
         )}
@@ -1168,7 +1177,8 @@ export function MultichainPage() {
                 </div>
               ) : bringRows.map(c => {
                 const has = c.balance > 0.001
-                const ub = UB_CLAIM_CHAINS.has(c.id === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : c.id)
+                const ub = isUbChain(c.id)
+                const cctp = !isMerchant && isGaslessBridgeAvailable(c.id)
                 return (
                   <button key={c.id} disabled={!has}
                     onClick={() => setClaimChain(c.id)}
@@ -1183,7 +1193,7 @@ export function MultichainPage() {
                           <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
                             color: 'var(--brand)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>UB</span>
                         )}
-                        {!isMerchant && (
+                        {cctp && (
                           <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
                             color: 'var(--success)', background: 'color-mix(in srgb, var(--success) 14%, transparent)' }}>CCTP</span>
                         )}
