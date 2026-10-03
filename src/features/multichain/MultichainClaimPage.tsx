@@ -56,6 +56,7 @@ import {
 } from '@/lib/claimService'
 import { ClaimProgressTracker } from '@/components/multichain/ClaimProgressTracker'
 import { CCTP_DOMAINS } from '@/lib/cctpTracker'
+import { isGaslessBridgeAvailable } from '@/lib/gaslessBridge'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFilters'
 import { readExternalBalances, refreshScope, readExternalChainBalance } from '@/blockchain/BlockchainManager'
@@ -1535,7 +1536,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
         }
 
         try {
-          setChain(chain.chainId, 'gas', 'Relay funding gas…', 10)
+          if (!isGaslessBridgeAvailable(chain.chainId)) setChain(chain.chainId, 'gas', 'Relay funding gas…', 10)
           setChain(chain.chainId, 'approving', `Approving ${formatAmount(claimAmount)} USDC…`, 25)
 
           // Each selected chain gets its OWN AppKit instance rather than
@@ -1584,6 +1585,42 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
             return { chainId: chain.chainId, amount: claimAmount }
           }
 
+          // Burn confirmed on-chain — record the claim and show "Claim
+          // Submitted" right away (shared by the gasless and the kit flow).
+          const handOffBurn = (cid: string, txHash: string, amount: number) => {
+            submitClaim({ walletAddress: wallet.addr, sourceChain: cid, amount, txHash }).then(res => {
+              if (res.success && res.claimId) {
+                setClaimRecords(prev =>
+                  prev.some(r => r.chainId === cid) ? prev : [...prev, { chainId: cid, claimId: res.claimId! }]
+                )
+                // Show the "Claim Submitted" screen (with View in Hub /
+                // Track Progress buttons) the instant submission is
+                // confirmed — previously there was an extra artificial
+                // 550ms pause here on top of submitClaim()'s own network
+                // latency, making the buttons appear noticeably late.
+                setConfirmPhase(phase => phase === 'processing' ? 'submitted' : phase)
+              }
+            })
+          }
+
+          // ── Gasless route (MeshPortBridgeRouter) — where a router is configured ──
+          // One signature, no gas on the source chain: the relayer submits it,
+          // MeshPort's fee is taken in the same transaction, and Circle's
+          // forwarder mints on Arc. Off until VITE_BRIDGE_ROUTERS lists the chain.
+          if (isGaslessBridgeAvailable(chain.chainId)) {
+            const { bringFundsGasless } = await import('@/lib/gaslessBridge')
+            const r = await bringFundsGasless({
+              chainId: chain.chainId, amountUsdc: claimAmount, privateKey: wallet.key, walletAddress: wallet.addr,
+              onStatus: msg => setChain(chain.chainId, 'burning', msg, 45),
+            })
+            setClaimFees(prev => ({ ...prev, [chain.chainId]: r.fee + r.maxFee }))
+            setIsSubmitted(true)
+            setChain(chain.chainId, 'attesting', 'Burn confirmed — Circle processing…', 65, { txHash: r.txHash })
+            // The claim is the burned amount: MeshPort's fee was taken before the burn.
+            handOffBurn(chain.chainId, r.txHash, Math.max(0, claimAmount - r.fee))
+            return { chainId: chain.chainId, amount: claimAmount }
+          }
+
           backgroundBridge.runBridge({
             chainId:      chain.chainId,
             sdkChainId:   toSdkChainId(chain.chainId),
@@ -1608,26 +1645,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
               // Burn confirmed on-chain — hand off to the server-side worker
               // right now. From this point the claim is a Supabase row being
               // advanced by claim-worker; the user can safely leave.
-              if (stage === 'attesting' && extra?.txHash) {
-                submitClaim({
-                  walletAddress: wallet.addr,
-                  sourceChain:   cid,
-                  amount:        claimAmount,
-                  txHash:        extra.txHash,
-                }).then(res => {
-                  if (res.success && res.claimId) {
-                    setClaimRecords(prev =>
-                      prev.some(r => r.chainId === cid) ? prev : [...prev, { chainId: cid, claimId: res.claimId! }]
-                    )
-                    // Show the "Claim Submitted" screen (with View in Hub /
-                    // Track Progress buttons) the instant submission is
-                    // confirmed — previously there was an extra artificial
-                    // 550ms pause here on top of submitClaim()'s own network
-                    // latency, making the buttons appear noticeably late.
-                    setConfirmPhase(phase => phase === 'processing' ? 'submitted' : phase)
-                  }
-                })
-              }
+              if (stage === 'attesting' && extra?.txHash) handOffBurn(cid, extra.txHash, claimAmount)
 
               if (stage === 'done' || stage === 'error') {
                 setChainProgress(prev => {

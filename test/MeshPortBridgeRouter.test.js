@@ -184,6 +184,32 @@ describe('MeshPortBridgeRouter', () => {
     })
   })
 
+  it('accepts a signature made the way the app makes it (viem) and split the way the relayer splits it', async () => {
+    const { privateKeyToAccount } = require('viem/accounts')
+    const { parseSignature } = require('viem')
+    // Hardhat's well-known account #0 key — the `user` signer in these tests.
+    const account = privateKeyToAccount('0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80')
+    expect(account.address).to.equal(user.address)
+    const b = bridgeFor()
+    const nonce = await router.bridgeNonce(b)
+    const now = BigInt((await ethers.provider.getBlock('latest')).timestamp)
+    const value = usdc6('100.25'), validBefore = now + 3600n
+    const signature = await account.signTypedData({
+      domain: { name: await usdc.name(), version: await usdc.version(), chainId: Number((await ethers.provider.getNetwork()).chainId), verifyingContract: await usdc.getAddress() },
+      types: { ReceiveWithAuthorization: [
+        { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
+        { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
+      ] },
+      primaryType: 'ReceiveWithAuthorization',
+      message: { from: account.address, to: await router.getAddress(), value, validAfter: 0n, validBefore, nonce },
+    })
+    const sig = parseSignature(signature)
+    const v = sig.v !== undefined ? Number(sig.v) : 27 + (sig.yParity ?? 0)
+    await router.connect(relayer).bridgeWithAuthorization(b, { from: account.address, value, validAfter: 0n, validBefore, v, r: sig.r, s: sig.s })
+    expect(await usdc.balanceOf(feeWallet.address)).to.equal(usdc6('0.25'))
+    expect((await messenger.last()).amount).to.equal(usdc6(100))
+  })
+
   it('bridgeNonce matches the off-chain computation the app will use', async () => {
     const b = bridgeFor()
     const chainId = (await ethers.provider.getNetwork()).chainId
