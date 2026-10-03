@@ -1624,11 +1624,22 @@ function BowedShapeCard({
   )
 }
 
+// Small spinner shown in front of the Hub labels while the all-chains scan runs.
+function HubSpinner() {
+  return (
+    <span aria-label="Loading balances" style={{ width: 11, height: 11, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
+      border: '1.5px solid rgba(255,255,255,0.25)', borderTopColor: '#fff', animation: 'hubSpin 0.8s linear infinite' }}>
+      <style>{'@keyframes hubSpin{to{transform:rotate(360deg)}}'}</style>
+    </span>
+  )
+}
+
 function MultichainHubCard({
-  arcAvailable, claimAvailable, balanceHidden, onToggleHidden, fmt, navigate,
+  arcAvailable, claimAvailable, claimLoading, balanceHidden, onToggleHidden, fmt, navigate,
 }: {
   arcAvailable: number
   claimAvailable: number
+  claimLoading?: boolean
   balanceHidden: boolean
   onToggleHidden: () => void
   fmt: (n: number, symbol?: string) => string
@@ -1680,6 +1691,7 @@ function MultichainHubCard({
           globe badge, per the approved reference layout). */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
+          {claimLoading && <HubSpinner />}
           {hub('Multichain Hub')}
           <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
             style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
@@ -1720,7 +1732,11 @@ function MultichainHubCard({
           </div>
         </div>
         <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
-          <div style={{ fontSize: 11.5, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px', ...ellipsisLine }}>{isMerchantHero ? 'In Ledger Chains' : 'Available To Bring'}</div>
+          <div style={{ fontSize: 11.5, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px', ...ellipsisLine,
+            ...(claimLoading ? { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 } : null) }}>
+            {claimLoading && <HubSpinner />}
+            <span style={claimLoading ? { minWidth: 0, ...ellipsisLine } : undefined}>{isMerchantHero ? 'In Ledger Chains' : 'Available To Bring'}</span>
+          </div>
           <div style={{ fontSize: claimFontSize, fontWeight: 800, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', ...ellipsisLine }}>
             {balanceHidden ? '••••' : <>${renderStat(claimAvailable, claimFontSize)}</>}
           </div>
@@ -1927,7 +1943,7 @@ function AvailableBalanceCard({
 // on this page with the same render-thrashing risk.
 function MobileHeroCarousel({
   portfolioTotal, balanceHidden, onToggleHidden, walletAddress, shortAddr, showToastMessage, navigate, fmt,
-  arcAvailable, claimAvailable,
+  arcAvailable, claimAvailable, claimLoading,
 }: {
   portfolioTotal: number
   balanceHidden: boolean
@@ -1939,6 +1955,7 @@ function MobileHeroCarousel({
   fmt: (n: number, symbol?: string) => string
   arcAvailable: number
   claimAvailable: number
+  claimLoading: boolean
 }) {
   // ── Hero carousel — Balance card / Multichain Hub card ─────────────────
   // The peek edges are REAL card content, not a decorative hint — the
@@ -2142,7 +2159,7 @@ function MobileHeroCarousel({
           <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('left') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, display: 'grid', gridTemplateColumns: '100%', gridTemplateRows: heroCardHeight ? `${heroCardHeight}px` : undefined, cursor: 'pointer' }}>
             <div style={{ gridArea: '1 / 1', alignSelf: 'stretch', minWidth: 0, minHeight: 0, visibility: heroCardIndex === 0 ? 'visible' : 'hidden' }}>
               <MultichainHubCard
-                arcAvailable={arcAvailable} claimAvailable={claimAvailable}
+                arcAvailable={arcAvailable} claimAvailable={claimAvailable} claimLoading={claimLoading}
                 balanceHidden={balanceHidden} onToggleHidden={onToggleHidden} fmt={fmt} navigate={navigate}
               />
             </div>
@@ -2167,7 +2184,7 @@ function MobileHeroCarousel({
             </div>
             <div style={{ gridArea: '1 / 1', alignSelf: 'stretch', minWidth: 0, minHeight: 0, visibility: heroCardIndex === 0 ? 'hidden' : 'visible' }}>
               <MultichainHubCard
-                arcAvailable={arcAvailable} claimAvailable={claimAvailable}
+                arcAvailable={arcAvailable} claimAvailable={claimAvailable} claimLoading={claimLoading}
                 balanceHidden={balanceHidden} onToggleHidden={onToggleHidden} fmt={fmt} navigate={navigate}
               />
             </div>
@@ -2177,7 +2194,7 @@ function MobileHeroCarousel({
           <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('right') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, display: 'grid', gridTemplateColumns: '100%', gridTemplateRows: heroCardHeight ? `${heroCardHeight}px` : undefined, cursor: 'pointer' }}>
             <div style={{ gridArea: '1 / 1', alignSelf: 'stretch', minWidth: 0, minHeight: 0, visibility: heroCardIndex === 0 ? 'visible' : 'hidden' }}>
               <MultichainHubCard
-                arcAvailable={arcAvailable} claimAvailable={claimAvailable}
+                arcAvailable={arcAvailable} claimAvailable={claimAvailable} claimLoading={claimLoading}
                 balanceHidden={balanceHidden} onToggleHidden={onToggleHidden} fmt={fmt} navigate={navigate}
               />
             </div>
@@ -2428,6 +2445,8 @@ export function HomePage() {
   const [cirBtcBalance,  setCirBtcBalance]  = useState(0)
   const [btcPrice,       setBtcPrice]       = useState(0)
   const [unifiedBalance, setUnifiedBalance] = useState<number | null>(null)
+  // True until the first all-chains scan for this wallet has finished.
+  const [unifiedLoading, setUnifiedLoading] = useState(true)
   // Desktop Assets table's real 24h % change column — fetched alongside the
   // BTC price below. `null` per-token means "fetched, unavailable from any
   // source" (renders a "—", never a fabricated number); starts `undefined`
@@ -3489,6 +3508,7 @@ export function HomePage() {
     // across the external RPCs). Skips the second trigger instead; the
     // next tick or the next reactive event picks it up.
     let inFlight = false
+    let firstScan = true
     const fullScan = () => {
       if (inFlight) return
       inFlight = true
@@ -3499,7 +3519,10 @@ export function HomePage() {
         chainBalancesRef.current = map
         const total = isMerchantRef.current ? sumChainBalances(map) : result.total
         setUnifiedBalance(total > 0.001 ? total : null)
-      }).catch(() => {}).finally(() => { inFlight = false })
+      }).catch(() => {}).finally(() => {
+        inFlight = false
+        if (firstScan && !cancelled) { firstScan = false; setUnifiedLoading(false) }
+      })
     }
     // Targeted single-chain refresh — patches one entry in the known
     // breakdown and re-sums in memory, instead of re-scanning everything.
@@ -4057,6 +4080,7 @@ export function HomePage() {
             fmt={fmt}
             arcAvailable={balance}
             claimAvailable={unifiedBalance ?? 0}
+            claimLoading={unifiedLoading}
           />
         )}
 
