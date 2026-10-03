@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
+import { clearSocialDeviceState } from '@/lib/socialWallet'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { generateWallet, importFromMnemonic, importFromPrivateKey, validateMnemonic } from '@/lib/arc'
 import { copySensitiveToClipboard } from '@/lib/utils'
@@ -276,6 +277,9 @@ export function GoogleAuthPage() {
         // restoreWallet.ts knows this account is eligible for the server-side
         // key backup fallback if this device has no local key material.
         if (existing.wallet_address) useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: 'social-auto' })
+        // A new sign-in always unlocks the wallet with the passkey or
+        // Recovery QR — never a copy left on this device from before.
+        clearSocialDeviceState()
         navigate('/auth/passcode?returning=1', { replace: true })
         return
       }
@@ -413,7 +417,10 @@ export function EmailOTPPage() {
       }
       setLoading(false)
       showToastMessage(`Welcome back, ${existing.username || existing.display_name}! 👋`, 'success')
-      // Returning user — set a new passcode (no old passcode needed)
+      // Returning user — set a new passcode (no old passcode needed), then
+      // unlock the wallet with the passkey or Recovery QR (never a copy left
+      // on this device from before this sign-in).
+      clearSocialDeviceState()
       navigate('/auth/passcode?returning=1', { replace: true })
       return
     }

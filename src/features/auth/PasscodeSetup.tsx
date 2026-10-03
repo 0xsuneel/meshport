@@ -199,6 +199,13 @@ export function PasscodeSetupPage() {
           //
           // No biometric offer here — relogin goes straight into the app.
           // Biometric can still be turned on any time from Settings.
+          // Google / email accounts: the wallet opens only with the
+          // passkey or Recovery QR on a new sign-in — go straight there.
+          const st = useAuthStore.getState()
+          if (st.loginType === 'social' && st.walletSource === 'social-auto' && !st.privateKey) {
+            navigateRef.current('/auth/recover-wallet', { replace: true })
+            return
+          }
           navigateRef.current('/', { replace: true })
           import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(firstRef.current)).catch(() => {})
         } else {

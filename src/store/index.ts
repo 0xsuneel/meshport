@@ -250,8 +250,15 @@ export const useAuthStore = create<AuthStore>()(
         }
         import('@/lib/chatCrypto').then(({ clearChatSessionSeeds }) => clearChatSessionSeeds()).catch(() => {})
         // Google / email wallets: this device's sealed copy goes too — signing
-        // back in opens the wallet with the passkey or Recovery QR.
-        import('@/lib/socialWallet').then(({ clearSocialDeviceState }) => clearSocialDeviceState()).catch(() => {})
+        // back in opens the wallet with the passkey or Recovery QR. Done here,
+        // synchronously: a lazy import could still be loading when the page
+        // navigates away to Google, leaving the copy behind.
+        try {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i)
+            if (k?.startsWith('meshport_social_dv_') || k?.startsWith('meshport_social_secured_')) localStorage.removeItem(k)
+          }
+        } catch { /* storage blocked */ }
         // Merchant status is per account — drop the cached one.
         import('@/lib/merchant').then(({ resetMerchant }) => resetMerchant()).catch(() => {})
 
