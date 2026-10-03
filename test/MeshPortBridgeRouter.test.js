@@ -7,7 +7,8 @@
 // signature check (MockUSDC3009 follows FiatTokenV2's rules).
 
 const { expect } = require('chai')
-const { ethers } = require('hardhat')
+const hre = require('hardhat')
+const { ethers } = hre
 
 const ARC_DOMAIN = 26
 const FORWARD_HOOK = '0x636374702d666f72776172640000000000000000000000000000000000000000'
@@ -22,12 +23,15 @@ describe('MeshPortBridgeRouter', () => {
     usdc = await (await ethers.getContractFactory('MockUSDC3009')).deploy()
     messenger = await (await ethers.getContractFactory('MockTokenMessengerV2')).deploy()
     router = await (await ethers.getContractFactory('MeshPortBridgeRouter'))
-      .deploy(await usdc.getAddress(), await messenger.getAddress(), feeWallet.address)
+      .deploy(await messenger.getAddress(), feeWallet.address)
     await usdc.mint(user.address, usdc6(1000))
   })
 
   // The bridge parameters a user would sign for: 100 USDC + 0.25 fee to Arc via the forwarder.
+  let usdcAddr
+  beforeEach(async () => { usdcAddr = await usdc.getAddress() })
   const bridgeFor = (overrides = {}) => ({
+    token: usdcAddr,
     destinationDomain: ARC_DOMAIN,
     mintRecipient: pad32(user.address),
     fee: usdc6('0.25'),
@@ -107,13 +111,16 @@ describe('MeshPortBridgeRouter', () => {
       'finality': (b) => ({ ...b, minFinalityThreshold: 2000 }),
       'hook data': (b) => ({ ...b, hookData: '0x' }),
       'salt': (b) => ({ ...b, salt: ethers.ZeroHash }),
+      'token': (b) => ({ ...b, token: '0x000000000000000000000000000000000000bEEF' }),
     }
     for (const [what, change] of Object.entries(tamper)) {
       it(`changing the ${what} is rejected and nothing moves`, async () => {
         const b = bridgeFor()
         const a = await sign(b)
-        await expect(router.connect(relayer).bridgeWithAuthorization(change(b), a))
-          .to.be.revertedWith('FiatTokenV2: invalid signature')
+        // A different token isn't USDC at all, so the call reverts there instead.
+        const call = router.connect(relayer).bridgeWithAuthorization(change(b), a)
+        if (what === 'token') await expect(call).to.be.reverted
+        else await expect(call).to.be.revertedWith('FiatTokenV2: invalid signature')
         expect(await usdc.balanceOf(user.address)).to.equal(usdc6(1000))
         expect(await messenger.calls()).to.equal(0n)
       })
@@ -124,6 +131,17 @@ describe('MeshPortBridgeRouter', () => {
       const a = await sign(b)
       await expect(router.connect(relayer).bridgeWithAuthorization(b, { ...a, value: usdc6(500) }))
         .to.be.revertedWith('FiatTokenV2: invalid signature')
+    })
+
+    it('a lookalike token cannot use the user’s signature (EIP-712 domain is per token)', async () => {
+      const fake = await (await ethers.getContractFactory('MockUSDC3009')).deploy()
+      await fake.mint(user.address, usdc6(1000))
+      const b = bridgeFor()
+      const a = await sign(b) // signed for the real USDC
+      await expect(router.connect(relayer).bridgeWithAuthorization({ ...b, token: await fake.getAddress() }, a))
+        .to.be.revertedWith('FiatTokenV2: invalid signature')
+      expect(await usdc.balanceOf(user.address)).to.equal(usdc6(1000))
+      expect(await fake.balanceOf(user.address)).to.equal(usdc6(1000))
     })
 
     it('a signature from someone else cannot spend the user’s USDC', async () => {
@@ -174,13 +192,18 @@ describe('MeshPortBridgeRouter', () => {
       const b = bridgeFor({ maxFee: usdc6(100) })
       await expect(router.bridgeWithAuthorization(b, await sign(b))).to.be.revertedWithCustomError(router, 'MaxFeeTooHigh')
     })
+    it('token must be set', async () => {
+      const b = bridgeFor({ token: ethers.ZeroAddress })
+      await expect(router.bridgeWithAuthorization(b, await sign(b))).to.be.revertedWithCustomError(router, 'ZeroToken')
+    })
     it('recipient must be set', async () => {
       const b = bridgeFor({ mintRecipient: ethers.ZeroHash })
       await expect(router.bridgeWithAuthorization(b, await sign(b))).to.be.revertedWithCustomError(router, 'ZeroRecipient')
     })
     it('constructor rejects zero addresses', async () => {
       const F = await ethers.getContractFactory('MeshPortBridgeRouter')
-      await expect(F.deploy(ethers.ZeroAddress, await messenger.getAddress(), feeWallet.address)).to.be.revertedWithCustomError(router, 'ZeroAddress')
+      await expect(F.deploy(ethers.ZeroAddress, feeWallet.address)).to.be.revertedWithCustomError(router, 'ZeroAddress')
+      await expect(F.deploy(await messenger.getAddress(), ethers.ZeroAddress)).to.be.revertedWithCustomError(router, 'ZeroAddress')
     })
   })
 
@@ -210,13 +233,41 @@ describe('MeshPortBridgeRouter', () => {
     expect((await messenger.last()).amount).to.equal(usdc6(100))
   })
 
+  describe('same address on every chain (CREATE2)', () => {
+    const { CREATE2_DEPLOYER, SALT, initCode, predictRouterAddress } = require('../contracts/bridge-router-create2.cjs')
+    // Runtime code of the standard deterministic deployment proxy (Arachnid's CREATE2 deployer).
+    const DEPLOYER_RUNTIME = '0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3'
+
+    it('the committed bytecode is exactly what this source compiles to', async () => {
+      const artifact = await hre.artifacts.readArtifact('MeshPortBridgeRouter')
+      expect(require('../contracts/MeshPortBridgeRouter.bytecode.json').bytecode).to.equal(artifact.bytecode)
+    })
+
+    it('deploying the committed bytecode through the CREATE2 deployer lands on the predicted address', async () => {
+      await ethers.provider.send('hardhat_setCode', [CREATE2_DEPLOYER, DEPLOYER_RUNTIME])
+      const messengerAddr = await messenger.getAddress()
+      const predicted = predictRouterAddress(feeWallet.address, messengerAddr)
+      expect(await ethers.provider.getCode(predicted)).to.equal('0x')
+      await (await relayer.sendTransaction({ to: CREATE2_DEPLOYER, data: ethers.concat([SALT, initCode(messengerAddr, feeWallet.address)]) })).wait()
+      expect(await ethers.provider.getCode(predicted)).to.not.equal('0x')
+      const deployed = await ethers.getContractAt('MeshPortBridgeRouter', predicted)
+      expect(await deployed.feeRecipient()).to.equal(feeWallet.address)
+      expect(await deployed.tokenMessenger()).to.equal(messengerAddr)
+      // And it works: a real bridge through the CREATE2-deployed router.
+      router = deployed
+      const b = bridgeFor()
+      await router.connect(relayer).bridgeWithAuthorization(b, await sign(b))
+      expect((await messenger.last()).amount).to.equal(usdc6(100))
+    })
+  })
+
   it('bridgeNonce matches the off-chain computation the app will use', async () => {
     const b = bridgeFor()
     const chainId = (await ethers.provider.getNetwork()).chainId
-    const typehash = ethers.id('MeshPortBridge(uint256 chainId,address router,uint32 destinationDomain,bytes32 mintRecipient,uint256 fee,uint256 maxFee,uint32 minFinalityThreshold,bytes32 hookDataHash,bytes32 salt)')
+    const typehash = ethers.id('MeshPortBridge(uint256 chainId,address router,address token,uint32 destinationDomain,bytes32 mintRecipient,uint256 fee,uint256 maxFee,uint32 minFinalityThreshold,bytes32 hookDataHash,bytes32 salt)')
     const offchain = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(
-      ['bytes32', 'uint256', 'address', 'uint32', 'bytes32', 'uint256', 'uint256', 'uint32', 'bytes32', 'bytes32'],
-      [typehash, chainId, await router.getAddress(), b.destinationDomain, b.mintRecipient, b.fee, b.maxFee, b.minFinalityThreshold, ethers.keccak256(b.hookData), b.salt],
+      ['bytes32', 'uint256', 'address', 'address', 'uint32', 'bytes32', 'uint256', 'uint256', 'uint32', 'bytes32', 'bytes32'],
+      [typehash, chainId, await router.getAddress(), b.token, b.destinationDomain, b.mintRecipient, b.fee, b.maxFee, b.minFinalityThreshold, ethers.keccak256(b.hookData), b.salt],
     ))
     expect(await router.bridgeNonce(b)).to.equal(offchain)
     expect(await router.BRIDGE_TYPEHASH()).to.equal(typehash)

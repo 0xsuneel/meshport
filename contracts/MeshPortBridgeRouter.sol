@@ -18,14 +18,25 @@ pragma solidity 0.8.20;
  *
  * WHY THE RELAYER CAN'T CHANGE ANYTHING
  * The authorization's `nonce` is not random: it is bridgeNonce(...) — a hash
- * of this chain, this router and every bridge parameter (destination domain,
- * recipient, fee, CCTP maxFee, finality, hook data, salt). The router
+ * of this chain, this router and every bridge parameter (USDC token,
+ * destination domain, recipient, fee, CCTP maxFee, finality, hook data, salt). The router
  * recomputes it from the parameters it is given and passes THAT to USDC, so
  * submitting any parameter other than the ones the user signed produces a
  * nonce the signature doesn't cover and USDC rejects it. EIP-3009 also
  * requires `to == msg.sender` for receiveWithAuthorization, so the signed
  * authorization can only ever be used through this router, and each nonce
  * only once.
+ *
+ * SAME ADDRESS ON EVERY CHAIN
+ * The USDC token is a signed parameter rather than a constructor argument,
+ * so the contract's code and constructor arguments (Circle's TokenMessengerV2
+ * — one address on every CCTP testnet — and MeshPort's fee wallet) are the
+ * same on every chain, and the CREATE2 deployment
+ * (contracts/deploy-bridge-router-all.mjs) lands on the same address
+ * everywhere. Passing the token is safe: the user's signature is checked by
+ * that token's own EIP-712 domain, so it is only valid on the real USDC the
+ * user signed for; any other token can't touch their USDC, and Circle's
+ * TokenMessenger refuses to burn tokens it doesn't support.
  *
  * No owner, no admin, no upgrade, no pause: nothing to compromise.
  * Compiled for EVM "paris" (see hardhat.config.cjs).
@@ -54,14 +65,14 @@ interface ITokenMessengerV2 {
 contract MeshPortBridgeRouter {
     /// Domain separation for the parameter hash used as the EIP-3009 nonce.
     bytes32 public constant BRIDGE_TYPEHASH = keccak256(
-        "MeshPortBridge(uint256 chainId,address router,uint32 destinationDomain,bytes32 mintRecipient,uint256 fee,uint256 maxFee,uint32 minFinalityThreshold,bytes32 hookDataHash,bytes32 salt)"
+        "MeshPortBridge(uint256 chainId,address router,address token,uint32 destinationDomain,bytes32 mintRecipient,uint256 fee,uint256 maxFee,uint32 minFinalityThreshold,bytes32 hookDataHash,bytes32 salt)"
     );
 
-    IUSDC3009 public immutable usdc;
     ITokenMessengerV2 public immutable tokenMessenger;
     address public immutable feeRecipient;
 
     struct Bridge {
+        address token;                // Circle's USDC on this chain (EIP-3009)
         uint32 destinationDomain;     // e.g. 26 = Arc
         bytes32 mintRecipient;        // recipient on the destination, left-padded
         uint256 fee;                  // MeshPort fee (relayer gas etc.), paid here in USDC
@@ -87,15 +98,15 @@ contract MeshPortBridgeRouter {
     );
 
     error ZeroAddress();
+    error ZeroToken();
     error FeeTooHigh();
     error MaxFeeTooHigh();
     error ZeroRecipient();
     error TransferFailed();
     error ApproveFailed();
 
-    constructor(address usdc_, address tokenMessenger_, address feeRecipient_) {
-        if (usdc_ == address(0) || tokenMessenger_ == address(0) || feeRecipient_ == address(0)) revert ZeroAddress();
-        usdc = IUSDC3009(usdc_);
+    constructor(address tokenMessenger_, address feeRecipient_) {
+        if (tokenMessenger_ == address(0) || feeRecipient_ == address(0)) revert ZeroAddress();
         tokenMessenger = ITokenMessengerV2(tokenMessenger_);
         feeRecipient = feeRecipient_;
     }
@@ -103,13 +114,14 @@ contract MeshPortBridgeRouter {
     /// The EIP-3009 nonce the user must sign for these parameters.
     function bridgeNonce(Bridge calldata b) public view returns (bytes32) {
         return keccak256(abi.encode(
-            BRIDGE_TYPEHASH, block.chainid, address(this), b.destinationDomain, b.mintRecipient,
+            BRIDGE_TYPEHASH, block.chainid, address(this), b.token, b.destinationDomain, b.mintRecipient,
             b.fee, b.maxFee, b.minFinalityThreshold, keccak256(b.hookData), b.salt
         ));
     }
 
     /// Pull, take the fee and burn — all in this one transaction.
     function bridgeWithAuthorization(Bridge calldata b, Authorization calldata a) external returns (bytes32 nonce) {
+        if (b.token == address(0)) revert ZeroToken();
         if (b.mintRecipient == bytes32(0)) revert ZeroRecipient();
         if (b.fee >= a.value) revert FeeTooHigh();
         uint256 amount = a.value - b.fee;
@@ -117,6 +129,7 @@ contract MeshPortBridgeRouter {
         if (b.maxFee >= amount) revert MaxFeeTooHigh();
 
         nonce = bridgeNonce(b);
+        IUSDC3009 usdc = IUSDC3009(b.token);
 
         // 1. Pull amount + fee. Reverts unless `from` signed exactly this nonce/value/window.
         usdc.receiveWithAuthorization(a.from, address(this), a.value, a.validAfter, a.validBefore, nonce, a.v, a.r, a.s);
@@ -128,12 +141,12 @@ contract MeshPortBridgeRouter {
         if (!usdc.approve(address(tokenMessenger), amount)) revert ApproveFailed();
         if (b.hookData.length > 0) {
             tokenMessenger.depositForBurnWithHook(
-                amount, b.destinationDomain, b.mintRecipient, address(usdc), bytes32(0),
+                amount, b.destinationDomain, b.mintRecipient, b.token, bytes32(0),
                 b.maxFee, b.minFinalityThreshold, b.hookData
             );
         } else {
             tokenMessenger.depositForBurn(
-                amount, b.destinationDomain, b.mintRecipient, address(usdc), bytes32(0),
+                amount, b.destinationDomain, b.mintRecipient, b.token, bytes32(0),
                 b.maxFee, b.minFinalityThreshold
             );
         }

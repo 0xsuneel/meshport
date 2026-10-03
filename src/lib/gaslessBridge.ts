@@ -22,20 +22,27 @@
 // JSON like {"Base_Sepolia":"0x…"}); Bring Funds then keeps its current flow.
 
 import { encodeAbiParameters, keccak256, toHex, pad, getAddress, type Hex } from 'viem'
+import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 
 export const ARC_DOMAIN = 26
 /** Circle Forwarding Service hook: "cctp-forward", version 0, no extra data. */
 export const FORWARD_HOOK: Hex = '0x636374702d666f72776172640000000000000000000000000000000000000000'
 export const FAST_FINALITY = 1000
 export const BRIDGE_TYPEHASH = keccak256(toHex(
-  'MeshPortBridge(uint256 chainId,address router,uint32 destinationDomain,bytes32 mintRecipient,uint256 fee,uint256 maxFee,uint32 minFinalityThreshold,bytes32 hookDataHash,bytes32 salt)',
+  'MeshPortBridge(uint256 chainId,address router,address token,uint32 destinationDomain,bytes32 mintRecipient,uint256 fee,uint256 maxFee,uint32 minFinalityThreshold,bytes32 hookDataHash,bytes32 salt)',
 ))
 
-/** Source chains the router supports (USDC addresses from Circle's tables). */
-export const GASLESS_CHAINS: Record<string, { chainId: number; usdc: Hex }> = {
-  Ethereum_Sepolia: { chainId: 11155111, usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238' },
-  Base_Sepolia:     { chainId: 84532,    usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' },
-}
+/**
+ * Chains gasless bridging can run on: every external chain whose numeric chain
+ * id is verified in EXTERNAL_CHAINS (the id is part of what the user signs, so
+ * an unverified one is never used). Which of these are actually ON is decided
+ * by VITE_BRIDGE_ROUTERS (only chains the router was deployed to).
+ */
+export const GASLESS_CHAINS: Record<string, { chainId: number; usdc: Hex }> = Object.fromEntries(
+  Object.entries(EXTERNAL_CHAINS)
+    .filter(([, c]) => typeof c.chainId === 'number')
+    .map(([k, c]) => [k, { chainId: c.chainId as number, usdc: getAddress(c.usdc) }]),
+)
 
 // Hard limits the app enforces whatever the server quotes.
 const MAX_FEE_SHARE = 0.05        // MeshPort fee ≤ 5% of the amount…
@@ -64,6 +71,7 @@ export function isGaslessBridgeAvailable(chainId: string): boolean {
 }
 
 export interface BridgeParams {
+  token: Hex
   destinationDomain: number
   mintRecipient: Hex
   fee: bigint
@@ -77,10 +85,10 @@ export interface BridgeParams {
 export function bridgeNonce(p: BridgeParams, chainId: number, router: Hex): Hex {
   return keccak256(encodeAbiParameters(
     [
-      { type: 'bytes32' }, { type: 'uint256' }, { type: 'address' }, { type: 'uint32' }, { type: 'bytes32' },
+      { type: 'bytes32' }, { type: 'uint256' }, { type: 'address' }, { type: 'address' }, { type: 'uint32' }, { type: 'bytes32' },
       { type: 'uint256' }, { type: 'uint256' }, { type: 'uint32' }, { type: 'bytes32' }, { type: 'bytes32' },
     ],
-    [BRIDGE_TYPEHASH, BigInt(chainId), router, p.destinationDomain, p.mintRecipient, p.fee, p.maxFee, p.minFinalityThreshold, keccak256(p.hookData), p.salt],
+    [BRIDGE_TYPEHASH, BigInt(chainId), router, p.token, p.destinationDomain, p.mintRecipient, p.fee, p.maxFee, p.minFinalityThreshold, keccak256(p.hookData), p.salt],
   ))
 }
 
@@ -135,6 +143,7 @@ export async function bringFundsGasless(p: {
   if (account.address.toLowerCase() !== p.walletAddress.toLowerCase()) throw new Error('Wallet key does not match this account')
 
   const params: BridgeParams = {
+    token: chain.usdc,
     destinationDomain: ARC_DOMAIN,
     mintRecipient: pad(account.address, { size: 32 }),
     fee, maxFee,

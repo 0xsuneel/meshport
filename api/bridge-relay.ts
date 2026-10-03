@@ -24,7 +24,7 @@
 //                               falls back to RELAY_PRIVATE_KEY (relay-gas's wallet)
 //   BRIDGE_ROUTERS              {"Base_Sepolia":"0x…","Ethereum_Sepolia":"0x…"}
 //   BRIDGE_RPC_<CHAIN>          optional RPC override per chain
-//   BRIDGE_NATIVE_USD           optional native-token USD price for the gas fee (default 3000)
+//   BRIDGE_NATIVE_USD_<CHAIN>   optional gas-token USD price per chain (defaults in CHAINS)
 //   BRIDGE_MIN_FEE_UNITS        optional fee floor in USDC base units (default 50000 = 0.05)
 //   SUPABASE_URL, SUPABASE_SERVICE_KEY  session → wallet ownership check (as relay-gas)
 
@@ -37,9 +37,27 @@ const ROUTER_GAS = 260_000n           // receiveWithAuthorization + transfer + a
 const MAX_AUTH_WINDOW_SEC = 2 * 60 * 60
 const MIN_TOTAL_UNITS = 1_000_000n    // 1 USDC
 
-const CHAINS: Record<string, { id: number; name: string; rpc: string; usdc: `0x${string}`; domain: number }> = {
-  Ethereum_Sepolia: { id: 11155111, name: 'Ethereum Sepolia', rpc: 'https://ethereum-sepolia-rpc.publicnode.com', usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', domain: 0 },
-  Base_Sepolia:     { id: 84532,    name: 'Base Sepolia',     rpc: 'https://sepolia.base.org',                   usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', domain: 6 },
+// Chain id, USDC and CCTP domain per chain — from src/blockchain/chains.ts
+// (EXTERNAL_CHAINS, verified ids only) and Circle's domain table;
+// src/lib/gaslessBridge.test.ts checks this stays in sync. `gasUsd` is a rough
+// USD price of the chain's gas token, only used to turn gas into a USDC fee
+// (override per chain with BRIDGE_NATIVE_USD_<CHAIN>; the fee floor applies anyway).
+export const CHAINS: Record<string, { id: number; name: string; rpc: string; usdc: `0x${string}`; domain: number; gasUsd: number }> = {
+  Ethereum_Sepolia:  { id: 11155111, name: 'Ethereum Sepolia',  rpc: 'https://ethereum-sepolia-rpc.publicnode.com', usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', domain: 0,  gasUsd: 3000 },
+  Base_Sepolia:      { id: 84532,    name: 'Base Sepolia',      rpc: 'https://sepolia.base.org',                   usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', domain: 6,  gasUsd: 3000 },
+  Arbitrum_Sepolia:  { id: 421614,   name: 'Arbitrum Sepolia',  rpc: 'https://sepolia-rollup.arbitrum.io/rpc',     usdc: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d', domain: 3,  gasUsd: 3000 },
+  Optimism_Sepolia:  { id: 11155420, name: 'OP Sepolia',        rpc: 'https://sepolia.optimism.io',                usdc: '0x5fd84259d66Cd46123540766Be93DFE6D43130D7', domain: 2,  gasUsd: 3000 },
+  Polygon_Sepolia:   { id: 80002,    name: 'Polygon Amoy',      rpc: 'https://polygon-amoy-bor-rpc.publicnode.com', usdc: '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582', domain: 7,  gasUsd: 0.5 },
+  Avalanche_Fuji:    { id: 43113,    name: 'Avalanche Fuji',    rpc: 'https://api.avax-test.network/ext/bc/C/rpc', usdc: '0x5425890298aed601595a70AB815c96711a31Bc65', domain: 1,  gasUsd: 30 },
+  HyperEVM_Testnet:  { id: 998,      name: 'HyperEVM Testnet',  rpc: 'https://rpcs.chain.link/hyperevm/testnet',   usdc: '0x2B3370eE501B4a559b57D449569354196457D8Ab', domain: 19, gasUsd: 30 },
+  Sei_Testnet:       { id: 1328,     name: 'Sei Testnet',       rpc: 'https://evm-rpc-testnet.sei-apis.com',       usdc: '0x4fCF1784B31630811181f670Aea7A7bEF803eaED', domain: 16, gasUsd: 0.5 },
+  Unichain_Sepolia:  { id: 1301,     name: 'Unichain Sepolia',  rpc: 'https://sepolia.unichain.org',               usdc: '0x31d0220469e10c4E71834a79b1f276d740d3768F', domain: 10, gasUsd: 3000 },
+  Morph_Testnet:     { id: 2910,     name: 'Morph Hoodi',       rpc: 'https://rpc-hoodi.morphl2.io',               usdc: '0x7433b41C6c5e1d58D4Da99483609520255ab661B', domain: 30, gasUsd: 3000 },
+  Pharos_Testnet:    { id: 688689,   name: 'Pharos Atlantic',   rpc: 'https://atlantic.dplabs-internal.com',       usdc: '0xcfC8330f4BCAB529c625D12781b1C19466A9Fc8B', domain: 31, gasUsd: 1 },
+  Plume_Testnet:     { id: 98867,    name: 'Plume Testnet',     rpc: 'https://testnet-rpc.plume.org',              usdc: '0xcB5f30e335672893c7eb944B374c196392C19D18', domain: 22, gasUsd: 0.2 },
+  XDC_Apothem:       { id: 51,       name: 'XDC Apothem',       rpc: 'https://rpc.apothem.network',                usdc: '0xb5AB69F7bBada22B28e79C8FFAECe55eF1c771D4', domain: 18, gasUsd: 0.1 },
+  Codex_Testnet:     { id: 812242,   name: 'Codex Testnet',     rpc: 'https://rpc.codex-stg.xyz',                  usdc: '0x6d7f141b6819C2c9CC2f818e6ad549E7Ca090F8f', domain: 12, gasUsd: 3000 },
+  Injective_Testnet: { id: 1439,     name: 'Injective Testnet', rpc: 'https://k8s.testnet.json-rpc.injective.network', usdc: '0x0C382e685bbeeFE5d3d9C29e29E341fEE8E84C5d', domain: 29, gasUsd: 20 },
 }
 
 const ROUTER_ABI = [
@@ -47,6 +65,7 @@ const ROUTER_ABI = [
     type: 'function', name: 'bridgeWithAuthorization', stateMutability: 'nonpayable',
     inputs: [
       { name: 'b', type: 'tuple', components: [
+        { name: 'token', type: 'address' },
         { name: 'destinationDomain', type: 'uint32' }, { name: 'mintRecipient', type: 'bytes32' },
         { name: 'fee', type: 'uint256' }, { name: 'maxFee', type: 'uint256' },
         { name: 'minFinalityThreshold', type: 'uint32' }, { name: 'hookData', type: 'bytes' }, { name: 'salt', type: 'bytes32' },
@@ -62,6 +81,7 @@ const ROUTER_ABI = [
   {
     type: 'function', name: 'bridgeNonce', stateMutability: 'view',
     inputs: [{ name: 'b', type: 'tuple', components: [
+      { name: 'token', type: 'address' },
       { name: 'destinationDomain', type: 'uint32' }, { name: 'mintRecipient', type: 'bytes32' },
       { name: 'fee', type: 'uint256' }, { name: 'maxFee', type: 'uint256' },
       { name: 'minFinalityThreshold', type: 'uint32' }, { name: 'hookData', type: 'bytes' }, { name: 'salt', type: 'bytes32' },
@@ -148,9 +168,9 @@ async function cctpMaxFee(srcDomain: number, burn: bigint): Promise<bigint> {
 }
 
 /** MeshPort's fee: the relayer's gas for the router call, priced in USDC, with margin and a floor. */
-async function relayFee(pub: any): Promise<bigint> {
+async function relayFee(pub: any, chainKey: string): Promise<bigint> {
   const gasPrice: bigint = await pub.getGasPrice()
-  const nativeUsd = Number(process.env.BRIDGE_NATIVE_USD || 3000)
+  const nativeUsd = Number(process.env[`BRIDGE_NATIVE_USD_${chainKey.toUpperCase()}`] || CHAINS[chainKey].gasUsd)
   // wei → USDC units: wei * usd / 1e18 * 1e6 = wei * usd / 1e12
   const units = (ROUTER_GAS * gasPrice * BigInt(Math.round(nativeUsd * 100))) / 100n / 1_000_000_000_000n
   const withMargin = (units * 130n) / 100n
@@ -162,7 +182,7 @@ async function quote(chainKey: string, total: bigint) {
   const c = CHAINS[chainKey]
   const { pub } = await clients(chainKey)
   const [fee, usdcName, usdcVersion] = await Promise.all([
-    relayFee(pub),
+    relayFee(pub, chainKey),
     pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'name' }) as Promise<string>,
     pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'version' }) as Promise<string>,
   ])
@@ -193,8 +213,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!b || !a) return res.status(400).json({ error: 'Missing bridge or authorization' })
     if (!isHex(a.from, 20) || !isUint(a.value) || !isUint(a.validAfter) || !isUint(a.validBefore) || !isHex(a.signature, 65))
       return res.status(400).json({ error: 'Malformed authorization' })
-    if (!isHex(b.mintRecipient, 32) || !isUint(b.fee) || !isUint(b.maxFee) || !isHex(b.salt, 32) || !isHex(b.hookData))
+    if (!isHex(b.token, 20) || !isHex(b.mintRecipient, 32) || !isUint(b.fee) || !isUint(b.maxFee) || !isHex(b.salt, 32) || !isHex(b.hookData))
       return res.status(400).json({ error: 'Malformed bridge parameters' })
+    if (String(b.token).toLowerCase() !== CHAINS[chainKey].usdc.toLowerCase()) return res.status(400).json({ error: 'Only USDC can be bridged' })
 
     // Only self-bridges to Arc through Circle's forwarder.
     const { pad, parseSignature } = await import('viem')
@@ -216,6 +237,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!wallet) return res.status(503).json({ error: 'Relayer is not configured' })
 
     const bridgeArgs = {
+      token: c.usdc,
       destinationDomain: ARC_DOMAIN, mintRecipient: b.mintRecipient as `0x${string}`, fee, maxFee,
       minFinalityThreshold: Number(b.minFinalityThreshold), hookData: FORWARD_HOOK as `0x${string}`, salt: b.salt as `0x${string}`,
     }
