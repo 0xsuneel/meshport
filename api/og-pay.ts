@@ -1,10 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 /**
- * GET /api/og-pay?username=<username>
+ * GET /api/og-pay?username=<username>[&amount=<n>]   personal payment link
+ * GET /api/og-pay?code=<code>[&order=<ORD-…>]        merchant bill / payment request
  *
- * Powers rich link previews for payment links (meshport.xyz/paylink/:username,
- * and the older meshport.xyz/pay/:username form).
+ * Powers rich link previews for payment links (meshport.xyz/paylink/:username
+ * and /paylink/r/:code, plus the older /pay/… forms). A link with an amount
+ * (?amount=10, or a merchant bill) shows that amount on the card: "Pay $10".
  *
  * WHY THIS EXISTS: MeshPort is a client-side React app — the actual HTML the
  * server sends back is the same empty shell for every route, and the real
@@ -48,12 +50,21 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+function formatAmount(n: number): string {
+  if (!Number.isFinite(n) || n <= 0 || n > 1e12) return ''
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })
+}
+
+const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const code = String(req.query.code || '').trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64)
   const username = String(req.query.username || '').replace(/\.arc$/i, '').trim()
   const userAgent = String(req.headers['user-agent'] || '')
   const host = req.headers.host || 'meshport.xyz'
   const proto = req.headers['x-forwarded-proto'] || 'https'
-  const pageUrl = `${proto}://${host}/paylink/${username}`
+  const appPath = code ? `/paylink/r/${code}` : `/paylink/${username}`
+  const pageUrl = `${proto}://${host}${appPath}`
 
   // ── Real visitor: pass through to the actual app, unchanged ──────────────
   if (!isBot(userAgent)) {
@@ -65,46 +76,87 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch {
       // If the self-fetch ever fails for some reason, redirecting still
       // gets a real visitor to a working page rather than an error.
-      res.setHeader('Location', `/paylink/${username}`)
+      const amt = code ? '' : String(req.query.amount || '').replace(/[^0-9.]/g, '')
+      res.setHeader('Location', appPath + (amt ? `?amount=${amt}` : ''))
       return res.status(302).end()
     }
   }
 
-  // ── Bot: look up the user and build a personalized preview card ──────────
+  // ── Bot: look up who is being paid and build a personalized preview card ──
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://cvvpzfvzweszuuxvaayb.supabase.co').trim()
   const key = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim()
+  const headers = { apikey: key, Authorization: `Bearer ${key}` }
 
   let displayName = username
   let handle = username
   let avatarUrl = ''
+  let amount = 0
+  let label = ''
 
-  if (username && supabaseUrl && key) {
-    try {
-      const r = await fetch(
-        `${supabaseUrl}/rest/v1/users?username=eq.${encodeURIComponent(username)}&select=display_name,username,avatar_url`,
-        { headers: { apikey: key, Authorization: `Bearer ${key}` } },
-      )
-      const rows = await r.json()
-      if (Array.isArray(rows) && rows[0]) {
-        displayName = rows[0].display_name || username
-        handle = rows[0].username || username
-        avatarUrl = rows[0].avatar_url || ''
+  if (code) {
+    // Merchant bill / payment request: the public view the pay page shows.
+    displayName = 'MeshPort merchant'
+    handle = ''
+    const order = String(req.query.order || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32)
+    if (supabaseUrl && key) {
+      try {
+        const r = await fetch(`${supabaseUrl}/functions/v1/merchant-pay`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'get', code }),
+        })
+        const v = await r.json()
+        if (v && !v.error) {
+          displayName = v.merchantName || v.merchantUsername || displayName
+          handle = v.merchantUsername || ''
+          avatarUrl = v.merchantAvatar || ''
+          const due = Math.max(0, Number(v.amount) - Number(v.received || 0))
+          amount = v.status === 'paid' ? Number(v.amount) : (due > 0 ? due : Number(v.amount))
+          label = v.status === 'paid' ? 'Paid' : v.orderNumber ? `Order #${v.orderNumber}` : v.kind === 'invoice' ? 'Invoice' : ''
+        }
+      } catch { /* plainer card below */ }
+    }
+    if (!label && order) label = `Order #${order}`
+  } else {
+    amount = Number(String(req.query.amount || '').replace(/[^0-9.]/g, '')) || 0
+    const isAddress = /^0x[0-9a-fA-F]{40}$/.test(username)
+    if (isAddress) { displayName = shortAddr(username); handle = '' }
+    if (username && supabaseUrl && key) {
+      try {
+        const filter = isAddress ? `wallet_address=ilike.${username}` : `username=eq.${encodeURIComponent(username)}`
+        const r = await fetch(`${supabaseUrl}/rest/v1/users?${filter}&select=display_name,username,avatar_url&limit=1`, { headers })
+        const rows = await r.json()
+        if (Array.isArray(rows) && rows[0]) {
+          displayName = rows[0].display_name || rows[0].username || displayName
+          handle = rows[0].username || handle
+          avatarUrl = rows[0].avatar_url || ''
+        }
+      } catch {
+        // Fall through with the raw username as a reasonable default — a
+        // slightly plainer card beats a broken one.
       }
-    } catch {
-      // Fall through with the raw username as a reasonable default — a
-      // slightly plainer card beats a broken one.
     }
   }
 
-  const title = `Pay ${displayName} on MeshPort`
-  const description = `${handle}.arc • Send USDC instantly with MeshPort`
-  // Render the branded card (avatar circle + name + handle + logo) via the
-  // og-image edge function instead of a static png, so it's personalized
-  // per recipient. og-image.tsx falls back to an initials badge itself
-  // when avatarUrl is empty, so no separate default-image branch needed.
-  const imageParams = new URLSearchParams({ name: displayName, username: handle })
+  const amountText = formatAmount(amount)
+  const title = amountText ? `Pay ${amountText} to ${displayName} on MeshPort` : `Pay ${displayName} on MeshPort`
+  const description = [
+    handle ? `${handle}.arc` : '',
+    label,
+    amountText ? `${amountText} USDC • Pay instantly with MeshPort` : 'Send USDC instantly with MeshPort',
+  ].filter(Boolean).join(' • ')
+  // Render the branded card (avatar + name + handle, the amount when there is
+  // one, and the logo) via the og-image edge function, so it's personalized
+  // per link. og-image.tsx falls back to an initials badge itself when
+  // avatarUrl is empty, so no separate default-image branch needed.
+  const imageParams = new URLSearchParams({ name: displayName })
+  if (handle) imageParams.set('username', handle)
   if (avatarUrl) imageParams.set('avatar', avatarUrl)
+  if (amountText) imageParams.set('amount', String(Math.round(amount * 100) / 100))
+  if (label) imageParams.set('label', label)
+  imageParams.set('v', '3') // new logo — a fresh URL for every preview cache
   const image = `${proto}://${host}/api/og-image?${imageParams.toString()}`
+  const shareUrl = pageUrl + (amountText && !code ? `?amount=${encodeURIComponent(String(amount))}` : '')
 
   const html = `<!DOCTYPE html>
 <html>
@@ -115,14 +167,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 <meta property="og:site_name" content="MeshPort">
 <meta property="og:title" content="${escapeHtml(title)}">
 <meta property="og:description" content="${escapeHtml(description)}">
-<meta property="og:image" content="${image}">
+<meta property="og:image" content="${escapeHtml(image)}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:url" content="${pageUrl}">
+<meta property="og:url" content="${escapeHtml(shareUrl)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(description)}">
-<meta name="twitter:image" content="${image}">
+<meta name="twitter:image" content="${escapeHtml(image)}">
 </head>
 <body></body>
 </html>`

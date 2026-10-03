@@ -15,6 +15,14 @@
       "destination": "/api/$1"
     },
     {
+      "source": "/paylink/r/:code",
+      "destination": "/api/og-pay?code=:code"
+    },
+    {
+      "source": "/pay/r/:code",
+      "destination": "/api/og-pay?code=:code"
+    },
+    {
       "source": "/paylink/:username",
       "destination": "/api/og-pay?username=:username"
     },
