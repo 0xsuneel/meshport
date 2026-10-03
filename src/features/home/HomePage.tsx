@@ -11,7 +11,8 @@ import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
 import { formatAmount, copyToClipboard, timeAgo, trimTrailingZeros } from '@/lib/utils'
-import { readArcBalance, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
+import { readArcBalance, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT, EXTERNAL_SCAN_PROGRESS_EVENT } from '@/blockchain/BlockchainManager'
+import { chainLogoSrc } from '@/lib/chainLogos'
 import { notifyPaymentReceived, notifyPaymentReceivedFromAddress, notifyBulkPaymentReceived } from '@/lib/notifications'
 import { markP2PNotificationRead } from '@/lib/p2pNotifications'
 import { P2P_ESCROW_CONTRACT_ADDRESS } from '@/lib/p2pEscrowContract'
@@ -1624,22 +1625,30 @@ function BowedShapeCard({
   )
 }
 
-// Small spinner shown in front of the Hub labels while the all-chains scan runs.
-function HubSpinner() {
+// Small spinner shown in front of the Hub labels while the all-chains scan
+// runs, with the logo of the chain being checked right now inside it.
+function HubSpinner({ chain }: { chain: string | null }) {
   return (
-    <span aria-label="Loading balances" style={{ width: 11, height: 11, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
-      border: '1.5px solid rgba(255,255,255,0.25)', borderTopColor: '#fff', animation: 'hubSpin 0.8s linear infinite' }}>
+    <span aria-label="Loading balances" style={{ position: 'relative', width: 18, height: 18, margin: '-2px 0', flexShrink: 0, display: 'inline-block' }}>
       <style>{'@keyframes hubSpin{to{transform:rotate(360deg)}}'}</style>
+      <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.25)',
+        borderTopColor: '#fff', animation: 'hubSpin 0.8s linear infinite' }} />
+      {chain && (
+        <img key={chain} src={chainLogoSrc(chain)} alt="" width={11} height={11}
+          style={{ position: 'absolute', top: 3.5, left: 3.5, borderRadius: '50%', display: 'block' }}
+          onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
+      )}
     </span>
   )
 }
 
 function MultichainHubCard({
-  arcAvailable, claimAvailable, claimLoading, balanceHidden, onToggleHidden, fmt, navigate,
+  arcAvailable, claimAvailable, claimLoading, scanChain = null, balanceHidden, onToggleHidden, fmt, navigate,
 }: {
   arcAvailable: number
   claimAvailable: number
   claimLoading?: boolean
+  scanChain?: string | null
   balanceHidden: boolean
   onToggleHidden: () => void
   fmt: (n: number, symbol?: string) => string
@@ -1691,7 +1700,7 @@ function MultichainHubCard({
           globe badge, per the approved reference layout). */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
-          {claimLoading && <HubSpinner />}
+          {claimLoading && <HubSpinner chain={scanChain} />}
           {hub('Multichain Hub')}
           <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
             style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
@@ -1733,8 +1742,8 @@ function MultichainHubCard({
         </div>
         <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
           <div style={{ fontSize: 11.5, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px', ...ellipsisLine,
-            ...(claimLoading ? { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 } : null) }}>
-            {claimLoading && <HubSpinner />}
+            ...(claimLoading ? { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5, overflow: 'visible' } : null) }}>
+            {claimLoading && <HubSpinner chain={scanChain} />}
             <span style={claimLoading ? { minWidth: 0, ...ellipsisLine } : undefined}>{isMerchantHero ? 'In Ledger Chains' : 'Available To Bring'}</span>
           </div>
           <div style={{ fontSize: claimFontSize, fontWeight: 800, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', ...ellipsisLine }}>
@@ -1943,7 +1952,7 @@ function AvailableBalanceCard({
 // on this page with the same render-thrashing risk.
 function MobileHeroCarousel({
   portfolioTotal, balanceHidden, onToggleHidden, walletAddress, shortAddr, showToastMessage, navigate, fmt,
-  arcAvailable, claimAvailable, claimLoading,
+  arcAvailable, claimAvailable, claimLoading, scanChain,
 }: {
   portfolioTotal: number
   balanceHidden: boolean
@@ -1956,6 +1965,7 @@ function MobileHeroCarousel({
   arcAvailable: number
   claimAvailable: number
   claimLoading: boolean
+  scanChain: string | null
 }) {
   // ── Hero carousel — Balance card / Multichain Hub card ─────────────────
   // The peek edges are REAL card content, not a decorative hint — the
@@ -2159,7 +2169,7 @@ function MobileHeroCarousel({
           <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('left') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, display: 'grid', gridTemplateColumns: '100%', gridTemplateRows: heroCardHeight ? `${heroCardHeight}px` : undefined, cursor: 'pointer' }}>
             <div style={{ gridArea: '1 / 1', alignSelf: 'stretch', minWidth: 0, minHeight: 0, visibility: heroCardIndex === 0 ? 'visible' : 'hidden' }}>
               <MultichainHubCard
-                arcAvailable={arcAvailable} claimAvailable={claimAvailable} claimLoading={claimLoading}
+                arcAvailable={arcAvailable} claimAvailable={claimAvailable} claimLoading={claimLoading} scanChain={scanChain}
                 balanceHidden={balanceHidden} onToggleHidden={onToggleHidden} fmt={fmt} navigate={navigate}
               />
             </div>
@@ -2184,7 +2194,7 @@ function MobileHeroCarousel({
             </div>
             <div style={{ gridArea: '1 / 1', alignSelf: 'stretch', minWidth: 0, minHeight: 0, visibility: heroCardIndex === 0 ? 'hidden' : 'visible' }}>
               <MultichainHubCard
-                arcAvailable={arcAvailable} claimAvailable={claimAvailable} claimLoading={claimLoading}
+                arcAvailable={arcAvailable} claimAvailable={claimAvailable} claimLoading={claimLoading} scanChain={scanChain}
                 balanceHidden={balanceHidden} onToggleHidden={onToggleHidden} fmt={fmt} navigate={navigate}
               />
             </div>
@@ -2194,7 +2204,7 @@ function MobileHeroCarousel({
           <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('right') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, display: 'grid', gridTemplateColumns: '100%', gridTemplateRows: heroCardHeight ? `${heroCardHeight}px` : undefined, cursor: 'pointer' }}>
             <div style={{ gridArea: '1 / 1', alignSelf: 'stretch', minWidth: 0, minHeight: 0, visibility: heroCardIndex === 0 ? 'visible' : 'hidden' }}>
               <MultichainHubCard
-                arcAvailable={arcAvailable} claimAvailable={claimAvailable} claimLoading={claimLoading}
+                arcAvailable={arcAvailable} claimAvailable={claimAvailable} claimLoading={claimLoading} scanChain={scanChain}
                 balanceHidden={balanceHidden} onToggleHidden={onToggleHidden} fmt={fmt} navigate={navigate}
               />
             </div>
@@ -2447,6 +2457,9 @@ export function HomePage() {
   const [unifiedBalance, setUnifiedBalance] = useState<number | null>(null)
   // True until the first all-chains scan for this wallet has finished.
   const [unifiedLoading, setUnifiedLoading] = useState(true)
+  const unifiedLoadingRef = useRef(true)
+  // The chain the first scan is checking right now (its logo sits in the spinner).
+  const [scanChain, setScanChain] = useState<string | null>(null)
   // Desktop Assets table's real 24h % change column — fetched alongside the
   // BTC price below. `null` per-token means "fetched, unavailable from any
   // source" (renders a "—", never a fabricated number); starts `undefined`
@@ -3508,7 +3521,6 @@ export function HomePage() {
     // across the external RPCs). Skips the second trigger instead; the
     // next tick or the next reactive event picks it up.
     let inFlight = false
-    let firstScan = true
     const fullScan = () => {
       if (inFlight) return
       inFlight = true
@@ -3521,7 +3533,7 @@ export function HomePage() {
         setUnifiedBalance(total > 0.001 ? total : null)
       }).catch(() => {}).finally(() => {
         inFlight = false
-        if (firstScan && !cancelled) { firstScan = false; setUnifiedLoading(false) }
+        if (unifiedLoadingRef.current && !cancelled) { unifiedLoadingRef.current = false; setUnifiedLoading(false); setScanChain(null) }
       })
     }
     // Targeted single-chain refresh — patches one entry in the known
@@ -3541,6 +3553,24 @@ export function HomePage() {
       if (d.chainId) applyOne(d.chainId, d.balance)
     }
     window.addEventListener(EXTERNAL_BALANCE_EVENT, onExternal)
+    // First load: as each chain is checked, show its logo and add its
+    // balance to the figure, instead of waiting for every chain.
+    const pending: string[] = []
+    const partial: Record<string, number> = {}
+    const onScanProgress = (e: Event) => {
+      const d = (e as CustomEvent).detail || {}
+      if (cancelled || !unifiedLoadingRef.current || d.wallet !== walletAddress.toLowerCase()) return
+      if (d.phase === 'start') pending.push(d.chainId)
+      else {
+        const i = pending.indexOf(d.chainId)
+        if (i >= 0) pending.splice(i, 1)
+        partial[d.chainId] = Number(d.balance) || 0
+        const total = sumChainBalances(partial)
+        setUnifiedBalance(total > 0.001 ? total : null)
+      }
+      setScanChain(pending[0] ?? null)
+    }
+    window.addEventListener(EXTERNAL_SCAN_PROGRESS_EVENT, onScanProgress)
     fullScan()
     const iv = setInterval(fullScan, 5 * 60_000)
 
@@ -3564,7 +3594,7 @@ export function HomePage() {
         .subscribe()
     })
 
-    return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal) }
+    return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal); window.removeEventListener(EXTERNAL_SCAN_PROGRESS_EVENT, onScanProgress) }
   }, [walletAddress, settingsMap, settingsLoaded])
 
   if (!user) return null
@@ -4081,6 +4111,7 @@ export function HomePage() {
             arcAvailable={balance}
             claimAvailable={unifiedBalance ?? 0}
             claimLoading={unifiedLoading}
+            scanChain={scanChain}
           />
         )}
 

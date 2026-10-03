@@ -175,6 +175,17 @@ export async function readChainUSDCBalance(chainId: string, walletAddress: strin
   return value
 }
 
+/**
+ * Fired on window as each chain of a full scan starts and finishes, so a
+ * page can show which chain is being checked and a running total.
+ * detail: { wallet (lowercase), chainId, phase: 'start' | 'done', balance? }
+ */
+export const EXTERNAL_SCAN_PROGRESS_EVENT = 'meshport:external-scan-progress'
+function emitScanProgress(detail: { wallet: string; chainId: string; phase: 'start' | 'done'; balance?: number }) {
+  if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') return
+  try { window.dispatchEvent(new CustomEvent(EXTERNAL_SCAN_PROGRESS_EVENT, { detail })) } catch { /* */ }
+}
+
 /** Runs `fn` over `items` with at most `limit` in flight — no batch barriers. */
 async function pooledMap<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length)
@@ -208,10 +219,13 @@ export function externalBalanceReader(
   return dedupe(key, async () => {
     const chainIds = Object.keys(EXTERNAL_CHAINS).filter(id => isChainEnabledForClaim(settings, id))
 
-    const chains = await pooledMap(chainIds, SCAN_CONCURRENCY, async (chainId) => ({
-      chainId,
-      balance: await readChainUSDCBalance(chainId, addr),
-    }))
+    const wallet = addr.toLowerCase()
+    const chains = await pooledMap(chainIds, SCAN_CONCURRENCY, async (chainId) => {
+      emitScanProgress({ wallet, chainId, phase: 'start' })
+      const balance = await readChainUSDCBalance(chainId, addr)
+      emitScanProgress({ wallet, chainId, phase: 'done', balance })
+      return { chainId, balance }
+    })
 
     const result: ExternalBalancesResult = {
       chains,

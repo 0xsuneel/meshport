@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { CHAIN_LOGO_FILE, chainLogoSrc } from '@/lib/chainLogos'
 import { RecoveryPanel } from './MultichainRecoveryPage'
 // Transfer and claim forms render inline under the Hub's tabs (no page change).
 const TransferSheetBody = lazy(() => import('./MultichainTransferPage').then(m => ({ default: m.MultichainTransferPage })))
@@ -311,17 +312,6 @@ function HubCctpTrackView({ item, onBack, onHome, onDone }: {
   )
 }
 
-// Logo files under public/logos/chains/ for each scanned chain id.
-const CHAIN_LOGO_FILE: Record<string, string> = {
-  Ethereum_Sepolia: 'ethereum', Base_Sepolia: 'base', Arbitrum_Sepolia: 'arbitrum',
-  Optimism_Sepolia: 'optimism', Polygon_Sepolia: 'polygon', Avalanche_Fuji: 'avalanche',
-  HyperEVM_Testnet: 'hyperevm', Sei_Testnet: 'sei', Sonic_Testnet: 'sonic',
-  Unichain_Sepolia: 'unichain', World_Chain_Sepolia: 'world', Linea_Sepolia: 'linea',
-  Ink_Testnet: 'ink', Monad_Testnet: 'monad', Morph_Testnet: 'morph',
-  Pharos_Testnet: 'pharos', Plume_Testnet: 'plume', XDC_Apothem: 'xdc',
-  Codex_Testnet: 'codex', Edge_Testnet: 'edge', Injective_Testnet: 'injective',
-}
-const chainLogoSrc = (id: string) => `/logos/chains/${CHAIN_LOGO_FILE[id] ?? '_fallback'}.svg`
 // One logo per distinct chain for the scanning animation.
 const SCAN_LOGOS = [...new Set(Object.values(CHAIN_LOGO_FILE))].map(f => ({ src: `/logos/chains/${f}.svg`, alt: f }))
 
