@@ -617,7 +617,7 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
 // ── Asset History Sheet ───────────────────────────────────────────────────────
 function AssetSheet({ token, history, onClose }: { token: string; history: any[]; onClose: () => void }) {
   const headerRow = (
-    <div style={{ padding: '16px 20px', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)',
+    <div style={{ padding: '16px 20px',
       display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
       <span style={{ fontSize: 17, fontWeight: 700 }}>{token} History</span>
       <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: '50%',
@@ -704,8 +704,7 @@ function AssetSheet({ token, history, onClose }: { token: string; history: any[]
               : formatAmount(amtNum)
 
             return (
-              <div key={item.id || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 20px',
-                borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}>
+              <div key={item.id || i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 20px' }}>
                 <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
                   background: isSent ? 'color-mix(in srgb, var(--danger) 10%, transparent)' : 'color-mix(in srgb, var(--success) 10%, transparent)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
