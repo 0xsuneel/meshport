@@ -23,6 +23,7 @@ import { motion } from 'framer-motion'
 import { useSharedKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { ChainScanner } from '@/components/ui/ChainScanner'
+import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpinner'
 import { DesktopHistoryPanel } from '@/components/ui/DesktopHistoryPanel'
 import { UbProgressTracker, type UbTrackerProgress } from '@/components/multichain/UbProgressTracker'
 import { TrackDetails, type TrackDetailRow } from '@/components/multichain/TrackDetails'
@@ -317,8 +318,8 @@ const SCAN_LOGOS = [...new Set(Object.values(CHAIN_LOGO_FILE))].map(f => ({ src:
 
 // ── Hero card — ticket style. Left: Available To Transfer (on Arc).
 // Right: Available To Bring (USDC on other chains, with their logos).
-function HubHeroCard({ arcAvailable, claimAvailable, scanning, balanceHidden, onToggleHidden, chains, bringLabel = 'Available To Bring' }: {
-  arcAvailable: number; claimAvailable: number; scanning: boolean; balanceHidden: boolean; onToggleHidden: () => void; bringLabel?: string
+function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null, balanceHidden, onToggleHidden, chains, bringLabel = 'Available To Bring' }: {
+  arcAvailable: number; claimAvailable: number; scanning: boolean; scanChain?: string | null; balanceHidden: boolean; onToggleHidden: () => void; bringLabel?: string
   chains: Array<{ id: string; label: string; balance: number }>
 }) {
   const amountSize = (n: number) => {
@@ -390,7 +391,10 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, balanceHidden, on
               display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+{extra}</span>
           )}
         </div>
-        <span style={amount(claimAvailable)}>{bringText}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, maxWidth: '100%' }}>
+          {scanning && <ChainScanSpinner chain={scanChain} size={22} />}
+          <span style={{ ...amount(claimAvailable), minWidth: 0 }}>{bringText}</span>
+        </div>
         <span style={sub}>{bringSub}</span>
       </div>
 
@@ -427,6 +431,8 @@ export function MultichainPage() {
   const [chainBalances, setChainBalances] = useState<Array<{ id: string; label: string; balance: number }>>([])
   const [totalExternal, setTotalExternal] = useState(0)
   const [scanning, setScanning]           = useState(true)
+  // Logo of the chain being checked, shown in the spinner next to Available To Bring.
+  const scanChain = useScanningChain(walletAddress, scanning)
   // Every scanned chain (incl. zero balance) for the Bring in list; balances first.
   const [allChainRows, setAllChainRows]   = useState<Array<{ id: string; label: string; balance: number }>>([])
   const [scanNonce, setScanNonce]         = useState(0)
@@ -1062,7 +1068,7 @@ export function MultichainPage() {
             keypad opens, so the whole screen moves as one (useKeypadLift). */}
         <motion.div animate={{ y: -hubKeypadLift }} initial={false} transition={KEYPAD_SPRING}
           style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <HubHeroCard arcAvailable={arcBalance} scanning={scanning}
+        <HubHeroCard arcAvailable={arcBalance} scanning={scanning} scanChain={scanChain}
           claimAvailable={isMerchant ? bringRows.reduce((sum, c) => sum + (c.balance > 0.001 ? c.balance : 0), 0) : totalExternal}
           bringLabel={isMerchant ? 'In Ledger Chains' : undefined}
           balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} chains={bringRows} />

@@ -12,7 +12,7 @@ import { arcAddressUri } from '@/lib/merchantQr'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
 import { formatAmount, copyToClipboard, timeAgo, trimTrailingZeros } from '@/lib/utils'
 import { readArcBalance, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT, EXTERNAL_SCAN_PROGRESS_EVENT } from '@/blockchain/BlockchainManager'
-import { chainLogoSrc } from '@/lib/chainLogos'
+import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpinner'
 import { notifyPaymentReceived, notifyPaymentReceivedFromAddress, notifyBulkPaymentReceived } from '@/lib/notifications'
 import { markP2PNotificationRead } from '@/lib/p2pNotifications'
 import { P2P_ESCROW_CONTRACT_ADDRESS } from '@/lib/p2pEscrowContract'
@@ -1625,23 +1625,6 @@ function BowedShapeCard({
   )
 }
 
-// Small spinner shown in front of the Hub labels while the all-chains scan
-// runs, with the logo of the chain being checked right now inside it.
-function HubSpinner({ chain }: { chain: string | null }) {
-  return (
-    <span aria-label="Loading balances" style={{ position: 'relative', width: 18, height: 18, margin: '-2px 0', flexShrink: 0, display: 'inline-block' }}>
-      <style>{'@keyframes hubSpin{to{transform:rotate(360deg)}}'}</style>
-      <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.25)',
-        borderTopColor: '#fff', animation: 'hubSpin 0.8s linear infinite' }} />
-      {chain && (
-        <img key={chain} src={chainLogoSrc(chain)} alt="" width={11} height={11}
-          style={{ position: 'absolute', top: 3.5, left: 3.5, borderRadius: '50%', display: 'block' }}
-          onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
-      )}
-    </span>
-  )
-}
-
 function MultichainHubCard({
   arcAvailable, claimAvailable, claimLoading, scanChain = null, balanceHidden, onToggleHidden, fmt, navigate,
 }: {
@@ -1700,7 +1683,6 @@ function MultichainHubCard({
           globe badge, per the approved reference layout). */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
-          {claimLoading && <HubSpinner chain={scanChain} />}
           {hub('Multichain Hub')}
           <button onClick={onToggleHidden} aria-label="Toggle balance visibility"
             style={{ width: 26, height: 26, borderRadius: '50%', background: 'transparent', border: 'none',
@@ -1743,7 +1725,7 @@ function MultichainHubCard({
         <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
           <div style={{ fontSize: 11.5, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px', ...ellipsisLine,
             ...(claimLoading ? { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5, overflow: 'visible' } : null) }}>
-            {claimLoading && <HubSpinner chain={scanChain} />}
+            {claimLoading && <span style={{ margin: '-2px 0', display: 'flex' }}><ChainScanSpinner chain={scanChain} /></span>}
             <span style={claimLoading ? { minWidth: 0, ...ellipsisLine } : undefined}>{isMerchantHero ? 'In Ledger Chains' : 'Available To Bring'}</span>
           </div>
           <div style={{ fontSize: claimFontSize, fontWeight: 800, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', ...ellipsisLine }}>
@@ -2459,7 +2441,7 @@ export function HomePage() {
   const [unifiedLoading, setUnifiedLoading] = useState(true)
   const unifiedLoadingRef = useRef(true)
   // The chain the first scan is checking right now (its logo sits in the spinner).
-  const [scanChain, setScanChain] = useState<string | null>(null)
+  const scanChain = useScanningChain(walletAddress, unifiedLoading)
   // Desktop Assets table's real 24h % change column — fetched alongside the
   // BTC price below. `null` per-token means "fetched, unavailable from any
   // source" (renders a "—", never a fabricated number); starts `undefined`
@@ -3533,7 +3515,7 @@ export function HomePage() {
         setUnifiedBalance(total > 0.001 ? total : null)
       }).catch(() => {}).finally(() => {
         inFlight = false
-        if (unifiedLoadingRef.current && !cancelled) { unifiedLoadingRef.current = false; setUnifiedLoading(false); setScanChain(null) }
+        if (unifiedLoadingRef.current && !cancelled) { unifiedLoadingRef.current = false; setUnifiedLoading(false) }
       })
     }
     // Targeted single-chain refresh — patches one entry in the known
@@ -3553,22 +3535,15 @@ export function HomePage() {
       if (d.chainId) applyOne(d.chainId, d.balance)
     }
     window.addEventListener(EXTERNAL_BALANCE_EVENT, onExternal)
-    // First load: as each chain is checked, show its logo and add its
-    // balance to the figure, instead of waiting for every chain.
-    const pending: string[] = []
+    // First load: add each chain's balance to the figure as it's read,
+    // instead of waiting for every chain.
     const partial: Record<string, number> = {}
     const onScanProgress = (e: Event) => {
       const d = (e as CustomEvent).detail || {}
-      if (cancelled || !unifiedLoadingRef.current || d.wallet !== walletAddress.toLowerCase()) return
-      if (d.phase === 'start') pending.push(d.chainId)
-      else {
-        const i = pending.indexOf(d.chainId)
-        if (i >= 0) pending.splice(i, 1)
-        partial[d.chainId] = Number(d.balance) || 0
-        const total = sumChainBalances(partial)
-        setUnifiedBalance(total > 0.001 ? total : null)
-      }
-      setScanChain(pending[0] ?? null)
+      if (cancelled || !unifiedLoadingRef.current || d.wallet !== walletAddress.toLowerCase() || d.phase !== 'done') return
+      partial[d.chainId] = Number(d.balance) || 0
+      const total = sumChainBalances(partial)
+      setUnifiedBalance(total > 0.001 ? total : null)
     }
     window.addEventListener(EXTERNAL_SCAN_PROGRESS_EVENT, onScanProgress)
     fullScan()

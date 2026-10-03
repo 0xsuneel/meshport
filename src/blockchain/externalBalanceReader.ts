@@ -181,7 +181,19 @@ export async function readChainUSDCBalance(chainId: string, walletAddress: strin
  * detail: { wallet (lowercase), chainId, phase: 'start' | 'done', balance? }
  */
 export const EXTERNAL_SCAN_PROGRESS_EVENT = 'meshport:external-scan-progress'
+// Chains being read right now, per wallet (lowercase), oldest first.
+const inFlightChains = new Map<string, string[]>()
+
+/** The chain this wallet's scan has been waiting on longest, or null. */
+export function currentScanningChain(wallet: string): string | null {
+  return inFlightChains.get(wallet.toLowerCase())?.[0] ?? null
+}
+
 function emitScanProgress(detail: { wallet: string; chainId: string; phase: 'start' | 'done'; balance?: number }) {
+  const list = inFlightChains.get(detail.wallet) ?? []
+  if (detail.phase === 'start') list.push(detail.chainId)
+  else { const i = list.indexOf(detail.chainId); if (i >= 0) list.splice(i, 1) }
+  if (list.length) inFlightChains.set(detail.wallet, list); else inFlightChains.delete(detail.wallet)
   if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') return
   try { window.dispatchEvent(new CustomEvent(EXTERNAL_SCAN_PROGRESS_EVENT, { detail })) } catch { /* */ }
 }

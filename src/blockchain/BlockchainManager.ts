@@ -50,7 +50,7 @@ import {
   externalBalanceReader, externalBalanceTotal, readChainUSDCBalance, patchCachedChainBalance,
 } from './externalBalanceReader'
 import type { ChainBalanceResult, ExternalBalancesResult } from './externalBalanceReader'
-export { EXTERNAL_SCAN_PROGRESS_EVENT } from './externalBalanceReader'
+export { EXTERNAL_SCAN_PROGRESS_EVENT, currentScanningChain } from './externalBalanceReader'
 import { ARC_CHAIN_ID } from './chains'
 import { normalizeAddress } from './types'
 import type { ChainId, RefreshScope } from './types'
