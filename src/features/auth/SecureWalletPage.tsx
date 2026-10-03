@@ -11,9 +11,11 @@
 // No private key or seed phrase is ever shown, copied or exported here.
 
 import { useEffect, useRef, useState } from 'react'
+import type React from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { KeyRound, QrCode, Check, ChevronLeft, Camera, Upload, Loader2, ShieldCheck, Download } from 'lucide-react'
+import { KeyRound, QrCode, Check, ChevronLeft, ChevronRight, Camera, Upload, Loader2, ShieldCheck, Download, Wallet, Mail, Copy } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
+import { Card } from '@/components/ui/Card'
 
 const shortAddr = (a?: string | null) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '')
 
@@ -507,44 +509,105 @@ export function WalletSecuritySection() {
 
   const providerName = (p: string) => p === 'google' ? 'Google' : p === 'apple' ? 'Apple' : p === 'email' ? 'Email code' : p
   const fmt = (d: string) => new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+  const short = walletAddress ? `${walletAddress.slice(0, 8)}…${walletAddress.slice(-6)}` : ''
+  const copyAddress = async () => {
+    if (!walletAddress) return
+    const { copyToClipboard } = await import('@/lib/utils')
+    if (await copyToClipboard(walletAddress)) showToastMessage('Address copied')
+  }
 
   return (
-    <div className="rounded-2xl border border-border bg-surface divide-y divide-border">
-      <div className="p-4">
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-text-secondary mb-2">Wallet</p>
-        <p className="text-[13px] font-mono text-text-primary break-all">{walletAddress}</p>
+    <>
+      <div>
+        <SecSectionLabel>Wallet</SecSectionLabel>
+        <Card className="divide-y divide-border">
+          <SecRow icon={<Wallet className="w-5 h-5 text-accent-text" />} title="Wallet address"
+            sub={<span className="font-mono">{short}</span>}
+            right={
+              <button onClick={copyAddress} aria-label="Copy address"
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-text-secondary active:scale-95 transition-transform">
+                <Copy className="w-4 h-4" />
+              </button>
+            } />
+          {(methods.length ? methods : loaded ? [] : [null]).map((m, i) => (
+            <SecRow key={i}
+              icon={m?.provider === 'google' ? <GoogleMark /> : <Mail className="w-5 h-5 text-accent-text" />}
+              title={m ? `Signed in with ${providerName(m.provider)}` : 'Login method'}
+              sub={m ? (m.email ?? '') : 'Loading…'}
+              right={m ? <SecPill ok>Linked</SecPill> : null} />
+          ))}
+        </Card>
       </div>
-      <div className="p-4">
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-text-secondary mb-2">Login methods</p>
-        {methods.length === 0 && loaded && <p className="text-[13px] text-text-secondary">—</p>}
-        {methods.map((m, i) => (
-          <p key={i} className="text-[13px] text-text-primary flex items-center gap-2">
-            <Check className="w-3.5 h-3.5 text-success" /> {providerName(m.provider)}{m.email ? <span className="text-text-secondary">· {m.email}</span> : null}
-          </p>
-        ))}
-      </div>
-      <div className="p-4 space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-text-secondary">Passkeys</p>
-          <span className={'text-[12px] font-semibold ' + (passkeys.length ? 'text-success' : 'text-text-secondary')}>{passkeys.length ? '✓ Enabled' : 'Not set up'}</span>
-        </div>
-        {passkeys.map(p => (
-          <div key={p.id} className="flex items-center justify-between gap-2">
-            <p className="text-[13px] text-text-primary">{p.label || 'Passkey'} <span className="text-text-secondary">· added {fmt(p.createdAt)}</span></p>
-            <button onClick={() => remove(p.id)} className="text-[12px] text-danger font-semibold">Remove</button>
+
+      <div>
+        <SecSectionLabel>Recovery</SecSectionLabel>
+        <Card className="divide-y divide-border">
+          <div>
+            <SecRow icon={<KeyRound className="w-5 h-5 text-accent-text" />} title="Passkeys"
+              sub={!loaded ? 'Checking…' : passkeys.length ? 'Unlock with fingerprint or face' : 'Unlock this wallet on any device'}
+              right={loaded ? <SecPill ok={passkeys.length > 0}>{passkeys.length ? 'On' : 'Off'}</SecPill> : null} />
+            {passkeys.map(p => (
+              <div key={p.id} className="flex items-center gap-3 pl-[68px] pr-4 pb-3 -mt-1">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium text-text-primary truncate">{p.label || 'Passkey'}</p>
+                  <p className="text-[11.5px] text-text-secondary">Added {fmt(p.createdAt)}</p>
+                </div>
+                <button onClick={() => remove(p.id)}
+                  className="px-3 h-8 rounded-lg text-[12px] font-semibold text-danger bg-danger/10 active:scale-95 transition-transform">
+                  Remove
+                </button>
+              </div>
+            ))}
           </div>
-        ))}
+          <SecRow icon={<QrCode className="w-5 h-5 text-accent-text" />} title="Recovery QR"
+            sub={!loaded ? 'Checking…' : qrAt ? `Backed up ${fmt(qrAt)}` : 'Restore your wallet with a password'}
+            right={loaded ? <SecPill ok={!!qrAt}>{qrAt ? 'Saved' : 'Off'}</SecPill> : null} />
+          <button onClick={() => navigate('/auth/secure-wallet?manage=1')} className="w-full text-left active:opacity-70">
+            <SecRow icon={<ShieldCheck className="w-5 h-5 text-accent-text" />} title="Manage passkeys & Recovery QR"
+              sub="Add a passkey or make a new Recovery QR"
+              right={<ChevronRight className="w-4 h-4 text-text-secondary" />} />
+          </button>
+        </Card>
       </div>
-      <div className="p-4 flex items-center justify-between">
-        <p className="text-[12px] font-semibold uppercase tracking-wide text-text-secondary">Recovery QR</p>
-        <span className={'text-[12px] font-semibold ' + (qrAt ? 'text-success' : 'text-text-secondary')}>{qrAt ? `✓ Backed Up · ${fmt(qrAt)}` : 'Not set up'}</span>
+    </>
+  )
+}
+
+/** Small uppercase heading above a Security page card. */
+export function SecSectionLabel({ children }: { children: React.ReactNode }) {
+  return <p className="text-[12px] font-semibold uppercase tracking-wide text-text-secondary px-1 mb-2">{children}</p>
+}
+
+/** One Security page row: tinted icon, title + subtitle, optional right side. */
+export function SecRow({ icon, title, sub, right }: { icon: React.ReactNode; title: React.ReactNode; sub?: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3.5">
+      <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center flex-shrink-0">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-text-primary truncate">{title}</p>
+        {sub ? <p className="text-xs text-text-secondary truncate mt-0.5">{sub}</p> : null}
       </div>
-      <div className="p-3">
-        <button onClick={() => navigate('/auth/secure-wallet?manage=1')}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold text-brand active:scale-95 transition-transform">
-          <ShieldCheck className="w-4 h-4" /> Manage Passkeys & Recovery QR
-        </button>
-      </div>
+      {right}
     </div>
+  )
+}
+
+function SecPill({ ok, children }: { ok?: boolean; children: React.ReactNode }) {
+  return (
+    <span className={'flex-shrink-0 inline-flex items-center gap-1 px-2.5 h-6 rounded-full text-[11.5px] font-semibold ' +
+      (ok ? 'bg-success/10 text-success' : 'bg-[rgb(var(--text-primary-rgb)/0.07)] text-text-secondary')}>
+      {ok && <Check className="w-3 h-3" strokeWidth={3} />}{children}
+    </span>
+  )
+}
+
+function GoogleMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden>
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/>
+      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/>
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/>
+    </svg>
   )
 }

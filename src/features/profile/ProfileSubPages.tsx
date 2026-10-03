@@ -15,10 +15,11 @@ function buildProfileUpdateMessage(
   ].join('\n')
 }
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
-import { WalletSecuritySection } from '@/features/auth/SecureWalletPage'
+import { WalletSecuritySection, SecSectionLabel, SecRow } from '@/features/auth/SecureWalletPage'
+import { knownSecured } from '@/lib/socialWallet'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import {
-  ArrowLeft, Shield, Fingerprint, Lock, KeyRound,
+  ArrowLeft, Shield, ShieldAlert, Fingerprint, Lock, KeyRound, ChevronRight,
   Bell, BellOff, CheckCircle, Mail, Plus, Trash2,
   Copy, Eye, EyeOff, Upload, Key, FileText,
   ShoppingCart, Tag, Wallet, Ban, Clock as ClockIcon, Scale, RefreshCw,
@@ -52,6 +53,9 @@ export function SecurityPage() {
   const storedPasscode = useAuthStore(s => s.passcode)
   const lock = useAuthStore(s => s.lock)
   const isSocialWallet = useAuthStore(s => s.loginType === 'social' && s.walletSource === 'social-auto')
+  const userId = useAuthStore(s => s.user?.id)
+  // Google / email wallets need a passkey or Recovery QR to count as secured.
+  const secured = !isSocialWallet || (!!userId && knownSecured(userId))
   // Admin Panel → Features → Security. When an admin turns this off, App.tsx
   // (global effect) forces biometricEnabled to false for every session
   // immediately — this local gate additionally locks the toggle itself so
@@ -113,34 +117,45 @@ export function SecurityPage() {
         )}
         <h1 className="text-xl font-bold text-text-primary">Security</h1>
       </div>
-      <div className="px-4 space-y-4">
-        <Card className="p-4 flex items-center gap-3 bg-success/10 border-success/30">
-          <Shield className="w-6 h-6 text-success" />
-          <div>
-            <p className="text-sm font-bold text-success">Account Secured</p>
-            <p className="text-xs text-text-secondary">Your wallet is protected</p>
+      <div className="px-4 space-y-5">
+        {/* Status */}
+        <div className={`rounded-2xl p-4 flex items-center gap-3.5 border ${secured ? 'bg-success/10 border-success/25' : 'bg-warning/10 border-warning/30'}`}>
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${secured ? 'bg-success/15' : 'bg-warning/15'}`}>
+            {secured ? <Shield className="w-6 h-6 text-success" /> : <ShieldAlert className="w-6 h-6 text-warning" />}
           </div>
-        </Card>
+          <div className="min-w-0">
+            <p className={`text-[15px] font-bold ${secured ? 'text-success' : 'text-warning'}`}>{secured ? 'Account secured' : 'Secure your wallet'}</p>
+            <p className="text-xs text-text-secondary mt-0.5">
+              {secured
+                ? (isSocialWallet ? 'Passcode, passkey and Recovery QR keep your wallet safe' : 'Your passcode keeps your wallet safe')
+                : 'Add a passkey or Recovery QR so you never lose access'}
+            </p>
+          </div>
+        </div>
+
         {isSocialWallet && <WalletSecuritySection />}
-        <Card className="divide-y divide-border">
-          <ToggleItem icon={<Fingerprint className="w-5 h-5 text-brand" />} label={`${label} Login`}
-            description={biometricAdminEnabled ? "Optional — uses passcode as fallback" : "Disabled by admin"}
-            enabled={biometricAdminEnabled && biometricEnabled}
-            disabled={!biometricAdminEnabled}
-            onToggle={handleToggle} />
-          <ToggleItem icon={<Lock className="w-5 h-5 text-accent-text" />} label="Passcode Lock"
-            description="Auto-locks instantly when offline or the browser is closed" enabled={passcodeLockEnabled}
-            onToggle={() => { setPasscodeLockEnabled(!passcodeLockEnabled); showToastMessage(`Auto-lock ${!passcodeLockEnabled ? 'enabled' : 'disabled'}`) }} />
-        </Card>
+
+        <div>
+          <SecSectionLabel>App lock</SecSectionLabel>
+          <Card className="divide-y divide-border">
+            <ToggleItem icon={<Fingerprint className="w-5 h-5 text-accent-text" />} label={`${label} Login`}
+              description={biometricAdminEnabled ? "Optional — uses passcode as fallback" : "Disabled by admin"}
+              enabled={biometricAdminEnabled && biometricEnabled}
+              disabled={!biometricAdminEnabled}
+              onToggle={handleToggle} />
+            <ToggleItem icon={<Lock className="w-5 h-5 text-accent-text" />} label="Passcode Lock"
+              description="Locks when offline or the browser is closed" enabled={passcodeLockEnabled}
+              onToggle={() => { setPasscodeLockEnabled(!passcodeLockEnabled); showToastMessage(`Auto-lock ${!passcodeLockEnabled ? 'enabled' : 'disabled'}`) }} />
+            <button onClick={() => navigate('/security/change-passcode')} className="w-full text-left active:opacity-70">
+              <SecRow icon={<KeyRound className="w-5 h-5 text-accent-text" />} title="Change Passcode" sub="Update your 6-digit passcode"
+                right={<ChevronRight className="w-4 h-4 text-text-secondary" />} />
+            </button>
+          </Card>
+        </div>
 
         <button onClick={() => { lock(); navigate('/auth/lock', { replace: true }) }}
-          className="w-full flex items-center justify-center gap-2 py-3 bg-surface border border-border rounded-2xl text-sm font-semibold text-text-primary active:scale-95 transition-transform">
+          className="w-full flex items-center justify-center gap-2 h-12 bg-brand rounded-2xl text-sm font-semibold text-white active:scale-[0.98] transition-transform">
           <Lock className="w-4 h-4" /> Lock Now
-        </button>
-
-        <button onClick={() => navigate('/security/change-passcode')}
-          className="w-full flex items-center justify-center gap-2 py-3 bg-surface border border-border rounded-2xl text-sm font-semibold text-text-primary active:scale-95 transition-transform">
-          <KeyRound className="w-4 h-4" /> Change Passcode
         </button>
       </div>
 
@@ -1224,11 +1239,11 @@ function ToggleItem({ icon, label, description, enabled, onToggle, disabled }: {
   icon: React.ReactNode; label: string; description: string; enabled: boolean; onToggle: () => void; disabled?: boolean
 }) {
   return (
-    <div className={`flex items-center gap-3 px-4 py-4 ${disabled ? 'opacity-50' : ''}`}>
-      <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center flex-shrink-0">{icon}</div>
-      <div className="flex-1">
+    <div className={`flex items-center gap-3 px-4 py-3.5 ${disabled ? 'opacity-50' : ''}`}>
+      <div className="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center flex-shrink-0">{icon}</div>
+      <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-text-primary">{label}</p>
-        <p className="text-xs text-text-secondary">{description}</p>
+        <p className="text-xs text-text-secondary mt-0.5">{description}</p>
       </div>
       <button onClick={disabled ? undefined : onToggle} disabled={disabled}
         className={`w-12 h-6 rounded-full transition-colors relative flex-shrink-0 ${enabled ? 'bg-brand' : 'bg-[rgb(var(--text-primary-rgb)/0.12)]'} ${disabled ? 'cursor-not-allowed' : ''}`}>
