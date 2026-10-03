@@ -13,13 +13,10 @@
  * social-auto (Google AND Email-OTP accounts, unified) — SELF-CUSTODIAL
  * since 2026-10-04. The key is made on the device (lib/socialWallet.ts)
  * and opens with the account's passkey (lib/walletPasskey.ts) or encrypted
- * Recovery QR (lib/recoveryQr.ts); MeshPort's servers can't open it. This
+ * Recovery QR (lib/recoveryQr.ts); MeshPort's servers hold no copy. This
  * device keeps a copy sealed with its non-extractable device key, so a
  * reload restores without a prompt. The app passcode is still an APP LOCK
- * ONLY for these accounts — it never encrypts the wallet. Accounts from
- * before the change still have a server-held copy until they set up a
- * passkey or Recovery QR; that copy is then deleted (wallet-key
- * forget-vault).
+ * ONLY for these accounts — it never encrypts the wallet.
  *
  * Priority order:
  * 1. Already in memory → done
@@ -40,10 +37,9 @@
  *    on a new device — that's fine, this step is just a fast path and is
  *    allowed to fail). Never attempted for social-auto — see above.
  * 4a. social-auto: this device's sealed copy.
- * 4b. social-auto accounts not yet moved over: the server-held copy (then
- *    sealed on this device). With neither, needsSocialUnlock() is true and
- *    AppLayout sends the user to the Unlock screen (passkey / Recovery QR),
- *    which needs a tap and so never runs from here.
+ * 4b. Otherwise needsSocialUnlock() is true and AppLayout sends the user to
+ *    the Unlock screen (passkey / Recovery QR), which needs a tap and so
+ *    never runs from here.
  *
  * If none of these work, `walletRecoveryNeeded` is set on the UI store,
  * which drives a persistent, app-wide banner (see
@@ -238,72 +234,12 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
     }
   }
 
-  // ── 4b. social-auto, accounts not yet moved over: server-side vault ───────
-  // Only accounts from before self-custody still have a vault row; it's
-  // deleted once they set up a passkey or Recovery QR (forget-vault), after
-  // which this answers 404 and the Unlock screen takes over.
-  // Deliberately does NOT depend on any passcode — a social account
-  // restoring on a new device (or unlocking after setting a brand-new
-  // passcode) authorizes purely via the live Supabase session. The
-  // decrypted key is held in memory for this session only; it is NEVER
-  // written to localStorage/sessionStorage keyed by a passcode, so there
-  // is nothing here that a stale or changed passcode could break.
+  // ── 4b. social-auto without a copy here: passkey or Recovery QR ──────────
+  // MeshPort's servers hold no copy of these wallets, so the only way in on
+  // this device is the Unlock screen (needs a tap — never run from here).
   if (walletSource === 'social-auto') {
-    try {
-      const { supabase } = await import('@/lib/supabase')
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.access_token) {
-        const { getDeviceId } = await import('@/lib/deviceId')
-        // This is the ONLY network call in the entire restore path, and it
-        // used to get exactly one attempt — a single slow response (e.g. a
-        // weak connection, seen in practice down around 6 KB/s) was enough
-        // to fail this outright and show the "couldn't restore your wallet"
-        // banner, even though the rest of the page (balance, address —
-        // neither needs the key) was working completely fine. Retrying a
-        // few times with a short backoff gives a genuinely slow-but-working
-        // connection a real chance to succeed instead of being treated the
-        // same as an actually-broken one. Every one of the 13+ call sites
-        // across the app shares this same function, so this fixes it
-        // everywhere at once rather than needing a per-page patch.
-        // Retrying blindly on EVERY failure was itself a bug: a 404 here
-        // means the server looked up this account's vault row and found
-        // nothing — a deterministic answer, not a network hiccup. Retrying
-        // that 3 times just repeats the same guaranteed-to-fail request,
-        // and since 13+ call sites across the app each independently retry
-        // this same function, that turned into a real storm of repeated
-        // 404s in production (seen directly in a user's console: 3+ minutes
-        // of nonstop identical failures). Only retry errors that could
-        // plausibly succeed on a second try — a thrown/network exception,
-        // or a 5xx — and stop immediately on a 4xx, which retrying can
-        // never fix.
-        const RETRY_DELAYS_MS = [0, 1500, 3000]
-        for (const delay of RETRY_DELAYS_MS) {
-          if (delay) await new Promise(r => setTimeout(r, delay))
-          try {
-            const { data, error } = await supabase.functions.invoke('wallet-key', {
-              body: { action: 'restore-full-key', device_id: getDeviceId() },
-            })
-            if (!error && data?.privateKey) {
-              socialUnlockNeeded = false
-              setWallet(walletAddress, data.privateKey, undefined, 'social-auto')
-              const { saveDeviceCopy } = await import('@/lib/socialWallet')
-              await saveDeviceCopy(walletAddress, data.privateKey)
-              return true
-            }
-            if (error) {
-              const status = (error as any)?.context?.status
-              if (status === 404) socialUnlockNeeded = true // no server copy: passkey or Recovery QR
-              if (typeof status === 'number' && status >= 400 && status < 500) {
-                console.warn('[Restore] wallet-key returned', status, '— not retrying (not a transient failure):', (error as any)?.message)
-                break
-              }
-            }
-          } catch { /* thrown/network exception — worth trying the next delay */ }
-        }
-      }
-    } catch (e) {
-      console.warn('[Restore] server-side vault fetch failed:', e)
-    }
+    socialUnlockNeeded = true
+    return false
   }
 
   console.warn('[Restore] No recovery path available — walletSource:', walletSource, '— user needs to re-enter their recovery phrase or private key.')

@@ -329,8 +329,8 @@ export async function upsertUserProfile(params: {
   // conditional spread — omitting the key on upsert leaves any existing
   // value alone rather than overwriting it with null. See
   // supabase/migrations/20260722100000_*.sql for why this column exists:
-  // it's what lets the wallet-key Edge Function tell a self-custodial
-  // account apart from a social-login one server-side.
+  // it tells a Google / email account apart from a create / import one
+  // server-side.
   const loginTypeField = params.loginType ? { login_type: params.loginType } : {}
 
   // Use onConflict: 'username' as fallback in case id conflicts
@@ -430,10 +430,9 @@ export async function getAvatarByWallet(walletAddress: string): Promise<string |
 // list — id, username, display_name, email, wallet_address, avatar_url,
 // created_at — matching DbUser exactly, rather than select('*'). This is
 // deliberate, not stylistic: the users table also holds encrypted_wallet_key
-// and wallet_auth_share (the social-login wallet vault — see wallet-key
-// Edge Function), which the app never needs client-side and which now have
-// a column-level REVOKE from anon/authenticated (service_role, used only by
-// that Edge Function, is unaffected). A select('*') here would need those
+// and wallet_auth_share (legacy server-side wallet columns, no longer
+// used), which the app never needs client-side and which have a
+// column-level REVOKE from anon/authenticated. A select('*') here would need those
 // two columns too and fail outright post-REVOKE — keep every users query
 // on an explicit allowlist, not '*', so this stays true.
 export async function fetchUserProfile(userId: string): Promise<DbUser | null> {

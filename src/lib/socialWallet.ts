@@ -11,10 +11,6 @@
 // device a copy is kept sealed with the browser's non-extractable device key
 // (security.ts sealForDevice), so a reload doesn't need Face ID or the QR —
 // the same layer the chat identity uses. Logout removes it.
-//
-// Accounts from before this change still have a server-held copy
-// (wallet_vault). The app uses it one last time to load the wallet, asks the
-// user to set up a passkey or Recovery QR, then deletes it (forget-vault).
 
 import { supabase } from './supabase'
 
@@ -93,18 +89,6 @@ export function knownSecured(userId: string): boolean {
 export async function markRecoveryQrCreated(userId: string): Promise<boolean> {
   const { error } = await supabase.from('users').update({ recovery_qr_at: new Date().toISOString() }).eq('id', userId)
   return !error
-}
-
-/**
- * Delete the server-held copy once the account has a passkey or Recovery QR.
- * Safe to call repeatedly; true when nothing is left on the server.
- */
-export async function forgetServerVault(): Promise<boolean> {
-  try {
-    const { getDeviceId } = await import('./deviceId')
-    const { data, error } = await supabase.functions.invoke('wallet-key', { body: { action: 'forget-vault', device_id: getDeviceId() } })
-    return !error && !!data?.ok
-  } catch { return false }
 }
 
 /** Login methods linked to this sign-in (Google, email…), from Supabase Auth. */

@@ -39,28 +39,8 @@ export function AutoWalletPage() {
         // AppLayout's secure-wallet guard). Until then, this device keeps a
         // copy sealed with its non-extractable device key so a reload
         // doesn't lose it.
-        //
-        // An account from before this change may still have a server-held
-        // wallet from an unfinished signup: wallet-key's generate-wallet
-        // only returns such an EXISTING wallet now (404 otherwise), so the
-        // same person never ends up with two wallets.
-        const { supabase } = await import('@/lib/supabase')
-        const { getDeviceId } = await import('@/lib/deviceId')
         const { createLocalWallet, saveDeviceCopy } = await import('@/lib/socialWallet')
-        let wallet: { address: string; privateKey: string }
-        const { data, error } = await supabase.functions.invoke('wallet-key', {
-          body: { action: 'generate-wallet', device_id: getDeviceId() },
-        })
-        if (!error && data?.address && data?.privateKey) {
-          wallet = { address: data.address, privateKey: data.privateKey }
-        } else {
-          const status = (error as any)?.context?.status
-          if (status !== 404) {
-            const { describeFunctionsError } = await import('@/lib/describeFunctionsError')
-            throw new Error(error ? await describeFunctionsError(error, "Couldn't check for an existing wallet") : "Couldn't check for an existing wallet")
-          }
-          wallet = await createLocalWallet()
-        }
+        const wallet = await createLocalWallet()
         await saveDeviceCopy(wallet.address, wallet.privateKey)
         setWallet(wallet.address, wallet.privateKey, undefined, 'social-auto')
         setBalance(0)

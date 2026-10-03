@@ -402,18 +402,16 @@ export function AppLayout() {
 
   // Google / email wallets are self-custodial: until the account has a
   // passkey or a Recovery QR, losing this device would lose the wallet, so
-  // the user sets one up before using the app. Once it has one, the
-  // server-held copy left from before self-custody is deleted.
+  // the user sets one up before using the app.
   const loginTypeApp = useAuthStore(s => s.loginType)
   useEffect(() => {
     if (loginTypeApp !== 'social' || walletSource !== 'social-auto' || !privateKey || !userId) return
     let cancelled = false
-    import('@/lib/socialWallet').then(async ({ getWalletSecurityStatus, knownSecured, forgetServerVault }) => {
+    import('@/lib/socialWallet').then(async ({ getWalletSecurityStatus, knownSecured }) => {
       const status = await getWalletSecurityStatus(userId)
       if (cancelled) return
       const secured = status ? status.secured : knownSecured(userId)
-      if (!secured) { if (status) navigateApp('/auth/secure-wallet', { replace: true }); return }
-      void forgetServerVault()
+      if (!secured && status) navigateApp('/auth/secure-wallet', { replace: true })
     }).catch(() => {})
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps

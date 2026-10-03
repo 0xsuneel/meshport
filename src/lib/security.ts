@@ -5,7 +5,7 @@
  *   the app UI and gate sensitive actions (send, reveal seed, export key).
  *   This passcode is NEVER used to derive a wallet-encryption key for
  *   social-login (Google/Email-OTP) accounts — those wallets are
- *   envelope-encrypted server-side (see supabase/functions/wallet-key)
+ *   self-custodial, locked with a passkey / Recovery QR (lib/socialWallet.ts)
  *   and have nothing to do with this file's passcode functions.
  * - encryptPrivateKey / decryptPrivateKey / storeEncryptedKey / getEncryptedKey:
  *   passcode-derived AES-GCM private-key encryption for LOCAL, self-custodial

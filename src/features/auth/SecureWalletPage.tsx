@@ -69,8 +69,6 @@ export function SecureWalletPage() {
       await registerWalletPasskey({ userId, username: username ?? '', walletAddress, privateKey })
       showToastMessage('Passkey set up', 'success')
       await refresh()
-      const { forgetServerVault } = await import('@/lib/socialWallet')
-      void forgetServerVault()
     } catch (e: any) {
       showToastMessage(e?.message ?? "Couldn't set up a passkey", 'error')
     } finally {
@@ -82,8 +80,6 @@ export function SecureWalletPage() {
     return <RecoveryQrCreator onBack={() => setMakingQr(false)} onDone={async () => {
       setMakingQr(false)
       await refresh()
-      const { forgetServerVault } = await import('@/lib/socialWallet')
-      void forgetServerVault()
     }} />
   }
 

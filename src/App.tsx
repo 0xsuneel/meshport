@@ -485,7 +485,7 @@ export default function App() {
   // exactly what was asked for: the instant the entered passcode verifies,
   // it calls both unlock() AND restorePrivateKey(val) with that SAME
   // passcode (see its last two lines) — one entry, one screen, both the
-  // app-unlock and the wallet-key restore. No separate banner/prompt needed.
+  // app-unlock and the wallet restore. No separate banner/prompt needed.
   useEffect(() => {
     const onOffline = () => {
       const { walletAddress, walletSource, isAuthenticated, passcodeLockEnabled, lock } = useAuthStore.getState()
