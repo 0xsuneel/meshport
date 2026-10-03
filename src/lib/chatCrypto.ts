@@ -8,7 +8,16 @@
 //   wallet (Google/email accounts from the server, others from the recovery
 //   phrase / private key), and with it the exact same chat identity, so every
 //   device the user signs in on reads their whole chat history, old and new.
-//   Only the PUBLIC key is uploaded (users.chat_public_key).
+//   Only the PUBLIC key is uploaded (users.chat_public_key), together with
+//   a signature by the WALLET over it (users.chat_key_sig).
+//
+// SIGNED KEYS — the server can't swap them.
+//   A key is used only if its signature recovers to that user's wallet
+//   address (which no client can change). Someone with database access who
+//   replaces a key can't produce that signature, so the swapped key is
+//   ignored and nothing gets sealed for it — messages wait (e2e:q2) instead.
+//   Like WhatsApp's safety numbers, but checked automatically, because the
+//   identity is already the wallet.
 //
 // EVERY MESSAGE CARRIES ITS OWN KEY — format "e2e:v2:".
 //   For each message (and each photo/file) a fresh random 256-bit key K is
@@ -109,7 +118,7 @@ export function deriveMyChatIdentity(walletPrivateKeyHex: string): { privateKey:
 // ── This device's copy of the chat identity seed ───────────────────────────
 const SEED_PREFIX = 'meshport_chat_seed_'        // sessionStorage, this tab
 const SEED_DEVICE_PREFIX = 'meshport_chat_seed_dv_' // localStorage, sealed to this browser
-const PUB_PREFIX = 'meshport_chat_pub_'
+const PUB_PREFIX = 'meshport_chat_vpub_' // verified (wallet-signed) keys only
 
 function saveSeed(walletAddress: string, seed: Uint8Array) {
   const addr = walletAddress.toLowerCase()
@@ -164,6 +173,21 @@ function cachedPub(userId: string): string | null { try { return localStorage.ge
 function savePub(userId: string, pub: string) { try { localStorage.setItem(PUB_PREFIX + userId, pub) } catch { /* storage blocked */ } }
 function dropPub(userId: string) { try { localStorage.removeItem(PUB_PREFIX + userId) } catch { /* storage blocked */ } }
 
+/** The text a wallet signs to vouch for its chat key. */
+export function chatKeyStatement(walletAddress: string, publicKeyB64: string): string {
+  return `MeshPort chat key\nWallet: ${walletAddress.toLowerCase()}\nKey: ${publicKeyB64}`
+}
+
+/** True when `sig` is `walletAddress`'s signature over its chat key `publicKeyB64`. */
+export async function verifyChatKey(walletAddress: string | null | undefined, publicKeyB64: string | null | undefined, sig: string | null | undefined): Promise<boolean> {
+  if (!walletAddress || !publicKeyB64 || !sig || !parsePublicKey(publicKeyB64)) return false
+  try {
+    const { recoverMessageAddress } = await import('viem')
+    const signer = await recoverMessageAddress({ message: chatKeyStatement(walletAddress, publicKeyB64), signature: sig as `0x${string}` })
+    return signer.toLowerCase() === walletAddress.toLowerCase()
+  } catch { return false }
+}
+
 /**
  * Publishes this wallet's chat public key to users.chat_public_key (replacing
  * a missing or outdated one). Cheap to call repeatedly — AppLayout calls it
@@ -171,13 +195,20 @@ function dropPub(userId: string) { try { localStorage.removeItem(PUB_PREFIX + us
  */
 export async function ensureChatKeysReady(walletAddress: string, myUserId: string): Promise<void> {
   try {
-    const seed = await getMySeed(walletAddress)
-    if (!seed) return // nothing on this device yet — called again once the wallet unlocks
+    // Publishing needs the wallet key itself: the chat key is only trusted
+    // with the wallet's signature. Called again when the wallet unlocks.
+    const walletPrivateKey = (await import('@/store')).useAuthStore.getState().privateKey
+    if (!walletPrivateKey) return
+    const seed = deriveMyChatIdentity(walletPrivateKey).privateKey
+    saveSeed(walletAddress, seed)
     const publicKeyStr = toBase64(x25519.getPublicKey(seed))
+    const { privateKeyToAccount } = await import('viem/accounts')
+    const pk = (walletPrivateKey.startsWith('0x') ? walletPrivateKey : '0x' + walletPrivateKey) as `0x${string}`
+    const sig = await privateKeyToAccount(pk).signMessage({ message: chatKeyStatement(walletAddress, publicKeyStr) })
     const { supabase } = await import('@/lib/supabase')
-    const { data: current } = await supabase.from('users').select('chat_public_key').eq('id', myUserId).maybeSingle()
-    if (current?.chat_public_key === publicKeyStr) return
-    const { error } = await supabase.from('users').update({ chat_public_key: publicKeyStr }).eq('id', myUserId)
+    const { data: current } = await supabase.from('users').select('chat_public_key, chat_key_sig').eq('id', myUserId).maybeSingle()
+    if (current?.chat_public_key === publicKeyStr && current?.chat_key_sig === sig) return
+    const { error } = await supabase.from('users').update({ chat_public_key: publicKeyStr, chat_key_sig: sig }).eq('id', myUserId)
     if (error) console.error('[chatCrypto] failed to upload public key:', error.message)
   } catch (e) {
     console.error('[chatCrypto] ensureChatKeysReady failed:', e instanceof Error ? e.message : e)
@@ -228,9 +259,12 @@ export async function getConversationKey(myWalletAddress: string, otherUserId: s
     const seed = await getMySeed(myWalletAddress)
     if (!seed) return null
     const { supabase } = await import('@/lib/supabase')
+    // Their key, only if their wallet signed it (null otherwise, undefined on a network error).
     const fetchPub = async () => {
-      const { data, error } = await supabase.from('users').select('chat_public_key').eq('id', otherUserId).maybeSingle()
-      return error ? undefined : ((data?.chat_public_key as string | null) ?? null)
+      const { data, error } = await supabase.from('users').select('chat_public_key, chat_key_sig, wallet_address').eq('id', otherUserId).maybeSingle()
+      if (error) return undefined
+      const pub = (data?.chat_public_key as string | null) ?? null
+      return (await verifyChatKey(data?.wallet_address, pub, data?.chat_key_sig)) ? pub : null
     }
     // Remembered copy first (no network wait), confirmed in the background.
     let pubStr = cachedPub(otherUserId)
@@ -285,6 +319,10 @@ async function openRawMsgKey(keys: ChatKeys, header: string[]): Promise<ArrayBuf
   const [spk, rpk, wiv, wk] = header.map(fromBase64)
   const other = sameBytes(spk, keys.myPub) ? rpk : sameBytes(rpk, keys.myPub) ? spk : null
   if (!other) return null // sealed for a different identity
+  // With their wallet-signed key known, only that key (or my own, for my
+  // waiting messages) may be the other side — a message made with some
+  // other key (forged by whoever controls the server) doesn't open.
+  if (keys.otherPub && !sameBytes(other, keys.otherPub) && !sameBytes(other, keys.myPub)) return null
   const wrapKey = await wrappingKey(keys.seed, other, spk, rpk)
   return crypto.subtle.decrypt({ name: 'AES-GCM', iv: wiv }, wrapKey, wk)
 }

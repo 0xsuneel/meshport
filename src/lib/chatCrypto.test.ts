@@ -315,3 +315,33 @@ describe('e2e:v2 per-message keys', async () => {
     await expect(decryptBlob(ct, ivBase64, await makeChatKeys(eve.privateKey, alice.publicKey))).rejects.toBeTruthy()
   })
 })
+
+describe('wallet-signed chat keys', async () => {
+  const { chatKeyStatement, verifyChatKey, makeChatKeys, LOCKED_TEXT } = await import('./chatCrypto')
+  const { privateKeyToAccount } = await import('viem/accounts')
+  const toB64 = (b: Uint8Array) => btoa(String.fromCharCode(...b))
+  const aliceWallet = '0x' + 'a1'.repeat(32) as `0x${string}`
+  const eveWallet = '0x' + 'e3'.repeat(32) as `0x${string}`
+  const aliceAddr = privateKeyToAccount(aliceWallet).address
+  const alicePub = toB64(deriveMyChatIdentity(aliceWallet).publicKey)
+  const evePub = toB64(deriveMyChatIdentity(eveWallet).publicKey)
+  const sign = (pk: `0x${string}`, addr: string, pub: string) => privateKeyToAccount(pk).signMessage({ message: chatKeyStatement(addr, pub) })
+
+  it('accepts a key signed by the owner\'s wallet', async () => {
+    expect(await verifyChatKey(aliceAddr, alicePub, await sign(aliceWallet, aliceAddr, alicePub))).toBe(true)
+  })
+
+  it('rejects a key swapped in the database (signed by someone else, or unsigned)', async () => {
+    expect(await verifyChatKey(aliceAddr, evePub, await sign(eveWallet, aliceAddr, evePub))).toBe(false)
+    expect(await verifyChatKey(aliceAddr, evePub, await sign(aliceWallet, aliceAddr, alicePub))).toBe(false)
+    expect(await verifyChatKey(aliceAddr, evePub, null)).toBe(false)
+  })
+
+  it('a message forged with another key does not open once the real key is known', async () => {
+    const bob = deriveMyChatIdentity('0x' + 'b2'.repeat(32))
+    const eve = deriveMyChatIdentity(eveWallet)
+    const forged = await encryptText('pay me', await makeChatKeys(eve.privateKey, bob.publicKey))
+    const bobKnowsAlice = await makeChatKeys(bob.privateKey, deriveMyChatIdentity(aliceWallet).publicKey)
+    expect(await decryptText(forged, bobKnowsAlice)).toBe(LOCKED_TEXT)
+  })
+})

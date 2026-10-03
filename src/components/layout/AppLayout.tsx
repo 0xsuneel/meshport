@@ -224,7 +224,7 @@ export function AppLayout() {
 
   // ── Set up E2E chat encryption keys ─────────────────────────────────────
   // Generates this device's key pair (if it doesn't have one yet) and makes
-  // sure the matching public key is uploaded to `users.chat_public_key` —
+  // sure the matching public key is uploaded to `users.chat_public_key` (signed by the wallet, `chat_key_sig`) —
   // see chatCrypto.ts's own header for the full design. Runs once per
   // session as soon as both walletAddress and the real user id are known;
   // safe to call every mount, it's a no-op after the first successful
