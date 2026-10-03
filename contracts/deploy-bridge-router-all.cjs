@@ -41,6 +41,11 @@ const CHAINS = {
   Plume_Testnet:     { chainId: 98867,    usdc: '0xcB5f30e335672893c7eb944B374c196392C19D18', rpc: 'https://testnet-rpc.plume.org' },
   XDC_Apothem:       { chainId: 51,       usdc: '0xb5AB69F7bBada22B28e79C8FFAECe55eF1c771D4', rpc: 'https://rpc.apothem.network' },
   Codex_Testnet:     { chainId: 812242,   usdc: '0x6d7f141b6819C2c9CC2f818e6ad549E7Ca090F8f', rpc: 'https://rpc.codex-stg.xyz' },
+  Monad_Testnet:     { chainId: 10143,    usdc: '0x534b2f3A21130d7a60830c2Df862319e593943A3', rpc: 'https://testnet-rpc.monad.xyz' },
+  Sonic_Testnet:     { chainId: 14601,    usdc: '0x0BA304580ee7c9a980CF72e55f5Ed2E9fd30Bc51', rpc: 'https://rpc.testnet.soniclabs.com' },
+  World_Chain_Sepolia: { chainId: 4801,   usdc: '0x66145f38cBAC35Ca6F1Dfb4914dF98F1614aeA88', rpc: 'https://worldchain-sepolia.g.alchemy.com/public' },
+  Linea_Sepolia:     { chainId: 59141,    usdc: '0xFEce4462D57bD51A6A552365A011b95f0E16d9B7', rpc: 'https://rpc.sepolia.linea.build' },
+  Ink_Testnet:       { chainId: 763373,   usdc: '0xFabab97dCE620294D2B0b0e46C68964e326300Ac', rpc: 'https://rpc-gel-sepolia.inkonchain.com' },
   Injective_Testnet: { chainId: 1439,     usdc: '0x0C382e685bbeeFE5d3d9C29e29E341fEE8E84C5d', rpc: 'https://k8s.testnet.json-rpc.injective.network' },
 }
 

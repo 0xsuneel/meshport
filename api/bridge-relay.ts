@@ -67,6 +67,11 @@ export const CHAINS: Record<string, { id: number; name: string; rpc: string; usd
   Plume_Testnet:     { id: 98867,    name: 'Plume Testnet',     rpc: 'https://testnet-rpc.plume.org',              usdc: '0xcB5f30e335672893c7eb944B374c196392C19D18', domain: 22, gasUsd: 0.2 },
   XDC_Apothem:       { id: 51,       name: 'XDC Apothem',       rpc: 'https://rpc.apothem.network',                usdc: '0xb5AB69F7bBada22B28e79C8FFAECe55eF1c771D4', domain: 18, gasUsd: 0.1 },
   Codex_Testnet:     { id: 812242,   name: 'Codex Testnet',     rpc: 'https://rpc.codex-stg.xyz',                  usdc: '0x6d7f141b6819C2c9CC2f818e6ad549E7Ca090F8f', domain: 12, gasUsd: 3000 },
+  Monad_Testnet:     { id: 10143,    name: 'Monad Testnet',     rpc: 'https://testnet-rpc.monad.xyz',              usdc: '0x534b2f3A21130d7a60830c2Df862319e593943A3', domain: 15, gasUsd: 1 },
+  Sonic_Testnet:     { id: 14601,    name: 'Sonic Testnet',     rpc: 'https://rpc.testnet.soniclabs.com',          usdc: '0x0BA304580ee7c9a980CF72e55f5Ed2E9fd30Bc51', domain: 13, gasUsd: 0.5 },
+  World_Chain_Sepolia: { id: 4801,   name: 'World Chain Sepolia', rpc: 'https://worldchain-sepolia.g.alchemy.com/public', usdc: '0x66145f38cBAC35Ca6F1Dfb4914dF98F1614aeA88', domain: 14, gasUsd: 3000 },
+  Linea_Sepolia:     { id: 59141,    name: 'Linea Sepolia',     rpc: 'https://rpc.sepolia.linea.build',            usdc: '0xFEce4462D57bD51A6A552365A011b95f0E16d9B7', domain: 11, gasUsd: 3000 },
+  Ink_Testnet:       { id: 763373,   name: 'Ink Sepolia',       rpc: 'https://rpc-gel-sepolia.inkonchain.com',     usdc: '0xFabab97dCE620294D2B0b0e46C68964e326300Ac', domain: 21, gasUsd: 3000 },
   Injective_Testnet: { id: 1439,     name: 'Injective Testnet', rpc: 'https://k8s.testnet.json-rpc.injective.network', usdc: '0x0C382e685bbeeFE5d3d9C29e29E341fEE8E84C5d', domain: 29, gasUsd: 20 },
 }
 
@@ -171,11 +176,6 @@ async function clients(chainKey: string) {
 // Extra chains a relayed call can run on, beyond CHAINS (public RPCs).
 const EXTRA_RPCS: Record<string, string> = {
   Arc_Testnet:         'https://rpc.testnet.arc.network',
-  Sonic_Testnet:       'https://rpc.testnet.soniclabs.com',
-  World_Chain_Sepolia: 'https://worldchain-sepolia.g.alchemy.com/public',
-  Linea_Sepolia:       'https://rpc.sepolia.linea.build',
-  Ink_Testnet:         'https://rpc-gel-sepolia.inkonchain.com',
-  Monad_Testnet:       'https://testnet-rpc.monad.xyz',
   Edge_Testnet:        'https://edge-testnet.g.alchemy.com/public',
 }
 // Circle's SDK names a few chains differently from the app.

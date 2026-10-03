@@ -287,7 +287,8 @@ export const EXTERNAL_CHAINS: Record<string, ExternalChainConfig> = {
     decimals: 6,
   },
   Sonic_Testnet: {
-    // chainId not in api/relay-gas.ts — left unset rather than guessed.
+    // chainId verified against this chain's own RPC (eth_chainId), 2026-10-03.
+    chainId:  14601,
     // Second endpoint copied verbatim from api/relay-rpc.js's own
     // CHAIN_DEFS.Sonic_Testnet (already trusted + in production there) — NOT
     // a web-search guess. Needed because rpc.testnet.soniclabs.com returns a
@@ -305,25 +306,29 @@ export const EXTERNAL_CHAINS: Record<string, ExternalChainConfig> = {
     decimals: 6,
   },
   World_Chain_Sepolia: {
-    // chainId not in api/relay-gas.ts — left unset rather than guessed.
+    // chainId verified against this chain's own RPC (eth_chainId), 2026-10-03.
+    chainId:  4801,
     rpcs:     ['https://worldchain-sepolia.g.alchemy.com/public', 'https://worldchain-sepolia.rpc.thirdweb.com'],
     usdc:     '0x66145f38cBAC35Ca6F1Dfb4914dF98F1614aeA88',
     decimals: 6,
   },
   Linea_Sepolia: {
-    // chainId not in api/relay-gas.ts — left unset rather than guessed.
+    // chainId verified against this chain's own RPC (eth_chainId), 2026-10-03.
+    chainId:  59141,
     rpcs:     ['https://rpc.sepolia.linea.build'],
     usdc:     '0xFEce4462D57bD51A6A552365A011b95f0E16d9B7',
     decimals: 6,
   },
   Ink_Testnet: {
-    // chainId not in api/relay-gas.ts — left unset rather than guessed.
+    // chainId verified against this chain's own RPC (eth_chainId), 2026-10-03.
+    chainId:  763373,
     rpcs:     ['https://rpc-gel-sepolia.inkonchain.com', 'https://rpc-qnd-sepolia.inkonchain.com'],
     usdc:     '0xFabab97dCE620294D2B0b0e46C68964e326300Ac',
     decimals: 6,
   },
   Monad_Testnet: {
-    // chainId not in api/relay-gas.ts — left unset rather than guessed.
+    // chainId verified against this chain's own RPC (eth_chainId), 2026-10-03.
+    chainId:  10143,
     rpcs:     ['https://testnet-rpc.monad.xyz'],
     usdc:     '0x534b2f3A21130d7a60830c2Df862319e593943A3',
     decimals: 6,
