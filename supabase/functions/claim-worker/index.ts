@@ -3,6 +3,7 @@ import { createClient, SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 // reused here (not a new dependency) to sign relayer transactions.
 import { getPublicKey, signAsync as secpSignAsync } from 'npm:@noble/secp256k1@2.1.0'
 import { keccak_256 } from 'npm:@noble/hashes@1.4.0/sha3'
+import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
 const corsHeaders = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -762,6 +763,26 @@ async function waitForBridge(supabase: SupabaseClient, claim: Claim) {
 async function settleClaim(supabase: SupabaseClient, claim: Claim) {
   await updateClaim(supabase, claim.id, { status: 'settling', settling_at: new Date().toISOString() })
 }
+// Gasless bridges (MeshPortBridgeRouter) burn with Circle's Forwarding
+// Service hook, so Circle itself mints on Arc and Iris reports that mint as
+// forwardTxHash. That is the exact destination tx for THIS message — no log
+// scanning or amount matching needed — so it is checked first.
+async function findForwardedMint(claim: Claim): Promise<CctpReceiveLog | null> {
+  const domain = CCTP_DOMAINS[claim.source_chain]
+  if (domain === undefined || !claim.tx_hash) return null
+  try {
+    const res = await fetch(`${CIRCLE_IRIS_API}/v2/messages/${domain}?transactionHash=${claim.tx_hash}`, { signal: AbortSignal.timeout(8000) })
+    const data = await res.json().catch(() => ({}))
+    const hash = data?.messages?.[0]?.forwardTxHash
+    if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) return null
+    const receipt = await rpcCall(ARC_RPCS, 'eth_getTransactionReceipt', [hash])
+    if (receipt?.status !== '0x1') return null
+    return { transactionHash: hash.toLowerCase(), blockNumber: Number(BigInt(receipt.blockNumber)), amount: await fetchMintAmountForTx(hash) }
+  } catch (e) {
+    console.error(`[claim-worker] findForwardedMint failed for ${claim.id} (non-fatal):`, e instanceof Error ? e.message : e)
+    return null
+  }
+}
 async function confirmArrival(supabase: SupabaseClient, claim: Claim) {
   try {
     if (claim.destination_tx_hash) {
@@ -774,6 +795,28 @@ async function confirmArrival(supabase: SupabaseClient, claim: Claim) {
       await recordClaimActivity(supabase, claim, 'completed', arrivedAmount ?? undefined, claim.destination_tx_hash)
       await notifyClaimComplete(supabase, claim, arrivedAmount ?? claim.amount)
       return
+    }
+
+    const forwarded = await findForwardedMint(claim)
+    if (forwarded) {
+      try {
+        const relayTimestamp = await getBlockTimestamp(forwarded.blockNumber)
+        await updateClaim(supabase, claim.id, {
+          status:              'completed',
+          destination_tx_hash: forwarded.transactionHash,
+          receiver_block:      forwarded.blockNumber,
+          relay_timestamp:     relayTimestamp,
+          completed_at:        new Date().toISOString(),
+          error:               null,
+          arrived_amount:      forwarded.amount ?? null,
+        })
+        await recordClaimActivity(supabase, claim, 'completed', forwarded.amount ?? undefined, forwarded.transactionHash)
+        await notifyClaimComplete(supabase, claim, forwarded.amount ?? claim.amount)
+        logSettlementMetrics(claim)
+        return
+      } catch (e) {
+        if (!isDuplicateDestinationTxError(e)) throw e
+      }
     }
 
     // Actively submit receiveMessage() ourselves, at most once per claim,
@@ -1126,6 +1169,14 @@ Deno.serve(async (req: Request) => {
   let body: any = {}
   try { body = await req.json() } catch { /* sweep may send no body */ }
   const mode = body?.mode === 'single' ? 'single' : 'sweep'
+  // Cron-only gate on the sweep path (unchanged: mode:'single' has never had
+  // an auth check here, and this doesn't add one — kicking processing of a
+  // specific already-submitted claimId grants no privilege beyond what that
+  // claim can already do). Key-migration cutover: accepts CRON_SECRET or the
+  // legacy service_role key — see _shared/cronAuth.ts.
+  if (mode === 'sweep' && !isCronOrLegacyServiceCaller(req)) {
+    return json({ success: false, error: 'Forbidden' }, 403)
+  }
   if (mode === 'single' && body?.claimId) {
     const start = Date.now()
     let totalProcessed = 0
