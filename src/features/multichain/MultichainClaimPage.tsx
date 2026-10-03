@@ -58,7 +58,8 @@ import { isGaslessBridgeAvailable, quoteGaslessBridge, bringFundsGasless } from 
 import { relayedProviderFor } from '@/lib/relayedProvider'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFilters'
-import { readExternalBalances, refreshScope, readExternalChainBalance } from '@/blockchain/BlockchainManager'
+import { readExternalBalances, refreshScope, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
+import { fetchCctpProgress } from '@/lib/cctpTracker'
 import { ARC_RPCS } from '@/lib/arc'
 import { UB_CLAIM_CHAINS, runUbClaim, ubClaimEta } from '@/lib/ubClaim'
 import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
@@ -764,6 +765,31 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     return () => window.removeEventListener('meshport:arc-deposit', onDeposit)
   }, [claimRecords, claimsByStatus])
 
+  // Circle's forwarder mints on Arc seconds after attestation, but the row
+  // only flips to 'completed' on claim-worker's next pass — the Track
+  // Progress checklist (ClaimProgressTracker) already shows Completed from
+  // Circle, so the success screen and balances follow the same signal.
+  const [mintedOnArc, setMintedOnArc] = useState<Record<string, true>>({})
+  useEffect(() => {
+    const pending = claimRecords
+      .map(r => claimsByStatus[r.claimId])
+      .filter((c): c is ServerClaim => !!c && !!c.txHash && c.status !== 'completed' && c.status !== 'failed' && !mintedOnArc[c.id])
+    if (pending.length === 0) return
+    let stop = false
+    const check = () => {
+      for (const c of pending) {
+        fetchCctpProgress(c.sourceChain, c.txHash!).then(p => {
+          if (stop || p?.stage !== 'done') return
+          setMintedOnArc(prev => prev[c.id] ? prev : { ...prev, [c.id]: true })
+          kickClaimWorker(c.id)
+        })
+      }
+    }
+    check()
+    const iv = setInterval(check, 3_000)
+    return () => { stop = true; clearInterval(iv) }
+  }, [claimRecords, claimsByStatus, mintedOnArc])
+
   // Auto-advance the UI once the server-side state machine finishes —
   // works even if this page was just opened via the Hub deep link.
   useEffect(() => {
@@ -776,7 +802,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       setStep('failed')
       return
     }
-    if (claims.every(c => c.status === 'completed')) {
+    if (claims.every(c => c.status === 'completed' || mintedOnArc[c.id])) {
+      if (walletAddress) refreshScope({ kind: 'arc', wallet: walletAddress })
       import('@/lib/arcService').then(({ getUSDCBalance }) =>
         getUSDCBalance(walletAddress ?? '').then(setBalance).catch(() => {})
       )
@@ -795,7 +822,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       // which re-fetches claimsByStatus as already-'completed' and would
       // otherwise re-fire with an empty ref) from notifying again for a
       // claim that was already durably marked notified server-side.
+      // Notify once the row is final — it carries the exact arrived amount.
       for (const c of claims) {
+        if (c.status !== 'completed') continue
         if (c.userNotifiedAt) { notifiedClaimIdsRef.current.add(c.id); continue }
         if (!notifiedClaimIdsRef.current.has(c.id)) {
           notifiedClaimIdsRef.current.add(c.id)
@@ -812,7 +841,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         }
       }
     }
-  }, [claimsByStatus, claimRecords, walletAddress, setBalance])
+  }, [claimsByStatus, claimRecords, walletAddress, setBalance, mintedOnArc])
 
   // NOTE: a client-side balance-delta poller previously lived here
   // (checked getUSDCBalance() against a startBalance snapshot, same
@@ -1036,18 +1065,25 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   useEffect(() => {
     if (!walletAddress) return
     let cancelled = false
-    const refreshOneChain = (chainId: string) => {
-      readExternalChainBalance(chainId as any, walletAddress).then(balance => {
-        if (cancelled) return
-        setChains(prev => {
-          const next = prev.some(c => c.chainId === chainId)
-            ? prev.map(c => c.chainId === chainId ? { ...c, claimable: Math.floor(balance * 100) / 100 } : c)
-            : [...prev, { chainId, claimable: Math.floor(balance * 100) / 100, pending: 0 }]
-          setClaimableTotal(Math.floor(next.reduce((s, c) => s + c.claimable, 0) * 100) / 100)
-          return next
-        })
-      }).catch(() => {})
+    const onExternal = (e: Event) => {
+      const d = (e as CustomEvent).detail || {}
+      if (d.chainId) applyOne(d.chainId, d.balance)
     }
+    window.addEventListener(EXTERNAL_BALANCE_EVENT, onExternal)
+    const refreshOneChain = (chainId: string) => {
+      readExternalChainBalance(chainId as any, walletAddress).then(b => applyOne(chainId, b)).catch(() => {})
+    }
+    function applyOne(chainId: string, balance: number) {
+      if (cancelled) return
+      setChains(prev => {
+        const next = prev.some(c => c.chainId === chainId)
+          ? prev.map(c => c.chainId === chainId ? { ...c, claimable: Math.floor(balance * 100) / 100 } : c)
+          : [...prev, { chainId, claimable: Math.floor(balance * 100) / 100, pending: 0 }]
+        setClaimableTotal(Math.floor(next.reduce((s, c) => s + c.claimable, 0) * 100) / 100)
+        return next
+      })
+    }
+
     let channel: any
     import('@/lib/supabase').then(({ supabase }) => {
       if (cancelled) return
@@ -1067,7 +1103,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           })
         .subscribe()
     })
-    return () => { cancelled = true; channel?.unsubscribe() }
+    return () => { cancelled = true; channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal) }
   }, [walletAddress])
 
   useEffect(() => {
@@ -1203,6 +1239,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               onStep: (stage, msg, pct, extra) => {
                 setChain(chain.chainId, stage, msg, pct, extra)
                 if (stage === 'attesting') {
+                  notifyExternalBalanceChanged(chain.chainId, wallet.addr)
                   setIsSubmitted(true)
                   setConfirmPhase(phase => phase === 'processing' ? 'submitted' : phase)
                 }
@@ -1256,6 +1293,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           setClaimFees(prev => ({ ...prev, [chain.chainId]: r.fee + r.maxFee }))
           setIsSubmitted(true)
           setChain(chain.chainId, 'attesting', 'Burn confirmed — Circle processing…', 65, { txHash: r.txHash })
+          notifyExternalBalanceChanged(chain.chainId, wallet.addr)
           // The claim is the burned amount: MeshPort's fee was taken before the burn.
           handOffBurn(chain.chainId, r.txHash, Math.max(0, claimAmount - r.fee))
           return { chainId: chain.chainId, amount: claimAmount }

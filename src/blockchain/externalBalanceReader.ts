@@ -7,7 +7,7 @@
  *
  * ── Preserved exactly from the legacy implementation ────────────────────────
  *  - settings-aware filtering via isChainEnabledForClaim
- *  - staggeredMap batching (5 at a time, 400ms apart) so ~21 chains are never
+ *  - bounded concurrency (SCAN_CONCURRENCY in flight) so ~21 chains are never
  *    fired simultaneously at public RPC endpoints
  *  - per-chain RPC fallback, and "return 0" rather than throwing on failure
  *  - results are only cached once settings have genuinely loaded (a scan run
@@ -32,7 +32,6 @@
  *
  * TESTNET ONLY.
  */
-import { staggeredMap } from '@/lib/utils'
 import { isChainEnabledForClaim } from '@/lib/featureFilters'
 import type { SettingsMap } from '@/lib/adminSupabase'
 import { EXTERNAL_CHAINS, resolveRpcList } from './chains'
@@ -80,6 +79,20 @@ export interface ExternalBalancesResult {
 const CACHE_TTL_MS = 90_000
 const BALANCE_OF_SELECTOR = '0x70a08231'
 
+// Scan speed. Chains used to go in batches of 5 with a 400ms pause, each batch
+// waiting for its slowest chain, and each chain tried its RPCs one by one with
+// a 6s timeout — one dead endpoint stalled the whole scan for seconds. Now
+// up to SCAN_CONCURRENCY chains run at once with no barriers (still well
+// under any rate limit: one eth_call per chain), and a slow endpoint gets a
+// fallback after HEDGE_MS.
+const SCAN_CONCURRENCY = 8
+const HEDGE_MS = 1_200
+const RPC_TIMEOUT_MS = 4_000
+
+// Last good balance per wallet+chain: if every endpoint for a chain is down
+// this scan, show the last value instead of flashing $0.
+const lastKnown = new Map<string, number>()
+
 /**
  * Stable signature of which chains are enabled. Part of the cache key so an
  * admin toggle invalidates immediately instead of being masked for the TTL.
@@ -110,27 +123,65 @@ export async function readChainUSDCBalance(chainId: string, walletAddress: strin
   const padded = walletAddress.toLowerCase().replace('0x', '').padStart(64, '0')
   const data = BALANCE_OF_SELECTOR + padded
   const rpcs = resolveRpcList(cfg.rpcs)
+  if (rpcs.length === 0) return 0
 
-  for (const rpc of rpcs) {
+  const ask = async (rpc: string): Promise<number> => {
+    countRequest(chainId, 'eth_call')
     try {
-      countRequest(chainId, 'eth_call')
       const res = await fetch(rpc, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to: cfg.usdc, data }, 'latest'] }),
-        signal: AbortSignal.timeout(6_000),
+        signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
       })
-      if (!res.ok) { countError(); continue }
+      if (!res.ok) throw new Error('http ' + res.status)
       const json = await res.json()
+      if (json?.error) throw new Error('rpc error')
       const hex = json?.result
       if (!hex || hex === '0x' || hex === '0x0') return 0
       return Number(BigInt(hex)) / Math.pow(10, cfg.decimals)
-    } catch {
+    } catch (e) {
       countError()
-      // try next RPC — same as legacy
+      throw e
     }
   }
-  return 0
+
+  // Hedged fallback: the first endpoint gets a head start; if it hasn't
+  // answered within HEDGE_MS (or fails sooner) the next one is asked too, and
+  // the first good answer wins. A dead endpoint used to cost a full timeout
+  // before the fallback was even tried.
+  const value = await new Promise<number | null>(resolve => {
+    let next = 0, running = 0, done = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const launch = () => {
+      if (done || next >= rpcs.length) return
+      running++
+      ask(rpcs[next++]).then(
+        v => { if (!done) { done = true; clearTimeout(timer); resolve(v) } },
+        () => {
+          running--
+          if (done) return
+          if (next < rpcs.length) { clearTimeout(timer); launch(); arm() }
+          else if (running === 0) { done = true; resolve(null) }
+        },
+      )
+    }
+    const arm = () => { if (next < rpcs.length) timer = setTimeout(() => { launch(); arm() }, HEDGE_MS) }
+    launch(); arm()
+  })
+
+  if (value === null) return lastKnown.get(`${walletAddress.toLowerCase()}:${chainId}`) ?? 0
+  lastKnown.set(`${walletAddress.toLowerCase()}:${chainId}`, value)
+  return value
+}
+
+/** Runs `fn` over `items` with at most `limit` in flight — no batch barriers. */
+async function pooledMap<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let i = 0
+  const worker = async () => { while (i < items.length) { const k = i++; results[k] = await fn(items[k]) } }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
 }
 
 /**
@@ -157,7 +208,7 @@ export function externalBalanceReader(
   return dedupe(key, async () => {
     const chainIds = Object.keys(EXTERNAL_CHAINS).filter(id => isChainEnabledForClaim(settings, id))
 
-    const chains = await staggeredMap(chainIds, async (chainId) => ({
+    const chains = await pooledMap(chainIds, SCAN_CONCURRENCY, async (chainId) => ({
       chainId,
       balance: await readChainUSDCBalance(chainId, addr),
     }))
@@ -169,7 +220,7 @@ export function externalBalanceReader(
 
     // Same rule as legacy: never persist a scan taken before settings loaded,
     // since it optimistically treats every chain as enabled.
-    if (settingsLoaded) put(key, result)
+    if (settingsLoaded) { put(key, result); scanKeys.add(key) }
     return result
   })
 }
@@ -181,4 +232,25 @@ export function externalBalanceTotal(
   settingsLoaded: boolean = true,
 ): Promise<number> {
   return externalBalanceReader(walletAddress, settings, settingsLoaded).then(r => r.total)
+}
+
+// Every aggregate-scan key written, so a single-chain read can patch them.
+const scanKeys = new Set<string>()
+
+/**
+ * Write a freshly read single-chain balance into every cached full scan for
+ * this wallet. Without this, a page that mounts after a claim was served the
+ * pre-claim scan from cache (up to 90s) and the old balance came back.
+ */
+export function patchCachedChainBalance(walletAddress: string, chainId: string, balance: number): void {
+  const addr = normalizeAddress(walletAddress)
+  lastKnown.set(`${addr.toLowerCase()}:${chainId}`, balance)
+  for (const key of scanKeys) {
+    if (!key.startsWith(`external:${addr}:`)) continue
+    const hit = peek<ExternalBalancesResult>(key)
+    if (!hit) { scanKeys.delete(key); continue }
+    if (!hit.value.chains.some(c => c.chainId === chainId)) continue
+    const chains = hit.value.chains.map(c => c.chainId === chainId ? { ...c, balance } : c)
+    put(key, { chains, total: chains.reduce((sum, c) => sum + c.balance, 0) })
+  }
 }

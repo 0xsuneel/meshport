@@ -11,7 +11,7 @@ import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
 import { formatAmount, copyToClipboard, timeAgo, trimTrailingZeros } from '@/lib/utils'
-import { readArcBalance, readExternalBalances, readExternalChainBalance } from '@/blockchain/BlockchainManager'
+import { readArcBalance, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
 import { notifyPaymentReceived, notifyPaymentReceivedFromAddress, notifyBulkPaymentReceived } from '@/lib/notifications'
 import { markP2PNotificationRead } from '@/lib/p2pNotifications'
 import { P2P_ESCROW_CONTRACT_ADDRESS } from '@/lib/p2pEscrowContract'
@@ -3544,14 +3544,21 @@ export function HomePage() {
     }
     // Targeted single-chain refresh — patches one entry in the known
     // breakdown and re-sums in memory, instead of re-scanning everything.
-    const refreshOneChain = (chainId: string) => {
-      readExternalChainBalance(chainId as any, walletAddress).then(balance => {
-        if (cancelled) return
-        chainBalancesRef.current = { ...chainBalancesRef.current, [chainId]: balance }
-        const total = sumChainBalances(chainBalancesRef.current)
-        setUnifiedBalance(total > 0.001 ? total : null)
-      }).catch(() => {})
+    const applyOne = (chainId: string, balance: number) => {
+      if (cancelled) return
+      chainBalancesRef.current = { ...chainBalancesRef.current, [chainId]: balance }
+      const total = sumChainBalances(chainBalancesRef.current)
+      setUnifiedBalance(total > 0.001 ? total : null)
     }
+    const refreshOneChain = (chainId: string) => {
+      readExternalChainBalance(chainId as any, walletAddress).then(b => applyOne(chainId, b)).catch(() => {})
+    }
+    // A bridge/deposit this app just sent moved funds on an external chain.
+    const onExternal = (e: Event) => {
+      const d = (e as CustomEvent).detail || {}
+      if (d.chainId) applyOne(d.chainId, d.balance)
+    }
+    window.addEventListener(EXTERNAL_BALANCE_EVENT, onExternal)
     fullScan()
     const iv = setInterval(fullScan, 5 * 60_000)
 
@@ -3575,7 +3582,7 @@ export function HomePage() {
         .subscribe()
     })
 
-    return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe() }
+    return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal) }
   }, [walletAddress, settingsMap, settingsLoaded])
 
   if (!user) return null

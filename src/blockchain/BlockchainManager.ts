@@ -47,7 +47,7 @@ import { getClient } from './ProviderManager'
 import { getArcBalance, peekArcBalance, fetchArcBalanceRaw } from './arcBalanceReader'
 import type { ArcAsset } from './arcBalanceReader'
 import {
-  externalBalanceReader, externalBalanceTotal, readChainUSDCBalance,
+  externalBalanceReader, externalBalanceTotal, readChainUSDCBalance, patchCachedChainBalance,
 } from './externalBalanceReader'
 import type { ChainBalanceResult, ExternalBalancesResult } from './externalBalanceReader'
 import { ARC_CHAIN_ID } from './chains'
@@ -141,8 +141,27 @@ export function readExternalTotal(
 }
 
 /** One external chain, for a targeted post-event refresh. */
-export function readExternalChainBalance(chain: ChainId, wallet: string): Promise<number> {
-  return readChainUSDCBalance(chain, normalizeAddress(wallet))
+export async function readExternalChainBalance(chain: ChainId, wallet: string): Promise<number> {
+  const balance = await readChainUSDCBalance(chain, normalizeAddress(wallet))
+  patchCachedChainBalance(wallet, chain, balance)
+  return balance
+}
+
+/** Event every page showing external balances listens to: { chainId, balance }. */
+export const EXTERNAL_BALANCE_EVENT = 'meshport:external-balance'
+
+/**
+ * Call right after this app moved USDC on an external chain (bridge burn,
+ * Gateway deposit). Re-reads that chain now and once more a few seconds
+ * later (an RPC can lag the confirming block), updates the cache and tells
+ * every open page — no waiting for the claim to finish or the next scan.
+ */
+export function notifyExternalBalanceChanged(chain: string, wallet: string): void {
+  const read = () => readExternalChainBalance(chain as ChainId, wallet).then(balance => {
+    window.dispatchEvent(new CustomEvent(EXTERNAL_BALANCE_EVENT, { detail: { chainId: chain, balance } }))
+  }).catch(() => {})
+  read()
+  setTimeout(read, 4_000)
 }
 
 // ─── Transactions ───────────────────────────────────────────────────────────

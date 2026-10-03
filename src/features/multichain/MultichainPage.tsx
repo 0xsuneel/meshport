@@ -16,7 +16,7 @@ import { formatAmount, timeAgo, copyToClipboard } from '@/lib/utils'
 import { subscribeToWalletClaims, type Claim as ServerClaim } from '@/lib/claimService'
 import { useSettingsStore } from '@/store/settingsStore'
 import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
-import { readExternalBalances, readExternalChainBalance } from '@/blockchain/BlockchainManager'
+import { readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { motion } from 'framer-motion'
 import { useSharedKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
@@ -594,13 +594,20 @@ export function MultichainPage() {
     // Targeted single-chain refresh — patches one entry in the known
     // per-chain map and re-derives chainBalances/totalExternal from it,
     // instead of re-scanning every chain.
-    const refreshOneChain = (chainId: string) => {
-      readExternalChainBalance(chainId as any, walletAddress).then(balance => {
-        if (cancelled) return
-        chainBalancesMapRef.current = { ...chainBalancesMapRef.current, [chainId]: balance }
-        applyChainMap(chainBalancesMapRef.current)
-      }).catch(() => {})
+    const applyOne = (chainId: string, balance: number) => {
+      if (cancelled) return
+      chainBalancesMapRef.current = { ...chainBalancesMapRef.current, [chainId]: balance }
+      applyChainMap(chainBalancesMapRef.current)
     }
+    const refreshOneChain = (chainId: string) => {
+      readExternalChainBalance(chainId as any, walletAddress).then(b => applyOne(chainId, b)).catch(() => {})
+    }
+    // A bridge/deposit this app just sent moved funds on an external chain.
+    const onExternal = (e: Event) => {
+      const d = (e as CustomEvent).detail || {}
+      if (d.chainId) applyOne(d.chainId, d.balance)
+    }
+    window.addEventListener(EXTERNAL_BALANCE_EVENT, onExternal)
     fullScan()
     const iv = setInterval(fullScan, 5 * 60_000)
 
@@ -624,7 +631,7 @@ export function MultichainPage() {
         .subscribe()
     })
 
-    return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe() }
+    return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal) }
   }, [walletAddress, processingClaims.map(c => `${c.id}:${c.status}`).join(','), settingsMap, settingsLoaded, scanNonce])
 
   // Load completed activity from DB — shared across all devices via Supabase
