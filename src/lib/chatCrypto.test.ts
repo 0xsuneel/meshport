@@ -319,6 +319,9 @@ describe('e2e:v2 per-message keys', async () => {
 describe('wallet-signed chat keys', async () => {
   const { chatKeyStatement, verifyChatKey, makeChatKeys, LOCKED_TEXT } = await import('./chatCrypto')
   const { privateKeyToAccount } = await import('viem/accounts')
+  // verifyChatKey loads viem lazily; load it here, at collection, so a cold
+  // transform can't eat into a test's timeout.
+  await import('viem')
   const toB64 = (b: Uint8Array) => btoa(String.fromCharCode(...b))
   const aliceWallet = '0x' + 'a1'.repeat(32) as `0x${string}`
   const eveWallet = '0x' + 'e3'.repeat(32) as `0x${string}`
