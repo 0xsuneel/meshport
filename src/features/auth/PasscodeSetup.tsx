@@ -265,13 +265,12 @@ export function PasscodeSetupPage() {
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
             </svg>
           </div>
-          {/* No exit-then-enter (mode="wait" left a blank gap between
-              "Create" and "Confirm"): the new title just fades in. */}
-          <motion.div key={step}
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18 }}>
+          {/* The title just changes — any fade between "Set" and "Confirm"
+              reads as a flicker on a phone. */}
+          <div>
             <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">{title}</h2>
             <p className="text-text-secondary mt-1 text-[14px] leading-[1.5]">{subtitle}</p>
-          </motion.div>
+          </div>
         </div>
 
         {/* Keyed by step: the dots start empty on Confirm instead of fading

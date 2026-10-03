@@ -12,7 +12,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { motion } from 'framer-motion'
 import { KeyRound, QrCode, Check, ChevronLeft, Camera, Upload, Loader2, ShieldCheck, Download } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 
@@ -90,12 +89,12 @@ export function SecureWalletPage() {
           <ChevronLeft className="w-6 h-6 text-text-primary" />
         </button>
       )}
-      <div className="flex-1 flex flex-col justify-center gap-6 py-8">
+      {/* Top-aligned so status badges / labels arriving never move the page. */}
+      <div className="flex-1 flex flex-col gap-6 pb-8" style={{ paddingTop: manage ? 8 : 'max(40px, 8vh)' }}>
         <div className="text-center">
-          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-            className="w-20 h-20 rounded-full flex items-center justify-center bg-brand/15 border border-brand/25 mx-auto mb-4">
+          <div className="w-20 h-20 rounded-full flex items-center justify-center bg-brand/15 border border-brand/25 mx-auto mb-4">
             <ShieldCheck className="w-10 h-10 text-brand" />
-          </motion.div>
+          </div>
           <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary mb-2">Secure Your Wallet</h2>
           <p className="text-text-secondary text-[14px] leading-[1.5] max-w-xs mx-auto">
             Your wallet lives on your device — MeshPort can't open it. Set up at least one way to get it back on a new phone.
@@ -284,8 +283,12 @@ export function RecoverWalletPage() {
 
   useEffect(() => { if (privateKey) navigate('/', { replace: true }) }, [privateKey])
   useEffect(() => {
-    if (!userId) return
-    import('@/lib/walletPasskey').then(({ listWalletPasskeys }) => listWalletPasskeys(userId)).then(l => setHasPasskey(l.length > 0)).catch(() => setHasPasskey(false))
+    if (!userId) { setHasPasskey(true); return }
+    // Never leave the page without buttons: if the check is slow, offer the
+    // passkey anyway (it says so if this account has none).
+    const t = setTimeout(() => setHasPasskey(h => h ?? true), 1500)
+    import('@/lib/walletPasskey').then(({ listWalletPasskeys }) => listWalletPasskeys(userId)).then(l => setHasPasskey(l.length > 0)).catch(() => setHasPasskey(true))
+    return () => clearTimeout(t)
   }, [userId])
 
   const finish = async (key: string, via: 'passkey' | 'qr') => {
@@ -344,7 +347,9 @@ export function RecoverWalletPage() {
 
   return (
     <div className="flex flex-col h-full bg-bg px-6 py-safe overflow-y-auto">
-      <div className="flex-1 flex flex-col justify-center gap-5 py-8">
+      {/* Top-aligned, not centred: nothing above moves when the buttons
+          below arrive (centring made the whole page jump). */}
+      <div className="flex-1 flex flex-col gap-5 pb-8" style={{ paddingTop: 'max(56px, 12vh)' }}>
         <div className="text-center">
           <div className="w-20 h-20 rounded-full flex items-center justify-center bg-brand/15 border border-brand/25 mx-auto mb-4">
             <KeyRound className="w-10 h-10 text-brand" />
@@ -366,12 +371,18 @@ export function RecoverWalletPage() {
             <SecondaryButton onClick={() => { setMode('choose'); setQrText(''); setPw('') }} disabled={busy}>Use a different QR</SecondaryButton>
           </div>
         ) : (
-          <div className="space-y-3">
-            {hasPasskey && (
-              <PrimaryButton onClick={usePasskey} disabled={busy}>{busy ? 'Waiting for passkey…' : 'Use Passkey'}</PrimaryButton>
+          // Shown once it's known whether this account has a passkey, all at
+          // once — the passkey button popping in later pushed the rest down.
+          <div className="space-y-3" style={{ minHeight: 200, opacity: hasPasskey === null ? 0 : 1, transition: 'opacity 0.15s' }}>
+            {hasPasskey !== null && (
+              <>
+                {hasPasskey && (
+                  <PrimaryButton onClick={usePasskey} disabled={busy}>{busy ? 'Waiting for passkey…' : 'Use Passkey'}</PrimaryButton>
+                )}
+                <SecondaryButton onClick={() => { setError(''); setMode('scan') }} disabled={busy}><Camera className="w-4 h-4" /> Scan Recovery QR</SecondaryButton>
+                <SecondaryButton onClick={() => fileRef.current?.click()} disabled={busy}><Upload className="w-4 h-4" /> Upload QR Image</SecondaryButton>
+              </>
             )}
-            <SecondaryButton onClick={() => { setError(''); setMode('scan') }} disabled={busy}><Camera className="w-4 h-4" /> Scan Recovery QR</SecondaryButton>
-            <SecondaryButton onClick={() => fileRef.current?.click()} disabled={busy}><Upload className="w-4 h-4" /> Upload QR Image</SecondaryButton>
             <input ref={fileRef} type="file" accept="image/*" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) uploadQr(f) }} />
           </div>
