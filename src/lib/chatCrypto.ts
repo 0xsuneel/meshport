@@ -19,6 +19,15 @@
 //   Like WhatsApp's safety numbers, but checked automatically, because the
 //   identity is already the wallet.
 //
+// REMEMBERED IDENTITIES — "security info changed".
+//   The signature ties a key to the wallet address the server reports. To
+//   also catch that address being changed, this device remembers each
+//   contact's wallet + key the first time it sees them signed (like
+//   WhatsApp's security code). If either later differs, the new key isn't
+//   used — messages wait and Pay is held — until the user confirms in the
+//   chat (trustNewIdentity). A user's real key never changes on its own:
+//   it's derived from their wallet.
+//
 // EVERY MESSAGE CARRIES ITS OWN KEY — format "e2e:v2:".
 //   For each message (and each photo/file) a fresh random 256-bit key K is
 //   made, the content is sealed with AES-256-GCM under K, and K itself is
@@ -169,6 +178,55 @@ async function getMySeed(walletAddress: string): Promise<Uint8Array | null> {
   return loadSeed(walletAddress)
 }
 
+// ── Remembered contact identities (per device, per my wallet) ──────────────
+const PIN_PREFIX = 'meshport_chat_pin_'
+const CHANGED_PREFIX = 'meshport_chat_changed_'
+/** Fired with { userId } when a contact's wallet or key differs from the remembered one. */
+export const IDENTITY_CHANGED_EVENT = 'meshport:chat-identity-changed'
+type Pin = { wallet: string; pub: string }
+const pinKey = (me: string, userId: string) => `${me.toLowerCase()}:${userId}`
+function readJson(key: string): Pin | null {
+  try { const v = JSON.parse(localStorage.getItem(key) ?? 'null'); return v?.wallet && v?.pub ? v : null } catch { return null }
+}
+function writeJson(key: string, v: Pin | null) {
+  try { if (v) localStorage.setItem(key, JSON.stringify(v)); else localStorage.removeItem(key) } catch { /* storage blocked */ }
+}
+
+/**
+ * Checks a contact's verified wallet + key against the remembered one.
+ * First sighting is remembered; a difference is recorded and reported.
+ * Returns true when it may be used. (Exported for tests.)
+ */
+export function checkPinned(me: string, userId: string, wallet: string, pub: string): boolean {
+  const k = pinKey(me, userId)
+  const pin = readJson(PIN_PREFIX + k)
+  const seen = { wallet: wallet.toLowerCase(), pub }
+  if (!pin) { writeJson(PIN_PREFIX + k, seen); return true }
+  if (pin.wallet === seen.wallet && pin.pub === seen.pub) { writeJson(CHANGED_PREFIX + k, null); return true }
+  const prev = readJson(CHANGED_PREFIX + k)
+  writeJson(CHANGED_PREFIX + k, seen)
+  if (!prev || prev.wallet !== seen.wallet || prev.pub !== seen.pub) {
+    try { window.dispatchEvent(new CustomEvent(IDENTITY_CHANGED_EVENT, { detail: { userId } })) } catch { /* no window (tests) */ }
+  }
+  return false
+}
+
+/** The contact's changed identity awaiting confirmation on this device, or null. */
+export function changedIdentity(myWalletAddress: string, userId: string): { wallet: string } | null {
+  const c = readJson(CHANGED_PREFIX + pinKey(myWalletAddress, userId))
+  return c ? { wallet: c.wallet } : null
+}
+
+/** The user confirmed the contact's new security info: remember it and use it. */
+export function trustNewIdentity(myWalletAddress: string, userId: string): void {
+  const k = pinKey(myWalletAddress, userId)
+  const c = readJson(CHANGED_PREFIX + k)
+  if (c) writeJson(PIN_PREFIX + k, c)
+  writeJson(CHANGED_PREFIX + k, null)
+  _keysCache.delete(k)
+  dropPub(userId)
+}
+
 function cachedPub(userId: string): string | null { try { return localStorage.getItem(PUB_PREFIX + userId) } catch { return null } }
 function savePub(userId: string, pub: string) { try { localStorage.setItem(PUB_PREFIX + userId, pub) } catch { /* storage blocked */ } }
 function dropPub(userId: string) { try { localStorage.removeItem(PUB_PREFIX + userId) } catch { /* storage blocked */ } }
@@ -264,7 +322,8 @@ export async function getConversationKey(myWalletAddress: string, otherUserId: s
       const { data, error } = await supabase.from('users').select('chat_public_key, chat_key_sig, wallet_address').eq('id', otherUserId).maybeSingle()
       if (error) return undefined
       const pub = (data?.chat_public_key as string | null) ?? null
-      return (await verifyChatKey(data?.wallet_address, pub, data?.chat_key_sig)) ? pub : null
+      if (!(await verifyChatKey(data?.wallet_address, pub, data?.chat_key_sig))) return null
+      return checkPinned(myWalletAddress, otherUserId, data!.wallet_address as string, pub!) ? pub : null
     }
     // Remembered copy first (no network wait), confirmed in the background.
     let pubStr = cachedPub(otherUserId)

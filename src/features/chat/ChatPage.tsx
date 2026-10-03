@@ -2032,6 +2032,8 @@ export function ChatConversationPage() {
   // own comment on why that's a safe, non-blocking fallback rather than an
   // error state.
   const [convKey, setConvKey] = useState<any>(null)
+  // Bumped to look the key up again (after confirming changed security info).
+  const [keyNonce, setKeyNonce] = useState(0)
   // Which conversation partner convKey was resolved for (null key is a valid
   // "no E2E yet" answer, so readiness is tracked separately).
   const [convKeyFor, setConvKeyFor] = useState<string | null>(null)
@@ -2069,7 +2071,27 @@ export function ChatConversationPage() {
       })
     )
     return () => { cancelled = true }
-  }, [otherUser?.id, walletAddress, walletKeyReady])
+  }, [otherUser?.id, walletAddress, walletKeyReady, keyNonce])
+  // This contact's wallet or chat key differs from the one this device
+  // remembered (chatCrypto's "remembered identities"): messages wait and Pay
+  // is held until the user confirms.
+  const [idChanged, setIdChanged] = useState<{ wallet: string } | null>(null)
+  useEffect(() => {
+    if (!otherUser?.id || !walletAddress) { setIdChanged(null); return }
+    const read = () => import('@/lib/chatCrypto').then(({ changedIdentity }) => setIdChanged(changedIdentity(walletAddress, otherUser.id)))
+    read()
+    const on = (e: Event) => { if ((e as CustomEvent).detail?.userId === otherUser.id) read() }
+    window.addEventListener('meshport:chat-identity-changed', on)
+    return () => window.removeEventListener('meshport:chat-identity-changed', on)
+  }, [otherUser?.id, walletAddress, convKey])
+  const confirmNewIdentity = () => {
+    if (!otherUser?.id || !walletAddress) return
+    import('@/lib/chatCrypto').then(({ trustNewIdentity }) => {
+      trustNewIdentity(walletAddress, otherUser.id)
+      setIdChanged(null)
+      setKeyNonce(n => n + 1)
+    })
+  }
   // What text bubbles get: the key, null (no key — final), or undefined
   // (still unlocking).
   const bubbleKey = convKey || (keyFinalFor === otherUser?.id || keyWaitOver ? null : undefined)
@@ -3370,6 +3392,7 @@ export function ChatConversationPage() {
   }
 
   const handlePay = () => {
+    if (idChanged) { showToastMessage(`Confirm ${otherUser?.display_name || otherUser?.username || 'this contact'}'s new security info before paying`, 'error'); return }
     if (!otherUser?.username || !otherUser?.wallet_address) { showToastMessage('Recipient wallet not available', 'error'); return }
     setPayAmount(''); setPayToken('USDC'); setPayNote(''); setPayError(''); setPayTxHash('')
     setBillPay(null)
@@ -4393,6 +4416,26 @@ export function ChatConversationPage() {
             </motion.button>
           )}
         </AnimatePresence>
+
+        {/* Security info changed — WhatsApp's "security code changed", but held
+            until confirmed since a changed wallet would also redirect payments. */}
+        {idChanged && (
+          <div className="mx-3 mt-2 rounded-xl px-3 py-2.5 flex items-start gap-2.5"
+            style={{ background: 'color-mix(in srgb, var(--warning) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }} aria-hidden>
+              <path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z" /><path d="M12 9v4M12 16.5v.01" />
+            </svg>
+            <div className="flex-1 min-w-0 text-[12.5px] leading-snug text-text-primary">
+              {(otherUser?.display_name || recipientClean)}'s security info changed (wallet {idChanged.wallet.slice(0, 6)}…{idChanged.wallet.slice(-4)}).
+              Messages wait and Pay is paused until you confirm. Check with them in person or another app first.
+            </div>
+            <button type="button" onClick={confirmNewIdentity}
+              className="text-[12.5px] font-semibold rounded-lg px-2.5 py-1.5 flex-shrink-0"
+              style={{ color: '#fff', background: 'var(--brand)' }}>
+              Confirm
+            </button>
+          </div>
+        )}
 
         {/* Replying to… (swipe-to-reply) */}
         <AnimatePresence>

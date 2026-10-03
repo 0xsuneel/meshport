@@ -348,3 +348,31 @@ describe('wallet-signed chat keys', async () => {
     expect(await decryptText(forged, bobKnowsAlice)).toBe(LOCKED_TEXT)
   })
 })
+
+describe('remembered contact identities ("security info changed")', async () => {
+  const { checkPinned, changedIdentity, trustNewIdentity } = await import('./chatCrypto')
+  const store = new Map<string, string>()
+  ;(globalThis as any).localStorage = {
+    getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v) },
+    removeItem: (k: string) => { store.delete(k) }, key: (i: number) => [...store.keys()][i] ?? null,
+    get length() { return store.size },
+  }
+  const me = '0xMe'
+  const guru = { id: 'user-guru', wallet: '0xAAA', pub: 'pubA' }
+
+  it('remembers the first identity and keeps accepting it', () => {
+    expect(checkPinned(me, guru.id, guru.wallet, guru.pub)).toBe(true)
+    expect(checkPinned(me, guru.id, guru.wallet, guru.pub)).toBe(true)
+    expect(changedIdentity(me, guru.id)).toBeNull()
+  })
+
+  it('a different wallet or key is held until confirmed, then used', () => {
+    expect(checkPinned(me, guru.id, '0xBBB', 'pubB')).toBe(false)
+    expect(changedIdentity(me, guru.id)).toEqual({ wallet: '0xbbb' })
+    expect(checkPinned(me, guru.id, guru.wallet, 'pubOther')).toBe(false)
+    trustNewIdentity(me, guru.id) // confirms the latest one seen
+    expect(changedIdentity(me, guru.id)).toBeNull()
+    expect(checkPinned(me, guru.id, guru.wallet, 'pubOther')).toBe(true)
+    expect(checkPinned(me, guru.id, '0xBBB', 'pubB')).toBe(false)
+  })
+})
