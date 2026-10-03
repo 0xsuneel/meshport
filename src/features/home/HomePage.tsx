@@ -1552,30 +1552,17 @@ function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
 // card, AND each action line now has `whiteSpace:'nowrap'` with an
 // ellipsis fallback — so a line can never silently wrap to a 3rd line and
 // blow the card's height out again, even on an unusually narrow screen.
-// ── Organic "bowed-edge" card shape — large-radius corners plus a
-// slight outward bow on every edge (a plain CSS border-radius rectangle
-// can only round the corners; all 4 sides stay perfectly straight, so
-// that alone can't produce this silhouette). W/H are the box's own
-// size, RX/RY the elliptical corner radii, BT how far the top and
-// bottom edges' midpoints bow outward (the sides stay straight).
-// Card outline: straight top and bottom edges; the left and right ends are
-// the halves of a superellipse |x/a|^n + |y/b|^n = 1 as tall as the card, so
-// the sides curve slightly and flow into smooth corners in one continuous
-// curve (n = 9). The flat edges meet the ends where those are already
-// horizontal, so the joins are smooth. Sampled finely enough to read as a curve.
-function superellipsePath(W: number, H: number, n = 9): string {
-  const ex = Math.min(W / 2, H * 0.95), b = H / 2, steps = 120
-  const right: string[] = [], left: string[] = []
-  for (let i = 0; i <= steps; i++) {
-    const t = -Math.PI / 2 + (i / steps) * Math.PI, c = Math.cos(t), sn = Math.sin(t)
-    const dx = ex * Math.pow(Math.abs(c), 2 / n)
-    const dy = b * Math.sign(sn) * Math.pow(Math.abs(sn), 2 / n)
-    right.push(`${(W - ex + dx).toFixed(2)},${(b + dy).toFixed(2)}`)  // top → bottom
-    left.push(`${(ex - dx).toFixed(2)},${(b - dy).toFixed(2)}`)       // bottom → top
-  }
-  return `M ${ex},0 L ${right.join(' L ')} L ${ex},${H} L ${left.join(' L ')} Z`
+// Card outline: all four edges straight; only the corners curve, with a
+// smooth (iOS-style) 20px corner. Drawn as a path in the box's own pixel
+// size so the corners stay round at any card width.
+const CARD_CORNER = 20
+function cardPath(W: number, H: number, r = CARD_CORNER): string {
+  r = Math.min(r, W / 2, H / 2)
+  const k = r * 0.45
+  return `M ${r},0 L ${W - r},0 C ${W - k},0 ${W},${k} ${W},${r} L ${W},${H - r} C ${W},${H - k} ${W - k},${H} ${W - r},${H}`
+    + ` L ${r},${H} C ${k},${H} 0,${H - k} 0,${H - r} L 0,${r} C 0,${k} ${k},0 ${r},0 Z`
 }
-const FALLBACK_CARD_PATH = superellipsePath(100, 100)
+const FALLBACK_CARD_PATH = cardPath(100, 100, 6)
 
 // Shared shell for the Balance and Multichain Hub hero cards: measures
 // its own rendered size via ResizeObserver and recomputes the bowed
@@ -1609,7 +1596,7 @@ function BowedShapeCard({
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
-  const path = useMemo(() => (size ? superellipsePath(size.w, size.h) : ''), [size?.w, size?.h])
+  const path = useMemo(() => (size ? cardPath(size.w, size.h) : ''), [size?.w, size?.h])
   // iOS Safari can briefly report a zero-sized SVG during a reload/layout
   // restore. Keep a normalized fallback path mounted so the card background
   // is visible immediately; once ResizeObserver has the real dimensions the
