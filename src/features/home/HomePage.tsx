@@ -1,6 +1,6 @@
 import { useHubLabel, useMerchant } from '@/lib/merchant'
 import { isUbChain } from '@/lib/ubChains'
-import {useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject, type CSSProperties, type ReactNode} from 'react'
+import {useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject, type MutableRefObject, type CSSProperties, type ReactNode} from 'react'
 import { flushSync, createPortal } from 'react-dom'
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
 import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
@@ -1632,7 +1632,7 @@ function BowedShapeCard({
 
   return (
     <div
-      ref={(node) => { wrapRef.current = node; if (cardRef) (cardRef as RefObject<HTMLDivElement | null>).current = node }}
+      ref={(node) => { wrapRef.current = node; if (cardRef) (cardRef as MutableRefObject<HTMLDivElement | null>).current = node }}
       style={{ position: 'relative', width: '100%', height: fill ? '100%' : undefined }}
     >
       {/* Always keep the card shape mounted. This prevents iOS Safari from
