@@ -1558,18 +1558,22 @@ function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
 // that alone can't produce this silhouette). W/H are the box's own
 // size, RX/RY the elliptical corner radii, BT how far the top and
 // bottom edges' midpoints bow outward (the sides stay straight).
-// Card outline: a superellipse |x/a|^n + |y/b|^n = 1 — the edges curve only
-// a tiny bit and flow into smooth corners in one continuous curve (n = 9; a
-// lower n is rounder). Sampled into a polygon fine enough to read as a curve.
+// Card outline: straight top and bottom edges; the left and right ends are
+// the halves of a superellipse |x/a|^n + |y/b|^n = 1 as tall as the card, so
+// the sides curve slightly and flow into smooth corners in one continuous
+// curve (n = 9). The flat edges meet the ends where those are already
+// horizontal, so the joins are smooth. Sampled finely enough to read as a curve.
 function superellipsePath(W: number, H: number, n = 9): string {
-  const a = W / 2, b = H / 2, steps = 240, pts: string[] = []
-  for (let i = 0; i < steps; i++) {
-    const t = (i / steps) * Math.PI * 2, c = Math.cos(t), sn = Math.sin(t)
-    const x = a + a * Math.sign(c) * Math.pow(Math.abs(c), 2 / n)
-    const y = b + b * Math.sign(sn) * Math.pow(Math.abs(sn), 2 / n)
-    pts.push(`${x.toFixed(2)},${y.toFixed(2)}`)
+  const ex = Math.min(W / 2, H * 0.95), b = H / 2, steps = 120
+  const right: string[] = [], left: string[] = []
+  for (let i = 0; i <= steps; i++) {
+    const t = -Math.PI / 2 + (i / steps) * Math.PI, c = Math.cos(t), sn = Math.sin(t)
+    const dx = ex * Math.pow(Math.abs(c), 2 / n)
+    const dy = b * Math.sign(sn) * Math.pow(Math.abs(sn), 2 / n)
+    right.push(`${(W - ex + dx).toFixed(2)},${(b + dy).toFixed(2)}`)  // top → bottom
+    left.push(`${(ex - dx).toFixed(2)},${(b - dy).toFixed(2)}`)       // bottom → top
   }
-  return 'M ' + pts.join(' L ') + ' Z'
+  return `M ${ex},0 L ${right.join(' L ')} L ${ex},${H} L ${left.join(' L ')} Z`
 }
 const FALLBACK_CARD_PATH = superellipsePath(100, 100)
 
