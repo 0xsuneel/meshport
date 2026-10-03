@@ -280,8 +280,8 @@ async function raceOnce(body) {
   // fast as the single fastest endpoint (never slower than a healthy
   // primary was before), and a degraded/dead primary just loses the race
   // instead of blocking anything. This mirrors the ethers
-  // FallbackProvider(quorum: 1) pattern already used in swap-proxy.js and
-  // relay-deposit.js — applied by hand here since this function forwards
+  // FallbackProvider(quorum: 1) pattern already used in swap-proxy.js —
+  // applied by hand here since this function forwards
   // raw JSON-RPC bodies rather than using ethers Provider objects.
   //
   // Safe for every method here, including eth_sendRawTransaction: sending

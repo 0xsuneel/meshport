@@ -31,7 +31,7 @@ const SUPABASE_SERVICE_KEY = (
 // txHash/amounts and it would write a fake "completed swap" into that
 // wallet's activity feed via the service-role key, or inject a fake
 // tx_hash into another user's in-flight transaction_attempts row). Same
-// verify-session-owns-address pattern as api/relay-gas.ts.
+// verify-session-owns-address pattern as api/bridge-relay.ts.
 async function verifyOwnsAddress(req, walletAddress) {
   const token = String((req.headers && req.headers.authorization) || '').replace(/^Bearer\s+/i, '')
   if (!token) return false

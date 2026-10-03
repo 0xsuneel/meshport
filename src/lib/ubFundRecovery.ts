@@ -147,12 +147,8 @@ export async function initiateUBRecovery(params: {
   const { walletAddress, privateKey, amount, destinationChainLabel } = params
   const chain = params.chain ?? 'Arc_Testnet'
   try {
-    // Starting the withdrawal is an on-chain tx from the user's wallet on
-    // that chain; outside Arc it needs a little native gas there.
-    if (chain !== 'Arc_Testnet') {
-      const { fundDestinationGas } = await import('@/lib/ubClaim')
-      await fundDestinationGas(chain, walletAddress)
-    }
+    // Starting the withdrawal is an on-chain tx from the user's own wallet
+    // on that chain (it can't be relayed); outside Arc it needs native gas there.
     const { kit, adapter } = await getKitAndAdapter(privateKey, chain)
     const result: any = await kit.unifiedBalance.initiateRemoveFund({
       from: { adapter, chain: chain as any },
@@ -305,8 +301,6 @@ async function runUbCompletion(params: { walletAddress: string; privateKey: stri
       if (!eligibleAt || eligibleAt > nowIso) continue
       try {
         const chain: string = row.metadata?.withdraw_chain
-        const { fundDestinationGas } = await import('@/lib/ubClaim')
-        await fundDestinationGas(chain, walletAddress)
         const { kit, adapter } = await getKitAndAdapter(privateKey, chain)
         const result: any = await kit.unifiedBalance.removeFund({ from: { adapter, chain: chain as any }, token: 'USDC' })
         const hash: string = result?.txHash || result?.data?.txHash || ''
@@ -449,11 +443,12 @@ export async function resolveUbStuckTransfer(p: {
   const recipient = mode === 'refund' ? p.walletAddress : item.destinationAddress
   if (!toChain || !recipient) throw new Error('This transfer has no saved destination')
   // `adapter` above is pinned to Arc RPCs (it signs the Arc allocation). A
-  // mint we submit ourselves on the destination needs that chain's own RPCs.
+  // mint on the destination goes through MeshPort's relayer on that chain.
   const { createEthersAdapterFromPrivateKey } = await loadSdk()
-  const destAdapter = createEthersAdapterFromPrivateKey({ privateKey: p.privateKey })
+  const { relayedProviderFor } = await import('@/lib/relayedProvider')
+  const destAdapter = createEthersAdapterFromPrivateKey({ privateKey: p.privateKey, getProvider: async ({ chain }: any) => relayedProviderFor(chain) })
   const out = await spendUnifiedTo({
-    kit, adapter, destAdapter, signerAddress: p.walletAddress,
+    kit, adapter, destAdapter,
     fromChain: 'Arc_Testnet', amount, toChain, recipient,
   })
 

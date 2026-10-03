@@ -1,7 +1,7 @@
 // api/bridge-relay.ts — MeshPort's gasless bridge relayer (Vercel).
 //
 // Stateless: it holds no user funds, keeps no job state, and can only submit
-// what a user signed. Two actions:
+// what a user signed (or what Circle attested). Three actions:
 //
 //   GET  ?action=quote&chain=Base_Sepolia&amount=<USDC base units>
 //        → { fee, maxFee, usdcName, usdcVersion }
@@ -14,19 +14,29 @@
 //        { txHash } — the CCTP burn. Idempotent: an authorization that was
 //        already used returns the transaction that used it.
 //
+//   POST { action:'call', chain, to, data }
+//        Submits, from the relayer wallet, one of a few calls whose outcome
+//        doesn't depend on who sends them — so the user needs no gas:
+//          · Circle Gateway Wallet deposits signed by the user
+//            (depositWithAuthorization / depositWithPermit; the depositor
+//            must be the signed-in user's wallet)
+//          · Gateway Minter gatewayMint(attestation, signature)
+//          · CCTP V2 MessageTransmitter receiveMessage(message, attestation)
+//        The recipient is fixed by the user's signature or Circle's
+//        attestation, so the relayer can't redirect anything. → { txHash }
+//
 // The router (contracts/MeshPortBridgeRouter.sol) makes the relayer unable to
 // change anything the user signed; this endpoint additionally only relays
 // self-bridges to Arc through Circle's forwarder, for signed-in users, at a
 // fee that covers its gas.
 //
 // Env:
-//   BRIDGE_RELAYER_PRIVATE_KEY  relayer key (pays gas; never holds user funds);
-//                               falls back to RELAY_PRIVATE_KEY (relay-gas's wallet)
+//   BRIDGE_RELAYER_PRIVATE_KEY  relayer key (pays gas; never holds user funds)
 //   BRIDGE_ROUTERS              {"Base_Sepolia":"0x…","Ethereum_Sepolia":"0x…"}
 //   BRIDGE_RPC_<CHAIN>          optional RPC override per chain
 //   BRIDGE_NATIVE_USD_<CHAIN>   optional gas-token USD price per chain (defaults in CHAINS)
 //   BRIDGE_MIN_FEE_UNITS        optional fee floor in USDC base units (default 50000 = 0.05)
-//   SUPABASE_URL, SUPABASE_SERVICE_KEY  session → wallet ownership check (as relay-gas)
+//   SUPABASE_URL, SUPABASE_SERVICE_KEY  session → wallet ownership check
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
@@ -121,19 +131,24 @@ function routers(): Record<string, `0x${string}`> {
   } catch { return {} }
 }
 
-/** The caller's Supabase session must own `address` (same check as relay-gas). */
-async function sessionOwns(req: VercelRequest, address: string): Promise<boolean> {
+/** The wallet of the caller's Supabase session, or null when not signed in. */
+async function sessionWallet(req: VercelRequest): Promise<string | null> {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
-  if (!token || !SERVICE_KEY) return false
+  if (!token || !SERVICE_KEY) return null
   const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` } })
-  if (!r.ok) return false
+  if (!r.ok) return null
   const u = await r.json().catch(() => null) as { id?: string } | null
-  if (!u?.id) return false
+  if (!u?.id) return null
   const ur = await fetch(`${SUPABASE_URL}/rest/v1/users?auth_uid=eq.${u.id}&select=wallet_address`, {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
   })
   const rows = ur.ok ? await ur.json().catch(() => []) as Array<{ wallet_address?: string }> : []
-  return !!rows[0]?.wallet_address && rows[0].wallet_address.toLowerCase() === address.toLowerCase()
+  return rows[0]?.wallet_address ? rows[0].wallet_address.toLowerCase() : null
+}
+
+/** The caller's Supabase session must own `address`. */
+async function sessionOwns(req: VercelRequest, address: string): Promise<boolean> {
+  return (await sessionWallet(req)) === address.toLowerCase()
 }
 
 async function clients(chainKey: string) {
@@ -142,8 +157,7 @@ async function clients(chainKey: string) {
   const rpc = process.env[`BRIDGE_RPC_${chainKey.toUpperCase()}`] || c.rpc
   const chain = defineChain({ id: c.id, name: c.name, nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } })
   const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }) })
-  // Falls back to relay-gas's wallet, which already holds gas on these chains.
-  let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || process.env.RELAY_PRIVATE_KEY || '').trim()
+  let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
   if (key && !key.startsWith('0x')) key = '0x' + key
   let wallet: any = null
   if (/^0x[0-9a-fA-F]{64}$/.test(key)) {
@@ -151,6 +165,107 @@ async function clients(chainKey: string) {
     wallet = createWalletClient({ chain, transport: http(rpc, { timeout: 15_000 }), account: privateKeyToAccount(key as `0x${string}`) })
   }
   return { pub, wallet }
+}
+
+// ── Relayed calls (action:'call') ──────────────────────────────────────────
+// Extra chains a relayed call can run on, beyond CHAINS (public RPCs).
+const EXTRA_RPCS: Record<string, string> = {
+  Arc_Testnet:         'https://rpc.testnet.arc.network',
+  Sonic_Testnet:       'https://rpc.testnet.soniclabs.com',
+  World_Chain_Sepolia: 'https://worldchain-sepolia.g.alchemy.com/public',
+  Linea_Sepolia:       'https://rpc.sepolia.linea.build',
+  Ink_Testnet:         'https://rpc-gel-sepolia.inkonchain.com',
+  Monad_Testnet:       'https://testnet-rpc.monad.xyz',
+  Edge_Testnet:        'https://edge-testnet.g.alchemy.com/public',
+}
+// Circle's SDK names a few chains differently from the app.
+const CHAIN_ALIASES: Record<string, string> = { Polygon_Amoy_Testnet: 'Polygon_Sepolia' }
+
+// Same address on every testnet chain.
+const GATEWAY_WALLET = '0x0077777d7eba4688bdef3e311b846f25870a19b9'
+const GATEWAY_MINTER = '0x0022222abe238cc2c7bb1f21003f0a260052475b'
+const MESSAGE_TRANSMITTER_V2 = '0xe737e5cebeeba77efe34d4aa090756590b1ce275'
+
+const RELAYABLE_ABI = [
+  { type: 'function', name: 'depositWithAuthorization', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'token', type: 'address' }, { name: 'from', type: 'address' }, { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
+    { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] },
+  { type: 'function', name: 'depositWithAuthorization', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'token', type: 'address' }, { name: 'from', type: 'address' }, { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
+    { name: 'signature', type: 'bytes' }] },
+  { type: 'function', name: 'depositWithPermit', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'token', type: 'address' }, { name: 'owner', type: 'address' }, { name: 'value', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' }, { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] },
+  { type: 'function', name: 'depositWithPermit', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'token', type: 'address' }, { name: 'owner', type: 'address' }, { name: 'value', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' }, { name: 'signature', type: 'bytes' }] },
+  { type: 'function', name: 'gatewayMint', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'attestationPayload', type: 'bytes' }, { name: 'signature', type: 'bytes' }] },
+  { type: 'function', name: 'receiveMessage', stateMutability: 'nonpayable', outputs: [{ type: 'bool' }], inputs: [
+    { name: 'message', type: 'bytes' }, { name: 'attestation', type: 'bytes' }] },
+] as const
+
+/**
+ * Checks that `to`/`data` is one of the relayable calls. Returns null when it
+ * is, or the reason it isn't. A deposit must be the caller's own.
+ */
+export async function checkRelayable(to: string, data: `0x${string}`, caller: string): Promise<string | null> {
+  const { decodeFunctionData } = await import('viem')
+  let call: { functionName: string; args: readonly unknown[] }
+  try { call = decodeFunctionData({ abi: RELAYABLE_ABI, data }) as any } catch { return 'This call cannot be relayed' }
+  const target = to.toLowerCase()
+  if (call.functionName === 'depositWithAuthorization' || call.functionName === 'depositWithPermit') {
+    if (target !== GATEWAY_WALLET) return 'This call cannot be relayed'
+    if (String(call.args[1]).toLowerCase() !== caller) return 'You can only deposit from your own wallet'
+    return null
+  }
+  if (call.functionName === 'gatewayMint') return target === GATEWAY_MINTER ? null : 'This call cannot be relayed'
+  if (call.functionName === 'receiveMessage') return target === MESSAGE_TRANSMITTER_V2 ? null : 'This call cannot be relayed'
+  return 'This call cannot be relayed'
+}
+
+/** Public + relayer wallet client for any chain a relayed call can run on (chain id read from the RPC). */
+async function callClients(chainKey: string) {
+  const { createPublicClient, createWalletClient, http, defineChain } = await import('viem')
+  const rpc = process.env[`BRIDGE_RPC_${chainKey.toUpperCase()}`] || CHAINS[chainKey]?.rpc || EXTRA_RPCS[chainKey]
+  if (!rpc) return null
+  const probe: any = createPublicClient({ transport: http(rpc, { timeout: 15_000 }) })
+  const id = await probe.getChainId()
+  const chain = defineChain({ id, name: chainKey, nativeCurrency: { name: 'Native', symbol: 'NATIVE', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } })
+  const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }) })
+  let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
+  if (key && !key.startsWith('0x')) key = '0x' + key
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) return { pub, wallet: null as any }
+  const { privateKeyToAccount } = await import('viem/accounts')
+  const wallet: any = createWalletClient({ chain, transport: http(rpc, { timeout: 15_000 }), account: privateKeyToAccount(key as `0x${string}`) })
+  return { pub, wallet }
+}
+
+async function relayCall(req: VercelRequest, res: VercelResponse) {
+  const { chain, to, data } = (req.body ?? {}) as any
+  const chainKey = CHAIN_ALIASES[chain] ?? String(chain || '')
+  if (!isHex(to, 20) || !isHex(data) || data.length < 10) return res.status(400).json({ error: 'Malformed call' })
+  const caller = await sessionWallet(req)
+  if (!caller) return res.status(403).json({ error: 'Not signed in' })
+  const reason = await checkRelayable(to, data, caller)
+  if (reason) return res.status(400).json({ error: reason })
+  const cl = await callClients(chainKey)
+  if (!cl) return res.status(400).json({ error: 'This chain is not supported' })
+  if (!cl.wallet) return res.status(503).json({ error: 'Relayer is not configured' })
+
+  // Simulate first: an already-used or invalid signature/attestation never costs gas.
+  try { await cl.pub.call({ account: cl.wallet.account, to, data }) }
+  catch (e: any) { return res.status(400).json({ error: e?.shortMessage || 'Call would fail' }) }
+  const txHash = await cl.wallet.sendTransaction({ to, data })
+  try {
+    const receipt = await cl.pub.waitForTransactionReceipt({ hash: txHash, timeout: 40_000 })
+    if (receipt.status !== 'success') return res.status(502).json({ error: 'Transaction reverted', txHash })
+    return res.status(200).json({ txHash })
+  } catch {
+    return res.status(200).json({ txHash, pending: true })
+  }
 }
 
 /** Circle's CCTP fee for a burn of `burn` units to Arc via the forwarder, with margin. */
@@ -210,6 +325,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+    if ((req.body as any)?.action === 'call') return await relayCall(req, res)
 
     // ── Relay ────────────────────────────────────────────────────────────
     const { chain: chainKey, bridge: b, authorization: a } = (req.body ?? {}) as any

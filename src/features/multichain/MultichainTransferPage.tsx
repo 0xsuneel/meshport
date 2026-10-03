@@ -24,8 +24,9 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForTransfer, resolveChainMechanism, resolveAvailableMechanisms } from '@/lib/featureFilters'
 import { ARC_EXPLORER, explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ARC_RPCS, ARC_NETWORK } from '@/lib/arc'
-import { RPC_BY_CHAIN_NAME, chainSupportsForwarder } from '@/lib/chainRpcs'
-import { GATEWAY_SELF_MINT_CHAINS, fundDestinationGas } from '@/lib/ubClaim'
+import { chainSupportsForwarder } from '@/lib/chainRpcs'
+import { GATEWAY_SELF_MINT_CHAINS } from '@/lib/ubClaim'
+import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
@@ -84,24 +85,6 @@ async function loadSdkModules(): Promise<SdkModules> {
 // JsonRpcProvider cache — one provider instance per RPC URL per session.
 // Avoids repeated eth_chainId auto-detect on each approve/burn call.
 const _providerCache = new Map<string, any>()
-
-function getCachedProvider(rpcUrl: string, JsonRpcProvider: any, chainId?: number) {
-  if (!_providerCache.has(rpcUrl)) {
-    // Pin the network when the SDK tells us the chain ID up front — same
-    // reasoning as ARC_NETWORK below: skips the eth_chainId auto-detect
-    // call (and its endless 1s retry loop on failure) for a chain ID we
-    // already know isn't going to change mid-session.
-    // toAbsoluteRpcUrl is a no-op for the absolute URLs the SDK normally
-    // hands back here — cheap defense in depth against the same
-    // "unsupported protocol" failure a relative URL causes (see
-    // toAbsoluteRpcUrl below for the full explanation).
-    const url = toAbsoluteRpcUrl(rpcUrl)
-    _providerCache.set(rpcUrl, chainId
-      ? new JsonRpcProvider(url, { chainId, name: 'chain-' + chainId }, { staticNetwork: true })
-      : new JsonRpcProvider(url))
-  }
-  return _providerCache.get(rpcUrl)
-}
 
 // ── Resolve a possibly-relative RPC URL to an absolute one ──────────────────
 // ARC_RPCS is deliberately relative ('/api/arc-rpc' — a same-origin proxy,
@@ -168,38 +151,6 @@ function getArcFallbackProvider(JsonRpcProvider: any, FallbackProvider: any) {
   return _providerCache.get(_ARC_FALLBACK_KEY)
 }
 
-// Non-Arc destination chains had NO fallback at all before this: getProvider
-// trusted whatever single endpoint the Circle SDK handed back
-// (sdkChain.rpcEndpoints[0]) and had nowhere to go if that one endpoint was
-// slow or rate-limited — this mattered specifically for non-forwarder
-// chains, where `adapter` submits the destination mint itself and a stalled
-// destination RPC stalled the whole transfer with nothing to fail over to.
-// RPC_BY_CHAIN_NAME (shared with MultichainClaimPage.tsx via chainRpcs.ts —
-// see that file for why it's shared rather than copied) gives each
-// destination chain the same multi-endpoint failover Arc already had.
-function getDestFallbackProvider(
-  sdkChain: any,
-  fallbackRpcUrl: string | undefined,
-  JsonRpcProvider: any,
-  FallbackProvider: any,
-) {
-  const chainName: string = sdkChain?.name ?? ''
-  const urls = RPC_BY_CHAIN_NAME[chainName] ?? (fallbackRpcUrl ? [fallbackRpcUrl] : [])
-  if (urls.length === 0) return undefined
-
-  const cacheKey = `__dest_fallback__${chainName || urls[0]}`
-  if (!_providerCache.has(cacheKey)) {
-    const providers = urls.map(url => sdkChain?.chainId
-      ? new JsonRpcProvider(toAbsoluteRpcUrl(url), { chainId: sdkChain.chainId, name: 'chain-' + sdkChain.chainId }, { staticNetwork: true })
-      : new JsonRpcProvider(toAbsoluteRpcUrl(url)))
-    // quorum: 1 — failover only, not multi-node consensus (same reasoning
-    // as getArcFallbackProvider above).
-    _providerCache.set(cacheKey, providers.length === 1
-      ? providers[0]
-      : new FallbackProvider(providers, undefined, { quorum: 1 }))
-  }
-  return _providerCache.get(cacheKey)
-}
 
 
 // e.g. ARC_RPCS grows to multiple entries in the future and a
@@ -1244,8 +1195,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // SDK provides; only use its endpoint for non-Arc chains.
           const isArc = sdkChain?.name?.toLowerCase?.().includes('arc') || /arc[.-]/i.test(rpcUrl ?? '')
           if (isArc) return getArcFallbackProvider(JsonRpcProvider, FallbackProvider)
-          return getDestFallbackProvider(sdkChain, rpcUrl, JsonRpcProvider, FallbackProvider)
-            ?? (rpcUrl ? getCachedProvider(rpcUrl, JsonRpcProvider, sdkChain?.chainId) : getArcFallbackProvider(JsonRpcProvider, FallbackProvider))
+          // Destination chains: mints the wallet would submit itself go
+          // through MeshPort's relayer, so it needs no gas there.
+          return relayedProviderFor(sdkChain)
         },
       })
 
@@ -1623,8 +1575,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // failover to /api/arc-rpc or any other fallback.
           const isArc = sdkChain?.name?.toLowerCase?.().includes('arc') || /arc[.-]/i.test(rpcUrl ?? '')
           if (isArc) return getArcFallbackProvider(JsonRpcProvider, FallbackProvider)
-          return getDestFallbackProvider(sdkChain, rpcUrl, JsonRpcProvider, FallbackProvider)
-            ?? (rpcUrl ? getCachedProvider(rpcUrl, JsonRpcProvider, sdkChain?.chainId) : getArcFallbackProvider(JsonRpcProvider, FallbackProvider))
+          // Destination chains: mints the wallet would submit itself go
+          // through MeshPort's relayer, so it needs no gas there.
+          return relayedProviderFor(sdkChain)
         },
       })
 
@@ -1644,11 +1597,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // here rather than trusting depositResult.txHash / spendResult.txHash
       // directly — if it wasn't the cause of transfers missing from
       // Activity, it's a no-op; if it was, this is the fix.
-      const getUBHash = (r: any): string =>
+      // realTxHash: a mint submitted through MeshPort's relayer reports a
+      // hash only the relayer's transaction has on-chain.
+      const getUBHash = (r: any): string => realTxHash(
         r?.txHash || r?.data?.txHash || r?.values?.txHash
           || r?.steps?.find((s: any) => s.name === 'mint')?.txHash
           || r?.steps?.find((s: any) => s.state === 'success' && s.txHash)?.txHash
-          || ''
+          || '')
 
       if (chain.ub) {
         // Resume path: a prior attempt already deposited into Unified Balance
@@ -1769,14 +1724,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             allocations: [{ amount: spendAmount.toFixed(6), chain: 'Arc_Testnet' }],
           },
           // Sei (GATEWAY_SELF_MINT_CHAINS): Circle's forwarder mint keeps
-          // failing on-chain there, so our own wallet submits the mint
-          // (gas topped up by the relay just below). Recipient is unchanged.
+          // failing on-chain there, so the mint is submitted through
+          // MeshPort's relayer instead (relayedProviderFor). Recipient is unchanged.
           to: (GATEWAY_SELF_MINT_CHAINS.has(chain.sdk)
             ? { chain: chain.sdk as any, recipientAddress: address, adapter, useForwarder: false }
             : { chain: chain.sdk as any, recipientAddress: address, useForwarder: true }) as any,
           token: 'USDC',
         }
-        if (GATEWAY_SELF_MINT_CHAINS.has(chain.sdk) && senderAddress) await fundDestinationGas(chain.sdk, senderAddress)
         // Covers both the first spend() attempt and the resumable retry
         // below, since the retry only adds `config.retry` on top of these
         // same spendParams — amount/allocations never change between them.
@@ -1859,9 +1813,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             // The forwarder's mint is what failed, so resuming must NOT go
             // back through the forwarder (with config.retry the SDK has no
             // transferId and rejects a forwarder destination outright) —
-            // mint it with the user's own wallet on the destination, after
-            // topping up its gas there. Same recipient, same attestation.
-            if (senderAddress) await fundDestinationGas(chain.sdk, senderAddress)
+            // mint it on the destination through MeshPort's relayer
+            // (relayedProviderFor). Same recipient, same attestation.
             const resumeParams = {
               ...spendParams,
               to: { chain: chain.sdk as any, recipientAddress: address, adapter, useForwarder: false } as any,
@@ -2258,40 +2211,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       const isL1Destination = chain.layer === 'L1'
       let maxFee = String(Math.max(isL1Destination ? 1.0 : 0.15, numAmount * (isL1Destination ? 0.01 : 0.002)).toFixed(6))
 
-      // Chains outside Circle's forwarder allow-list (e.g. Plume) have no
-      // relayer to submit the destination mint, so `adapter` — the same key
-      // that signs on Arc — has to submit it itself. That needs a little
-      // native gas sitting on the destination chain first; top it up via the
-      // gas-relay endpoint before attempting the bridge. Best-effort: if
-      // funding fails (chain not configured server-side, relay underfunded,
-      // etc.) we still attempt the bridge — the wallet may already hold gas
-      // from a prior top-up — but we don't block the whole transfer on it.
+      // Chains outside Circle's forwarder allow-list have no forwarder to
+      // submit the destination mint, so `adapter` submits it — through
+      // MeshPort's relayer (relayedProviderFor), so the wallet needs no gas.
       const useForwarder = chainSupportsForwarder(chain.sdk)
 
       const destTarget = useForwarder
         ? { chain: chain.sdk as any, recipientAddress: address, useForwarder: true }
         : { chain: chain.sdk as any, recipientAddress: address, adapter, useForwarder: false }
-
-      // PERF: the gas top-up and the fee re-estimate below used to run
-      // sequentially (await gas, THEN await estimate) even though neither
-      // depends on the other's result — that serialized the full latency
-      // of both network calls into the signing hot path on every single
-      // transfer. Both still have to finish before kit.bridge() (the
-      // top-up must land before `adapter` submits the mint on non-forwarder
-      // chains; the estimate feeds maxFee below), so fire them together
-      // and await both, instead of one after the other.
-      const gasTopUpPromise: Promise<void> = useForwarder
-        ? Promise.resolve()
-        : import('@/lib/supabase').then(({ authApiHeaders }) => authApiHeaders()).then(headers => fetch('/api/relay-gas', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ chainId: chain.sdk, userAddress: senderAddress }),
-          })).then(() => undefined).catch((gasErr) => {
-            // Best-effort: if funding fails (chain not configured server-side,
-            // relay underfunded, etc.) we still attempt the bridge — the
-            // wallet may already hold gas from a prior top-up.
-            console.warn('[Bridge] relay-gas top-up failed, proceeding anyway:', gasErr)
-          })
 
       const runEstimate = () => kit.estimateBridge({
         from: { adapter, chain: 'Arc_Testnet' },
@@ -2314,7 +2241,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         }
       })()
 
-      const [estimate] = await Promise.all([estimatePromise, gasTopUpPromise])
+      const estimate = await estimatePromise
       if (estimate) {
         const feeEntries: any[] = estimate?.fees ?? []
         const hadFailedLookup = feeEntries.some((f: any) => f.amount === null || f.error)
@@ -2450,7 +2377,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
       // Arc SDK: txHash is at step.txHash OR step.data.txHash
       const getHash = (step: any): string =>
-        step?.txHash || step?.data?.txHash || step?.values?.txHash || ''
+        realTxHash(step?.txHash || step?.data?.txHash || step?.values?.txHash || '')
 
       const stepHashMap: Record<string, string> = {
         approve:     getHash(approveStep),

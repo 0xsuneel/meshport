@@ -55,6 +55,7 @@ import {
 } from '@/lib/claimService'
 import { ClaimProgressTracker } from '@/components/multichain/ClaimProgressTracker'
 import { isGaslessBridgeAvailable, quoteGaslessBridge, bringFundsGasless } from '@/lib/gaslessBridge'
+import { relayedProviderFor } from '@/lib/relayedProvider'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFilters'
 import { readExternalBalances, refreshScope, readExternalChainBalance } from '@/blockchain/BlockchainManager'
@@ -137,32 +138,6 @@ function sanitizeClaimAmount(raw: string): string {
   return cleaned
 }
 
-// Native gas token per chain, mapped to its mainnet CoinGecko id for live
-// USD pricing — every chain above is a TESTNET (Sepolia/Fuji/testnet
-// suffix), so its own gas token has no real market price. Using the
-// corresponding MAINNET token's live price is the standard way to express
-// "what this would actually cost" for a testnet gas figure — the same
-// approach block explorers use for testnet gas-price widgets. Chains with
-// no meaningful mainnet-equivalent price yet (no mainnet token launched,
-// or ticker too new/ambiguous to map confidently) are left out entirely —
-// their gas just doesn't count toward the USD total rather than risk a
-// wrong or invented number.
-const NATIVE_GAS_COINGECKO_ID: Record<string, string> = {
-  Ethereum_Sepolia:    'ethereum',
-  Base_Sepolia:        'ethereum',       // Base gas token is ETH
-  Arbitrum_Sepolia:    'ethereum',       // Arbitrum gas token is ETH
-  Optimism_Sepolia:    'ethereum',       // OP gas token is ETH
-  Polygon_Sepolia:     'matic-network',
-  Avalanche_Fuji:      'avalanche-2',
-  Unichain_Sepolia:    'ethereum',       // Unichain gas token is ETH
-  World_Chain_Sepolia: 'ethereum',       // World Chain gas token is ETH
-  Linea_Sepolia:       'ethereum',       // Linea gas token is ETH
-  Ink_Testnet:         'ethereum',       // Ink gas token is ETH
-  Morph_Testnet:       'ethereum',       // Morph gas token is ETH
-  Sei_Testnet:         'sei-network',
-  XDC_Apothem:         'xdce-crowd-sale',
-  Injective_Testnet:   'injective-protocol',
-}
 
 function getMeta(id: string) {
   return CHAIN_META[id] ?? {
@@ -205,37 +180,6 @@ async function getWorkingRpc(chainName: string): Promise<string> {
   return rpcs[0]
 }
 
-const CHAIN_NAME_TO_ID: Record<string, string> = {
-  'Ethereum Sepolia':    'Ethereum_Sepolia',
-  'Base Sepolia':        'Base_Sepolia',
-  'Arbitrum Sepolia':    'Arbitrum_Sepolia',
-  'OP Sepolia':          'Optimism_Sepolia',
-  'Optimism Sepolia':    'Optimism_Sepolia',
-  'Polygon PoS Amoy':    'Polygon_Sepolia',
-  'Polygon Amoy':        'Polygon_Sepolia',
-  'Avalanche Fuji':      'Avalanche_Fuji',
-  'HyperEVM Testnet':    'HyperEVM_Testnet',
-  'Sei Testnet':         'Sei_Testnet',
-  'Sonic Testnet':       'Sonic_Testnet',
-  'Unichain Sepolia':    'Unichain_Sepolia',
-  'World Chain Sepolia': 'World_Chain_Sepolia',
-  'Arc Testnet':         'Arc_Testnet',
-  'Linea Sepolia':       'Linea_Sepolia',
-  'Ink Testnet':         'Ink_Testnet',
-  'Ink Sepolia':         'Ink_Testnet',
-  'Monad Testnet':       'Monad_Testnet',
-  'Morph Testnet':       'Morph_Testnet',
-  'Morph Hoodi':         'Morph_Testnet',
-  'Pharos Testnet':      'Pharos_Testnet',
-  'Pharos Atlantic':     'Pharos_Testnet',
-  'Plume Testnet':       'Plume_Testnet',
-  'XDC Apothem':         'XDC_Apothem',
-  'Apothem Network':     'XDC_Apothem',
-  'Codex Testnet':       'Codex_Testnet',
-  'EDGE Testnet':        'Edge_Testnet',
-  'Edge Testnet':        'Edge_Testnet',
-  'Injective Testnet':   'Injective_Testnet',
-}
 
 const CIRCLE_SDK_CHAIN_ID: Record<string, string> = {
   Ethereum_Sepolia:    'Ethereum_Sepolia',
@@ -274,244 +218,34 @@ function toSdkChainId(internalId: string): string {
 // the pre-claim fee estimate too.
 const MIN_CLAIM_AMOUNT = 2.00
 
-const _providerCache = new Map<string, any>()
+const _arcProviderCache = new Map<string, any>()
 
-async function buildGasSponsoredProvider(rpcList: string[], chainKey: string, walletAddr: string, onGasFunded?: (chainId: string, wei: bigint) => void) {
-  const { JsonRpcProvider } = await import('ethers')
-  const proxyUrl = `/api/relay-rpc?chain=${chainKey}&user=${encodeURIComponent(walletAddr)}`
-
-  // These maps mirror api/relay-rpc.js's GAS_BY_SELECTOR/CIRCLE_CONTRACTS —
-  // keep both in sync. This copy had fallen out of sync: it still had the
-  // depositForBurn v2 selector (0x8a94d4fc) and depositForBurnWithHook v2
-  // selector (0x44bc937b) from BEFORE those were corrected server-side —
-  // neither ever matches a real V2 transaction (V2's real signature hashes
-  // to 0x8e0250ee / 0x779b432d respectively), and this map was also missing
-  // the V2 TokenMessenger/MessageTransmitter addresses from CIRCLE_CONTRACTS
-  // entirely. Since nothing matched, every V2 burn fell through to the
-  // generic 150,000 gas default — nowhere near what a V2 depositForBurn
-  // actually costs. relay-rpc.js faithfully funded + broadcast the resulting
-  // tx (which is why gas-relay looked like it was "working"), but it
-  // reverted out-of-gas on-chain: no state change, so no USDC was ever
-  // deducted. Monad and Sei are V2-only, so 100% of their burns hit this;
-  // Polygon Amoy has both V1 and V2 and only failed on the V2 path.
-  //
-  // Follow-up: a real Polygon Amoy "Bridge With Preapproval And Hook" call
-  // reverted AGAIN even after raising 0x35093510 and the CIRCLE_CONTRACTS
-  // fallback — gas consumed stayed pinned at 291,183 regardless of the
-  // limit raised, which was the tell that this was never actually an
-  // out-of-gas revert being fixed by margin. Decoded the tx's real Input
-  // Data directly: MethodID is 0x513e1175, not 0x35093510 — that selector
-  // was guessed/unverified from the start and never matched a real
-  // transaction on any chain. The call had been silently falling through to
-  // the CIRCLE_CONTRACTS fallback (whatever its value was at the time) this
-  // entire time. Added 0x513e1175 as the real, confirmed selector; left
-  // 0x35093510 in place in case it corresponds to some other real call this
-  // app makes, but it should not be trusted as "the" bridge-burn selector.
-  const GAS_BY_SELECTOR: Record<string, string> = {
-    '0x095ea7b3': '0x' + (250000).toString(16), // ERC20 approve
-    '0x39509351': '0x' + (250000).toString(16), // ERC20 increaseAllowance (Circle SDK uses this)
-    '0x6fd3504e': '0x' + (500000).toString(16), // depositForBurn v1 (4 params)
-    '0x8e0250ee': '0x' + (650000).toString(16), // depositForBurn v2 (7 params) — was 0x8a94d4fc (WRONG, never matched)
-    '0xf856ddb6': '0x' + (500000).toString(16), // depositForBurnWithCaller v1
-    '0x779b432d': '0x' + (650000).toString(16), // depositForBurnWithHook v2 — was 0x44bc937b (WRONG, never matched)
-    '0x57ecfd28': '0x' + (650000).toString(16), // receiveMessage (spend)
-    // Raised 700,000 → 1,500,000: read directly out of the installed SDK
-    // (@circle-fin/provider-cctp-v2@1.10.1, @circle-fin/adapter-ethers-v6),
-    // hasCustomContractSupport(chain,'bridge') — checked BEFORE
-    // isCCTPV2Supported, so it wins whenever kitContracts.bridge is set,
-    // which is configured broadly across testnet chains — routes every
-    // claim through this exact bridgeWithPreapprovalAndHook call in
-    // adapter-ethers-v6, which calls the adapter's REAL
-    // contractFunction.estimateGas(...) (unlike the "standard"
-    // depositForBurn path, which passes provider-cctp-v2's own hardcoded
-    // 300,000-gas override straight to execute() and never consults
-    // eth_estimateGas at all). So THIS proxy's hardcoded response is what
-    // ends up as the signed tx's gasLimit for essentially every claim —
-    // it just only actually needs more than 700,000 gas on Polygon Amoy,
-    // Monad and Sei, whose EVM execution environments (Sei's Cosmos-SDK EVM
-    // layer, Monad's from-scratch parallel execution engine, Polygon's Bor
-    // client) can cost more real gas units for identical bytecode than an
-    // OP-stack/Arbitrum-Nitro-style L2 — consistent with 18/21 chains
-    // working fine at 700,000 while these three don't, even with gas
-    // funded (funding covers the SIGNED gasLimit × gasPrice, not whatever
-    // the operation actually needs — see api/relay-rpc.js's own copy of
-    // this map for the full writeup). A gas LIMIT ceiling costs nothing
-    // unused, so there's no downside to the wider margin here.
-    '0x35093510': '0x' + (1500000).toString(16), // (kept as a guess, unverified) — was labeled "Kit Bridge contract burn" but never actually matched a real tx on any chain
-    '0x513e1175': '0x' + (1500000).toString(16), // bridgeWithPreapprovalAndHook(tuple bridgeParams, bytes hookData) — the REAL selector for the Kit Bridge contract call, confirmed directly from a decoded Polygon Amoy tx's Input Data (MethodID). 0x35093510 above was always wrong; this call had been falling through to the CIRCLE_CONTRACTS fallback the entire time, at whatever that fallback's value was at the time.
-  }
-  const CIRCLE_CONTRACTS = new Set([
-    '0x0077777d7eba4688bdef3e311b846f25870a19b9',
-    '0x9f3b8679c73c2fef8b59b4f3444d4e156fb70aa5',
-    '0x7865fafc2db2093669d92c0f33aeef291086befd', // was '...086becd' — typo, verified against the real SDK value
-    '0xacf1ceef35caac005e15888ddb8a3515c41b4872',
-    '0xc5567a5e3370d4dbfb0540025078e283e36a363d',
-    '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b',
-    '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa', // CCTP V2 TokenMessenger — same address across all chains, safety net for any V2 selector variant not in GAS_BY_SELECTOR
-    '0xe737e5cebeeba77efe34d4aa090756590b1ce275', // CCTP V2 MessageTransmitter — same reasoning
-  ])
-  const USDC_CONTRACTS = new Set([
-    '0x1c7d4b196cb0c7b01d743fbc6116a902379c7238',
-    '0x036cbd53842c5426634e7929541ec2318f3dcf7e',
-    '0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d',
-    '0x5fd84259d66cd46123540766be93dfe6d43130d7',
-    '0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582',
-    '0x5425890298aed601595a70ab815c96711a31bc65',
-    '0x2b3370ee501b4a559b57d449569354196457d8ab',
-    '0x4fcf1784b31630811181f670aea7a7bef803eaed',
-    '0x0ba304580ee7c9a980cf72e55f5ed2e9fd30bc51', // Sonic — was 0xa4879fed...c4ec6, stale/wrong contract
-    '0x31d0220469e10c4e71834a79b1f276d740d3768f',
-    '0x66145f38cbac35ca6f1dfb4914df98f1614aea88', // World Chain — was 0x79a02482...4cd24d1, same stale-address bug as Sonic
-    '0xfece4462d57bd51a6a552365a011b95f0e16d9b7', // Linea Sepolia
-    '0xfabab97dce620294d2b0b0e46c68964e326300ac', // Ink Testnet
-    '0x534b2f3a21130d7a60830c2df862319e593943a3', // Monad Testnet — previously missing entirely
-    '0x7433b41c6c5e1d58d4da99483609520255ab661b', // Morph Testnet
-    '0xcfc8330f4bcab529c625d12781b1c19466a9fc8b', // Pharos Testnet
-    '0xcb5f30e335672893c7eb944b374c196392c19d18', // Plume Testnet
-    '0xb5ab69f7bbada22b28e79c8ffaece55ef1c771d4', // XDC Apothem
-    '0x6d7f141b6819c2c9cc2f818e6ad549e7ca090f8f', // Codex Testnet
-    '0x2d9f7cad728051aa35ecdc472a14cf8cdf5cfd6b', // Edge Testnet
-    '0x0c382e685bbeefe5d3d9c29e29e341fee8e84c5d', // Injective Testnet
-  ])
-
-
-  // BUG FIX: this used to build a single JsonRpcProvider(rpc) from only
-  // rpcList[0] — every other candidate in RPC_BY_CHAIN_NAME for this chain
-  // (1-2 more per chain, actively maintained with real incident history —
-  // see chainRpcs.ts) was silently discarded. If that one endpoint had a
-  // transient issue, EVERY call through this provider failed outright with
-  // nowhere to fail over to — confirmed as the direct cause of
-  // "[BgBridge] failed: RPC endpoint error on <chain>" in production, and a
-  // likely contributor to "Simulation failed: Transaction reverted" too, if
-  // the single endpoint served stale/lagging state for the pre-flight
-  // simulation. Building a provider per URL and trying each in sequence
-  // (falling through only on failure) uses the same fallback list this
-  // file already imports and maintains, instead of ignoring it.
-  const providers = rpcList.map((url: string) => new JsonRpcProvider(url))
-  const provider = providers[0]
-  const origSendFns = providers.map((p: any) => p._send.bind(p))
-  const origSend = async (payload: any) => {
-    let lastErr: unknown = null
-    for (const send of origSendFns) {
-      try {
-        return await send(payload)
-      } catch (e) {
-        lastErr = e
-      }
-    }
-    throw lastErr
-  }
-
-  ;(provider as any)._send = async (payload: any) => {
-    const batch = Array.isArray(payload) ? payload : [payload]
-    const results: any[] = []
-
-    for (const req of batch) {
-      const method = req.method
-      if (method === 'eth_estimateGas') {
-        const tx = req.params?.[0] ?? {}
-        const toAddr  = (tx.to ?? '').toLowerCase()
-        const dataHex = (tx.data ?? '0x').slice(0, 10).toLowerCase()
-        const gasHex  = GAS_BY_SELECTOR[dataHex]
-                     ?? (CIRCLE_CONTRACTS.has(toAddr) ? '0x' + (1500000).toString(16) : null) // same ceiling as GAS_BY_SELECTOR's own bridgeWithPreapprovalAndHook entry above
-                     ?? (USDC_CONTRACTS.has(toAddr)   ? '0x' + (65000).toString(16)  : null)
-                     ?? '0x' + (150000).toString(16)
-        results.push({ id: req.id, result: gasHex })
-        continue
-      }
-
-      if (method === 'eth_getBalance') {
-        results.push({ id: req.id, result: '0x1BC16D674EC80000' })
-        continue
-      }
-
-      if (method === 'eth_sendRawTransaction') {
-        try {
-          const resp = await fetch(proxyUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jsonrpc: '2.0', id: req.id, method, params: req.params }),
-          })
-          const json = await resp.json()
-          if (json.error) {
-            results.push({ id: req.id, error: json.error })
-          } else {
-            results.push({ id: req.id, result: json.result })
-            // Real wei MeshPort's relay just transferred to broadcast THIS
-            // tx (0 if the wallet was already funded — see api/relay-rpc.js's
-            // fundedWei on eth_sendRawTransaction). Feeds the success
-            // screen's "gas MeshPort covered" figure — the real, non-guessed
-            // number, not an estimate.
-            if (json.fundedWei) {
-              try { onGasFunded?.(chainKey, BigInt(json.fundedWei)) } catch {}
-            }
-          }
-        } catch(e: any) {
-          results.push({ id: req.id, error: { code: -32603, message: e.message } })
-        }
-        continue
-      }
-
-      results.push(null)
-    }
-
-    const needRpc = batch.filter((_: any, i: number) => results[i] === null)
-    if (needRpc.length > 0) {
-      const rpcResults = await origSend(needRpc.length === 1 ? needRpc[0] : needRpc)
-      const rpcArr = Array.isArray(rpcResults) ? rpcResults : [rpcResults]
-      let ri = 0
-      for (let i = 0; i < results.length; i++) {
-        if (results[i] === null) results[i] = rpcArr[ri++]
-      }
-    }
-
-    return results
-  }
-
-  return provider
-}
-
-/** Same gas-sponsored adapter the claim flow uses — for merchant auto-collect. */
+/** The claim adapter — for merchant auto-collect. */
 export async function buildClaimAdapter(privateKey: string) {
   const { createEthersAdapterFromPrivateKey } = await import('@circle-fin/adapter-ethers-v6')
   return buildAdapter(createEthersAdapterFromPrivateKey, privateKey)
 }
 
-async function buildAdapter(createFn: any, privateKey: string, onGasFunded?: (chainId: string, wei: bigint) => void) {
-  const adapter = createFn({
+// Non-Arc chains go through relayedProviderFor: the Gateway deposit (and
+// any Gateway/CCTP mint) is submitted by MeshPort's relayer, so the wallet
+// needs no gas there. Arc pays its own gas in USDC.
+async function buildAdapter(createFn: any, privateKey: string) {
+  return createFn({
     privateKey,
     getProvider: async ({ chain }: { chain: any }) => {
-      const rpcList = RPC_BY_CHAIN_NAME[chain?.name] ?? [chain?.rpcEndpoints?.[0] ?? ARC_RPCS[0]]
-      const chainKey = CHAIN_NAME_TO_ID[chain?.name] ?? ''
-
-      if (chainKey && chainKey !== 'Arc_Testnet') {
-        const cacheKey = `sponsored:${chainKey}:${privateKey.slice(-8)}`
-        if (!_providerCache.has(cacheKey)) {
-          const { Wallet } = await import('ethers')
-          const walletAddr = new Wallet(privateKey).address
-          _providerCache.set(cacheKey, await buildGasSponsoredProvider(rpcList, chainKey, walletAddr, onGasFunded))
-        }
-        return _providerCache.get(cacheKey)!
-      }
-
-      // Same fix as the gas-sponsored branch above: cache and fall back
-      // across every URL in rpcList, not just the first one.
-      const arcCacheKey = rpcList.join('|')
-      if (!_providerCache.has(arcCacheKey)) {
+      if (chain?.name !== 'Arc Testnet') return relayedProviderFor(chain)
+      const rpcList = RPC_BY_CHAIN_NAME['Arc Testnet']
+      const key = rpcList.join('|')
+      if (!_arcProviderCache.has(key)) {
         const { JsonRpcProvider, FallbackProvider } = await import('ethers')
-        const arcProviders = rpcList.map((url: string) => new JsonRpcProvider(url))
-        _providerCache.set(
-          arcCacheKey,
-          arcProviders.length > 1
-            ? new FallbackProvider(arcProviders.map((p: any, i: number) => ({ provider: p, priority: i, weight: 1, stallTimeout: 2000 })), undefined, { quorum: 1 })
-            : arcProviders[0]
-        )
+        const ps = rpcList.map((url: string) => new JsonRpcProvider(url))
+        _arcProviderCache.set(key, ps.length > 1
+          ? new FallbackProvider(ps.map((p: any, i: number) => ({ provider: p, priority: i, weight: 1, stallTimeout: 2000 })), undefined, { quorum: 1 })
+          : ps[0])
       }
-      return _providerCache.get(arcCacheKey)!
+      return _arcProviderCache.get(key)!
     },
   })
-
-  return adapter
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -741,38 +475,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
   // summed for the success screen's "Total Fees" row, mirroring
   // MultichainTransferPage's own transfer success screen.
   const [claimFees,      setClaimFees]     = useState<Record<string, number>>({})
-  // Real wei MeshPort's relay wallet transferred to fund gas for each
-  // source chain's burn transaction this claim session — accumulated (+=)
-  // since funding can happen in more than one call per chain (an early
-  // mp_ensureGasFunded pre-fund, then a top-up at broadcast time if
-  // needed). Fed by onGasFunded in buildAdapter/buildGasSponsoredProvider
-  // (Unified Balance route).
-  // Converted to USD for the "Gas Covered" row in Total Fees using live
-  // native-token prices (claimGasUsd below), never a hardcoded example.
-  const [claimGasWei,    setClaimGasWei]    = useState<Record<string, bigint>>({})
-  // Live USD price per CoinGecko id, for converting claimGasWei into a real
-  // dollar figure — fetched once per claim session, only for the tokens
-  // this claim's chains actually need (see NATIVE_GAS_COINGECKO_ID above).
-  const [nativeUsdPrices, setNativeUsdPrices] = useState<Record<string, number>>({})
-  useEffect(() => {
-    const ids = Array.from(new Set(
-      chainProgress.map(p => NATIVE_GAS_COINGECKO_ID[p.chainId]).filter((id): id is string => !!id)
-    ))
-    if (ids.length === 0) return
-    const missing = ids.filter(id => !(id in nativeUsdPrices))
-    if (missing.length === 0) return
-    fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${missing.join(',')}&vs_currencies=usd`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data) return
-        setNativeUsdPrices(prev => {
-          const next = { ...prev }
-          for (const id of missing) if (typeof data[id]?.usd === 'number') next[id] = data[id].usd
-          return next
-        })
-      })
-      .catch(() => {}) // best-effort — Gas Covered row just omits unpriced chains if this fails
-  }, [chainProgress])
   const notifiedClaimIdsRef = useRef<Set<string>>(new Set())
   const sdkRef = useRef<{ AppKit: any; createEthersAdapterFromPrivateKey: any } | null>(null)
 
@@ -1452,7 +1154,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
     setStep('confirm')
     claimStartRef.current = performance.now()
     setClaimFees({})
-    setClaimGasWei({})
 
     const setChain = (chainId: string, stage: ChainProgress['stage'], msg: string, pct: number, extra?: Partial<ChainProgress>) =>
       setChainProgress(prev => prev.map(p =>
@@ -1460,9 +1161,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
       ))
 
     try {
-      const onGasFunded = (chainId: string, wei: bigint) => {
-        setClaimGasWei(prev => ({ ...prev, [chainId]: (prev[chainId] ?? 0n) + wei }))
-      }
 
       const depositedChains: Array<{ chainId: string; amount: number }> = []
 
@@ -1489,7 +1187,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
           if ((claimRoute === 'ub' || !isGaslessBridgeAvailable(chain.chainId)) && UB_CLAIM_CHAINS.has(sdkId)) {
             const { AppKit, createEthersAdapterFromPrivateKey } = sdkRef.current ?? await loadSdk()
             const kit = new AppKit({ clientKey: import.meta.env.VITE_KIT_KEY, disableErrorReporting: true } as any)
-            const adapter = await buildAdapter(createEthersAdapterFromPrivateKey, wallet.key, onGasFunded)
+            const adapter = await buildAdapter(createEthersAdapterFromPrivateKey, wallet.key)
             setUbClaimChains(prev => prev.includes(chain.chainId) ? prev : [...prev, chain.chainId])
             runUbClaim({
               kit, adapter, walletAddr: wallet.addr, sdkChainId: sdkId,
@@ -2509,25 +2207,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
             // MultichainTransferPage's transfer success screen gives its own
             // totalFeesLabel.
             const totalFeesLabel = `${trimTrailingZeros(Object.values(claimFees).reduce((sum, f) => sum + f, 0).toFixed(4))} USDC`
-            // Real "gas MeshPort covered" figure — sums claimGasWei (actual
-            // wei the relay transferred, per chain) against a live mainnet
-            // price for that chain's native token (NATIVE_GAS_COINGECKO_ID),
-            // never a hardcoded/example number. A chain is silently skipped
-            // — not shown as $0 — if either its funded amount is still 0
-            // (nothing needed funding this claim, e.g. wallet already had
-            // gas) or its price hasn't loaded/has no mapping; the row itself
-            // only renders once at least one chain actually priced out,
-            // so it never shows a misleading "$0.00 covered".
-            let gasCoveredUsd = 0
-            for (const [chainId, wei] of Object.entries(claimGasWei)) {
-              const cgId = NATIVE_GAS_COINGECKO_ID[chainId]
-              const price = cgId ? nativeUsdPrices[cgId] : undefined
-              if (!price || wei <= 0n) continue
-              gasCoveredUsd += Number(wei) / 1e18 * price
-            }
-            const gasCoveredLabel = gasCoveredUsd > 0
-              ? (gasCoveredUsd < 0.01 ? '<$0.01' : `$${trimTrailingZeros(gasCoveredUsd.toFixed(2))}`)
-              : null
             // Process checklist — same stages Track Progress shows
             // (Submitted excluded there too, already confirmed on the
             // screen before it), all rendered as already-done since this
@@ -2591,7 +2270,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
                     { label: 'From', value: fromLabel },
                     { label: 'To', value: 'Arc Testnet' },
                     { label: 'Total Fees', value: totalFeesLabel },
-                    ...(gasCoveredLabel ? [{ label: 'Gas Covered by MeshPort', value: gasCoveredLabel, positive: true }] : []),
                   ]}
                   links={links}
                   linksNote={mintPending && links.length > 0 ? 'The Arc mint link appears once the mint lands on Arc.' : undefined}

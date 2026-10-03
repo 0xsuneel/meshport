@@ -15,6 +15,7 @@
 // finishes it later.
 
 // SDK chain ids that support Unified Balance deposits — see ubChains.ts.
+import { realTxHash } from './relayedProvider'
 import { UB_CLAIM_CHAINS } from './ubChains'
 export { UB_CLAIM_CHAINS }
 
@@ -93,7 +94,8 @@ type Stage = 'approving' | 'attesting' | 'minting' | 'done' | 'error'
 type StepFn = (stage: Stage, msg: string, pct: number, extra?: { txHash?: string; mintTxHash?: string }) => void
 
 function hashOf(r: any): string | undefined {
-  return r?.txHash ?? r?.transactionHash ?? r?.hash ?? r?.result?.txHash ?? undefined
+  // realTxHash: a relayed deposit/mint reports a hash that only the relayer's tx has on-chain.
+  return realTxHash(r?.txHash ?? r?.transactionHash ?? r?.hash ?? r?.result?.txHash ?? undefined)
 }
 
 /** Confirmed Unified Balance per chain for this wallet. */
@@ -131,19 +133,6 @@ export async function spendUnifiedToArc(params: {
 // ourselves instead of waiting for the forwarder to fail first.
 export const GATEWAY_SELF_MINT_CHAINS = new Set(['Sei_Testnet'])
 
-/** Tops up the signer's native gas on `chain` (MeshPort relay) so it can submit the destination mint. */
-export async function fundDestinationGas(chain: string, signerAddress: string): Promise<void> {
-  try {
-    const { authApiHeaders } = await import('./supabase')
-    await fetch('/api/relay-gas', {
-      method: 'POST', headers: await authApiHeaders(),
-      body: JSON.stringify({ chainId: chain, userAddress: signerAddress }),
-    })
-  } catch (e) {
-    console.warn('[ubClaim] relay-gas top-up failed, trying the mint anyway', e)
-  }
-}
-
 /** true when a Gateway spend failed at the forwarder's destination mint and can be minted by us. */
 export function forwarderMintRetry(err: any): { attestation: string; signature: string } | null {
   const trace = err?.cause?.trace
@@ -159,12 +148,12 @@ export function forwarderMintRetry(err: any): { attestation: string; signature: 
  * (fees come out of `amount`). Uses Circle's forwarder; if the forwarder's
  * mint fails on-chain — or the destination is in GATEWAY_SELF_MINT_CHAINS —
  * the mint is submitted by the user's own wallet on the destination
- * (`destAdapter`, gas topped up by MeshPort's relay). The recipient never
+ * (`destAdapter`, submitted through MeshPort's relayer — see relayedProvider). The recipient never
  * changes; only who pays for and submits the mint.
  */
 export async function spendUnifiedTo(params: {
   kit: any; adapter: any; fromChain: string; amount: number; toChain: string; recipient: string
-  destAdapter?: any; signerAddress?: string
+  destAdapter?: any
   /** Dust on `fromChain` beyond `amount`, used as the safety margin. */
   cushion?: number
 }): Promise<{ txHash?: string; received: number }> {
@@ -184,7 +173,6 @@ export async function spendUnifiedTo(params: {
 
   const selfMint = toChain !== 'Arc_Testnet' && GATEWAY_SELF_MINT_CHAINS.has(toChain)
   if (selfMint) {
-    if (params.signerAddress) await fundDestinationGas(toChain, params.signerAddress)
     const r: any = await kit.unifiedBalance.spend({ from: alloc(send), to: selfMintTo, token: 'USDC', amount: send.toFixed(6) })
     return { txHash: hashOf(r), received: send }
   }
@@ -196,7 +184,6 @@ export async function spendUnifiedTo(params: {
     // mint it ourselves on the destination (same recipient).
     const retry = forwarderMintRetry(err)
     if (!retry) throw err
-    if (params.signerAddress && toChain !== 'Arc_Testnet') await fundDestinationGas(toChain, params.signerAddress)
     const r: any = await kit.unifiedBalance.spend({
       from: alloc(send), to: selfMintTo, token: 'USDC', amount: send.toFixed(6), config: { retry },
     })

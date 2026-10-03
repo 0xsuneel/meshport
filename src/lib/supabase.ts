@@ -120,8 +120,8 @@ export function syncAuthUidToProfile(userId: string, privateKey?: string | null)
 
 /**
  * Headers for server routes that only need to prove "this request comes from
- * a real signed-in session bound to a specific wallet" (relay-gas,
- * relay-deposit) — no chat-specific auth_uid sync needed, unlike
+ * a real signed-in session bound to a specific wallet" (bridge-relay) —
+ * no chat-specific auth_uid sync needed, unlike
  * chatApiHeaders() below.
  */
 export async function authApiHeaders(): Promise<Record<string, string>> {
