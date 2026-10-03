@@ -1076,6 +1076,20 @@ const UnreadDivider = memo(function UnreadDivider({ count }: { count: number }) 
 // instead. Its own small component (not inlined in MessageBubble) so the
 // fetch+decrypt only re-runs when THIS image's url/iv actually change, not
 // on every unrelated re-render of the message list.
+/** "Not encrypted" next to a message's time — open lock + label. */
+function NotEncryptedTag({ light }: { light?: boolean }) {
+  return (
+    <span title="Sent without end-to-end encryption" aria-label="Not encrypted"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10.5, whiteSpace: 'nowrap',
+        color: light ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)' }}>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.5-2" />
+      </svg>
+      Not encrypted
+    </span>
+  )
+}
+
 function EncryptedImage({ url, ivBase64, convKey, isLastInGroup, isMine, onTap }: {
   url: string; ivBase64: string; convKey: any; isLastInGroup: boolean; isMine: boolean
   onTap: (objectUrl: string) => void
@@ -1311,6 +1325,12 @@ const MessageBubble = memo(function MessageBubble({
   // Bill / request / shared payment link: the card fills the bubble, which
   // gets only a slim edge so every chat card lines up at CHAT_CARD_W.
   const isCardMsg = !isPayment && !isDeleted && (isPaymentRecord || !!parsePersonalPayLink(content))
+  // Sent without end-to-end encryption (the recipient had no chat key yet,
+  // or it predates encryption): say so next to the time. Payment cards are
+  // plain records by design; unsaved copies are still on their way to being
+  // encrypted, so they're skipped.
+  const notEncrypted = !isPayment && !isDeleted && !isCardMsg && !msg._upload && !msg._failed
+    && !String(msg.id).startsWith('optimistic_') && !!msg.content && !isEncryptedPayload(msg.content)
   const handleLongPressStart = () => { if (!isPaymentRecord) onLongPress?.(msg, isMine) }
   // A long-press only counts if the finger stays put — scrolling never selects.
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -1494,6 +1514,7 @@ const MessageBubble = memo(function MessageBubble({
                     <div style={{ padding: '6px 10px 5px', maxWidth: 260, wordBreak: 'break-word' }}>
                       {linkifyText(caption, isMine)}
                       <div className="flex items-center justify-end gap-1 mt-0.5">
+                        {notEncrypted && <NotEncryptedTag light={isMine} />}
                         <p className={`text-[11px] ${isMine ? 'text-white/60' : 'text-text-secondary'}`}>{new Date(msg.created_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</p>
                         {isMine && <MessageTicks msg={msg} />}
                       </div>
@@ -1506,6 +1527,7 @@ const MessageBubble = memo(function MessageBubble({
                     background: 'rgba(0,0,0,0.45)', borderRadius: 10,
                     padding: '2px 6px', pointerEvents: 'none',
                   }}>
+                    {notEncrypted && <NotEncryptedTag light />}
                     <span style={{ fontSize: 11, color: '#fff' }}>
                       {new Date(msg.created_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}
                     </span>
@@ -1548,6 +1570,7 @@ const MessageBubble = memo(function MessageBubble({
             </div>}
             {(isDeleted || !isImageMsg) && (
               <div className="relative flex items-center justify-end gap-1 mt-0.5" style={isCardMsg ? { padding: '0 6px 1px' } : undefined}>
+                {notEncrypted && <NotEncryptedTag light={isMine} />}
                 <p className={`text-[11px] ${isMine ? 'text-white/60' : 'text-text-secondary'}`}>{new Date(msg.created_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</p>
                 {isMine && !isDeleted && <MessageTicks msg={msg} />}
               </div>
