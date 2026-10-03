@@ -1558,28 +1558,20 @@ function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
 // that alone can't produce this silhouette). W/H are the box's own
 // size, RX/RY the elliptical corner radii, BT how far the top and
 // bottom edges' midpoints bow outward (the sides stay straight).
-function squirclePath(W: number, H: number, RX: number, RY: number, BT: number) {
-  // Top and bottom edges are both straight lines between the rounded
-  // corners (the bottom used to bow outward; BT is kept for call-site
-  // compatibility but no longer bends the edge). Drawn as an SVG path so it
-  // renders identically on Android Chrome and iOS Safari.
-  void BT
-  const rX = Math.min(RX, W * 0.18)
-  const rY = Math.min(RY, H * 0.32)
-  const kx = rX * 0.55
-  const ky = rY * 0.55
-  return [
-    `M ${rX},0`,
-    `L ${W - rX},0`,
-    `C ${W - rX + kx},0 ${W},${rY - ky} ${W},${rY}`,
-    `L ${W},${H - rY}`,
-    `C ${W},${H - rY + ky} ${W - rX + kx},${H} ${W - rX},${H}`,
-    `L ${rX},${H}`,
-    `C ${rX - kx},${H} 0,${H - rY + ky} 0,${H - rY}`,
-    `L 0,${rY}`,
-    `C 0,${rY - ky} ${rX - kx},0 ${rX},0 Z`,
-  ].join(' ')
+// Card outline: a superellipse |x/a|^n + |y/b|^n = 1 — the edges curve only
+// a tiny bit and flow into smooth corners in one continuous curve (n = 9; a
+// lower n is rounder). Sampled into a polygon fine enough to read as a curve.
+function superellipsePath(W: number, H: number, n = 9): string {
+  const a = W / 2, b = H / 2, steps = 240, pts: string[] = []
+  for (let i = 0; i < steps; i++) {
+    const t = (i / steps) * Math.PI * 2, c = Math.cos(t), sn = Math.sin(t)
+    const x = a + a * Math.sign(c) * Math.pow(Math.abs(c), 2 / n)
+    const y = b + b * Math.sign(sn) * Math.pow(Math.abs(sn), 2 / n)
+    pts.push(`${x.toFixed(2)},${y.toFixed(2)}`)
+  }
+  return 'M ' + pts.join(' L ') + ' Z'
 }
+const FALLBACK_CARD_PATH = superellipsePath(100, 100)
 
 // Shared shell for the Balance and Multichain Hub hero cards: measures
 // its own rendered size via ResizeObserver and recomputes the bowed
@@ -1600,16 +1592,6 @@ function BowedShapeCard({
   children, background, cardRef, fill,
 }: { children: ReactNode; background: string; cardRef?: RefObject<HTMLDivElement>; fill?: boolean }) {
   const wrapRef = useRef<HTMLDivElement>(null)
-  const uid = useId()
-  const sinkId = `bowedSink-${uid.replace(/:/g, '')}`
-  // iOS Safari/WebKit can mispaint the expanded SVG filter bounding box on
-  // this responsive bowed card, producing side strips and a different
-  // silhouette than Android/Chrome. Keep the Android rendering untouched
-  // and disable only that problematic filter on iOS; the actual path, size,
-  // spacing, and all card content remain identical across platforms.
-  const isIOS = typeof navigator !== 'undefined' &&
-    (/iPad|iPhone|iPod/.test(navigator.platform) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
   const [size, setSize] = useState<{ w: number; h: number } | null>(null)
   useLayoutEffect(() => {
     const el = wrapRef.current
@@ -1623,12 +1605,12 @@ function BowedShapeCard({
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
-  const path = size ? squirclePath(size.w, size.h, size.w * 0.09, size.h * 0.18, size.h * 0.085) : ''
+  const path = useMemo(() => (size ? superellipsePath(size.w, size.h) : ''), [size?.w, size?.h])
   // iOS Safari can briefly report a zero-sized SVG during a reload/layout
   // restore. Keep a normalized fallback path mounted so the card background
   // is visible immediately; once ResizeObserver has the real dimensions the
   // exact responsive path replaces it without changing the card's content.
-  const fallbackPath = 'M 9,0 L 91,0 C 96,0 100,8 100,18 L 100,82 C 100,88 96,100 91,100 L 9,100 C 4,100 0,88 0,82 L 0,18 C 0,8 4,0 9,0 Z'
+  const fallbackPath = FALLBACK_CARD_PATH
 
   return (
     <div
@@ -1640,22 +1622,8 @@ function BowedShapeCard({
           after a reload or bfcache restore. */}
       <svg viewBox={size ? `0 0 ${size.w} ${size.h}` : '0 0 100 100'} preserveAspectRatio="none"
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', overflow: 'visible' }}>
-        <defs>
-          <filter id={sinkId} x="-15%" y="-40%" width="130%" height="180%" colorInterpolationFilters="sRGB">
-            <feComponentTransfer in="SourceAlpha" result="inv"><feFuncA type="table" tableValues="1 0" /></feComponentTransfer>
-            <feOffset in="inv" dy="6" result="o1" /><feGaussianBlur in="o1" stdDeviation="3" result="b1" />
-            <feFlood floodColor="rgb(4,84,80)" floodOpacity=".75" /><feComposite in2="b1" operator="in" result="c1" />
-            <feComposite in="c1" in2="SourceAlpha" operator="in" result="L1" />
-            <feMorphology in="inv" operator="dilate" radius="6" result="m2" /><feGaussianBlur in="m2" stdDeviation="11" result="b2" />
-            <feFlood floodColor="rgb(6,98,92)" floodOpacity=".65" /><feComposite in2="b2" operator="in" result="c2" />
-            <feComposite in="c2" in2="SourceAlpha" operator="in" result="L2" />
-            <feOffset in="inv" dy="14" result="o3" /><feGaussianBlur in="o3" stdDeviation="12" result="b3" />
-            <feFlood floodColor="rgb(8,108,100)" floodOpacity=".5" /><feComposite in2="b3" operator="in" result="c3" />
-            <feComposite in="c3" in2="SourceAlpha" operator="in" result="L3" />
-            <feMerge><feMergeNode in="SourceGraphic" /><feMergeNode in="L3" /><feMergeNode in="L2" /><feMergeNode in="L1" /></feMerge>
-          </filter>
-        </defs>
-        <path d={path || fallbackPath} fill={background} filter={isIOS ? undefined : `url(#${sinkId})`} />
+        {/* Flat fill: the shape alone gives the card its depth — no shading, no shadow. */}
+        <path d={path || fallbackPath} fill={background} />
       </svg>
       <div style={{ position: 'relative', zIndex: 1, padding: '16px 26px 16px', boxSizing: 'border-box',
         ...(fill ? { height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' } : null) }}>
