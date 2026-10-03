@@ -71,7 +71,7 @@ export function Hero() {
             transition={{ duration: 0.6, delay: 0.35 }}
             className="mt-12 flex flex-wrap items-center gap-x-8 gap-y-3 text-[13px] font-medium text-text-muted"
           >
-            <span>Self-custody available</span>
+            <span>Self-custodial by default</span>
             <span className="h-1 w-1 rounded-full bg-text-muted/50" />
             <span>USDC-native</span>
             <span className="h-1 w-1 rounded-full bg-text-muted/50" />

@@ -6,11 +6,19 @@ import { Reveal } from './Reveal'
 const FAQS = [
   {
     q: 'Is MeshPort self-custodial?',
-    a: 'MeshPort is designed around self-custody. If you create or import a wallet directly, your private key is generated on your device and never sent anywhere. Signing in with Google or email uses a recoverable model instead, so you can access your wallet without a seed phrase.',
+    a: 'Yes — every wallet. Whether you create one, import one, or sign in with Google or an email code, the wallet key is generated on your own device and is never sent to MeshPort. MeshPort cannot move your funds.',
   },
   {
     q: 'How are Google/email wallets secured?',
-    a: 'Wallets created via Google or email sign-in use envelope encryption: your key is encrypted with a wallet-specific key, which is itself encrypted under a server-held master key, before anything touches the database. MeshPort never stores your key in plaintext, and every access is authenticated, rate-limited, and logged.',
+    a: 'The key is made on your device and kept there, sealed by your browser. To use it on another device you unlock it with a passkey (Face ID, fingerprint or device PIN) or scan your Recovery QR and enter its password. MeshPort stores none of these secrets — no private key, no recovery password, no seed phrase.',
+  },
+  {
+    q: 'What if I lose my phone?',
+    a: 'Sign in on your new device and unlock with your passkey (if it syncs through iCloud Keychain or Google Password Manager), or scan your Recovery QR and type its password. Without either one the wallet can’t be recovered — not even by MeshPort — so save your Recovery QR somewhere safe.',
+  },
+  {
+    q: 'Are my chats private?',
+    a: 'Yes. Messages are end-to-end encrypted: they are locked on your device and only unlocked on the other person’s. Each person’s chat key is signed by their wallet, and MeshPort warns you if a contact’s key ever changes.',
   },
   {
     q: 'What is Arc?',
@@ -46,7 +54,7 @@ const FAQS = [
   },
   {
     q: 'How is my account secured?',
-    a: 'A passcode is required by default, with optional Face ID / fingerprint unlock backed by your device’s platform authenticator. For self-custodial (create/import) wallets, your key never leaves your device.',
+    a: 'A 6-digit passcode protects the app and every payment, with optional Face ID / fingerprint unlock backed by your device’s platform authenticator. Your wallet key itself never leaves your device.',
   },
 ]
 

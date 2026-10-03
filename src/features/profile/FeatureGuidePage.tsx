@@ -20,8 +20,8 @@ const SECTIONS: GuideSection[] = [
   {
     heading: 'Getting started',
     entries: [
-      { title: '1. Sign in with your email', body: 'No password to remember. You type your email, get a one-time code sent to it, and enter that code. That\u2019s it \u2014 you\u2019re in.' },
-      { title: '2. Set up your wallet', body: 'This is where your money actually lives. Create a new wallet (you\u2019ll get 12 secret words \u2014 write these down and keep them safe), or use a wallet you already have by entering your secret words or private key.' },
+      { title: '1. Sign in', body: 'Continue with Google, or type your email and enter the one-time code sent to it. No password to remember. You can also bring a wallet you already have.' },
+      { title: '2. Set up your wallet', body: 'This is where your money actually lives, and it\u2019s yours alone: the wallet key is made on your phone and never sent to MeshPort. With Google or email, you then add a passkey (Face ID or fingerprint) and save a Recovery QR \u2014 these are how you open the wallet on a new device. Or create a wallet with 12 secret words, or import one you already have.' },
       { title: '3. Pick a username', body: 'Choose a name like sunil.arc. This becomes your public identity \u2014 how people find you, pay you, and message you \u2014 like a phone number, but for money.' },
       { title: '4. Set a 6-digit PIN', body: 'Like an ATM PIN. It unlocks the app every time you open it, and you\u2019ll be asked for it again to approve every payment you send.' },
     ],
@@ -30,7 +30,7 @@ const SECTIONS: GuideSection[] = [
     heading: 'Your profile',
     entries: [
       { title: 'Edit Profile', body: 'Change your photo or display name any time.' },
-      { title: 'Security', body: 'Turn your PIN lock on or off, turn on fingerprint or face unlock, or change your PIN.' },
+      { title: 'Security', body: 'See how your wallet is protected: your linked sign-in, your passkeys and your Recovery QR. Add or remove passkeys, make a new Recovery QR, turn PIN lock or fingerprint/face unlock on or off, or change your PIN.' },
       { title: 'Backup', body: 'Save a fresh copy of your secret recovery words or private key, in case you didn\u2019t save them properly the first time.' },
     ],
   },
@@ -46,7 +46,7 @@ const SECTIONS: GuideSection[] = [
   {
     heading: 'Extra features',
     entries: [
-      { title: 'Chat', body: 'Message your friends like a normal chat app \u2014 and send them money in the same conversation, shown as its own payment card in the thread.' },
+      { title: 'Chat', body: 'Message your friends like a normal chat app \u2014 and send them money in the same conversation, shown as its own payment card in the thread. Chats are end-to-end encrypted: only you and the other person can read them, not even MeshPort.' },
       { title: 'Insights', body: 'A simple dashboard about your own spending \u2014 who you pay most, your average payment size, your biggest payment, and how it\u2019s changed over time.' },
       { title: 'Rewards', body: 'Earn points every time you make a payment, up to a daily cap. Once you\u2019ve got enough, trade them in for real testnet money.' },
       { title: 'Bulk Payout', body: 'Pay many recipients at once, in a single batch, instead of one at a time. Add people one by one, or upload a spreadsheet of names and amounts.' },

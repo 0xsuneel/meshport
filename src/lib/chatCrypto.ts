@@ -5,8 +5,9 @@
 // IDENTITY — one per person, on every device.
 //   Each user's chat identity is an X25519 key pair DERIVED from their wallet
 //   private key (deriveMyChatIdentity). Logging in on any device restores the
-//   wallet (Google/email accounts from the server, others from the recovery
-//   phrase / private key), and with it the exact same chat identity, so every
+//   wallet (Google/email accounts with their passkey or Recovery QR, others
+//   from the recovery phrase / private key), and with it the exact same chat
+//   identity, so every
 //   device the user signs in on reads their whole chat history, old and new.
 //   Only the PUBLIC key is uploaded (users.chat_public_key), together with
 //   a signature by the WALLET over it (users.chat_key_sig).
