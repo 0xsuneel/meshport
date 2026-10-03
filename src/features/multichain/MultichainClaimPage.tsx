@@ -55,6 +55,7 @@ import {
   type Claim as ServerClaim,
 } from '@/lib/claimService'
 import { ClaimProgressTracker } from '@/components/multichain/ClaimProgressTracker'
+import { CCTP_DOMAINS } from '@/lib/cctpTracker'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFilters'
 import { readExternalBalances, refreshScope, readExternalChainBalance } from '@/blockchain/BlockchainManager'
@@ -1496,31 +1497,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, t
 
       const depositedChains: Array<{ chainId: string; amount: number }> = []
 
-      const CCTP_DOMAINS: Record<string, number> = {
-        Ethereum_Sepolia:    0,
-        Base_Sepolia:        6,
-        Arbitrum_Sepolia:    3,
-        Optimism_Sepolia:    2,
-        Polygon_Sepolia:     7,
-        Avalanche_Fuji:      1,
-        HyperEVM_Testnet:    19,
-        Sei_Testnet:         16,
-        Sonic_Testnet:       13,
-        Unichain_Sepolia:    10,
-        World_Chain_Sepolia: 14,
-        // Added — verified directly from Circle's official CCTP domain
-        // table (developers.circle.com/cctp/concepts/supported-chains-and-domains)
-        Linea_Sepolia:       11,
-        Codex_Testnet:       12,
-        Monad_Testnet:       15,
-        XDC_Apothem:         18,
-        Ink_Testnet:         21,
-        Plume_Testnet:       22,
-        Edge_Testnet:        28,
-        Injective_Testnet:   29,
-        Morph_Testnet:       30,
-        Pharos_Testnet:      31,
-      }
+      // Shared table (lib/cctpTracker) — one source for every CCTP domain lookup.
 
       const fetchIrisAttestation = async (chainId: string, burnTxHash: string): Promise<{ attestation: string, message: string } | null> => {
         const domain = CCTP_DOMAINS[chainId]

@@ -18,8 +18,15 @@ export type UbTrackerProgress = {
 //   Verifying = Circle Gateway confirms the deposit (source finality)
 //   Settling  = Gateway mints to the user's Arc wallet
 //   Completed = arrived on Arc
-export function UbProgressTracker({ progress, chainLabel }: { progress: UbTrackerProgress; chainLabel: string }) {
-  const steps = [
+// `steps` swaps the four labels (the CCTP track view uses its own wording);
+// the stages and the look stay the same.
+export function UbProgressTracker({ progress, chainLabel, steps: customSteps, safeNote }: {
+  progress: UbTrackerProgress; chainLabel: string
+  steps?: Array<{ label: string; subtitle: string }>
+  /** Shown instead of the Unified Balance note when a failed move is still safe. */
+  safeNote?: string
+}) {
+  const steps = customSteps ?? [
     { label: 'Bridging',  subtitle: `Deposit confirmed on ${chainLabel}` },
     { label: 'Verifying', subtitle: 'Circle Gateway confirmed the deposit' },
     { label: 'Settling',  subtitle: 'Funds landing on Arc' },
@@ -91,7 +98,7 @@ export function UbProgressTracker({ progress, chainLabel }: { progress: UbTracke
       {failed && (
         <p style={{ fontSize: 12, color: heldInUb ? 'var(--text-secondary)' : 'var(--danger)', margin: '12px 0 0', lineHeight: 1.45 }}>
           {heldInUb
-            ? `Your USDC is safe in your Unified Balance on ${chainLabel}. It’s sent to Arc automatically, or finish it from Multichain Hub → Recover.`
+            ? (safeNote ?? `Your USDC is safe in your Unified Balance on ${chainLabel}. It’s sent to Arc automatically, or finish it from Multichain Hub → Recover.`)
             : (progress.msg || 'Claim failed. Please try again.')}
         </p>
       )}
