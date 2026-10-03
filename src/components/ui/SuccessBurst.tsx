@@ -22,7 +22,7 @@ function Checkmark({ circle, stroke, delay = 0.2, rotateFrom }: { circle: number
     <motion.div
       initial={{ scale: 0.5, opacity: 0, rotate: rotateFrom ?? 0 }}
       animate={{ scale: 1, opacity: 1, rotate: 0 }}
-      transition={{ type: 'spring', stiffness: 170, damping: 15 }}
+      transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
       style={{
         width: circle, height: circle, borderRadius: '50%',
         background: 'color-mix(in srgb, var(--success) 15%, transparent)',
@@ -103,7 +103,7 @@ export function SuccessBurst({ variant, height = 170, circle = 96 }: { variant: 
         <motion.div
           initial={{ rotate: -150, opacity: 0 }}
           animate={{ rotate: 0, opacity: 1 }}
-          transition={{ duration: 0.85, ease: [0.34, 1.56, 0.64, 1] }}
+          transition={{ duration: 0.85, ease: [0.32, 0.72, 0, 1] }}
           style={{ position: 'absolute', width: 0, height: 0 }}
         >
           {arcDots.map((d, i) => (

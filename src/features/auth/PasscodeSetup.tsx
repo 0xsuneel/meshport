@@ -13,7 +13,7 @@ function PasscodeDots({ filled, error }: { filled: number; error: boolean }) {
         <motion.div key={i}
           animate={error ? { x: [0,-8,8,-6,6,0] } : { scale: filled > i ? 1.1 : 1 }}
           transition={{ duration: error ? 0.4 : 0.1 }}
-          className={`w-4 h-4 rounded-full border-2 transition-all ${
+          className={`w-4 h-4 rounded-full border-2 transition-colors ${
             error ? 'border-danger bg-danger'
             : filled > i ? 'border-brand bg-brand'
             : 'border-text-secondary/40'
@@ -265,28 +265,38 @@ export function PasscodeSetupPage() {
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
             </svg>
           </div>
-          <AnimatePresence mode="wait">
-            <motion.div key={step}
-              initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }}>
-              <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">{title}</h2>
-              <p className="text-text-secondary mt-1 text-[14px] leading-[1.5]">{subtitle}</p>
-            </motion.div>
+          {/* No exit-then-enter (mode="wait" left a blank gap between
+              "Create" and "Confirm"): the new title just fades in. */}
+          <motion.div key={step}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.18 }}>
+            <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">{title}</h2>
+            <p className="text-text-secondary mt-1 text-[14px] leading-[1.5]">{subtitle}</p>
+          </motion.div>
+        </div>
+
+        {/* Keyed by step: the dots start empty on Confirm instead of fading
+            out from the six filled ones. */}
+        <PasscodeDots key={step} filled={filledCount} error={error} />
+
+        {/* Fixed-height status line: an error or "Securing…" appearing never
+            pushes the keypad down, and the keypad stays mounted (just
+            disabled) while the passcode is saved — swapping it out for text
+            made the whole screen jump right before moving on. */}
+        <div className="h-6 mb-2 flex items-center justify-center">
+          <AnimatePresence mode="popLayout" initial={false}>
+            {errorMsg ? (
+              <motion.p key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="text-danger text-sm text-center">{errorMsg}</motion.p>
+            ) : hashing ? (
+              <motion.p key="saving" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="text-text-secondary text-sm">Securing passcode…</motion.p>
+            ) : null}
           </AnimatePresence>
         </div>
 
-        <PasscodeDots filled={filledCount} error={error} />
-
-        <AnimatePresence>
-          {errorMsg && (
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="text-danger text-sm mb-4 text-center">{errorMsg}</motion.p>
-          )}
-        </AnimatePresence>
-
-        {hashing
-          ? <p className="text-text-secondary text-sm">Securing passcode...</p>
-          : <div className="w-full mt-2"><NumPad onPress={(k) => pressRef.current(k)} /></div>
-        }
+        <div className="w-full" style={{ pointerEvents: hashing ? 'none' : undefined, opacity: hashing ? 0.5 : 1, transition: 'opacity 0.15s' }}>
+          <NumPad onPress={(k) => pressRef.current(k)} />
+        </div>
 
         <p className="text-xs text-text-muted text-center mt-8 px-4">
           Stored securely on this device. Cannot be recovered if lost.

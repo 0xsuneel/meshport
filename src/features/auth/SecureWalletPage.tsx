@@ -92,7 +92,7 @@ export function SecureWalletPage() {
       )}
       <div className="flex-1 flex flex-col justify-center gap-6 py-8">
         <div className="text-center">
-          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', damping: 15 }}
+          <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
             className="w-20 h-20 rounded-full flex items-center justify-center bg-brand/15 border border-brand/25 mx-auto mb-4">
             <ShieldCheck className="w-10 h-10 text-brand" />
           </motion.div>

@@ -252,7 +252,7 @@ export function AmountKeypad({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
             style={{
               background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18,
               boxShadow: 'var(--shadow-1)', padding: '20px 22px',

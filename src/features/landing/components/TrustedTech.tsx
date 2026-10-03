@@ -25,7 +25,7 @@ export function TrustedTech() {
               key={t.name}
               variants={staggerItem}
               whileHover={{ y: -3 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+              transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
               className="flex flex-col items-center gap-3 rounded-[20px] border border-border bg-bg px-5 py-7 text-center shadow-elevation-1"
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand/12">

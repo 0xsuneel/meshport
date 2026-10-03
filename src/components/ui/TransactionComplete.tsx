@@ -90,7 +90,7 @@ export function TransactionComplete({
         variants={item}
         initial={{ opacity: 0, scale: 0.6 }}
         animate={{ opacity: 1, scale: 1 }}
-        transition={{ type: 'spring', damping: 14, stiffness: 220, delay: 0.05 }}
+        transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1], delay: 0.05 }}
         style={{
           width: 80, height: 80, borderRadius: '50%', marginBottom: 20,
           background: `color-mix(in srgb, ${statusColor} 15%, transparent)`,

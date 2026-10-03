@@ -5007,8 +5007,8 @@ export function ChatConversationPage() {
                 // Exit noticeably snappier than enter (higher stiffness,
                 // less damping) — a dismiss should feel quicker than the
                 // arrival, not mirror it 1:1.
-                animate={{ x: 0, transition: { type: 'spring', stiffness: 380, damping: 34 } }}
-                exit={{ x: '100%', transition: { type: 'spring', stiffness: 520, damping: 40 } }}
+                animate={{ x: 0, transition: { duration: 0.34, ease: [0.32, 0.72, 0, 1] } }}
+                exit={{ x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
                 onClick={e => e.stopPropagation()}
                 style={{
                   position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 141,

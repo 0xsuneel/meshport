@@ -452,7 +452,7 @@ export function ContactsPage() {
                       <motion.button key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                         whileTap={{ scale: 0.98 }}
                         onClick={() => setSelected(c)}
-                        className="flex items-center gap-3 px-4 py-4 w-full text-left hover:bg-brand/[0.07] active:bg-brand/10 transition-all duration-150">
+                        className="flex items-center gap-3 px-4 py-4 w-full text-left hover:bg-brand/[0.07] active:bg-brand/10 transition-colors duration-150">
                         <Avatar name={c.display_name} src={c.avatar_url ? c.avatar_url.split('?')[0] : undefined} size="lg" className="flex-shrink-0 !w-[57px] !h-[57px]" />
                         <div className="flex-1 min-w-0">
                           <p className="text-base font-bold text-text-primary truncate flex items-center gap-1.5">
@@ -740,7 +740,7 @@ export function ContactsPage() {
               {payStep === 'success' && payFlash && <SuccessFlash title={payPending ? 'Payment Submitted' : 'Payment Sent'} />}
               {payStep === 'success' && (
                 <div className="px-5 pt-10 pb-12 flex flex-col items-center gap-3">
-                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', damping: 12 }}
+                  <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
                     className="w-16 h-16 rounded-full bg-success/20 flex items-center justify-center">
                     <CheckCircle className="w-9 h-9 text-success" />
                   </motion.div>

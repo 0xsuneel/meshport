@@ -27,7 +27,7 @@ export function SelfCustody() {
             key={p.title}
             variants={staggerItem}
             whileHover={{ y: -3 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
             className="flex flex-col gap-3 rounded-[20px] border border-border bg-surface p-6 shadow-elevation-1"
           >
             <p.icon size={22} className="text-brand" />

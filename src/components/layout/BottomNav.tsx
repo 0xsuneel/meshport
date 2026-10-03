@@ -218,7 +218,7 @@ export function BottomNav() {
                     {isActive && (
                       <motion.div
                         layoutId="bottom-nav-active"
-                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
                         style={{
                           position: 'absolute', inset: 0, borderRadius: 14,
                           background: 'color-mix(in srgb, var(--brand) 14%, transparent)',
@@ -227,7 +227,7 @@ export function BottomNav() {
                     )}
                     <motion.div
                       animate={{ scale: isActive ? 1.08 : 1 }}
-                      transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                      transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
                       style={{ position: 'relative', display: 'flex' }}
                     >
                       {tab.id === 'home'     && <HomeIcon active={isActive} />}
@@ -240,7 +240,7 @@ export function BottomNav() {
                         key={badgeCount}
                         initial={{ scale: 0.6 }}
                         animate={{ scale: 1 }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+                        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
                         style={{
                           position: 'absolute', top: -4, right: -6,
                           minWidth: 16, height: 16, background: 'var(--danger)',

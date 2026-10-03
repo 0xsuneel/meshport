@@ -57,7 +57,7 @@ export function SuccessFlash({ title, checkRef, viaBiometric, circleReady = true
           style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2px solid #fff' }} />
         <motion.div ref={checkRef}
           initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: 0.14, type: 'spring', stiffness: 260, damping: 17, opacity: { delay: 0.14, duration: 0.18, ease: EASE_OUT } }}
+          transition={{ delay: 0.14, duration: 0.3, ease: EASE_OUT, opacity: { delay: 0.14, duration: 0.18, ease: EASE_OUT } }}
           onAnimationComplete={onCircleReady}
           style={{ width: SUCCESS_CIRCLE, height: SUCCESS_CIRCLE, borderRadius: '50%', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {viaBiometric ? (

@@ -8,7 +8,7 @@
 //   Tab switch (bottom nav) quick cross-fade, no sliding (like native apps).
 //   In-page steps ......... same slide as pages (forward → from right,
 //                           back → from left), e.g. Pay's amount → review.
-//   Bottom sheets ......... slide up from the bottom on one spring, dimmed
+//   Bottom sheets ......... slide up from the bottom on one curve, dimmed
 //                           backdrop fades — every sheet, PIN sheet and the
 //                           amount keypad.
 //   Centered popups ....... fade + gentle scale-in (dialogs, confirms).
@@ -62,7 +62,10 @@ export const DESKTOP_FADE_Y = 5
 export const DESKTOP_FADE_TRANSITION: Transition = { duration: 0.2, ease: EASE_OUT }
 
 // ── Bottom sheets (incl. PIN sheets and the amount keypad) ─────────────────
-export const SHEET_SPRING: Transition = { type: 'spring', damping: 32, stiffness: 300 }
+// A tween, not a spring: the old spring (damping 32 / stiffness 300) was just
+// under-damped, so every sheet overshot its resting place and settled back —
+// a small rubber-band bounce. This lands once, iOS-style, and stays.
+export const SHEET_SPRING: Transition = { duration: 0.38, ease: EASE_OUT }
 /** Sheets leave a little quicker than they arrive (ease-in, like the OS). */
 export const SHEET_EXIT = { y: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } } as const
 export const SHEET_PANEL = {
@@ -79,14 +82,14 @@ export const SHEET_BACKDROP = {
 } as const
 
 // ── Centered popups / dialogs ──────────────────────────────────────────────
-/** Popups fade on a plain tween: these springs are underdamped, and on the
- *  spring the opacity overshoots and dips back, which reads as a blink. */
+/** Popups move on plain tweens: springs overshoot (a rubber-band bounce),
+ *  and on a spring the opacity overshoots and dips back, which reads as a blink. */
 const POPUP_FADE: Transition = { duration: 0.18, ease: EASE_OUT }
 export const DIALOG_CARD = {
   initial: { opacity: 0, scale: 0.96, y: 8 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.97, y: 4 },
-  transition: { type: 'spring', stiffness: 380, damping: 30, opacity: POPUP_FADE } as Transition,
+  transition: { duration: 0.22, ease: EASE_OUT, opacity: POPUP_FADE } as Transition, // no overshoot
 } as const
 /** Centred popups (DesktopDialogFrame / Sheet): a slightly livelier pop-in
  *  than DIALOG_CARD, which the success receipt keeps. */
@@ -94,7 +97,7 @@ export const POPUP_CARD = {
   initial: { opacity: 0, scale: 0.92, y: 18 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } },
-  transition: { type: 'spring', stiffness: 420, damping: 30, opacity: POPUP_FADE } as Transition,
+  transition: { duration: 0.26, ease: EASE_OUT, opacity: POPUP_FADE } as Transition, // no overshoot
 } as const
 export const DIALOG_BACKDROP = {
   initial: { opacity: 0 },

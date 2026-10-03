@@ -62,7 +62,7 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
         <span className="text-[15.5px] font-semibold text-text-primary">{q}</span>
         <motion.span
           animate={{ rotate: open ? 45 : 0 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+          transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
           className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-brand/12 text-brand"
         >
           <Plus size={16} />
@@ -74,7 +74,7 @@ function FAQItem({ q, a, index }: { q: string; a: string; index: number }) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
             style={{ overflow: 'hidden' }}
           >
             <p className="pb-5 pr-10 text-[14px] leading-relaxed text-text-secondary">{a}</p>

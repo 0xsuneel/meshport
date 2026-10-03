@@ -48,7 +48,7 @@ export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex =
         animate={POPUP_CARD.animate}
         exit={POPUP_CARD.exit}
         transition={POPUP_CARD.transition}
-        style={{ width: '100%', maxWidth, maxHeight: '100%', overflowY: 'auto', overscrollBehavior: 'contain' }}
+        style={{ width: '100%', maxWidth, maxHeight: '100%', overflowY: 'auto', overscrollBehavior: 'none' }}
       >
         {children}
       </motion.div>

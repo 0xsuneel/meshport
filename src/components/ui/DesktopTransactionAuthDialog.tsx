@@ -68,7 +68,7 @@ export function DesktopTransactionAuthDialog({
           <motion.div
             initial={{ scale: 0.5, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 22, delay: 0.05 }}
+            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1], delay: 0.05 }}
             style={{
               width: 52, height: 52, borderRadius: '50%', flexShrink: 0,
               background: `color-mix(in srgb, ${accent} 14%, transparent)`,

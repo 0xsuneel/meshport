@@ -696,7 +696,7 @@ export function CreateWalletPage() {
         )}
         {step === 'success' && walletData && (
           <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6 text-center">
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', delay: 0.2 }}
+            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1], delay: 0.2 }}
               className="w-24 h-24 bg-success/20 rounded-full flex items-center justify-center mx-auto">
               <CheckCircle className="w-14 h-14 text-success" />
             </motion.div>

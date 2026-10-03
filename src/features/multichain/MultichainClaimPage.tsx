@@ -2345,7 +2345,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         >
           <motion.div
             initial={{ scale: 0.5 }} animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 180, damping: 16 }}
+            transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
             style={{ width: 80, height: 80, borderRadius: '50%', background: 'color-mix(in srgb, var(--danger) 12%, transparent)', border: '2px solid color-mix(in srgb, var(--danger) 35%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.lg }}
           >
             <XCircle className="w-10 h-10" style={{ color: COLORS.error }}/>

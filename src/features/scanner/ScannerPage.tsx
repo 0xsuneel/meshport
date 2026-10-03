@@ -540,7 +540,7 @@ export function ScannerPage() {
           >
           <motion.div
             initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 4 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
             className="mp-popup w-full p-6 space-y-5"
             style={{ maxWidth: 420 }}
           >
@@ -680,7 +680,7 @@ export function ScannerPage() {
             >
               <motion.div
                 initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
-                transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
                 onClick={e => e.stopPropagation()}
                 className="mp-popup w-full mx-6 space-y-4 p-6"
                 style={{ maxWidth: 380 }}
