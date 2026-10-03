@@ -3,13 +3,14 @@
 // Client side of the recovery system.
 //   CCTP: supabase/functions/cctp-recovery diagnoses every stuck/failed
 //         claim or transfer against Circle's attestation API and the
-//         destination chain's usedNonces. Claims into Arc are re-queued for
-//         the MeshPort relayer; transfers out of Arc are minted by the user's
-//         own key on the destination (receiveMessage), signed on this device.
+//         destination chain's usedNonces. The missing mint (receiveMessage)
+//         is then submitted by MeshPort's relayer (/api/bridge-relay), so
+//         nobody needs gas — except a transfer whose message is locked to the
+//         user's own wallet, which only that wallet can mint.
 //   UB:   reuses lib/ubFundRecovery.ts (initiateRemoveFund / removeFund) —
 //         that logic is unchanged; this file only lists its pending rows.
 
-import { createPublicClient, createWalletClient, fallback, http, type Hex } from 'viem'
+import { createPublicClient, createWalletClient, http, type Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { supabase } from './supabase'
 import { describeFunctionsError } from './describeFunctionsError'
@@ -41,6 +42,7 @@ export type CctpDiagnosis = {
   attestation?: Hex
   messageTransmitter?: Hex
   destinationChain?: string
+  destinationCaller?: string
   destinationMintTxHash?: string | null
 }
 
@@ -62,9 +64,42 @@ export function inspectCctp(kind: 'claim' | 'transfer', id: string): Promise<Cct
   return call({ action: 'inspect', kind, id })
 }
 
-/** Claim → Arc: re-queue for MeshPort's relayer (claim-worker mints on Arc). */
+const OPEN_CALLER = '0x' + '0'.repeat(40)
+
+/**
+ * Finishes a stuck CCTP move through MeshPort's relayer: it submits
+ * receiveMessage on the destination (Arc for a claim), paying the gas. The
+ * message decides the recipient, so the relayer can't redirect anything.
+ * Works for the row's owner and for admins.
+ */
+export async function relayMint(kind: 'claim' | 'transfer', id: string): Promise<CctpDiagnosis> {
+  const d = await inspectCctp(kind, id)
+  if (d.state === 'already_minted') return d
+  const ready = kind === 'claim' ? d.state === 'ready_relay' : d.state === 'ready_self_mint'
+  if (!ready || !d.message || !d.attestation || !d.messageTransmitter) throw new Error(d.detail || `Not ready to mint (${d.state})`)
+  if ((d.destinationCaller ?? OPEN_CALLER).toLowerCase() !== OPEN_CALLER) {
+    throw new Error('This mint is locked to the wallet itself — finish it with "Mint with my wallet".')
+  }
+  const { encodeFunctionData } = await import('viem')
+  const { authApiHeaders } = await import('./supabase')
+  const r = await fetch('/api/bridge-relay', {
+    method: 'POST', headers: await authApiHeaders(),
+    body: JSON.stringify({
+      action: 'call', chain: kind === 'claim' ? 'Arc_Testnet' : d.destinationChain, to: d.messageTransmitter,
+      data: encodeFunctionData({ abi: RECEIVE_MESSAGE_ABI, functionName: 'receiveMessage', args: [d.message, d.attestation] }),
+    }),
+  })
+  const out = await r.json().catch(() => null) as { txHash?: string; error?: string } | null
+  if (!r.ok || !out?.txHash) throw new Error(out?.error || 'Relayer could not finish this mint')
+  // Re-inspect: the nonce is now used on-chain, so the row is marked completed
+  // (and tagged as recovered) from chain truth.
+  await call({ action: 'inspect', kind, id, selfMinted: true, mintTxHash: out.txHash }).catch(() => {})
+  return { ...d, state: 'already_minted', destinationMintTxHash: out.txHash }
+}
+
+/** Claim → Arc: MeshPort's relayer mints it on Arc (no gas needed). */
 export function retryClaimRelay(id: string): Promise<CctpDiagnosis> {
-  return call({ action: 'retry-relay', id })
+  return relayMint('claim', id)
 }
 
 /** Expired fast-transfer attestation: ask Circle to re-attest, then inspect again. */
@@ -79,15 +114,20 @@ const RECEIVE_MESSAGE_ABI = [{
 }] as const
 
 /**
- * Transfer out of Arc whose mint never happened: the user's own wallet
- * submits receiveMessage on the destination chain. Needs a little native
- * gas there. The key stays on this device.
+ * Transfer out of Arc whose mint never happened. Normally MeshPort's relayer
+ * submits the mint (no gas needed). Only a message locked to the user's own
+ * wallet is minted by that wallet, which then needs a little native gas on
+ * the destination. The key stays on this device.
  */
 export async function selfMintTransfer(id: string, privateKey: string): Promise<{ mintTxHash: string }> {
   const d = await inspectCctp('transfer', id)
   if (d.state === 'already_minted') return { mintTxHash: d.destinationMintTxHash ?? '' }
   if (d.state !== 'ready_self_mint' || !d.message || !d.attestation || !d.messageTransmitter || !d.destinationChain) {
     throw new Error(d.detail || `Not ready to mint (${d.state})`)
+  }
+  if ((d.destinationCaller ?? OPEN_CALLER).toLowerCase() === OPEN_CALLER) {
+    const out = await relayMint('transfer', id)
+    return { mintTxHash: out.destinationMintTxHash ?? '' }
   }
 
   const cfg = EXTERNAL_CHAINS[CHAIN_ALIASES[d.destinationChain] ?? d.destinationChain]
@@ -117,47 +157,10 @@ export async function selfMintTransfer(id: string, privateKey: string): Promise<
   return { mintTxHash: hash }
 }
 
-/**
- * Claim into Arc that never minted — finished by the user's OWN wallet on
- * Arc (receiveMessage), no MeshPort relayer involved. Gas on Arc is paid in
- * USDC, so a little Arc USDC is all it needs. Only possible when the
- * message isn't locked to Circle's forwarder (state 'ready_relay').
- */
-export async function selfMintClaim(id: string, privateKey: string): Promise<{ mintTxHash: string }> {
-  const d = await inspectCctp('claim', id)
-  if (d.state === 'already_minted') return { mintTxHash: d.destinationMintTxHash ?? '' }
-  if (d.state !== 'ready_relay' || !d.message || !d.attestation || !d.messageTransmitter) {
-    throw new Error(d.detail || `Not ready to mint (${d.state})`)
-  }
-  const { ARC, ARC_RPCS } = await import('@/blockchain/chains')
-  const toAbsolute = (url: string) =>
-    /^[a-z]+:\/\//i.test(url) ? url : window.location.origin + (url.startsWith('/') ? url : '/' + url)
-  // MeshPort's same-origin Arc proxy first, Arc's public RPC as fallback —
-  // so the mint still goes through if MeshPort's proxy is down.
-  const rpcs = [...ARC_RPCS.map(toAbsolute), ARC.rpcUrl]
-  const transport = fallback(rpcs.map(u => http(u)))
-  const chain = {
-    id: ARC.chainId, name: 'Arc Testnet',
-    nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
-    rpcUrls: { default: { http: rpcs } },
-  } as const
-  const account = privateKeyToAccount(privateKey as Hex)
-  const publicClient = createPublicClient({ chain, transport })
-  const gas = await publicClient.getBalance({ address: account.address })
-  if (gas === 0n) throw new Error('You need a little USDC on Arc to pay the gas for this mint.')
-
-  const { request } = await publicClient.simulateContract({
-    account, address: d.messageTransmitter, abi: RECEIVE_MESSAGE_ABI,
-    functionName: 'receiveMessage', args: [d.message, d.attestation],
-  })
-  const walletClient = createWalletClient({ account, chain, transport })
-  const hash = await walletClient.writeContract(request)
-  const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 })
-  if (receipt.status !== 'success') throw new Error('Mint transaction reverted')
-  // Re-inspect: the nonce is now used on Arc, so the claim is marked
-  // completed (and tagged "Recovered via CCTP") from chain truth.
-  await call({ action: 'inspect', kind: 'claim', id, selfMinted: true, mintTxHash: hash }).catch(() => {})
-  return { mintTxHash: hash }
+/** Claim into Arc that never minted — MeshPort's relayer mints it on Arc (no Arc USDC needed). */
+export async function selfMintClaim(id: string, _privateKey?: string): Promise<{ mintTxHash: string }> {
+  const out = await relayMint('claim', id)
+  return { mintTxHash: out.destinationMintTxHash ?? '' }
 }
 
 /** UB: pending 7-day withdrawals started by lib/ubFundRecovery.ts. */

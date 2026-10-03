@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store'
 import {
-  listRecoverable, inspectCctp, retryClaimRelay, selfMintClaim, requestReattest, selfMintTransfer,
+  listRecoverable, inspectCctp, retryClaimRelay, requestReattest, selfMintTransfer,
   listPendingUbRecoveries, type RecoveryItem, type CctpDiagnosis,
 } from '@/lib/cctpRecovery'
 
@@ -24,8 +24,8 @@ const btn: React.CSSProperties = { padding: '10px 14px', borderRadius: 12, borde
 const STATE_TEXT: Record<CctpDiagnosis['state'], string> = {
   already_minted: 'Funds already arrived — marked completed.',
   waiting_attestation: 'Circle has not attested this burn yet. It will finish on its own.',
-  ready_relay: 'Ready — MeshPort can finish this on Arc.',
-  ready_self_mint: 'Ready — finish the mint with your wallet (needs a little gas on the destination).',
+  ready_relay: 'Ready — MeshPort can finish this on Arc (no gas needed).',
+  ready_self_mint: 'Ready — MeshPort can finish the mint on the destination (no gas needed).',
   forwarder_only: "Only Circle's forwarder can finish this one. It usually completes on its own.",
   needs_reattest: 'The attestation expired. Request a new one, then check again.',
   no_message: 'Circle has no record of this burn.',
@@ -302,12 +302,9 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
               {lockedByMeshPort && running?.kind === 'relay' && actionBtn('Let MeshPort finish it', async () => retryClaimRelay(it.id))}
               {/* Started by the user: hidden until it finishes or the new attestation expires. */}
               {!inProgress && state === 'ready_relay' && (
-                <>
-                  {actionBtn('Mint on Arc with my wallet', async () => selfMintClaim(it.id, await getKey()))}
-                  {actionBtn('Let MeshPort finish it', () => retryClaimRelay(it.id))}
-                </>
+                actionBtn('Finish it now', () => retryClaimRelay(it.id))
               )}
-              {!inProgress && state === 'ready_self_mint' && actionBtn('Mint with my wallet', async () => selfMintTransfer(it.id, await getKey()))}
+              {!inProgress && state === 'ready_self_mint' && actionBtn('Finish it now', async () => selfMintTransfer(it.id, await getKey()))}
               {!inProgress && state === 'needs_reattest' && actionBtn('Request new attestation', () => requestReattest(it.kind, it.id))}
             </div>
           </div>

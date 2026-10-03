@@ -6,7 +6,6 @@
 // USER actions (own rows only):
 //   POST { action: 'list' }
 //   POST { action: 'inspect', kind: 'claim'|'transfer', id }
-//   POST { action: 'retry-relay', id }                         claims → Arc, MeshPort relayer
 //   POST { action: 'reattest', kind, id }                      expired fast-transfer attestation
 //   POST { action: 'confirm-mint', kind: 'transfer', id, mintTxHash }
 //
@@ -15,17 +14,16 @@
 // accepts an address, chain or amount, so recipients and destinations can
 // never be changed from the admin panel.
 //   POST { action: 'admin-list' }
-//   POST { action: 'inspect' | 'retry-relay' | 'reattest', ... }   (any user's row)
-//   POST { action: 'admin-relay-transfer', id }   MeshPort relayer mints a transfer on its destination
+//   POST { action: 'inspect' | 'reattest', ... }   (any user's row)
 //   POST { action: 'admin-requeue-ub-intent', id } resubmit a signed UB claim (ub-claim-worker)
 //   POST { action: 'admin-notify', kind, id }     tell the user to finish it in Recover
 //
-// No private key of any user is ever involved. Every admin action is written
-// to admin_recovery_log.
+// The missing mint itself is submitted by MeshPort's relayer
+// (api/bridge-relay, action 'call') from the app — this function only
+// diagnoses and records. No private key is held here. Every admin action is
+// written to admin_recovery_log.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
-import { createPublicClient, createWalletClient, http } from 'npm:viem@2'
-import { privateKeyToAccount } from 'npm:viem@2/accounts'
 import { handleOptionsFor, jsonFor } from '../_shared/cors.ts'
 import { CHAIN_RPCS, CCTP_DOMAINS } from '../_shared/chains.ts'
 
@@ -48,7 +46,6 @@ const ARC_RPCS = [
   'https://rpc.quicknode.testnet.arc.io',
   'https://rpc.testnet.arc.network',
 ]
-const RELAYER_PRIVATE_KEY = (Deno.env.get('RELAYER_PRIVATE_KEY') ?? '').trim()
 
 function serviceKey(): string {
   const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -127,7 +124,7 @@ function readAction(kind: unknown, at: unknown, by: unknown): RecoveryAction | n
 function activeAction(status: string, action: RecoveryAction | null | undefined): RecoveryAction | null {
   if (!action || status === 'completed') return null
   if (Date.now() - new Date(action.at).getTime() > ACTION_LOCK_MS) return null
-  // A relay that failed (claim-worker gave up) can be retried straight away.
+  // A relay that failed can be retried straight away.
   if (action.kind === 'relay' && status === 'failed') return null
   return action
 }
@@ -265,8 +262,7 @@ async function simulateReceive(urls: string[], message: string, attestation: str
 
 // `recovered` = this completion came from a recovery action (relay / self
 // mint). A plain status correction ("it already arrived") is not labelled
-// as a recovery. A claim already re-queued via retry-relay keeps the
-// recovered_via it got then.
+// as a recovery.
 async function markCompleted(r: Row, mintTx: string | null, recovered = false) {
   const now = new Date().toISOString()
   if (r.kind === 'claim') {
@@ -381,36 +377,7 @@ async function adminList() {
         status: 'withdrawing', error: null, txHash: w.metadata?.init_tx_hash ?? null, readyAt: w.metadata?.eligible_at ?? null, createdAt: w.created_at,
       })),
     ].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))),
-    relayerConfigured: !!RELAYER_PRIVATE_KEY,
   }
-}
-
-// ── Admin: MeshPort relayer mints a stuck transfer on its destination ──────
-// receiveMessage mints to the recipient INSIDE the attested message — the
-// relayer only pays gas; it cannot redirect funds.
-async function relayerMintTransfer(row: Row, d: Diagnosis): Promise<{ mintTxHash: string }> {
-  if (!RELAYER_PRIVATE_KEY) throw new Error('RELAYER_PRIVATE_KEY is not configured')
-  if (d.state !== 'ready_self_mint' || !d.message || !d.attestation) throw new Error(`Not mintable (${d.state})`)
-  const caller = (d.destinationCaller ?? '').toLowerCase()
-  if (caller !== '0x' + '0'.repeat(40)) throw new Error('This message is locked to the user’s own wallet — only the user can mint it')
-  const url = row.destRpcs.find(u => u && !u.endsWith('/'))
-  if (!url) throw new Error(`No RPC for ${row.destinationChain}`)
-  const chainId = Number(BigInt(await rpc(row.destRpcs, 'eth_chainId', [])))
-  const chain = { id: chainId, name: row.destinationChain, nativeCurrency: { name: 'Native', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [url] } } } as const
-  const account = privateKeyToAccount((RELAYER_PRIVATE_KEY.startsWith('0x') ? RELAYER_PRIVATE_KEY : `0x${RELAYER_PRIVATE_KEY}`) as `0x${string}`)
-  const pub = createPublicClient({ chain, transport: http(url) })
-  const abi = [{ type: 'function', name: 'receiveMessage', stateMutability: 'nonpayable',
-    inputs: [{ name: 'message', type: 'bytes' }, { name: 'attestation', type: 'bytes' }], outputs: [{ name: 'success', type: 'bool' }] }] as const
-  const { request } = await pub.simulateContract({
-    account, address: MESSAGE_TRANSMITTER_V2 as `0x${string}`, abi, functionName: 'receiveMessage',
-    args: [d.message as `0x${string}`, d.attestation as `0x${string}`],
-  })
-  const wallet = createWalletClient({ account, chain, transport: http(url) })
-  const hash = await wallet.writeContract(request)
-  const receipt = await pub.waitForTransactionReceipt({ hash, timeout: 90_000 })
-  if (receipt.status !== 'success') throw new Error('Mint transaction reverted')
-  await markCompleted(row, hash, true)
-  return { mintTxHash: hash }
 }
 
 async function notifyUser(kind: string, id: string): Promise<string> {
@@ -459,26 +426,6 @@ Deno.serve(async (req: Request) => {
       const id = String(b.id ?? '')
       if (action === 'admin-list') return jsonFor(req, await adminList())
 
-      if (action === 'admin-relay-transfer') {
-        const row = await loadRow('transfer', id)
-        if (!row) return jsonFor(req, { error: 'Not found' }, 404)
-        const d = await diagnose(row)
-        if (d.state === 'already_minted') {
-          if (row.status !== 'completed') await markCompleted(row, d.destinationMintTxHash ?? null)
-          await audit(caller, action, 'transfer', id, d)
-          return jsonFor(req, d)
-        }
-        try {
-          const out = await relayerMintTransfer(row, d)
-          await audit(caller, action, 'transfer', id, out)
-          return jsonFor(req, { state: 'already_minted', destinationMintTxHash: out.mintTxHash })
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e)
-          await audit(caller, action, 'transfer', id, { error: msg })
-          return jsonFor(req, { ...d, error: msg }, 409)
-        }
-      }
-
       if (action === 'admin-requeue-ub-intent') {
         const { data: i } = await db.from('ub_claim_intents').select('status').eq('id', id).maybeSingle()
         if (!i) return jsonFor(req, { error: 'Not found' }, 404)
@@ -526,7 +473,7 @@ Deno.serve(async (req: Request) => {
       })
     }
 
-    const kind = String(b.kind ?? (action === 'retry-relay' ? 'claim' : ''))
+    const kind = String(b.kind ?? '')
     const id = String(b.id ?? '')
     const row = await loadRow(kind, id)
     if (!row) return jsonFor(req, { error: 'Not found' }, 404)
@@ -535,11 +482,11 @@ Deno.serve(async (req: Request) => {
     if (!row.burnTx) return jsonFor(req, { error: 'This record has no burn transaction' }, 400)
 
     const d = await diagnose(row)
-    // `selfMinted`: the user just minted it with their own wallet from Recover
-    // (lib/cctpRecovery.selfMintClaim) — label it as a recovery.
+    // `selfMinted`: the app just minted it from Recover (MeshPort's relayer
+    // or the user's own wallet — lib/cctpRecovery) — label it as a recovery.
     if (d.state === 'already_minted' && row.status !== 'completed') {
-      // Iris only knows the mint hash for forwarded mints. For a self-mint the
-      // app sends its own tx hash — verified on-chain here — so the claim keeps
+      // Iris only knows the mint hash for forwarded mints. For a Recover mint
+      // the app sends its tx hash — verified on-chain here — so the claim keeps
       // its Arc mint hash (without it the recovery scan later sees an
       // "untracked" mint and records the same funds a second time).
       let mintTx = d.destinationMintTxHash ?? null
@@ -570,19 +517,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (action === 'inspect') return jsonFor(req, reply)
-
-    if (action === 'retry-relay') {
-      if (running?.kind === 'relay') return jsonFor(req, reply)
-      if (d.state !== 'ready_relay') return jsonFor(req, reply)
-      await db.from('claims').update({
-        status: 'verifying', message_hash: d.message, verifying_at: new Date().toISOString(),
-        settling_at: null, relay_tx_hash: null, relay_error: null, relay_submitted_at: null,
-        attempts: 0, error: null, needs_review: false, completed_at: null, recovered_via: 'cctp',
-      }).eq('id', row.id).neq('status', 'completed')
-      await saveAction(row, 'relay', ownsRow ? 'user' : 'meshport')
-      if (!ownsRow) await audit(caller, 'retry-relay', 'claim', id, { queued: true })
-      return jsonFor(req, { ...d, state: 'relay_queued', action: { kind: 'relay', at: new Date().toISOString(), by: ownsRow ? 'user' : 'meshport' } })
-    }
 
     if (action === 'reattest') {
       if (running?.kind === 'reattest') return jsonFor(req, reply)

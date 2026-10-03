@@ -39,20 +39,23 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
   return data as T
 }
 
-export function adminListStuck(): Promise<{ items: StuckItem[]; relayerConfigured: boolean }> {
+export function adminListStuck(): Promise<{ items: StuckItem[] }> {
   return call({ action: 'admin-list' })
 }
 export function adminInspect(kind: 'claim' | 'transfer', id: string): Promise<AdminActionResult> {
   return call({ action: 'inspect', kind, id })
 }
-export function adminFinishClaim(id: string): Promise<AdminActionResult> {
-  return call({ action: 'retry-relay', id })
+// Mints go through MeshPort's relayer (/api/bridge-relay) — see relayMint.
+export async function adminFinishClaim(id: string): Promise<AdminActionResult> {
+  const { relayMint } = await import('./cctpRecovery')
+  return relayMint('claim', id) as Promise<AdminActionResult>
 }
 export function adminReattest(kind: 'claim' | 'transfer', id: string): Promise<AdminActionResult> {
   return call({ action: 'reattest', kind, id })
 }
-export function adminRelayTransfer(id: string): Promise<AdminActionResult> {
-  return call({ action: 'admin-relay-transfer', id })
+export async function adminRelayTransfer(id: string): Promise<AdminActionResult> {
+  const { relayMint } = await import('./cctpRecovery')
+  return relayMint('transfer', id) as Promise<AdminActionResult>
 }
 export function adminRequeueUbClaim(id: string): Promise<AdminActionResult> {
   return call({ action: 'admin-requeue-ub-intent', id })

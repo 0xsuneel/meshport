@@ -43,7 +43,7 @@ const STATE_TEXT: Record<string, string> = {
   already_minted: 'Funds already arrived — the record is now marked completed.',
   waiting_attestation: 'Circle has not attested this burn yet. It finishes on its own.',
   ready_relay: 'Ready — the MeshPort relayer can mint this on Arc.',
-  ready_self_mint: 'Ready — can be minted on the destination (by the user, or the MeshPort relayer).',
+  ready_self_mint: 'Ready — the MeshPort relayer can mint this on the destination.',
   forwarder_only: 'Locked to Circle’s forwarder — only Circle can finish it. Nothing to do but wait.',
   needs_reattest: 'The attestation expired. Request a new one, then check again.',
   no_message: 'Circle has no record of this burn.',
@@ -128,8 +128,8 @@ function ActionButton({ children, onClick, disabled, primary, icon }: {
 }
 
 // ── Detail panel ─────────────────────────────────────────────────────────────
-function Detail({ item, relayerConfigured, onClose, onChanged }: {
-  item: StuckItem; relayerConfigured: boolean; onClose: () => void; onChanged: () => void
+function Detail({ item, onClose, onChanged }: {
+  item: StuckItem; onClose: () => void; onChanged: () => void
 }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [diag, setDiag] = useState<AdminActionResult | null>(null)
@@ -229,13 +229,13 @@ function Detail({ item, relayerConfigured, onClose, onChanged }: {
         {item.kind === 'claim' && state === 'ready_relay' && (
           <ActionButton primary icon={<Zap size={14} />} disabled={!!busy}
             onClick={() => run('finish', `Mint ${usd(item.amount)} on Arc to ${short(item.wallet)} with the MeshPort relayer?`, () => adminFinishClaim(item.id), true)}>
-            {busy === 'finish' ? 'Queuing…' : 'Finish on Arc (relayer)'}
+            {busy === 'finish' ? 'Minting…' : 'Finish on Arc (relayer)'}
           </ActionButton>
         )}
         {item.kind === 'transfer' && state === 'ready_self_mint' && (
-          <ActionButton primary icon={<Zap size={14} />} disabled={!!busy || !relayerConfigured}
+          <ActionButton primary icon={<Zap size={14} />} disabled={!!busy}
             onClick={() => run('relay', `Mint on ${chainName(item.to)} with the MeshPort relayer? Funds go to the address inside the signed message${item.destinationAddress ? ` (${short(item.destinationAddress)})` : ''}; the relayer only pays gas.`, () => adminRelayTransfer(item.id), true)}>
-            {busy === 'relay' ? 'Minting…' : relayerConfigured ? `Mint on ${chainName(item.to)} (relayer)` : 'Relayer not configured'}
+            {busy === 'relay' ? 'Minting…' : `Mint on ${chainName(item.to)} (relayer)`}
           </ActionButton>
         )}
         {cctpKind && state === 'needs_reattest' && (
@@ -275,7 +275,6 @@ function Detail({ item, relayerConfigured, onClose, onChanged }: {
 export function StuckFundsPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const [items, setItems] = useState<StuckItem[]>([])
-  const [relayerConfigured, setRelayerConfigured] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState<'all' | StuckKind>('all')
@@ -288,7 +287,6 @@ export function StuckFundsPage() {
     try {
       const r = await adminListStuck()
       setItems(r.items ?? [])
-      setRelayerConfigured(!!r.relayerConfigured)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     }
@@ -379,7 +377,6 @@ export function StuckFundsPage() {
         {tile('Stuck moves', String(counts.all ?? 0), `${usersAffected} user${usersAffected === 1 ? '' : 's'} affected`, (counts.all ?? 0) > 0 ? 'var(--warning)' : 'var(--success)')}
         {tile('USDC not yet delivered', usd(totalUsd), 'Excludes 7-day withdrawals')}
         {tile('Waiting for users', String(counts.ub_transfer ?? 0), 'UB transfers — user must choose')}
-        {tile('Relayer', relayerConfigured ? 'Ready' : 'Not set', relayerConfigured ? 'Can finish CCTP mints' : 'Set RELAYER_PRIVATE_KEY', relayerConfigured ? 'var(--success)' : 'var(--danger)')}
       </div>
 
       {/* Filters + search */}
@@ -415,7 +412,7 @@ export function StuckFundsPage() {
           {list}
           <div style={{ position: 'sticky', top: 16 }}>
             {selected
-              ? <Detail item={selected} relayerConfigured={relayerConfigured} onClose={() => setSelectedId(null)} onChanged={() => void load()} />
+              ? <Detail item={selected} onClose={() => setSelectedId(null)} onChanged={() => void load()} />
               : <AdminCard><div style={{ color: 'var(--text-secondary)', fontSize: 13, padding: '18px 0', textAlign: 'center' }}>Select a move to see its details and actions.</div></AdminCard>}
           </div>
         </div>
@@ -426,7 +423,7 @@ export function StuckFundsPage() {
             <div role="dialog" aria-modal="true" onClick={() => setSelectedId(null)}
               style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
               <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 560, maxHeight: '100%', overflowY: 'auto', boxSizing: 'border-box', animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}>
-                <Detail item={selected} relayerConfigured={relayerConfigured} onClose={() => setSelectedId(null)} onChanged={() => void load()} />
+                <Detail item={selected} onClose={() => setSelectedId(null)} onChanged={() => void load()} />
               </div>
             </div>
           )}
