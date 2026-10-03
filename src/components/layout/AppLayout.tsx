@@ -251,7 +251,19 @@ export function AppLayout() {
     if (!walletAddress || !chatUserId) return
     import('@/lib/chatCrypto').then(({ ensureChatKeysReady }) =>
       ensureChatKeysReady(walletAddress, chatUserId)
-    ).catch(() => { /* best-effort — chat falls back to plaintext until this succeeds */ })
+    ).catch(() => { /* best-effort — retried on the next unlock / session bind */ })
+  }, [walletAddress, chatUserId, boundTick, walletUnlocked])
+
+  // Messages this user sent before the recipient had a chat key are sealed
+  // for the sender only (e2e:q2). Hand them over as soon as the recipient
+  // has signed in: now, on unlock, and every 2 minutes while the app is open.
+  useEffect(() => {
+    if (!walletAddress || !chatUserId) return
+    const run = () => import('@/lib/chatCrypto')
+      .then(({ resealWaitingMessages }) => resealWaitingMessages(walletAddress, chatUserId)).catch(() => {})
+    run()
+    const iv = setInterval(run, 2 * 60_000)
+    return () => clearInterval(iv)
   }, [walletAddress, chatUserId, boundTick, walletUnlocked])
 
   // Chat delivery receipts (two grey ticks for the sender) while the app is open.

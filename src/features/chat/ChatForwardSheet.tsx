@@ -54,6 +54,8 @@ export function ChatForwardSheet({ messages, sourceKey, myUserId, walletAddress,
       for (const convId of picked) {
         const conv = (convs ?? []).find(c => c.id === convId)
         const key = walletAddress && conv?.other_user?.id ? await getConversationKey(walletAddress, conv.other_user.id).catch(() => null) : null
+        // Never forward readable: no chat key on this device → skip this chat.
+        if (!key) { failed += ordered.length; continue }
         for (const m of ordered) {
           try {
             const plain = plainTextOf(m.content)

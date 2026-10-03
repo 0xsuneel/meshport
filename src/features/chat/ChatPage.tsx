@@ -37,7 +37,7 @@ import {
   type DbConversation,
   type DbUser,
 } from '@/lib/supabase'
-import { decryptText, isEncryptedPayload } from '@/lib/chatCrypto'
+import { decryptText, isEncryptedPayload, isWaitingPayload } from '@/lib/chatCrypto'
 import {
   loadMessages,
   ensureConversation,
@@ -1090,6 +1090,20 @@ function NotEncryptedTag({ light }: { light?: boolean }) {
   )
 }
 
+/** On the sender's own message still sealed only for them: it's handed to the recipient once they sign in. */
+function WaitingTag({ light }: { light?: boolean }) {
+  return (
+    <span title="End-to-end encrypted. Delivered when they next sign in to MeshPort." aria-label="Waiting for recipient"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10.5, whiteSpace: 'nowrap',
+        color: light ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)' }}>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+      </svg>
+      Waiting for them
+    </span>
+  )
+}
+
 function EncryptedImage({ url, ivBase64, convKey, isLastInGroup, isMine, onTap }: {
   url: string; ivBase64: string; convKey: any; isLastInGroup: boolean; isMine: boolean
   onTap: (objectUrl: string) => void
@@ -1331,6 +1345,8 @@ const MessageBubble = memo(function MessageBubble({
   // encrypted, so they're skipped.
   const notEncrypted = !isPayment && !isDeleted && !isCardMsg && !msg._upload && !msg._failed
     && !String(msg.id).startsWith('optimistic_') && !!msg.content && !isEncryptedPayload(msg.content)
+  // Mine, sealed for me only until they sign in (e2e:q2).
+  const waitingForThem = isMine && !isDeleted && !!msg.content && isWaitingPayload(msg.content)
   const handleLongPressStart = () => { if (!isPaymentRecord) onLongPress?.(msg, isMine) }
   // A long-press only counts if the finger stays put — scrolling never selects.
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
@@ -1514,7 +1530,7 @@ const MessageBubble = memo(function MessageBubble({
                     <div style={{ padding: '6px 10px 5px', maxWidth: 260, wordBreak: 'break-word' }}>
                       {linkifyText(caption, isMine)}
                       <div className="flex items-center justify-end gap-1 mt-0.5">
-                        {notEncrypted && <NotEncryptedTag light={isMine} />}
+                        {notEncrypted && <NotEncryptedTag light={isMine} />}{waitingForThem && <WaitingTag light={isMine} />}
                         <p className={`text-[11px] ${isMine ? 'text-white/60' : 'text-text-secondary'}`}>{new Date(msg.created_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</p>
                         {isMine && <MessageTicks msg={msg} />}
                       </div>
@@ -1527,7 +1543,7 @@ const MessageBubble = memo(function MessageBubble({
                     background: 'rgba(0,0,0,0.45)', borderRadius: 10,
                     padding: '2px 6px', pointerEvents: 'none',
                   }}>
-                    {notEncrypted && <NotEncryptedTag light />}
+                    {notEncrypted && <NotEncryptedTag light />}{waitingForThem && <WaitingTag light />}
                     <span style={{ fontSize: 11, color: '#fff' }}>
                       {new Date(msg.created_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}
                     </span>
@@ -1570,7 +1586,7 @@ const MessageBubble = memo(function MessageBubble({
             </div>}
             {(isDeleted || !isImageMsg) && (
               <div className="relative flex items-center justify-end gap-1 mt-0.5" style={isCardMsg ? { padding: '0 6px 1px' } : undefined}>
-                {notEncrypted && <NotEncryptedTag light={isMine} />}
+                {notEncrypted && <NotEncryptedTag light={isMine} />}{waitingForThem && <WaitingTag light={isMine} />}
                 <p className={`text-[11px] ${isMine ? 'text-white/60' : 'text-text-secondary'}`}>{new Date(msg.created_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</p>
                 {isMine && !isDeleted && <MessageTicks msg={msg} />}
               </div>
@@ -2057,6 +2073,20 @@ export function ChatConversationPage() {
   // What text bubbles get: the key, null (no key — final), or undefined
   // (still unlocking).
   const bubbleKey = convKey || (keyFinalFor === otherUser?.id || keyWaitOver ? null : undefined)
+  // The keys every send needs. Nothing is ever sent readable: without a chat
+  // identity on this device (wallet still locked) the send fails and says so.
+  const keyForSend = async () => {
+    if (convKey) return convKey
+    const addr = useAuthStore.getState().walletAddress
+    const k = addr && otherUser?.id
+      ? await import('@/lib/chatCrypto').then(({ getConversationKey }) => getConversationKey(addr, otherUser.id)).catch(() => null)
+      : null
+    if (!k) {
+      showToastMessage('Unlock your wallet to send encrypted messages', 'error')
+      throw new Error('no chat key')
+    }
+    return k
+  }
   const [conversationId, setConversationId] = useState<string | null>(null)
   const _setConvId = (id: string | null) => { conversationIdRef.current = id; setConversationId(id) }
   // A merchant's "Send in chat" opens the conversation with the payment
@@ -3094,7 +3124,7 @@ export function ChatConversationPage() {
       // text (like payment cards). Everything else is end-to-end encrypted.
       const isPaymentRecordCard = /^(🧾 Bill|💸 Payment request)\b/u.test(text) && !!codeFromLink(text)
       const { encryptText } = await import('@/lib/chatCrypto')
-      encryptedContent = isPaymentRecordCard ? text : await encryptText(text, convKey)
+      encryptedContent = isPaymentRecordCard ? text : await encryptText(text, await keyForSend())
       // Known plaintext for this ciphertext — the saved copy (and the live
       // echo) show the text at once instead of flashing empty.
       _plainByContent.set(encryptedContent, text)
@@ -3131,7 +3161,8 @@ export function ChatConversationPage() {
     patchMsg(convId, optId, { _failed: false, _upload: { progress: 0.02 } })
     try {
       const { encryptBlob, encryptText } = await import('@/lib/chatCrypto')
-      const { blob: up, ivBase64, encrypted } = await encryptBlob(job.blob, convKey)
+      const sendKey = await keyForSend()
+      const { blob: up, ivBase64, encrypted } = await encryptBlob(job.blob, sendKey)
       const ext = job.isImage ? (job.blob.type === 'image/png' ? 'png' : job.blob.type === 'image/gif' ? 'gif' : 'jpg') : (job.name.split('.').pop() || 'bin')
       const path = `chat/${convId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
       let last = 0
@@ -3152,7 +3183,7 @@ export function ChatConversationPage() {
         : (encrypted ? `[FILE-E:${safeName}:${ivBase64}](${remote})` : `[FILE:${safeName}](${remote})`)
       // The caption travels in the same message, under the marker.
       const plain = job.caption.trim() ? `${marker}\n${job.caption.trim()}` : marker
-      const content = await encryptText(plain, convKey)
+      const content = await encryptText(plain, sendKey)
       _plainByContent.set(content, plain)
       const saved = await persistMessage({ conversationId: convId, senderId: user.id, content, type: 'text' })
       if (!saved) throw new Error('save failed')
@@ -3313,10 +3344,9 @@ export function ChatConversationPage() {
       // upload — the storage bucket serves public URLs (see the comment on
       // getPublicUrl below), so without this step anyone with the link
       // could view the raw file, not just the two people in this chat.
-      // Falls back to uploading the original bytes unchanged if convKey is
-      // null (see encryptBlob's own comment — same "recipient hasn't
-      // opened a build with this feature yet" fallback text uses).
-      const { blob: uploadBlob, ivBase64, encrypted } = await encryptBlob(file, convKey)
+      // Never uploaded readable — keyForSend fails without a chat key.
+      const sendKey = await keyForSend()
+      const { blob: uploadBlob, ivBase64, encrypted } = await encryptBlob(file, sendKey)
 
       const { error: uploadErr } = await supabase.storage.from('attachments').upload(fileName, uploadBlob, { cacheControl: '3600', upsert: false, contentType: encrypted ? 'application/octet-stream' : file.type })
       if (uploadErr) { console.error('[Chat] Upload error:', uploadErr.message); return null }
@@ -3333,7 +3363,7 @@ export function ChatConversationPage() {
       const marker = encrypted
         ? (isImage ? `[IMAGE-E:${ivBase64}](${fileUrl})` : `[FILE-E:${safeName}:${ivBase64}](${fileUrl})`)
         : (isImage ? `[IMAGE](${fileUrl})` : `[FILE:${safeName}](${fileUrl})`)
-      const out = await encryptText(marker, convKey)
+      const out = await encryptText(marker, sendKey)
       _plainByContent.set(out, marker)
       return out
     } catch (e: any) { console.error('[Chat] File upload failed:', e?.message); return null }
@@ -4459,7 +4489,8 @@ export function ChatConversationPage() {
         </div>
 
         {/* Attach panel — opens right under the typing box in place of the
-            keyboard (WhatsApp-style): a grid of round buttons. */}
+            keyboard (WhatsApp-style): a grid of round buttons in the app's
+            brand colour. Order: Camera, Gallery, Document, File, Pay, Bill. */}
         <AnimatePresence initial={false}>
           {showAttach && attachMode === 'attachments' && (
             <motion.div key="attach-panel"
@@ -4468,18 +4499,18 @@ export function ChatConversationPage() {
               style={{ overflow: 'hidden' }}>
               <div className="grid grid-cols-4 gap-x-2 gap-y-4 px-4 pt-3 pb-5">
                 {[
-                  { key: 'gallery',  label: 'Gallery',  color: '#3B82F6', icon: <Image className="w-6 h-6" /> },
-                  { key: 'camera',   label: 'Camera',   color: '#EC4899', icon: (
+                  { key: 'camera',   label: 'Camera',   color: 'var(--brand)', icon: (
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/>
                     </svg>) },
-                  { key: 'document', label: 'Document', color: '#8B5CF6', icon: <FileText className="w-6 h-6" /> },
-                  { key: 'file',     label: 'File',     color: '#F59E0B', icon: <File className="w-6 h-6" /> },
+                  { key: 'gallery',  label: 'Gallery',  color: 'var(--brand)', icon: <Image className="w-6 h-6" /> },
+                  { key: 'document', label: 'Document', color: 'var(--brand)', icon: <FileText className="w-6 h-6" /> },
+                  { key: 'file',     label: 'File',     color: 'var(--brand)', icon: <File className="w-6 h-6" /> },
                   { key: 'pay',      label: 'Pay',      color: 'var(--brand)', icon: (
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="12" cy="12" r="10"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6.5v11"/>
                     </svg>) },
-                  ...(merchant.isMerchant ? [{ key: 'bill', label: 'Bill', color: '#10B981', icon: <Receipt className="w-6 h-6" /> }] : []),
+                  ...(merchant.isMerchant ? [{ key: 'bill', label: 'Bill', color: 'var(--brand)', icon: <Receipt className="w-6 h-6" /> }] : []),
                 ].map(item => (
                   <button key={item.key} type="button"
                     onClick={() => {

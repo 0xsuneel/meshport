@@ -268,8 +268,38 @@ describe('e2e:v2 per-message keys', async () => {
     expect(await decryptText(old, await bobToAlice())).toBe('from before')
   })
 
-  it('sends plain text only when the recipient has no usable key yet', async () => {
-    expect(await encryptText('hi', await makeChatKeys(alice.privateKey, null))).toBe('hi')
+  it('never sends readable text: no recipient key yet → sealed for the sender only (e2e:q2)', async () => {
+    const { WAITING_TEXT, isWaitingPayload } = await import('./chatCrypto')
+    const msg = await encryptText('hi', await makeChatKeys(alice.privateKey, null))
+    expect(msg.startsWith('e2e:q2:')).toBe(true)
+    expect(isWaitingPayload(msg)).toBe(true)
+    expect(msg).not.toContain('hi')
+    // Sender (any device) reads it; the recipient and anyone else cannot.
+    expect(await decryptText(msg, await aliceToBob())).toBe('hi')
+    expect(await decryptText(msg, await bobToAlice())).toBe(WAITING_TEXT)
+    expect(await decryptText(msg, await makeChatKeys(eve.privateKey, alice.publicKey))).toBe(WAITING_TEXT)
+  })
+
+  it('a waiting message is handed over once the recipient has a key — text and file keys', async () => {
+    const { resealWaiting } = await import('./chatCrypto')
+    const aliceNoKey = await makeChatKeys(alice.privateKey, null)
+    const bytes = new Uint8Array([9, 8, 7])
+    const { blob, ivBase64 } = await encryptBlob(new Blob([bytes]), aliceNoKey)
+    const marker = `[IMAGE-E:${ivBase64}](https://x/y.jpg)\ncaption`
+    const waiting = await encryptText(marker, aliceNoKey)
+    // Recipient still has no key → nothing to do.
+    expect(await resealWaiting(waiting, aliceNoKey)).toBeNull()
+    const sealed = (await resealWaiting(waiting, await aliceToBob()))!
+    expect(sealed.startsWith('e2e:v2:')).toBe(true)
+    const plain = await decryptText(sealed, await bobToAlice())
+    expect(plain.endsWith('](https://x/y.jpg)\ncaption')).toBe(true)
+    const newIv = plain.match(/^\[IMAGE-E:(.+?)\]/)![1]
+    const ct = await blob.arrayBuffer()
+    for (const keys of [await bobToAlice(), await aliceToBob()]) {
+      expect(Array.from(new Uint8Array(await (await decryptBlob(ct, newIv, keys)).arrayBuffer()))).toEqual(Array.from(bytes))
+    }
+    // Only the sender can hand it over.
+    expect(await resealWaiting(waiting, await makeChatKeys(eve.privateKey, bob.publicKey))).toBeNull()
   })
 
   it('photos/files: own key per file, marker field has no ":" or "]", round-trips both ways', async () => {

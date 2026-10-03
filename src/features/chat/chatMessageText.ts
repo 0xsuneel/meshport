@@ -6,8 +6,8 @@ import { isEncryptedPayload } from '@/lib/chatCrypto'
 // Decrypted text by ciphertext — shared so search, the delete dialog and a
 // bubble re-mounting (optimistic → saved copy) never show ciphertext or flash.
 export const _plainByContent = new Map<string, string>()
-/** decryptText's "🔒 Encrypted message — unable to decrypt…" placeholder. */
-export const isDecryptFailure = (s: string) => s.startsWith('🔒 Encrypted message')
+/** decryptText's placeholders: "🔒 … unable to decrypt…" and "⏳ Waiting for this message…". */
+export const isDecryptFailure = (s: string) => s.startsWith('🔒 Encrypted message') || s.startsWith('⏳ Waiting for this message')
 export function plainTextOf(content: string): string {
   if (!content) return ''
   if (!isEncryptedPayload(content)) return content

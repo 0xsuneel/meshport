@@ -26,6 +26,15 @@
 //   lets any signed-in device read everything. The trade-off: whoever holds
 //   the wallet key can read that wallet's chats (as they can move its funds).
 //
+// WAITING FOR THE RECIPIENT — format "e2e:q2:".
+//   Someone who hasn't signed in since chat encryption started has no key to
+//   seal for. Nothing is ever sent readable: the message is sealed for the
+//   SENDER's own identity (same e2e:v2 layout, recipient key = sender key),
+//   so only the sender can open it — not the server, not an admin. Once the
+//   recipient signs in and publishes a key, the sender's app (any device)
+//   re-seals it for both of them as e2e:v2 (resealWaitingMessages); the
+//   database only lets the sender make exactly that q2 → v2 change.
+//
 // OLDER FORMATS — still readable, never sent any more.
 //   "e2e:v1:" messages used one shared key per conversation. They are still
 //   decrypted (from the same identities), so no history is lost. Text with
@@ -45,6 +54,7 @@ import { sha256 } from '@noble/hashes/sha256'
 const AES_ALGO = { name: 'AES-GCM', length: 256 }
 const V1_PREFIX = 'e2e:v1:'
 const V2_PREFIX = 'e2e:v2:'
+const Q2_PREFIX = 'e2e:q2:' // sealed for the sender only, waiting for the recipient's key
 const MEDIA_V2_PREFIX = 'v2.'
 // Domain separation — this seed is only ever a chat identity.
 const CHAT_IDENTITY_INFO = new TextEncoder().encode('meshport-chat-identity-v2')
@@ -53,6 +63,8 @@ const MSG_KEY_INFO = new TextEncoder().encode('meshport-chat-msgkey-v2')
 /** The placeholder shown for a message this device cannot open. */
 export const LOCKED_TEXT = '🔒 Encrypted message — unable to decrypt on this device'
 const BROKEN_TEXT = '🔒 Encrypted message — unable to decrypt'
+/** What the recipient sees for a message still waiting to be re-sealed for them. */
+export const WAITING_TEXT = '⏳ Waiting for this message — it appears when the sender is next online'
 
 function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex
@@ -255,7 +267,8 @@ async function wrappingKey(seed: Uint8Array, otherPub: Uint8Array, spk: Uint8Arr
 
 /** Seal `data` under a fresh per-message key; returns the parts as base64, '.'-joined. */
 async function sealV2(keys: ChatKeys, data: BufferSource): Promise<{ header: string; iv: Uint8Array; ct: ArrayBuffer }> {
-  const otherPub = keys.otherPub!
+  // No key for the recipient yet → sealed for the sender alone (see e2e:q2).
+  const otherPub = keys.otherPub ?? keys.myPub
   const raw = crypto.getRandomValues(new Uint8Array(32))
   const msgKey = await crypto.subtle.importKey('raw', raw, AES_ALGO, false, ['encrypt'])
   const iv = crypto.getRandomValues(new Uint8Array(12))
@@ -267,29 +280,47 @@ async function sealV2(keys: ChatKeys, data: BufferSource): Promise<{ header: str
   return { header: [keys.myPub, otherPub, wiv, new Uint8Array(wk)].map(toBase64).join('.'), iv, ct }
 }
 
-/** Recover a message's own key from its header, if this identity is its sender or recipient. */
-async function openMsgKey(keys: ChatKeys, header: string[]): Promise<CryptoKey | null> {
+/** A message's own key bytes from its header, if this identity is its sender or recipient. */
+async function openRawMsgKey(keys: ChatKeys, header: string[]): Promise<ArrayBuffer | null> {
   const [spk, rpk, wiv, wk] = header.map(fromBase64)
   const other = sameBytes(spk, keys.myPub) ? rpk : sameBytes(rpk, keys.myPub) ? spk : null
   if (!other) return null // sealed for a different identity
   const wrapKey = await wrappingKey(keys.seed, other, spk, rpk)
-  const raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: wiv }, wrapKey, wk)
-  return crypto.subtle.importKey('raw', raw, AES_ALGO, false, ['decrypt'])
+  return crypto.subtle.decrypt({ name: 'AES-GCM', iv: wiv }, wrapKey, wk)
+}
+
+/** Recover a message's own key from its header, if this identity is its sender or recipient. */
+async function openMsgKey(keys: ChatKeys, header: string[]): Promise<CryptoKey | null> {
+  const raw = await openRawMsgKey(keys, header)
+  return raw ? crypto.subtle.importKey('raw', raw, AES_ALGO, false, ['decrypt']) : null
+}
+
+/** Re-wrap a message key header (4 parts) so the recipient in `keys` can open it too. */
+async function rewrapHeader(keys: ChatKeys, header: string[]): Promise<string | null> {
+  const otherPub = keys.otherPub
+  if (!otherPub) return null
+  const raw = await openRawMsgKey(keys, header)
+  if (!raw) return null
+  const wrapKey = await wrappingKey(keys.seed, otherPub, keys.myPub, otherPub)
+  const wiv = crypto.getRandomValues(new Uint8Array(12))
+  const wk = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: wiv }, wrapKey, raw)
+  new Uint8Array(raw).fill(0)
+  return [keys.myPub, otherPub, wiv, new Uint8Array(wk)].map(toBase64).join('.')
 }
 
 // ── Text ───────────────────────────────────────────────────────────────────
 /**
- * Encrypts text for sending. Every message gets its own key (e2e:v2). Returns
- * the text unchanged when it can't be sealed for the recipient (no keys, or
- * the recipient hasn't published one yet). A bare CryptoKey still produces
- * the legacy e2e:v1 format (kept for tests and old callers).
+ * Encrypts text for sending. Every message gets its own key (e2e:v2). When
+ * the recipient has no key yet it is sealed for the sender alone (e2e:q2)
+ * and handed over later by resealWaitingMessages — never sent readable.
+ * Returns the text unchanged only with no keys at all (callers must not send
+ * then). A bare CryptoKey still produces the legacy e2e:v1 format (tests).
  */
 export async function encryptText(plaintext: string, key: AnyKey): Promise<string> {
   if (!key) return plaintext
   if (isChatKeys(key)) {
-    if (!key.otherPub) return plaintext
     const { header, iv, ct } = await sealV2(key, new TextEncoder().encode(plaintext))
-    return V2_PREFIX + header + '.' + toBase64(iv) + '.' + toBase64(ct)
+    return (key.otherPub ? V2_PREFIX : Q2_PREFIX) + header + '.' + toBase64(iv) + '.' + toBase64(ct)
   }
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext))
@@ -304,12 +335,13 @@ export async function decryptText(payload: string, key: AnyKey): Promise<string>
   if (!isEncryptedPayload(payload)) return payload
   if (!key) return LOCKED_TEXT
   try {
-    if (payload.startsWith(V2_PREFIX)) {
-      if (!isChatKeys(key)) return LOCKED_TEXT
+    const waiting = payload.startsWith(Q2_PREFIX)
+    if (payload.startsWith(V2_PREFIX) || waiting) {
+      if (!isChatKeys(key)) return waiting ? WAITING_TEXT : LOCKED_TEXT
       const parts = payload.slice(V2_PREFIX.length).split('.')
       if (parts.length !== 6) return BROKEN_TEXT
       const msgKey = await openMsgKey(key, parts.slice(0, 4))
-      if (!msgKey) return LOCKED_TEXT
+      if (!msgKey) return waiting ? WAITING_TEXT : LOCKED_TEXT
       const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(parts[4]) }, msgKey, fromBase64(parts[5]))
       return new TextDecoder().decode(pt)
     }
@@ -328,11 +360,12 @@ export async function decryptText(payload: string, key: AnyKey): Promise<string>
 /**
  * Encrypts a file under its own key. `ivBase64` is what goes into the
  * message marker ([IMAGE-E:…] / [FILE-E:name:…]): for the new format it holds
- * the sealed file key too ("v2.<…>", no ':' or ']'). Returns the original
- * blob with encrypted:false when it can't be sealed for the recipient.
+ * the sealed file key too ("v2.<…>", no ':' or ']'). With no recipient key
+ * yet the file key is sealed for the sender alone, like the text around it.
+ * Returns the original blob with encrypted:false only with no keys at all.
  */
 export async function encryptBlob(blob: Blob, key: AnyKey): Promise<{ blob: Blob; ivBase64: string | null; encrypted: boolean }> {
-  if (!key || (isChatKeys(key) && !key.otherPub)) return { blob, ivBase64: null, encrypted: false }
+  if (!key) return { blob, ivBase64: null, encrypted: false }
   const plainBytes = await blob.arrayBuffer()
   if (isChatKeys(key)) {
     const { header, iv, ct } = await sealV2(key, plainBytes)
@@ -365,5 +398,67 @@ export async function decryptBlob(encryptedBytes: ArrayBuffer, ivBase64: string 
 }
 
 export function isEncryptedPayload(payload: string): boolean {
-  return payload.startsWith(V2_PREFIX) || payload.startsWith(V1_PREFIX)
+  return payload.startsWith(V2_PREFIX) || payload.startsWith(Q2_PREFIX) || payload.startsWith(V1_PREFIX)
+}
+
+/** Sealed for the sender only, still waiting for the recipient's key. */
+export function isWaitingPayload(payload: string): boolean {
+  return payload.startsWith(Q2_PREFIX)
+}
+
+/**
+ * Hand a waiting (e2e:q2) message over: re-seal it for sender and recipient
+ * as e2e:v2, including the keys of any photos/files it carries (the files
+ * themselves don't change). null if the recipient still has no key or this
+ * identity didn't send it.
+ */
+export async function resealWaiting(payload: string, keys: ChatKeys): Promise<string | null> {
+  if (!payload.startsWith(Q2_PREFIX) || !keys.otherPub) return null
+  const plain = await decryptText(payload, keys)
+  if (plain === WAITING_TEXT || plain === LOCKED_TEXT || plain === BROKEN_TEXT) return null
+  // Media markers: [IMAGE-E:v2.<spk>.<rpk>.<wiv>.<wk>.<iv>](…) / [FILE-E:name:v2.…](…)
+  let out = plain
+  for (const m of plain.matchAll(/v2\.([A-Za-z0-9+/=]+)\.([A-Za-z0-9+/=]+)\.([A-Za-z0-9+/=]+)\.([A-Za-z0-9+/=]+)\.([A-Za-z0-9+/=]+)(?=\])/g)) {
+    const header = await rewrapHeader(keys, [m[1], m[2], m[3], m[4]])
+    if (!header) return null
+    out = out.replace(m[0], MEDIA_V2_PREFIX + header + '.' + m[5])
+  }
+  const sealed = await encryptText(out, keys)
+  return sealed.startsWith(V2_PREFIX) ? sealed : null
+}
+
+/**
+ * Re-seal this user's waiting messages for every recipient who now has a
+ * key. Runs from AppLayout on start, on unlock and every few minutes; cheap
+ * when there's nothing waiting (one indexed query).
+ */
+export async function resealWaitingMessages(walletAddress: string, myUserId: string): Promise<number> {
+  try {
+    const { supabase } = await import('@/lib/supabase')
+    const { data: rows } = await supabase.from('messages')
+      .select('id, conversation_id, content')
+      .eq('sender_id', myUserId).like('content', Q2_PREFIX + '%').limit(200)
+    if (!rows?.length) return 0
+    const convIds = [...new Set(rows.map(r => r.conversation_id as string))]
+    const { data: convs } = await supabase.from('conversations')
+      .select('id, participant_a, participant_b').in('id', convIds)
+    let done = 0
+    for (const c of convs ?? []) {
+      const other = c.participant_a === myUserId ? c.participant_b : c.participant_a
+      _keysCache.delete(`${walletAddress.toLowerCase()}:${other}`)
+      dropPub(other) // re-read: their key may have just been published
+      const keys = await getConversationKey(walletAddress, other)
+      if (!keys?.otherPub) continue
+      for (const r of rows.filter(r => r.conversation_id === c.id)) {
+        const sealed = await resealWaiting(r.content as string, keys)
+        if (!sealed) continue
+        const { error } = await supabase.from('messages').update({ content: sealed }).eq('id', r.id)
+        if (!error) done++
+      }
+    }
+    return done
+  } catch (e) {
+    console.error('[chatCrypto] resealWaitingMessages failed:', e instanceof Error ? e.message : e)
+    return 0
+  }
 }
