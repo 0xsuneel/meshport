@@ -241,12 +241,17 @@ export function AppLayout() {
     window.addEventListener('meshport:session-bound', on)
     return () => window.removeEventListener('meshport:session-bound', on)
   }, [])
+  // Also re-runs when the wallet key unlocks: on start it is often still
+  // locked (reload, passcode not entered yet), and publishing only then left
+  // accounts stuck with a missing or outdated chat key that nobody could
+  // decrypt their messages with.
+  const walletUnlocked = useAuthStore(s => !!s.privateKey)
   useEffect(() => {
     if (!walletAddress || !chatUserId) return
     import('@/lib/chatCrypto').then(({ ensureChatKeysReady }) =>
       ensureChatKeysReady(walletAddress, chatUserId)
     ).catch(() => { /* best-effort — chat falls back to plaintext until this succeeds */ })
-  }, [walletAddress, chatUserId, boundTick])
+  }, [walletAddress, chatUserId, boundTick, walletUnlocked])
 
   // Chat delivery receipts (two grey ticks for the sender) while the app is open.
   useEffect(() => {

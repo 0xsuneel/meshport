@@ -1,97 +1,58 @@
 // src/lib/chatCrypto.ts
 //
-// ── What this is ─────────────────────────────────────────────────────────
-// End-to-end encryption for chat messages, images, and files.
+// ── End-to-end encrypted chat (messages, photos, files) ──────────────────
 //
-//   1. Each user has an X25519 key pair for chat, DETERMINISTICALLY derived
-//      from their wallet's private key (see deriveMyChatIdentity below) —
-//      not randomly generated and stored in this browser's localStorage.
-//      That's the deliberate fix for a real problem the original random-
-//      per-device design had: since the wallet's private key is already
-//      portable across devices (via the recovery phrase / private-key
-//      import this app already supports), re-importing the SAME wallet on
-//      ANY device deterministically re-derives the EXACT SAME chat identity
-//      — so E2E chat keeps working across a device change, reinstall, or
-//      cleared browser storage, exactly like the wallet itself does. There
-//      is nothing to lose track of and nothing to back up separately: the
-//      chat identity is a pure function of the one secret the user already
-//      has to keep safe (their wallet), never stored anywhere on its own.
-//   2. The PUBLIC key is uploaded to `users.chat_public_key` (see the
-//      migration adding that column) so anyone can look it up to message
-//      this user — public keys are safe to share by definition.
-//   3. For any two users A and B, X25519 (Diffie-Hellman over Curve25519)
-//      lets each of them independently compute the SAME shared secret from
-//      (their own private key + the other's public key) — without either
-//      secret ever crossing the network. That shared secret, run through
-//      HKDF, becomes a per-conversation AES-256-GCM key (still via the
-//      browser's native Web Crypto API for the actual AES operations —
-//      only the key-AGREEMENT step needs a curve Web Crypto doesn't support
-//      natively; see the @noble/curves import below).
-//   4. Message text and file bytes are encrypted with that key before ever
-//      leaving the device, and decrypted only after arriving on the other
-//      device. MeshPort's servers store and relay only ciphertext — the
-//      same guarantee real E2E chat apps (Signal, WhatsApp) make, achieved
-//      here with simpler, single-shared-key-per-conversation mechanics
-//      rather than a full double-ratchet protocol. That's a real,
-//      meaningful trade-off worth being upfront about: this protects
-//      message content from MeshPort's own servers and from anyone who
-//      gains read access to the database, which is the threat model that
-//      actually matters for a chat-payments app — but it does not give the
-//      forward-secrecy-per-message property Signal's ratchet does (a single
-//      compromised private key can decrypt that conversation's full
-//      history, not just future messages).
+// IDENTITY — one per person, on every device.
+//   Each user's chat identity is an X25519 key pair DERIVED from their wallet
+//   private key (deriveMyChatIdentity). Logging in on any device restores the
+//   wallet (Google/email accounts from the server, others from the recovery
+//   phrase / private key), and with it the exact same chat identity, so every
+//   device the user signs in on reads their whole chat history, old and new.
+//   Only the PUBLIC key is uploaded (users.chat_public_key).
 //
-// ── Why X25519 via @noble/curves instead of Web Crypto's ECDH ───────────
-// Web Crypto's native ECDH (P-256/P-384/P-521) has no way to generate a
-// deterministic/seeded key pair — crypto.subtle.generateKey() is always
-// internally random, with no seed parameter exposed. That's exactly the
-// capability this needs (derive the same key pair from the same wallet
-// private key, every time, on any device), so the key-AGREEMENT step uses
-// @noble/curves' X25519 implementation instead — a tiny, widely-used, audited
-// pure-JS library (already a transitive dependency of viem, used elsewhere
-// in this app for wallet operations; pinned directly in package.json here
-// too so it can't silently disappear if viem's own dependencies change).
-// The actual AES-GCM encrypt/decrypt of message content still goes through
-// native Web Crypto exactly as before — only the "how do two people agree
-// on a shared key" step changed.
+// EVERY MESSAGE CARRIES ITS OWN KEY — format "e2e:v2:".
+//   For each message (and each photo/file) a fresh random 256-bit key K is
+//   made, the content is sealed with AES-256-GCM under K, and K itself is
+//   sealed for the two people in the chat with a key from X25519(sender,
+//   recipient) — which both of them, and only they, can recompute. The
+//   message also names the sender's and recipient's public keys, so reading
+//   it never depends on looking anyone's key up on the server (that lookup
+//   failing, e.g. an account still showing an outdated key, was what made
+//   messages show as locked). One message's key opens that message only.
 //
-// ── Migration note ────────────────────────────────────────────────────────
-// This replaces an earlier random-per-device P-256 keypair stored in
-// localStorage. Messages encrypted under that old scheme cannot be
-// retroactively decrypted (the old random private key was never derivable
-// from anything else, by design — that's what made it "random"), but that
-// was already a dead end under the old scheme too (a cleared localStorage
-// or a new device already made those old messages permanently
-// undecryptable). Every NEW message, from the moment a device upgrades to
-// this scheme, encrypts under the wallet-derived identity and stays
-// decryptable on any device that ever re-imports the same wallet.
+//   This is not WhatsApp's Signal protocol: WhatsApp gives every DEVICE its
+//   own keys, so a new device does not get old history unless the old phone
+//   transfers it. MeshPort ties chat to the WALLET instead, which is what
+//   lets any signed-in device read everything. The trade-off: whoever holds
+//   the wallet key can read that wallet's chats (as they can move its funds).
 //
-// ── Backward compatibility ──────────────────────────────────────────────
-// Every message sent before E2E chat shipped at all is plain, unencrypted
-// text with no special marker. Every encrypted payload produced here is
-// prefixed `"e2e:v1:"` before the base64 data — decryptText() checks for
-// that prefix and returns anything without it completely unchanged. Old
-// messages keep displaying exactly as they always did; nothing needs a
-// backfill.
+// OLDER FORMATS — still readable, never sent any more.
+//   "e2e:v1:" messages used one shared key per conversation. They are still
+//   decrypted (from the same identities), so no history is lost. Text with
+//   no prefix was sent before encryption existed and is shown as is.
 //
-// ── When encryption can't happen yet ────────────────────────────────────
-// If either participant hasn't opened a build with this feature yet, their
-// `chat_public_key` is NULL and no shared key can be derived. Every send
-// path here falls back to plaintext in that case — exactly the same
-// behavior as before this feature existed — rather than blocking sending
-// entirely. Once both sides have opened the app at least once, new messages
-// in that conversation start encrypting automatically; no user action
-// needed.
+// KEY ON THIS DEVICE.
+//   The wallet key lives in memory only, so after a reload — or a tab Android
+//   discarded — chat used to wait for it (for created/imported wallets: until
+//   the passcode was entered) and showed every message locked meanwhile. The
+//   chat identity seed (it reads chat; it can't move funds) is now also kept
+//   on this device, sealed with the browser's non-extractable device key
+//   (see sealForDevice in security.ts), and removed on logout.
 
 import { x25519 } from '@noble/curves/ed25519'
 import { sha256 } from '@noble/hashes/sha256'
 
 const AES_ALGO = { name: 'AES-GCM', length: 256 }
-const ENC_PREFIX = 'e2e:v1:'
-// Domain separation — makes sure this derived value can only ever be used
-// as a chat identity seed, never accidentally reusable for some other
-// wallet-private-key-derived purpose this app (or a future one) might add.
+const V1_PREFIX = 'e2e:v1:'
+const V2_PREFIX = 'e2e:v2:'
+const MEDIA_V2_PREFIX = 'v2.'
+// Domain separation — this seed is only ever a chat identity.
 const CHAT_IDENTITY_INFO = new TextEncoder().encode('meshport-chat-identity-v2')
+const MSG_KEY_INFO = new TextEncoder().encode('meshport-chat-msgkey-v2')
+
+/** The placeholder shown for a message this device cannot open. */
+export const LOCKED_TEXT = '🔒 Encrypted message — unable to decrypt on this device'
+const BROKEN_TEXT = '🔒 Encrypted message — unable to decrypt'
 
 function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex
@@ -99,31 +60,7 @@ function hexToBytes(hex: string): Uint8Array {
   for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(clean.substring(i * 2, i * 2 + 2), 16)
   return bytes
 }
-
-/**
- * Deterministically derives this device's chat identity (X25519 key pair)
- * from the wallet's private key. Pure function — same wallet in, same key
- * pair out, on any device, every time. Never touches localStorage or any
- * other per-device state; there is nothing to generate, persist, or lose.
- * Exported (despite being an internal implementation detail of
- * getConversationKey/ensureChatKeysReady) specifically so this determinism
- * — the actual property that fixes the multi-device problem — has a direct
- * unit test rather than only being exercised indirectly through functions
- * that also need a live Supabase client and auth store to test at all.
- */
-export function deriveMyChatIdentity(walletPrivateKeyHex: string): { privateKey: Uint8Array; publicKey: Uint8Array } {
-  const walletKeyBytes = hexToBytes(walletPrivateKeyHex)
-  // sha256(walletKey || domain-separation info) — never expose the wallet
-  // key's own bytes directly as the X25519 scalar; always go through a hash
-  // with a distinct label first, standard practice for deriving one key
-  // from another.
-  const combined = new Uint8Array(walletKeyBytes.length + CHAT_IDENTITY_INFO.length)
-  combined.set(walletKeyBytes, 0)
-  combined.set(CHAT_IDENTITY_INFO, walletKeyBytes.length)
-  const seed = sha256(combined)
-  return { privateKey: seed, publicKey: x25519.getPublicKey(seed) }
-}
-
+function toHex(b: Uint8Array): string { let h = ''; for (const x of b) h += x.toString(16).padStart(2, '0'); return h }
 function toBase64(bytes: ArrayBuffer | Uint8Array): string {
   let binary = ''
   const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)
@@ -136,205 +73,291 @@ function fromBase64(b64: string): Uint8Array<ArrayBuffer> {
   for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i)
   return arr
 }
+const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i])
 
-// In-memory only, keyed by wallet address (a public identifier, safe to use
-// as a Map key — unlike the private key itself, which this cache never
-// stores). Re-derived on next page load; avoids re-running X25519 + HKDF on
-// every single message in a conversation within one session.
-const _conversationKeyCache = new Map<string, CryptoKey>()
-
-// ── Instant unlock after a page refresh ─────────────────────────────────────
-// The wallet key is memory-only, so a refresh drops it and chat had to wait
-// for it to come back (a server round-trip for Google/email accounts) before
-// any message could be read. Two small caches remove that wait:
-//  • this tab keeps the CHAT identity seed (not the wallet key — it can read
-//    chat, it can't move funds) in sessionStorage, which the browser deletes
-//    when the tab closes, and which logout clears;
-//  • the other person's chat PUBLIC key (public by design) is remembered and
-//    re-checked against the server in the background.
-const SEED_PREFIX = 'meshport_chat_seed_'
-const PUB_PREFIX = 'meshport_chat_pub_'
-function toHex(b: Uint8Array): string { let h = ''; for (const x of b) h += x.toString(16).padStart(2, '0'); return h }
-function saveSeed(walletAddress: string, seed: Uint8Array) {
-  try { sessionStorage.setItem(SEED_PREFIX + walletAddress.toLowerCase(), toHex(seed)) } catch { /* storage blocked */ }
+/** A published chat public key, or null for a missing / outdated (pre-X25519 JSON) one. */
+function parsePublicKey(value: string | null | undefined): Uint8Array | null {
+  if (!value || value.startsWith('{')) return null
+  try { const k = fromBase64(value); return k.length === 32 ? k : null } catch { return null }
 }
-function loadSeed(walletAddress: string): Uint8Array | null {
-  try {
-    const h = sessionStorage.getItem(SEED_PREFIX + walletAddress.toLowerCase())
-    return h && /^[0-9a-f]{64}$/.test(h) ? hexToBytes(h) : null
-  } catch { return null }
-}
-/** Forget this tab's chat seed (logout). */
-export function clearChatSessionSeeds() {
-  try {
-    for (let i = sessionStorage.length - 1; i >= 0; i--) {
-      const k = sessionStorage.key(i)
-      if (k?.startsWith(SEED_PREFIX)) sessionStorage.removeItem(k)
-    }
-  } catch { /* storage blocked */ }
-}
-function cachedPub(userId: string): string | null { try { return localStorage.getItem(PUB_PREFIX + userId) } catch { return null } }
-function savePub(userId: string, pub: string) { try { localStorage.setItem(PUB_PREFIX + userId, pub) } catch { /* storage blocked */ } }
 
 /**
- * Ensures this wallet's chat public key is uploaded to `users.chat_public_key`.
- * Safe to call on every app mount — it's a no-op after the first successful
- * upload for a given wallet, and re-derives the exact same public key every
- * time (see deriveMyChatIdentity), so calling it again after a device change
- * just re-confirms the same value rather than generating a new identity.
+ * This wallet's chat identity (X25519). Pure: the same wallet key gives the
+ * same identity on every device, every time.
+ */
+export function deriveMyChatIdentity(walletPrivateKeyHex: string): { privateKey: Uint8Array; publicKey: Uint8Array } {
+  const walletKeyBytes = hexToBytes(walletPrivateKeyHex)
+  const combined = new Uint8Array(walletKeyBytes.length + CHAT_IDENTITY_INFO.length)
+  combined.set(walletKeyBytes, 0)
+  combined.set(CHAT_IDENTITY_INFO, walletKeyBytes.length)
+  const seed = sha256(combined)
+  return { privateKey: seed, publicKey: x25519.getPublicKey(seed) }
+}
+
+// ── This device's copy of the chat identity seed ───────────────────────────
+const SEED_PREFIX = 'meshport_chat_seed_'        // sessionStorage, this tab
+const SEED_DEVICE_PREFIX = 'meshport_chat_seed_dv_' // localStorage, sealed to this browser
+const PUB_PREFIX = 'meshport_chat_pub_'
+
+function saveSeed(walletAddress: string, seed: Uint8Array) {
+  const addr = walletAddress.toLowerCase()
+  try { sessionStorage.setItem(SEED_PREFIX + addr, toHex(seed)) } catch { /* storage blocked */ }
+  void import('@/lib/security').then(async ({ sealForDevice }) => {
+    const sealed = await sealForDevice(toHex(seed))
+    if (sealed) { try { localStorage.setItem(SEED_DEVICE_PREFIX + addr, sealed) } catch { /* storage blocked */ } }
+  }).catch(() => {})
+}
+async function loadSeed(walletAddress: string): Promise<Uint8Array | null> {
+  const addr = walletAddress.toLowerCase()
+  const valid = (h: string | null) => (h && /^[0-9a-f]{64}$/.test(h) ? hexToBytes(h) : null)
+  try {
+    const s = valid(sessionStorage.getItem(SEED_PREFIX + addr))
+    if (s) return s
+  } catch { /* storage blocked */ }
+  try {
+    const sealed = localStorage.getItem(SEED_DEVICE_PREFIX + addr)
+    if (!sealed) return null
+    const { openFromDevice } = await import('@/lib/security')
+    const seed = valid(await openFromDevice(sealed))
+    if (seed) { try { sessionStorage.setItem(SEED_PREFIX + addr, toHex(seed)) } catch { /* */ } }
+    return seed
+  } catch { return null }
+}
+/** Forget this device's chat identity (logout). */
+export function clearChatSessionSeeds() {
+  for (const store of [() => sessionStorage, () => localStorage]) {
+    try {
+      const st = store()
+      for (let i = st.length - 1; i >= 0; i--) {
+        const k = st.key(i)
+        if (k?.startsWith(SEED_PREFIX)) st.removeItem(k)
+      }
+    } catch { /* storage blocked */ }
+  }
+  _keysCache.clear()
+}
+
+/** This wallet's chat seed: from the wallet key when unlocked, else this device's copy. */
+async function getMySeed(walletAddress: string): Promise<Uint8Array | null> {
+  const walletPrivateKey = (await import('@/store')).useAuthStore.getState().privateKey
+  if (walletPrivateKey) {
+    const seed = deriveMyChatIdentity(walletPrivateKey).privateKey
+    saveSeed(walletAddress, seed)
+    return seed
+  }
+  return loadSeed(walletAddress)
+}
+
+function cachedPub(userId: string): string | null { try { return localStorage.getItem(PUB_PREFIX + userId) } catch { return null } }
+function savePub(userId: string, pub: string) { try { localStorage.setItem(PUB_PREFIX + userId, pub) } catch { /* storage blocked */ } }
+function dropPub(userId: string) { try { localStorage.removeItem(PUB_PREFIX + userId) } catch { /* storage blocked */ } }
+
+/**
+ * Publishes this wallet's chat public key to users.chat_public_key (replacing
+ * a missing or outdated one). Cheap to call repeatedly — AppLayout calls it
+ * on start and again whenever the wallet key unlocks.
  */
 export async function ensureChatKeysReady(walletAddress: string, myUserId: string): Promise<void> {
   try {
-    const walletPrivateKey = (await import('@/store')).useAuthStore.getState().privateKey
-    if (!walletPrivateKey) return // wallet locked/not yet loaded — try again on the next mount
-    const { publicKey } = deriveMyChatIdentity(walletPrivateKey)
-    const publicKeyStr = toBase64(publicKey)
-
+    const seed = await getMySeed(walletAddress)
+    if (!seed) return // nothing on this device yet — called again once the wallet unlocks
+    const publicKeyStr = toBase64(x25519.getPublicKey(seed))
     const { supabase } = await import('@/lib/supabase')
     const { data: current } = await supabase.from('users').select('chat_public_key').eq('id', myUserId).maybeSingle()
-    if (current?.chat_public_key === publicKeyStr) return // already up to date
-
+    if (current?.chat_public_key === publicKeyStr) return
     const { error } = await supabase.from('users').update({ chat_public_key: publicKeyStr }).eq('id', myUserId)
     if (error) console.error('[chatCrypto] failed to upload public key:', error.message)
   } catch (e) {
-    // Never block app startup or messaging over a key-setup hiccup — the
-    // send/receive paths below independently fall back to plaintext
-    // whenever a usable key isn't available, so failing here just means
-    // "this session sends plaintext a bit longer," not a broken app.
     console.error('[chatCrypto] ensureChatKeysReady failed:', e instanceof Error ? e.message : e)
   }
 }
 
+// ── Keys for one conversation ──────────────────────────────────────────────
+/** What getConversationKey returns. Opaque to callers — pass it back in. */
+export interface ChatKeys {
+  readonly kind: 'chat-keys'
+  readonly seed: Uint8Array
+  readonly myPub: Uint8Array
+  /** The other person's published key; null if missing/outdated (then new messages can't be sealed for them). */
+  readonly otherPub: Uint8Array | null
+  /** Shared key for reading old e2e:v1 messages. */
+  readonly v1: CryptoKey | null
+}
+type AnyKey = ChatKeys | CryptoKey | null | undefined
+const isChatKeys = (k: AnyKey): k is ChatKeys => !!k && (k as ChatKeys).kind === 'chat-keys'
+
+const _keysCache = new Map<string, ChatKeys>()
+
+async function deriveV1Key(seed: Uint8Array, otherPub: Uint8Array): Promise<CryptoKey> {
+  const shared = x25519.getSharedSecret(seed, otherPub)
+  const hkdf = await crypto.subtle.importKey('raw', new Uint8Array(shared), 'HKDF', false, ['deriveKey'])
+  return crypto.subtle.deriveKey(
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode('meshport-chat-e2e-v1') },
+    hkdf, AES_ALGO, false, ['encrypt', 'decrypt'],
+  )
+}
+
+/** Builds the keys for one chat from my identity seed and their public key (exported for tests). */
+export async function makeChatKeys(seed: Uint8Array, otherPub: Uint8Array | null): Promise<ChatKeys> {
+  return { kind: 'chat-keys', seed, myPub: x25519.getPublicKey(seed), otherPub, v1: otherPub ? await deriveV1Key(seed, otherPub) : null }
+}
+
 /**
- * Derives (and caches) the shared AES-GCM key for a conversation between
- * `myWalletAddress` and `otherUserId`. Returns null if either side doesn't
- * have a public key yet (see the file header on backward compatibility) —
- * callers treat null as "send/display as plaintext for now."
+ * This user's keys for the chat with `otherUserId`, or null when this
+ * device has no chat identity yet (wallet still locked on a fresh device).
+ * Messages in the new format open with these keys even if the other person's
+ * published key is missing or outdated.
  */
-export async function getConversationKey(myWalletAddress: string, otherUserId: string): Promise<CryptoKey | null> {
+export async function getConversationKey(myWalletAddress: string, otherUserId: string): Promise<ChatKeys | null> {
   const cacheKey = `${myWalletAddress.toLowerCase()}:${otherUserId}`
-  const cached = _conversationKeyCache.get(cacheKey)
+  const cached = _keysCache.get(cacheKey)
   if (cached) return cached
-
   try {
-    const walletPrivateKey = (await import('@/store')).useAuthStore.getState().privateKey
-    let mySeed: Uint8Array | null = null
-    if (walletPrivateKey) {
-      mySeed = deriveMyChatIdentity(walletPrivateKey).privateKey
-      saveSeed(myWalletAddress, mySeed)
-    } else {
-      mySeed = loadSeed(myWalletAddress) // same tab, after a refresh
-    }
-    if (!mySeed) return null // wallet locked on this device right now
-
-    // Their public key: remembered copy first (no network wait), then
-    // confirmed with the server in the background.
-    let otherPub = cachedPub(otherUserId)
+    const seed = await getMySeed(myWalletAddress)
+    if (!seed) return null
     const { supabase } = await import('@/lib/supabase')
     const fetchPub = async () => {
       const { data, error } = await supabase.from('users').select('chat_public_key').eq('id', otherUserId).maybeSingle()
       return error ? undefined : ((data?.chat_public_key as string | null) ?? null)
     }
-    if (otherPub) {
+    // Remembered copy first (no network wait), confirmed in the background.
+    let pubStr = cachedPub(otherUserId)
+    if (pubStr && parsePublicKey(pubStr)) {
       void fetchPub().then(fresh => {
-        if (fresh === undefined || fresh === otherPub) return
-        // Changed (or removed): drop the stale copy so the next lookup uses it.
-        if (fresh) savePub(otherUserId, fresh); else { try { localStorage.removeItem(PUB_PREFIX + otherUserId) } catch { /* */ } }
-        _conversationKeyCache.delete(cacheKey)
+        if (fresh === undefined || fresh === pubStr) return
+        if (parsePublicKey(fresh)) savePub(otherUserId, fresh as string); else dropPub(otherUserId)
+        _keysCache.delete(cacheKey)
       }).catch(() => {})
     } else {
       const fresh = await fetchPub()
-      if (!fresh) return null // other side hasn't opened a build with this feature yet
-      otherPub = fresh
-      savePub(otherUserId, fresh)
+      pubStr = fresh ?? null
+      if (parsePublicKey(pubStr)) savePub(otherUserId, pubStr as string); else dropPub(otherUserId)
     }
-
-    const otherPublicKey = fromBase64(otherPub)
-
-    // HKDF over the raw X25519 shared secret rather than using it directly
-    // as the AES key — a thin extra step, but it means the actual AES key
-    // is never the raw DH output verbatim, standard practice for combining
-    // a key-agreement primitive with a symmetric cipher.
-    const sharedSecret = x25519.getSharedSecret(mySeed, otherPublicKey)
-    const hkdfKey = await crypto.subtle.importKey('raw', new Uint8Array(sharedSecret), 'HKDF', false, ['deriveKey'])
-    const aesKey = await crypto.subtle.deriveKey(
-      { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: new TextEncoder().encode('meshport-chat-e2e-v1') },
-      hkdfKey, AES_ALGO, false, ['encrypt', 'decrypt'],
-    )
-
-    _conversationKeyCache.set(cacheKey, aesKey)
-    return aesKey
+    const otherPub = parsePublicKey(pubStr)
+    const keys = await makeChatKeys(seed, otherPub)
+    // Only cache a complete answer: a missing key is looked up again next time.
+    if (otherPub) _keysCache.set(cacheKey, keys)
+    return keys
   } catch (e) {
     console.error('[chatCrypto] getConversationKey failed:', e instanceof Error ? e.message : e)
     return null
   }
 }
 
+// ── Per-message key: seal / open ───────────────────────────────────────────
+/** The key that seals one message's own key, from X25519(me, them) bound to both public keys. */
+async function wrappingKey(seed: Uint8Array, otherPub: Uint8Array, spk: Uint8Array, rpk: Uint8Array): Promise<CryptoKey> {
+  const shared = x25519.getSharedSecret(seed, otherPub)
+  const salt = new Uint8Array(spk.length + rpk.length); salt.set(spk, 0); salt.set(rpk, spk.length)
+  const hkdf = await crypto.subtle.importKey('raw', new Uint8Array(shared), 'HKDF', false, ['deriveKey'])
+  return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(sha256(salt)), info: MSG_KEY_INFO }, hkdf, AES_ALGO, false, ['encrypt', 'decrypt'])
+}
 
+/** Seal `data` under a fresh per-message key; returns the parts as base64, '.'-joined. */
+async function sealV2(keys: ChatKeys, data: BufferSource): Promise<{ header: string; iv: Uint8Array; ct: ArrayBuffer }> {
+  const otherPub = keys.otherPub!
+  const raw = crypto.getRandomValues(new Uint8Array(32))
+  const msgKey = await crypto.subtle.importKey('raw', raw, AES_ALGO, false, ['encrypt'])
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, msgKey, data)
+  const wrapKey = await wrappingKey(keys.seed, otherPub, keys.myPub, otherPub)
+  const wiv = crypto.getRandomValues(new Uint8Array(12))
+  const wk = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: wiv }, wrapKey, raw)
+  raw.fill(0)
+  return { header: [keys.myPub, otherPub, wiv, new Uint8Array(wk)].map(toBase64).join('.'), iv, ct }
+}
+
+/** Recover a message's own key from its header, if this identity is its sender or recipient. */
+async function openMsgKey(keys: ChatKeys, header: string[]): Promise<CryptoKey | null> {
+  const [spk, rpk, wiv, wk] = header.map(fromBase64)
+  const other = sameBytes(spk, keys.myPub) ? rpk : sameBytes(rpk, keys.myPub) ? spk : null
+  if (!other) return null // sealed for a different identity
+  const wrapKey = await wrappingKey(keys.seed, other, spk, rpk)
+  const raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: wiv }, wrapKey, wk)
+  return crypto.subtle.importKey('raw', raw, AES_ALGO, false, ['decrypt'])
+}
+
+// ── Text ───────────────────────────────────────────────────────────────────
 /**
- * Encrypts plaintext for storage/transmission. Returns the plaintext
- * UNCHANGED if `key` is null (no shared key available yet — see
- * getConversationKey) rather than throwing, so callers can always just
- * `content = await encryptText(content, key)` unconditionally.
+ * Encrypts text for sending. Every message gets its own key (e2e:v2). Returns
+ * the text unchanged when it can't be sealed for the recipient (no keys, or
+ * the recipient hasn't published one yet). A bare CryptoKey still produces
+ * the legacy e2e:v1 format (kept for tests and old callers).
  */
-export async function encryptText(plaintext: string, key: CryptoKey | null): Promise<string> {
+export async function encryptText(plaintext: string, key: AnyKey): Promise<string> {
   if (!key) return plaintext
+  if (isChatKeys(key)) {
+    if (!key.otherPub) return plaintext
+    const { header, iv, ct } = await sealV2(key, new TextEncoder().encode(plaintext))
+    return V2_PREFIX + header + '.' + toBase64(iv) + '.' + toBase64(ct)
+  }
   const iv = crypto.getRandomValues(new Uint8Array(12))
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext))
-  return ENC_PREFIX + toBase64(iv.buffer) + ':' + toBase64(ciphertext)
+  return V1_PREFIX + toBase64(iv.buffer) + ':' + toBase64(ciphertext)
 }
 
 /**
- * Decrypts text produced by encryptText(). Anything without the e2e:v1:
- * prefix — every message sent before this feature existed, or a message
- * sent while no shared key was available — is returned completely
- * unchanged. Decryption FAILURES (wrong/missing key, corrupted payload)
- * also fail soft, returning a placeholder rather than throwing, so one bad
- * message can never crash the whole conversation view.
+ * Decrypts e2e:v2 and legacy e2e:v1 text. Anything else is returned as is.
+ * Never throws: a message this device can't open shows a placeholder.
  */
-export async function decryptText(payload: string, key: CryptoKey | null): Promise<string> {
-  if (!payload.startsWith(ENC_PREFIX)) return payload
-  if (!key) return '🔒 Encrypted message — unable to decrypt on this device'
+export async function decryptText(payload: string, key: AnyKey): Promise<string> {
+  if (!isEncryptedPayload(payload)) return payload
+  if (!key) return LOCKED_TEXT
   try {
-    // ENC_PREFIX itself contains colons ("e2e:v1:"), so splitting the WHOLE
-    // payload by ':' and taking [1],[2] is wrong — it grabs pieces of the
-    // prefix instead of the iv/ciphertext. Strip the prefix first, then
-    // split only the remainder.
-    const [ivB64, ctB64] = payload.slice(ENC_PREFIX.length).split(':')
-    const iv = fromBase64(ivB64)
-    const ciphertext = fromBase64(ctB64)
-    const plainBytes = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext)
-    return new TextDecoder().decode(plainBytes)
+    if (payload.startsWith(V2_PREFIX)) {
+      if (!isChatKeys(key)) return LOCKED_TEXT
+      const parts = payload.slice(V2_PREFIX.length).split('.')
+      if (parts.length !== 6) return BROKEN_TEXT
+      const msgKey = await openMsgKey(key, parts.slice(0, 4))
+      if (!msgKey) return LOCKED_TEXT
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(parts[4]) }, msgKey, fromBase64(parts[5]))
+      return new TextDecoder().decode(pt)
+    }
+    const v1 = isChatKeys(key) ? key.v1 : key
+    if (!v1) return LOCKED_TEXT
+    const [ivB64, ctB64] = payload.slice(V1_PREFIX.length).split(':')
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(ivB64) }, v1, fromBase64(ctB64))
+    return new TextDecoder().decode(pt)
   } catch (e) {
     console.error('[chatCrypto] decryptText failed:', e instanceof Error ? e.message : e)
-    return '🔒 Encrypted message — unable to decrypt'
+    return BROKEN_TEXT
   }
 }
 
+// ── Photos & files ─────────────────────────────────────────────────────────
 /**
- * Encrypts a file's bytes for upload. Returns the ORIGINAL blob unchanged
- * if `key` is null, mirroring encryptText's fallback behavior, along with
- * `encrypted: false` so callers know not to expect a decryptable payload.
+ * Encrypts a file under its own key. `ivBase64` is what goes into the
+ * message marker ([IMAGE-E:…] / [FILE-E:name:…]): for the new format it holds
+ * the sealed file key too ("v2.<…>", no ':' or ']'). Returns the original
+ * blob with encrypted:false when it can't be sealed for the recipient.
  */
-export async function encryptBlob(blob: Blob, key: CryptoKey | null): Promise<{ blob: Blob; ivBase64: string | null; encrypted: boolean }> {
-  if (!key) return { blob, ivBase64: null, encrypted: false }
-  const iv = crypto.getRandomValues(new Uint8Array(12))
+export async function encryptBlob(blob: Blob, key: AnyKey): Promise<{ blob: Blob; ivBase64: string | null; encrypted: boolean }> {
+  if (!key || (isChatKeys(key) && !key.otherPub)) return { blob, ivBase64: null, encrypted: false }
   const plainBytes = await blob.arrayBuffer()
+  if (isChatKeys(key)) {
+    const { header, iv, ct } = await sealV2(key, plainBytes)
+    return { blob: new Blob([ct]), ivBase64: MEDIA_V2_PREFIX + header + '.' + toBase64(iv), encrypted: true }
+  }
+  const iv = crypto.getRandomValues(new Uint8Array(12))
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plainBytes)
   return { blob: new Blob([ciphertext]), ivBase64: toBase64(iv.buffer), encrypted: true }
 }
 
-/**
- * Decrypts a downloaded file's bytes. If `ivBase64` is null (the file was
- * never encrypted — sent before this feature existed, or sent with no
- * shared key available), returns the bytes unchanged.
- */
-export async function decryptBlob(encryptedBytes: ArrayBuffer, ivBase64: string | null, key: CryptoKey | null): Promise<Blob> {
+/** Decrypts a downloaded file (new or legacy format). Bytes pass through when it was never encrypted. */
+export async function decryptBlob(encryptedBytes: ArrayBuffer, ivBase64: string | null, key: AnyKey): Promise<Blob> {
   if (!ivBase64 || !key) return new Blob([encryptedBytes])
   try {
-    const iv = fromBase64(ivBase64)
-    const plainBytes = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encryptedBytes)
-    return new Blob([plainBytes])
+    if (ivBase64.startsWith(MEDIA_V2_PREFIX)) {
+      if (!isChatKeys(key)) throw new Error('no chat identity')
+      const parts = ivBase64.slice(MEDIA_V2_PREFIX.length).split('.')
+      if (parts.length !== 5) throw new Error('bad file header')
+      const msgKey = await openMsgKey(key, parts.slice(0, 4))
+      if (!msgKey) throw new Error('file sealed for another identity')
+      return new Blob([await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(parts[4]) }, msgKey, encryptedBytes)])
+    }
+    const v1 = isChatKeys(key) ? key.v1 : key
+    if (!v1) throw new Error('no key for legacy file')
+    return new Blob([await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(ivBase64) }, v1, encryptedBytes)])
   } catch (e) {
     console.error('[chatCrypto] decryptBlob failed:', e instanceof Error ? e.message : e)
     throw e // caller shows a "couldn't decrypt this file" state — see ChatPage.tsx
@@ -342,5 +365,5 @@ export async function decryptBlob(encryptedBytes: ArrayBuffer, ivBase64: string 
 }
 
 export function isEncryptedPayload(payload: string): boolean {
-  return payload.startsWith(ENC_PREFIX)
+  return payload.startsWith(V2_PREFIX) || payload.startsWith(V1_PREFIX)
 }

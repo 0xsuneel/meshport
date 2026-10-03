@@ -237,13 +237,18 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: () => {
         const currentAddr = get().walletAddress
-        // This tab's chat key (see chatCrypto.ts) goes with the session.
-        try {
-          for (let i = sessionStorage.length - 1; i >= 0; i--) {
-            const k = sessionStorage.key(i)
-            if (k?.startsWith('meshport_chat_seed_')) sessionStorage.removeItem(k)
-          }
-        } catch { /* storage blocked */ }
+        // This device's chat key (see chatCrypto.ts) goes with the session —
+        // the tab copy and the device-sealed copy alike.
+        for (const st of [() => sessionStorage, () => localStorage]) {
+          try {
+            const store = st()
+            for (let i = store.length - 1; i >= 0; i--) {
+              const k = store.key(i)
+              if (k?.startsWith('meshport_chat_seed_')) store.removeItem(k)
+            }
+          } catch { /* storage blocked */ }
+        }
+        import('@/lib/chatCrypto').then(({ clearChatSessionSeeds }) => clearChatSessionSeeds()).catch(() => {})
         // Merchant status is per account — drop the cached one.
         import('@/lib/merchant').then(({ resetMerchant }) => resetMerchant()).catch(() => {})
 

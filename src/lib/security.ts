@@ -364,6 +364,21 @@ async function unwrapFromDevice(wrapped: string): Promise<string | null> {
   } catch { return null }
 }
 
+/**
+ * Seal / open a small secret with this browser's non-extractable device key
+ * (the same layer as wallet device binding above). Used for the chat
+ * identity so encrypted chats open straight away after a reload or a tab
+ * Android discarded, without exposing the wallet key. null when IndexedDB
+ * is unavailable or the device key is gone.
+ */
+export async function sealForDevice(secret: string): Promise<string | null> {
+  try { return typeof indexedDB === 'undefined' ? null : await wrapForDevice(secret) } catch { return null }
+}
+export async function openFromDevice(sealed: string): Promise<string | null> {
+  if (typeof indexedDB === 'undefined' || !sealed.startsWith(DEVICE_PREFIX)) return null
+  return unwrapFromDevice(sealed)
+}
+
 /** The owner has a backup of this wallet (recovery phrase / private key). */
 export function markWalletBackedUp(walletAddress: string): void {
   try { localStorage.setItem(BACKUP_OK_PREFIX + walletAddress.toLowerCase(), '1') } catch { /* storage blocked */ }

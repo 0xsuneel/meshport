@@ -214,3 +214,74 @@ describe('encryptBlob / decryptBlob — round trip', () => {
     await expect(decryptBlob(encryptedBytes, ivBase64, keyB)).rejects.toBeTruthy()
   })
 })
+
+// ── e2e:v2 — every message carries its own key ─────────────────────────────
+describe('e2e:v2 per-message keys', async () => {
+  const { makeChatKeys, LOCKED_TEXT } = await import('./chatCrypto')
+  const alice = deriveMyChatIdentity('0x' + 'a1'.repeat(32))
+  const bob = deriveMyChatIdentity('0x' + 'b2'.repeat(32))
+  const eve = deriveMyChatIdentity('0x' + 'e3'.repeat(32))
+  const aliceToBob = () => makeChatKeys(alice.privateKey, bob.publicKey)
+  const bobToAlice = () => makeChatKeys(bob.privateKey, alice.publicKey)
+
+  it('the recipient reads it, and so does the sender on another device', async () => {
+    const msg = await encryptText('hello bob', await aliceToBob())
+    expect(msg.startsWith('e2e:v2:')).toBe(true)
+    expect(isEncryptedPayload(msg)).toBe(true)
+    expect(await decryptText(msg, await bobToAlice())).toBe('hello bob')
+    // Alice on a brand-new device: same wallet → same identity → reads her own sent message.
+    const aliceNewDevice = await makeChatKeys(deriveMyChatIdentity('0x' + 'a1'.repeat(32)).privateKey, bob.publicKey)
+    expect(await decryptText(msg, aliceNewDevice)).toBe('hello bob')
+  })
+
+  it('opens without the other person\'s published key — the message names both keys itself', async () => {
+    const msg = await encryptText('no lookup needed', await aliceToBob())
+    const bobWithoutAlicesKey = await makeChatKeys(bob.privateKey, null)
+    expect(await decryptText(msg, bobWithoutAlicesKey)).toBe('no lookup needed')
+  })
+
+  it('each message has its own key: the same text twice gives unrelated ciphertext and sealed keys', async () => {
+    const keys = await aliceToBob()
+    const a = (await encryptText('same', keys)).split('.')
+    const b = (await encryptText('same', keys)).split('.')
+    expect(a[3]).not.toBe(b[3]) // sealed per-message key
+    expect(a[5]).not.toBe(b[5]) // content
+  })
+
+  it('a third party cannot read it', async () => {
+    const msg = await encryptText('private', await aliceToBob())
+    const eveKeys = await makeChatKeys(eve.privateKey, alice.publicKey)
+    expect(await decryptText(msg, eveKeys)).toBe(LOCKED_TEXT)
+  })
+
+  it('a tampered message fails safely instead of decrypting', async () => {
+    const msg = await encryptText('integrity', await aliceToBob())
+    const parts = msg.split('.')
+    parts[5] = parts[5].slice(0, -4) + (parts[5].endsWith('AAAA') ? 'BBBB' : 'AAAA')
+    expect(await decryptText(parts.join('.'), await bobToAlice())).toContain('🔒')
+  })
+
+  it('still reads legacy e2e:v1 messages of the same conversation', async () => {
+    const legacyKey = (await aliceToBob()).v1!
+    const old = await encryptText('from before', legacyKey)
+    expect(old.startsWith('e2e:v1:')).toBe(true)
+    expect(await decryptText(old, await bobToAlice())).toBe('from before')
+  })
+
+  it('sends plain text only when the recipient has no usable key yet', async () => {
+    expect(await encryptText('hi', await makeChatKeys(alice.privateKey, null))).toBe('hi')
+  })
+
+  it('photos/files: own key per file, marker field has no ":" or "]", round-trips both ways', async () => {
+    const bytes = new Uint8Array([1, 2, 3, 250, 251, 252])
+    const { blob, ivBase64, encrypted } = await encryptBlob(new Blob([bytes]), await aliceToBob())
+    expect(encrypted).toBe(true)
+    expect(ivBase64!.startsWith('v2.')).toBe(true)
+    expect(/[:\]]/.test(ivBase64!)).toBe(false)
+    const ct = await blob.arrayBuffer()
+    for (const keys of [await bobToAlice(), await aliceToBob()]) {
+      expect(Array.from(new Uint8Array(await (await decryptBlob(ct, ivBase64, keys)).arrayBuffer()))).toEqual(Array.from(bytes))
+    }
+    await expect(decryptBlob(ct, ivBase64, await makeChatKeys(eve.privateKey, alice.publicKey))).rejects.toBeTruthy()
+  })
+})
