@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- ── Theme bootstrap — MUST run before the <style> block below is
+         parsed so `html[data-theme]` is already set for the very first
+         paint (no flash of the wrong theme). Mirrors the resolution logic
+         in src/store/themeStore.ts: explicit user choice (persisted by
+         zustand under the same localStorage key) wins; otherwise falls
+         back to the OS/browser's prefers-color-scheme. Plain vanilla JS —
+         runs long before the React bundle loads. -->
+    <script src="/boot.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+    <!-- Two variants so the OS status bar / browser chrome tint matches
+         whichever theme actually resolved — see the header colors in
+         src/index.css (--header). -->
+    <meta name="theme-color" content="#0F5C57" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#12665F" media="(prefers-color-scheme: dark)" />
+    <!-- Lets native browser chrome (scrollbars, overscroll glow, form
+         controls, autofill) render as light or dark to match whichever
+         theme is active — MeshPort now supports both, driven by
+         data-theme above rather than a single pinned value. -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MeshPort" />
+    <meta name="description" content="USDC Payments, Made Simple" />
+
+    <!-- Open Graph — controls the rich preview card shown when this link is
+         shared in WhatsApp, iMessage, Telegram, Slack, etc. Without these,
+         a shared link just shows as bare text with no card at all.
+
+         og-default.png is versioned with a ?v= query param (bump this any
+         time the image content actually changes) rather than referenced
+         by its bare filename. Discord, Telegram, Google Images, etc. each
+         cache a link's preview image keyed by this exact URL and can sit
+         on that cache for days to weeks even after the file on disk
+         changes — a plain filename never looks "new" to them, so stale
+         previews silently persist (see the MeshPort logo/tagline mixup
+         history: two outdated versions were still showing on different
+         platforms long after the current one shipped). Bumping the query
+         string makes it a new URL to every one of those caches, forcing
+         a fresh fetch instead of reusing whatever they saw the first time
+         anyone shared this link. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="MeshPort" />
+    <meta property="og:title" content="MeshPort — USDC Payments, Made Simple" />
+    <meta property="og:description" content="Fast, free stablecoin payments. No wallet address needed — just a username." />
+    <meta property="og:image" content="https://meshport.xyz/og-default.png?v=3" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="https://meshport.xyz" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="MeshPort — USDC Payments, Made Simple" />
+    <meta name="twitter:description" content="Fast, free stablecoin payments. No wallet address needed — just a username." />
+    <meta name="twitter:image" content="https://meshport.xyz/og-default.png?v=3" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>MeshPort</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      /* html (not just body) is painted first on refresh — without this,
+         the browser paints its own light/dark default before any CSS
+         loads, producing a flash of the wrong color. The data-theme
+         attribute is already set by the bootstrap script above by the
+         time these rules are evaluated, so the very first pixel already
+         matches the resolved theme. Values mirror --bg in src/index.css. */
+      html, body { background: #F5F6F8; }
+      html[data-theme="dark"], html[data-theme="dark"] body { background: #0B0E11; }
+
+      /* ── Opening splash ──────────────────────────────────────────────
+         Shown instantly when the app opens (refreshes get a quiet variant), on top of #root, so the
+         gap before React mounts reads as an intentional brief "refreshing"
+         moment (the animated logo) instead of a blank/white flash. Removed by
+         App.tsx once the app has hydrated. */
+      #splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #0F5C57;
+        color: #FFFFFF;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        z-index: 9999;
+        transition: opacity 0.25s ease;
+      }
+      #splash.splash-hide { opacity: 0; pointer-events: none; }
+      #splash .mark { width: 104px; height: 104px; display: block; }
+      #splash .name { margin-top: 18px; font-size: 24px; font-weight: 700; letter-spacing: -0.4px; }
+      #splash .tag { margin-top: 6px; font-size: 13px; color: #A9D9CF; }
+      /* Animated logo (Pulse + Twinkle) — same as MeshLoader.tsx. */
+      #splash .mark .n, #splash .mark .hub { transform-box: fill-box; transform-origin: center; }
+      #splash .mark .n { animation: mplPopTw 1.8s ease-in-out infinite; }
+      #splash .mark .l { animation: mplTw 1.8s ease-in-out infinite; }
+      #splash .mark .s2 { animation-delay: .2s; } #splash .mark .s3 { animation-delay: .4s; }
+      #splash .mark .s4 { animation-delay: .6s; } #splash .mark .s5 { animation-delay: .8s; }
+      #splash .mark .hub { animation: mplBreathe 1.8s ease-in-out infinite; }
+      @keyframes mplPopTw { 0%,60%,100% { transform: scale(1); opacity: .35; } 22% { transform: scale(1.38); opacity: 1; } 38% { opacity: 1; } }
+      @keyframes mplTw { 0%,100% { opacity: .3; } 35% { opacity: 1; } }
+      @keyframes mplBreathe { 0%,100% { transform: scale(1); } 50% { transform: scale(.86); } }
+      @media (prefers-reduced-motion: reduce) { #splash .mark .n, #splash .mark .l, #splash .mark .hub { animation: none; opacity: 1; } }
+      /* Refresh (this tab already opened the app): no teal brand screen —
+         just the normal page background, and a small logo only if loading
+         takes more than a moment. html.mp-refresh is set by the script below. */
+      html.mp-refresh #splash { background: #F5F6F8; color: #0F5C57; }
+      html.mp-refresh[data-theme="dark"] #splash { background: #0B0E11; color: #5DE0C0; }
+      html.mp-refresh #splash .name, html.mp-refresh #splash .tag { display: none; }
+      html.mp-refresh #splash .mark { width: 56px; height: 56px; opacity: 0; animation: mpSplashIn .3s ease .5s forwards; }
+      html.mp-refresh #splash .mark g { stroke: currentColor; }
+      @keyframes mpSplashIn { to { opacity: 1; } }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="splash" aria-hidden="true">
+      <svg class="mark" viewBox="28 35 140 140" fill="none" style="overflow: visible">
+        <g stroke="#FFFFFF" stroke-width="10"><line class="l" x1="84.0" y1="84.9" x2="70.7" y2="72.3"/><line class="l s2" x1="116.2" y1="85.2" x2="136.4" y2="66.8"/><line class="l s3" x1="120.7" y1="107.5" x2="141.5" y2="115.0"/><line class="l s4" x1="103.3" y1="121.7" x2="106.8" y2="144.1"/><line class="l s5" x1="83.8" y1="114.8" x2="65.8" y2="131.2"/></g>
+        <g fill="none" stroke="#FFFFFF" stroke-width="10"><circle class="n" cx="62" cy="64" r="12"/><circle class="n s2" cx="146" cy="58" r="13"/><circle class="n s3" cx="150" cy="118" r="9"/><circle class="n s4" cx="108" cy="152" r="8"/><circle class="n s5" cx="54" cy="142" r="16"/><circle class="hub" cx="100" cy="100" r="22"/></g>
+      </svg>
+      <div class="name">MeshPort</div>
+      <div class="tag">USDC Payments, Made Simple</div>
+    </div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
