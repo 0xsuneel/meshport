@@ -101,15 +101,17 @@ export default defineConfig({
         scope: '/',
         start_url: '/',
         icons: [
-          // 'any': teal tile with the white logo. Android's launch screen puts
-          // it on the teal background_color, so only the white mark shows
-          // (same look as the in-app opening screen).
-          // 'maskable': full-bleed white for the home-screen icon (the
-          // launcher crops it to its own shape).
+          // ONE non-maskable icon on purpose: Android uses the maskable icon
+          // for BOTH the home-screen icon and the launch screen, so a maskable
+          // icon can't give a white home icon AND a small launch-screen logo.
+          // This one is a small white logo tile on a transparent canvas: on
+          // the teal background_color it draws as a small tile (launch screen);
+          // the launcher puts it on its own backdrop (home screen).
+          // To go back to the old look: restore the two 'maskable' entries
+          // (pwa-192x192.png / pwa-512x512.png, white full-bleed) and the old
+          // pwa-any-*.png files from git history.
           { src: 'pwa-any-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: 'pwa-any-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
-          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
     }),
