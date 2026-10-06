@@ -16,7 +16,9 @@
  * accumulate points across several days and claim up to 1000/day of their
  * banked balance. Only how points are EARNED changed.
  *
- * Conversion: 1000 points = 0.50 USDC (500_000 micro-USDC per 1000 points)
+ * Conversion: 1000 points = 0.50 USDC (500_000 micro-USDC per 1000 points).
+ * The ON-CHAIN contract (usdcPerThousandPoints = 500_000) is the source of
+ * truth for what is actually paid — USDC_PER_1000_PTS below MUST match it.
  *
  * Contract: MeshPortRewards.sol on Arc Testnet
  * Treasury: Admin funds with USDC; users claim on-chain
@@ -32,18 +34,20 @@ import { useAuthStore } from '@/store'
 export const POINTS_PER_TX       = 20
 export const MAX_DAILY_POINTS    = 1000
 export const MAX_DAILY_TX        = 10
-// RATE CHANGE (2026-09-17, explicit product requirement): was 0.5 USDC per
-// 1000 points (i.e. 100 points = $0.05, 1000 points = $0.50). Now 1.0 USDC
-// per 1000 points, so 100 points = $0.10 and 1000 points = $1.00 exactly —
-// both pointsToUSDC/usdcToPoints below derive from this single constant, so
-// changing it here is the one place that needs to change.
-export const USDC_PER_1000_PTS   = 1.0      // 1.0 USDC per 1000 points
+// BUG FIX (2026-10-06): this was changed to 1.0 on 2026-09-17, but the deployed
+// MeshPortRewards contract was never changed — it still pays
+// usdcPerThousandPoints = 500_000 (0.5 USDC per 1000 points). The app therefore
+// showed/recorded $1.00 for a 1000-point claim while only $0.50 actually reached
+// the wallet. Must mirror the contract: 1000 points = 0.5 USDC. If the rate is
+// ever changed for real, call setConversionRate() on the contract FIRST, then
+// update this constant — never the other way round.
+export const USDC_PER_1000_PTS   = 0.5      // 0.5 USDC per 1000 points (matches contract)
 export const MIN_CLAIM_POINTS    = 100       // minimum points per claim
 // NEW (2026-09-17, explicit product requirement): maximum points redeemable
 // in a single claim. Distinct from MAX_DAILY_POINTS (1000) above, which is
 // the on-chain contract's own daily claim ceiling — this is a PER-CLAIM cap
 // on top of that: even with a much larger banked balance, one claim
-// transaction can never redeem more than this many points (= $1.00 at the
+// transaction can never redeem more than this many points (= $0.50 at the
 // current rate) at once. A user with more than this simply claims again
 // another day.
 export const MAX_CLAIM_POINTS    = 1000
@@ -90,6 +94,18 @@ const REWARDS_ABI = [{
 { type: 'error' as const, name: 'InvalidSignature', inputs: [] },
 ]
 
+
+// RewardClaimed event — used to read the real on-chain payout after a claim.
+const REWARDS_EVENTS_ABI = [{
+  type: 'event' as const, name: 'RewardClaimed',
+  inputs: [
+    { name: 'user',      type: 'address' as const, indexed: true },
+    { name: 'points',    type: 'uint256' as const, indexed: false },
+    { name: 'usdcAmount', type: 'uint256' as const, indexed: false },
+    { name: 'claimId',   type: 'bytes32' as const, indexed: false },
+    { name: 'timestamp', type: 'uint256' as const, indexed: false },
+  ],
+}] as const
 
 // ─── Points calculation ────────────────────────────────────────────────────────
 export function pointsToUSDC(points: number): number {
@@ -426,8 +442,20 @@ export async function claimPointsAsUSDC(params: {
         const receipt = await publicClient.waitForTransactionReceipt({ hash })
         if (receipt.status === 'reverted') throw new Error('Contract call reverted')
 
+        // Use the amount the contract ACTUALLY paid out (RewardClaimed event,
+        // micro-USDC) instead of trusting the client-side rate constant, so the
+        // UI / reward_claims / activity can never disagree with the chain again.
+        let paidUsdc = usdcAmount
+        try {
+          const { parseEventLogs } = await import('viem')
+          const logs = parseEventLogs({ abi: REWARDS_EVENTS_ABI, logs: receipt.logs, eventName: 'RewardClaimed' })
+          const ev = logs.find(l => l.address.toLowerCase() === REWARDS_CONTRACT.toLowerCase())
+          if (ev) paidUsdc = Number((ev.args as { usdcAmount: bigint }).usdcAmount) / 1e6
+        } catch { /* fall back to the computed amount */ }
+
         await supabase.from('reward_claims').update({
           tx_hash: hash, status: 'completed', claimed_at: new Date().toISOString(),
+          usdc_received: paidUsdc,
         }).eq('id', claimRecord?.id)
         // Points were already deducted server-side when the voucher was signed.
         try { localStorage.removeItem(pendingKey) } catch { /* none */ }
@@ -441,7 +469,7 @@ export async function claimPointsAsUSDC(params: {
             walletAddress,
             userId,
             txHash: hash,
-            amount: usdcAmount,
+            amount: paidUsdc,
             fromAddress: REWARDS_CONTRACT || '',
             fromUsername: 'MeshPort Reward',
             note: `${points} points claimed`,
@@ -451,13 +479,13 @@ export async function claimPointsAsUSDC(params: {
 
         // In-app notification — guaranteed to show regardless of push state
         import('./notifications').then(({ notifyRewardClaimed }) => {
-          notifyRewardClaimed({ usdcAmount, points })
+          notifyRewardClaimed({ usdcAmount: paidUsdc, points })
         }).catch(() => {})
 
         // The phone-shade notification comes from the in-app one above
         // (store → lib/systemNotify.ts); no server self-push (it would stack).
 
-        return { txHash: hash, usdcReceived: usdcAmount, error: null }
+        return { txHash: hash, usdcReceived: paidUsdc, error: null }
       } catch (err: any) {
         // sendTransaction (unlike writeContract) never auto-decodes custom
         // errors even with the ABI present — the raw revert data has to be
