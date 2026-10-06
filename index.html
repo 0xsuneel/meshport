@@ -91,8 +91,14 @@
         transition: opacity 0.25s ease;
       }
       #splash.splash-hide { opacity: 0; pointer-events: none; }
-      #splash .mark { width: 104px; height: 104px; display: block; }
-      #splash .name { margin-top: 18px; font-size: 24px; font-weight: 700; letter-spacing: -0.4px; }
+      /* White logo tile (104px = the size Android's launch screen draws the
+         manifest icon's tile, so the hand-off from the system launch screen
+         to this one doesn't jump). The tile is dead-centre; the name sits
+         BELOW it (absolutely positioned) so adding text never moves the logo. */
+      #splash .tile { width: 104px; height: 104px; border-radius: 28px; background: #FFFFFF; display: flex; align-items: center; justify-content: center; }
+      #splash .mark { width: 64px; height: 64px; display: block; }
+      #splash .txt { position: absolute; left: 0; right: 0; top: calc(50% + 52px + 20px); text-align: center; }
+      #splash .name { font-size: 24px; font-weight: 700; letter-spacing: -0.4px; }
       #splash .tag { margin-top: 6px; font-size: 13px; color: #A9D9CF; }
       /* Animated logo (Pulse + Twinkle) — same as MeshLoader.tsx. */
       #splash .mark .n, #splash .mark .hub { transform-box: fill-box; transform-origin: center; }
@@ -110,8 +116,9 @@
          takes more than a moment. html.mp-refresh is set by the script below. */
       html.mp-refresh #splash { background: #F5F6F8; color: #0F5C57; }
       html.mp-refresh[data-theme="dark"] #splash { background: #0B0E11; color: #5DE0C0; }
-      html.mp-refresh #splash .name, html.mp-refresh #splash .tag { display: none; }
-      html.mp-refresh #splash .mark { width: 56px; height: 56px; opacity: 0; animation: mpSplashIn .3s ease .5s forwards; }
+      html.mp-refresh #splash .txt { display: none; }
+      html.mp-refresh #splash .tile { width: 56px; height: 56px; background: transparent; border-radius: 0; opacity: 0; animation: mpSplashIn .3s ease .5s forwards; }
+      html.mp-refresh #splash .mark { width: 56px; height: 56px; }
       html.mp-refresh #splash .mark g { stroke: currentColor; }
       @keyframes mpSplashIn { to { opacity: 1; } }
     </style>
@@ -119,12 +126,11 @@
   <body>
     <div id="root"></div>
     <div id="splash" aria-hidden="true">
-      <svg class="mark" viewBox="28 35 140 140" fill="none" style="overflow: visible">
-        <g stroke="#FFFFFF" stroke-width="10"><line class="l" x1="84.0" y1="84.9" x2="70.7" y2="72.3"/><line class="l s2" x1="116.2" y1="85.2" x2="136.4" y2="66.8"/><line class="l s3" x1="120.7" y1="107.5" x2="141.5" y2="115.0"/><line class="l s4" x1="103.3" y1="121.7" x2="106.8" y2="144.1"/><line class="l s5" x1="83.8" y1="114.8" x2="65.8" y2="131.2"/></g>
-        <g fill="none" stroke="#FFFFFF" stroke-width="10"><circle class="n" cx="62" cy="64" r="12"/><circle class="n s2" cx="146" cy="58" r="13"/><circle class="n s3" cx="150" cy="118" r="9"/><circle class="n s4" cx="108" cy="152" r="8"/><circle class="n s5" cx="54" cy="142" r="16"/><circle class="hub" cx="100" cy="100" r="22"/></g>
-      </svg>
-      <div class="name">MeshPort</div>
-      <div class="tag">USDC Payments, Made Simple</div>
+      <div class="tile"><svg class="mark" viewBox="28 35 140 140" fill="none" style="overflow: visible">
+        <g stroke="#0F5C57" stroke-width="10"><line class="l" x1="84.0" y1="84.9" x2="70.7" y2="72.3"/><line class="l s2" x1="116.2" y1="85.2" x2="136.4" y2="66.8"/><line class="l s3" x1="120.7" y1="107.5" x2="141.5" y2="115.0"/><line class="l s4" x1="103.3" y1="121.7" x2="106.8" y2="144.1"/><line class="l s5" x1="83.8" y1="114.8" x2="65.8" y2="131.2"/></g>
+        <g fill="none" stroke="#0F5C57" stroke-width="10"><circle class="n" cx="62" cy="64" r="12"/><circle class="n s2" cx="146" cy="58" r="13"/><circle class="n s3" cx="150" cy="118" r="9"/><circle class="n s4" cx="108" cy="152" r="8"/><circle class="n s5" cx="54" cy="142" r="16"/><circle class="hub" cx="100" cy="100" r="22"/></g>
+      </svg></div>
+      <div class="txt"><div class="name">MeshPort</div><div class="tag">USDC Payments, Made Simple</div></div>
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
