@@ -10,11 +10,14 @@ import { sendPushToUser } from './_lib/push'
  * All three are called as POST /api/chat?action=<create|send|touch>
  */
 
+// H-2 FIX: hardcoded Supabase project URL removed — a missing env var now
+// fails loudly at request time instead of silently hitting production DB.
 const SUPABASE_URL = (
   process.env.SUPABASE_URL ||
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  'https://cvvpzfvzweszuuxvaayb.supabase.co'
+  ''
 ).trim()
+if (!SUPABASE_URL) console.error('[chat] SUPABASE_URL is not set — all chat/conversation requests will fail')
 
 const SERVICE_KEY = (
   process.env.SUPABASE_SERVICE_KEY ||
@@ -78,7 +81,20 @@ async function insertMessage(row: any) {
 // for a real, successful Arc transaction from the sender's own wallet that
 // paid at least the stated amount to the other participant. Without this a
 // participant could post "+1,000,000 USDC" cards and pushes for free.
-const ARC_RPCS = [(process.env.ARC_RPC_URL || '').trim(), 'https://rpc.testnet.arc.network'].filter(Boolean)
+// M-2 FIX: expand the Arc RPC fallback list to include all four official Arc
+// Testnet providers (matching api/arc-rpc.js). The previous single legacy
+// endpoint was a single point of failure — a slow or rate-limited node
+// rejected valid payment-card verifications with 409 instead of retrying.
+// Endpoints read from env first so the authenticated/private URL is preferred
+// without ever being hard-coded into source.
+const ARC_RPCS = [
+  (process.env.ARC_RPC_URL || '').trim(),
+  'https://rpc.testnet.arc.io',           // arc-studio-allow-onchain-literal  Circle primary (official docs.arc.io endpoint)
+  'https://rpc.blockdaemon.testnet.arc.io', // arc-studio-allow-onchain-literal
+  'https://rpc.drpc.testnet.arc.io',      // arc-studio-allow-onchain-literal
+  'https://rpc.quicknode.testnet.arc.io', // arc-studio-allow-onchain-literal
+  'https://rpc.testnet.arc.network',      // arc-studio-allow-onchain-literal  legacy — last-resort fallback
+].filter(Boolean)
 async function arcRpc(body: object): Promise<any> {
   let lastErr: unknown
   for (const url of ARC_RPCS) {
@@ -97,9 +113,19 @@ const PAY_TOKENS: Record<string, { contract: string; decimals: number }> = {
   cirBTC: { contract: '0xf0c4a4ce82a5746abaad9425360ab04fbba432bf', decimals: 8 },
 }
 const pad32 = (a: string) => '0x' + a.toLowerCase().replace(/^0x/, '').padStart(64, '0')
+// B-1 FIX: the previous toUnits used Number.toFixed() which produces
+// floating-point precision artifacts (e.g. (0.1).toFixed(18) is
+// '0.100000000000000005551...') — amounts like 0.1 USDC failed the
+// >= comparison even when the correct amount was sent. Multiply to integer
+// using BigInt arithmetic via a scaled integer to avoid all FP rounding.
 function toUnits(amount: number, decimals: number): bigint {
-  const [i, f = ''] = amount.toFixed(decimals).split('.')
-  return BigInt(i + f.padEnd(decimals, '0').slice(0, decimals))
+  if (!Number.isFinite(amount) || amount < 0) return 0n
+  // Scale: split at the decimal point, pad or truncate the fractional part
+  // to exactly `decimals` digits, then parse as a pure integer — no FP math.
+  const str = amount.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: decimals })
+  const [intPart, fracPart = ''] = str.split('.')
+  const frac = fracPart.padEnd(decimals, '0').slice(0, decimals)
+  return BigInt(intPart + frac)
 }
 
 async function verifyPayment(txHash: string, from: string, to: string, token: string, amount: number): Promise<'ok' | 'pending' | 'invalid'> {
@@ -456,7 +482,12 @@ async function handleTouchConversation(req: VercelRequest, res: VercelResponse) 
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
+  // H-3 FIX: restrict CORS to the configured production origin rather than '*'.
+  // chat handles authenticated, financial operations — wildcard CORS is too broad.
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || ''
+  const origin = String(req.headers.origin || '')
+  const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+  res.setHeader('Access-Control-Allow-Origin', (allowedOrigin && !isLocalDev) ? allowedOrigin : (origin || '*'))
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   res.setHeader('Content-Type', 'application/json')

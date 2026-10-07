@@ -53,8 +53,12 @@ async function handleGetProfile(req: VercelRequest, res: VercelResponse) {
     // Exactly one well-formed address — never a pattern. (An unchecked value
     // used to go straight into an `ilike` filter: `?wallet=*` listed every user.)
     if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) return res.status(400).json({ error: 'invalid wallet' })
+    // M-4 FIX: use eq (strict equality, index-safe) now that the address is
+    // already validated and in a canonical form. ilike bypasses the index and
+    // is unneeded here since there are no wildcard characters in the value.
+    const walletLower = wallet.toLowerCase()
     const r = await fetch(
-      `${supabaseUrl}/rest/v1/users?wallet_address=ilike.${wallet}&select=id,wallet_address,avatar_url,display_name,username&limit=1`,
+      `${supabaseUrl}/rest/v1/users?wallet_address=eq.${walletLower}&select=id,wallet_address,avatar_url,display_name,username&limit=1`,
       { headers: { apikey: key, Authorization: `Bearer ${key}` } }
     )
     return res.status(200).json(await r.json())
@@ -187,8 +191,10 @@ async function handleUpdateProfile(req: VercelRequest, res: VercelResponse) {
     // Find by wallet address — the ONLY identity this request has actually
     // proven ownership of. (The old "match by id first" path is gone: id
     // never proved ownership even before this fix.)
+    // M-4 FIX: use eq (strict equality, index-safe). addr is already
+    // lowercased and validated by verifyProfileUpdateSignature above.
     const findR = await fetch(
-      `${supabaseUrl}/rest/v1/users?wallet_address=ilike.${encodeURIComponent(addr)}&select=id,wallet_address&limit=1`,
+      `${supabaseUrl}/rest/v1/users?wallet_address=eq.${encodeURIComponent(addr)}&select=id,wallet_address&limit=1`,
       { method: 'GET', headers }
     )
     const rows = await findR.json()

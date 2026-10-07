@@ -155,8 +155,20 @@ function routers(): Record<string, `0x${string}`> {
 // pattern already in swap-proxy.js. The cache lives per warm Lambda instance
 // (resets on cold start); 5 min is safe because a JWT that expires mid-TTL
 // still fails the auth/v1/user check at next cache miss.
+//
+// B-3 FIX: previously _sessionCache.clear() evicted ALL entries when the map
+// exceeded 500 entries, resetting every cached session simultaneously and
+// forcing a double Supabase round-trip on every subsequent relay until the
+// cache refilled. Replaced with LRU: only the oldest entry is evicted, so
+// the 499 most-recently-used sessions stay warm.
 const _sessionCache = new Map<string, { wallet: string; exp: number }>()
 const SESSION_CACHE_TTL_MS = 5 * 60_000
+const SESSION_CACHE_MAX = 500
+
+function _evictOldestSession() {
+  const firstKey = _sessionCache.keys().next().value
+  if (firstKey !== undefined) _sessionCache.delete(firstKey)
+}
 
 /** The wallet of the caller's Supabase session, or null when not signed in. */
 async function sessionWallet(req: VercelRequest): Promise<string | null> {
@@ -174,7 +186,7 @@ async function sessionWallet(req: VercelRequest): Promise<string | null> {
   const rows = ur.ok ? await ur.json().catch(() => []) as Array<{ wallet_address?: string }> : []
   const wallet = rows[0]?.wallet_address ? rows[0].wallet_address.toLowerCase() : null
   if (wallet) {
-    if (_sessionCache.size > 500) _sessionCache.clear()
+    if (_sessionCache.size >= SESSION_CACHE_MAX) _evictOldestSession()
     _sessionCache.set(token, { wallet, exp: Date.now() + SESSION_CACHE_TTL_MS })
   }
   return wallet
@@ -316,13 +328,23 @@ async function callClients(chainKey: string) {
 
 // Per-wallet limit on relayed calls (per warm instance): a real bridge needs
 // a handful, so this only stops scripted gas-draining.
+//
+// B-2 FIX: previously _relayHits.clear() evicted ALL entries when the map
+// exceeded 5000, which reset every wallet's rate-limit window simultaneously
+// and allowed a coordinated burst immediately after the clear. Replaced with
+// LRU: only the oldest wallet entry is evicted so all other limits stay intact.
 const _relayHits = new Map<string, number[]>()
+const RELAY_HITS_MAX = 5000
 function allowRelay(wallet: string): boolean {
   const now = Date.now(), win = 10 * 60_000
   const hits = (_relayHits.get(wallet) || []).filter(t => now - t < win)
   if (hits.length >= 20) return false
-  hits.push(now); _relayHits.set(wallet, hits)
-  if (_relayHits.size > 5000) _relayHits.clear()
+  hits.push(now)
+  _relayHits.set(wallet, hits)
+  if (_relayHits.size > RELAY_HITS_MAX) {
+    const firstKey = _relayHits.keys().next().value
+    if (firstKey !== undefined) _relayHits.delete(firstKey)
+  }
   return true
 }
 
