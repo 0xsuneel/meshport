@@ -547,6 +547,14 @@ export function WalletSetupPage() {
 }
 
 // ─── Create Wallet ─────────────────────────────────────────────────────────────
+/** Three distinct, ascending word positions for the backup check. */
+function pickVerifyIndexes(wordCount: number): number[] {
+  const picked = new Set<number>()
+  const rand = new Uint32Array(1)
+  while (picked.size < 3) { crypto.getRandomValues(rand); picked.add(rand[0] % wordCount) }
+  return [...picked].sort((a, b) => a - b)
+}
+
 export function CreateWalletPage() {
   const navigate = useNavigate()
   const setWallet = useAuthStore(s => s.setWallet)
@@ -561,23 +569,28 @@ export function CreateWalletPage() {
   const [step, setStep] = useState<'generate' | 'backup' | 'confirm' | 'success'>('generate')
   const [walletData, setWalletData] = useState<{ address: string; privateKey: string; mnemonic: string } | null>(null)
   const [loading, setLoading] = useState(false)
-  const [confirmWord, setConfirmWord] = useState('')
+  const [confirmWords, setConfirmWords] = useState<string[]>(['', '', ''])
   const [confirmError, setConfirmError] = useState('')
   const [copied, setCopied] = useState(false)
-
-  const VERIFY_INDEX = 3
+  // Three random positions, picked per wallet and only revealed on the verify
+  // screen — one fixed, highlighted word could be noted without saving the rest.
+  const [verifyIdx, setVerifyIdx] = useState<number[]>([])
   // No inline guards — handled entirely by RequireNoWallet in App.tsx router
 
   const handleGenerate = async () => {
     setLoading(true)
     const w = await generateWallet()
+    setVerifyIdx(pickVerifyIndexes(w.mnemonic.split(' ').length))
+    setConfirmWords(['', '', ''])
     setWalletData(w); setLoading(false); setStep('backup')
   }
 
   const handleConfirm = async () => {
     if (!walletData) return
-    if (confirmWord.trim().toLowerCase() !== walletData.mnemonic.split(' ')[VERIFY_INDEX].toLowerCase()) {
-      setConfirmError(`Word #${VERIFY_INDEX + 1} is incorrect. Check your backup.`); return
+    const words = walletData.mnemonic.split(' ')
+    const wrong = verifyIdx.filter((wi, i) => confirmWords[i].trim().toLowerCase() !== words[wi].toLowerCase())
+    if (wrong.length) {
+      setConfirmError(`${wrong.map(wi => `Word #${wi + 1}`).join(', ')} ${wrong.length > 1 ? 'are' : 'is'} incorrect. Check your backup.`); return
     }
     setConfirmError('')
     setWallet(walletData.address, walletData.privateKey, walletData.mnemonic, 'create')
@@ -630,7 +643,7 @@ export function CreateWalletPage() {
         const encryptedMnemonic = await encryptMnemonic(walletData.mnemonic, rawPasscode)
         storeEncryptedMnemonic(walletData.address, encryptedMnemonic)
         // The word check on the previous screen proved the phrase was saved.
-        markWalletBackedUp(walletData.address)
+        await markWalletBackedUp(walletData.address)
       } catch (e) { console.warn('[Wallet] Local key backup failed:', e) }
       finally { const { clearRawPasscode } = await import('@/lib/restoreWallet'); clearRawPasscode() }
     }
@@ -642,7 +655,7 @@ export function CreateWalletPage() {
       <button onClick={() => {
         if (step === 'generate') navigate(-1)
         else if (step === 'backup') setStep('generate')
-        else if (step === 'confirm') { setStep('backup'); setConfirmWord(''); setConfirmError('') }
+        else if (step === 'confirm') { setStep('backup'); setConfirmWords(['', '', '']); setConfirmError('') }
       }} className="back-btn" style={{marginBottom:24}}>
         <ArrowLeft className="w-5 h-5 text-text-primary" />
       </button>
@@ -671,14 +684,14 @@ export function CreateWalletPage() {
         )}
         {step === 'backup' && walletData && (
           <motion.div key="backup" {...stepMotion('forward')} className="space-y-5">
-            <div><h2 className="text-2xl font-bold text-text-primary">Save Recovery Phrase</h2><p className="text-text-secondary mt-1">Write down all 12 words. You'll verify word #{VERIFY_INDEX + 1}.</p></div>
+            <div><h2 className="text-2xl font-bold text-text-primary">Save Recovery Phrase</h2><p className="text-text-secondary mt-1">Write down all 12 words, in order. Next you'll be asked for 3 of them.</p></div>
             <div className="p-3 bg-warning/10 border border-warning/30 rounded-2xl flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
               <p className="text-sm text-warning">Never share this. Anyone with it controls your wallet. Avoid taking a screenshot — write it down instead.</p>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {walletData.mnemonic.split(' ').map((word, i) => (
-                <div key={i} className={`rounded-xl px-3 py-2.5 flex items-center gap-1.5 ${i === VERIFY_INDEX ? 'bg-brand/15 border border-brand/50' : 'bg-surface border border-border'} ${!word || word === 'undefined' ? 'border border-danger/50' : ''}`}>
+                <div key={i} className={`rounded-xl px-3 py-2.5 flex items-center gap-1.5 bg-surface border border-border ${!word || word === 'undefined' ? 'border border-danger/50' : ''}`}>
                   <span className="text-text-secondary text-xs">{i + 1}.</span>
                   <span className={`text-sm font-semibold ${!word || word === 'undefined' ? 'text-danger' : 'text-text-primary'}`}>
                     {(!word || word === 'undefined') ? 'error' : word}
@@ -691,17 +704,22 @@ export function CreateWalletPage() {
               {copied ? <CheckCircle className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
               {copied ? 'Copied!' : 'Copy All 12 Words'}
             </button>
-            <Button fullWidth onClick={() => { setConfirmWord(''); setConfirmError(''); setStep('confirm') }}>I've Written It Down →</Button>
+            <Button fullWidth onClick={() => { setConfirmWords(['', '', '']); setConfirmError(''); setStep('confirm') }}>I've Written It Down →</Button>
           </motion.div>
         )}
         {step === 'confirm' && walletData && (
           <motion.div key="confirm" {...stepMotion('forward')} className="space-y-6">
             <div><h2 className="text-2xl font-bold text-text-primary">Verify Your Backup</h2>
-              <p className="text-text-secondary mt-1">Enter word <span className="text-brand font-bold">#{VERIFY_INDEX + 1}</span> from your recovery phrase</p></div>
-            <Input label={`Word #${VERIFY_INDEX + 1}`} placeholder="Type the word..." value={confirmWord}
-              onChange={e => { setConfirmWord(e.target.value); setConfirmError('') }} autoFocus />
+              <p className="text-text-secondary mt-1">Enter these 3 words from your recovery phrase</p></div>
+            <div className="space-y-4">
+              {verifyIdx.map((wi, i) => (
+                <Input key={wi} label={`Word #${wi + 1}`} placeholder="Type the word..." value={confirmWords[i]}
+                  onChange={e => { const v = e.target.value; setConfirmWords(ws => ws.map((w, j) => j === i ? v : w)); setConfirmError('') }}
+                  autoFocus={i === 0} autoComplete="off" autoCapitalize="none" spellCheck={false} />
+              ))}
+            </div>
             {confirmError && <div role="alert" className="flex items-start gap-2 p-3 bg-danger/10 border border-danger/30 rounded-2xl"><XCircle className="w-4 h-4 text-danger mt-0.5" /><p className="text-sm text-danger">{confirmError}</p></div>}
-            <Button fullWidth onClick={handleConfirm} disabled={!confirmWord.trim()}>Confirm & Create Wallet</Button>
+            <Button fullWidth onClick={handleConfirm} disabled={confirmWords.some(w => !w.trim())}>Confirm & Create Wallet</Button>
           </motion.div>
         )}
         {step === 'success' && walletData && (
@@ -838,7 +856,7 @@ export function ImportWalletPage() {
           storeEncryptedMnemonic(result.address, encryptedMnemonic)
         }
         // Imported → the owner already holds the phrase / key they typed in.
-        markWalletBackedUp(result.address)
+        await markWalletBackedUp(result.address)
       } catch {}
       finally { const { clearRawPasscode } = await import('@/lib/restoreWallet'); clearRawPasscode() }
     }

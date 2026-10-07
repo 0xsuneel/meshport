@@ -427,10 +427,14 @@ export async function openFromDevice(sealed: string): Promise<string | null> {
   return unwrapFromDevice(sealed)
 }
 
-/** The owner has a backup of this wallet (recovery phrase / private key). */
-export function markWalletBackedUp(walletAddress: string): void {
+/**
+ * The owner has a backup of this wallet (recovery phrase / private key).
+ * Resolves once the device layer is on the saved key and phrase — wallet
+ * setup awaits it so closing the page right after can't leave them unbound.
+ */
+export function markWalletBackedUp(walletAddress: string): Promise<void> {
   try { localStorage.setItem(BACKUP_OK_PREFIX + walletAddress.toLowerCase(), '1') } catch { /* storage blocked */ }
-  void bindWalletToDevice(walletAddress)
+  return bindWalletToDevice(walletAddress)
 }
 export function isWalletBackedUp(walletAddress: string): boolean {
   try { return localStorage.getItem(BACKUP_OK_PREFIX + walletAddress.toLowerCase()) === '1' } catch { return false }
