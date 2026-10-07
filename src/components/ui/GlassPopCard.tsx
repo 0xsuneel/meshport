@@ -54,10 +54,10 @@ export function GlassPopCard({ open, kind, title, message, actionLabel, onAction
           <motion.div
             {...TOAST_MOTION}
             style={{
-              background: 'color-mix(in srgb, var(--surface) 65%, transparent)',
+              // Solid, no backdrop blur: a blur under a fading layer renders
+              // wrong until fully opaque (text ghosting, then a snap).
+              background: 'var(--surface)',
               border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
               borderRadius: 20,
               padding: 18,
               boxShadow: '0 20px 50px rgba(0,0,0,0.35)',

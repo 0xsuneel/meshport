@@ -762,7 +762,7 @@ export function ContactsPage() {
           ) : (
             <>
               <motion.div transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-black/70 backdrop-blur-sm z-40"
+                className="absolute inset-0 bg-black/70 z-40"
                 onClick={closePay} />
               <motion.div {...sheetDrag('ct-pay', closePay)}
                 initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}

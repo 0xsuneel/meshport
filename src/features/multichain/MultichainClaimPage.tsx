@@ -2009,7 +2009,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     transition={SHEET_BACKDROP.transition}
                     onClick={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
-                    style={{ position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', zIndex: 60, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)' }}
+                    style={{ position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', zIndex: 60, background: 'rgba(0,0,0,0.55)' }}
                   />
                   <motion.div {...sheetDrag('mc-pass', () => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') })}
                     key="pass-sheet"

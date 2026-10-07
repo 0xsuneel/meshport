@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type React from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, Navigate } from 'react-router-dom'
 import { KeyRound, QrCode, Check, ChevronLeft, ChevronRight, Camera, Upload, Loader2, ShieldCheck, Download, Wallet, Mail, Copy } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { Card } from '@/components/ui/Card'
@@ -56,9 +56,9 @@ export function SecureWalletPage() {
   useEffect(() => { refresh() }, [userId])
 
   // Needs the unlocked wallet (it's what gets locked to the passkey / QR).
-  useEffect(() => {
-    if (walletAddress && !privateKey) navigate('/auth/recover-wallet', { replace: true })
-  }, [walletAddress, privateKey])
+  // Redirected while rendering (see below), not after the first paint —
+  // that showed this page for a few frames first.
+  const needsUnlock = !!walletAddress && !privateKey
 
   const secured = (passkeys ?? 0) > 0 || !!qrAt
 
@@ -76,6 +76,8 @@ export function SecureWalletPage() {
       setBusy(false)
     }
   }
+
+  if (needsUnlock) return <Navigate to="/auth/recover-wallet" replace />
 
   if (makingQr) {
     return <RecoveryQrCreator onBack={() => setMakingQr(false)} onDone={async () => {

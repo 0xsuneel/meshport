@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
 import {useLocation, useSearchParams} from 'react-router-dom'
 import { RefreshCw, Loader2, X, Check } from 'lucide-react'
@@ -683,23 +685,30 @@ function FilterSheet({ active, onSelect, onClose }: {
     </>
   )
 
+  // A plain dim (no backdrop blur — Android re-blurs it every frame of the
+  // fade), and it slides back out when closed instead of vanishing.
+  usePopupOpen()
   return (
-    <div onClick={onClose} style={{
-      position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, zIndex: 100,
-      background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)',
-      display: 'flex', justifyContent: 'flex-end',
-      animation: 'mpFadeIn 0.22s cubic-bezier(0.32, 0.72, 0, 1)',
-    }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        width: panelWidth, height: '100%', background: 'var(--surface)',
-        borderLeft: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
-        boxShadow: 'var(--shadow-3, -8px 0 24px rgba(0,0,0,0.25))',
-        animation: 'mpDrawerIn 0.42s cubic-bezier(0.32, 0.72, 0, 1)',
-        overflowY: 'auto',
+    <motion.div onClick={onClose}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.24 } }}
+      transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+      style={{
+        position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, zIndex: 100,
+        background: 'rgba(0,0,0,0.5)',
+        display: 'flex', justifyContent: 'flex-end',
       }}>
+      <motion.div onClick={e => e.stopPropagation()}
+        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
+        transition={{ duration: 0.42, ease: [0.32, 0.72, 0, 1] }}
+        style={{
+          width: panelWidth, height: '100%', background: 'var(--surface)',
+          borderLeft: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
+          boxShadow: 'var(--shadow-3, -8px 0 24px rgba(0,0,0,0.25))',
+          overflowY: 'auto',
+        }}>
         {listContent}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }
 
@@ -774,11 +783,11 @@ export function ActivityPage() {
     const el = bottomRef.current
     if (!el) return
     const obs = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting && hasMore && !loadingMore && !loading) loadMore()
+      if (e.isIntersecting && hasMore && !loadingMore && !loading && !error && records.length > 0) loadMore()
     }, { threshold: 0.1 })
     obs.observe(el)
     return () => obs.disconnect()
-  }, [hasMore, loadingMore, loading, loadMore])
+  }, [hasMore, loadingMore, loading, loadMore, error, records.length])
 
   const displayed = (tokenFilter
     ? records.filter(r => r.tokenSymbol?.toUpperCase() === tokenFilter.toUpperCase())
@@ -926,10 +935,14 @@ export function ActivityPage() {
         )}
       </div>
 
-      {selected && <DetailSheet record={selected} onClose={() => setSelected(null)} />}
-      {filterOpen && (
-        <FilterSheet active={activeTab} onSelect={handleTabChange} onClose={() => setFilterOpen(false)} />
-      )}
+      <AnimatePresence>
+        {selected && <DetailSheet key="detail" record={selected} onClose={() => setSelected(null)} />}
+      </AnimatePresence>
+      <AnimatePresence>
+        {filterOpen && (
+          <FilterSheet key="filter" active={activeTab} onSelect={handleTabChange} onClose={() => setFilterOpen(false)} />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

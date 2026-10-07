@@ -85,8 +85,10 @@ export const SHEET_BACKDROP = {
 /** Popups move on plain tweens: springs overshoot (a rubber-band bounce),
  *  and on a spring the opacity overshoots and dips back, which reads as a blink. */
 const POPUP_FADE: Transition = { duration: 0.18, ease: EASE_OUT }
+// Cards start mostly opaque: from opacity 0 the screen behind showed through
+// the half-faded card for a couple of frames (doubled text).
 export const DIALOG_CARD = {
-  initial: { opacity: 0, scale: 0.96, y: 8 },
+  initial: { opacity: 0.7, scale: 0.96, y: 8 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.97, y: 4 },
   transition: { duration: 0.22, ease: EASE_OUT, opacity: POPUP_FADE } as Transition, // no overshoot
@@ -94,7 +96,7 @@ export const DIALOG_CARD = {
 /** Centred popups (DesktopDialogFrame / Sheet): a slightly livelier pop-in
  *  than DIALOG_CARD, which the success receipt keeps. */
 export const POPUP_CARD = {
-  initial: { opacity: 0, scale: 0.92, y: 18 },
+  initial: { opacity: 0.7, scale: 0.92, y: 18 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } },
   transition: { duration: 0.26, ease: EASE_OUT, opacity: POPUP_FADE } as Transition, // no overshoot

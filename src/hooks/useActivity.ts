@@ -224,7 +224,9 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
   const load = useCallback(async (reset = false) => {
     if (!walletAddress) return
     if (reset) { setLoading(true); offsetRef.current = 0; cursorRef.current = null }
-    setError('')
+    // The error is cleared only once a load succeeds (below). Clearing it up
+    // front made a failing load-more flip the page between the empty state
+    // and the error every frame or two.
 
     const opts: FetchOptions = {
       limit:        PAGE_SIZE,
@@ -246,6 +248,7 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
       if (myRequestId !== requestIdRef.current) return
       // A failed request must not wipe the list or end pagination.
       if (meta.failed) throw new Error('Could not load activity — pull to refresh')
+      setError('')
 
       let addedCount = data.length
       if (reset) {
@@ -292,6 +295,9 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
     } catch (e: any) {
       if (myRequestId !== requestIdRef.current) return
       setError(e.message ?? 'Failed to load activity')
+      // A failed load-more stops paging until a refresh — otherwise the
+      // always-visible bottom marker retries it in a tight loop.
+      if (!reset) setHasMore(false)
     } finally {
       if (myRequestId === requestIdRef.current) setLoading(false)
     }
@@ -398,13 +404,15 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
     load(true)
   }, [load])
 
+  // Loading starts in the same update as the filter/search change, so the
+  // old (or empty) list doesn't show for a frame before the skeleton.
   const handleSetFilter = useCallback((f: ActivityType | undefined) => {
-    setFilter(f)
+    setFilter(prev => { if (prev !== f) setLoading(true); return f })
     offsetRef.current = 0
   }, [])
 
   const handleSetSearch = useCallback((s: string) => {
-    setSearch(s)
+    setSearch(prev => { if (prev !== s) setLoading(true); return s })
     offsetRef.current = 0
   }, [])
 

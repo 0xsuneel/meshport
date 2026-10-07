@@ -1815,7 +1815,7 @@ export function PaySendPage() {
           <>
             <motion.div transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="absolute inset-0 z-40"
-              style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}
+              style={{ background: 'rgba(0,0,0,0.6)' }}
               onClick={() => setShowPasscodeSheet(false)} />
             <motion.div {...sheetDrag('ps-pass', () => setShowPasscodeSheet(false))}
               initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}

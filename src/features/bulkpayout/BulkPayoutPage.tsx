@@ -8,6 +8,8 @@ import {
   Send, ExternalLink, Search, Loader2, User, Download,
   Users, DollarSign, HelpCircle, AlertCircle
 } from 'lucide-react'
+import { ScreenPush } from '@/components/ui/ScreenPush'
+import { PopupOpen } from '@/hooks/usePopupOpen'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import {createPublicClient, createWalletClient, parseGwei, encodeFunctionData} from 'viem'
@@ -1334,11 +1336,13 @@ export function BulkPayoutPage() {
       {/* Glides up with the amount keypad so the amount box stays in view
           (the keypad itself is rendered outside this, below). */}
       <motion.div animate={{ y: -bulkKeypadLift }} initial={false} transition={KEYPAD_SPRING}>
-      <AnimatePresence initial={false} mode="wait">
+      {/* Steps push like pages (no fade-out to an empty screen in between).
+          Processing → results stay on one screen. */}
+      <ScreenPush screenKey={step === 'processing' || step === 'results' ? 'run' : step} back={stepDir === 'back'}>
 
         {/* ══════════════════ SETUP STEP ══════════════════ */}
         {step === 'setup' && (
-          <motion.div key="setup" {...stepMotion(stepDir)} className="px-4 space-y-4">
+          <motion.div key="setup" initial={false} className="px-4 space-y-4">
             {addRecipientsSection}
             {purposeSection}
             {summarySection}
@@ -1347,26 +1351,26 @@ export function BulkPayoutPage() {
 
         {/* ══════════════════ REVIEW STEP ══════════════════ */}
         {step === 'review' && (
-          <motion.div key="review" {...stepMotion(stepDir)} className="px-4 space-y-4">
+          <motion.div key="review" initial={false} className="px-4 space-y-4">
             {reviewContent}
           </motion.div>
         )}
 
         {/* ══════════════════ PROCESSING ══════════════════ */}
         {step === 'processing' && (
-          <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION} className="px-4 py-16 text-center space-y-6">
+          <motion.div key="processing" initial={false} className="px-4 py-16 text-center space-y-6">
             {processingContent}
           </motion.div>
         )}
 
         {/* ══════════════════ RESULTS ══════════════════ */}
         {step === 'results' && (
-          <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION} className="px-4 space-y-4">
+          <motion.div key="results" initial={false} className="px-4 space-y-4">
             {resultsContent}
           </motion.div>
         )}
 
-      </AnimatePresence>
+      </ScreenPush>
       </motion.div>
 
       <AmountKeypad
@@ -1444,8 +1448,10 @@ export function BulkPayoutPage() {
             </DesktopTransactionAuthDialog>
           ) : (
             <>
-              <motion.div transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-black/70 backdrop-blur-sm z-40"
+              {/* Plain dim — no backdrop blur (Android re-blurs it every frame of the fade). */}
+              <PopupOpen key="bp-popup-open" />
+              <motion.div key="bp-pass-dim" transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.24 } }}
+                className="absolute inset-0 bg-black/70 z-40"
                 onClick={close} />
               <motion.div {...sheetDrag('bp-pass', close)} initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}
                 transition={SHEET_SPRING}

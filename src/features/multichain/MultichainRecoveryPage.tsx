@@ -15,7 +15,7 @@ const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) =
 // Every action checks the chain first, so a transfer that already arrived is
 // simply marked completed — nothing can be minted twice.
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store'
 import {
@@ -64,6 +64,8 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
   // Failed UB transfers (Arc → other chain) still sitting in the Arc Unified Balance.
   const [ubStuck, setUbStuck] = useState<Array<import('@/lib/ubFundRecovery').UbStuckTransfer & { available: number }>>([])
   const [loading, setLoading] = useState(true)
+  const everLoaded = useRef(false)
+  if (!loading) everLoaded.current = true
   const [busy, setBusy] = useState<string | null>(null)
   const [result, setResult] = useState<Record<string, { diag?: CctpDiagnosis; error?: string }>>({})
 
@@ -254,7 +256,8 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
 
       {result._list?.error && <div role="alert" style={{ ...card, color: 'var(--danger)' }}>{result._list.error}</div>}
 
-      {!loading && items.length === 0 && ub.length === 0 && ubHeld.length === 0 && ubDust.length === 0 && ubStuck.length === 0 && (
+      {/* Stays up while Refresh re-checks (no blink), and never under an error. */}
+      {(!loading || everLoaded.current) && !result._list?.error && items.length === 0 && ub.length === 0 && ubHeld.length === 0 && ubDust.length === 0 && ubStuck.length === 0 && (
         <div style={{ ...card, color: 'var(--text-secondary)' }}>Nothing stuck. All your cross-chain moves have finished.</div>
       )}
 

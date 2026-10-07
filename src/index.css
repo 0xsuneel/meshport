@@ -515,6 +515,11 @@ body { overflow-wrap: break-word; }
 .mp-search-input::placeholder { color: var(--text-muted); opacity: 1; }
 
 
+/* Frozen picture of the old page during a page/screen push (PageTransition,
+   ScreenPush): cloned nodes would restart their CSS entrance animations from
+   opacity 0, blinking parts of the old page out and back in as it slides. */
+.mp-page-snapshot, .mp-page-snapshot * { animation: none !important; transition: none !important; }
+
 /* A popup is open (see src/hooks/usePopupOpen.ts): drop every backdrop blur
    on the page beneath it. Android Chrome re-blurs them each frame the popup
    animates, which made the screen blink when a popup, a history card's

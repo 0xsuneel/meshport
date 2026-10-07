@@ -7,7 +7,7 @@ import { flushSync, createPortal } from 'react-dom'
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
 import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
 import { useMotionValue, animate, motion, AnimatePresence } from 'framer-motion'
-import { SHEET_SPRING, SHEET_BACKDROP } from '@/lib/motion'
+import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { parseUnits } from 'viem'
 import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
@@ -599,9 +599,9 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
       <motion.div key="more-backdrop"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SHEET_BACKDROP.transition}
         onClick={onClose}
-        style={{ position: 'fixed', inset: 0, maxWidth: 430, margin: '0 auto', zIndex: 9990, background: 'rgba(0,0,0,0.18)' }} />
+        style={{ position: 'fixed', inset: 0, maxWidth: 430, margin: '0 auto', zIndex: 9990, background: 'rgba(0,0,0,0.32)' }} />
       <motion.div key="more-sheet" role="dialog" aria-modal="true" aria-label="Actions"
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={SHEET_SPRING}
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT} transition={SHEET_SPRING}
         style={{
           position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 9991,
           maxWidth: 430, margin: '0 auto',
@@ -766,7 +766,7 @@ function AssetSheet({ token, history, onClose, onOpen }: { token: string; histor
         onClick={onClose}
         style={{ position: 'fixed', inset: 0, maxWidth: 430, margin: '0 auto', zIndex: 9990, background: 'rgba(0,0,0,0.32)' }} />
       <motion.div key="asset-sheet" role="dialog" aria-modal="true" aria-label={`${token} history`}
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={SHEET_SPRING}
+        initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT} transition={SHEET_SPRING}
         style={{
           position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 9991,
           maxWidth: 430, margin: '0 auto', maxHeight: '82dvh',
@@ -2296,7 +2296,7 @@ function FeatureBanner({ height, onOpen }: { height: number; onOpen: (path: stri
           <span key={i} style={{ width: i === idx ? 12 : 4, height: 4, borderRadius: 2, background: i === idx ? '#fff' : 'rgba(255,255,255,0.4)', transition: 'width 0.25s ease' }} />
         ))}
       </div>
-      <style>{`@keyframes mpBannerIn { from { opacity: 0; transform: translateX(10px) } to { opacity: 1; transform: none } }`}</style>
+      <style>{`@keyframes mpBannerIn { from { opacity: 0.5; transform: translateX(14px) } to { opacity: 1; transform: none } }`}</style>
     </div>
   )
 }

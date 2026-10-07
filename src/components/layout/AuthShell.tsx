@@ -1,7 +1,5 @@
-import { motion, useReducedMotion } from 'framer-motion'
 import { useLocation } from 'react-router-dom'
-import { DESKTOP_FADE_Y, DESKTOP_FADE_TRANSITION, PAGE_TRANSITION, pageSlide } from '@/lib/motion'
-import { useNavDirection } from '@/hooks/useNavDirection'
+import { PageTransition } from '@/components/ui/PageTransition'
 
 // AuthShell — wraps public, pre-login pages (login/register flow, the
 // public payment link, legal pages) so they get the same phone-width
@@ -11,23 +9,17 @@ import { useNavDirection } from '@/hooks/useNavDirection'
 // width constraint at all — inputs, buttons, and the payment-receive
 // link page all rendered full browser width on desktop.
 //
-// Onboarding (/auth/*) is a linear, back-able wizard, so its steps get the
-// same directional slide as any other hierarchical step flow — direction
-// comes from useNavigationType() ('POP' = the user went back), so it
-// reverses automatically without each auth page tracking its own state.
-// Everything else routed through this shell (/paylink/:username, /legal,
-// /terms, /privacy) is a standalone deep-linked page with no "previous
-// step" to slide from, so it only fades.
+// Pages change with the same push as the rest of the app (PageTransition):
+// the next page slides in from the right over a picture of the old one, and
+// back reverses it; a first load shows the page at once. (They used to
+// remount from opacity 0, so every change started on an empty frame.)
+// /legal, /terms and /privacy are one page whose tabs switch the URL, so
+// they share one key and a tab tap doesn't count as opening a new page.
+const LEGAL = new Set(['/legal', '/terms', '/privacy'])
+
 export function AuthShell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
-  const nav = useNavDirection()
-  const reduceMotion = useReducedMotion()
-  const isOnboardingStep = location.pathname.startsWith('/auth')
-  // Same page animation as the rest of the app (lib/motion.ts).
-  const slide = pageSlide(nav === 'back' ? 'back' : 'forward')
-  const initial = isOnboardingStep && nav !== 'none' ? slide.initial : { opacity: 0, y: DESKTOP_FADE_Y }
-  const animate = isOnboardingStep && nav !== 'none' ? slide.animate : { opacity: 1, y: 0 }
-  const transition = isOnboardingStep && nav !== 'none' ? PAGE_TRANSITION : DESKTOP_FADE_TRANSITION
+  const pageKey = LEGAL.has(location.pathname) ? '/legal' : location.pathname
 
   return (
     <div style={{
@@ -38,7 +30,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
       alignItems: 'flex-start',
       justifyContent: 'center',
     }}>
-      <div style={{
+      <div data-page-shell="" style={{
         width: '100%',
         maxWidth: '430px',
         height: '100%',
@@ -63,15 +55,9 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         display: 'flex',
         flexDirection: 'column',
       }}>
-        <motion.div
-          key={location.pathname}
-          initial={reduceMotion ? false : initial}
-          animate={animate}
-          transition={transition}
-          style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}
-        >
+        <PageTransition locationKey={pageKey}>
           {children}
-        </motion.div>
+        </PageTransition>
       </div>
     </div>
   )

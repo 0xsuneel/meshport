@@ -21,6 +21,8 @@ import {
   type P2PTrade, type CounterpartyProfile,
 } from '@/lib/p2pService'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { SkeletonCards } from '@/components/ui/Skeleton'
+import { AnimatePresence } from 'framer-motion'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 
 type CategoryTab = 'all' | 'buy' | 'sell' | 'completed' | 'cancelled' | 'disputed' | 'refunded'
@@ -212,21 +214,23 @@ export function P2PHistoryPage() {
         ))}
       </div>
 
+      <AnimatePresence>
       {receiptTrade && (() => {
         const t = receiptTrade
         const isBuyer = t.buyerId === user?.id
         const cp = counterparties.get(isBuyer ? t.sellerId : t.buyerId)
-        return <TradeReceipt t={t} isBuyer={isBuyer} label={badgeMeta(t).label}
+        return <TradeReceipt key="receipt" t={t} isBuyer={isBuyer} label={badgeMeta(t).label}
           counterparty={cp?.displayName || cp?.username || 'Trader'}
           counterpartyWallet={cp?.walletAddress || (isBuyer ? t.sellerWallet : t.buyerWallet)}
           onOpenTrade={() => { setReceiptTrade(null); navigate(`/p2p/trade/${t.id}`) }}
           onClose={() => setReceiptTrade(null)} />
       })()}
+      </AnimatePresence>
 
       {/* List */}
       <div style={{ padding: '4px 16px' }}>
         {loading ? (
-          <p style={{ textAlign: 'center', color: COLORS.muted, fontSize: 13, padding: 40 }}>Loading history…</p>
+          <SkeletonCards count={4} className="pt-2" />
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '50px 20px', background: COLORS.surface, borderRadius: 18, border: `1px dashed ${COLORS.border}` }}>
             <p style={{ color: COLORS.muted, fontSize: 13, margin: 0 }}>No transactions match these filters.</p>

@@ -1692,7 +1692,7 @@ export function SwapPage() {
             {/* Glass exchange card */}
             <div className="rounded-2xl p-5" style={{
               position: 'relative',
-              background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', backdropFilter: 'blur(20px)',
+              background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
               border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)',
             }}>
               <div className="flex items-center justify-between">
@@ -1977,7 +1977,7 @@ export function SwapPage() {
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               transition={SHEET_BACKDROP.transition}
               className="absolute inset-0 z-40"
-              style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(2px)' }}
+              style={{ background: 'rgba(0,0,0,0.6)' }}
               onClick={closeSheet}/>
             <motion.div {...sheetDrag('sw-pass', closeSheet)} key="pass-sheet"
               initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}

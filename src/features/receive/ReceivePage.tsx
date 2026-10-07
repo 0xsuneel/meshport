@@ -169,7 +169,7 @@ export function ReceivePage() {
       }}>
         <canvas
           ref={canvasRef}
-          className={`transition-opacity ${qrReady ? 'opacity-100' : 'opacity-0'}`}
+          className={qrReady ? 'opacity-100' : 'opacity-0'}
           style={{ width: 236, height: 236, borderRadius: 10 }}
         />
         {!qrReady && !qrError && qrData && (

@@ -71,6 +71,7 @@ export function ScreenPush({ screenKey, back = false, style, children }: {
     const opts: KeyframeAnimationOptions = { duration: back ? BACK_MS : OPEN_MS, easing: EASE, fill: 'both' }
     const layer = document.createElement('div')
     layer.setAttribute('aria-hidden', 'true')
+    layer.className = 'mp-page-snapshot' // no replayed CSS animations in the picture
     Object.assign(layer.style, { position: 'absolute', inset: '0', pointerEvents: 'none', overflow: 'hidden', background: 'var(--bg)' })
     Object.assign(s.node.style, { position: 'absolute', left: '0', right: '0', top: '0', minHeight: '100%' })
     layer.appendChild(s.node)
