@@ -2845,7 +2845,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         {addrHint.text && addrHint.type !== '' && (
           <span style={{ marginLeft: 'auto', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4,
             color: addrHint.type === 'ok' ? 'var(--success)' : addrHint.type === 'error' ? 'var(--danger)' : 'var(--warning)' }}>
-            {addrHint.text}
+            {/* A valid wallet address: say where the money lands, always
+                naming the chain currently picked below. */}
+            {addrHint.type === 'ok' && isEVMAddress(address) ? `You will receive USDC on ${chain.name}` : addrHint.text}
             {addrHint.type === 'ok' && <CheckCircle className="w-3 h-3"/>}
           </span>
         )}
