@@ -339,12 +339,14 @@ async function recordedRow(supabase: SupabaseClient, walletAddress: string, recv
   return (data as { id: string; created_at: string } | null) ?? null
 }
 
+// Returns true only when this call created the row, so a transfer seen by
+// both the Circle webhook and the Arc watcher is recorded and pushed once.
 async function recordExternalReceive(
   supabase: SupabaseClient,
   walletAddress: string, userId: string | undefined,
   txHash: string, amount: number, fromAddress: string, tokenSymbol: string,
-) {
-  const { error } = await supabase
+): Promise<boolean> {
+  const { data, error } = await supabase
     .from('activity')
     .upsert({
       wallet_address:       walletAddress.toLowerCase(),
@@ -358,7 +360,9 @@ async function recordExternalReceive(
       explorer_url:         `${ARC_EXPLORER}/tx/${txHash}`,
       metadata:             { recovered: false, note: 'External deposit', source: 'chain-transfer-webhook', receiveKind: 'external_deposit', pushed: true },
     }, { onConflict: 'tx_hash,wallet_address', ignoreDuplicates: true })
-  if (error) console.error('[chain-transfer-webhook] recordExternalReceive failed:', error.message)
+    .select('id')
+  if (error) { console.error('[chain-transfer-webhook] recordExternalReceive failed:', error.message); return false }
+  return (data?.length ?? 0) > 0
 }
 
 async function notifyExternalReceive(
@@ -438,6 +442,191 @@ async function sweepUnnotifiedReceives(supabase: SupabaseClient): Promise<void> 
   }
 }
 
+// ── Shared processing for one verified Transfer to a MeshPort wallet ────────
+// Used by the Circle webhook (after signature verification) and by the Arc
+// log watcher (logs come straight from Arc's RPC, filtered to MeshPort
+// wallets). Every write is idempotent on (tx_hash, wallet_address).
+interface TransferIn {
+  symbol: string; isMint: boolean; fromAddress: string; toAddress: string
+  amount: number; txHash: string
+  user?: { id: string; username: string | null } | null
+}
+async function processTransfer(supabase: SupabaseClient, t: TransferIn): Promise<Record<string, unknown>> {
+  const { symbol, isMint, fromAddress, toAddress, amount, txHash } = t
+  if (isMint) {
+    // A mint (from address(0)) is a CCTP claim or similar system mint, not a
+    // generic external deposit — see tryCompleteClaimFromMint's own comment
+    // for why matching by wallet+amount here is safe and already-precedented
+    // in this codebase. Only USDC claims are tracked.
+    if (symbol === 'USDC') {
+      const completedClaimId = await tryCompleteClaimFromMint(supabase, toAddress, txHash, amount)
+      if (completedClaimId) return { completedClaim: completedClaimId, wallet: toAddress, amount, token: symbol }
+    }
+    return { ignored: 'mint (from address(0)) - no matching pending/recent-failed claim found' }
+  }
+  if (fromAddress.toLowerCase() === toAddress.toLowerCase()) return { ignored: 'self-transfer' }
+  const user = t.user ?? await findUserByWallet(supabase, toAddress)
+  if (!user) return { ignored: 'recipient is not a MeshPort wallet' }
+
+  try {
+    // Same three-layer classification claim-recovery-scan already
+    // established, in the same order, for the same reasons - see
+    // trackedFeatureCorrelation.ts and knownInternalContracts.ts.
+    if (isKnownInternalContract(fromAddress, KNOWN_INTERNAL_EXTRA)) {
+      return { ignored: 'sender is a known-internal contract (swap/BulkPay/CCTP/P2P escrow)' }
+    }
+    if (await findCorrelatedTrackedFeature(supabase, 'arc', txHash)) {
+      return { ignored: 'tx_hash correlates to a tracked Pay/BulkPay/Swap attempt' }
+    }
+    if (await recordedRow(supabase, toAddress, `recv_${txHash.toLowerCase()}`)) {
+      // Already recorded by a scanner — the catch-up sweep notifies it
+      // (exactly once, via its claim).
+      lastSweepAt = 0
+      await sweepUnnotifiedReceives(supabase)
+      return { ignored: 'already recorded (notification handled by the catch-up sweep)' }
+    }
+
+    const inserted = await recordExternalReceive(supabase, toAddress, user.id, txHash, amount, fromAddress, symbol)
+    if (!inserted) return { ignored: 'already recorded by a concurrent writer' }
+    // Phone notification the moment the deposit is seen — works with the
+    // app closed. Tag matches the app's in-app mirror (payment-<hash>), so
+    // the phone keeps one entry.
+    const pushed = await notifyExternalReceive(supabase, user.id, txHash, amount, fromAddress, symbol)
+    if (!pushed) {
+      // Not delivered — clear the flag so the catch-up sweep retries it.
+      await supabase.from('activity')
+        .update({ metadata: { recovered: false, note: 'External deposit', source: 'chain-transfer-webhook', receiveKind: 'external_deposit' } })
+        .eq('tx_hash', `recv_${txHash.toLowerCase()}`).eq('wallet_address', toAddress.toLowerCase())
+    }
+    return { recorded: true, wallet: toAddress, amount, token: symbol }
+  } catch (e) {
+    // Never throw back to Circle (no retry storm) or out of the watcher loop;
+    // the scan-based backstops still catch this transfer on their schedule.
+    console.error('[chain-transfer-webhook] failed:', e instanceof Error ? e.message : e)
+    return { error: e instanceof Error ? e.message : 'unknown error' }
+  }
+}
+
+// ── Arc log watcher ──────────────────────────────────────────────────────────
+// Asks Arc's RPC for Transfer logs whose recipient (topic 2) is a MeshPort
+// wallet — the node filters, so only MeshPort transfers come back. Native
+// USDC is included: Arc emits a Transfer log for every native USDC movement
+// from the system address below (18 decimals), whether it was a plain value
+// send or went through the 0x3600… ERC-20 interface. This replaces Circle's
+// Event Monitor, which delivers every USDC transfer on Arc (~490k/day).
+const NATIVE_USDC_EMITTER = '0xfffffffffffffffffffffffffffffffffffffffe'
+const WATCH_TOKENS: Record<string, { symbol: string; decimals: number }> = {
+  [NATIVE_USDC_EMITTER]:                         { symbol: 'USDC',   decimals: 18 },
+  '0x89b50855aa3be2f677cd6303cec089b5f319d72a':  { symbol: 'EURC',   decimals: 6 },
+  '0xf0c4a4ce82a5746abaad9425360ab04fbba432bf':  { symbol: 'cirBTC', decimals: 8 },
+}
+const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+const WATCH_CURSOR = 'transfer_watch'
+const WATCH_MAX_RANGE = 5000        // Arc RPC caps eth_getLogs ranges (~10k)
+const WATCH_FIRST_LOOKBACK = 200    // first run: ~2 minutes of history
+const WATCH_WALLET_CHUNK = 200      // recipients per eth_getLogs call
+const WATCH_LOOP_MS = 45_000
+const WATCH_INTERVAL_MS = 5_000
+const ARC_RPC_URLS = [
+  (Deno.env.get('ARC_RPC_URL') ?? '').trim(),
+  'https://rpc.testnet.arc.network',
+  'https://rpc.drpc.testnet.arc.io',
+  'https://rpc.quicknode.testnet.arc.io',
+].filter(Boolean)
+
+async function arcRpc(method: string, params: unknown[]): Promise<any> {
+  let lastErr: unknown
+  for (const url of ARC_RPC_URLS) {
+    try {
+      const res = await fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+        signal: AbortSignal.timeout(8000),
+      })
+      const body = await res.json()
+      if (body?.error) throw new Error(body.error.message ?? 'rpc error')
+      return body.result
+    } catch (e) { lastErr = e }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('all Arc RPCs failed')
+}
+
+const pad32Topic = (a: string) => '0x' + a.toLowerCase().replace(/^0x/, '').padStart(64, '0')
+
+/** One pass: claim the next block range, fetch MeshPort-bound transfers, process them. */
+async function watchPass(supabase: SupabaseClient, wallets: string[]): Promise<number> {
+  const latest = parseInt(await arcRpc('eth_blockNumber', []), 16)
+  const { data: cur } = await supabase.from('deposit_scan_cursor')
+    .select('last_scanned_block').eq('source', WATCH_CURSOR).maybeSingle()
+  if (!cur) {
+    await supabase.from('deposit_scan_cursor')
+      .upsert({ source: WATCH_CURSOR, last_scanned_block: latest - WATCH_FIRST_LOOKBACK }, { onConflict: 'source', ignoreDuplicates: true })
+    return 0
+  }
+  const from = Number(cur.last_scanned_block)
+  if (from >= latest) return 0
+  const to = Math.min(latest, from + WATCH_MAX_RANGE)
+  // Compare-and-swap claim: overlapping runs never scan the same range twice.
+  const { data: claimed } = await supabase.from('deposit_scan_cursor')
+    .update({ last_scanned_block: to, updated_at: new Date().toISOString() })
+    .eq('source', WATCH_CURSOR).eq('last_scanned_block', from).select('source')
+  if (!claimed?.length) return 0
+
+  const logs: any[] = []
+  try {
+    for (let i = 0; i < wallets.length; i += WATCH_WALLET_CHUNK) {
+      const recipients = wallets.slice(i, i + WATCH_WALLET_CHUNK).map(pad32Topic)
+      logs.push(...await arcRpc('eth_getLogs', [{
+        address: Object.keys(WATCH_TOKENS),
+        fromBlock: '0x' + (from + 1).toString(16), toBlock: '0x' + to.toString(16),
+        topics: [TRANSFER_TOPIC, null, recipients],
+      }]) ?? [])
+    }
+  } catch (e) {
+    // Hand the range back so the next pass retries it.
+    await supabase.from('deposit_scan_cursor').update({ last_scanned_block: from })
+      .eq('source', WATCH_CURSOR).eq('last_scanned_block', to)
+    console.error('[chain-transfer-webhook] watch getLogs failed:', e instanceof Error ? e.message : e)
+    return 0
+  }
+
+  let recorded = 0
+  for (const log of logs) {
+    const token = WATCH_TOKENS[String(log.address).toLowerCase()]
+    if (!token || log.removed) continue
+    const fromTopic = String(log.topics?.[1] ?? '')
+    const toAddress = '0x' + String(log.topics?.[2] ?? '').slice(-40)
+    let amount: number
+    try { amount = Number(BigInt(log.data)) / (10 ** token.decimals) } catch { continue }
+    if (!Number.isFinite(amount) || amount <= 0) continue
+    const out = await processTransfer(supabase, {
+      symbol: token.symbol,
+      isMint: fromTopic.toLowerCase() === MINT_FROM_TOPIC,
+      fromAddress: '0x' + fromTopic.slice(-40),
+      toAddress, amount, txHash: String(log.transactionHash),
+    })
+    if (out.recorded || out.completedClaim) recorded++
+  }
+  return recorded
+}
+
+async function runWatcher(supabase: SupabaseClient): Promise<{ passes: number; recorded: number }> {
+  const { data: rows } = await supabase.from('users').select('wallet_address').not('wallet_address', 'is', null)
+  const wallets: string[] = [...new Set<string>((rows ?? []).map((r: any) => String(r.wallet_address).toLowerCase())
+    .filter((a: string) => /^0x[0-9a-f]{40}$/.test(a)))]
+  let passes = 0, recorded = 0
+  if (!wallets.length) return { passes, recorded }
+  const until = Date.now() + WATCH_LOOP_MS
+  while (Date.now() < until) {
+    try { recorded += await watchPass(supabase, wallets) } catch (e) {
+      console.error('[chain-transfer-webhook] watch pass failed:', e instanceof Error ? e.message : e)
+    }
+    passes++
+    await new Promise(r => setTimeout(r, WATCH_INTERVAL_MS))
+  }
+  return { passes, recorded }
+}
+
 // The cron job sends the vault's claim_worker_service_key, which need not be
 // byte-identical to this function's own service key (other jobs rely on the
 // gateway's verify_jwt, which is off here so Circle can call in). Ask Auth:
@@ -479,9 +668,12 @@ Deno.serve(async (req: Request) => {
     try { mode = JSON.parse(rawBody || '{}')?.mode ?? '' } catch { /* not a sweep */ }
     if (mode === 'sweep') {
       if (!await isServiceRoleBearer(req.headers.get('authorization'))) return json({ ok: false, error: 'unauthorized' }, 401)
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
       lastSweepAt = 0
-      await sweepUnnotifiedReceives(createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY))
-      return json({ ok: true, swept: true })
+      await sweepUnnotifiedReceives(supabase)
+      // The same once-a-minute job drives the Arc log watcher (~45s of 5s passes).
+      const watch = await runWatcher(supabase)
+      return json({ ok: true, swept: true, watch })
     }
   }
 
@@ -577,63 +769,6 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: 'unauthorized' }, 401)
   }
 
-  if (isMint) {
-    // A mint (from address(0)) is a CCTP claim or similar system mint, not a
-    // generic external deposit — see tryCompleteClaimFromMint's own comment
-    // for why matching by wallet+amount here is safe and already-precedented
-    // in this codebase. Only USDC claims are tracked; EURC/cirBTC mints have
-    // no `claims` rows to match against, so they fall through to `ignored`
-    // exactly as before.
-    if (token.symbol === 'USDC') {
-      const completedClaimId = await tryCompleteClaimFromMint(supabase, toAddress, n.txHash, amount)
-      if (completedClaimId) {
-        return json({ ok: true, completedClaim: completedClaimId, wallet: toAddress, amount, token: token.symbol })
-      }
-    }
-    return json({ ok: true, ignored: 'mint (from address(0)) - no matching pending/recent-failed claim found' })
-  }
-  if (!user) return json({ ok: true, ignored: 'recipient is not a MeshPort wallet' })
-
-  try {
-    // Same three-layer classification claim-recovery-scan already
-    // established this session, in the same order, for the same reasons -
-    // see trackedFeatureCorrelation.ts and knownInternalContracts.ts for
-    // the full reasoning on each. No TOCTOU poll here: this writer is
-    // usually the FASTEST of all of them to run, so a poll-for-the-other-
-    // writer's-row check would almost always find nothing yet regardless
-    // of outcome - the two deterministic checks below are what actually
-    // closes the collision cases, not timing.
-    if (isKnownInternalContract(fromAddress, KNOWN_INTERNAL_EXTRA)) {
-      return json({ ok: true, ignored: 'sender is a known-internal contract (swap/BulkPay/CCTP/P2P escrow)' })
-    }
-    if (await findCorrelatedTrackedFeature(supabase, 'arc', n.txHash)) {
-      return json({ ok: true, ignored: 'tx_hash correlates to a tracked Pay/BulkPay/Swap attempt' })
-    }
-    if (await recordedRow(supabase, toAddress, `recv_${n.txHash.toLowerCase()}`)) {
-      // Already recorded by a scanner — the catch-up sweep notifies it
-      // (exactly once, via its claim).
-      lastSweepAt = 0
-      await sweepUnnotifiedReceives(supabase)
-      return json({ ok: true, ignored: 'already recorded (notification handled by the catch-up sweep)' })
-    }
-
-    await recordExternalReceive(supabase, toAddress, user.id, n.txHash, amount, fromAddress, token.symbol)
-    // Phone notification the moment Circle reports the deposit — works with
-    // the app closed. Tag matches the app's in-app mirror (payment-<hash>),
-    // so the phone keeps one entry.
-    const pushed = await notifyExternalReceive(supabase, user.id, n.txHash, amount, fromAddress, token.symbol)
-    if (!pushed) {
-      // Not delivered — clear the flag so the catch-up sweep retries it.
-      await supabase.from('activity')
-        .update({ metadata: { recovered: false, note: 'External deposit', source: 'chain-transfer-webhook', receiveKind: 'external_deposit' } })
-        .eq('tx_hash', `recv_${n.txHash.toLowerCase()}`).eq('wallet_address', toAddress.toLowerCase())
-    }
-    return json({ ok: true, recorded: true, wallet: toAddress, amount, token: token.symbol })
-  } catch (e) {
-    console.error('[chain-transfer-webhook] failed:', e instanceof Error ? e.message : e)
-    // 200, not 500 - a transient DB hiccup here should not make Circle
-    // retry-storm this endpoint; the scan-based backstops still catch this
-    // transfer on their own schedule either way.
-    return json({ ok: false, error: e instanceof Error ? e.message : 'unknown error' })
-  }
+  const outcome = await processTransfer(supabase, { symbol: token.symbol, isMint, fromAddress, toAddress, amount, txHash: n.txHash, user })
+  return json({ ok: true, ...outcome })
 })
