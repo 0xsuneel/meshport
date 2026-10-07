@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
-import { HubPage, HubPageItem, HubPageBack } from '@/components/multichain/HubPage'
+import { HubPage, HubPageBack } from '@/components/multichain/HubPage'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
@@ -3511,11 +3511,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           {/* Moves up with the amount keypad so the amount stays in view. */}
           <motion.div animate={{ y: -keypadLift }} initial={false} transition={KEYPAD_SPRING}
             style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <HubPageItem i={0}>{formRecipient}</HubPageItem>
-            <HubPageItem i={1}>{formAmount}</HubPageItem>
-            <HubPageItem i={2}>{formDestination}</HubPageItem>
-            <HubPageItem i={3}>{formRoute}</HubPageItem>
-            {formGasWarning && <HubPageItem i={4}>{formGasWarning}</HubPageItem>}
+            {formRecipient}
+            {formAmount}
+            {formDestination}
+            {formRoute}
+            {formGasWarning}
           </motion.div>
         </HubPage>
       )}
@@ -3546,7 +3546,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   : { opacity: 0, transition: { delay: 0.32, duration: 0 } } },
                 exit: 'leave',
                 className: 'fixed inset-0 z-40 overflow-y-auto',
-                style: { background: 'var(--bg)', maxWidth: 430, marginLeft: 'auto', marginRight: 'auto',
+                style: { background: 'var(--bg)', maxWidth: 430, marginLeft: 'auto', marginRight: 'auto', boxShadow: '-10px 0 28px rgba(0,0,0,0.28)',
                   paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' } }
             : { initial: { y: '100%' }, animate: { y: 0 }, exit: { y: '100%' }, transition: { duration: 0.34, ease: [0.32, 0.72, 0, 1] },
                 className: `${embedded ? 'fixed' : 'absolute'} inset-0 z-40 overflow-y-auto`,
