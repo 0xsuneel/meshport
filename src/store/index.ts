@@ -201,7 +201,9 @@ export const useAuthStore = create<AuthStore>()(
         // locally in ANY form.
         const effectiveSource = source !== undefined ? source : get().walletSource
         if (privateKey && effectiveSource !== 'social-auto') {
-          cacheSessionPrivateKey(address, privateKey)
+          // cacheSessionPrivateKey is now async (device-wraps before writing
+          // sessionStorage); fire-and-forget from this sync setter.
+          void cacheSessionPrivateKey(address, privateKey)
         }
         // A real key means recovery is no longer needed — no matter which
         // of the several paths got us here (mnemonic derive, local

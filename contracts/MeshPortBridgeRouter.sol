@@ -119,6 +119,11 @@ contract MeshPortBridgeRouter {
         ));
     }
 
+    /// Reject any accidental native-token transfers — this contract only handles
+    /// ERC-20 USDC and should never accumulate native balance. Any ETH/native
+    /// sent here directly would be permanently locked (no sweep function exists).
+    receive() external payable { revert("MeshPortBridgeRouter: no native token accepted"); }
+
     /// Pull, take the fee and burn — all in this one transaction.
     function bridgeWithAuthorization(Bridge calldata b, Authorization calldata a) external returns (bytes32 nonce) {
         if (b.token == address(0)) revert ZeroToken();
@@ -138,6 +143,12 @@ contract MeshPortBridgeRouter {
         if (b.fee > 0 && !usdc.transfer(feeRecipient, b.fee)) revert TransferFailed();
 
         // 3. Burn the rest to the recipient on the destination chain.
+        // Reset any stale allowance to 0 first — some ERC-20 tokens (and older
+        // USDC versions on certain chains) revert on non-zero-to-non-zero
+        // approve. The router never keeps a balance between calls, but a
+        // partial-fill or revert on a previous transaction could theoretically
+        // leave a dust allowance; resetting to 0 first is the safe pattern.
+        if (!usdc.approve(address(tokenMessenger), 0)) revert ApproveFailed();
         if (!usdc.approve(address(tokenMessenger), amount)) revert ApproveFailed();
         if (b.hookData.length > 0) {
             tokenMessenger.depositForBurnWithHook(
@@ -150,6 +161,12 @@ contract MeshPortBridgeRouter {
                 b.maxFee, b.minFinalityThreshold
             );
         }
+        // Reset the allowance back to 0 after the burn so no residual approval
+        // persists on the TokenMessenger. CCTP's depositForBurn consumes the
+        // exact approved amount, so this should always succeed (nothing left to
+        // approve), but doing it explicitly makes the intent clear and protects
+        // against any edge case where the burn consumed less than approved.
+        usdc.approve(address(tokenMessenger), 0);
 
         emit Bridged(a.from, nonce, b.destinationDomain, b.mintRecipient, amount, b.fee, b.maxFee);
     }

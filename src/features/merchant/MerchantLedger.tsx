@@ -21,7 +21,7 @@ import { merchantQrChain, MERCHANT_QR_EXTERNAL } from '@/lib/merchantQr'
 import { ChainPicker, WalletPaymentDetails } from './MerchantQrPanel'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
-import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
+import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 
 /** Chat text for a request / bill — the chat renders it as a live card. */
 function chatMessageFor(i: MerchantIntent): string {
@@ -317,7 +317,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const link = orderPayLink(code, intent?.orderNumber)
   const [verifyOpen, setVerifyOpen] = useState(false)
-  const [vChain, setVChain] = useState('Arc_Testnet')
+  const [vChain, setVChain] = useState(ARC_CHAIN_KEY)
   const [vHash, setVHash] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -625,7 +625,7 @@ function MerchantPaymentReceipt({ p, orderNumber, note, onViewOrder, onClose }: 
   onViewOrder?: () => void; onClose: () => void
 }) {
   const arriving = isArriving(p)
-  const onArc = p.chain === 'Arc_Testnet'
+  const onArc = p.chain === ARC_CHAIN_KEY
   const href = onArc ? arcExplorerTxUrl(p.txHash) : explorerTxUrl(p.chain, p.txHash)
   const chainName = onArc ? 'Arc' : (CHAIN_LABEL[p.chain] ?? p.chain.replace(/_/g, ' '))
   const from = p.customerUsername ? `${p.customerUsername.replace(/\.arc$/i, '')}.arc` : short(p.from)

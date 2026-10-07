@@ -171,11 +171,19 @@ async function restInsertMessage(row: Record<string, unknown>): Promise<{ data: 
     const akey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
     if (!url || !akey) return { data: null, error: 'No Supabase config' }
 
+    // Use the session JWT as the Authorization bearer so the write is scoped
+    // to the signed-in user; fall back to anon key only when there is no session.
+    let token = akey
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) token = session.access_token
+    } catch { /* fall through */ }
+
     const res = await fetch(`${url}/rest/v1/messages`, {
       method: 'POST',
       headers: {
         'apikey':        akey,
-        'Authorization': `Bearer ${akey}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type':  'application/json',
         'Prefer':        'return=representation',
       },
@@ -870,10 +878,19 @@ export async function sendMessage(params: {
 }
 
 export async function markMessagesRead(conversationId: string, myId: string): Promise<void> {
-  // Use direct REST with service key — client-side UPDATE fails with sb_publishable_ key
+  // Use an authenticated session token — using the anon key as the
+  // Authorization bearer on a PATCH allows any unauthenticated caller to
+  // mark any user's messages as read (or inject messages if RLS allows
+  // anon writes). The session JWT scopes the write to the signed-in user.
   try {
     const url  = (import.meta.env.VITE_SUPABASE_URL as string) || ''
     const akey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
+    let token = akey // apikey header always uses the anon key
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) token = session.access_token
+    } catch { /* fall through — use anon key as last resort */ }
+
     // Same self-chat fix as chatService.ts's markRead (the function actually
     // in use) — `sender_id=neq.${myId}` matches zero rows in a self-chat
     // (participant_a === participant_b === myId), since every message's
@@ -884,7 +901,7 @@ export async function markMessagesRead(conversationId: string, myId: string): Pr
     try {
       const res = await fetch(
         `${url}/rest/v1/conversations?id=eq.${conversationId}&select=participant_a,participant_b`,
-        { headers: { apikey: akey, Authorization: `Bearer ${akey}` } },
+        { headers: { apikey: akey, Authorization: `Bearer ${token}` } },
       )
       const rows = await res.json().catch(() => [])
       const conv = Array.isArray(rows) ? rows[0] : null
@@ -898,7 +915,7 @@ export async function markMessagesRead(conversationId: string, myId: string): Pr
         method: 'PATCH',
         headers: {
           'apikey':        akey,
-          'Authorization': `Bearer ${akey}`,
+          'Authorization': `Bearer ${token}`,
           'Content-Type':  'application/json',
           'Prefer':        'return=minimal',
         },
@@ -1148,137 +1165,27 @@ export async function fetchTransactions(walletAddress: string, limit = 100): Pro
   return (data ?? []) as DbTransaction[]
 }
 
-// ─── MULTICHAIN TRANSACTIONS — persistent cross-device classification ──────────
-// Written by MultichainClaimPage and MultichainTransferPage on every successful
-// bridge/claim operation. Read by activityService to classify Transfer logs
-// as 'multichain' instead of 'received'. Works on any device after login.
+// ─── MULTICHAIN TRANSACTIONS — IndexedDB-backed, no Supabase table needed ─────
+// Previously backed by the `multichain_transactions` Supabase table.
+// Replaced with multichainStore.ts (IndexedDB) — same exported signatures,
+// zero callers need to change. The Supabase table can be dropped from the
+// project's DB schema once this ships.
+//
+// Why IDB: tx hashes are on-chain facts, not user data. No server needed.
+// See src/lib/multichainStore.ts for the full schema and rationale.
 
-export async function saveMultichainTx(params: {
-  txHash:        string
-  walletAddress: string
-  type:          'claim' | 'deposit' | 'bridge'
-  amount?:       number
-  sourceChain?:  string
-  destChain?:    string
-}): Promise<void> {
-  const { error } = await supabase.from('multichain_transactions').upsert({
-    tx_hash:        params.txHash.toLowerCase(),
-    wallet_address: params.walletAddress.toLowerCase(),
-    type:           params.type,
-    amount:         params.amount ?? null,
-    source_chain:   params.sourceChain ?? null,
-    dest_chain:     params.destChain ?? null,
-  }, { onConflict: 'tx_hash' })
-  if (error) console.error('[Supabase] saveMultichainTx error:', error.message)
-}
+export type {
+  MultichainTxRecord,
+  SwapTxRecord,
+} from './multichainStore'
 
-export async function fetchMultichainTxHashes(walletAddress: string): Promise<Set<string>> {
-  const { data, error } = await supabase
-    .from('multichain_transactions')
-    .select('tx_hash')
-    .eq('wallet_address', walletAddress.toLowerCase())
-    .order('created_at', { ascending: false })
-    .limit(200)
-  if (error) {
-    console.error('[Supabase] fetchMultichainTxHashes error:', error.message)
-    return new Set()
-  }
-  return new Set((data ?? []).map((r: any) => r.tx_hash))
-}
-
-// Returns full rows for deposit/bridge txs — used to show them in Activity
-// even though they happened on external chains (not visible in Arc eth_getLogs)
-export interface MultichainTxRecord {
-  txHash:      string
-  type:        'claim' | 'deposit' | 'bridge'
-  amount:      number | null
-  sourceChain: string | null
-  destChain:   string | null
-  createdAt:   string
-}
-
-export async function fetchMultichainTxRecords(
-  walletAddress: string,
-): Promise<MultichainTxRecord[]> {
-  const { data, error } = await supabase
-    .from('multichain_transactions')
-    .select('tx_hash, type, amount, source_chain, dest_chain, created_at')
-    .eq('wallet_address', walletAddress.toLowerCase())
-    .order('created_at', { ascending: false })
-    .limit(200)
-  if (error) {
-    console.error('[Supabase] fetchMultichainTxRecords error:', error.message)
-    return []
-  }
-  return (data ?? []).map((r: any) => ({
-    txHash:      r.tx_hash,
-    type:        r.type,
-    amount:      r.amount != null ? parseFloat(r.amount) : null,
-    sourceChain: r.source_chain ?? null,
-    destChain:   r.dest_chain   ?? null,
-    createdAt:   r.created_at,
-  }))
-}
-
-// ── Swap history (cross-device) ───────────────────────────────────────────────
-// Stored in multichain_transactions with type='swap'.
-// source_chain = tokenIn, dest_chain = tokenOut for easy filtering.
-
-export async function saveSwapTx(params: {
-  txHash:      string
-  walletAddress: string
-  tokenIn:     string
-  tokenOut:    string
-  amountIn:    string
-  amountOut:   string
-  status:      'success' | 'failed'
-}): Promise<void> {
-  const { error } = await supabase.from('multichain_transactions').upsert({
-    tx_hash:        params.txHash.toLowerCase(),
-    wallet_address: params.walletAddress.toLowerCase(),
-    type:           'swap',
-    amount:         parseFloat(params.amountIn) || null,
-    source_chain:   params.tokenIn,   // repurposed: tokenIn
-    dest_chain:     params.tokenOut,  // repurposed: tokenOut
-    // store amountOut + status in note field as JSON
-    note:           JSON.stringify({ amountOut: params.amountOut, status: params.status }),
-  }, { onConflict: 'tx_hash' })
-  if (error) console.error('[Supabase] saveSwapTx error:', error.message)
-}
-
-export interface SwapTxRecord {
-  txHash:    string
-  tokenIn:   string
-  tokenOut:  string
-  amountIn:  string
-  amountOut: string
-  status:    'success' | 'failed'
-  timestamp: number
-}
-
-export async function fetchSwapRecords(walletAddress: string): Promise<SwapTxRecord[]> {
-  const { data, error } = await supabase
-    .from('multichain_transactions')
-    .select('tx_hash, source_chain, dest_chain, amount, note, created_at')
-    .eq('wallet_address', walletAddress.toLowerCase())
-    .eq('type', 'swap')
-    .order('created_at', { ascending: false })
-    .limit(100)
-  if (error) { console.error('[Supabase] fetchSwapRecords error:', error.message); return [] }
-  return (data ?? []).map((r: any) => {
-    let amountOut = '0', status: 'success' | 'failed' = 'success'
-    try { const n = JSON.parse(r.note || '{}'); amountOut = n.amountOut || '0'; status = n.status || 'success' } catch {}
-    return {
-      txHash:    r.tx_hash,
-      tokenIn:   r.source_chain ?? '',
-      tokenOut:  r.dest_chain ?? '',
-      amountIn:  String(r.amount ?? '0'),
-      amountOut,
-      status,
-      timestamp: new Date(r.created_at).getTime(),
-    }
-  })
-}
+export {
+  saveMultichainTx,
+  fetchMultichainTxHashes,
+  fetchMultichainTxRecords,
+  saveSwapTx,
+  fetchSwapRecords,
+} from './multichainStore'
 
 // ── Support tickets — Help & Support ────────────────────────────────────────
 export interface SupportTicket {

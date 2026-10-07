@@ -4,7 +4,7 @@
  */
 import { createPublicClient, createWalletClient, parseUnits, encodeFunctionData, parseGwei, getAddress, isAddress } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { ARC_RPCS, arcTransport, arcRpcJson } from './arc'
+import { arcTransport, arcRpcJson } from './arc'
 import { ARC, ARC_TOKENS, ARC_CHAIN_INLINE as REGISTRY_ARC_CHAIN_INLINE } from '@/blockchain/chains'
 
 // ─── Chain/token constants re-exported from the shared registry ─────────────
@@ -524,21 +524,17 @@ export async function sendEURC(params: {
     maxFeePerGas: parseGwei('25'),
     maxPriorityFeePerGas: parseGwei('1'),
     nonce: serverNonce,
-    chain: {
-      id: ARC_TESTNET.chainId,
-      name: ARC_TESTNET.name,
-      nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
-      rpcUrls: { default: { http: ARC_RPCS } },
-    },
+    // MAINNET FIX: sendEURC previously duplicated the chain definition inline
+    // instead of importing ARC_CHAIN_INLINE. The inline copy hardcoded the
+    // testnet chain id/name directly, so EURC sends would silently broadcast
+    // as "wrong chain" on mainnet. ARC_CHAIN_INLINE is already env-driven via
+    // blockchain/chains.ts (same fix sendUSDC already benefits from by using
+    // it there). This bug only affected EURC; USDC used ARC_CHAIN_INLINE.
+    chain: ARC_CHAIN_INLINE,
   } as unknown as Parameters<typeof walletClient.sendTransaction>[0])
 
   void markPayAttemptSubmitted(attemptId, txHash).catch(() => { /* best-effort */ })
 
-  // PERF FIX (2026-09-17, explicit product decision): reverted back to
-  // optimistic return — see sendUSDC's own comment above for the full
-  // reasoning. Confirmed neither caller branches UI on state:
-  // 'success' vs 'pending'; confirmTransactionInBackground remains the
-  // real correction path for the rare revert case.
   return {
     txHash,
     explorerUrl: `${ARC_TESTNET.explorerUrl}/tx/${txHash}`,
@@ -657,6 +653,8 @@ export async function sendCirBTC(params: {
 
   // Cast: see comment on sendUSDC's sendTransaction call above — viem's
   // overload resolution spuriously demands an EIP-4844 `kzg` field here too.
+  // MAINNET FIX: same inline chain duplication bug as sendEURC — replaced
+  // with ARC_CHAIN_INLINE (env-driven, matches sendUSDC and now sendEURC).
   const txHash = await walletClient.sendTransaction({
     to: CIRBTC_CONTRACT,
     data,
@@ -664,12 +662,7 @@ export async function sendCirBTC(params: {
     maxFeePerGas: parseGwei('25'),
     maxPriorityFeePerGas: parseGwei('1'),
     nonce: serverNonce,
-    chain: {
-      id: ARC_TESTNET.chainId,
-      name: ARC_TESTNET.name,
-      nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
-      rpcUrls: { default: { http: ARC_RPCS } },
-    },
+    chain: ARC_CHAIN_INLINE,
   } as unknown as Parameters<typeof walletClient.sendTransaction>[0])
 
   void markPayAttemptSubmitted(attemptId, txHash).catch(() => { /* best-effort */ })

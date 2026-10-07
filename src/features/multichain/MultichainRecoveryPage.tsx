@@ -1,4 +1,9 @@
 // src/features/multichain/MultichainRecoveryPage.tsx
+// MAINNET FIX: ARC_CHAIN_KEY replaces all 'Arc_Testnet' literals so recovery
+// works correctly on both testnet and mainnet deployments.
+const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
+  ? 'Arc'
+  : 'Arc_Testnet'
 //
 // One place to recover money stuck in a cross-chain move:
 //   • CCTP claims into Arc   → re-queue MeshPort's relayer
@@ -86,12 +91,12 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
           const rows = await getUnifiedBalances(kit, walletAddress)
           // Dust (below UB_MIN_SWEEP per chain) is never listed — it stays in
           // the Unified Balance as the safety margin for the next spend.
-          setUbHeld(rows.filter(r => r.chain !== 'Arc_Testnet' && (r.confirmed >= UB_MIN_SWEEP || r.pending >= UB_MIN_SWEEP)))
+          setUbHeld(rows.filter(r => r.chain !== ARC_CHAIN_KEY && (r.confirmed >= UB_MIN_SWEEP || r.pending >= UB_MIN_SWEEP)))
           setUbDust([])
           // Stuck transfers draw on the Arc Unified Balance, oldest first.
           try {
             const { listUbStuckTransfers } = await import('@/lib/ubFundRecovery')
-            let arcLeft = rows.filter(r => r.chain === 'Arc_Testnet').reduce((s, r) => s + r.confirmed, 0)
+            let arcLeft = rows.filter(r => r.chain === ARC_CHAIN_KEY).reduce((s, r) => s + r.confirmed, 0)
             const stuck = (await listUbStuckTransfers(walletAddress)).map(t => {
               const available = Math.min(t.amount, arcLeft)
               arcLeft = Math.max(0, arcLeft - available)
@@ -196,7 +201,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
   // not MeshPort, not Circle's API — only the user's own wallet. Started only
   // when the user taps it; completes by itself on the next app open after 7 days.
   const withdrawTrustless = async (key: string, p: { chain: string; amount: number; label: string; replaceRowId?: string }) => {
-    const where = p.chain === 'Arc_Testnet' ? 'your Arc wallet' : `your wallet on ${p.chain.replace(/_/g, ' ')}`
+    const where = p.chain === ARC_CHAIN_KEY ? 'your Arc wallet' : `your wallet on ${p.chain.replace(/_/g, ' ')}`
     if (!window.confirm(`Withdraw ${p.amount.toFixed(2)} USDC to ${where} without Circle's service?\n\nThis is an on-chain withdrawal only you can do. The funds are locked for 7 days, then return automatically. Use it only if sending normally keeps failing.`)) return
     setBusy(key)
     try {
@@ -351,7 +356,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
             )}
             {t.available >= 0.1 && (
               <button style={{ ...btn, marginTop: 8, width: '100%', fontSize: 12.5, color: 'var(--text-secondary)' }} disabled={isBusy}
-                onClick={() => void withdrawTrustless(key, { chain: 'Arc_Testnet', amount: t.available, label: t.destinationLabel, replaceRowId: t.id })}>
+                onClick={() => void withdrawTrustless(key, { chain: ARC_CHAIN_KEY, amount: t.available, label: t.destinationLabel, replaceRowId: t.id })}>
                 Withdraw without Circle (7-day wait)
               </button>
             )}

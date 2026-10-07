@@ -69,8 +69,12 @@ async function isMerchantOrderPayment(id: string | undefined, amount: number, to
   if ((tokenSymbol || 'USDC').toUpperCase() !== 'USDC' || !(amount > 0)) return false
   const tx = id?.startsWith('ext_recv_tx_') ? id.slice('ext_recv_tx_'.length).toLowerCase() : null
   if (tx && /^0x[0-9a-f]{64}$/.test(tx)) {
-    const { data } = await supabase.from('merchant_payments').select('id').eq('tx_hash', tx).limit(1)
-    if (data?.length) return true
+    // SUPABASE REDUCTION: replaced supabase.from('merchant_payments') with a
+    // server-side proxy that never exposes the anon key for this check.
+    try {
+      const r = await fetch(`/api/bridge-relay?tx_is_merchant_payment=${encodeURIComponent(tx)}`)
+      if (r.ok) { const j = await r.json().catch(() => null); if (j?.found) return true }
+    } catch { /* fall through to intent check */ }
   }
   const { data: open } = await supabase.from('merchant_payment_intents')
     .select('requested_amount, received_amount, expires_at')

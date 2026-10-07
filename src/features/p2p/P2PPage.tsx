@@ -6,6 +6,7 @@
 // clearly — the DemoBadge/DemoBanner components below, not just a one-time
 // disclaimer buried somewhere.
 
+import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { safeStorageUrl, openExternal } from '@/lib/safeUrl'
 import { useState, useEffect, useCallback, useRef, type ReactNode, type CSSProperties } from 'react'
 import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
@@ -1420,7 +1421,7 @@ export function P2PTradePage() {
           </div>
         )}
         {trade.status === 'completed' && trade.txHash && (
-          <a href={`https://testnet.arcscan.app/tx/${trade.txHash}`} target="_blank" rel="noopener noreferrer"
+          <a href={arcExplorerTxUrl(trade.txHash)} target="_blank" rel="noopener noreferrer"
             style={{ display: 'flex', alignItems: 'center', gap: 6, color: COLORS.success, fontSize: 12.5, marginBottom: 10, textDecoration: 'none' }}>
             <CheckCircle2 size={14} /> USDC transferred on Arc Testnet — View on Explorer ↗
           </a>

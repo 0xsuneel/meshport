@@ -13,6 +13,7 @@ import { CheckCircle2, Clock, Receipt } from 'lucide-react'
 import { cardInnerWidth } from '@/features/chat/chatCard'
 import { formatAmount } from '@/lib/utils'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
   watchPayment, getPayment, orderLabel, STATUS_LABEL, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type PaymentView,
 } from '@/lib/merchantPay'
@@ -209,7 +210,7 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
     : STATUS_LABEL[v.status]
   const hash = payment?.txHash || null
   const explorerHref = hash
-    ? (route && route !== 'Arc_Testnet' ? null : `https://testnet.arcscan.app/tx/${hash}`)
+    ? (route && route !== ARC_CHAIN_KEY ? null : arcExplorerTxUrl(hash))
     : null
 
   return (

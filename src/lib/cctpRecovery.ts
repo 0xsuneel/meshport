@@ -15,6 +15,7 @@ import { privateKeyToAccount } from 'viem/accounts'
 import { supabase } from './supabase'
 import { describeFunctionsError } from './describeFunctionsError'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
+import { ARC_CHAIN_KEY } from './chainExplorers'
 
 /** A recovery step already running for a row — started by the user or by MeshPort. */
 export type RecoveryAction = { kind: 'relay' | 'reattest'; at: string; by: 'user' | 'meshport' }
@@ -85,7 +86,7 @@ export async function relayMint(kind: 'claim' | 'transfer', id: string): Promise
   const r = await fetch('/api/bridge-relay', {
     method: 'POST', headers: await authApiHeaders(),
     body: JSON.stringify({
-      action: 'call', chain: kind === 'claim' ? 'Arc_Testnet' : d.destinationChain, to: d.messageTransmitter,
+      action: 'call', chain: kind === 'claim' ? ARC_CHAIN_KEY : d.destinationChain, to: d.messageTransmitter,
       data: encodeFunctionData({ abi: RECEIVE_MESSAGE_ABI, functionName: 'receiveMessage', args: [d.message, d.attestation] }),
     }),
   })
@@ -165,20 +166,18 @@ export async function selfMintClaim(id: string, _privateKey?: string): Promise<{
 
 /** UB: pending 7-day withdrawals started by lib/ubFundRecovery.ts. */
 export async function listPendingUbRecoveries(walletAddress: string): Promise<Array<{ id: string; amount: number; createdAt: string; readyAt: string }>> {
-  const { data } = await supabase.from('activity')
-    .select('id, amount, created_at, metadata')
-    .eq('activity_type', 'withdraw').eq('status', 'pending')
-    // Only real 7-day withdrawals (initiateRemoveFund). Stuck UB transfers
-    // are also pending 'withdraw' rows, but they are NOT withdrawals — they
-    // wait for the user to choose in Recover (metadata.ub_stuck_transfer).
-    .contains('metadata', { ub_recovery: true })
-    .ilike('wallet_address', walletAddress)
-    .order('created_at', { ascending: false })
-  return (data ?? []).map((r: any) => ({
-    id: r.id as string,
-    amount: Number(r.amount),
-    createdAt: r.created_at as string,
-    readyAt: (r.metadata?.eligible_at as string | undefined)
-      ?? new Date(new Date(r.created_at as string).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-  }))
+  // SUPABASE REDUCTION: replaced supabase.from('activity') with the
+  // /api/bridge-relay?ub_pending_recoveries= proxy. The server applies the
+  // ub_recovery:true filter and returns only safe-to-expose fields.
+  try {
+    const r = await fetch(`/api/bridge-relay?ub_pending_recoveries=${encodeURIComponent(walletAddress.toLowerCase())}`)
+    if (!r.ok) return []
+    const rows = await r.json().catch(() => []) as Array<{ id: string; amount: number; createdAt: string; readyAt: string }>
+    return rows.map(row => ({
+      id: row.id,
+      amount: Number(row.amount),
+      createdAt: row.createdAt,
+      readyAt: row.readyAt || new Date(new Date(row.createdAt).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    }))
+  } catch { return [] }
 }

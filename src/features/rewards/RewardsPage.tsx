@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 import {Gift, Star, CheckCircle, Loader2, Lock, ExternalLink, Info, X} from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import {useAuthStore} from '@/store'
@@ -74,7 +75,7 @@ function RewardClaimReceipt({ claim, onClose }: { claim: ClaimRecord; onClose: (
         { label: 'Network', value: 'Arc Testnet' },
       ]}
       fullHash={hash || undefined}
-      links={hash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash, href: `https://testnet.arcscan.app/tx/${hash}` }] : undefined}
+      links={hash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash, href: arcExplorerTxUrl(hash) }] : undefined}
     />
   )
 }
@@ -342,7 +343,7 @@ export function RewardsPage() {
             </p>
           </div>
           {claimSuccess.txHash && (
-            <a href={`https://testnet.arcscan.app/tx/${claimSuccess.txHash}`}
+            <a href={arcExplorerTxUrl(claimSuccess.txHash)}
               target="_blank" rel="noopener noreferrer"
               className="text-xs text-brand flex items-center gap-1 ml-6">
               <ExternalLink className="w-3 h-3" /> View on ArcScan

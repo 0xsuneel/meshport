@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { SHEET_SPRING, SHEET_BACKDROP, TOAST_MOTION, SHEET_EXIT } from '@/lib/motion'
 import { useNavigate } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
@@ -747,7 +748,7 @@ export function ContactsPage() {
                   <p className="text-lg font-bold text-text-primary">{payPending ? 'Payment Submitted' : 'Payment Sent'}</p>
                   <p className="text-sm text-text-secondary">{formatAmount(parseFloat(payAmount) || 0)} USDC sent to {(payTarget.username || '').replace(/\.arc$/, '')}.arc</p>
                   {payTxHash && (
-                    <a href={`https://testnet.arcscan.app/tx/${payTxHash}`} target="_blank" rel="noopener noreferrer"
+                    <a href={arcExplorerTxUrl(payTxHash)} target="_blank" rel="noopener noreferrer"
                       className="text-xs text-brand">View on ArcScan →</a>
                   )}
                 </div>

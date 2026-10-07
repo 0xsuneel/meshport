@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { copyToClipboard } from '@/lib/utils'
 import { useUIStore } from '@/store'
+import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 
 export interface TxRow { label: string; value: string; color?: string }
 
@@ -192,7 +193,7 @@ export function TransactionComplete({
       {txHash && (
         <motion.a
           variants={item}
-          href={`https://testnet.arcscan.app/tx/${txHash}`}
+          href={`${arcExplorerTxUrl(txHash)}`}
           target="_blank" rel="noreferrer"
           style={{
             display: 'flex', alignItems: 'center', gap: 6,

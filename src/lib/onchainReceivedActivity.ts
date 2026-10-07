@@ -32,7 +32,8 @@
 
 import { P2P_ESCROW_CONTRACT_ADDRESS } from './p2pEscrowContract'
 
-const ARC_EXPLORER_API = 'https://testnet.arcscan.app/api/v2'
+import { ARC_EXPLORER } from './chainExplorers'
+const ARC_EXPLORER_API = `${ARC_EXPLORER}/api/v2`
 
 // Same known-internal-contracts list as deposit-scan-all's own — a
 // transfer FROM one of these is definitionally a swap/bridge output leg,

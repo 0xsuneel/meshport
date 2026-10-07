@@ -15,7 +15,7 @@ import {
 import { AdminCard } from '@/components/admin/AdminCard'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { copyToClipboard } from '@/lib/utils'
-import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
+import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
   adminListStuck, adminInspect, adminFinishClaim, adminReattest, adminRelayTransfer, adminRequeueUbClaim,
   adminNotifyUser, fetchRecoveryLog, type StuckItem, type StuckKind, type AdminActionResult, type RecoveryLogRow,
@@ -69,8 +69,8 @@ function txUrl(item: StuckItem): string | null {
   if (!item.txHash) return null
   // Claims burn/deposit on the source chain; transfers and UB deposits start on Arc.
   const chain = item.kind === 'claim' || item.kind === 'ub_claim' ? item.from
-    : item.kind === 'ub_withdrawal' ? item.from : 'Arc_Testnet'
-  return chain === 'Arc_Testnet' ? arcExplorerTxUrl(item.txHash) : explorerTxUrl(chain === 'Polygon_Amoy_Testnet' ? 'Polygon_Sepolia' : chain, item.txHash)
+    : item.kind === 'ub_withdrawal' ? item.from : ARC_CHAIN_KEY
+  return chain === ARC_CHAIN_KEY ? arcExplorerTxUrl(item.txHash) : explorerTxUrl(chain === 'Polygon_Amoy_Testnet' ? 'Polygon_Sepolia' : chain, item.txHash)
 }
 function statusTone(item: StuckItem): { text: string; color: string } {
   if (item.kind === 'ub_transfer') return { text: 'Waiting for user', color: 'var(--warning)' }

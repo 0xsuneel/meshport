@@ -98,6 +98,19 @@ function hashOf(r: any): string | undefined {
   return realTxHash(r?.txHash ?? r?.transactionHash ?? r?.hash ?? r?.result?.txHash ?? undefined)
 }
 
+// Derive the networkType from the env rather than hardcoding 'testnet'.
+// Hardcoding 'testnet' caused getBalances() to return 0 on mainnet
+// deployments, making claims and Recover permanently invisible.
+const UB_NETWORK_TYPE = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
+  ? 'mainnet'
+  : 'testnet'
+
+// The Arc destination chain key for UB spends — resolved from env so a
+// mainnet build targets Arc mainnet instead of the testnet chain ID.
+const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
+  ? 'Arc'
+  : 'Arc_Testnet'
+
 /** Confirmed Unified Balance per chain for this wallet. */
 export async function getUnifiedBalances(kit: any, walletAddr: string): Promise<Array<{ chain: string; confirmed: number; pending: number }>> {
   const res: any = await kit.unifiedBalance.getBalances({
@@ -105,7 +118,7 @@ export async function getUnifiedBalances(kit: any, walletAddr: string): Promise<
     // An address-only source can't tell the network, and App Kit then
     // defaults to MAINNET — which reported 0 for every testnet deposit, so
     // claims never saw their deposit confirm and Recover never listed it.
-    networkType: 'testnet',
+    networkType: UB_NETWORK_TYPE,
   })
   const rows: Array<{ chain: string; confirmed: number; pending: number }> = []
   for (const acct of res?.breakdown ?? []) {
@@ -125,7 +138,7 @@ async function confirmedOn(kit: any, walletAddr: string, chain: string): Promise
 export async function spendUnifiedToArc(params: {
   kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number; cushion?: number
 }): Promise<{ txHash?: string; received: number }> {
-  return spendUnifiedTo({ ...params, toChain: 'Arc_Testnet', recipient: params.walletAddr })
+  return spendUnifiedTo({ ...params, toChain: ARC_CHAIN_KEY, recipient: params.walletAddr })
 }
 
 // Destinations where Circle's Gateway forwarder mint has been failing
@@ -171,7 +184,7 @@ export async function spendUnifiedTo(params: {
   const send = Math.max(0, amount - fee - spendMargin(params.cushion))
   if (send <= 0) throw new Error(`Amount too small to cover the Gateway fee (${fee.toFixed(4)} USDC)`)
 
-  const selfMint = toChain !== 'Arc_Testnet' && GATEWAY_SELF_MINT_CHAINS.has(toChain)
+  const selfMint = toChain !== ARC_CHAIN_KEY && GATEWAY_SELF_MINT_CHAINS.has(toChain)
   if (selfMint) {
     const r: any = await kit.unifiedBalance.spend({ from: alloc(send), to: selfMintTo, token: 'USDC', amount: send.toFixed(6) })
     return { txHash: hashOf(r), received: send }
@@ -275,7 +288,7 @@ export async function spendDustToArc(params: {
   const dust = params.dust.filter(d => d.amount > 0.000001)
   const total = dust.reduce((s, d) => s + d.amount, 0)
   if (total <= 0) throw new Error('No leftover balance to claim')
-  const to = { chain: 'Arc_Testnet', recipientAddress: walletAddr, useForwarder: true }
+  const to = { chain: ARC_CHAIN_KEY, recipientAddress: walletAddr, useForwarder: true }
   const est: any = await kit.unifiedBalance.estimateSpend({
     from: { adapter, allocations: dust.map(d => ({ amount: d.amount.toFixed(6), chain: d.chain })) },
     to, token: 'USDC', amount: total.toFixed(6),
@@ -296,6 +309,64 @@ export async function spendDustToArc(params: {
 }
 
 // ── Server hand-off ─────────────────────────────────────────────────────────
+
+// CONCURRENCY FIX: signSpendToArc and signSpendAllToArc both temporarily
+// monkey-patch globalThis.fetch to intercept the App Kit transfer call
+// before it is submitted. If two of these run concurrently (e.g. merchant
+// auto-convert fires at the same time as a manual claim from another tab,
+// which is the exact case that the runMerchantAutoConvert logic leaves
+// possible), the two patched functions race on globalThis.fetch:
+//
+//   Tab A patches: globalThis.fetch = patchA  (saves realA = original)
+//   Tab B patches: globalThis.fetch = patchB  (saves realB = patchA, NOT original)
+//   Tab A restores: globalThis.fetch = realA  (original — correct)
+//   Tab B restores: globalThis.fetch = realB  (patchA — Tab A's stale patch)
+//
+// After that, every future fetch goes through Tab A's stale intercept: all
+// subsequent /v1/transfer calls (real spend/claim calls) are swallowed and
+// returned a fake 400, silently failing every Gateway operation.
+//
+// Fix: serialise all fetch-patch sections behind a single Web Lock
+// (cross-tab, cross-worker, cross-document) and a same-tab boolean guard.
+// Any concurrent call that cannot acquire the lock immediately returns an
+// error — it never patches fetch, and the caller gets a clear error message
+// rather than a silent failure or a corrupted fetch state.
+let _fetchPatchActive = false
+
+async function withFetchPatch<T>(fn: (realFetch: typeof fetch) => Promise<T>): Promise<T> {
+  // Same-tab guard: prevents two sign calls within the same JS context from
+  // patching simultaneously even before the Web Lock check runs.
+  if (_fetchPatchActive) throw new Error('A transfer is already being prepared — please wait a moment and try again')
+
+  const locks = typeof navigator !== 'undefined' ? (navigator as any).locks : undefined
+  if (locks?.request) {
+    // Cross-tab lock: any other tab holding this lock must release it first.
+    // { ifAvailable: true } returns immediately with lock=null if busy, so
+    // we never stall — we fail fast and let the caller retry instead.
+    return locks.request('meshport-fetch-patch', { ifAvailable: true }, async (lock: unknown) => {
+      if (!lock) throw new Error('A transfer is already being prepared in another tab — please wait a moment and try again')
+      return _runWithFetchPatch(fn)
+    })
+  }
+  // Web Locks not available (non-browser / old browser): fall back to the
+  // same-tab boolean guard only. Cross-tab safety degrades but same-tab
+  // concurrent calls are still protected.
+  return _runWithFetchPatch(fn)
+}
+
+async function _runWithFetchPatch<T>(fn: (realFetch: typeof fetch) => Promise<T>): Promise<T> {
+  _fetchPatchActive = true
+  const realFetch = globalThis.fetch
+  try {
+    return await fn(realFetch)
+  } finally {
+    // Always restore, even if fn threw, even if fn itself already restored
+    // (idempotent: restoring the same reference twice is harmless).
+    globalThis.fetch = realFetch
+    _fetchPatchActive = false
+  }
+}
+
 /**
  * Builds and signs the Gateway burn intent for "Unified Balance on
  * `fromChain` → user's own Arc wallet" WITHOUT submitting it: App Kit's
@@ -308,7 +379,7 @@ export async function signSpendToArc(params: {
   const { kit, adapter, walletAddr, fromChain, amount } = params
   const base = {
     from: { adapter, allocations: [{ amount: amount.toFixed(6), chain: fromChain }] },
-    to: { chain: 'Arc_Testnet', recipientAddress: walletAddr, useForwarder: true },
+    to: { chain: ARC_CHAIN_KEY, recipientAddress: walletAddr, useForwarder: true },
     token: 'USDC',
   }
   const est: any = await kit.unifiedBalance.estimateSpend({ ...base, amount: amount.toFixed(6) })
@@ -317,26 +388,27 @@ export async function signSpendToArc(params: {
   const send = Math.max(0, amount - fee - spendMargin(params.cushion))
   if (send <= 0) throw new Error(`Amount too small to cover the Gateway fee (${fee.toFixed(4)} USDC)`)
 
-  let captured: any = null
-  const realFetch = globalThis.fetch
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-    if (!captured && /\/v1\/transfer(\?|$)/.test(url) && (init?.method ?? 'GET').toUpperCase() === 'POST' && typeof init?.body === 'string') {
-      captured = JSON.parse(init.body)
-      // 4xx → App Kit stops without retrying; nothing is submitted.
-      return new Response(JSON.stringify({ success: false, message: 'captured for server submission' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
-    }
-    return realFetch(input as any, init)
-  }) as typeof fetch
-  try {
-    await kit.unifiedBalance.spend({
-      ...base,
-      amount: send.toFixed(6),
-      from: { adapter, allocations: [{ amount: send.toFixed(6), chain: fromChain }] },
-    })
-  } catch { /* expected — the transfer call was intercepted */ } finally {
-    globalThis.fetch = realFetch
-  }
+  const captured = await withFetchPatch(async (realFetch) => {
+    let cap: any = null
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (!cap && /\/v1\/transfer(\?|$)/.test(url) && (init?.method ?? 'GET').toUpperCase() === 'POST' && typeof init?.body === 'string') {
+        cap = JSON.parse(init.body)
+        // 4xx → App Kit stops without retrying; nothing is submitted.
+        return new Response(JSON.stringify({ success: false, message: 'captured for server submission' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+      }
+      return realFetch(input as any, init)
+    }) as typeof fetch
+    try {
+      await kit.unifiedBalance.spend({
+        ...base,
+        amount: send.toFixed(6),
+        from: { adapter, allocations: [{ amount: send.toFixed(6), chain: fromChain }] },
+      })
+    } catch { /* expected — the transfer call was intercepted */ }
+    return cap
+  })
+
   if (!Array.isArray(captured) || captured.length === 0) throw new Error('Could not prepare the Arc transfer')
 
   // Sanity: the main intent must mint to this wallet on Arc (domain 26).
@@ -359,7 +431,7 @@ export async function signSpendAllToArc(params: {
   const parts = params.parts.filter(p => p.amount > 0.000001)
   const total = parts.reduce((s, p) => s + p.amount, 0)
   if (total <= 0) throw new Error('Nothing to move')
-  const to = { chain: 'Arc_Testnet', recipientAddress: walletAddr, useForwarder: true }
+  const to = { chain: ARC_CHAIN_KEY, recipientAddress: walletAddr, useForwarder: true }
   const est: any = await kit.unifiedBalance.estimateSpend({
     from: { adapter, allocations: parts.map(p => ({ amount: p.amount.toFixed(6), chain: p.chain })) },
     to, token: 'USDC', amount: total.toFixed(6),
@@ -373,24 +445,24 @@ export async function signSpendAllToArc(params: {
     .filter(a => a.amount > 0)
   const send = allocations.reduce((s, a) => s + a.amount, 0)
 
-  let captured: any = null
-  const realFetch = globalThis.fetch
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-    if (!captured && /\/v1\/transfer(\?|$)/.test(url) && (init?.method ?? 'GET').toUpperCase() === 'POST' && typeof init?.body === 'string') {
-      captured = JSON.parse(init.body)
-      return new Response(JSON.stringify({ success: false, message: 'captured for server submission' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
-    }
-    return realFetch(input as any, init)
-  }) as typeof fetch
-  try {
-    await kit.unifiedBalance.spend({
-      from: { adapter, allocations: allocations.map(a => ({ amount: a.amount.toFixed(6), chain: a.chain })) },
-      to, token: 'USDC', amount: send.toFixed(6),
-    })
-  } catch { /* expected — the transfer call was intercepted */ } finally {
-    globalThis.fetch = realFetch
-  }
+  const captured = await withFetchPatch(async (realFetch) => {
+    let cap: any = null
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (!cap && /\/v1\/transfer(\?|$)/.test(url) && (init?.method ?? 'GET').toUpperCase() === 'POST' && typeof init?.body === 'string') {
+        cap = JSON.parse(init.body)
+        return new Response(JSON.stringify({ success: false, message: 'captured for server submission' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+      }
+      return realFetch(input as any, init)
+    }) as typeof fetch
+    try {
+      await kit.unifiedBalance.spend({
+        from: { adapter, allocations: allocations.map(a => ({ amount: a.amount.toFixed(6), chain: a.chain })) },
+        to, token: 'USDC', amount: send.toFixed(6),
+      })
+    } catch { /* expected — the transfer call was intercepted */ }
+    return cap
+  })
   if (!Array.isArray(captured) || captured.length === 0) throw new Error('Could not prepare the Arc transfer')
   const intents = captured.flatMap((e: any) => e?.burnIntent ? [e.burnIntent] : (e?.burnIntentSet?.intents ?? []))
   const me = walletAddr.toLowerCase().replace(/^0x/, '')
@@ -575,11 +647,34 @@ export async function autoCollectMerchantPayments(_p: { walletAddress: string; p
 // hand-off, a Gateway error): whenever the app is open and unlocked, sweep
 // any CONFIRMED Unified Balance on other chains into the Arc wallet. Chains
 // with an open ub_claim_intents row are skipped — the server owns those.
-let sweeping = false
+//
+// CROSS-TAB DEDUP FIX: the old approach used a module-level `sweeping`
+// boolean, which only guards the same JS context. Two browser tabs open at
+// the same time both had sweeping=false, so they both entered the sweep,
+// both called spendUnifiedToArc for the same chain at the same time, and
+// one of those spends reverted on-chain (the USDC was already spent by the
+// other tab's call). The failed spend produced a confusing "transfer
+// reverted" activity row with no explanation. Using a per-wallet Web Lock
+// (exclusive, non-blocking) means only one tab can sweep a given wallet at
+// a time across the entire browser session.
+let _sweepingSameTab = false
 
 export async function autoFinishUbClaims(p: { walletAddress: string; privateKey: string }): Promise<number> {
-  if (sweeping) return 0
-  sweeping = true
+  if (_sweepingSameTab) return 0
+  const locks = typeof navigator !== 'undefined' ? (navigator as any).locks : undefined
+  const lockName = `meshport-ub-autosweep:${p.walletAddress.toLowerCase()}`
+  if (locks?.request) {
+    return locks.request(lockName, { ifAvailable: true }, async (lock: unknown) => {
+      if (!lock) return 0 // another tab holds the sweep lock for this wallet
+      return _runAutoFinish(p)
+    })
+  }
+  // Web Locks not available: fall back to same-tab boolean guard only.
+  return _runAutoFinish(p)
+}
+
+async function _runAutoFinish(p: { walletAddress: string; privateKey: string }): Promise<number> {
+  _sweepingSameTab = true
   let finished = 0
   try {
     const [{ AppKit }, { createEthersAdapterFromPrivateKey }] = await Promise.all([
@@ -588,26 +683,25 @@ export async function autoFinishUbClaims(p: { walletAddress: string; privateKey:
     const kit = new AppKit({ disableErrorReporting: true } as any)
     const rows = await getUnifiedBalances(kit, p.walletAddress)
     const serverOwned = await serverOwnedChains(p.walletAddress)
-    const ready = rows.filter(r => r.chain !== 'Arc_Testnet' && r.confirmed >= UB_MIN_SWEEP && !inFlight.has(r.chain) && !serverOwned.has(r.chain))
+    const ready = rows.filter(r => r.chain !== ARC_CHAIN_KEY && r.confirmed >= UB_MIN_SWEEP && !inFlight.has(r.chain) && !serverOwned.has(r.chain))
     if (ready.length === 0) return 0
     const adapter = (createEthersAdapterFromPrivateKey as any)({ privateKey: p.privateKey })
     for (const r of ready) {
       if (inFlight.has(r.chain)) continue
-      inFlight.add(r.chain)
-      try {
+      // Per-chain Web Lock mirrors what withChainLock does for manual claims —
+      // same guard, same lock namespace, so a manual claim and an auto-sweep
+      // for the same chain never race.
+      const ran = await withChainLock(p.walletAddress, r.chain, async () => {
         const out = await spendUnifiedToArc({ kit, adapter, walletAddr: p.walletAddress, fromChain: r.chain, amount: r.confirmed })
         await recordUbClaim({ walletAddr: p.walletAddress, sdkChainId: r.chain, received: out.received, claimedAmount: r.confirmed, arcTxHash: out.txHash })
         finished++
-      } catch (e) {
-        console.warn('[ubClaim] auto-finish failed for', r.chain, e)
-      } finally {
-        inFlight.delete(r.chain)
-      }
+      })
+      if (!ran) console.warn('[ubClaim] auto-finish: chain lock busy for', r.chain, '— skipping this chain this sweep')
     }
   } catch (e) {
     console.warn('[ubClaim] auto-finish check failed', e)
   } finally {
-    sweeping = false
+    _sweepingSameTab = false
   }
   return finished
 }

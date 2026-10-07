@@ -133,8 +133,10 @@ export function DesktopHeader() {
                 .filter((a: string) => a && a !== myAddr)
             )]
             if (!addrs.length) return []
-            const { supabase } = await import('@/lib/supabase')
-            const { data } = await supabase.from('users').select('id, username, display_name, email, wallet_address, avatar_url, created_at').or(addrs.map(a => `wallet_address.ilike.${a}`).join(','))
+            // SUPABASE REDUCTION: replaced supabase.from('users').or(wallets)
+            // with /api/profile?wallets= — same payload, no anon key in auth header.
+            const profileRes = await fetch(`/api/profile?wallets=${encodeURIComponent(addrs.join(','))}`)
+            const data = profileRes.ok ? await profileRes.json().catch(() => []) : []
             return (data || []) as DbUser[]
           } catch { return [] }
         })(),
