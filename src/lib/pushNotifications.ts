@@ -64,6 +64,10 @@ export async function enablePushNotifications(userId: string, opts: { fresh?: bo
     }
 
     const registration = await navigator.serviceWorker.ready
+    // The endpoint this device last saved — if it changes below, the server
+    // deletes that old row so the device doesn't pile up one row per renewal.
+    let previousEndpoint: string | undefined
+    try { previousEndpoint = localStorage.getItem(PUSH_OK_KEY) || undefined } catch { /* ignore */ }
     let subscription = await registration.pushManager.getSubscription()
     // fresh: drop a possibly-expired subscription (the push service may have
     // revoked it, e.g. after a reinstall) and make a new one.
@@ -82,7 +86,10 @@ export async function enablePushNotifications(userId: string, opts: { fresh?: bo
     const saved = await fetch('/api/push?action=subscribe', {
       method: 'POST',
       headers: await authApiHeaders(),
-      body: JSON.stringify({ userId, subscription: subscription.toJSON() }),
+      body: JSON.stringify({
+        userId, subscription: subscription.toJSON(),
+        previousEndpoint: previousEndpoint && previousEndpoint !== subscription.endpoint && previousEndpoint.startsWith('https://') ? previousEndpoint : undefined,
+      }),
     })
     if (!saved.ok) return { ok: false, reason: `save-failed-${saved.status}` }
     try { localStorage.setItem(PUSH_OK_KEY, subscription.endpoint) } catch { /* ignore */ }

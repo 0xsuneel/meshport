@@ -38,7 +38,7 @@ const SERVICE_KEY = (
 async function handleSubscribe(req: VercelRequest, res: VercelResponse) {
   if (!SERVICE_KEY) return res.status(500).json({ error: 'Server misconfigured' })
 
-  const { userId, subscription } = req.body || {}
+  const { userId, subscription, previousEndpoint } = req.body || {}
   if (!userId || !subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
     return res.status(400).json({ error: 'Missing userId or subscription' })
   }
@@ -68,12 +68,24 @@ async function handleSubscribe(req: VercelRequest, res: VercelResponse) {
         p256dh:     subscription.keys.p256dh,
         auth:       subscription.keys.auth,
         user_agent: req.headers['user-agent'] || null,
+        // Refreshed on every save (each app open); the daily
+        // push-subscriptions-prune job drops rows unused for 30 days.
+        last_seen_at: new Date().toISOString(),
       }),
     })
     if (!r.ok) {
       const detail = await r.text().catch(() => '')
       console.error('[push/subscribe] insert failed:', r.status, detail.slice(0, 300))
       return res.status(500).json({ error: 'DB insert failed' })
+    }
+    // The app renews its subscription daily (see App.tsx). Remove the one this
+    // device just replaced, so a phone keeps one row instead of one per day.
+    // Scoped to the caller's own user_id: it can only ever delete its own row.
+    if (typeof previousEndpoint === 'string' && previousEndpoint !== subscription.endpoint && isPushEndpoint(previousEndpoint)) {
+      await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(previousEndpoint)}&user_id=eq.${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+        headers: { 'apikey': SERVICE_KEY, 'Authorization': `Bearer ${SERVICE_KEY}`, 'Prefer': 'return=minimal' },
+      }).catch(e => console.warn('[push/subscribe] old subscription cleanup failed:', e?.message))
     }
     return res.status(200).json({ ok: true })
   } catch (e: any) {
