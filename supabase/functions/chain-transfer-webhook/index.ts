@@ -449,6 +449,22 @@ Deno.serve(async (req: Request) => {
 
   const signature = req.headers.get('x-circle-signature') ?? ''
   const keyId     = req.headers.get('x-circle-key-id') ?? ''
+
+  // Catch-up sweep, driven by the chain-transfer-webhook-sweep cron job
+  // (every minute, service-role bearer — same pattern as the other cron
+  // jobs). It used to piggyback on every Circle request, but this function
+  // cold-starts on nearly every call, so the per-instance 10s throttle never
+  // held and the sweep query ran on every one of ~490k calls/day.
+  if (!signature && req.headers.get('authorization') === `Bearer ${SUPABASE_SERVICE_KEY}`) {
+    let mode = ''
+    try { mode = JSON.parse(rawBody || '{}')?.mode ?? '' } catch { /* not a sweep */ }
+    if (mode === 'sweep') {
+      lastSweepAt = 0
+      await sweepUnnotifiedReceives(createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY))
+      return json({ ok: true, swept: true })
+    }
+  }
+
   if (!signature || !keyId) {
     // Circle's actual endpoint-verification probe (sent when a notification
     // subscription is created/updated) is an unsigned POST, not the HEAD
@@ -459,15 +475,14 @@ Deno.serve(async (req: Request) => {
     // Circle's own verification step succeed.
     return json({ ok: true, ignored: 'no signature headers present - treated as a connectivity check' })
   }
-  const validSignature = await verifyCircleSignature(rawBody, signature, keyId)
-  if (!validSignature) {
-    console.error('[chain-transfer-webhook] rejected: signature verification failed')
-    return json({ ok: false, error: 'unauthorized' }, 401)
-  }
 
-  // Verified Circle traffic doubles as a frequent heartbeat for the catch-up.
-  await sweepUnnotifiedReceives(createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY))
-
+  // Filter BEFORE verifying the signature. The USDC monitor delivers every
+  // Transfer on Arc (~490k/day), and almost none involve a MeshPort wallet.
+  // Verifying first meant fetching Circle's public key on nearly every call
+  // (cold start = empty key cache), ~0.8s each and a rate-limit risk for the
+  // deposits that matter. Every branch below that runs before verification
+  // only returns "ignored" — nothing is written or sent until the signature
+  // checks out, so an unsigned or forged body can at most get itself ignored.
   let payload: CircleEventLogNotification
   try {
     payload = JSON.parse(rawBody)
@@ -510,7 +525,37 @@ Deno.serve(async (req: Request) => {
   if (!Number.isFinite(amount) || amount <= 0) {
     return json({ ok: true, ignored: 'non-positive or unparseable amount' })
   }
+  if (isMint && token.symbol !== 'USDC') {
+    // Only USDC claims are tracked; EURC/cirBTC mints have no `claims` rows.
+    return json({ ok: true, ignored: 'mint (from address(0)) - no matching pending/recent-failed claim found' })
+  }
+  if (!isMint && fromAddress.toLowerCase() === toAddress.toLowerCase()) {
+    return json({ ok: true, ignored: 'self-transfer at the topic level (should not occur for a real Transfer)' })
+  }
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+  // One indexed lookup decides relevance: a claim mint needs an in-flight
+  // claim for the recipient; any other transfer needs a MeshPort recipient.
+  let user: { id: string; username: string | null } | null = null
+  if (isMint) {
+    const { data: claim, error } = await supabase
+      .from('claims').select('id')
+      .eq('wallet_address', toAddress.toLowerCase())
+      .in('status', ['bridging', 'verifying', 'settling', 'failed'])
+      .limit(1).maybeSingle()
+    if (error) console.error('[chain-transfer-webhook] claims pre-check failed:', error.message)
+    else if (!claim) return json({ ok: true, ignored: 'mint (from address(0)) - no matching pending/recent-failed claim found' })
+  } else {
+    user = await findUserByWallet(supabase, toAddress)
+    if (!user) return json({ ok: true, ignored: 'recipient is not a MeshPort wallet' })
+  }
+
+  const validSignature = await verifyCircleSignature(rawBody, signature, keyId)
+  if (!validSignature) {
+    console.error('[chain-transfer-webhook] rejected: signature verification failed')
+    return json({ ok: false, error: 'unauthorized' }, 401)
+  }
 
   if (isMint) {
     // A mint (from address(0)) is a CCTP claim or similar system mint, not a
@@ -527,16 +572,9 @@ Deno.serve(async (req: Request) => {
     }
     return json({ ok: true, ignored: 'mint (from address(0)) - no matching pending/recent-failed claim found' })
   }
-  if (fromAddress.toLowerCase() === toAddress.toLowerCase()) {
-    return json({ ok: true, ignored: 'self-transfer at the topic level (should not occur for a real Transfer)' })
-  }
+  if (!user) return json({ ok: true, ignored: 'recipient is not a MeshPort wallet' })
 
   try {
-    const user = await findUserByWallet(supabase, toAddress)
-    if (!user) {
-      return json({ ok: true, ignored: 'recipient is not a MeshPort wallet' })
-    }
-
     // Same three-layer classification claim-recovery-scan already
     // established this session, in the same order, for the same reasons -
     // see trackedFeatureCorrelation.ts and knownInternalContracts.ts for
