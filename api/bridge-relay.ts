@@ -458,7 +458,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             id: r.id,
             amount: Number(r.amount),
             createdAt: r.created_at,
-            readyAt: r.metadata?.ready_at ?? '',
+            // initiateUbFundRecovery stores this as eligible_at (ready_at never existed).
+            readyAt: r.metadata?.eligible_at ?? r.metadata?.ready_at ?? '',
           }))
         )
       }

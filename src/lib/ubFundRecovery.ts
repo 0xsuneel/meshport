@@ -456,9 +456,14 @@ export async function resolveUbStuckTransfer(p: {
   walletAddress: string; privateKey: string; item: UbStuckTransfer; mode: 'refund' | 'forward'; available: number
 }): Promise<{ received: number; txHash?: string }> {
   const { item, mode } = p
-  const amount = Math.min(item.amount, p.available)
-  if (amount <= 0) throw new Error('Nothing left in your Unified Balance for this transfer')
   const { kit, adapter } = await getKitAndAdapter(p.privateKey)
+  // Re-read the balance here rather than trusting the screen's copy, which
+  // can be stale — e.g. read while Circle still held a failed delivery.
+  const { getUnifiedBalances } = await import('@/lib/ubClaim')
+  const fresh = (await getUnifiedBalances(kit, p.walletAddress))
+    .filter(r => r.chain === ARC_CHAIN_KEY).reduce((s, r) => s + r.confirmed, 0)
+  const amount = Math.min(item.amount, p.available, fresh)
+  if (amount <= 0) throw new Error('Nothing left in your Unified Balance for this transfer')
   const { spendUnifiedTo } = await import('@/lib/ubClaim')
   const toChain = mode === 'refund' ? ARC_CHAIN_KEY : item.destinationChain
   const recipient = mode === 'refund' ? p.walletAddress : item.destinationAddress
