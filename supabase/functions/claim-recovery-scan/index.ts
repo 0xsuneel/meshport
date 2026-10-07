@@ -639,6 +639,22 @@ async function isUbClaimMint(supabase: SupabaseClient, walletAddress: string, tx
   return false
 }
 
+// When the transfer actually happened on Arc. A deposit found late (a
+// backfill, a reconcile pass, a catch-up after downtime) must be dated by its
+// block, not by when it was found — otherwise a month-old deposit shows up in
+// Activity as "today". Arc receipts carry blockTimestamp on their logs; the
+// block itself is the fallback. null → the row keeps its default (now()).
+async function txTime(txHash: string): Promise<string | null> {
+  try {
+    const receipt = await rpcCall(ARC_RPCS, 'eth_getTransactionReceipt', [txHash])
+    let ts = (receipt?.logs ?? []).find((l: any) => l?.blockTimestamp)?.blockTimestamp
+    if (!ts && receipt?.blockNumber) ts = (await rpcCall(ARC_RPCS, 'eth_getBlockByNumber', [receipt.blockNumber, false]))?.timestamp
+    return ts ? new Date(Number(BigInt(ts)) * 1000).toISOString() : null
+  } catch {
+    return null
+  }
+}
+
 // A real transfer (not a mint from address(0)) landing in the wallet with no
 // matching claims/activity row at all — this is what a Circle testnet
 // faucet drop actually looks like on-chain: a plain Transfer from a funded
@@ -647,9 +663,11 @@ async function isUbClaimMint(supabase: SupabaseClient, walletAddress: string, tx
 // real sender address as the counterparty rather than 'Unknown'.
 async function recordExternalReceive(supabase: SupabaseClient, walletAddress: string, txHash: string, amount: number, fromAddress: string, tokenSymbol: string = 'USDC') {
   try {
+    const createdAt = await txTime(txHash)
     const { error } = await supabase
       .from('activity')
       .upsert({
+        ...(createdAt ? { created_at: createdAt } : {}),
         wallet_address:      walletAddress.toLowerCase(),
         tx_hash:             `recv_${txHash.toLowerCase()}`,
         activity_type:       'receive',
