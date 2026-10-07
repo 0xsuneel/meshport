@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
+import { HubSheet, HubSheetItem, HubSheetIconButton } from '@/components/multichain/HubSheet'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
@@ -498,6 +499,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // embedded in the Hub: on desktop they type with the keyboard (Swap-style
   // box) and authorise in a centred popup, never the phone keypad sheets.
   const desktopInput = isDesktopMq
+  // In the Hub on a phone the form opens as two sheets that slide up over
+  // the Hub: 1 = chain, route and recipient; 2 = amount (keypad built in).
+  const sheetMode = embedded && !isDesktopMq
+  const [formSheet, setFormSheet] = useState<0 | 1 | 2>(0)
 
   // Embedded in the Multichain Hub's bottom sheet: anything that would go
   // "back to the Hub" closes the sheet instead of changing page.
@@ -516,7 +521,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // Pre-fill address if returning from scanner
   useEffect(() => {
     const scanned = searchParams.get('scannedAddress')
-    if (scanned) handleAddressChange(scanned)
+    if (scanned) { handleAddressChange(scanned); if (sheetMode) setFormSheet(1) }
   }, [])
   const { balance } = useWalletStore()
   const storedPasscode = useAuthStore(s => s.passcode)
@@ -550,6 +555,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const stepRef = useRef(step)
   stepRef.current = step
   const inBackableStep = embedded && (step === 'review' || step === 'confirm')
+  // Set when the cleanup below steps history back itself, so the form-sheet
+  // back handler further down doesn't mistake that for a back press.
+  const skipSheetPop = useRef(false)
   useEffect(() => {
     if (!inBackableStep) return
     let poppedByBack = false
@@ -568,10 +576,37 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       window.removeEventListener('popstate', onPop)
       // Left review/confirm with an on-screen button while still on the Hub:
       // drop the extra entry so the next back press behaves normally.
-      if (!poppedByBack && window.location.pathname === '/multichain') window.history.back()
+      if (!poppedByBack && window.location.pathname === '/multichain') { skipSheetPop.current = true; window.history.back() }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inBackableStep])
+  // Same for the Hub's form sheets: back closes the amount sheet, then the
+  // first sheet. (While Review is open its own handler above takes the press.)
+  const sheetBackable = sheetMode && formSheet > 0 && (step === 'form' || step === 'review' || step === 'confirm')
+  const formSheetRef = useRef(formSheet)
+  formSheetRef.current = formSheet
+  useEffect(() => {
+    if (!sheetBackable) return
+    skipSheetPop.current = false
+    let poppedByBack = false
+    window.history.pushState({ ...(window.history.state ?? {}), mpTransferSheet: true }, '')
+    const onPop = () => {
+      if (skipSheetPop.current) { skipSheetPop.current = false; return }
+      if (stepRef.current !== 'form') return
+      if (formSheetRef.current === 2) {
+        setFormSheet(1)
+        window.history.pushState({ ...(window.history.state ?? {}), mpTransferSheet: true }, '')
+      } else {
+        poppedByBack = true
+        setFormSheet(0)
+      }
+    }
+    window.addEventListener('popstate', onPop)
+    return () => {
+      window.removeEventListener('popstate', onPop)
+      if (!poppedByBack && window.location.pathname === '/multichain') window.history.back()
+    }
+  }, [sheetBackable])
 
   // ─── Resume an in-flight transfer after a refresh ───────────────────────
   // The burn is irreversible the moment it confirms (funds have already
@@ -2726,6 +2761,177 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // Held in a variable (not returned directly) so the exact same JSX renders
   // either as the whole page (mobile) or as the left column of the desktop
   // 2-column layout below — never duplicated.
+  // ── Form pieces ── one copy of each, laid out either as the single form
+  // card (desktop / standalone page) or, inside the Hub on a phone, split
+  // over the two slide-up sheets below.
+  const formTitle = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: 44, height: 44, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'color-mix(in srgb, var(--brand) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 19, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>Cross-Chain Transfer</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Send USDC from Arc Testnet to any chain</div>
+      </div>
+    </div>
+  )
+  const formBalance = (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '14px 16px', borderRadius: 16,
+      background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
+      <span style={{ minWidth: 0, fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Arc Testnet Balance</span>
+      {/* Amount + unit never split across lines on narrow phones. */}
+      <span style={{ flexShrink: 0, whiteSpace: 'nowrap', fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(balance)} USDC</span>
+    </div>
+  )
+  const formDestination = (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Destination Chain</div>
+      <button onClick={() => setShowChainPicker(true)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 16, cursor: 'pointer',
+        background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)', textAlign: 'left' }}>
+        <ChainLogoImg id={chain.id} size={30}/>
+        <span style={{ flex: 1, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>{chain.testnet}</span>
+        <ChevronDown className="w-4 h-4" style={{ color: 'var(--text-secondary)' }}/>
+      </button>
+    </div>
+  )
+  const formRoute = (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Transfer Route</div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        {([
+          { id: 'ub' as const,   name: 'Unified Balance', text: 'Gateway · ~60s', on: effectiveUb,
+            icon: <path d="M13 2L4 14h7l-1 8 9-12h-7z"/> },
+          { id: 'cctp' as const, name: 'CCTP',            text: 'Burn-mint · 20–90s', on: !effectiveUb,
+            icon: <path d="M4 8h14l-3-3M20 16H6l3 3"/> },
+        ]).filter(r => availableMechanisms.length > 1 || r.on).map(r => (
+          <button key={r.id} onClick={() => { if (availableMechanisms.length > 1) setSelectedRoute(r.id) }}
+            style={{ flex: 1, minWidth: 0, height: 68, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10,
+              textAlign: 'left', padding: '0 12px', borderRadius: 16, cursor: availableMechanisms.length > 1 ? 'pointer' : 'default',
+              background: r.on ? 'color-mix(in srgb, var(--brand) 14%, transparent)' : 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
+              border: r.on ? '1.5px solid var(--brand)' : '1px solid var(--border)' }}>
+            <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: r.on ? 'color-mix(in srgb, var(--brand) 22%, transparent)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={r.on ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: r.on ? 'var(--brand)' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
+              <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.text}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+  const formRecipient = (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Recipient Address</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 14px', borderRadius: 16,
+        background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
+        border: addrHint.type === 'ok' ? '1px solid color-mix(in srgb, var(--success) 45%, transparent)'
+          : addrHint.type === 'error' ? '1px solid color-mix(in srgb, var(--danger) 45%, transparent)' : '1px solid var(--border)' }}>
+        <input
+          className="flex-1 bg-transparent text-text-primary text-[15px] focus:outline-none font-mono placeholder-text-secondary"
+          style={{ minWidth: 0, padding: '8px 0' }}
+          placeholder="0x…"
+          value={address} onChange={e => handleAddressChange(e.target.value)}
+          spellCheck={false} autoComplete="off"
+        />
+        <button onClick={() => { prewarmCamera(); navigate('/scanner?mode=wallet&returnTo=/multichain') }} aria-label="Scan QR"
+          className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+          style={{ background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
+          <QrCode className="w-4 h-4 text-text-secondary"/>
+        </button>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+        {senderAddress && (
+          <button onClick={() => handleAddressChange(senderAddress)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand)' }}>
+            Use my address
+          </button>
+        )}
+        {addrHint.text && addrHint.type !== '' && (
+          <span style={{ marginLeft: 'auto', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4,
+            color: addrHint.type === 'ok' ? 'var(--success)' : addrHint.type === 'error' ? 'var(--danger)' : 'var(--warning)' }}>
+            {addrHint.text}
+            {addrHint.type === 'ok' && <CheckCircle className="w-3 h-3"/>}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+  const formAmount = (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Amount (USDC)</div>
+      {desktopInput ? (
+        <div ref={amountBoxRef}>
+          <DesktopAmountInput
+            value={amount}
+            onChange={v => setAmount(sanitizeMultichainAmount(v))}
+            onMax={() => {
+              // Same static reserve as the phone Max: no live fee fetch until Review.
+              const maxAmount = Math.max(0, balance - feeReserveEstimate)
+              setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
+            }}
+            invalid={numAmount > 0 && numAmount < MIN_AMOUNT}
+            ariaLabel="Amount in USDC"
+          />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5 }}>
+            <span style={{ color: 'var(--text-secondary)' }}>Balance: {formatAmount(balance)} USDC</span>
+            {numAmount > 0 && numAmount < MIN_AMOUNT
+              ? <span style={{ fontWeight: 600, color: 'var(--danger)' }}>Minimum $3</span>
+              : <span style={{ color: 'var(--text-secondary)' }}>~{trimTrailingZeros(feeReserveEstimate.toFixed(2))} USDC fee reserved on Max</span>}
+          </div>
+        </div>
+      ) : (
+        <div ref={amountBoxRef} onClick={() => { if (!sheetMode) setShowAmountPad(true) }} style={{ padding: '14px 16px', borderRadius: 16, cursor: sheetMode ? 'default' : 'pointer',
+          background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1.15,
+            color: amount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>
+            {amount || '0.00'}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>USDC</span>
+            {numAmount > 0 && numAmount < MIN_AMOUNT ? (
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--danger)' }}>Minimum $3</span>
+            ) : (
+              <button onClick={e => {
+                  e.stopPropagation()
+                  // Same static reserve as before: no live fee fetch until Review.
+                  const maxAmount = Math.max(0, balance - feeReserveEstimate)
+                  setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
+                }}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand)' }}>
+                Max: {formatAmount(balance)} (−{trimTrailingZeros(feeReserveEstimate.toFixed(2))} est.)
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+  const formGasWarning = gasWarning ? (
+      <div className="flex items-start gap-2 p-3 rounded-xl" style={{background:'color-mix(in srgb, var(--warning) 8%, transparent)', border:'1px solid color-mix(in srgb, var(--warning) 25%, transparent)'}}>
+        <AlertCircle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5"/>
+        <p className="text-xs text-warning">{gasWarning}</p>
+      </div>
+    ) : null
+  const formActions = (
+<div style={{ display: 'flex', gap: 10 }}>
+      <button onClick={() => navigate('/multichain')}
+        className="active:scale-[.98] transition-all"
+        style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 600, cursor: 'pointer',
+          color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
+        Cancel
+      </button>
+      <button disabled={!canContinue} onClick={handleContinue}
+        className="active:scale-[.98] transition-all disabled:opacity-40"
+        style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, border: 'none',
+          cursor: canContinue ? 'pointer' : 'not-allowed', color: '#fff', background: 'var(--brand)' }}>
+        Review
+      </button>
+    </div>
+  )
+
   const flow = (
     <div ref={flowRootRef} className={`relative flex flex-col bg-bg ${isDesktop || embedded ? 'h-full' : 'h-screen'}`}>
       {/* Desktop-only compact "Success" header (same padding/size as
@@ -2811,175 +3017,24 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               {/* ── Transfer Out form (Arc Bridge layout, MeshPort brand) ── */}
               <motion.div animate={{ y: -keypadLift }} initial={false} transition={KEYPAD_SPRING}
                 style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 22, padding: isDesktop ? 20 : 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-                {/* Title */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: 'color-mix(in srgb, var(--brand) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 19, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>Cross-Chain Transfer</div>
-                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Send USDC from Arc Testnet to any chain</div>
-                  </div>
-                </div>
-
-                {/* Balance */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '14px 16px', borderRadius: 16,
-                  background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-                  <span style={{ minWidth: 0, fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Arc Testnet Balance</span>
-                  {/* Amount + unit never split across lines on narrow phones. */}
-                  <span style={{ flexShrink: 0, whiteSpace: 'nowrap', fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(balance)} USDC</span>
-                </div>
-
-                {/* Destination chain */}
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Destination Chain</div>
-                  <button onClick={() => setShowChainPicker(true)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 16, cursor: 'pointer',
-                    background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)', textAlign: 'left' }}>
-                    <ChainLogoImg id={chain.id} size={30}/>
-                    <span style={{ flex: 1, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>{chain.testnet}</span>
-                    <ChevronDown className="w-4 h-4" style={{ color: 'var(--text-secondary)' }}/>
-                  </button>
-                </div>
-
-                {/* Route */}
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Transfer Route</div>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    {([
-                      { id: 'ub' as const,   name: 'Unified Balance', text: 'Gateway · ~60s', on: effectiveUb,
-                        icon: <path d="M13 2L4 14h7l-1 8 9-12h-7z"/> },
-                      { id: 'cctp' as const, name: 'CCTP',            text: 'Burn-mint · 20–90s', on: !effectiveUb,
-                        icon: <path d="M4 8h14l-3-3M20 16H6l3 3"/> },
-                    ]).filter(r => availableMechanisms.length > 1 || r.on).map(r => (
-                      <button key={r.id} onClick={() => { if (availableMechanisms.length > 1) setSelectedRoute(r.id) }}
-                        style={{ flex: 1, minWidth: 0, height: 68, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10,
-                          textAlign: 'left', padding: '0 12px', borderRadius: 16, cursor: availableMechanisms.length > 1 ? 'pointer' : 'default',
-                          background: r.on ? 'color-mix(in srgb, var(--brand) 14%, transparent)' : 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-                          border: r.on ? '1.5px solid var(--brand)' : '1px solid var(--border)' }}>
-                        <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: r.on ? 'color-mix(in srgb, var(--brand) 22%, transparent)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={r.on ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
-                        </span>
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: r.on ? 'var(--brand)' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
-                          <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.text}</span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Recipient */}
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Recipient Address</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 14px', borderRadius: 16,
-                    background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-                    border: addrHint.type === 'ok' ? '1px solid color-mix(in srgb, var(--success) 45%, transparent)'
-                      : addrHint.type === 'error' ? '1px solid color-mix(in srgb, var(--danger) 45%, transparent)' : '1px solid var(--border)' }}>
-                    <input
-                      className="flex-1 bg-transparent text-text-primary text-[15px] focus:outline-none font-mono placeholder-text-secondary"
-                      style={{ minWidth: 0, padding: '8px 0' }}
-                      placeholder="0x…"
-                      value={address} onChange={e => handleAddressChange(e.target.value)}
-                      spellCheck={false} autoComplete="off"
-                    />
-                    <button onClick={() => { prewarmCamera(); navigate('/scanner?mode=wallet&returnTo=/multichain') }} aria-label="Scan QR"
-                      className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-                      <QrCode className="w-4 h-4 text-text-secondary"/>
-                    </button>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                    {senderAddress && (
-                      <button onClick={() => handleAddressChange(senderAddress)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand)' }}>
-                        Use my address
-                      </button>
-                    )}
-                    {addrHint.text && addrHint.type !== '' && (
-                      <span style={{ marginLeft: 'auto', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4,
-                        color: addrHint.type === 'ok' ? 'var(--success)' : addrHint.type === 'error' ? 'var(--danger)' : 'var(--warning)' }}>
-                        {addrHint.text}
-                        {addrHint.type === 'ok' && <CheckCircle className="w-3 h-3"/>}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Amount */}
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Amount (USDC)</div>
-                  {desktopInput ? (
-                    <div ref={amountBoxRef}>
-                      <DesktopAmountInput
-                        value={amount}
-                        onChange={v => setAmount(sanitizeMultichainAmount(v))}
-                        onMax={() => {
-                          // Same static reserve as the phone Max: no live fee fetch until Review.
-                          const maxAmount = Math.max(0, balance - feeReserveEstimate)
-                          setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
-                        }}
-                        invalid={numAmount > 0 && numAmount < MIN_AMOUNT}
-                        ariaLabel="Amount in USDC"
-                      />
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5 }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Balance: {formatAmount(balance)} USDC</span>
-                        {numAmount > 0 && numAmount < MIN_AMOUNT
-                          ? <span style={{ fontWeight: 600, color: 'var(--danger)' }}>Minimum $3</span>
-                          : <span style={{ color: 'var(--text-secondary)' }}>~{trimTrailingZeros(feeReserveEstimate.toFixed(2))} USDC fee reserved on Max</span>}
-                      </div>
-                    </div>
-                  ) : (
-                    <div ref={amountBoxRef} onClick={() => setShowAmountPad(true)} style={{ padding: '14px 16px', borderRadius: 16, cursor: 'pointer',
-                      background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-                      <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1.15,
-                        color: amount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>
-                        {amount || '0.00'}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
-                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>USDC</span>
-                        {numAmount > 0 && numAmount < MIN_AMOUNT ? (
-                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--danger)' }}>Minimum $3</span>
-                        ) : (
-                          <button onClick={e => {
-                              e.stopPropagation()
-                              // Same static reserve as before: no live fee fetch until Review.
-                              const maxAmount = Math.max(0, balance - feeReserveEstimate)
-                              setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
-                            }}
-                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand)' }}>
-                            Max: {formatAmount(balance)} (−{trimTrailingZeros(feeReserveEstimate.toFixed(2))} est.)
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-
-                {gasWarning && (
-                  <div className="flex items-start gap-2 p-3 rounded-xl" style={{background:'color-mix(in srgb, var(--warning) 8%, transparent)', border:'1px solid color-mix(in srgb, var(--warning) 25%, transparent)'}}>
-                    <AlertCircle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5"/>
-                    <p className="text-xs text-warning">{gasWarning}</p>
-                  </div>
-                )}
-
-                {/* Cancel / Review — replaced by the inline review below once tapped */}
-                {<div style={{ display: 'flex', gap: 10 }}>
-                  <button onClick={() => navigate('/multichain')}
+                {formTitle}
+                {formBalance}
+                {sheetMode ? (
+                  <button onClick={() => setFormSheet(1)}
                     className="active:scale-[.98] transition-all"
-                    style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 600, cursor: 'pointer',
-                      color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-                    Cancel
+                    style={{ width: '100%', padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, border: 'none',
+                      cursor: 'pointer', color: '#fff', background: 'var(--brand)' }}>
+                    Transfer Funds
                   </button>
-                  <button disabled={!canContinue} onClick={handleContinue}
-                    className="active:scale-[.98] transition-all disabled:opacity-40"
-                    style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, border: 'none',
-                      cursor: canContinue ? 'pointer' : 'not-allowed', color: '#fff', background: 'var(--brand)' }}>
-                    Review
-                  </button>
-                </div>}
+                ) : (<>
+                  {formDestination}
+                  {formRoute}
+                  {formRecipient}
+                  {formAmount}
+                  {formGasWarning}
+                  {formActions}
+                </>)}
+
               </motion.div>
 
 
@@ -3412,6 +3467,63 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
         </AnimatePresence>
       </div>
+
+      {/* ── Hub (phone): the form's two slide-up sheets. Review, the
+          passcode and the chain picker all open above them. ── */}
+      {sheetMode && (step === 'form' || step === 'review' || step === 'confirm') && (<>
+        <HubSheet id="mt-form-1" open={formSheet >= 1} behind={formSheet === 2} onClose={() => setFormSheet(0)}
+          header={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px 12px' }}>
+              <HubSheetIconButton kind="close" label="Close" onClick={() => setFormSheet(0)} />
+              <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Cross-Chain Transfer</span>
+            </div>
+          }
+          footer={
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setFormSheet(0)}
+                className="active:scale-[.98] transition-all"
+                style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                  color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
+                Cancel
+              </button>
+              <button disabled={!(isEVMAddress(address) || isSolanaAddress(address))} onClick={() => setFormSheet(2)}
+                className="active:scale-[.98] transition-all disabled:opacity-40"
+                style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, border: 'none',
+                  cursor: (isEVMAddress(address) || isSolanaAddress(address)) ? 'pointer' : 'not-allowed', color: '#fff', background: 'var(--brand)' }}>
+                Continue
+              </button>
+            </div>
+          }>
+          <div style={{ padding: '4px 18px 12px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <HubSheetItem i={0}>{formDestination}</HubSheetItem>
+            <HubSheetItem i={1}>{formRoute}</HubSheetItem>
+            <HubSheetItem i={2}>{formRecipient}</HubSheetItem>
+          </div>
+        </HubSheet>
+
+        <HubSheet id="mt-form-2" level={1} backdrop={false} open={formSheet === 2} onClose={() => setFormSheet(1)}
+          header={
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px 12px' }}>
+              <HubSheetIconButton kind="back" label="Back" onClick={() => setFormSheet(1)} />
+              <ChainLogoImg id={chain.id} size={30}/>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{chain.testnet}</div>
+                <div className="font-mono" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{shortenAddress(address)}</div>
+              </div>
+            </div>
+          }
+          footer={formActions}>
+          <div style={{ padding: '4px 18px 12px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <HubSheetItem i={0}>{formBalance}</HubSheetItem>
+            <HubSheetItem i={1}>{formAmount}</HubSheetItem>
+            {formGasWarning && <HubSheetItem i={2}>{formGasWarning}</HubSheetItem>}
+            <HubSheetItem i={3}>
+              <AmountKeypad inline open value={amount} onChange={v => setAmount(v)} balance={balance} token="USDC"
+                feeReserve={feeReserveEstimate} showMax={false} />
+            </HubSheetItem>
+          </div>
+        </HubSheet>
+      </>)}
 
       {/* ── Confirm & Pay: clean passcode entry, matching the same bottom
           sheet pattern used in Send/Pay — drag handle, title, one subtitle

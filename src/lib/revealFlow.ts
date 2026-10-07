@@ -6,6 +6,8 @@
 // header marked with `data-scroll-header` (the Hub's title bar) while it's pinned.
 export function revealFlow(el: HTMLElement | null) {
   if (!el) return
+  // Already on screen in its own slide-up sheet (Hub on a phone) — nothing to scroll.
+  if (el.closest('[data-hub-sheet]')) return
   // Two frames: lets the Hub re-render its title bar (unpinned) first.
   requestAnimationFrame(() => requestAnimationFrame(() => {
     // A container marked `data-flow-scroller` wins even while its scrolling
