@@ -500,7 +500,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // box) and authorise in a centred popup, never the phone keypad sheets.
   const desktopInput = isDesktopMq
   // In the Hub on a phone the form opens as two sheets that slide up over
-  // the Hub: 1 = chain, route and recipient; 2 = amount (keypad built in).
+  // the Hub: 1 = chain, route and recipient; 2 = amount.
   const sheetMode = embedded && !isDesktopMq
   const [formSheet, setFormSheet] = useState<0 | 1 | 2>(0)
 
@@ -808,7 +808,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // A temporary spacer at the bottom gives the page room to scroll that far.
   const amountBoxRef = useRef<HTMLDivElement>(null)
   // The form glides up with the keypad so the amount stays in view.
-  const keypadLift = useKeypadLift(showAmountPad, amountBoxRef, !isDesktop)
+  const keypadLift = useKeypadLift(showAmountPad, amountBoxRef, !isDesktop && !sheetMode)
   const [selectedChain, setSelectedChain] = useState<ChainId>('eth')
   // Editing the address, amount or chain while the inline review is showing
   // hides it again — the fees shown must always match what's in the fields.
@@ -2883,7 +2883,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           </div>
         </div>
       ) : (
-        <div ref={amountBoxRef} onClick={() => { if (!sheetMode) setShowAmountPad(true) }} style={{ padding: '14px 16px', borderRadius: 16, cursor: sheetMode ? 'default' : 'pointer',
+        <div ref={amountBoxRef} onClick={() => setShowAmountPad(true)} style={{ padding: '14px 16px', borderRadius: 16, cursor: 'pointer',
           background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
           <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1.15,
             color: amount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>
@@ -3517,10 +3517,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             <HubSheetItem i={0}>{formBalance}</HubSheetItem>
             <HubSheetItem i={1}>{formAmount}</HubSheetItem>
             {formGasWarning && <HubSheetItem i={2}>{formGasWarning}</HubSheetItem>}
-            <HubSheetItem i={3}>
-              <AmountKeypad inline open value={amount} onChange={v => setAmount(v)} balance={balance} token="USDC"
-                feeReserve={feeReserveEstimate} showMax={false} />
-            </HubSheetItem>
           </div>
         </HubSheet>
       </>)}
