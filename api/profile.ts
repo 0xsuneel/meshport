@@ -66,8 +66,11 @@ async function handleGetProfile(req: VercelRequest, res: VercelResponse) {
   if (typeof username === 'string') {
     const clean = username.replace(/\.arc$/i, '').toLowerCase().trim()
     if (!clean || clean.length > 60 || !/^[a-z0-9_.-]+$/.test(clean)) return res.status(400).json({ error: 'invalid username' })
+    // Exact match, not ilike: `_` is a LIKE wildcard, so `a_c` would resolve
+    // to user `abc` — the wrong payment recipient. Usernames are stored
+    // lowercase, and `clean` is lowercased above.
     const r = await fetch(
-      `${supabaseUrl}/rest/v1/users?username=ilike.${encodeURIComponent(clean)}&select=id,wallet_address,avatar_url,display_name,username&limit=1`,
+      `${supabaseUrl}/rest/v1/users?username=eq.${encodeURIComponent(clean)}&select=id,wallet_address,avatar_url,display_name,username&limit=1`,
       { headers: { apikey: key, Authorization: `Bearer ${key}` } }
     )
     return res.status(200).json(await r.json())
