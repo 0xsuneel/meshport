@@ -158,13 +158,21 @@ export function AppLayout() {
     if (!walletAddress) return
 
     const runScan = () => {
-      supabase.functions.invoke('claim-recovery-scan', { body: { walletAddress } })
-        .then(async ({ data, error }) => {
-          // BUG FIX: see lib/describeFunctionsError.ts — error.message alone
-          // is always the SDK's generic "Edge Function returned a non-2xx
-          // status code", which was making every real server-side failure
-          // here indistinguishable from every other one in the console.
-          if (error) { const { describeFunctionsError } = await import('@/lib/describeFunctionsError'); console.error('[claim-recovery-scan] invoke failed:', await describeFunctionsError(error, 'unknown')); return }
+      // SUPABASE REDUCTION: replaced supabase.functions.invoke('claim-recovery-scan')
+      // with a server-side proxy through /api/bridge-relay so the Supabase
+      // anon key is never used as auth for a server-side action. The relay
+      // uses the session JWT (via authApiHeaders) and calls the Edge Function
+      // with the service key on the server side.
+      import('@/lib/supabase').then(({ authApiHeaders }) => authApiHeaders()).then(headers =>
+        fetch('/api/bridge-relay', {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'claim_recovery_scan' }),
+        })
+      ).then(async r => {
+          const data = r.ok ? await r.json().catch(() => ({})) : {}
+          const error = r.ok ? null : { message: data?.error || r.statusText }
+          if (error) { console.error('[claim-recovery-scan] invoke failed:', error.message); return }
           const recoveredHashes: string[] = data?.recovered ?? []
           if (recoveredHashes.length === 0) return
           console.log(`[claim-recovery-scan] recovered ${recoveredHashes.length} item(s)`)

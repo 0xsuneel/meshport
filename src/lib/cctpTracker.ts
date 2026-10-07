@@ -17,7 +17,14 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-const IRIS = 'https://iris-api-sandbox.circle.com'
+// Use the production Iris API for mainnet flows; fall back to sandbox when the
+// app is explicitly configured for testnet. VITE_IRIS_ENV='sandbox' opts in to
+// the sandbox URL — the default is the production endpoint so production CCTP
+// mints are never invisible.
+const IRIS_ENV = (import.meta.env.VITE_IRIS_ENV as string | undefined) || 'production'
+const IRIS = IRIS_ENV === 'sandbox'
+  ? 'https://iris-api-sandbox.circle.com'
+  : 'https://iris-api.circle.com'
 
 /** CCTP domain per chain id used in activity rows (Circle's domain table). */
 export const CCTP_DOMAINS: Record<string, number> = {

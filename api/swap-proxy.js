@@ -18,8 +18,9 @@
 const SUPABASE_URL = (
   process.env.SUPABASE_URL ||
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
-  'https://cvvpzfvzweszuuxvaayb.supabase.co'
+  ''
 ).trim()
+if (!SUPABASE_URL) console.warn('[swap-proxy] SUPABASE_URL is not set — session verification will fail')
 const SUPABASE_SERVICE_KEY = (
   process.env.SUPABASE_SERVICE_KEY ||
   process.env.SUPABASE_SERVICE_ROLE_KEY ||

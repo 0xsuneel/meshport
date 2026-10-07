@@ -206,6 +206,21 @@ contract P2PMeshportEscrowV2 is ReentrancyGuard {
     // the moment they've paid, which blocks the seller's cancel for good.
     uint64 public constant SELLER_CANCEL_AFTER = 30 minutes;
 
+    // After the buyer marks the trade paid, the seller should release within
+    // this window. If they do not, a PAUSER may force-freeze the trade (even
+    // without an explicit dispute raised by either party) so the full
+    // Freeze -> Investigate -> Resolve path can run. This prevents a
+    // malicious or unresponsive seller from holding confirmed-paid funds
+    // locked indefinitely: the buyer's only recourse was previously to hope
+    // admin noticed, since `release()` is seller-only and the dispute flow
+    // requires a Pauser to freeze first.
+    //
+    // This does NOT change who can release: only the seller (via release())
+    // or admin after a full dispute resolution (adminResolve()) can actually
+    // move funds to the buyer. This ONLY lets a Pauser freeze the trade
+    // once the window has elapsed, enabling the dispute pipeline to proceed.
+    uint64 public constant SELLER_RELEASE_TIMEOUT = 24 hours;
+
     mapping(bytes32 => OfferEscrow) public escrows;
     mapping(bytes32 => Trade) public trades;
 
@@ -497,6 +512,32 @@ contract P2PMeshportEscrowV2 is ReentrancyGuard {
     }
 
     // ── PAUSER tier — freezing only, never moves value ───────────────────
+
+    /// Forcibly freeze a trade where the buyer has already marked it paid but
+    /// the seller has not released within SELLER_RELEASE_TIMEOUT. A Pauser
+    /// may call this to escalate the stale trade to the Freeze -> Investigate
+    /// -> AdminResolve pipeline, giving the buyer a dispute path instead of
+    /// indefinitely locked funds.
+    ///
+    /// Distinct from freezeTrade() (which requires no precondition on payment
+    /// status) — this variant specifically documents and enforces the "seller
+    /// went silent after receiving payment" escalation path.
+    ///
+    /// Security: this does NOT move funds and does NOT change who can release.
+    /// It is structurally identical to freezeTrade() in effect; the separate
+    /// name and timeout check are intentional documentation and enforcement.
+    function forceFreezeStalePaidTrade(bytes32 tradeKey) external onlyPauser {
+        Trade storage t = trades[tradeKey];
+        require(t.state == TradeState.Active, "P2PEscrowV2: trade not active");
+        require(t.buyerPaid, "P2PEscrowV2: buyer has not marked this trade paid");
+        require(
+            block.timestamp >= uint256(t.registeredAt) + SELLER_RELEASE_TIMEOUT,
+            "P2PEscrowV2: seller release window has not elapsed yet"
+        );
+        t.state = TradeState.Frozen;
+        t.frozenBy = msg.sender;
+        emit TradeFrozen(tradeKey, msg.sender);
+    }
 
     function freezeTrade(bytes32 tradeKey) external onlyPauser {
         Trade storage t = trades[tradeKey];

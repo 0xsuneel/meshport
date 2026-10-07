@@ -19,7 +19,7 @@ import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { formatAmount, timeAgo, copyToClipboard } from '@/lib/utils'
 import { subscribeToWalletClaims, type Claim as ServerClaim } from '@/lib/claimService'
 import { useSettingsStore } from '@/store/settingsStore'
-import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
+import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { motion } from 'framer-motion'
@@ -158,9 +158,12 @@ function HubUbTracker({ item }: { item: ActivityItem }) {
     let stop = false
     const load = async () => {
       try {
-        const { supabase } = await import('@/lib/supabase')
-        const { data } = await supabase.from('ub_claim_intents').select('status').eq('id', item.ubIntentId!).maybeSingle()
-        const st = (data as any)?.status as string | undefined
+        // SUPABASE REDUCTION: replaced direct supabase.from('ub_claim_intents')
+        // with the /api/bridge-relay?ub_intent_status= proxy so the client
+        // never needs the Supabase anon key for this read.
+        const r = await fetch(`/api/bridge-relay?ub_intent_status=${encodeURIComponent(item.ubIntentId!)}`, { credentials: 'include' })
+        const json = r.ok ? await r.json().catch(() => null) : null
+        const st = json?.status as string | undefined
         if (stop || !st) return
         setProgress(
           st === 'completed' ? { stage: 'done', txHash: item.sourceTxHash }
@@ -236,7 +239,7 @@ function HubUbTrackView({ item, onBack, onViewInHub, onHome }: {
 }
 
 // A CCTP move's burn: claims burn on the external chain, transfers on Arc.
-const cctpBurnChain = (item: ActivityItem) => (item.type === 'claim' ? item.chain : 'Arc_Testnet')
+const cctpBurnChain = (item: ActivityItem) => (item.type === 'claim' ? item.chain : ARC_CHAIN_KEY)
 // Pending moves the CCTP tracker can follow (UB claims and merchant rows have their own).
 const isTrackableCctp = (item: ActivityItem) =>
   item.status === 'pending' && item.route !== 'ub' && !item.isRecovery && !item.chainReceipt && !item.autoConvert
@@ -768,7 +771,7 @@ export function MultichainPage() {
             readyAt:    item.metadata?.eligible_at || undefined,
             status:     item.status === 'completed' ? 'success' : item.status === 'failed' ? 'failed' : 'pending',
             amount:     item.amount ?? 0,
-            chain:      'Arc_Testnet',
+            chain:      ARC_CHAIN_KEY,
             chainLabel: 'Unified Balance',
             timestamp:  new Date(item.createdAt).getTime(),
             sourceTxHash:      item.metadata?.init_tx_hash || undefined,

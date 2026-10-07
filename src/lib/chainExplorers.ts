@@ -27,7 +27,21 @@
 // Import EXPLORER_BASE / ARC_EXPLORER and build links with explorerTxUrl()
 // rather than hand-rolling `${base}/tx/${hash}` at each call site.
 
-export const ARC_EXPLORER = 'https://testnet.arcscan.app'
+// MAINNET FIX: ARC_EXPLORER was hardcoded to the testnet explorer URL,
+// meaning every "View on ArcScan" link in the app (swap receipts, transfer
+// success cards, activity rows) pointed at testnet.arcscan.app even on a
+// mainnet deployment — so a real mainnet tx would open a blank "not found"
+// page. Derived from VITE_NETWORK_ENV: mainnet uses arcscan.app,
+// testnet (and anything else) uses testnet.arcscan.app, same convention
+// ARC_CHAIN_KEY uses across ubClaim.ts/swapService.ts/ubFundRecovery.ts.
+export const ARC_EXPLORER = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
+  ? 'https://arcscan.app'
+  : 'https://testnet.arcscan.app'
+
+// App Kit chain key for Arc, derived from VITE_NETWORK_ENV like ARC_EXPLORER.
+export const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
+  ? 'Arc'
+  : 'Arc_Testnet'
 
 export const EXPLORER_BASE: Record<string, string> = {
   Ethereum_Sepolia:     'https://sepolia.etherscan.io',

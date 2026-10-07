@@ -173,7 +173,7 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
   if (walletSource !== 'social-auto') {
     try {
       const { getSessionPrivateKey } = await import('@/lib/security')
-      const cached = getSessionPrivateKey(walletAddress)
+      const cached = await getSessionPrivateKey(walletAddress)
       if (cached) {
         // BUG FIX: this hardcoded 'import-privkey' as the 4th arg, which was
         // a harmless no-op back when this branch only ever ran for

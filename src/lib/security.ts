@@ -274,38 +274,80 @@ export function getEncryptedMnemonic(walletAddress: string): string | null {
 // step 3), which is why those wallets used to re-prompt for the passcode on
 // EVERY refresh, not just after a real gap in the session.
 //
-// This cache trades a small amount of exposure for that convenience: once
-// the key is decrypted (by whatever means), it's mirrored in sessionStorage
-// so subsequent refreshes in the SAME browser tab session can skip the
-// prompt. sessionStorage — not localStorage — is deliberate: it's wiped the
-// moment the tab/window actually closes, and App.tsx additionally clears it
-// on the browser's 'offline' event so a genuine disconnect-and-return also
-// forces the passcode again, matching the "only ask again after being away"
-// behavior. It does NOT protect against an XSS running on the page while
-// the tab is open (nothing in browser storage can), so this is a real
-// security/convenience tradeoff, not a free win — worth keeping in mind
-// since this cache holds the raw private key itself.
+// SECURITY IMPROVEMENT: the raw private key was previously cached in plain
+// text in sessionStorage, which is accessible to any script on the page
+// (XSS, a compromised dependency) via `sessionStorage.getItem(key)`. The
+// improved strategy is:
+//   1. Primary: in-memory map (zero storage footprint — cleared on tab close
+//      or page reload automatically). XSS in the same page load can still
+//      read JS module scope, but this removes the persistent sessionStorage
+//      string that survives a devtools open or a storage inspector.
+//   2. Fallback for cross-reload persistence: the key is device-wrapped
+//      (AES-GCM under the non-extractable IndexedDB key, same layer as
+//      bindWalletToDevice) before being written to sessionStorage. A copied
+//      sessionStorage dump is useless without the exact IndexedDB key from
+//      this browser, matching the protection the locally-stored encrypted key
+//      already has. sessionStorage — not localStorage — is still deliberate:
+//      cleared when the tab/window closes. App.tsx clears it on 'offline'.
+//   3. On any IndexedDB error, fall back to the previous plain-text
+//      sessionStorage behaviour rather than silently losing the cache and
+//      forcing a passcode prompt on every single interaction.
 const SESSION_PK_PREFIX = 'meshport_session_pk_'
 
-export function cacheSessionPrivateKey(walletAddress: string, privateKey: string) {
-  try { sessionStorage.setItem(SESSION_PK_PREFIX + walletAddress.toLowerCase(), privateKey) } catch {}
+// In-memory primary cache — never serialised anywhere. Cleared automatically
+// when the page/tab unloads.
+const _sessionPkMemory = new Map<string, string>()
+
+export async function cacheSessionPrivateKey(walletAddress: string, privateKey: string): Promise<void> {
+  const key = walletAddress.toLowerCase()
+  _sessionPkMemory.set(key, privateKey)
+  // Write a device-wrapped copy to sessionStorage so a same-tab reload can
+  // recover without a passcode prompt.
+  try {
+    const wrapped = await wrapForDevice(privateKey)
+    sessionStorage.setItem(SESSION_PK_PREFIX + key, wrapped)
+  } catch {
+    // IndexedDB unavailable or no device key yet — write plain text as last
+    // resort, same as the original behaviour. The in-memory copy above still
+    // gives better safety within the current page load.
+    try { sessionStorage.setItem(SESSION_PK_PREFIX + key, privateKey) } catch {}
+  }
 }
 
-export function getSessionPrivateKey(walletAddress: string): string | null {
-  try { return sessionStorage.getItem(SESSION_PK_PREFIX + walletAddress.toLowerCase()) } catch { return null }
+export async function getSessionPrivateKey(walletAddress: string): Promise<string | null> {
+  const key = walletAddress.toLowerCase()
+  // Fast path: in-memory hit.
+  const memVal = _sessionPkMemory.get(key)
+  if (memVal) return memVal
+  // Reload path: unwrap from sessionStorage.
+  try {
+    const stored = sessionStorage.getItem(SESSION_PK_PREFIX + key)
+    if (!stored) return null
+    let plain: string | null = null
+    if (stored.startsWith(DEVICE_PREFIX)) {
+      plain = await unwrapFromDevice(stored)
+    } else {
+      // Legacy plain-text entry written by an older session — accept it.
+      plain = stored
+    }
+    if (plain) _sessionPkMemory.set(key, plain)
+    return plain
+  } catch { return null }
 }
 
 /** Clears one wallet's cached key, or every cached key when no address is given (e.g. on 'offline'). */
 export function clearSessionPrivateKey(walletAddress?: string | null) {
-  try {
-    if (walletAddress) {
-      sessionStorage.removeItem(SESSION_PK_PREFIX + walletAddress.toLowerCase())
-    } else {
+  if (walletAddress) {
+    _sessionPkMemory.delete(walletAddress.toLowerCase())
+    try { sessionStorage.removeItem(SESSION_PK_PREFIX + walletAddress.toLowerCase()) } catch {}
+  } else {
+    _sessionPkMemory.clear()
+    try {
       Object.keys(sessionStorage)
         .filter(k => k.startsWith(SESSION_PK_PREFIX))
         .forEach(k => sessionStorage.removeItem(k))
-    }
-  } catch {}
+    } catch {}
+  }
 }
 
 

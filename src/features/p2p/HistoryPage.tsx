@@ -21,6 +21,7 @@ import {
   type P2PTrade, type CounterpartyProfile,
 } from '@/lib/p2pService'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 
 type CategoryTab = 'all' | 'buy' | 'sell' | 'completed' | 'cancelled' | 'disputed' | 'refunded'
 
@@ -105,7 +106,7 @@ function TradeReceipt({ t, isBuyer, label, counterparty, counterpartyWallet, onO
       ]}
       detailsTitle="Trade details"
       fullHash={hash || undefined}
-      links={hash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash, href: `https://testnet.arcscan.app/tx/${hash}` }] : undefined}
+      links={hash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash, href: arcExplorerTxUrl(hash) }] : undefined}
       linksNote={hash ? undefined : 'No on-chain transaction yet for this trade.'}
       primaryLabel="Open Trade"
       onPrimary={onOpenTrade}

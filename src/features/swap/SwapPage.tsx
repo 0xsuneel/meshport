@@ -32,6 +32,7 @@ import { DesktopHistoryPanel, DesktopHistoryEmpty } from '@/components/ui/Deskto
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { sheetDrag } from '@/lib/sheetDrag'
+import { ARC_EXPLORER } from '@/lib/chainExplorers'
 
 // ── Token definitions ─────────────────────────────────────────────────────────
 // Arc Testnet: only USDC, EURC, cirBTC supported for swap (per Arc docs)
@@ -254,7 +255,7 @@ function HistoryDetail({ r, onClose }: { r: SwapRecord; onClose: () => void }) {
         { label: 'Network', value: 'Arc Testnet' },
       ]}
       fullHash={r.txHash || undefined}
-      links={r.txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: r.txHash, href: `https://testnet.arcscan.app/tx/${r.txHash}` }] : undefined}
+      links={r.txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: r.txHash, href: `${ARC_EXPLORER}/tx/${r.txHash}` }] : undefined}
     />
   )
 }
@@ -386,7 +387,7 @@ function SwapChecklist({ step, error, txHash, progress }: { step: string; error:
               {(i === 0 ? progress.approveHash : i === 1 && s.done ? swapHash : undefined) && (() => {
                 const h = (i === 0 ? progress.approveHash : swapHash)!
                 return (
-                  <a href={`https://testnet.arcscan.app/tx/${h}`} target="_blank" rel="noopener noreferrer"
+                  <a href={`${ARC_EXPLORER}/tx/${h}`} target="_blank" rel="noopener noreferrer"
                     style={{ fontSize: 10, color: 'var(--brand)', fontFamily: 'monospace', marginTop: 2, display: 'block', textDecoration: 'none' }}>
                     {h.slice(0, 16)}…
                   </a>
@@ -1091,7 +1092,7 @@ export function SwapPage() {
         txHash:      hash,
         timestamp:   Date.now(),
         status:      'success',
-        explorerUrl: hash ? `https://testnet.arcscan.app/tx/${hash}` : '',
+        explorerUrl: hash ? `${ARC_EXPLORER}/tx/${hash}` : '',
       }
       // BUG FIX (2026-09-03): this used to be unguarded, unlike every other
       // post-swap step below it (notifications, the Activity write, balance
@@ -1170,9 +1171,15 @@ export function SwapPage() {
       // race is what the scan's own poll-with-delay guard exists to handle
       // (see claim-recovery-scan/index.ts).
       if (walletAddress) {
-        import('@/lib/supabase').then(({ supabase }) => {
-          supabase.functions.invoke('claim-recovery-scan', { body: { walletAddress } }).catch(() => {})
-        }).catch(() => {})
+        // SUPABASE REDUCTION: proxy through /api/bridge-relay (service-key auth)
+        // instead of calling the Edge Function directly with the anon key.
+        import('@/lib/supabase').then(({ authApiHeaders }) => authApiHeaders()).then(headers =>
+          fetch('/api/bridge-relay', {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'claim_recovery_scan' }),
+          })
+        ).catch(() => {})
       }
 
       // PERF FIX: fire-and-forget — rewards points are a nice-to-have on top
@@ -1811,7 +1818,7 @@ export function SwapPage() {
                 { label: 'Network', value: 'Arc Testnet' },
               ]}
               fullHash={txHash || undefined}
-              links={txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: txHash, href: `https://testnet.arcscan.app/tx/${txHash}` }] : undefined}
+              links={txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: txHash, href: `${ARC_EXPLORER}/tx/${txHash}` }] : undefined}
               onPrimary={() => navigate('/')}
               checkRef={heroCheckRef}
               revealed={travelDone}

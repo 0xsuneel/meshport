@@ -1,3 +1,9 @@
+// The destination chain key for Arc — env-driven so mainnet builds target
+// the production chain rather than testnet.
+const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
+  ? 'Arc'
+  : 'Arc_Testnet'
+
 /**
  * ActivityService.ts — Centralized Supabase-backed activity tracking.
  *
@@ -446,7 +452,7 @@ export const Activity = {
       activityType:     'claim',
       amount:           p.amount,
       sourceChain:      normalizeChain(p.sourceChain),
-      destinationChain: 'Arc_Testnet',
+      destinationChain: ARC_CHAIN_KEY,
       explorerUrl:      p.explorerUrl || explorerUrl(p.txHash, normalizeChain(p.sourceChain)),
       metadata:         {},
     })
@@ -466,7 +472,7 @@ export const Activity = {
       activityType:     'claim',
       amount:           p.amount,
       sourceChain:      p.sourceChain,
-      destinationChain: 'Arc_Testnet',
+      destinationChain: ARC_CHAIN_KEY,
       status:           'pending',
       explorerUrl:      explorerUrl(p.depositTxHash, p.sourceChain),
       metadata:         { route: 'ub', claimed_amount: p.amount, ...(p.merchant ? { merchant: true } : {}) },
@@ -539,7 +545,7 @@ export const Activity = {
       activityType:      'claim',
       amount:            p.received,
       sourceChain:       p.sourceChain,
-      destinationChain:  'Arc_Testnet',
+      destinationChain:  ARC_CHAIN_KEY,
       status:            'completed',
       explorerUrl:       p.depositTxHash ? explorerUrl(p.depositTxHash, p.sourceChain) : p.arcTxHash ? explorerUrl(p.arcTxHash) : undefined,
       arrivedAmount:     p.received,
@@ -691,7 +697,6 @@ export async function fetchActivity(
   opts: FetchOptions = {},
 ): Promise<ActivityRecord[]> {
   const SUPA_URL  = (import.meta.env.VITE_SUPABASE_URL  as string) || ''
-  const SUPA_KEY  = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
   const { limit = 100, offset = 0, cursorCreatedAt, cursorId, activityType, status, search, since, includePendingBridge = false } = opts
 
   const addr = walletAddress.toLowerCase()
@@ -912,9 +917,14 @@ export async function fetchActivity(
       try {
         const addrs = [...new Set(needsLookup.map(r => r.counterpartyAddress!.toLowerCase()))]
         const orFilter = addrs.map(a => `wallet_address.ilike.${a}`).join(',')
+        // Use the session JWT as bearer — not the anon key — so this read is
+        // scoped to the signed-in session. The anon key as a bearer is only
+        // safe for truly unauthenticated reads and should never be reused for
+        // authenticated write paths or user-data lookups.
+        const { authHeaders } = await import('./chatService')
         const res2 = await fetch(
           `${SUPA_URL}/rest/v1/users?or=(${orFilter})&select=wallet_address,username,display_name`,
-          { headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` } }
+          { headers: { ...(await authHeaders()), 'Accept': 'application/json' } }
         )
         if (res2.ok) {
           const users = await res2.json() as any[]

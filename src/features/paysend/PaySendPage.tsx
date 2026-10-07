@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
+import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
@@ -898,7 +899,7 @@ export function PaySendPage() {
       setProcessStage('confirming')
       setTxHash(result.txHash)
       if (merchantPayCode && token === 'USDC' && result.txHash) {
-        import('@/lib/merchantPay').then(({ submitPayment }) => submitPayment(merchantPayCode, 'Arc_Testnet', result.txHash, { orderNumber: merchantOrderNumber ?? undefined, amount: numAmount }))
+        import('@/lib/merchantPay').then(({ submitPayment }) => submitPayment(merchantPayCode, ARC_CHAIN_KEY, result.txHash, { orderNumber: merchantOrderNumber ?? undefined, amount: numAmount }))
           .catch(e => console.warn('[PaySend] merchant payment submit failed (merchant can verify by tx):', e))
       }
 
@@ -1029,7 +1030,13 @@ export function PaySendPage() {
           if (chatName && user) {
             await ensureAnonSession()
             const name = chatName
-            const { data: otherUser, error: lookupErr } = await supabase.from('users').select('id,username,display_name').eq('username', name).maybeSingle()
+            // SUPABASE REDUCTION: replaced direct supabase.from('users') lookup
+            // with /api/profile?username= so the client never needs the anon key
+            // for user lookups. Same shape: {id, username, display_name}.
+            const _profileRes = await fetch(`/api/profile?username=${encodeURIComponent(name)}`)
+            const _profileRows = _profileRes.ok ? await _profileRes.json().catch(() => []) as any[] : []
+            const otherUser = _profileRows[0] ?? null
+            const lookupErr = _profileRes.ok ? null : { message: `profile lookup ${_profileRes.status}` }
             if (lookupErr) {
               // Was previously swallowed with zero trace — this is the
               // single most likely failure point (recipient lookup needs a
@@ -1594,7 +1601,7 @@ export function PaySendPage() {
                     { label: 'Network', value: 'Arc Testnet' },
                   ]}
                   fullHash={txHash || undefined}
-                  links={txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: txHash, href: `https://testnet.arcscan.app/tx/${txHash}` }] : undefined}
+                  links={txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: txHash, href: arcExplorerTxUrl(txHash) }] : undefined}
                   onPrimary={finishDone}
                   checkRef={heroCheckRef}
                   revealed={travelDone}
@@ -1944,7 +1951,7 @@ export function PaySendPage() {
                 { label: 'Status', value: r.status === 'completed' ? 'Completed' : r.status === 'failed' ? 'Failed' : 'Pending' },
                 ...(r.txHash ? [{ label: 'Tx Hash', value: `${r.txHash.slice(0, 8)}…${r.txHash.slice(-6)}` }] : []),
               ]}
-              explorerLinks={r.txHash ? [{ label: 'View on Arc Explorer', href: `https://testnet.arcscan.app/tx/${r.txHash}` }] : undefined}
+              explorerLinks={r.txHash ? [{ label: 'View on Arc Explorer', href: arcExplorerTxUrl(r.txHash) }] : undefined}
             />
           )
         })()}

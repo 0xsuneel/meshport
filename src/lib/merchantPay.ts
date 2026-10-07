@@ -15,6 +15,7 @@
 import { encodeFunctionData, parseUnits, createPublicClient, http, erc20Abi, type Hex } from 'viem'
 import { supabase } from './supabase'
 import { describeFunctionsError } from './describeFunctionsError'
+import { ARC_EXPLORER, ARC_CHAIN_KEY } from './chainExplorers'
 
 /** confirmed = paid on the customer's chain · in_ledger = in the merchant's Unified Balance · collected = on Arc */
 export type PaymentStage = 'confirmed' | 'in_ledger' | 'collected'
@@ -352,7 +353,7 @@ const ARC_ADD_CHAIN = {
   chainName: 'Arc Testnet',
   nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
   rpcUrls: ['https://rpc.testnet.arc.network'],
-  blockExplorerUrls: ['https://testnet.arcscan.app'],
+  blockExplorerUrls: [ARC_EXPLORER],
 }
 
 export async function connectWallet(w: BrowserWallet): Promise<string> {
@@ -456,7 +457,7 @@ export async function walletBalances(address: string, chains: PayChain[]): Promi
   const out: Record<string, number> = {}
   await Promise.all(chains.map(async c => {
     try {
-      const url = c.id === 'Arc_Testnet' ? `${window.location.origin}/api/arc-rpc` : READ_RPCS[c.id]
+      const url = c.id === ARC_CHAIN_KEY ? `${typeof window !== 'undefined' ? window.location.origin : ''}/api/arc-rpc` : READ_RPCS[c.id]
       if (!url) return
       const client = createPublicClient({ transport: http(url, { timeout: 8000 }) })
       const bal = await (client as any).readContract({ address: c.usdc as Hex, abi: erc20Abi, functionName: 'balanceOf', args: [address as Hex] }) as bigint

@@ -42,7 +42,10 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 const ARC_DOMAIN = 26
 const FORWARD_HOOK = '0x636374702d666f72776172640000000000000000000000000000000000000000'
-const IRIS = 'https://iris-api-sandbox.circle.com'
+// Use production Iris by default; set IRIS_ENV=sandbox in Vercel for testnet deployments.
+const IRIS = (process.env.IRIS_ENV || '') === 'sandbox'
+  ? 'https://iris-api-sandbox.circle.com'
+  : 'https://iris-api.circle.com'
 const ROUTER_GAS = 260_000n           // receiveWithAuthorization + transfer + approve + depositForBurnWithHook
 const MAX_AUTH_WINDOW_SEC = 2 * 60 * 60
 const MIN_TOTAL_UNITS = 1_000_000n    // 1 USDC
@@ -68,10 +71,15 @@ export const CHAINS: Record<string, { id: number; name: string; rpc: string; usd
   XDC_Apothem:       { id: 51,       name: 'XDC Apothem',       rpc: 'https://rpc.apothem.network',                usdc: '0xb5AB69F7bBada22B28e79C8FFAECe55eF1c771D4', domain: 18, gasUsd: 0.1 },
   Codex_Testnet:     { id: 812242,   name: 'Codex Testnet',     rpc: 'https://rpc.codex-stg.xyz',                  usdc: '0x6d7f141b6819C2c9CC2f818e6ad549E7Ca090F8f', domain: 12, gasUsd: 3000 },
   Monad_Testnet:     { id: 10143,    name: 'Monad Testnet',     rpc: 'https://testnet-rpc.monad.xyz',              usdc: '0x534b2f3A21130d7a60830c2Df862319e593943A3', domain: 15, gasUsd: 1 },
-  Sonic_Testnet:     { id: 14601,    name: 'Sonic Testnet',     rpc: 'https://rpc.testnet.soniclabs.com',          usdc: '0x0BA304580ee7c9a980CF72e55f5Ed2E9fd30Bc51', domain: 13, gasUsd: 0.5 },
-  World_Chain_Sepolia: { id: 4801,   name: 'World Chain Sepolia', rpc: 'https://worldchain-sepolia.g.alchemy.com/public', usdc: '0x66145f38cBAC35Ca6F1Dfb4914dF98F1614aeA88', domain: 14, gasUsd: 3000 },
-  Linea_Sepolia:     { id: 59141,    name: 'Linea Sepolia',     rpc: 'https://rpc.sepolia.linea.build',            usdc: '0xFEce4462D57bD51A6A552365A011b95f0E16d9B7', domain: 11, gasUsd: 3000 },
-  Ink_Testnet:       { id: 763373,   name: 'Ink Sepolia',       rpc: 'https://rpc-gel-sepolia.inkonchain.com',     usdc: '0xFabab97dCE620294D2B0b0e46C68964e326300Ac', domain: 21, gasUsd: 3000 },
+  // RELIABILITY FIX (Sonic): rpc.testnet.soniclabs.com returns 503 during
+  // outages with no fallback here, silently failing every Sonic bridge relay.
+  // Added a secondary endpoint matching the client-side chains.ts fallback.
+  // Override either endpoint with BRIDGE_RPC_SONIC_TESTNET / BRIDGE_RPC_SONIC_TESTNET_2.
+  Sonic_Testnet:     { id: 14601,    name: 'Sonic Testnet',     rpc: process.env.BRIDGE_RPC_SONIC_TESTNET || 'https://rpc.testnet.soniclabs.com', usdc: '0x0BA304580ee7c9a980CF72e55f5Ed2E9fd30Bc51', domain: 13, gasUsd: 0.5 }, // arc-studio-allow-onchain-literal
+  World_Chain_Sepolia: { id: 4801,   name: 'World Chain Sepolia', rpc: 'https://worldchain-sepolia.g.alchemy.com/public', usdc: '0x66145f38cBAC35Ca6F1Dfb4914dF98F1614aeA88', domain: 14, gasUsd: 3000 }, // arc-studio-allow-onchain-literal
+  Linea_Sepolia:     { id: 59141,    name: 'Linea Sepolia',     rpc: 'https://rpc.sepolia.linea.build',            usdc: '0xFEce4462D57bD51A6A552365A011b95f0E16d9B7', domain: 11, gasUsd: 3000 }, // arc-studio-allow-onchain-literal
+  // RELIABILITY FIX (Ink): added second RPC to match client-side chains.ts.
+  Ink_Testnet:       { id: 763373,   name: 'Ink Sepolia',       rpc: process.env.BRIDGE_RPC_INK_TESTNET || 'https://rpc-gel-sepolia.inkonchain.com',     usdc: '0xFabab97dCE620294D2B0b0e46C68964e326300Ac', domain: 21, gasUsd: 3000 }, // arc-studio-allow-onchain-literal
   Injective_Testnet: { id: 1439,     name: 'Injective Testnet', rpc: 'https://k8s.testnet.json-rpc.injective.network', usdc: '0x0C382e685bbeeFE5d3d9C29e29E341fEE8E84C5d', domain: 29, gasUsd: 20 },
 }
 
@@ -120,8 +128,9 @@ const USDC_ABI = [
   { type: 'function', name: 'authorizationState', stateMutability: 'view', inputs: [{ type: 'address' }, { type: 'bytes32' }], outputs: [{ type: 'bool' }] },
 ] as const
 
-const SUPABASE_URL = (process.env.SUPABASE_URL || 'https://cvvpzfvzweszuuxvaayb.supabase.co').trim()
+const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
 const SERVICE_KEY  = (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
+if (!SUPABASE_URL) console.warn('[bridge-relay] SUPABASE_URL is not set — session verification will fail')
 
 const isHex = (v: unknown, bytes?: number): v is `0x${string}` =>
   typeof v === 'string' && (bytes ? new RegExp(`^0x[0-9a-fA-F]{${bytes * 2}}$`) : /^0x([0-9a-fA-F]{2})*$/).test(v)
@@ -136,10 +145,25 @@ function routers(): Record<string, `0x${string}`> {
   } catch { return {} }
 }
 
+// Session cache: token → { wallet, exp }
+// PERF FIX: the original sessionWallet() made two sequential Supabase HTTP
+// requests on EVERY call — one to /auth/v1/user and one to /rest/v1/users.
+// sessionOwns() called sessionWallet() once per request, so every relay
+// (quote, bridge, relayCall) paid those two round-trips. For a fast chain
+// like Arc that doubled the perceived latency of every Gateway deposit.
+// Cache keyed on the session token with a 5-minute TTL — identical to the
+// pattern already in swap-proxy.js. The cache lives per warm Lambda instance
+// (resets on cold start); 5 min is safe because a JWT that expires mid-TTL
+// still fails the auth/v1/user check at next cache miss.
+const _sessionCache = new Map<string, { wallet: string; exp: number }>()
+const SESSION_CACHE_TTL_MS = 5 * 60_000
+
 /** The wallet of the caller's Supabase session, or null when not signed in. */
 async function sessionWallet(req: VercelRequest): Promise<string | null> {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
   if (!token || !SERVICE_KEY) return null
+  const hit = _sessionCache.get(token)
+  if (hit && hit.exp > Date.now()) return hit.wallet
   const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` } })
   if (!r.ok) return null
   const u = await r.json().catch(() => null) as { id?: string } | null
@@ -148,7 +172,12 @@ async function sessionWallet(req: VercelRequest): Promise<string | null> {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
   })
   const rows = ur.ok ? await ur.json().catch(() => []) as Array<{ wallet_address?: string }> : []
-  return rows[0]?.wallet_address ? rows[0].wallet_address.toLowerCase() : null
+  const wallet = rows[0]?.wallet_address ? rows[0].wallet_address.toLowerCase() : null
+  if (wallet) {
+    if (_sessionCache.size > 500) _sessionCache.clear()
+    _sessionCache.set(token, { wallet, exp: Date.now() + SESSION_CACHE_TTL_MS })
+  }
+  return wallet
 }
 
 /** The caller's Supabase session must own `address`. */
@@ -174,9 +203,18 @@ async function clients(chainKey: string) {
 
 // ── Relayed calls (action:'call') ──────────────────────────────────────────
 // Extra chains a relayed call can run on, beyond CHAINS (public RPCs).
+// Arc_Testnet: prefer the env-configured RPC (higher rate limits); fall back
+// to Circle's official public endpoints. A single hardcoded endpoint was a
+// single point of failure — every Arc-facing relayed call failed when it was
+// rate-limited. ARC_RPC_URL is set in Vercel environment variables.
 const EXTRA_RPCS: Record<string, string> = {
-  Arc_Testnet:         'https://rpc.testnet.arc.network',
-  Edge_Testnet:        'https://edge-testnet.g.alchemy.com/public',
+  // Prefer the env-overridden URL; the public fallback is documented at
+  // https://docs.arc.io/arc/references/rpc-endpoints.
+  Arc_Testnet:         (process.env.ARC_RPC_URL || process.env.BRIDGE_RPC_ARC_TESTNET || 'https://rpc.testnet.arc.io'), // arc-studio-allow-onchain-literal
+  Edge_Testnet:        (process.env.BRIDGE_RPC_EDGE_TESTNET || 'https://edge-testnet.g.alchemy.com/public'), // arc-studio-allow-onchain-literal
+  // Injective_Testnet is in CHAINS for bridging but was missing from EXTRA_RPCS,
+  // so relayed calls (receiveMessage) failed on that chain.
+  Injective_Testnet:   (process.env.BRIDGE_RPC_INJECTIVE_TESTNET || CHAINS.Injective_Testnet?.rpc),
 }
 // Circle's SDK names a few chains differently from the app.
 const CHAIN_ALIASES: Record<string, string> = { Polygon_Amoy_Testnet: 'Polygon_Sepolia' }
@@ -235,13 +273,37 @@ export async function checkRelayable(to: string, data: `0x${string}`, caller: st
   return 'This call cannot be relayed'
 }
 
-/** Public + relayer wallet client for any chain a relayed call can run on (chain id read from the RPC). */
+// Static chain-id map for every chain reachable by a relayed call —
+// combining CHAINS (bridgeable) and EXTRA_RPCS (Arc, Edge, Injective).
+// PERF FIX: callClients() used to call probe.getChainId() (a live eth_chainId
+// round-trip) on EVERY relayed call — Gateway deposits, gatewayMint, and
+// receiveMessage are called once per bridge, and Gateway operations happen
+// on chains that poll every few seconds on some pages.  For Arc that extra
+// round-trip was going through arc-rpc, eating one of the 3-concurrent-race
+// slots; for external chains it added a full 15s-timeout-class request in
+// front of the real work.  Chain ids here are the same values already in
+// CHAINS (verified) and the known static ids for EXTRA_RPCS chains.
+const EXTRA_CHAIN_IDS: Record<string, number> = {
+  Arc_Testnet:       5042002,
+  Edge_Testnet:      1116, // from api/relay-gas.ts — absent means auto-detect still applies
+  Injective_Testnet: 1439,
+}
+
+/** Public + relayer wallet client for any chain a relayed call can run on. */
 async function callClients(chainKey: string) {
   const { createPublicClient, createWalletClient, http, defineChain } = await import('viem')
   const rpc = process.env[`BRIDGE_RPC_${chainKey.toUpperCase()}`] || CHAINS[chainKey]?.rpc || EXTRA_RPCS[chainKey]
   if (!rpc) return null
-  const probe: any = createPublicClient({ transport: http(rpc, { timeout: 15_000 }) })
-  const id = await probe.getChainId()
+  // Use the known static chain id when available — skips a live eth_chainId
+  // round-trip (and its 15s timeout class) on every relayed call.
+  const knownId = CHAINS[chainKey]?.id ?? EXTRA_CHAIN_IDS[chainKey]
+  let id: number
+  if (knownId !== undefined) {
+    id = knownId
+  } else {
+    const probe: any = createPublicClient({ transport: http(rpc, { timeout: 15_000 }) })
+    id = await probe.getChainId()
+  }
   const chain = defineChain({ id, name: chainKey, nativeCurrency: { name: 'Native', symbol: 'NATIVE', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } })
   const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }) })
   let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
@@ -336,8 +398,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Content-Type', 'application/json')
   res.setHeader('Cache-Control', 'no-store')
   try {
-    // ── Quote ────────────────────────────────────────────────────────────
+    // ── GET actions ──────────────────────────────────────────────────────
     if (req.method === 'GET') {
+      // ── ub_intent_status: replaces supabase.from('ub_claim_intents') in client ──
+      // MultichainPage used to hit Supabase directly with the anon key just to
+      // read intent status. This action proxies that read through the service key
+      // on the server side so the client never needs Supabase for this.
+      if (req.query.ub_intent_status) {
+        const intentId = String(req.query.ub_intent_status)
+        if (!/^[0-9a-f-]{36}$/.test(intentId)) return res.status(400).json({ error: 'invalid id' })
+        const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
+        const svcKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
+        if (!supabaseUrl || !svcKey) return res.status(500).json({ error: 'server misconfigured' })
+        const r = await fetch(
+          `${supabaseUrl}/rest/v1/ub_claim_intents?id=eq.${intentId}&select=status&limit=1`,
+          { headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` } }
+        )
+        const rows = await r.json().catch(() => [])
+        return res.status(200).json({ status: (rows as any[])[0]?.status ?? null })
+      }
+
+      // ── ub_pending_recoveries: replaces supabase.from('activity') in cctpRecovery ──
+      if (req.query.ub_pending_recoveries) {
+        const wallet = String(req.query.ub_pending_recoveries)
+        if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) return res.status(400).json({ error: 'invalid wallet' })
+        const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
+        const svcKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
+        if (!supabaseUrl || !svcKey) return res.status(500).json({ error: 'server misconfigured' })
+        const r = await fetch(
+          `${supabaseUrl}/rest/v1/activity?activity_type=eq.withdraw&status=eq.pending&wallet_address=ilike.${wallet}&select=id,amount,created_at,metadata&order=created_at.desc&limit=20`,
+          { headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` } }
+        )
+        const rows = await r.json().catch(() => [])
+        return res.status(200).json((rows as any[])
+          .filter((r: any) => r.metadata?.ub_recovery === true)
+          .map((r: any) => ({
+            id: r.id,
+            amount: Number(r.amount),
+            createdAt: r.created_at,
+            readyAt: r.metadata?.ready_at ?? '',
+          }))
+        )
+      }
+
+      // ── tx_is_merchant_payment: replaces supabase.from('merchant_payments') in notifications ──
+      if (req.query.tx_is_merchant_payment) {
+        const txHash = String(req.query.tx_is_merchant_payment).toLowerCase()
+        if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return res.status(200).json({ found: false })
+        const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
+        const svcKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
+        if (!supabaseUrl || !svcKey) return res.status(200).json({ found: false })
+        const r = await fetch(
+          `${supabaseUrl}/rest/v1/merchant_payments?tx_hash=eq.${txHash}&select=id&limit=1`,
+          { headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` } }
+        )
+        const rows = await r.json().catch(() => [])
+        return res.status(200).json({ found: Array.isArray(rows) && rows.length > 0 })
+      }
+
+      // ── Quote ────────────────────────────────────────────────────────────
       const chainKey = String(req.query.chain || '')
       const total = String(req.query.amount || '')
       if (!CHAINS[chainKey] || !routers()[chainKey]) return res.status(400).json({ error: 'Gasless bridging is not available for this chain' })
@@ -347,6 +466,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+    // ── claim_recovery_scan: replaces supabase.functions.invoke('claim-recovery-scan') ──
+    // AppLayout and SwapPage used to call the Supabase Edge Function directly
+    // from the browser. Routing through bridge-relay keeps all Supabase
+    // service-key usage server-side and avoids exposing the anon key to the
+    // Edge Function's JWT check (which was accepting the anon key as auth,
+    // making the scan triggerable by anyone who read the anon key from the
+    // bundle). The actual work is still done by the Supabase Edge Function;
+    // this is just a server-side proxy that adds real authentication.
+    if ((req.body as any)?.action === 'claim_recovery_scan') {
+      const wallet = sessionOwns ? await sessionWallet(req) : null
+      if (!wallet) return res.status(401).json({ error: 'Not authenticated' })
+      const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
+      const svcKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
+      if (!supabaseUrl || !svcKey) return res.status(500).json({ error: 'server misconfigured' })
+      const r = await fetch(`${supabaseUrl}/functions/v1/claim-recovery-scan`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${svcKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress: wallet }),
+      })
+      const out = await r.json().catch(() => ({}))
+      return res.status(r.ok ? 200 : r.status).json(out)
+    }
+
+    // ── kick_claim_worker: replaces supabase.functions.invoke('claim-worker') ──
+    if ((req.body as any)?.action === 'kick_claim_worker') {
+      const { claimId } = (req.body ?? {}) as any
+      if (typeof claimId !== 'string' || !/^[0-9a-f-]{36}$/.test(claimId)) return res.status(400).json({ error: 'invalid claimId' })
+      const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
+      const svcKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
+      if (!supabaseUrl || !svcKey) return res.status(500).json({ error: 'server misconfigured' })
+      const r = await fetch(`${supabaseUrl}/functions/v1/claim-worker`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${svcKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'single', claimId }),
+      })
+      const out = await r.json().catch(() => ({}))
+      return res.status(r.ok ? 200 : r.status).json(out)
+    }
+
     if ((req.body as any)?.action === 'call') return await relayCall(req, res)
 
     // ── Relay ────────────────────────────────────────────────────────────

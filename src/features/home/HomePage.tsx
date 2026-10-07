@@ -2581,6 +2581,10 @@ export function HomePage() {
         fetchContactsDb(user.id!).catch(() => []),
         (async () => {
           try {
+            // SUPABASE REDUCTION: activity reads still go through Supabase REST
+            // (RLS-protected), but user lookups now go through /api/profile?wallets=
+            // so the client never uses the anon key as an authorization header
+            // for user data (which had no ownership check).
             const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
             const SUPA_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
             const headers = { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` }
@@ -2596,8 +2600,8 @@ export function HomePage() {
                 .filter((a: string) => a && a !== myAddr)
             )]
             if (!addrs.length) return []
-            const { supabase } = await import('@/lib/supabase')
-            const { data } = await supabase.from('users').select('id, username, display_name, email, wallet_address, avatar_url, created_at').or(addrs.map(a => `wallet_address.ilike.${a}`).join(','))
+            const profileRes = await fetch(`/api/profile?wallets=${encodeURIComponent(addrs.join(','))}`)
+            const data = profileRes.ok ? await profileRes.json().catch(() => []) : []
             return (data || []) as DbUser[]
           } catch { return [] }
         })(),

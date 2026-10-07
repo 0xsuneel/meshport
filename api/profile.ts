@@ -42,23 +42,53 @@ import { verifyMessage } from 'viem'
 // lookup by address is expected to be public), and locking it down further
 // wasn't asked for here.
 async function handleGetProfile(req: VercelRequest, res: VercelResponse) {
-  const { wallet } = req.query
+  const { wallet, username, wallets } = req.query
 
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim()
+  if (!supabaseUrl || !key) return res.status(500).json({ error: 'server misconfigured' })
 
-  // Exactly one well-formed address — never a pattern. (An unchecked value
-  // used to go straight into an `ilike` filter: `?wallet=*` listed every user.)
-  if (!supabaseUrl || !key || typeof wallet !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(wallet)) {
-    return res.status(400).json({ error: 'missing params' })
+  // Mode 1: single wallet address
+  if (typeof wallet === 'string') {
+    // Exactly one well-formed address — never a pattern. (An unchecked value
+    // used to go straight into an `ilike` filter: `?wallet=*` listed every user.)
+    if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) return res.status(400).json({ error: 'invalid wallet' })
+    const r = await fetch(
+      `${supabaseUrl}/rest/v1/users?wallet_address=ilike.${wallet}&select=id,wallet_address,avatar_url,display_name,username&limit=1`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+    )
+    return res.status(200).json(await r.json())
   }
 
-  const r = await fetch(
-    `${supabaseUrl}/rest/v1/users?wallet_address=ilike.${wallet}&select=id,wallet_address,avatar_url,display_name&limit=1`,
-    { headers: { apikey: key, Authorization: `Bearer ${key}` } }
-  )
-  const data = await r.json()
-  return res.status(200).json(data)
+  // Mode 2: by username (for payment recipient lookup — replaces direct
+  // supabase.from('users').eq('username',name) calls in PaySendPage.tsx
+  // and ChatPage.tsx so the client never needs the anon key for user lookups)
+  if (typeof username === 'string') {
+    const clean = username.replace(/\.arc$/i, '').toLowerCase().trim()
+    if (!clean || clean.length > 60 || !/^[a-z0-9_.-]+$/.test(clean)) return res.status(400).json({ error: 'invalid username' })
+    const r = await fetch(
+      `${supabaseUrl}/rest/v1/users?username=ilike.${encodeURIComponent(clean)}&select=id,wallet_address,avatar_url,display_name,username&limit=1`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+    )
+    return res.status(200).json(await r.json())
+  }
+
+  // Mode 3: bulk wallet-address lookup — comma-separated list of 0x addresses
+  // Replaces supabase.from('users').or('wallet_address.ilike.0x…,…') calls
+  // in HomePage.tsx and DesktopHeader.tsx so those pages never touch the anon key.
+  if (typeof wallets === 'string') {
+    const addrs = wallets.split(',').map(a => a.trim().toLowerCase()).filter(a => /^0x[0-9a-fA-F]{40}$/.test(a))
+    if (addrs.length === 0 || addrs.length > 50) return res.status(400).json({ error: 'invalid wallets param' })
+    // Build Supabase OR filter: wallet_address=ilike.0xAAA,wallet_address=ilike.0xBBB
+    const orFilter = addrs.map(a => `wallet_address.ilike.${a}`).join(',')
+    const r = await fetch(
+      `${supabaseUrl}/rest/v1/users?or=(${encodeURIComponent(orFilter)})&select=id,wallet_address,avatar_url,display_name,username&limit=50`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+    )
+    return res.status(200).json(await r.json())
+  }
+
+  return res.status(400).json({ error: 'missing params' })
 }
 
 // ── Signature verification ──────────────────────────────────────────────────

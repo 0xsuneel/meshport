@@ -2,6 +2,7 @@ import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, use
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SNACKBAR_MOTION, DIALOG_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
 import { _plainByContent, plainTextOf, messagePreview, parseMedia, isDecryptFailure, splitCaption } from './chatMessageText'
+import { ARC_EXPLORER, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { ChatForwardSheet } from './ChatForwardSheet'
 import { ChatImage, ChatFile, QuoteThumb, FileTypeTile, MediaPreview, ChatImageViewer, type PreviewItem, type ViewerItem } from './ChatMedia'
 import { preparePhoto, uploadWithProgress, withMeta, metaOf, putCachedMedia, mimeOf } from './chatMediaStore'
@@ -1245,7 +1246,7 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
         { label: 'Network', value: 'Arc Testnet' },
       ]}
       fullHash={hash || undefined}
-      links={hash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash, href: `https://testnet.arcscan.app/tx/${hash}` }] : undefined}
+      links={hash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash, href: arcExplorerTxUrl(hash) }] : undefined}
     />
   )
 }
@@ -3598,7 +3599,7 @@ export function ChatConversationPage() {
         // Confirmed server-side against the order number + amount.
         const check = { orderNumber: billPay.orderNumber ?? undefined, amount: billPay.amount }
         import('@/lib/merchantPay').then(({ submitPayment, BILL_UPDATED_EVENT }) =>
-          submitPayment(code, 'Arc_Testnet', result.txHash, check)
+          submitPayment(code, ARC_CHAIN_KEY, result.txHash, check)
             .then(() => window.dispatchEvent(new CustomEvent(BILL_UPDATED_EVENT, { detail: code })))
         ).catch(e => {
           console.error('[Chat] order payment confirm failed:', e)
@@ -4746,7 +4747,7 @@ export function ChatConversationPage() {
                       <div className="text-right">
                         <p className={`text-sm font-bold ${sent ? 'text-brand' : 'text-success'}`}>{sent ? '-' : '+'}{formatAmount(p.payment_amount || 0, chatPayTokenDecimals((p.token_symbol as ChatPayToken) || 'USDC'))} {p.token_symbol || 'USDC'}</p>
                         {p.payment_tx_hash && (
-                          <a href={`https://testnet.arcscan.app/tx/${p.payment_tx_hash}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[11px] text-brand">View →</a>
+                          <a href={arcExplorerTxUrl(p.payment_tx_hash)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[11px] text-brand">View →</a>
                         )}
                       </div>
                     </div>
@@ -5125,7 +5126,7 @@ export function ChatConversationPage() {
                     { label: 'Network Fee', value: payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free' },
                   ]}
                   fullHash={payTxHash || undefined}
-                  links={payTxHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: payTxHash, href: `https://testnet.arcscan.app/tx/${payTxHash}` }] : undefined}
+                  links={payTxHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: payTxHash, href: arcExplorerTxUrl(payTxHash) }] : undefined}
                   primaryLabel="Back to Chat"
                   onPrimary={closeNow}
                   checkRef={paySuccessCheckRef}

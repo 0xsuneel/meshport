@@ -13,6 +13,7 @@ import {
   ARC_PAY_CHAIN, type BrowserWallet, type PayChain,
 } from '@/lib/merchantPay'
 import { MERCHANT_QR_NETWORK_NAME } from '@/lib/merchantQr'
+import { ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 
 type Props = {
   /** Recipient wallet on Arc. */
@@ -28,7 +29,7 @@ type Props = {
 }
 
 export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_CHAIN, onPaid }: Props) {
-  const isArc = chain.id === 'Arc_Testnet'
+  const isArc = chain.id === ARC_CHAIN_KEY
   const netName = MERCHANT_QR_NETWORK_NAME[chain.id] ?? chain.label
   const { showToastMessage } = useUIStore()
   const [wallets, setWallets] = useState<BrowserWallet[] | null>(null)

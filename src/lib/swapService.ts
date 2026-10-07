@@ -23,6 +23,15 @@
  */
 import { ARC_NETWORK, arcRpcJson } from './arc'
 import { USDC_CONTRACT, EURC_CONTRACT, CIRBTC_CONTRACT } from './arcService'
+import { ARC_EXPLORER } from './chainExplorers'
+
+// Derive the Arc chain key from env so a mainnet build targets Arc mainnet.
+// Hardcoding 'Arc_Testnet' here broke every swap on a mainnet deployment,
+// because the AppKit adapter was presented with a chain ID that didn't match
+// the live network, causing "chain mismatch" errors on every estimate/swap.
+const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
+  ? 'Arc'
+  : 'Arc_Testnet'
 
 const TOKEN_CONTRACTS: Record<string, { address: string; decimals: number }> = {
   USDC:   { address: USDC_CONTRACT,   decimals: 6 },
@@ -297,7 +306,7 @@ export async function estimateSwapLocal(params: {
   const slip = Math.max(Number(params.slippageBps || 500), 300)
 
   const baseParams = {
-    from:     { adapter, chain: 'Arc_Testnet' as any },
+    from:     { adapter, chain: ARC_CHAIN_KEY as any },
     tokenIn:  params.tokenIn,
     tokenOut: params.tokenOut,
     amountIn: params.amountIn,
@@ -347,7 +356,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
   const slip = Math.max(Number(params.slippageBps || 500), 300)
 
   const baseParams = {
-    from:     { adapter, chain: 'Arc_Testnet' as any },
+    from:     { adapter, chain: ARC_CHAIN_KEY as any },
     tokenIn:  params.tokenIn,
     tokenOut: params.tokenOut,
     amountIn: amountFormatted,
@@ -377,7 +386,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
       if (landed) {
         console.warn('[Swap] verified swap landed on-chain despite the throw:', landed)
         await finish(landed.txHash, landed.amount)
-        return { txHash: landed.txHash, amountOut: String(landed.amount), explorerUrl: `https://testnet.arcscan.app/tx/${landed.txHash}` }
+        return { txHash: landed.txHash, amountOut: String(landed.amount), explorerUrl: `${ARC_EXPLORER}/tx/${landed.txHash}` }
       }
     }
 

@@ -126,8 +126,17 @@ export async function submitClaim(params: {
 // check sooner, never influence what it finds.
 export async function kickClaimWorker(claimId: string): Promise<void> {
   try {
-    await ensureAnonSession()
-    await supabase.functions.invoke('claim-worker', { body: { mode: 'single', claimId } })
+    // SUPABASE REDUCTION: replaced supabase.functions.invoke('claim-worker')
+    // with /api/bridge-relay?action=kick_claim_worker — the relay calls the
+    // Edge Function with the service key on the server side so the client
+    // never invokes Edge Functions directly with the anon key.
+    const { authApiHeaders } = await import('./supabase')
+    const headers = await authApiHeaders()
+    await fetch('/api/bridge-relay', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'kick_claim_worker', claimId }),
+    })
   } catch {
     // Best-effort only — the pg_cron sweep is the real guarantee. A failed
     // kick just means this claim waits for the next scheduled tick instead

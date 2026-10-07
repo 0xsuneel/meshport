@@ -39,6 +39,13 @@ import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
 
+// Derive Arc chain key from env so a mainnet build targets Arc mainnet.
+// All 'Arc_Testnet' literals in this file are replaced with this constant —
+// same pattern ubClaim.ts, swapService.ts, and ubFundRecovery.ts use.
+const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
+  ? 'Arc'
+  : 'Arc_Testnet'
+
 // Digit/decimal sanitizing for the desktop "Amount" native input (mirrors
 // AmountKeypad's own internal sanitizer, which isn't exported) — max one
 // '.', capped at 2 typed decimal places.
@@ -1200,7 +1207,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           amount: ubTargetAmount.toFixed(6),
           from: {
             adapter,
-            allocations: [{ amount: ubTargetAmount.toFixed(6), chain: 'Arc_Testnet' }],
+            allocations: [{ amount: ubTargetAmount.toFixed(6), chain: ARC_CHAIN_KEY }],
           },
           to: { chain: chain.sdk as any, recipientAddress: address, useForwarder: true },
           token: 'USDC',
@@ -1274,7 +1281,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // little native gas via /api/relay-gas. See FORWARDER_SUPPORTED_SDK_CHAINS.
       const useForwarder = chainSupportsForwarder(chain.sdk)
       const estimate = await kit.estimateBridge({
-        from: { adapter, chain: 'Arc_Testnet' },
+        from: { adapter, chain: ARC_CHAIN_KEY },
         to: useForwarder
           ? { chain: chain.sdk as any, recipientAddress: address, useForwarder: true }
           : { chain: chain.sdk as any, recipientAddress: address, adapter, useForwarder: false },
@@ -1620,7 +1627,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           }
 
           const depositResult: any = await kit.unifiedBalance.deposit({
-            from: { adapter, chain: 'Arc_Testnet' as any },
+            from: { adapter, chain: ARC_CHAIN_KEY as any },
             amount: targetDepositAmount.toFixed(6),
             token: 'USDC',
             // Gasless EIP-2612 signature — same rationale as arc.ts's default
@@ -1701,7 +1708,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           amount: spendAmount.toFixed(6),
           from: {
             adapter,
-            allocations: [{ amount: spendAmount.toFixed(6), chain: 'Arc_Testnet' }],
+            allocations: [{ amount: spendAmount.toFixed(6), chain: ARC_CHAIN_KEY }],
           },
           // Sei (GATEWAY_SELF_MINT_CHAINS): Circle's forwarder mint keeps
           // failing on-chain there, so the mint is submitted through
@@ -1895,7 +1902,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               const bumpedParams = {
                 ...spendParams,
                 amount: bumpedAmount,
-                from: { adapter, allocations: [{ amount: bumpedAmount, chain: 'Arc_Testnet' }] },
+                from: { adapter, allocations: [{ amount: bumpedAmount, chain: ARC_CHAIN_KEY }] },
               }
               assertAllocationsMatchAmount(bumpedParams.amount, bumpedParams.from.allocations, 'unifiedBalance.spend (maxFee top-up retry)')
               logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: 'unifiedBalance.spend maxFee top-up retry', data: { shortfall, topUp, bumpedAmount } })
@@ -1982,7 +1989,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 txHash:             depositHash || spendHash,
                 destinationTxHash:  depositHash ? (spendHash || undefined) : undefined,
                 amount:             numAmount,
-                sourceChain:        'Arc_Testnet',
+                sourceChain:        ARC_CHAIN_KEY,
                 destinationChain:   chain.sdk || chain.name || selectedChain,
                 destinationAddress: address,
               }).catch((e: any) => console.error('[MultichainSend] Activity.bridge failed:', e?.message))
@@ -2072,7 +2079,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   walletAddress:      burnWa,
                   txHash:             hash,
                   amount:             numAmount,
-                  sourceChain:        'Arc_Testnet',
+                  sourceChain:        ARC_CHAIN_KEY,
                   destinationChain:   chain.sdk || chain.name || selectedChain,
                   destinationAddress: address,
                   status:             'pending',
@@ -2215,7 +2222,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         : { chain: chain.sdk as any, recipientAddress: address, adapter, useForwarder: false }
 
       const runEstimate = () => kit.estimateBridge({
-        from: { adapter, chain: 'Arc_Testnet' },
+        from: { adapter, chain: ARC_CHAIN_KEY },
         to: destTarget,
         amount: numAmount.toFixed(6),
         token: 'USDC',
@@ -2291,7 +2298,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
       let result = await Promise.race([
         kit.bridge({
-          from: { adapter, chain: 'Arc_Testnet' },
+          from: { adapter, chain: ARC_CHAIN_KEY },
           to: destTarget,
           amount: numAmount.toFixed(6),
           token: 'USDC',
@@ -2447,7 +2454,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // is a superset of the old behavior, never a regression from it.
       try {
         const { walletAddress: bwa } = useAuthStore.getState()
-        const srcChainName = 'Arc_Testnet'
+        const srcChainName = ARC_CHAIN_KEY
         const dstChainName = chain.sdk || chain.name || selectedChain
         // The Arc-side departure hash (row's primary tx_hash) and the REAL
         // destination mint hash (destination_tx_hash) — the latter only when

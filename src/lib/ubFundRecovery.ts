@@ -45,6 +45,16 @@
 
 const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000 // Circle's documented EVM removeFund timelock
 
+// Derive the Arc chain key and explorer base from env, matching ubClaim.ts.
+// Hardcoding 'Arc_Testnet' here caused every recovery row on a mainnet
+// deployment to show a testnet explorer link and target the wrong chain.
+const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
+  ? 'Arc'
+  : 'Arc_Testnet'
+const ARC_EXPLORER = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
+  ? 'https://arcscan.app'
+  : 'https://testnet.arcscan.app'
+
 let _sdkModules: { AppKit: any; createEthersAdapterFromPrivateKey: any; JsonRpcProvider: any; FallbackProvider: any } | null = null
 async function loadSdk() {
   if (_sdkModules) return _sdkModules
@@ -66,9 +76,20 @@ async function getArcProvider() {
   if (_arcProvider) return _arcProvider
   const { JsonRpcProvider, FallbackProvider } = await loadSdk()
   const { ARC_RPCS, ARC_NETWORK } = await import('@/lib/arc')
-  const toAbsolute = (url: string) =>
-    /^[a-z]+:\/\//i.test(url) ? url
-      : (typeof window !== 'undefined' && window.location?.origin ? window.location.origin + (url.startsWith('/') ? url : '/' + url) : url)
+  // Relative paths (e.g. '/api/arc-rpc') are safe to hand ethers as-is
+  // when running in a browser — fetch resolves them against the current
+  // origin automatically. The old `window.location.origin` join silently
+  // produced a broken URL in SSR/test environments where window is undefined
+  // (it fell back to the unjoined relative path, which ethers then tried to
+  // use as a host name and failed to connect). Using the URL constructor
+  // with a fallback origin resolves correctly in all environments.
+  const toAbsolute = (url: string) => {
+    if (/^[a-z]+:\/\//i.test(url)) return url
+    const base = typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'http://localhost'
+    return new URL(url.startsWith('/') ? url : '/' + url, base).href
+  }
   const providers = ARC_RPCS.map((url: string) => new JsonRpcProvider(toAbsolute(url), ARC_NETWORK, { staticNetwork: true, pollingInterval: 200 }))
   _arcProvider = providers.length === 1 ? providers[0] : new FallbackProvider(providers, undefined, { quorum: 1 })
   return _arcProvider
@@ -116,12 +137,12 @@ export async function getUbWithdrawalStatus(walletAddress: string): Promise<UbWi
   }
 }
 
-async function getKitAndAdapter(privateKey: string, chain: string = 'Arc_Testnet') {
+async function getKitAndAdapter(privateKey: string, chain: string = ARC_CHAIN_KEY) {
   const { AppKit, createEthersAdapterFromPrivateKey } = await loadSdk()
   const kit = new AppKit({ disableErrorReporting: true } as any)
   // Arc: pinned to MeshPort's Arc RPC list. Any other chain (a withdrawal of
   // Unified Balance held on e.g. Base): the SDK's own RPCs for that chain.
-  const adapter = chain === 'Arc_Testnet'
+  const adapter = chain === ARC_CHAIN_KEY
     ? createEthersAdapterFromPrivateKey({ privateKey, getProvider: async () => getArcProvider() })
     : createEthersAdapterFromPrivateKey({ privateKey })
   return { kit, adapter }
@@ -145,7 +166,7 @@ export async function initiateUBRecovery(params: {
   throwOnError?: boolean
 }): Promise<boolean> {
   const { walletAddress, privateKey, amount, destinationChainLabel } = params
-  const chain = params.chain ?? 'Arc_Testnet'
+  const chain = params.chain ?? ARC_CHAIN_KEY
   try {
     // Starting the withdrawal is an on-chain tx from the user's own wallet
     // on that chain (it can't be relayed); outside Arc it needs native gas there.
@@ -174,7 +195,7 @@ export async function initiateUBRecovery(params: {
       const { data: row } = await supabase.from('activity').select('metadata').eq('id', params.replaceRowId).maybeSingle()
       await supabase.from('activity').update({
         destination_chain: chain,
-        explorer_url: initHash && chain === 'Arc_Testnet' ? `https://testnet.arcscan.app/tx/${initHash}` : null,
+        explorer_url: initHash && chain === ARC_CHAIN_KEY ? `${ARC_EXPLORER}/tx/${initHash}` : null,
         metadata: { ...((row as any)?.metadata ?? {}), ...withdrawMeta },
       }).eq('id', params.replaceRowId)
       return true
@@ -189,7 +210,7 @@ export async function initiateUBRecovery(params: {
       source_chain: chain,
       destination_chain: chain,
       status: 'pending',
-      explorer_url: initHash && chain === 'Arc_Testnet' ? `https://testnet.arcscan.app/tx/${initHash}` : null,
+      explorer_url: initHash && chain === ARC_CHAIN_KEY ? `${ARC_EXPLORER}/tx/${initHash}` : null,
       metadata: withdrawMeta,
     }, { onConflict: 'tx_hash,wallet_address', ignoreDuplicates: true })
 
@@ -219,7 +240,7 @@ export function checkAndCompleteUBRecoveries(params: { walletAddress: string; pr
   return inFlight
 }
 
-const isArcRow = (row: any) => (row.metadata?.withdraw_chain ?? 'Arc_Testnet') === 'Arc_Testnet'
+const isArcRow = (row: any) => (row.metadata?.withdraw_chain ?? ARC_CHAIN_KEY) === ARC_CHAIN_KEY
 
 async function runUbCompletion(params: { walletAddress: string; privateKey: string }): Promise<UbCompleteResult> {
   const { walletAddress, privateKey } = params
@@ -241,12 +262,12 @@ async function runUbCompletion(params: { walletAddress: string; privateKey: stri
     const otherRows = rows.filter(r => !isArcRow(r))
 
     const markDone = async (row: any, amount: number, hash: string, extra: Record<string, any> = {}) => {
-      const chain: string = row.metadata?.withdraw_chain ?? 'Arc_Testnet'
+      const chain: string = row.metadata?.withdraw_chain ?? ARC_CHAIN_KEY
       const { error: upErr } = await supabase.from('activity').update({
         status: 'completed',
         amount,
         usd_value: amount,
-        ...(hash ? { explorer_url: chain === 'Arc_Testnet' ? `https://testnet.arcscan.app/tx/${hash}` : null } : {}),
+        ...(hash ? { explorer_url: chain === ARC_CHAIN_KEY ? `${ARC_EXPLORER}/tx/${hash}` : null } : {}),
         metadata: { ...row.metadata, ...(hash ? { completed_tx_hash: hash } : {}), completed_at: new Date().toISOString(), ...extra },
       }).eq('id', row.id)
       if (upErr) console.error('[ubFundRecovery] could not mark withdrawal completed:', upErr.message)
@@ -274,8 +295,8 @@ async function runUbCompletion(params: { walletAddress: string; privateKey: stri
         out.notReadyEtaMs = onchain.etaMs
       } else if (onchain || arcRows.some(r => r.metadata?.eligible_at && r.metadata.eligible_at <= nowIso)) {
         try {
-          const { kit, adapter } = await getKitAndAdapter(privateKey, 'Arc_Testnet')
-          const result: any = await kit.unifiedBalance.removeFund({ from: { adapter, chain: 'Arc_Testnet' as any }, token: 'USDC' })
+          const { kit, adapter } = await getKitAndAdapter(privateKey, ARC_CHAIN_KEY)
+          const result: any = await kit.unifiedBalance.removeFund({ from: { adapter, chain: ARC_CHAIN_KEY as any }, token: 'USDC' })
           const hash: string = result?.txHash || result?.data?.txHash || ''
           const total = parseFloat(result?.amount) || onchain?.withdrawing || arcRows.reduce((a, r) => a + Number(r.amount), 0)
           if (arcRows.length === 1) await markDone(arcRows[0], total, hash)
@@ -381,7 +402,7 @@ export async function recordUbStuckTransfer(p: {
       amount: parseFloat(p.amount),
       usd_value: parseFloat(p.amount),
       token_symbol: 'USDC',
-      source_chain: 'Arc_Testnet',
+      source_chain: ARC_CHAIN_KEY,
       destination_chain: p.destinationChain,
       counterparty_address: p.destinationAddress.toLowerCase(),
       status: 'pending',
@@ -439,7 +460,7 @@ export async function resolveUbStuckTransfer(p: {
   if (amount <= 0) throw new Error('Nothing left in your Unified Balance for this transfer')
   const { kit, adapter } = await getKitAndAdapter(p.privateKey)
   const { spendUnifiedTo } = await import('@/lib/ubClaim')
-  const toChain = mode === 'refund' ? 'Arc_Testnet' : item.destinationChain
+  const toChain = mode === 'refund' ? ARC_CHAIN_KEY : item.destinationChain
   const recipient = mode === 'refund' ? p.walletAddress : item.destinationAddress
   if (!toChain || !recipient) throw new Error('This transfer has no saved destination')
   // `adapter` above is pinned to Arc RPCs (it signs the Arc allocation). A
@@ -449,7 +470,7 @@ export async function resolveUbStuckTransfer(p: {
   const destAdapter = createEthersAdapterFromPrivateKey({ privateKey: p.privateKey, getProvider: async ({ chain }: any) => relayedProviderFor(chain) })
   const out = await spendUnifiedTo({
     kit, adapter, destAdapter,
-    fromChain: 'Arc_Testnet', amount, toChain, recipient,
+    fromChain: ARC_CHAIN_KEY, amount, toChain, recipient,
   })
 
   const { supabase } = await import('@/lib/supabase')
@@ -460,9 +481,9 @@ export async function resolveUbStuckTransfer(p: {
   if (mode === 'refund') {
     // Shows as "Recovered via UB" (withdraw + ub_recovery) in Activity and the Hub.
     await supabase.from('activity').update({
-      status: 'completed', amount: out.received, usd_value: out.received, destination_chain: 'Arc_Testnet',
+      status: 'completed', amount: out.received, usd_value: out.received, destination_chain: ARC_CHAIN_KEY,
       metadata: { ...metadata, ub_recovery: true },
-      explorer_url: out.txHash ? `https://testnet.arcscan.app/tx/${out.txHash}` : null,
+      explorer_url: out.txHash ? `${ARC_EXPLORER}/tx/${out.txHash}` : null,
     }).eq('id', item.id)
   } else {
     // Becomes the transfer it was meant to be: "Transfer to <chain> · Recovered via UB".

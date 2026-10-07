@@ -33,7 +33,7 @@ import { sheetDrag } from '@/lib/sheetDrag'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen'
 
-const ARC_EXPLORER    = 'https://testnet.arcscan.app'
+import { ARC_EXPLORER } from '@/lib/chainExplorers'
 const USDC_DECIMALS   = 6
 
 // ── Multicall3 (canonical deterministic deployment, same address on every EVM chain) ──
