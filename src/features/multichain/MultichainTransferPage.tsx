@@ -3547,14 +3547,15 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   onClick: (e: React.MouseEvent) => e.stopPropagation(),
                   className: 'w-full overflow-y-auto px-5 py-4',
                   style: { maxWidth: 540, maxHeight: '90vh', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 24, boxShadow: 'var(--shadow-3, 0 20px 60px rgba(0,0,0,.45))' } }
-              : { className: 'px-4' })}>
+              // Phone: fills the page so Back / Confirm sit at the bottom, like the form's buttons.
+              : { className: 'px-4 flex flex-col', style: { minHeight: '100%' } })}>
             <div className="flex items-center gap-3 py-2 mb-1">
               <button onClick={() => { setStep('form'); setFeeChangedNotice('') }} className="back-btn" aria-label="Back to transfer">
                 <ArrowLeft className="w-5 h-5 text-text-primary" />
               </button>
               <h1 className="text-lg font-bold text-text-primary">Review Transfer</h1>
             </div>
-            <div className="space-y-3 pt-1">
+            <div className={`space-y-3 pt-1${isDesktopMq ? '' : ' flex-1 flex flex-col'}`}>
 
               {/* Summary hero */}
               <div className="rounded-2xl p-3.5 flex flex-col items-center gap-2 text-center"
@@ -3617,16 +3618,20 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
               <p className="text-xs text-center px-4" style={{color:'var(--text-secondary)'}}>{chain.ub ? 'Circle Gateway · recipient receives native USDC' : 'Circle CCTP v2 · recipient receives native USDC'}</p>
 
-              <div className="flex gap-3 pt-1">
+              {/* Two equal buttons, same size as the form's Cancel / Review. */}
+              <div className="flex" style={{ gap: 10, paddingTop: 12, ...(isDesktopMq ? {} : { marginTop: 'auto' }) }}>
                 <button onClick={() => { setStep('form'); setFeeChangedNotice('') }}
-                  className="px-5 py-3 rounded-xl text-sm font-semibold" style={{color:'var(--text-secondary)', background:'var(--surface)', border:'1px solid var(--border)'}}>
+                  className="active:scale-[.98] transition-all"
+                  style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 600, cursor: 'pointer',
+                    color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
                   Back
                 </button>
                 <button
                   disabled={feeEstimate.loading}
                   onClick={() => { if (feeEstimate.loading) return; setFeeChangedNotice(''); setStep('confirm'); setPassEntry(''); setPassError('') }}
-                  className="flex-1 py-3 rounded-xl text-sm font-bold text-white active:scale-[.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
-                  style={{background:'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)', boxShadow: feeEstimate.loading ? 'none' : 'var(--shadow-2)'}}>
+                  className="text-white active:scale-[.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+                  style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: 'pointer',
+                    background:'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)', boxShadow: feeEstimate.loading ? 'none' : 'var(--shadow-2)'}}>
                   {feeEstimate.loading ? 'Fetching fees…' : 'Confirm & Transfer'}
                 </button>
               </div>
