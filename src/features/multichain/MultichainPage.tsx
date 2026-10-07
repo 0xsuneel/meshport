@@ -1175,7 +1175,7 @@ export function MultichainPage() {
             {sheetClaimChain && (
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 8px' }}>
                 <Suspense fallback={<InlineSpinner />}>
-                  <ClaimSheetBody key={sheetClaimChain} embedded initialChain={sheetClaimChain}
+                  <ClaimSheetBody key={sheetClaimChain} embedded pushScreens initialChain={sheetClaimChain}
                     initialBalance={bringRows.find(c => c.id === sheetClaimChain)?.balance}
                     onClose={() => setClaimChain(null)} merchantMode={isMerchant} onFocusChange={setFlowFocus} />
                 </Suspense>

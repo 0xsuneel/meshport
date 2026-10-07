@@ -13,7 +13,7 @@
  * MeshPort V2: Inspired by PayPal/Revolut/Cash App
  * "Sending money to friends" not "Managing blockchain infrastructure"
  */
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from 'react'
 import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
@@ -32,6 +32,7 @@ import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { ChainScanner } from '@/components/ui/ChainScanner'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { HubPush } from '@/components/multichain/HubPage'
 import { UbProgressTracker } from '@/components/multichain/UbProgressTracker'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { TrackDetails, type TrackDetailRow } from '@/components/multichain/TrackDetails'
@@ -275,6 +276,12 @@ type Step =
 // 'submitted' / 'tracking' are server-backed: the claim row already exists in
 // Supabase and claim-worker is advancing it independently of this page.
 type ConfirmPhase = 'processing' | 'submitted' | 'tracking' | 'done'
+// Hub Bring page (phone): screens swap at once instead of fading out to an
+// empty page and back in (HubPush slides the next one in instead).
+const INSTANT_STEP = { initial: false, exit: { opacity: 1, transition: { duration: 0 } } } as const
+function PushIf({ on, screenKey, children }: { on: boolean; screenKey: string; children: ReactNode }) {
+  return on ? <HubPush screenKey={screenKey}>{children}</HubPush> : <>{children}</>
+}
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 // Rows for the "View details" panel under Track Progress.
@@ -295,7 +302,10 @@ function trackDetailRows(p: { route: string; chainId: string; amount: number; cr
   ]
 }
 
-export function MultichainClaimPage({ embedded = false, onClose, initialChain, initialBalance, trackClaimId, merchantMode = false, onFocusChange }: { embedded?: boolean; onClose?: () => void; initialChain?: string; initialBalance?: number; trackClaimId?: string; merchantMode?: boolean; onFocusChange?: (f: 'none' | 'processing' | 'result') => void } = {}) {
+export function MultichainClaimPage({ embedded = false, onClose, initialChain, initialBalance, trackClaimId, merchantMode = false, onFocusChange, pushScreens = false }: { embedded?: boolean; onClose?: () => void; initialChain?: string; initialBalance?: number; trackClaimId?: string; merchantMode?: boolean; onFocusChange?: (f: 'none' | 'processing' | 'result') => void
+  /** Hub on a phone (inside its Bring page): screens swap at once, and the
+   *  processing and Track Progress screens slide in from the right. */
+  pushScreens?: boolean } = {}) {
   // Inside the Hub sheet the page always uses its phone layout.
   const isDesktopMq  = useMediaQuery('(min-width: 980px)')
   const isDesktop    = embedded ? false : isDesktopMq
@@ -1494,6 +1504,15 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
   // ─── Render ──────────────────────────────────────────────────────────────────
 
+  // Hub Bring page: which screen is showing, for the slide-in between them.
+  // The result (success or failure) stays on the screen it came from.
+  const lastPushKey = useRef('form')
+  const pushKey = step === 'loading' || step === 'select' ? 'form'
+    : step === 'confirm' && confirmPhase === 'tracking' ? 'track'
+    : step === 'confirm' && confirmPhase !== 'done' ? 'proc'
+    : lastPushKey.current
+  lastPushKey.current = pushKey
+
   // Held in a variable (not returned directly) so the exact same JSX renders
   // either as the whole page (mobile) or as the left column of the desktop
   // 2-column layout below — never duplicated.
@@ -1522,12 +1541,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           instead of instantly cutting from one screen to the other — that
           instant, un-animated unmount/mount swap was the "flicker" when the
           scan ended. */}
+      <PushIf on={pushScreens} screenKey={pushKey}>
       <AnimatePresence initial={false} mode="wait">
       {step === 'loading' && (
         <motion.div
           key="loading"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
+          {...(pushScreens ? INSTANT_STEP : {})}
           style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: SPACING.lg }}
         >
           {deepLinkChain ? (
@@ -1562,6 +1583,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           // Same page feel: a quick fade, never a slide from the side.
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.18, ease: 'easeOut' }}
+          {...(pushScreens ? INSTANT_STEP : {})}
           style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
         >
           {/* Header */}
@@ -1711,6 +1733,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.18, ease: 'easeOut' }}
           onClick={() => { if (keypadOpen) setKeypadOpen(false) }}
+          {...(pushScreens ? INSTANT_STEP : {})}
           style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
         >
           {/* Header — hidden inside the Hub (the form has its own Back) */}
@@ -2016,6 +2039,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           key="confirm-step"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           transition={{ duration: 0.25, ease: 'easeInOut' }}
+          {...(pushScreens ? INSTANT_STEP : {})}
           style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
         >
           {/* PROCESSING -> SUBMITTED — one continuous screen. The icon and
@@ -2072,6 +2096,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               // Leaving for the receipt (under the flash): go at once, no fade.
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: confirmPhase === 'done' ? 0 : 0.25 } }}
               transition={{ duration: 0.25 }}
+              {...(pushScreens ? INSTANT_STEP : {})}
               style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
             >
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: `${SPACING.xl}px ${SPACING.md}px`, gap: SPACING.md, overflowY: 'auto', minHeight: 0 }}>
@@ -2197,6 +2222,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               key="claim-tracking-step"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: confirmPhase === 'done' ? 0 : 0.25 } }}
               transition={{ duration: 0.25 }}
+              {...(pushScreens ? INSTANT_STEP : {})}
               style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', padding: `${SPACING.md}px ${SPACING.md}px`, flexShrink: 0 }}>
@@ -2377,6 +2403,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           key="failed-step"
           exit={{ opacity: 0 }}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          {...(pushScreens ? INSTANT_STEP : {})}
           style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: `0 ${SPACING.xl}px` }}
         >
           <motion.div
@@ -2399,6 +2426,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         </motion.div>
       )}
       </AnimatePresence>
+      </PushIf>
 
       <style>{`
         @keyframes spin {
