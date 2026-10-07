@@ -24,7 +24,14 @@ if (!SUPABASE_URL || !SUPABASE_ANON) {
 export const supabase = createClient(
   SUPABASE_URL  || 'https://placeholder.supabase.co',
   SUPABASE_ANON || 'placeholder-anon-key',
-  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } },
+  {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    // Run the realtime heartbeat in a Web Worker. Phones throttle a page's
+    // timers in the background, so the main-thread heartbeat missed its slot,
+    // the server dropped the socket, and chat/P2P updates arrived late until
+    // the reconnect. Worker timers are throttled far less.
+    realtime: { worker: true },
+  },
 )
 
 // ── Auto sign-in anonymously for wallet users ─────────────────────────────────
