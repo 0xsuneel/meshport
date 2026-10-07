@@ -121,9 +121,10 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
         {valid && row('Amount', `${formatAmount(value)} USDC`, String(value), 'Amount')}
       </div>
 
-      {wallets === null ? (
-        <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', textAlign: 'center' }}>Looking for your wallet…</div>
-      ) : wallets.length > 0 ? (
+      {/* Until a browser wallet is found, show the wallet-app links straight
+          away (not a one-line "looking…" placeholder that then grew and
+          pushed the page down). */}
+      {wallets && wallets.length > 0 ? (
         <>
           {wallets.slice(0, 3).map(w => (
             <button key={w.id} onClick={() => pay(w)} disabled={step !== 'idle' || !valid}

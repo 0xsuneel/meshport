@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import { stepMotion } from '@/hooks/useStepDirection'
+import { useStepDirection } from '@/hooks/useStepDirection'
+import { ScreenPush } from '@/components/ui/ScreenPush'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useNavigate, Navigate } from 'react-router-dom'
 import {
@@ -449,9 +450,10 @@ export function EmailOTPPage() {
         className="back-btn" style={{marginBottom:32}}>
         <ArrowLeft className="w-5 h-5 text-text-primary" />
       </button>
-      <AnimatePresence initial={false} mode="wait">
+      {/* Email ⇄ code push like pages (no fade-out to an empty screen). */}
+      <ScreenPush screenKey={step} back={step === 'email'}>
         {step === 'email' ? (
-          <motion.div key="email" {...stepMotion('back')} className="space-y-6">
+          <motion.div key="email" initial={false} className="space-y-6">
             <div>
               <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">Sign in with Email</h2>
               <p className="text-text-secondary mt-1 text-[14px] leading-[1.5]">We'll send a 6-digit code to your email</p>
@@ -462,7 +464,7 @@ export function EmailOTPPage() {
             <Button fullWidth loading={loading} onClick={sendOTP}>Send OTP →</Button>
           </motion.div>
         ) : (
-          <motion.div key="otp" {...stepMotion('forward')} className="space-y-6">
+          <motion.div key="otp" initial={false} className="space-y-6">
             <div>
               <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">Enter your code</h2>
               <p className="text-text-secondary mt-1 text-[14px] leading-[1.5]">Sent to <span className="text-text-primary font-medium">{email}</span></p>
@@ -500,7 +502,7 @@ export function EmailOTPPage() {
             </p>
           </motion.div>
         )}
-      </AnimatePresence>
+      </ScreenPush>
     </div>
   )
 }
@@ -567,6 +569,7 @@ export function CreateWalletPage() {
   const { setBalance } = useWalletStore()
   const { showToastMessage } = useUIStore()
   const [step, setStep] = useState<'generate' | 'backup' | 'confirm' | 'success'>('generate')
+  const createDir = useStepDirection(step, ['generate', 'backup', 'confirm', 'success'] as const)
   const [walletData, setWalletData] = useState<{ address: string; privateKey: string; mnemonic: string } | null>(null)
   const [loading, setLoading] = useState(false)
   const [confirmWords, setConfirmWords] = useState<string[]>(['', '', ''])
@@ -665,9 +668,11 @@ export function CreateWalletPage() {
           return <div key={s} className={`flex-1 h-1 rounded-full transition-all ${idx >= i ? 'bg-brand' : 'bg-text-primary/10'}`} />
         })}
       </div>
-      <AnimatePresence initial={false} mode="wait">
+      {/* Steps push like pages, and back reverses (no fade-out to an empty
+          screen in between). */}
+      <ScreenPush screenKey={step} back={createDir === 'back'}>
         {step === 'generate' && (
-          <motion.div key="gen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION} className="space-y-6">
+          <motion.div key="gen" initial={false} className="space-y-6">
             <div><h2 className="text-2xl font-bold text-text-primary">Create New Wallet</h2><p className="text-text-secondary mt-1">BIP39 · 12-word seed phrase</p></div>
             <div className="space-y-3">
               {[{Icon:Lock,t:'BIP39 Standard',s:'Industry standard 12-word phrase'},{Icon:Link2,t:'Compatible',s:'MetaMask, Trust, OKX, Coinbase'},{Icon:Zap,t:'Arc Testnet Ready',s:'Chain ID 5042002'}].map(i => (
@@ -683,7 +688,7 @@ export function CreateWalletPage() {
           </motion.div>
         )}
         {step === 'backup' && walletData && (
-          <motion.div key="backup" {...stepMotion('forward')} className="space-y-5">
+          <motion.div key="backup" initial={false} className="space-y-5">
             <div><h2 className="text-2xl font-bold text-text-primary">Save Recovery Phrase</h2><p className="text-text-secondary mt-1">Write down all 12 words, in order. Next you'll be asked for 3 of them.</p></div>
             <div className="p-3 bg-warning/10 border border-warning/30 rounded-2xl flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
@@ -708,7 +713,7 @@ export function CreateWalletPage() {
           </motion.div>
         )}
         {step === 'confirm' && walletData && (
-          <motion.div key="confirm" {...stepMotion('forward')} className="space-y-6">
+          <motion.div key="confirm" initial={false} className="space-y-6">
             <div><h2 className="text-2xl font-bold text-text-primary">Verify Your Backup</h2>
               <p className="text-text-secondary mt-1">Enter these 3 words from your recovery phrase</p></div>
             <div className="space-y-4">
@@ -723,8 +728,8 @@ export function CreateWalletPage() {
           </motion.div>
         )}
         {step === 'success' && walletData && (
-          <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6 text-center">
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1], delay: 0.2 }}
+          <motion.div key="success" initial={false} className="space-y-6 text-center">
+            <motion.div initial={{ scale: 0.6 }} animate={{ scale: 1 }} transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
               className="w-24 h-24 bg-success/20 rounded-full flex items-center justify-center mx-auto">
               <CheckCircle className="w-14 h-14 text-success" />
             </motion.div>
@@ -737,7 +742,7 @@ export function CreateWalletPage() {
             }}>Continue →</Button>
           </motion.div>
         )}
-      </AnimatePresence>
+      </ScreenPush>
     </div>
   )
 }
@@ -1106,12 +1111,16 @@ export function ClaimUsernamePage() {
               <span className="text-text-secondary font-semibold pr-2">.arc</span>
               <div className="pr-3 w-8 flex justify-center">{icons[status]}</div>
             </div>
-            <AnimatePresence>
-              {statusMsg && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className={`text-sm mt-2 text-center font-medium ${statusColors[status]}`}>{statusMsg}</motion.p>
-              )}
-            </AnimatePresence>
+            {/* Fixed-height line: a message appearing / changing as you type
+                never moves the page. */}
+            <div className="h-5 mt-2">
+              <AnimatePresence mode="popLayout" initial={false}>
+                {statusMsg && (
+                  <motion.p key={statusMsg} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className={`text-sm text-center font-medium ${statusColors[status]}`}>{statusMsg}</motion.p>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
           <div className="text-xs text-text-muted space-y-1 px-1">
             <p>• 3–20 characters</p><p>• Letters a-z, numbers 0-9, underscore _</p><p>• Cannot be changed later</p>

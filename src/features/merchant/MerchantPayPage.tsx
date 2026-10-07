@@ -71,7 +71,10 @@ export function MerchantPayPage() {
     navigate(orderPaySendUrl(view), { replace: true })
   }, [view, isAuthenticated, isMerchantSelf, params, navigate])
 
-  if (!view) {
+  // About to go straight to the pay screen: keep showing the loader rather
+  // than flashing this page for a moment first.
+  const willRedirect = !!view && isAuthenticated && !isMerchantSelf && !params.get('stay') && isOrderPayable(view)
+  if (!view || willRedirect) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center" style={{ background: 'var(--bg)' }}>
         {notFound ? (

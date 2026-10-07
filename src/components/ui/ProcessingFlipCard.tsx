@@ -10,6 +10,7 @@
 // neither is useful without the other.
 
 import { useCallback, useState } from 'react'
+import { PopupOpen } from '@/hooks/usePopupOpen'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
 
@@ -68,32 +69,32 @@ export function useProcessingFlip() {
   return { flipState, runFlip, dismissFlip }
 }
 
-export function ProcessingFlipCard({ open, phase, processingLabel, title, message, onDismiss }: FlipState & { onDismiss: () => void }) {
+export function ProcessingFlipCard({ open, phase, processingLabel, title, message, onDismiss, onExited }: FlipState & {
+  onDismiss: () => void
+  /** Runs once the card has finished closing (e.g. navigate only then). */
+  onExited?: () => void
+}) {
   const resultColor = phase === 'success' ? 'var(--success)' : 'var(--danger)'
-  // Frosted-glass treatment (matches the app's existing blur(20px) surface
-  // convention — see .page-header in index.css) in place of the previous
-  // solid, opaque var(--surface) card on a plain dim scrim. Backdrop now
-  // blurs what's behind it too, so it reads as one continuous glass layer
-  // rather than a flat dark curtain with a solid card floating on top.
+  // Solid card on a plain dim — no backdrop blur. Blurs under a layer that
+  // fades in render wrong until it's fully opaque on Android, so the card's
+  // text ghosted over the page and then the blur snapped on.
   const glassCardStyle = {
-    background: 'color-mix(in srgb, var(--surface) 65%, transparent)',
+    background: 'var(--surface)',
     border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
   } as const
   return (
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={onExited}>
       {open && (
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           onClick={phase !== 'processing' ? onDismiss : undefined}
           style={{
             position: 'fixed', inset: 0, zIndex: 300,
-            background: 'color-mix(in srgb, black 35%, transparent)',
-            backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+            background: 'rgba(6,10,14,0.62)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
           }}
         >
+          <PopupOpen />
           <div style={{ perspective: 1200 }} onClick={e => e.stopPropagation()}>
             <motion.div
               animate={{ rotateY: phase === 'processing' ? 0 : 180 }}

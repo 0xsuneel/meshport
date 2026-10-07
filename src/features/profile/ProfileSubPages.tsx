@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, startTransition } from 'react'
 
 // Kept byte-identical to buildProfileUpdateMessage in api/profile.ts — if
 // you edit one, edit both, or profile saves will start failing signature
@@ -154,7 +154,9 @@ export function SecurityPage() {
           </Card>
         </div>
 
-        <button onClick={() => { lock(); navigate('/auth/lock', { replace: true }) }}
+        {/* In a transition: the app tree would otherwise empty out (the lock
+            guard renders nothing) until the lock screen's code had loaded. */}
+        <button onClick={() => { startTransition(() => { lock(); navigate('/auth/lock', { replace: true }) }) }}
           className="w-full flex items-center justify-center gap-2 h-12 bg-brand rounded-2xl text-sm font-semibold text-white active:scale-[0.98] transition-transform">
           <Lock className="w-4 h-4" /> Lock Now
         </button>
@@ -759,11 +761,11 @@ function BackupRecoveryPhrasePage() {
             {showPrivateKeyTab && (
               <div className="flex bg-surface rounded-2xl p-1 border border-border">
                 <button onClick={() => setActiveTab('seed')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${activeTab === 'seed' ? 'bg-brand text-white' : 'text-text-secondary'}`}>
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold ${activeTab === 'seed' ? 'bg-brand text-white' : 'text-text-secondary'}`}>
                   <FileText className="w-4 h-4" /> Seed Phrase
                 </button>
                 <button onClick={() => setActiveTab('key')}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold transition-colors ${activeTab === 'key' ? 'bg-brand text-white' : 'text-text-secondary'}`}>
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-semibold ${activeTab === 'key' ? 'bg-brand text-white' : 'text-text-secondary'}`}>
                   <Key className="w-4 h-4" /> Private Key
                 </button>
               </div>

@@ -67,11 +67,11 @@ export function TermsPrivacyPage() {
       <div className="px-5 pt-2">
         <div className="flex gap-2 mb-5 bg-surface border border-border rounded-2xl p-1">
           <button onClick={() => selectTab('terms')}
-            className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${tab === 'terms' ? 'bg-brand text-white' : 'text-text-secondary'}`}>
+            className={`flex-1 py-2 rounded-xl text-sm font-semibold ${tab === 'terms' ? 'bg-brand text-white' : 'text-text-secondary'}`}>
             Terms of Service
           </button>
           <button onClick={() => selectTab('privacy')}
-            className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${tab === 'privacy' ? 'bg-brand text-white' : 'text-text-secondary'}`}>
+            className={`flex-1 py-2 rounded-xl text-sm font-semibold ${tab === 'privacy' ? 'bg-brand text-white' : 'text-text-secondary'}`}>
             Privacy Policy
           </button>
         </div>

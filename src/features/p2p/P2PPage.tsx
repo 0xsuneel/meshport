@@ -6,11 +6,12 @@
 // clearly — the DemoBadge/DemoBanner components below, not just a one-time
 // disclaimer buried somewhere.
 
+import { PopupOpen } from '@/hooks/usePopupOpen'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { safeStorageUrl, openExternal } from '@/lib/safeUrl'
 import { useState, useEffect, useCallback, useRef, type ReactNode, type CSSProperties } from 'react'
 import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import {
@@ -203,25 +204,28 @@ function PasscodeSheet({
     </>
   )
 
+  // Callers wrap this in <AnimatePresence> around their condition, so the
+  // sheet slides away when closed instead of vanishing in one frame (an
+  // AnimatePresence inside here unmounted along with it, so no exit ran).
   if (isDesktop) {
     return (
-      <AnimatePresence>
-        <DesktopTransactionAuthDialog
-          onClose={onClose}
-          title={title}
-          subLabel={passError ? <span role="alert" style={{ color: COLORS.error }}>{passError}</span> : subtitle}
-        >
-          {keypadContent}
-        </DesktopTransactionAuthDialog>
-      </AnimatePresence>
+      <DesktopTransactionAuthDialog
+        onClose={onClose}
+        title={title}
+        subLabel={passError ? <span role="alert" style={{ color: COLORS.error }}>{passError}</span> : subtitle}
+      >
+        {keypadContent}
+      </DesktopTransactionAuthDialog>
     )
   }
   return (
-    <AnimatePresence>
+    <>
+      <PopupOpen />
+      {/* Plain dim — no backdrop blur (Android re-blurs it every frame of the fade). */}
       <motion.div key="pass-backdrop"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.24 } }}
         transition={SHEET_BACKDROP.transition}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)', zIndex: 200 }}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200 }}
         onClick={onClose} />
       <motion.div {...sheetDrag('p2p-pass', onClose)} key="pass-sheet"
         initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}
@@ -230,9 +234,17 @@ function PasscodeSheet({
         <div style={{ width: 40, height: 4, borderRadius: 2, margin: '0 auto 24px', background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)' }} />
         {content}
       </motion.div>
-    </AnimatePresence>
+    </>
   )
 }
+
+// Last loaded lists, so coming back to a P2P page (or switching to a tab /
+// filter already seen) shows the rows at once and refreshes them quietly,
+// instead of flashing a full skeleton every time.
+const hubCache = new Map<string, { offers: P2POffer[]; remaining: Map<string, number> }>()
+const myOffersCache = new Map<string, { offers: P2POffer[]; remaining: Map<string, number> }>()
+const myTradesCache = new Map<string, P2PTrade[]>()
+let lastHubKey = ''
 
 // ── P2P Hub — Buy/Sell tabs, browse offers ──────────────────────────────────
 export function P2PHubPage() {
@@ -242,9 +254,9 @@ export function P2PHubPage() {
   const user = useAuthStore(s => s.user)
   const [tab, setTab] = useState<OfferType>('buy')
   const [merchantFilter, setMerchantFilter] = useState<MerchantFilter>('all')
-  const [offers, setOffers] = useState<P2POffer[]>([])
-  const [remaining, setRemaining] = useState<Map<string, number>>(new Map())
-  const [loading, setLoading] = useState(true)
+  const [offers, setOffers] = useState<P2POffer[]>(() => hubCache.get(lastHubKey)?.offers ?? [])
+  const [remaining, setRemaining] = useState<Map<string, number>>(() => hubCache.get(lastHubKey)?.remaining ?? new Map())
+  const [loading, setLoading] = useState(() => !hubCache.has(lastHubKey))
   const [showFilters, setShowFilters] = useState(false)
   const [currency, setCurrency] = useState('')
   const [country, setCountry] = useState('')
@@ -308,7 +320,13 @@ export function P2PHubPage() {
   }, [user?.id])
 
   const load = useCallback(async () => {
-    setLoading(true)
+    // A list already seen for these filters shows at once and refreshes
+    // quietly; only a never-loaded one shows the skeleton.
+    const key = [tab, merchantFilter, currency, country, paymentMethod, user?.id].join('|')
+    lastHubKey = key
+    const cached = hubCache.get(key)
+    if (cached) { setOffers(cached.offers); setRemaining(cached.remaining); setLoading(false) }
+    else { setOffers([]); setLoading(true) }
     // Browsing "Buy USDC" shows offers from SELLERS (people offering to
     // sell), and vice versa — the tab is what the viewer wants to do, the
     // fetched offer type is the counterparty's side.
@@ -321,10 +339,13 @@ export function P2PHubPage() {
       excludeUserId: user?.id,
       merchantFilter,
     })
-    setOffers(rows)
-    setRemaining(await fetchOfferConsumedAmounts(rows.map(o => o.id)).then(consumed =>
+    const rem = await fetchOfferConsumedAmounts(rows.map(o => o.id)).then(consumed =>
       new Map(rows.map(o => [o.id, offerRemainingAmount(o, consumed.get(o.id) ?? 0)]))
-    ))
+    )
+    hubCache.set(key, { offers: rows, remaining: rem })
+    if (lastHubKey !== key) return // filters changed while this was loading
+    setOffers(rows)
+    setRemaining(rem)
     setLoading(false)
   }, [tab, currency, country, paymentMethod, user?.id, merchantFilter])
 
@@ -461,7 +482,7 @@ export function P2PHubPage() {
             <p style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>Be the first — create one below.</p>
           </div>
         ) : filtered.map(offer => (
-          <div key={offer.id} onClick={() => navigate(`/p2p/offer/${offer.id}`)}
+          <div key={offer.id} onClick={() => navigate(`/p2p/offer/${offer.id}`, { state: { offerType: offer.offerType } })}
             style={{
               background: COLORS.surface, borderRadius: 16, padding: 16, marginBottom: 10,
               border: `1px solid ${COLORS.border}`, cursor: 'pointer',
@@ -658,10 +679,12 @@ export function P2PCreateOfferPage() {
   // Navigating away immediately on success would unmount this page (and
   // the flip card with it) before the person ever sees it — wait for them
   // to dismiss the result card first, same as every other action here.
+  // Navigates only once the card has finished closing (onExited), so it
+  // doesn't ride off with the page.
+  const afterCreateFlip = useRef<(() => void) | null>(null)
   const handleDismissCreateFlip = () => {
-    const wasSuccess = flipState.phase === 'success'
+    if (flipState.phase === 'success') afterCreateFlip.current = () => navigate('/p2p/my-offers', { replace: true })
     dismissFlip()
-    if (wasSuccess) navigate('/p2p/my-offers', { replace: true })
   }
 
   // Entry point for the "Create Offer" button — opens the passcode sheet
@@ -802,8 +825,9 @@ export function P2PCreateOfferPage() {
         }}>{submitting ? 'Creating…' : 'Create Offer'}</button>
       </div>
 
+      <AnimatePresence>
       {showPasscodeSheet && (
-        <PasscodeSheet
+        <PasscodeSheet key="pin"
           title={storedPasscode ? 'Enter Passcode' : 'Confirm Offer'}
           subtitle={offerType === 'sell'
             ? <>Deposit {totalAmount || '0'} USDC to escrow for this sell offer</>
@@ -815,7 +839,9 @@ export function P2PCreateOfferPage() {
           onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
         />
       )}
-      <ProcessingFlipCard {...flipState} onDismiss={handleDismissCreateFlip} />
+      </AnimatePresence>
+      <ProcessingFlipCard {...flipState} onDismiss={handleDismissCreateFlip}
+        onExited={() => { const go = afterCreateFlip.current; afterCreateFlip.current = null; go?.() }} />
     </div>
   )
 }
@@ -826,6 +852,8 @@ export function P2POfferDetailPage() {
   const { offerId } = useParams<{ offerId: string }>()
   const navigate = useNavigate()
   const goBack = useP2PBack('/p2p')
+  // The offer's side, passed from the list, for the title while it loads.
+  const offerTypeHint = (useLocation().state as { offerType?: OfferType } | null)?.offerType
   const walletAddress = useAuthStore(s => s.walletAddress)
   const user = useAuthStore(s => s.user)
   const storedPasscode = useAuthStore(s => s.passcode)
@@ -881,10 +909,11 @@ export function P2POfferDetailPage() {
   // Navigating away immediately on success would unmount this page (and
   // the flip card with it) before the person ever sees it — wait for them
   // to dismiss the result card first, same as Create Offer.
+  const afterAcceptFlip = useRef<(() => void) | null>(null)
   const handleDismissAcceptFlip = () => {
     const trade = flipState.phase === 'success' ? tradeRef.current : null
+    if (trade) afterAcceptFlip.current = () => navigate(`/p2p/trade/${trade.id}`, { replace: true })
     dismissFlip()
-    if (trade) navigate(`/p2p/trade/${trade.id}`, { replace: true })
   }
 
   // Validates and opens the passcode sheet — accepting a BUY offer deposits
@@ -931,7 +960,9 @@ export function P2POfferDetailPage() {
 
   if (!offer) return (
     <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto' }}>
-      <Header title="Offer" onBack={goBack} />
+      {/* Same title the loaded page will have (known from the list), so it
+          doesn't change after the page has slid in. */}
+      <Header title={offerTypeHint === 'sell' ? 'Buy USDC' : offerTypeHint === 'buy' ? 'Sell USDC' : 'Offer'} onBack={goBack} />
       <SkeletonCards count={4} className="pt-2" />
     </div>
   )
@@ -1029,8 +1060,9 @@ export function P2POfferDetailPage() {
         )}
       </div>
 
+      <AnimatePresence>
       {showPasscodeSheet && (
-        <PasscodeSheet
+        <PasscodeSheet key="pin"
           title={storedPasscode ? 'Enter Passcode' : 'Confirm Trade'}
           subtitle={offer.offerType === 'buy'
             ? <>Deposit {amt} USDC to escrow to start this trade</>
@@ -1042,7 +1074,9 @@ export function P2POfferDetailPage() {
           onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
         />
       )}
-      <ProcessingFlipCard {...flipState} onDismiss={handleDismissAcceptFlip} />
+      </AnimatePresence>
+      <ProcessingFlipCard {...flipState} onDismiss={handleDismissAcceptFlip}
+        onExited={() => { const go = afterAcceptFlip.current; afterAcceptFlip.current = null; go?.() }} />
     </div>
   )
 }
@@ -1153,7 +1187,7 @@ export function P2PTradePage() {
 
   if (!trade || !user) return (
     <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto' }}>
-      <Header title="Trade" onBack={goBack} />
+      <Header title="Trade Details" onBack={goBack} />
       <SkeletonCards count={4} className="pt-2" />
     </div>
   )
@@ -1580,8 +1614,9 @@ export function P2PTradePage() {
         })()}
       </AnimatePresence>
 
+      <AnimatePresence>
       {pendingAction && (
-        <PasscodeSheet
+        <PasscodeSheet key="pin"
           title={storedPasscode ? 'Enter Passcode' : (pendingAction === 'release' ? 'Confirm Release' : pendingAction === 'confirm' ? 'Confirm Trade' : 'Confirm Cancel')}
           subtitle={pendingAction === 'release'
             ? <>Release {trade.amountUsdc} USDC from escrow to the buyer</>
@@ -1595,6 +1630,7 @@ export function P2PTradePage() {
           onClose={() => { setPendingAction(null); setPassEntry(''); setPassError('') }}
         />
       )}
+      </AnimatePresence>
       <ProcessingFlipCard {...flipState} onDismiss={dismissFlip} />
       <GlassPopCard {...glassPop} onDismiss={dismissGlassPop} />
     </div>
@@ -1608,9 +1644,9 @@ export function P2PMyOffersPage() {
   const user = useAuthStore(s => s.user)
   const storedPasscode = useAuthStore(s => s.passcode)
   const { showToastMessage } = useUIStore()
-  const [offers, setOffers] = useState<P2POffer[]>([])
-  const [remaining, setRemaining] = useState<Map<string, number>>(new Map())
-  const [loading, setLoading] = useState(true)
+  const [offers, setOffers] = useState<P2POffer[]>(() => myOffersCache.get(user?.id ?? '')?.offers ?? [])
+  const [remaining, setRemaining] = useState<Map<string, number>>(() => myOffersCache.get(user?.id ?? '')?.remaining ?? new Map())
+  const [loading, setLoading] = useState(() => !myOffersCache.has(user?.id ?? ''))
   const [cancelling, setCancelling] = useState(false)
   const [offerToCancel, setOfferToCancel] = useState<P2POffer | null>(null)
   const [passEntry, setPassEntry] = useState('')
@@ -1639,7 +1675,7 @@ export function P2PMyOffersPage() {
 
   const load = useCallback(async () => {
     if (!user?.id) { setLoading(false); return }
-    setLoading(true)
+    if (!myOffersCache.has(user.id)) setLoading(true)
     // Sweep this seller's own expired trades BEFORE fetching offers, so a
     // trade whose buyer never paid is already unlocked and its escrow
     // already reclaimed by the time this list renders — the seller sees
@@ -1648,9 +1684,11 @@ export function P2PMyOffersPage() {
     // resolves it completely on-chain, no admin step needed.
     await autoCancelExpiredTrades(user.id)
     const rows = await fetchMyOffers(user.id)
-    setOffers(rows)
     const consumed = await fetchOfferConsumedAmounts(rows.map(o => o.id))
-    setRemaining(new Map(rows.map(o => [o.id, offerRemainingAmount(o, consumed.get(o.id) ?? 0)])))
+    const rem = new Map(rows.map(o => [o.id, offerRemainingAmount(o, consumed.get(o.id) ?? 0)]))
+    myOffersCache.set(user.id, { offers: rows, remaining: rem })
+    setOffers(rows)
+    setRemaining(rem)
     setLoading(false)
   }, [user?.id])
 
@@ -1879,7 +1917,9 @@ export function P2PMyOffersPage() {
       </div>
 
       <AnimatePresence>
-      {editingOffer && (
+      {/* Stepped aside while its passcode sheet is up, so confirming doesn't
+          uncover it undimmed for a moment before it fades out. */}
+      {editingOffer && !showEditPasscode && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SHEET_BACKDROP.transition}
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
           <div className="mp-popup" style={{ width: '100%', maxWidth: 480, padding: 20, maxHeight: '100%', overflowY: 'auto', animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}>
@@ -1950,8 +1990,9 @@ export function P2PMyOffersPage() {
       )}
       </AnimatePresence>
 
+      <AnimatePresence>
       {showEditPasscode && (
-        <PasscodeSheet
+        <PasscodeSheet key="pin"
           title={storedPasscode ? 'Enter Passcode' : 'Confirm Changes'}
           subtitle={<>Confirm changes to your offer's price and payment methods</>}
           storedPasscode={storedPasscode}
@@ -1961,6 +2002,7 @@ export function P2PMyOffersPage() {
           onClose={() => { setShowEditPasscode(false); setPassEntry(''); setPassError('') }}
         />
       )}
+      </AnimatePresence>
 
       <AnimatePresence>
       {toppingUpOffer && (
@@ -1988,8 +2030,9 @@ export function P2PMyOffersPage() {
       )}
       </AnimatePresence>
 
+      <AnimatePresence>
       {showTopUpPasscode && (
-        <PasscodeSheet
+        <PasscodeSheet key="pin"
           title={storedPasscode ? 'Enter Passcode' : 'Confirm Top Up'}
           subtitle={<>Deposit {topUpAmount || '0'} USDC to this offer's escrow</>}
           storedPasscode={storedPasscode}
@@ -1999,9 +2042,11 @@ export function P2PMyOffersPage() {
           onClose={() => { setShowTopUpPasscode(false); setPassEntry(''); setPassError('') }}
         />
       )}
+      </AnimatePresence>
 
+      <AnimatePresence>
       {offerToCancel && (
-        <PasscodeSheet
+        <PasscodeSheet key="pin"
           title={storedPasscode ? 'Enter Passcode' : 'Confirm Cancel'}
           subtitle={offerToCancel.offerType === 'sell'
             ? <>Cancel offer and return escrowed USDC to your wallet</>
@@ -2013,6 +2058,7 @@ export function P2PMyOffersPage() {
           onClose={() => { setOfferToCancel(null); setPassEntry(''); setPassError('') }}
         />
       )}
+      </AnimatePresence>
 
       {/* Delete never moves funds or signs anything — a plain confirm is
           enough, no passcode/wallet unlock needed like Cancel/Top Up. */}
@@ -2049,12 +2095,12 @@ export function P2PMyTradesPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
-  const [trades, setTrades] = useState<P2PTrade[]>([])
-  const [loading, setLoading] = useState(true)
+  const [trades, setTrades] = useState<P2PTrade[]>(() => myTradesCache.get(user?.id ?? '') ?? [])
+  const [loading, setLoading] = useState(() => !myTradesCache.has(user?.id ?? ''))
 
   useEffect(() => {
     if (!user?.id) { setLoading(false); return }
-    fetchMyTrades(user.id).then(rows => { setTrades(rows); setLoading(false) })
+    fetchMyTrades(user.id).then(rows => { myTradesCache.set(user.id!, rows); setTrades(rows); setLoading(false) })
   }, [user?.id])
 
   // Live updates — same reasoning as P2PPage's desktop History panel: a

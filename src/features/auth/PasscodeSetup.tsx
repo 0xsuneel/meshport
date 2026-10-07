@@ -401,7 +401,9 @@ export function PasscodeLockPage() {
       // only — never for import-privkey or social-auto, which is exactly
       // the asymmetry reported.
       const skippedRecently = walletAddress ? wasBiometricOfferSkippedRecently(walletAddress) : false
-      if (!canUseBiometric && !skippedRecently) {
+      // Only offer it where the device can actually do it — otherwise that
+      // page showed blank while it checked, then bounced on.
+      if (!canUseBiometric && !skippedRecently && liveSupported === true) {
         handBiometricPasscode(val); navigate('/auth/enable-biometric', { replace: true, state: { next: returnTo } })
       } else {
         navigate(returnTo, { replace: true })
@@ -483,28 +485,27 @@ export function PasscodeLockPage() {
         ) : (
           <>
             <PasscodeDots filled={input.length} error={error} />
-            <AnimatePresence>
-              {error && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="text-danger text-sm text-center -mt-2">
-                  {lockoutMs > 0
-                    ? `Too many attempts — try again in ${Math.ceil(lockoutMs / 1000)}s`
-                    : `Incorrect passcode${attempts > 1 ? ` · ${attempts} attempts` : ''}`}
-                </motion.p>
-              )}
-            </AnimatePresence>
-            <AnimatePresence>
-              {checking && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="text-text-secondary text-sm text-center -mt-2">Verifying…</motion.p>
-              )}
-            </AnimatePresence>
-            <AnimatePresence>
-              {biometricTrying && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="text-text-secondary text-sm text-center -mt-2">Checking {label}…</motion.p>
-              )}
-            </AnimatePresence>
+            {/* One fixed-height status line (as on passcode setup): a message
+                appearing never moves the dots and keypad, and only one shows
+                at a time. */}
+            <div className="h-6 -mt-2 flex items-center justify-center">
+              <AnimatePresence mode="popLayout" initial={false}>
+                {error ? (
+                  <motion.p key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="text-danger text-sm text-center">
+                    {lockoutMs > 0
+                      ? `Too many attempts — try again in ${Math.ceil(lockoutMs / 1000)}s`
+                      : `Incorrect passcode${attempts > 1 ? ` · ${attempts} attempts` : ''}`}
+                  </motion.p>
+                ) : checking ? (
+                  <motion.p key="verify" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="text-text-secondary text-sm text-center">Verifying…</motion.p>
+                ) : biometricTrying ? (
+                  <motion.p key="bio" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="text-text-secondary text-sm text-center">Checking {label}…</motion.p>
+                ) : null}
+              </AnimatePresence>
+            </div>
             <div className="w-full mt-2">
               <NumPad onPress={handlePress} onBiometric={tryBiometric} showBiometric={canUseBiometric} biometricTrying={biometricTrying} BiometricIcon={BiometricIcon} />
             </div>

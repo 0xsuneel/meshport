@@ -38,6 +38,8 @@ const BENEFITS = [
   },
 ]
 
+const recipientCache = new Map<string, any>()
+
 export function PayPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const { username }        = useParams<{ username: string }>()
@@ -52,18 +54,19 @@ export function PayPage() {
   const amountParam = searchParams.get('amount')
   const requestedAmount = amountParam && Number(amountParam) > 0 ? amountParam : null
 
-  const [recipient, setRecipient] = useState<any>(null)
-  const [loading, setLoading]     = useState(true)
+  const clean = (username ?? '').toLowerCase().replace(/\.arc$/, '').trim()
+  // A profile already looked up (e.g. coming back from /pay) shows at once
+  // instead of the loader again.
+  const [recipient, setRecipient] = useState<any>(() => recipientCache.get(clean) ?? null)
+  const [loading, setLoading]     = useState(() => !recipientCache.has(clean))
   const [notFound, setNotFound]   = useState(false)
   const [copied, setCopied]       = useState(false)
   const { showToastMessage } = useUIStore()
 
-  const clean = (username ?? '').toLowerCase().replace(/\.arc$/, '').trim()
-
   useEffect(() => {
     if (!clean) { setNotFound(true); setLoading(false); return }
     getUserByUsername(clean)
-      .then(u => { if (u) setRecipient(u); else setNotFound(true) })
+      .then(u => { if (u) { recipientCache.set(clean, u); setRecipient(u) } else setNotFound(true) })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false))
   }, [clean])

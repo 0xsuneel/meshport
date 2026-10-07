@@ -36,7 +36,7 @@ export function ReceiptPopup({ onClose, onPrimary, ...receipt }: Omit<ReceiptPro
 
   return createPortal(
     <motion.div
-      initial={DIALOG_BACKDROP.initial} animate={DIALOG_BACKDROP.animate} transition={DIALOG_BACKDROP.transition}
+      initial={DIALOG_BACKDROP.initial} animate={DIALOG_BACKDROP.animate} exit={DIALOG_BACKDROP.exit} transition={DIALOG_BACKDROP.transition}
       onClick={e => { e.stopPropagation(); onClose() }}
       onMouseDown={stop} onMouseUp={stop} onTouchStart={stop} onTouchMove={stop} onTouchEnd={stop} onTouchCancel={stop}
       style={{
@@ -47,7 +47,7 @@ export function ReceiptPopup({ onClose, onPrimary, ...receipt }: Omit<ReceiptPro
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px',
       }}>
       <motion.div
-        initial={DIALOG_CARD.initial} animate={DIALOG_CARD.animate} transition={DIALOG_CARD.transition}
+        initial={DIALOG_CARD.initial} animate={DIALOG_CARD.animate} exit={DIALOG_CARD.exit} transition={DIALOG_CARD.transition}
         onClick={e => e.stopPropagation()}
         role="dialog" aria-modal="true" aria-label={receipt.title}
         style={{ width: '100%', maxWidth: 420, maxHeight: '100%', display: 'flex', flexDirection: 'column', borderRadius: 30, overflow: 'hidden', willChange: 'transform, opacity', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>

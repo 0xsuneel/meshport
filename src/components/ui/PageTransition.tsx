@@ -14,7 +14,7 @@ interface PageTransitionProps {
 //        left and dims behind it.
 // Back:  the current page slides off to the right while the previous page
 //        comes back from the left and brightens.
-// Tabs:  a quick cross-fade.   First load / reload: no animation at all.
+// Tabs:  an instant switch.     First load / reload: no animation at all.
 //
 // The old page is shown as a frozen PICTURE (a DOM copy, taken just before
 // React swaps the pages) — never a second live copy — so no page logic,
@@ -23,7 +23,6 @@ interface PageTransitionProps {
 // the compositor, and the first frame is set before paint: no flicker.
 const OPEN_MS = 300
 const BACK_MS = 250
-const TAB_MS = 150
 const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
 const PARALLAX = '-28%'
 const DIM = 0.22
@@ -104,10 +103,9 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
       page.animate([{ opacity: 0, transform: 'translateY(5px)' }, { opacity: 1, transform: 'none' }], { duration: 200, easing: EASE })
       return
     }
-    if (nav === 'tab') {
-      page.animate([{ opacity: 0 }, { opacity: 1 }], { duration: TAB_MS, easing: EASE })
-      return
-    }
+    // Tabs switch instantly, like a native tab bar. A fade from opacity 0
+    // showed an empty screen for as long as the new tab's first render took.
+    if (nav === 'tab') return
     if (!willSlide || !s || s.key !== locationKey) return
 
     const back = nav === 'back'
@@ -124,6 +122,9 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
     // Old page picture (with its tab bar, if the new page has none).
     const layer = document.createElement('div')
     layer.setAttribute('aria-hidden', 'true')
+    // The picture must not replay CSS entrance animations (they restart on a
+    // cloned node, blinking parts of the old page out and back in).
+    layer.className = 'mp-page-snapshot'
     Object.assign(layer.style, { position: 'absolute', inset: '0', pointerEvents: 'none', overflow: 'hidden', willChange: 'transform' })
     Object.assign(s.node.style, { position: 'absolute', left: '0', right: '0', top: `${s.top}px`, height: `${s.height}px`, flex: 'none', background: 'var(--bg)' })
     layer.appendChild(s.node)

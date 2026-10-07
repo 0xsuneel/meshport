@@ -91,6 +91,9 @@
         transition: opacity 0.25s ease;
       }
       #splash.splash-hide { opacity: 0; pointer-events: none; }
+      /* The logo and name go at once; only the background fades — otherwise
+         they ghost over the first screen (two logos / two titles). */
+      #splash.splash-hide .tile, #splash.splash-hide .txt { visibility: hidden; }
       /* White logo tile (104px = the size Android's launch screen draws the
          manifest icon's tile, so the hand-off from the system launch screen
          to this one doesn't jump). The tile is dead-centre; the name sits
