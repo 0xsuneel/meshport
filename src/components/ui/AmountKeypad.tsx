@@ -70,6 +70,10 @@ interface AmountKeypadProps {
   open: boolean
   onClose?: () => void
   error?: string
+  /** Phone only: draw just the keys, in place on the page (no sheet, no
+   * backdrop) — for a screen that already is a sheet with the amount above
+   * the keys, e.g. the Multichain Hub's transfer amount sheet. */
+  inline?: boolean
 }
 
 const KEYS = ['1','2','3','4','5','6','7','8','9','.','0','del']
@@ -88,6 +92,7 @@ export function AmountKeypad({
   open,
   onClose,
   error,
+  inline = false,
 }: AmountKeypadProps) {
   // Desktop users type on a physical keyboard — the tap-grid below is a
   // mobile-only affordance. Same value/onChange contract either way.
@@ -240,6 +245,43 @@ export function AmountKeypad({
     )
   })()
 
+  const keysGrid = (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, maxWidth: 320, margin: '0 auto 14px' }}>
+      {KEYS.map((key, i) => (
+        <button
+          key={i}
+          onClick={() => handleKey(key)}
+          style={{
+            height: 56, borderRadius: 14, width: '100%',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', fontSize: key === '.' ? 28 : 24, fontWeight: 600, color: key === 'del' ? 'var(--text-secondary)' : 'var(--text-primary)',
+          }}
+          // Same key press as the PIN keypad (.mp-key in index.css).
+          className="mp-key"
+          onMouseDown={() => { if (key === 'del') startDeleteHold() }}
+          onMouseUp={() => { if (key === 'del') stopDeleteHold() }}
+          onMouseLeave={() => { if (key === 'del') stopDeleteHold() }}
+          onTouchStart={() => { if (key === 'del') startDeleteHold() }}
+          onTouchEnd={() => { if (key === 'del') stopDeleteHold() }}
+          onTouchCancel={() => { if (key === 'del') stopDeleteHold() }}
+        >
+          {key === 'del'
+            ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z"/>
+                <line x1="18" y1="9" x2="12" y2="15"/>
+                <line x1="12" y1="9" x2="18" y2="15"/>
+              </svg>
+            : key}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (inline && !isDesktop) {
+    return open ? <div>{errorMaxRow}{keysGrid}{doneButton}</div> : null
+  }
+
   if (isDesktop) {
     // No popup at all — a plain in-flow card, right where the caller
     // places it on the page. Fades/lifts in on mount instead of the
@@ -335,36 +377,7 @@ export function AmountKeypad({
                 cell (no dead space around a small circle), matching the
                 Paytm-style reference. Every key is a real, full-size tap
                 target instead of a 60px circle floating inside a wider cell. */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, maxWidth: 320, margin: '0 auto 14px' }}>
-              {KEYS.map((key, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleKey(key)}
-                  style={{
-                    height: 56, borderRadius: 14, width: '100%',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', fontSize: key === '.' ? 28 : 24, fontWeight: 600, color: key === 'del' ? 'var(--text-secondary)' : 'var(--text-primary)',
-                  }}
-                  // Same key press as the PIN keypad (.mp-key in index.css).
-                  className="mp-key"
-                  onMouseDown={() => { if (key === 'del') startDeleteHold() }}
-                  onMouseUp={() => { if (key === 'del') stopDeleteHold() }}
-                  onMouseLeave={() => { if (key === 'del') stopDeleteHold() }}
-                  onTouchStart={() => { if (key === 'del') startDeleteHold() }}
-                  onTouchEnd={() => { if (key === 'del') stopDeleteHold() }}
-                  onTouchCancel={() => { if (key === 'del') stopDeleteHold() }}
-                >
-                  {key === 'del'
-                    ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z"/>
-                        <line x1="18" y1="9" x2="12" y2="15"/>
-                        <line x1="12" y1="9" x2="18" y2="15"/>
-                      </svg>
-                    : key}
-                </button>
-              ))}
-            </div>
+            {keysGrid}
 
             {doneButton}
           </motion.div>
