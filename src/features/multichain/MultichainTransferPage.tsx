@@ -499,10 +499,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // embedded in the Hub: on desktop they type with the keyboard (Swap-style
   // box) and authorise in a centred popup, never the phone keypad sheets.
   const desktopInput = isDesktopMq
-  // In the Hub on a phone the form opens as two sheets that slide up over
-  // the Hub: 1 = chain, route and recipient; 2 = amount.
+  // In the Hub on a phone the form opens as a full page that slides in from
+  // the right: recipient, amount, chain, route, then Review.
   const sheetMode = embedded && !isDesktopMq
-  const [formSheet, setFormSheet] = useState<0 | 1 | 2>(0)
+  const [formSheet, setFormSheet] = useState<0 | 1>(0)
 
   // Embedded in the Multichain Hub's bottom sheet: anything that would go
   // "back to the Hub" closes the sheet instead of changing page.
@@ -580,11 +580,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inBackableStep])
-  // Same for the Hub's form sheets: back closes the amount sheet, then the
-  // first sheet. (While Review is open its own handler above takes the press.)
+  // Same for the Hub's form page: back closes it. (While Review is open its
+  // own handler above takes the press.)
   const sheetBackable = sheetMode && formSheet > 0 && (step === 'form' || step === 'review' || step === 'confirm')
-  const formSheetRef = useRef(formSheet)
-  formSheetRef.current = formSheet
   useEffect(() => {
     if (!sheetBackable) return
     skipSheetPop.current = false
@@ -593,13 +591,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     const onPop = () => {
       if (skipSheetPop.current) { skipSheetPop.current = false; return }
       if (stepRef.current !== 'form') return
-      if (formSheetRef.current === 2) {
-        setFormSheet(1)
-        window.history.pushState({ ...(window.history.state ?? {}), mpTransferSheet: true }, '')
-      } else {
-        poppedByBack = true
-        setFormSheet(0)
-      }
+      poppedByBack = true
+      setFormSheet(0)
     }
     window.addEventListener('popstate', onPop)
     return () => {
@@ -808,7 +801,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // A temporary spacer at the bottom gives the page room to scroll that far.
   const amountBoxRef = useRef<HTMLDivElement>(null)
   // The form glides up with the keypad so the amount stays in view.
-  const keypadLift = useKeypadLift(showAmountPad, amountBoxRef, !isDesktop && !sheetMode)
+  const keypadLift = useKeypadLift(showAmountPad, amountBoxRef, !isDesktop)
   const [selectedChain, setSelectedChain] = useState<ChainId>('eth')
   // Editing the address, amount or chain while the inline review is showing
   // hides it again — the fees shown must always match what's in the fields.
@@ -3015,7 +3008,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }} className={isDesktop ? "space-y-[9px] pt-1" : "space-y-2.5 pt-1"}>
 
               {/* ── Transfer Out form (Arc Bridge layout, MeshPort brand) ── */}
-              <motion.div animate={{ y: -keypadLift }} initial={false} transition={KEYPAD_SPRING}
+              <motion.div animate={{ y: sheetMode ? 0 : -keypadLift }} initial={false} transition={KEYPAD_SPRING}
                 style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 22, padding: isDesktop ? 20 : 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {formTitle}
                 {formBalance}
@@ -3468,11 +3461,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         </AnimatePresence>
       </div>
 
-      {/* ── Hub (phone): the form as two full pages that slide in from the
-          right. Review opens the same way on top; the passcode and the chain
-          picker open above them. ── */}
-      {sheetMode && (step === 'form' || step === 'review' || step === 'confirm') && (<>
-        <HubPage open={formSheet >= 1} behind={formSheet === 2}
+      {/* ── Hub (phone): the form as a full page that slides in from the
+          right. Review opens the same way on top; the passcode, amount
+          keypad and chain picker open above them. ── */}
+      {sheetMode && (step === 'form' || step === 'review' || step === 'confirm') && (
+        <HubPage open={formSheet === 1} behind={step !== 'form'}
           header={
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 12px' }}>
               <HubPageBack onClick={() => setFormSheet(0)} />
@@ -3487,40 +3480,25 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
                 Cancel
               </button>
-              <button disabled={!(isEVMAddress(address) || isSolanaAddress(address))} onClick={() => setFormSheet(2)}
+              <button disabled={!canContinue} onClick={handleContinue}
                 className="active:scale-[.98] transition-all disabled:opacity-40"
                 style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, border: 'none',
-                  cursor: (isEVMAddress(address) || isSolanaAddress(address)) ? 'pointer' : 'not-allowed', color: '#fff', background: 'var(--brand)' }}>
-                Continue
+                  cursor: canContinue ? 'pointer' : 'not-allowed', color: '#fff', background: 'var(--brand)' }}>
+                Review
               </button>
             </div>
           }>
-          <div style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <HubPageItem i={0}>{formDestination}</HubPageItem>
-            <HubPageItem i={1}>{formRoute}</HubPageItem>
-            <HubPageItem i={2}>{formRecipient}</HubPageItem>
-          </div>
-        </HubPage>
-
-        <HubPage level={1} open={formSheet === 2} behind={step !== 'form'}
-          header={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 12px' }}>
-              <HubPageBack onClick={() => setFormSheet(1)} />
-              <ChainLogoImg id={chain.id} size={30}/>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{chain.testnet}</div>
-                <div className="font-mono" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{shortenAddress(address)}</div>
-              </div>
-            </div>
-          }
-          footer={formActions}>
-          <div style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <HubPageItem i={0}>{formBalance}</HubPageItem>
+          {/* Moves up with the amount keypad so the amount stays in view. */}
+          <motion.div animate={{ y: -keypadLift }} initial={false} transition={KEYPAD_SPRING}
+            style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <HubPageItem i={0}>{formRecipient}</HubPageItem>
             <HubPageItem i={1}>{formAmount}</HubPageItem>
-            {formGasWarning && <HubPageItem i={2}>{formGasWarning}</HubPageItem>}
-          </div>
+            <HubPageItem i={2}>{formDestination}</HubPageItem>
+            <HubPageItem i={3}>{formRoute}</HubPageItem>
+            {formGasWarning && <HubPageItem i={4}>{formGasWarning}</HubPageItem>}
+          </motion.div>
         </HubPage>
-      </>)}
+      )}
 
       {/* ── Confirm & Pay: clean passcode entry, matching the same bottom
           sheet pattern used in Send/Pay — drag handle, title, one subtitle
