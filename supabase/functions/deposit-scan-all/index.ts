@@ -586,6 +586,22 @@ async function fetchNativeDepositsViaExplorer(walletAddress: string): Promise<Ar
   return out
 }
 
+// When the transfer actually happened on Arc. A deposit found late (a
+// backfill, a reconcile pass, a catch-up after downtime) must be dated by its
+// block, not by when it was found — otherwise a month-old deposit shows up in
+// Activity as "today". Arc receipts carry blockTimestamp on their logs; the
+// block itself is the fallback. null → the row keeps its default (now()).
+async function txTime(txHash: string): Promise<string | null> {
+  try {
+    const receipt = await rpcCallAny('eth_getTransactionReceipt', [txHash])
+    let ts = (receipt?.logs ?? []).find((l: any) => l?.blockTimestamp)?.blockTimestamp
+    if (!ts && receipt?.blockNumber) ts = (await rpcCallAny('eth_getBlockByNumber', [receipt.blockNumber, false]))?.timestamp
+    return ts ? new Date(Number(BigInt(ts)) * 1000).toISOString() : null
+  } catch {
+    return null
+  }
+}
+
 async function recordExternalReceive(
   supabase: SupabaseClient,
   walletAddress: string,
@@ -596,9 +612,11 @@ async function recordExternalReceive(
   recovered: boolean,
   quiet: boolean = false,
 ) {
+  const createdAt = await txTime(txHash)
   const { error } = await supabase
     .from('activity')
     .upsert({
+      ...(createdAt ? { created_at: createdAt } : {}),
       wallet_address:       walletAddress.toLowerCase(),
       tx_hash:              `recv_${txHash.toLowerCase()}`,
       activity_type:        'receive',
