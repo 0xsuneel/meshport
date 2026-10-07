@@ -166,7 +166,7 @@ contract MeshPortBridgeRouter {
         // exact approved amount, so this should always succeed (nothing left to
         // approve), but doing it explicitly makes the intent clear and protects
         // against any edge case where the burn consumed less than approved.
-        usdc.approve(address(tokenMessenger), 0);
+        if (!usdc.approve(address(tokenMessenger), 0)) revert ApproveFailed();
 
         emit Bridged(a.from, nonce, b.destinationDomain, b.mintRecipient, amount, b.fee, b.maxFee);
     }

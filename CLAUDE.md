@@ -9,8 +9,10 @@ Read it before touching any code in this repository.
 
 MeshPort is an Arc-native USDC payments app. Arc is Circle's blockchain where
 **USDC is the native gas token** — there is no separate ETH/MATIC for gas.
-Every value-moving function uses `payable`/`msg.value`/`.call{value:amount}("")`,
-not ERC-20 `approve`/`transferFrom`.
+The same USDC balance is reachable two ways (see Architecture rule 1): as the
+native currency (18 decimals, `msg.value`) and through the ERC-20 interface at
+`0x3600000000000000000000000000000000000000` (6 decimals). Both are valid;
+existing contracts and app code use both.
 
 ---
 
@@ -29,6 +31,14 @@ the tag shown. If you see the old code in a diff, reject it.
 | `B-3 FIX` | `api/bridge-relay.ts` | Session cache used `clear()` on all entries; replaced with single-entry LRU eviction |
 | `M-4 FIX` | `api/profile.ts` | `ilike` replaced with `eq` for wallet address queries (index-safe) |
 | `B-4 FIX` | `src/lib/supabase.ts` | Silent empty catch in `ensureAnonSession` replaced with `console.warn` |
+| contracts-audit H-1 | `contracts/MeshPortBridgeRouter.sol` | Post-burn `approve(0)` return value now checked |
+| contracts-audit M-1 | `contracts/MeshPortRewards.sol` | 2-day timelock on signer rotation, rate change, treasury withdrawal, ownership transfer |
+| contracts-audit L-1 | `contracts/MeshPortRewards.sol` | Owner no longer immutable; two-step (timelocked) ownership transfer |
+
+**Rejected finding — do not apply:** contracts-audit C-1 ("MeshPortRewards must
+switch to native `msg.value` because Arc USDC is not an ERC-20"). It is wrong:
+Arc USDC has an ERC-20 interface at `0x3600…0000`, the rewards contract was
+deployed against it, and production has completed on-chain reward claims.
 
 ---
 
@@ -147,12 +157,18 @@ if (import.meta.env.DEV && !import.meta.env.VITE_SUPABASE_URL) {
 
 ## Architecture rules — always follow these
 
-1. **Arc native USDC:** use `eth_getBalance` (18-decimal wei) for Arc balance,
-   NOT the ERC-20 contract. Do not call `decimals()` on Arc's native USDC address
-   (`0x3600000000000000000000000000000000000000`) — it is not an ERC-20.
+1. **Arc USDC has two interfaces over one balance — never mix their units:**
+   - Native: `eth_getBalance`, `msg.value`, plain value sends — **18 decimals**.
+     The app reads Arc balances this way.
+   - ERC-20 at `0x3600000000000000000000000000000000000000` — `transfer`,
+     `transferFrom`, `approve`, `balanceOf` — **6 decimals**. `sendUSDC`
+     (`src/lib/arcService.ts`) and `MeshPortRewards.sol` use this.
+   See `docs/ARCHITECTURE.md` (token table) and `src/blockchain/chains.ts`.
 
-2. **Arc native currency for contract value:** use `payable`/`.call{value: amount}("")`
-   in Solidity — no `approve`/`transferFrom`. See `P2PMeshportEscrowV2.sol`.
+2. **Contracts may use either interface — pick one per contract and keep its
+   units consistent.** `P2PMeshportEscrowV2.sol` uses native value
+   (`payable`/`.call{value: amount}("")`); `MeshPortRewards.sol` uses the
+   ERC-20 interface. Don't "convert" a working contract from one to the other.
 
 3. **Three chain registries must stay in sync:** when adding a chain, update
    all three files listed in H-1 above.

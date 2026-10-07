@@ -39,8 +39,9 @@ export const MAX_DAILY_TX        = 10
 // usdcPerThousandPoints = 500_000 (0.5 USDC per 1000 points). The app therefore
 // showed/recorded $1.00 for a 1000-point claim while only $0.50 actually reached
 // the wallet. Must mirror the contract: 1000 points = 0.5 USDC. If the rate is
-// ever changed for real, call setConversionRate() on the contract FIRST, then
-// update this constant — never the other way round.
+// ever changed for real, change it on the contract FIRST (scheduleSetConversionRate,
+// then setConversionRate once the 2-day timelock has passed), then update this
+// constant — never the other way round.
 export const USDC_PER_1000_PTS   = 0.5      // 0.5 USDC per 1000 points (matches contract)
 export const MIN_CLAIM_POINTS    = 100       // minimum points per claim
 // NEW (2026-09-17, explicit product requirement): maximum points redeemable

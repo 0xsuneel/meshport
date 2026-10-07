@@ -7,6 +7,8 @@
 //     InsufficientTreasury, ContractPaused, InsufficientPoints)
 //   - setPointsSigner owner-only setter
 //   - Normal conversion rate / pause / unpause admin helpers
+//   - 2-day timelock on signer rotation, rate changes, treasury withdrawal
+//     and ownership transfer; two-step ownership transfer
 //
 // Follows the conventions of test/P2PMeshportEscrowV2.test.js:
 //   const { expect } = require('chai')
@@ -64,6 +66,13 @@ describe('MeshPortRewards', function () {
     const digest = await buildDigest(contractAddress, chainId, callerAddress, points, claimIdBytes32)
     // ethers Wallet.signMessage signs with the Ethereum prefix automatically.
     return signerWallet.signMessage(ethers.getBytes(digest))
+  }
+
+  const TIMELOCK = 2 * 24 * 60 * 60
+
+  async function passTimelock() {
+    await ethers.provider.send('evm_increaseTime', [TIMELOCK])
+    await ethers.provider.send('evm_mine')
   }
 
   function makeClaimId(seed) {
@@ -232,6 +241,8 @@ describe('MeshPortRewards', function () {
 
       // Rotate to a new signer
       const newSigner = ethers.Wallet.createRandom()
+      await rewards.connect(owner).scheduleSetPointsSigner(newSigner.address)
+      await passTimelock()
       await rewards.connect(owner).setPointsSigner(newSigner.address)
 
       // Old sig now invalid
@@ -339,6 +350,8 @@ describe('MeshPortRewards', function () {
     it('owner can update pointsSigner and emits PointsSignerUpdated', async function () {
       const oldSigner = await rewards.pointsSigner()
       const newSignerAddr = other.address
+      await rewards.connect(owner).scheduleSetPointsSigner(newSignerAddr)
+      await passTimelock()
       await expect(rewards.connect(owner).setPointsSigner(newSignerAddr))
         .to.emit(rewards, 'PointsSignerUpdated')
         .withArgs(oldSigner, newSignerAddr)
@@ -351,6 +364,10 @@ describe('MeshPortRewards', function () {
     it('setConversionRate updates rate and emits event (only owner)', async function () {
       await expect(rewards.connect(other).setConversionRate(1000n))
         .to.be.revertedWithCustomError(rewards, 'NotOwner')
+      await expect(rewards.connect(other).scheduleSetConversionRate(1000n))
+        .to.be.revertedWithCustomError(rewards, 'NotOwner')
+      await rewards.connect(owner).scheduleSetConversionRate(1_000_000n)
+      await passTimelock()
       await expect(rewards.connect(owner).setConversionRate(1_000_000n))
         .to.emit(rewards, 'ConversionRateUpdated')
         .withArgs(500_000n, 1_000_000n)
@@ -360,9 +377,108 @@ describe('MeshPortRewards', function () {
     it('calculateUSDC reflects new rate after update', async function () {
       // Default: 500_000 per 1000 points → 1000 pts = 500_000 micro-USDC = 0.5 USDC
       expect(await rewards.calculateUSDC(1000n)).to.equal(500_000n)
+      await rewards.connect(owner).scheduleSetConversionRate(1_000_000n)
+      await passTimelock()
       await rewards.connect(owner).setConversionRate(1_000_000n)
       // 1_000_000 per 1000 points → 1000 pts = 1_000_000 micro-USDC = 1.0 USDC
       expect(await rewards.calculateUSDC(1000n)).to.equal(1_000_000n)
+    })
+  })
+
+  // ── Timelock on sensitive admin actions (M-1) ───────────────────────────
+  describe('timelock', function () {
+    it('signer rotation without scheduling reverts OperationNotScheduled', async function () {
+      await expect(rewards.connect(owner).setPointsSigner(other.address))
+        .to.be.revertedWithCustomError(rewards, 'OperationNotScheduled')
+    })
+
+    it('signer rotation before the delay has passed reverts TimelockNotReady', async function () {
+      await rewards.connect(owner).scheduleSetPointsSigner(other.address)
+      await ethers.provider.send('evm_increaseTime', [TIMELOCK - 60])
+      await ethers.provider.send('evm_mine')
+      await expect(rewards.connect(owner).setPointsSigner(other.address))
+        .to.be.revertedWithCustomError(rewards, 'TimelockNotReady')
+    })
+
+    it('a scheduled operation only executes for the exact scheduled value', async function () {
+      await rewards.connect(owner).scheduleSetPointsSigner(other.address)
+      await passTimelock()
+      await expect(rewards.connect(owner).setPointsSigner(claimer.address))
+        .to.be.revertedWithCustomError(rewards, 'OperationNotScheduled')
+    })
+
+    it('a scheduled operation executes only once', async function () {
+      await rewards.connect(owner).scheduleSetConversionRate(1_000_000n)
+      await passTimelock()
+      await rewards.connect(owner).setConversionRate(1_000_000n)
+      await expect(rewards.connect(owner).setConversionRate(1_000_000n))
+        .to.be.revertedWithCustomError(rewards, 'OperationNotScheduled')
+    })
+
+    it('owner can cancel a scheduled operation', async function () {
+      await rewards.connect(owner).scheduleSetPointsSigner(other.address)
+      const id = await rewards.operationId(
+        rewards.interface.getFunction('setPointsSigner').selector,
+        BigInt(other.address),
+      )
+      await expect(rewards.connect(other).cancelOperation(id))
+        .to.be.revertedWithCustomError(rewards, 'NotOwner')
+      await expect(rewards.connect(owner).cancelOperation(id))
+        .to.emit(rewards, 'OperationCancelled').withArgs(id)
+      await passTimelock()
+      await expect(rewards.connect(owner).setPointsSigner(other.address))
+        .to.be.revertedWithCustomError(rewards, 'OperationNotScheduled')
+    })
+
+    it('withdrawTreasury needs scheduling, then pays the owner', async function () {
+      await fundTreasury(ONE_USDC * 10n)
+      await expect(rewards.connect(owner).withdrawTreasury(ONE_USDC))
+        .to.be.revertedWithCustomError(rewards, 'OperationNotScheduled')
+      await expect(rewards.connect(other).scheduleWithdrawTreasury(ONE_USDC))
+        .to.be.revertedWithCustomError(rewards, 'NotOwner')
+
+      await rewards.connect(owner).scheduleWithdrawTreasury(ONE_USDC)
+      await passTimelock()
+      const ownerBefore = await usdc.balanceOf(owner.address)
+      await rewards.connect(owner).withdrawTreasury(ONE_USDC)
+      expect(await usdc.balanceOf(owner.address)).to.equal(ownerBefore + ONE_USDC)
+      expect(await rewards.treasuryBalance()).to.equal(ONE_USDC * 9n)
+    })
+
+    it('pauseClaims stays instant (emergency brake)', async function () {
+      await expect(rewards.connect(owner).pauseClaims()).to.emit(rewards, 'Paused')
+    })
+  })
+
+  // ── Two-step, timelocked ownership transfer (L-1) ────────────────────────
+  describe('ownership transfer', function () {
+    it('schedule → transfer → accept moves ownership', async function () {
+      await expect(rewards.connect(owner).transferOwnership(other.address))
+        .to.be.revertedWithCustomError(rewards, 'OperationNotScheduled')
+
+      await rewards.connect(owner).scheduleTransferOwnership(other.address)
+      await passTimelock()
+      await expect(rewards.connect(owner).transferOwnership(other.address))
+        .to.emit(rewards, 'OwnershipTransferStarted').withArgs(owner.address, other.address)
+      expect(await rewards.owner()).to.equal(owner.address)
+      expect(await rewards.pendingOwner()).to.equal(other.address)
+
+      await expect(rewards.connect(claimer).acceptOwnership())
+        .to.be.revertedWithCustomError(rewards, 'NotPendingOwner')
+      await expect(rewards.connect(other).acceptOwnership())
+        .to.emit(rewards, 'OwnershipTransferred').withArgs(owner.address, other.address)
+      expect(await rewards.owner()).to.equal(other.address)
+      expect(await rewards.pendingOwner()).to.equal(ethers.ZeroAddress)
+
+      // Old owner has lost admin rights; new owner has them.
+      await expect(rewards.connect(owner).pauseClaims())
+        .to.be.revertedWithCustomError(rewards, 'NotOwner')
+      await expect(rewards.connect(other).pauseClaims()).to.emit(rewards, 'Paused')
+    })
+
+    it('scheduleTransferOwnership rejects the zero address', async function () {
+      await expect(rewards.connect(owner).scheduleTransferOwnership(ethers.ZeroAddress))
+        .to.be.revertedWith('MeshPortRewards: zero owner address')
     })
   })
 
