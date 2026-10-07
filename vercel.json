@@ -1,6 +1,9 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "regions": [
+    "sin1"
+  ],
   "functions": {
     "api/swap-proxy.js": {
       "maxDuration": 60

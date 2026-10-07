@@ -262,8 +262,10 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
   if (!conversationId || !senderId || !content) {
     return res.status(400).json({ error: 'Missing: conversationId, senderId, content' })
   }
-  if (!(await callerIs(req, senderId))) return res.status(403).json(NOT_LINKED)
-  const member = await isParticipant(conversationId, senderId)
+  // Independent checks — run together instead of back to back (each is a
+  // round trip to the database).
+  const [isCaller, member] = await Promise.all([callerIs(req, senderId), isParticipant(conversationId, senderId)])
+  if (!isCaller) return res.status(403).json(NOT_LINKED)
   if (!member.ok) return res.status(403).json({ error: 'Not in this conversation' })
   if (!['text', 'payment_sent'].includes(type)) return res.status(400).json({ error: 'Bad message type' })
   if (typeof content !== 'string' || content.length > 20000) return res.status(400).json({ error: 'Bad content' })
@@ -318,7 +320,10 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
   console.log('[chat/send] ✓ sender msg id:', msgRow?.id)
 
   // ── 2. Update conversation last_message ────────────────────────────────────
-  supaFetch(
+  // Started now, awaited before responding: Vercel freezes the function as
+  // soon as it responds, so an un-awaited update was often cut off and the
+  // chat list kept showing the previous message.
+  const lastMessageUpdate = supaFetch(
     `/conversations?id=eq.${conversationId}`,
     'PATCH',
     { last_message: content, last_message_at: new Date().toISOString(),
@@ -433,6 +438,7 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  await lastMessageUpdate
   return res.status(200).json({ data: msgRow, error: null })
 }
 
