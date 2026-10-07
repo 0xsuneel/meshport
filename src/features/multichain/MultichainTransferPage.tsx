@@ -15,7 +15,7 @@ import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import {
   ArrowLeft, QrCode, Lock, CheckCircle, XCircle, AlertCircle, Loader2, ChevronDown, Clock,
 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useAnimationControls } from 'framer-motion'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useWalletStore, useAuthStore, useUIStore } from '@/store'
@@ -580,6 +580,18 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inBackableStep])
+  // Hub on a phone: processing and its result open as a full page that
+  // slides in from the right, like the form and Review before them.
+  const procPage = sheetMode && (step === 'broadcasting' || step === 'success' || step === 'failed')
+  const pageSlide = useAnimationControls()
+  useLayoutEffect(() => {
+    if (!sheetMode) return
+    if (procPage) {
+      pageSlide.set({ x: '100%' })
+      pageSlide.start({ x: 0, transition: { duration: 0.3, ease: [0.32, 0.72, 0, 1] } })
+    } else pageSlide.set({ x: 0 })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [procPage])
   // Same for the Hub's form page: back closes it. (While Review is open its
   // own handler above takes the press.)
   const sheetBackable = sheetMode && formSheet > 0 && (step === 'form' || step === 'review' || step === 'confirm')
@@ -2928,7 +2940,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   )
 
   const flow = (
-    <div ref={flowRootRef} className={`relative flex flex-col bg-bg ${isDesktop || embedded ? 'h-full' : 'h-screen'}`}>
+    <div ref={flowRootRef} className={`relative flex flex-col bg-bg ${isDesktop || embedded ? 'h-full' : 'h-screen'}`}
+      // Hub on a phone: processing → result is a full page over Review.
+      data-hub-page={procPage ? '' : undefined}
+      style={procPage ? { position: 'fixed', inset: 0, zIndex: 45, maxWidth: 430, margin: '0 auto', background: 'transparent' } : undefined}>
       {/* Desktop-only compact "Success" header (same padding/size as
           MultichainClaimPage's own done-step header) — the success step
           had no header at all before, so its content started right at
@@ -2973,8 +2988,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-3 pb-3" style={{
+      <motion.div className="flex-1 overflow-y-auto px-3 pb-3" animate={pageSlide} initial={false} style={{
         ...(isDesktop ? { padding: '0 10.8px 10.8px' } : {}),
+        // Hub on a phone: the processing page slides in from the right over
+        // Review (which stays underneath until it has arrived).
+        ...(procPage ? { position: 'relative', zIndex: 41, background: 'var(--bg)', paddingTop: 'env(safe-area-inset-top, 0px)', boxShadow: '-12px 0 32px rgba(0,0,0,0.25)' } : {}),
         // Success: this column stops scrolling and hands its full height to
         // the receipt, which scrolls its own details above a pinned
         // View in Hub / Done bar (see SuccessReceipt's `actions`).
@@ -3461,7 +3479,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           })()}
 
         </AnimatePresence>
-      </div>
+      </motion.div>
 
       {/* ── Hub (phone): the form as a full page that slides in from the
           right. Review opens the same way on top; the passcode, amount
@@ -3524,7 +3542,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             ? { custom: step, initial: { x: '100%' }, animate: { x: 0 }, transition: { duration: 0.3, ease: [0.32, 0.72, 0, 1] },
                 variants: { leave: (st: MCStep) => st === 'form'
                   ? { x: '100%', transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } }
-                  : { opacity: 0, transition: { duration: 0 } } },
+                  // To processing: stay put until its page has slid in on top.
+                  : { opacity: 0, transition: { delay: 0.32, duration: 0 } } },
                 exit: 'leave',
                 className: 'fixed inset-0 z-40 overflow-y-auto',
                 style: { background: 'var(--bg)', maxWidth: 430, marginLeft: 'auto', marginRight: 'auto',
