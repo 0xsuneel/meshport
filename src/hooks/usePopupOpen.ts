@@ -24,3 +24,10 @@ export function usePopupOpen() {
     }
   }, [])
 }
+
+/** Renders nothing; holds `popup-open` while mounted (for overlays that
+ *  aren't built from DesktopDialogFrame / SuccessFlash / receipts). */
+export function PopupOpen() {
+  usePopupOpen()
+  return null
+}

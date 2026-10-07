@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 
@@ -82,92 +82,5 @@ export function HubPageBack({ onClick, label = 'Back' }: { onClick: () => void; 
   )
 }
 
-/** A frozen, non-interactive copy of what's on screen right now — without
- *  any fixed-position overlays (sheets) that happen to be inside it. */
-function pictureOf(el: HTMLElement): HTMLElement {
-  const node = el.cloneNode(true) as HTMLElement
-  const orig = el.querySelectorAll<HTMLElement>('*')
-  const copy = node.querySelectorAll<HTMLElement>('*')
-  const drop: HTMLElement[] = []
-  for (let i = 0; i < orig.length && i < copy.length; i++) {
-    const o = orig[i], c = copy[i]
-    if (o.scrollTop) c.dataset.mpScrollTop = String(o.scrollTop)
-    if (getComputedStyle(o).position === 'fixed') drop.push(c)
-    if (c.id) c.removeAttribute('id')
-    if (c.hasAttribute('data-amount-keypad-sheet')) c.removeAttribute('data-amount-keypad-sheet')
-  }
-  drop.forEach(c => c.remove())
-  return node
-}
-
-/**
- * Screens that follow one another inside a Hub page (e.g. Bring: the amount
- * form → processing → Track Progress). When `screenKey` changes, the new
- * screen slides in from the right over a picture of the old one, which
- * shifts left and dims — the same push as opening a page. The children are
- * never remounted; only what they render changes.
- */
-export function HubPush({ screenKey, children }: { screenKey: string; children: ReactNode }) {
-  const reduce = useReducedMotion()
-  const hostRef = useRef<HTMLDivElement>(null)
-  const liveRef = useRef<HTMLDivElement>(null)
-  const shown = useRef(screenKey)
-  const snap = useRef<{ key: string; node: HTMLElement } | null>(null)
-  const cleanup = useRef<(() => void) | null>(null)
-
-  // About to change screens: picture the old one while it's still on screen
-  // (render runs before React touches the DOM).
-  if (!reduce && shown.current !== screenKey && snap.current?.key !== screenKey && liveRef.current) {
-    try { snap.current = { key: screenKey, node: pictureOf(liveRef.current) } } catch { snap.current = null }
-  }
-
-  useLayoutEffect(() => {
-    if (shown.current === screenKey) return
-    shown.current = screenKey
-    cleanup.current?.()
-    const s = snap.current
-    snap.current = null
-    const host = hostRef.current, live = liveRef.current
-    if (!s || s.key !== screenKey || !host || !live) return
-
-    const opts: KeyframeAnimationOptions = { duration: OPEN_S * 1000, easing: `cubic-bezier(${EASE.join(',')})`, fill: 'both' }
-    const layer = document.createElement('div')
-    layer.setAttribute('aria-hidden', 'true')
-    Object.assign(layer.style, { position: 'absolute', inset: '0', zIndex: '1', pointerEvents: 'none', overflow: 'hidden', background: 'var(--bg)' })
-    Object.assign(s.node.style, { position: 'absolute', inset: '0' })
-    layer.appendChild(s.node)
-    const veil = document.createElement('div')
-    Object.assign(veil.style, { position: 'absolute', inset: '0', zIndex: '2', background: '#000', opacity: '0', pointerEvents: 'none' })
-    host.appendChild(layer)
-    host.appendChild(veil)
-    s.node.querySelectorAll<HTMLElement>('[data-mp-scroll-top]').forEach(el => { el.scrollTop = Number(el.dataset.mpScrollTop) })
-    const prev = { position: live.style.position, zIndex: live.style.zIndex, background: live.style.background, boxShadow: live.style.boxShadow }
-    Object.assign(live.style, { position: 'relative', zIndex: '3', background: 'var(--bg)', boxShadow: '-10px 0 28px rgba(0,0,0,0.28)' })
-
-    const anims = [
-      live.animate([{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }], opts),
-      layer.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${PARALLAX})` }], opts),
-      veil.animate([{ opacity: 0 }, { opacity: DIM }], opts),
-    ]
-    let done = false
-    const finish = () => {
-      if (done) return
-      done = true
-      anims.forEach(a => { try { a.cancel() } catch { /* already gone */ } })
-      layer.remove()
-      veil.remove()
-      Object.assign(live.style, prev)
-      if (cleanup.current === finish) cleanup.current = null
-    }
-    cleanup.current = finish
-    Promise.all(anims.map(a => a.finished)).then(finish, finish)
-  }, [screenKey])
-
-  useLayoutEffect(() => () => cleanup.current?.(), [])
-
-  return (
-    <div ref={hostRef} style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div ref={liveRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>{children}</div>
-    </div>
-  )
-}
+// Screens inside a Hub page push like pages (see ScreenPush).
+export { ScreenPush as HubPush } from '@/components/ui/ScreenPush'

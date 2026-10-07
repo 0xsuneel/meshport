@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type R
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { Check, ChevronDown, Copy, ExternalLink, Zap } from 'lucide-react'
 import { EASE_OUT } from '@/lib/motion'
+import { usePopupOpen } from '@/hooks/usePopupOpen'
 
 // The receipt card every success flow lands on after SuccessFlash:
 // gradient header holding the check (the traveling checkmark flies into
@@ -137,6 +138,10 @@ export function SuccessReceipt({
   primaryLabel = 'Done', onPrimary, checkRef, revealed, checkContent, style,
   status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions,
 }: SuccessReceiptProps) {
+  // Takes over from the success flash, which switches the page's blurs off
+  // while it's up. Holding them off here too means the hand-off doesn't turn
+  // them back on for a frame (Android repaints the blurred header — a flash).
+  usePopupOpen()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
