@@ -58,7 +58,12 @@ export async function ensureAnonSession(): Promise<void> {
 
           const { data, error } = await supabase.auth.signInAnonymously()
           if (error) {
-              // anon sign-in failed — Enable at: Auth → Settings → Anonymous sign-ins
+            // B-4 FIX: log at warn level so a broken Supabase config is visible
+            // in telemetry. Previously this was a silent empty catch — every
+            // subsequent Supabase write would fail silently or be rejected by RLS
+            // while the app appeared healthy. Enable anonymous sign-ins at:
+            // Auth → Settings → Anonymous sign-ins
+            console.warn('[Supabase] Anonymous sign-in failed — subsequent writes will fail until resolved:', error.message)
           } else if (data?.session) {
             _anonSignInDone = true
           }
@@ -66,6 +71,7 @@ export async function ensureAnonSession(): Promise<void> {
         new Promise<void>(resolve => setTimeout(resolve, ANON_SESSION_TIMEOUT_MS)),
       ])
     } catch (e) {
+      console.warn('[Supabase] ensureAnonSession threw unexpectedly:', e instanceof Error ? e.message : String(e))
     } finally {
       _anonSignInPromise = null
     }
