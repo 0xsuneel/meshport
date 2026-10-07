@@ -438,6 +438,25 @@ async function sweepUnnotifiedReceives(supabase: SupabaseClient): Promise<void> 
   }
 }
 
+// The cron job sends the vault's claim_worker_service_key, which need not be
+// byte-identical to this function's own service key (other jobs rely on the
+// gateway's verify_jwt, which is off here so Circle can call in). Ask Auth:
+// its admin API only answers a service-role key.
+async function isServiceRoleBearer(authorization: string | null): Promise<boolean> {
+  const token = authorization?.startsWith('Bearer ') ? authorization.slice(7).trim() : ''
+  if (!token) return false
+  if (token === SUPABASE_SERVICE_KEY) return true
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=1`, {
+      headers: { apikey: token, Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
   if (req.method === 'HEAD') return new Response(null, { status: 200, headers: corsHeaders })
@@ -455,10 +474,11 @@ Deno.serve(async (req: Request) => {
   // jobs). It used to piggyback on every Circle request, but this function
   // cold-starts on nearly every call, so the per-instance 10s throttle never
   // held and the sweep query ran on every one of ~490k calls/day.
-  if (!signature && req.headers.get('authorization') === `Bearer ${SUPABASE_SERVICE_KEY}`) {
+  if (!signature) {
     let mode = ''
     try { mode = JSON.parse(rawBody || '{}')?.mode ?? '' } catch { /* not a sweep */ }
     if (mode === 'sweep') {
+      if (!await isServiceRoleBearer(req.headers.get('authorization'))) return json({ ok: false, error: 'unauthorized' }, 401)
       lastSweepAt = 0
       await sweepUnnotifiedReceives(createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY))
       return json({ ok: true, swept: true })
