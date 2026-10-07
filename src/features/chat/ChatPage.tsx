@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
+import { PopupOpen } from '@/hooks/usePopupOpen'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SNACKBAR_MOTION, DIALOG_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
 import { _plainByContent, plainTextOf, messagePreview, parseMedia, isDecryptFailure, splitCaption } from './chatMessageText'
@@ -62,6 +63,12 @@ import { sheetDrag } from '@/lib/sheetDrag'
 import { SkeletonRows, SkeletonChat } from '@/components/ui/Skeleton'
 
 // ─── Hidden chats helpers — wallet-scoped so Wallet A hidden chats never bleed into Wallet B
+// Chat pay sheets (phone): closing slides the sheet down; moving to the
+// other pay step leaves at once, so the sheet's content just swaps in place.
+const PAY_SHEET_LEAVE = {
+  leave: (next: string) => next === 'closed' ? SHEET_EXIT : { opacity: 0, transition: { duration: 0 } },
+}
+
 function hiddenKey(addr: string | null) {
   return addr ? `meshport_hidden_chats_${addr.toLowerCase()}` : 'meshport_hidden_chats_anon'
 }
@@ -2329,6 +2336,11 @@ export function ChatConversationPage() {
 
   // ── In-chat payment modal state ──────────────────────────────────────────
   const [payStep, setPayStep] = useState<'closed' | 'form' | 'confirm' | 'processing' | 'success'>('closed')
+  // The step before this one: moving between the amount and Review sheets
+  // swaps the sheet's content in place (no slide down and back up).
+  const prevPayStepRef = useRef(payStep)
+  const prevPayStep = prevPayStepRef.current
+  useEffect(() => { prevPayStepRef.current = payStep }, [payStep])
   // Warm the RPC proxy as soon as the passcode step opens.
   useEffect(() => {
     if (payStep === 'confirm') import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
@@ -4768,7 +4780,23 @@ export function ChatConversationPage() {
       </AnimatePresence>
 
       {/* In-Chat Payment Modal — STEP 1: Amount entry form */}
+      {/* Chat pay (phone): ONE dim behind both pay sheets, so it doesn't fade
+          out and back in between them, and no backdrop blur (Android
+          re-blurs it every frame of a fade — the flicker). While paying,
+          the chat's own header blur is off too. */}
+      {payStep !== 'closed' && <PopupOpen />}
       <AnimatePresence>
+        {!isDesktop && payStep !== 'closed' && (
+          <motion.div key="chat-pay-dim" transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/70 z-40"
+            onClick={() => {
+              if (payStep === 'form') { setPayStep('closed'); setPayPassEntry(''); setShowAmountPad(false) }
+              else if (payStep === 'confirm') { setPayStep('closed'); setPayPassEntry('') }
+              else if (payStep === 'success') { setPayStep('closed'); setMessagesReady(true); setTimeout(() => scrollToBottom(false), 50) }
+            }} />
+        )}
+      </AnimatePresence>
+      <AnimatePresence custom={payStep}>
         {payStep === 'form' && (() => {
           const formContent = (
               <div className="px-5 pt-4 pb-6 space-y-3">
@@ -5027,10 +5055,8 @@ export function ChatConversationPage() {
             </>
           ) : (
             <>
-              <motion.div transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-black/70 backdrop-blur-sm z-40"
-                onClick={closeForm} />
-              <motion.div {...sheetDrag('chat-pay', closeForm)} initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}
+              <motion.div {...sheetDrag('chat-pay', closeForm)} initial={prevPayStep === 'confirm' ? false : { y: '100%' }} animate={{ y: 0 }}
+                custom={payStep} variants={PAY_SHEET_LEAVE} exit="leave"
                 transition={SHEET_SPRING}
                 className="absolute bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-3xl h-[70vh] overflow-y-auto">
                 {formContent}
@@ -5042,7 +5068,7 @@ export function ChatConversationPage() {
 
       {/* In-Chat Payment Modal — STEP 2: Review + PIN confirm (separate full-height
           sheet so the PIN keypad always has room and is never pushed off-screen) */}
-      <AnimatePresence>
+      <AnimatePresence custom={payStep}>
         {(payStep === 'confirm' || payStep === 'processing' || payStep === 'success') && (
           (() => {
             const closeStep2 = () => {
@@ -5078,7 +5104,9 @@ export function ChatConversationPage() {
                 </div>
               )}
 
-              {payStep === 'processing' && (
+              {/* Also stays up under the success flash, so the flash never
+                  grows over an empty card. */}
+              {(payStep === 'processing' || (payStep === 'success' && paySuccessPhase === 'flash')) && (
                 <div className="px-5 pt-10 pb-12 flex-1 flex flex-col items-center justify-center gap-4">
                   <ProcessingRing size={64} />
                   <p className="text-text-primary" style={{ fontSize: 14.7, fontWeight: 700 }}>Processing payment…</p>
@@ -5176,11 +5204,9 @@ export function ChatConversationPage() {
                 // one fragment, swapping sheet -> card mid-flow left the exit
                 // unfinished and the invisible backdrop stayed over the chat,
                 // blocking every tap after "Back to Chat".
-                <motion.div key="chat-pay-backdrop" transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                  className="absolute inset-0 bg-black/70 backdrop-blur-sm z-40"
-                  onClick={closeStep2} />,
                 payStep === 'confirm' ? (
-                  <motion.div key="chat-pay-sheet" {...sheetDrag('chat-pay-2', closeStep2)} initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}
+                  <motion.div key="chat-pay-sheet" {...sheetDrag('chat-pay-2', closeStep2)} initial={prevPayStep === 'form' ? false : { y: '100%' }} animate={{ y: 0 }}
+                    custom={payStep} variants={PAY_SHEET_LEAVE} exit="leave"
                     transition={SHEET_SPRING}
                     className="absolute bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-3xl h-[70vh] overflow-y-auto flex flex-col">
                     {step2Content}

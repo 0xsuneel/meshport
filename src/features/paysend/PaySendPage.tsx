@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
 import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/motion'
@@ -37,6 +37,7 @@ import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, Deskt
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { sheetDrag } from '@/lib/sheetDrag'
+import { ScreenPush } from '@/components/ui/ScreenPush'
 import { readPeople, writePeople } from '@/lib/peopleCache'
 import { SearchField } from '@/components/ui/SearchField'
 
@@ -89,6 +90,9 @@ function sanitizeSendAmount(raw: string, decimals: number = 3): string {
   if (decPart !== undefined) cleaned = intPart + '.' + decPart.slice(0, decimals)
   return cleaned
 }
+
+// Phone: screens swap instantly inside ScreenPush, which does the slide.
+const INSTANT_SCREEN = { initial: false, animate: { opacity: 1, x: 0 }, exit: { opacity: 1, transition: { duration: 0 } } } as const
 
 export function PaySendPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -351,6 +355,10 @@ export function PaySendPage() {
   // a staggered "drop in from above" entrance.
   const flashCheckRef = useRef<HTMLDivElement>(null)
   const heroCheckRef = useRef<HTMLDivElement>(null)
+  // The receipt's check circle, once it's on screen: the flash stays up
+  // until then, so there's never a frame with neither on screen.
+  const [heroCheckEl, setHeroCheckEl] = useState<HTMLDivElement | null>(null)
+  const heroCheckCallback = useCallback((el: HTMLDivElement | null) => { heroCheckRef.current = el; setHeroCheckEl(el) }, [])
   const lastFlashRectRef = useRef<DOMRect | null>(null)
   const [travelRect, setTravelRect] = useState<{ from: DOMRect; to: DOMRect } | null>(null)
   const [travelDone, setTravelDone] = useState(false)
@@ -401,25 +409,19 @@ export function PaySendPage() {
     }
   }, [successPhase, isDesktop])
 
-  useEffect(() => {
+  // Measured before paint, once the receipt's check circle is mounted, so
+  // the traveling checkmark is on screen in the receipt's very first frame.
+  useLayoutEffect(() => {
     if (successPhase !== 'collapsed') { setTravelDone(false); setTravelRect(null); return }
+    if (!heroCheckEl) return
     const from = lastFlashRectRef.current
-    // Hero card has just mounted this render; its own checkmark ref isn't
-    // attached until after this effect runs, so measure it on the next
-    // frame once it's actually in the DOM.
-    requestAnimationFrame(() => {
-      const to = heroCheckRef.current?.getBoundingClientRect()
-      if (from && to) {
-        setTravelRect({ from, to })
-        const t = setTimeout(() => setTravelDone(true), 520)
-        return () => clearTimeout(t)
-      } else {
-        // Couldn't measure either circle (shouldn't normally happen) -
-        // don't get stuck with an invisible checkmark forever.
-        setTravelDone(true)
-      }
-    })
-  }, [successPhase])
+    const to = heroCheckEl.getBoundingClientRect()
+    // Couldn't measure the flash circle — don't leave an invisible checkmark.
+    if (!from) { setTravelDone(true); return }
+    setTravelRect({ from, to })
+    const t = setTimeout(() => setTravelDone(true), 520)
+    return () => clearTimeout(t)
+  }, [successPhase, heroCheckEl])
 
   // ─── Fee-aware spend ceiling (computed once, up front, on the Amount
   // screen) ───────────────────────────────────────────────────────────────
@@ -1122,12 +1124,16 @@ export function PaySendPage() {
   // boundary. Mobile keeps overflow-hidden, unchanged.
   const flow = (
     <div className={`flex flex-col ${isDesktop ? 'h-full' : 'h-screen overflow-hidden'}`} style={{ background: 'var(--bg)' }}>
+      {/* Search → amount → review push like pages (ScreenPush), so two
+          screens are never seen through each other mid-change. Desktop
+          keeps its own slide. */}
+      <ScreenPush screenKey={isDesktop ? 'desktop' : screen} back={direction === 'back'}>
       <AnimatePresence initial={false} mode="popLayout">
 
         {/* ══════════════ SCREEN 1 — SEARCH RECIPIENT ══════════════ */}
         {screen === 'search' && (
           <motion.div key="search"
-            {...(reduceMotion ? { initial: false, animate: { opacity: 1, x: 0 } } : slideStepVariants(direction))}
+            {...(reduceMotion || !isDesktop ? INSTANT_SCREEN : slideStepVariants(direction))}
             transition={MOBILE_SLIDE_TRANSITION}
             className="flex flex-col h-full">
 
@@ -1322,7 +1328,7 @@ export function PaySendPage() {
         {/* ══════════════ SCREEN 2 — ENTER AMOUNT ══════════════ */}
         {screen === 'amount' && recipient && (
           <motion.div key="amount"
-            {...(reduceMotion ? { initial: false, animate: { opacity: 1, x: 0 } } : slideStepVariants(direction))}
+            {...(reduceMotion || !isDesktop ? INSTANT_SCREEN : slideStepVariants(direction))}
             transition={MOBILE_SLIDE_TRANSITION}
             className="flex flex-col h-full">
 
@@ -1533,7 +1539,7 @@ export function PaySendPage() {
         {/* ══════════════ SCREEN 3 — REVIEW + INLINE STATES ══════════════ */}
         {screen === 'review' && recipient && (
           <motion.div key="review"
-            {...(reduceMotion ? { initial: false, animate: { opacity: 1, x: 0 } } : slideStepVariants(direction))}
+            {...(reduceMotion || !isDesktop ? INSTANT_SCREEN : slideStepVariants(direction))}
             transition={MOBILE_SLIDE_TRANSITION}
             className="flex flex-col h-full">
 
@@ -1559,7 +1565,7 @@ export function PaySendPage() {
                 fading in front). The traveling checkmark clone is what
                 should be the only thing visibly moving during this
                 instant - not this panel too. */}
-            {isDone && successPhase === 'flash' && (
+            {isDone && (successPhase === 'flash' || !heroCheckEl) && (
   <SuccessFlash title={payPending ? "Payment Submitted" : "Paid Successfully"} checkRef={flashCheckRef} viaBiometric={paidViaBiometric} circleReady={flashCircleReady} onCircleReady={() => setFlashCircleReady(true)} rect={isDesktop ? flashColumnRect : null} radius={20} />
 )}
 
@@ -1603,7 +1609,7 @@ export function PaySendPage() {
                   fullHash={txHash || undefined}
                   links={txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: txHash, href: arcExplorerTxUrl(txHash) }] : undefined}
                   onPrimary={finishDone}
-                  checkRef={heroCheckRef}
+                  checkRef={heroCheckCallback}
                   revealed={travelDone}
                   checkContent={paidViaBiometric && travelDone
                     // Mounted fresh here (not earlier, just hidden) so its
@@ -1615,10 +1621,10 @@ export function PaySendPage() {
               )
             })() : (
             <>
-            {!isDone && (
+            {(!isDone || successPhase === 'flash') && (
               <div className="header-row sticky top-0 z-20 gap-3 px-5 pt-header pb-header flex-shrink-0">
                 {!isDesktop && (
-                  <button onClick={goBack} disabled={isProcessing} className="back-btn disabled:opacity-30">
+                  <button onClick={goBack} disabled={isProcessing || isDone} className="back-btn disabled:opacity-30">
                     <ArrowLeft className="w-5 h-5 text-text-primary" />
                   </button>
                 )}
@@ -1657,8 +1663,10 @@ export function PaySendPage() {
                      search/amount/review screens above), not layout-prop
                      or manual position-tracking, both of which turned out
                      harder to get reliably working for this. */}
-                {isProcessing && (
-                  <motion.div key="processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                {/* Also stays up under the success flash, so the flash never
+                    grows over an empty screen. */}
+                {(isProcessing || (isDone && (successPhase === 'flash' || !heroCheckEl))) && (
+                  <motion.div key="processing" initial={false}
                     className="flex flex-col items-center justify-center flex-1 space-y-6 py-10">
                     <ProcessingRing size={80} />
                     <p className="text-text-primary" style={{ fontSize: 14.7, fontWeight: 700 }}>Processing payment…</p>
@@ -1780,6 +1788,7 @@ export function PaySendPage() {
           </motion.div>
         )}
       </AnimatePresence>
+      </ScreenPush>
 
       {/* ══════════════ PASSCODE SHEET / DIALOG (modal over review) ══════════════ */}
       <AnimatePresence>

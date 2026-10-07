@@ -8,6 +8,7 @@ import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
+import { ScreenPush } from '@/components/ui/ScreenPush'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import type { SwapProgress } from '@/lib/swapService'
 import { useNavigate } from 'react-router-dom'
@@ -564,6 +565,10 @@ export function SwapPage() {
   // uses, via the shared TravelingCheckmark component).
   const flashCheckRef = useRef<HTMLDivElement>(null)
   const heroCheckRef = useRef<HTMLDivElement>(null)
+  // The receipt's check circle, once it's on screen: the flash stays up
+  // until then, so there's never a frame with neither on screen.
+  const [heroCheckEl, setHeroCheckEl] = useState<HTMLDivElement | null>(null)
+  const heroCheckCallback = useCallback((el: HTMLDivElement | null) => { heroCheckRef.current = el; setHeroCheckEl(el) }, [])
   const lastFlashRectRef = useRef<DOMRect | null>(null)
   const [travelRect, setTravelRect] = useState<{ from: DOMRect; to: DOMRect } | null>(null)
   const [travelDone, setTravelDone] = useState(false)
@@ -605,20 +610,18 @@ export function SwapPage() {
     }
   }, [successPhase, isDesktop])
 
-  useEffect(() => {
+  // Measured before paint, once the receipt's check circle is mounted, so
+  // the traveling checkmark is on screen in the receipt's very first frame.
+  useLayoutEffect(() => {
     if (successPhase !== 'collapsed') { setTravelDone(false); setTravelRect(null); return }
+    if (!heroCheckEl) return
     const from = lastFlashRectRef.current
-    requestAnimationFrame(() => {
-      const to = heroCheckRef.current?.getBoundingClientRect()
-      if (from && to) {
-        setTravelRect({ from, to })
-        const t = setTimeout(() => setTravelDone(true), 520)
-        return () => clearTimeout(t)
-      } else {
-        setTravelDone(true)
-      }
-    })
-  }, [successPhase])
+    const to = heroCheckEl.getBoundingClientRect()
+    if (!from) { setTravelDone(true); return }
+    setTravelRect({ from, to })
+    const t = setTimeout(() => setTravelDone(true), 520)
+    return () => clearTimeout(t)
+  }, [successPhase, heroCheckEl])
 
   const copySwapHash = async () => {
     if (!txHash) return
@@ -1337,6 +1340,8 @@ export function SwapPage() {
   // also require that live quote to have actually landed before enabling —
   // matching Multichain Claim's Confirm Amount gating -- instead of letting
   // someone tap Swap against a rate that hasn't shown up yet.
+  // Which screen the swap is on, for the page-style push between them.
+  const swapScreen = isActive ? 'form' : 'review'
   const canReview = step === 'idle'
     && parseFloat(amountIn || '0') > 0
     && tokenIn.id !== tokenOut.id
@@ -1370,7 +1375,7 @@ export function SwapPage() {
       {/* Success screen supplies its own back+title header inside the hero
           card (matching PaySendPage's completed-payment screen), so the
           normal Swap header is skipped entirely once a swap has landed. */}
-      {step !== 'done' && (
+      {(step !== 'done' || successPhase === 'flash' || !heroCheckEl) && (
         <div className={cn("header-row flex-shrink-0 justify-between px-5 pt-header pb-header", !isDesktop && "sticky top-0 z-20")}
           style={{ background:'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter:'blur(12px)', borderBottom:'1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
           <div className="flex items-center gap-3">
@@ -1392,6 +1397,9 @@ export function SwapPage() {
 
       {/* Scrollable content (desktop: plain — the ancestor column scrolls) */}
       <div className={isDesktop ? undefined : "flex-1 overflow-y-auto"}>
+      {/* Swap form ⇄ Review push like pages (Review, swapping and the
+          success flash are one screen). */}
+      <ScreenPush screenKey={isDesktop ? 'desktop' : swapScreen} back={swapScreen === 'form'} style={isDesktop ? undefined : { minHeight: '100%' }}>
       <div className="px-4 pt-4 pb-8 space-y-3">
 
         {/* Settings panel */}
@@ -1657,13 +1665,17 @@ export function SwapPage() {
         {/* Confirm sheet — also hosts the progress checklist once the passcode is
             entered, so "Review Swap" stays the one screen from confirm through
             completion instead of jumping to a separate swapping screen. */}
-        <AnimatePresence>
-        {(step === 'confirming' || step === 'swapping') && (
-          <motion.div key="conf" initial={{ opacity:0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity:1, y:0 }} transition={MOBILE_TAB_FADE_TRANSITION}
+        {/* No AnimatePresence here: this has no exit animation, and being
+            kept for an extra frame while the receipt mounted showed the
+            progress screen above the receipt for a frame. */}
+        {/* Stays up under the success flash (until the receipt takes over),
+            so the flash never grows over an empty screen. */}
+        {(step === 'confirming' || step === 'swapping' || (step === 'done' && (successPhase === 'flash' || !heroCheckEl))) && (
+          <motion.div key="conf" initial={false}
             className="space-y-3" style={{ position: 'relative', overflow: 'hidden', borderRadius: 24, padding: 2 }}>
 
             <p className="text-center text-sm font-bold text-text-primary" style={{ position: 'relative' }}>
-              {step === 'swapping' ? 'Swapping…' : 'Review Swap'}
+              {step === 'confirming' ? 'Review Swap' : 'Swapping…'}
             </p>
 
             {/* Quote-changed notice — shown briefly when the background poll
@@ -1697,7 +1709,7 @@ export function SwapPage() {
 
                 <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
                   style={{ background: 'color-mix(in srgb, var(--brand) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-                  {step === 'swapping'
+                  {step !== 'confirming'
                     ? <ProcessingRing size={36} />
                     : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                   }
@@ -1775,7 +1787,6 @@ export function SwapPage() {
             )}
           </motion.div>
         )}
-        </AnimatePresence>
 
         {/* ─── Full-screen success takeover — identical mechanic to
             PaySendPage's completed-payment screen: the whole screen flashes
@@ -1783,7 +1794,7 @@ export function SwapPage() {
             holds briefly, then that panel shrinks away while the
             traveling checkmark bridges into the detailed hero card that
             fades in underneath. ─────────────────────────────────────── */}
-        {step === 'done' && successPhase === 'flash' && (
+        {step === 'done' && (successPhase === 'flash' || !heroCheckEl) && (
   <SuccessFlash title="Swapped Successfully" checkRef={flashCheckRef} viaBiometric={paidViaBiometric} circleReady={flashCircleReady} onCircleReady={() => setFlashCircleReady(true)} rect={isDesktop ? flashColumnRect : null} radius={20} />
 )}
 
@@ -1800,7 +1811,7 @@ export function SwapPage() {
           const fmtIn  = `${trimTrailingZeros(inNum.toFixed(swapTokenDecimals(tokenIn.id)))} ${tokenIn.id}`
           const fmtOut = `${trimTrailingZeros(outNum.toFixed(swapTokenDecimals(tokenOut.id)))} ${tokenOut.id}`
           return (
-          <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION} style={{ margin: '-16px -16px 0' }}>
+          <motion.div key="done" initial={false} style={{ margin: '-16px -16px 0' }}>
             <SuccessReceipt
               title="Swap Successful!"
               subtitle={<>{fmtIn} became {fmtOut}</>}
@@ -1820,7 +1831,7 @@ export function SwapPage() {
               fullHash={txHash || undefined}
               links={txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: txHash, href: `${ARC_EXPLORER}/tx/${txHash}` }] : undefined}
               onPrimary={() => navigate('/')}
-              checkRef={heroCheckRef}
+              checkRef={heroCheckCallback}
               revealed={travelDone}
               checkContent={paidViaBiometric && travelDone
                 ? <FlashAuthIcon key="landing-toggle" viaBiometric loop size={34} color="var(--success)" />
@@ -1916,6 +1927,7 @@ export function SwapPage() {
         )}
 
       </div>
+      </ScreenPush>
       </div>
 
       {/* Passcode sheet/dialog — opens on Swap tap, same page, no navigation */}
