@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
-import { HubSheet, HubSheetItem, HubSheetIconButton } from '@/components/multichain/HubSheet'
+import { HubPage, HubPageItem, HubPageBack } from '@/components/multichain/HubPage'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
@@ -3468,13 +3468,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         </AnimatePresence>
       </div>
 
-      {/* ── Hub (phone): the form's two slide-up sheets. Review, the
-          passcode and the chain picker all open above them. ── */}
+      {/* ── Hub (phone): the form as two full pages that slide in from the
+          right. Review opens the same way on top; the passcode and the chain
+          picker open above them. ── */}
       {sheetMode && (step === 'form' || step === 'review' || step === 'confirm') && (<>
-        <HubSheet id="mt-form-1" open={formSheet >= 1} behind={formSheet === 2} onClose={() => setFormSheet(0)}
+        <HubPage open={formSheet >= 1} behind={formSheet === 2}
           header={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px 12px' }}>
-              <HubSheetIconButton kind="close" label="Close" onClick={() => setFormSheet(0)} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 12px' }}>
+              <HubPageBack onClick={() => setFormSheet(0)} />
               <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Cross-Chain Transfer</span>
             </div>
           }
@@ -3494,17 +3495,17 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               </button>
             </div>
           }>
-          <div style={{ padding: '4px 18px 12px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <HubSheetItem i={0}>{formDestination}</HubSheetItem>
-            <HubSheetItem i={1}>{formRoute}</HubSheetItem>
-            <HubSheetItem i={2}>{formRecipient}</HubSheetItem>
+          <div style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <HubPageItem i={0}>{formDestination}</HubPageItem>
+            <HubPageItem i={1}>{formRoute}</HubPageItem>
+            <HubPageItem i={2}>{formRecipient}</HubPageItem>
           </div>
-        </HubSheet>
+        </HubPage>
 
-        <HubSheet id="mt-form-2" level={1} backdrop={false} open={formSheet === 2} onClose={() => setFormSheet(1)}
+        <HubPage level={1} open={formSheet === 2} behind={step !== 'form'}
           header={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 18px 12px' }}>
-              <HubSheetIconButton kind="back" label="Back" onClick={() => setFormSheet(1)} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 12px' }}>
+              <HubPageBack onClick={() => setFormSheet(1)} />
               <ChainLogoImg id={chain.id} size={30}/>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{chain.testnet}</div>
@@ -3513,12 +3514,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             </div>
           }
           footer={formActions}>
-          <div style={{ padding: '4px 18px 12px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <HubSheetItem i={0}>{formBalance}</HubSheetItem>
-            <HubSheetItem i={1}>{formAmount}</HubSheetItem>
-            {formGasWarning && <HubSheetItem i={2}>{formGasWarning}</HubSheetItem>}
+          <div style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <HubPageItem i={0}>{formBalance}</HubPageItem>
+            <HubPageItem i={1}>{formAmount}</HubPageItem>
+            {formGasWarning && <HubPageItem i={2}>{formGasWarning}</HubPageItem>}
           </div>
-        </HubSheet>
+        </HubPage>
       </>)}
 
       {/* ── Confirm & Pay: clean passcode entry, matching the same bottom
@@ -3526,8 +3527,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           line, then PinKeypad directly. No summary card or fee breakdown
           here; that's all already shown on the Review page underneath. ── */}
       {/* ── REVIEW page — rises from the bottom and stays (the form pushes up
-          behind it); Back reverses it. The passcode sheet opens on top. */}
-      <AnimatePresence>
+          behind it); Back reverses it. The passcode sheet opens on top.
+          In the Hub on a phone it slides in from the right like the form
+          pages, and gives way to the processing screen without sliding back. */}
+      <AnimatePresence custom={step}>
       {(step === 'review' || step === 'confirm') && (
         // Phone / tablet: a full page in the app's 430px column. Desktop: a
         // centred card over the Hub, so the sidebar and header stay visible.
@@ -3537,6 +3540,15 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 onClick: () => { if (step === 'review') { setStep('form'); setFeeChangedNotice('') } },
                 className: 'fixed inset-0 z-40 flex items-center justify-center p-6',
                 style: { background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)' } }
+            : sheetMode
+            ? { custom: step, initial: { x: '100%' }, animate: { x: 0 }, transition: { duration: 0.3, ease: [0.32, 0.72, 0, 1] },
+                variants: { leave: (st: MCStep) => st === 'form'
+                  ? { x: '100%', transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } }
+                  : { opacity: 0, transition: { duration: 0 } } },
+                exit: 'leave',
+                className: 'fixed inset-0 z-40 overflow-y-auto',
+                style: { background: 'var(--bg)', maxWidth: 430, marginLeft: 'auto', marginRight: 'auto',
+                  paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' } }
             : { initial: { y: '100%' }, animate: { y: 0 }, exit: { y: '100%' }, transition: { duration: 0.34, ease: [0.32, 0.72, 0, 1] },
                 className: `${embedded ? 'fixed' : 'absolute'} inset-0 z-40 overflow-y-auto`,
                 style: { background: 'var(--bg)', maxWidth: 430, marginLeft: 'auto', marginRight: 'auto',

@@ -28,7 +28,7 @@ import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { ChainScanner } from '@/components/ui/ChainScanner'
 import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpinner'
 import { DesktopHistoryPanel } from '@/components/ui/DesktopHistoryPanel'
-import { HubSheet, HubSheetIconButton } from '@/components/multichain/HubSheet'
+import { HubPage, HubPageBack } from '@/components/multichain/HubPage'
 import { UbProgressTracker, type UbTrackerProgress } from '@/components/multichain/UbProgressTracker'
 import { TrackDetails, type TrackDetailRow } from '@/components/multichain/TrackDetails'
 import { useCctpProgress, fetchCctpProgress } from '@/lib/cctpTracker'
@@ -1038,7 +1038,7 @@ export function MultichainPage() {
 
   const hubKeypadLift = useSharedKeypadLift()
   const flowFocused = flowFocus !== 'none'
-  // The Bring sheet keeps showing its chain while it slides away.
+  // The Bring page keeps showing its chain while it slides away.
   const lastClaimChain = useRef(claimChain)
   if (claimChain) lastClaimChain.current = claimChain
   const sheetClaimChain = claimChain ?? lastClaimChain.current
@@ -1161,25 +1161,27 @@ export function MultichainPage() {
           </div>
         )}
 
-        {/* Phone: the chosen chain's Bring form slides up as a sheet over the
-            chain list (which stays underneath). It can't be swiped away while
-            the claim is being sent. */}
+        {/* Phone: the chosen chain's Bring flow opens as a full page that
+            slides in from the right over the chain list — form, processing,
+            Track Progress and success all happen inside it. */}
         {!isDesktop && (
-          <HubSheet id="mc-bring" open={hubTab === 'bring' && !trackCctp && !trackUb && !trackClaim && !!claimChain}
-            onClose={() => { if (!flowFocused) setClaimChain(null) }}
+          <HubPage open={hubTab === 'bring' && !trackCctp && !trackUb && !trackClaim && !!claimChain}
             header={!flowFocused && (
-              <div style={{ display: 'flex', padding: '8px 18px 4px' }}>
-                <HubSheetIconButton kind="close" label="Close" onClick={() => setClaimChain(null)} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 4px' }}>
+                <HubPageBack onClick={() => setClaimChain(null)} />
+                <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>{isMerchant ? 'Ledger' : 'Bring Funds'}</span>
               </div>
             )}>
             {sheetClaimChain && (
-              <Suspense fallback={<InlineSpinner />}>
-                <ClaimSheetBody key={sheetClaimChain} embedded initialChain={sheetClaimChain}
-                  initialBalance={bringRows.find(c => c.id === sheetClaimChain)?.balance}
-                  onClose={() => setClaimChain(null)} merchantMode={isMerchant} onFocusChange={setFlowFocus} />
-              </Suspense>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '0 8px' }}>
+                <Suspense fallback={<InlineSpinner />}>
+                  <ClaimSheetBody key={sheetClaimChain} embedded initialChain={sheetClaimChain}
+                    initialBalance={bringRows.find(c => c.id === sheetClaimChain)?.balance}
+                    onClose={() => setClaimChain(null)} merchantMode={isMerchant} onFocusChange={setFlowFocus} />
+                </Suspense>
+              </div>
             )}
-          </HubSheet>
+          </HubPage>
         )}
 
         {hubTab === 'bring' && !trackCctp && !trackUb && !trackClaim && (!claimChain || !isDesktop) && (() => {
