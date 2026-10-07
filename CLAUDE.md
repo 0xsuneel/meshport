@@ -77,11 +77,14 @@ swap quota.
 confirm Vercel env vars have access-controlled visibility. Long-term: move swap
 signing to a Circle developer-controlled wallet so the key never lives in env.
 
-#### C-3: Move rewards signer off raw private key
+#### C-3: Move rewards signer off raw private key — code done, setup pending
 **File:** `supabase/functions/rewards-claim-sign/`  
-**Problem:** The `MeshPortRewards.sol` off-chain signer key is stored somewhere
-server-side. Same risk class as C-1.  
-**Fix:** Same pattern as C-1 — Circle developer-controlled wallet for signing.
+**Status:** The function signs through a Circle developer-controlled wallet
+(`POST /v1/w3s/developer/sign/message`) whenever `REWARDS_SIGNER_WALLET_ID` is
+set, and falls back to `REWARDS_SIGNER_PRIVATE_KEY` until then.  
+**Remaining setup:** `scripts/create-rewards-signer-wallet.mjs` → set the
+Supabase secrets it prints → register the address with
+`contracts/set-points-signer.cjs` → delete `REWARDS_SIGNER_PRIVATE_KEY`.
 
 ---
 
@@ -211,7 +214,12 @@ VITE_P2P_ESCROW_CONTRACT=
 
 # Circle developer-controlled wallets (for C-1/C-3 migration)
 CIRCLE_API_KEY=
-CIRCLE_ENTITY_SECRET=
+CIRCLE_ENTITY_SECRET=          # 64 hex chars, registered in Circle Console
+
+# Rewards signer (Supabase secrets for rewards-claim-sign)
+REWARDS_SIGNER_WALLET_ID=      # Circle wallet id — preferred
+REWARDS_SIGNER_ADDRESS=        # its address; optional sanity check
+REWARDS_SIGNER_PRIVATE_KEY=    # LEGACY — delete once the Circle signer is live
 
 # Circle App Kit swap
 KIT_KEY=                       # keep server-side only — never VITE_-prefixed
