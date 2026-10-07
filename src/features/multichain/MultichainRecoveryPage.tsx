@@ -320,6 +320,14 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
         const key = `ubstuck:${t.id}`
         const r = result[key]
         const isBusy = busy === key
+        // After a failed forwarder delivery Circle keeps the delivered amount
+        // reserved until that delivery expires, so the Arc balance reads low.
+        // Acting on the remainder then would send only the fee allowance and
+        // close the row, stranding the rest when it's released — so hold the
+        // buttons back until it's released (or, failing that, for a day).
+        const held = Math.max(0, t.amount - t.available)
+        const holding = held > Math.max(0.5, t.amount * 0.05)
+          && Date.now() - new Date(t.createdAt).getTime() < 24 * 60 * 60 * 1000
         const row = (label: string, value: string, mono = false) => (
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, padding: '6px 0', borderTop: '1px solid var(--border)' }}>
             <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
@@ -330,19 +338,21 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
           <div key={key} style={card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-primary)', fontWeight: 600 }}>
               <span>Transfer to {t.destinationLabel} didn’t finish</span>
-              <span>{(t.available >= 0.1 ? t.available : t.amount).toFixed(2)} USDC</span>
+              <span>{t.amount.toFixed(2)} USDC</span>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0 10px' }}>
               Held safely in your Unified Balance · {new Date(t.createdAt).toLocaleString()}
             </div>
+            {held > 0.01 && row('Available now', `${t.available.toFixed(2)} USDC`)}
+            {held > 0.01 && row('Still held by Circle', `${held.toFixed(2)} USDC`)}
             {row('Destination chain', t.destinationLabel)}
             {row('Destination address', t.destinationAddress, true)}
             {r?.diag?.detail && <div style={{ fontSize: 13, marginTop: 10, color: 'var(--text-primary)' }}>{r.diag.detail}</div>}
             {r?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger)' }}>{r.error}</div>}
-            {t.available < 0.1 ? (
+            {(holding || t.available < 0.1) ? (
               <div style={{ fontSize: 13, marginTop: 10, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                Circle is still holding this amount for the delivery that failed. It's released back to your
-                Unified Balance within about 10 minutes — tap Refresh, then choose where to send it.
+                Circle is still holding {held.toFixed(2)} USDC for the delivery that failed. It isn't lost — it comes
+                back to your Unified Balance once that delivery expires. Tap Refresh later, then choose where to send it.
               </div>
             ) : (
             <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
@@ -354,7 +364,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
               </button>
             </div>
             )}
-            {t.available >= 0.1 && (
+            {!holding && t.available >= 0.1 && (
               <button style={{ ...btn, marginTop: 8, width: '100%', fontSize: 12.5, color: 'var(--text-secondary)' }} disabled={isBusy}
                 onClick={() => void withdrawTrustless(key, { chain: ARC_CHAIN_KEY, amount: t.available, label: t.destinationLabel, replaceRowId: t.id })}>
                 Withdraw without Circle (7-day wait)
