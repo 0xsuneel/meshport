@@ -638,6 +638,7 @@ export function MultichainPage() {
     return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal) }
   }, [walletAddress, processingClaims.map(c => `${c.id}:${c.status}`).join(','), settingsMap, settingsLoaded, scanNonce])
 
+  const reloadActivityRef = useRef<(() => void) | null>(null)
   // Load completed activity from DB — shared across all devices via Supabase
   useEffect(() => {
     if (!walletAddress) { setLoadingActivity(false); return }
@@ -809,8 +810,26 @@ export function MultichainPage() {
       refreshBalance()
     }, 30_000)
 
-    return () => { disposed = true; clearInterval(interval) }
+    // A transfer's row changed (e.g. Processing → Completed once it lands):
+    // reload at once instead of waiting for the next 30s refresh, so the
+    // list never says "Processing" after the transfer has finished.
+    let soon: ReturnType<typeof setTimeout> | undefined
+    const reloadSoon = () => { clearTimeout(soon); soon = setTimeout(loadActivity, 400) }
+    reloadActivityRef.current = reloadSoon
+    let channel: any
+    import('@/lib/supabase').then(({ supabase }) => {
+      if (disposed) return
+      channel = supabase
+        .channel('multichain-hub-activity-' + walletAddress.slice(2, 10).toLowerCase())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'activity', filter: `wallet_address=eq.${walletAddress.toLowerCase()}` }, reloadSoon)
+        .subscribe()
+    })
+
+    return () => { disposed = true; clearInterval(interval); clearTimeout(soon); channel?.unsubscribe(); reloadActivityRef.current = null }
   }, [walletAddress, serverClaims.map(c => `${c.id}:${c.status}`).join(',')])
+
+  // Opening the Activity tab always shows the latest.
+  useEffect(() => { if (hubTab === 'activity') reloadActivityRef.current?.() }, [hubTab])
 
   // Use dbActivity as the single source of truth for activity
   // Arrival seen on-chain wins over a row that still says "pending".
