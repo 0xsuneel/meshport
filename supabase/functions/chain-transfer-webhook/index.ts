@@ -525,8 +525,8 @@ const WATCH_CURSOR = 'transfer_watch'
 const WATCH_MAX_RANGE = 5000        // Arc RPC caps eth_getLogs ranges (~10k)
 const WATCH_FIRST_LOOKBACK = 200    // first run: ~2 minutes of history
 const WATCH_WALLET_CHUNK = 200      // recipients per eth_getLogs call
-const WATCH_LOOP_MS = 45_000
-const WATCH_INTERVAL_MS = 5_000
+const WATCH_LOOP_MS = 58_000      // covers the whole minute until the next cron run
+const WATCH_INTERVAL_MS = 2_000  // Arc makes ~2 blocks a second
 const ARC_RPC_URLS = [
   (Deno.env.get('ARC_RPC_URL') ?? '').trim(),
   'https://rpc.testnet.arc.network',
@@ -671,7 +671,7 @@ Deno.serve(async (req: Request) => {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
       lastSweepAt = 0
       await sweepUnnotifiedReceives(supabase)
-      // The same once-a-minute job drives the Arc log watcher (~45s of 5s passes).
+      // The same once-a-minute job drives the Arc log watcher (2s passes for ~58s).
       const watch = await runWatcher(supabase)
       return json({ ok: true, swept: true, watch })
     }
