@@ -476,12 +476,14 @@ function getServiceRoleKey(): string {
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = getServiceRoleKey()
 
-async function recordClaimActivity(supabase: SupabaseClient, walletAddress: string, txHash: string, amount: number, sourceChain: string, realBurnTxHash?: string | null) {
+async function recordClaimActivity(supabase: SupabaseClient, walletAddress: string, txHash: string, amount: number, sourceChain: string, realBurnTxHash?: string | null, createdAt?: string | null) {
   try {
     const hasRealBurnHash = !!realBurnTxHash
     const { error } = await supabase
       .from('activity')
       .upsert({
+        // Dated by the mint's block (see txTime) so a claim found late isn't shown as today.
+        ...(createdAt ? { created_at: createdAt } : {}),
         wallet_address:      walletAddress.toLowerCase(),
         // Real source-chain burn hash when findSourceBurnTx found one —
         // otherwise the same placeholder reasoning as before: the mint
@@ -1029,7 +1031,7 @@ Deno.serve(async (req: Request) => {
             // that happened to complete through the recovery scan instead of
             // claim-worker's normal path (exactly the "recovery scan helped
             // show it, but the source hash/link are missing" symptom).
-            await recordClaimActivity(supabase, walletAddress, txHash, amount, matchingClaim.source_chain || 'Unknown', matchingClaim.tx_hash)
+            await recordClaimActivity(supabase, walletAddress, txHash, amount, matchingClaim.source_chain || 'Unknown', matchingClaim.tx_hash, timestamp)
           }
           recovered.push(txHash)
         }
@@ -1099,7 +1101,7 @@ Deno.serve(async (req: Request) => {
         continue
       }
 
-      await recordClaimActivity(supabase, walletAddress, txHash, amount, resolvedSourceChain, realBurnTxHash)
+      await recordClaimActivity(supabase, walletAddress, txHash, amount, resolvedSourceChain, realBurnTxHash, timestamp)
       recovered.push(txHash)
       }
     }
