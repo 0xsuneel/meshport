@@ -272,10 +272,16 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
               <div style={{ position: 'relative', height: NEWS_PIC_H, borderRadius: 10, overflow: 'hidden', background: NEWS_SOURCE_TINT[it.source] }}>
                 {it.image_url && !broken[it.id] ? (
                   <>
+                    {/* The strip is wider than the 1200×630 covers, so the whole cover is
+                        fitted in the middle (never cropped) over a soft blurred copy of
+                        itself that fills the sides. Only the blurred copy drifts. */}
+                    <img src={it.image_url} alt="" aria-hidden draggable={false} loading={k === 0 ? 'eager' : 'lazy'}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+                        filter: 'blur(10px) saturate(1.1) brightness(0.92)',
+                        transform: on || reduce ? 'scale(1.25)' : 'scale(1.4)', transition: reduce ? 'none' : 'transform 5.5s cubic-bezier(.2,.6,.3,1)' }} />
                     <img src={it.image_url} alt="" draggable={false} loading={k === 0 ? 'eager' : 'lazy'}
                       onError={() => setBroken(b => ({ ...b, [it.id]: true }))}
-                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
-                        transform: on || reduce ? 'scale(1)' : 'scale(1.08)', transition: reduce ? 'none' : 'transform 5.5s cubic-bezier(.2,.6,.3,1)' }} />
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
                     <span style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(0,0,0,0.45)', borderRadius: 999, padding: '1px 7px',
                       color: '#fff', fontSize: 9.5, fontWeight: 700, lineHeight: '15px' }}>{NEWS_SOURCE_LABEL[it.source]}</span>
                   </>
