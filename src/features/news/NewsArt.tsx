@@ -27,6 +27,13 @@ function Glyph({ item, size }: { item: NewsItem; size: number }) {
           <g fill="#FFFFFF" stroke="#0F5C57" strokeWidth="12"><circle cx="62" cy="64" r="12"/><circle cx="146" cy="58" r="13"/><circle cx="150" cy="118" r="9"/><circle cx="108" cy="152" r="8"/><circle cx="54" cy="142" r="16"/><circle cx="100" cy="100" r="22"/></g>
         </svg>
       )
+    case 'circle_dev':
+      // Code brackets
+      return (
+        <svg viewBox="0 0 24 24" style={s} fill="none" stroke="#3B4A6B" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 5l-3 14" />
+        </svg>
+      )
     case 'circle':
       return (
         <svg viewBox="0 0 24 24" style={s} fill="none" strokeWidth="3.2">
@@ -49,6 +56,7 @@ function labels(item: NewsItem): { title: string; sub: string | null; live: bool
     case 'arc_status': return { title: 'Network notice', sub: item.status_label, live: isLiveStatusNotice(item) }
     case 'meshport':   return { title: 'MeshPort update', sub: newsDate(item.published_at), live: false }
     case 'circle':     return { title: 'Circle', sub: item.topic ?? newsDate(item.published_at), live: false }
+    case 'circle_dev': return { title: item.topic ?? 'Developer update', sub: 'Release notes', live: false }
     default:           return { title: 'Arc', sub: item.topic ?? newsDate(item.published_at), live: false }
   }
 }

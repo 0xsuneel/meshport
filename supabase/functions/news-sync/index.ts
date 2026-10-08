@@ -5,6 +5,9 @@
 //                                    opening paragraphs, publish date)
 //   status.arc.io/history.rss     — network notices, refreshed every run
 //                                    because their status changes
+//   developer updates (circle_dev) — Circle's CCTP and Gateway release
+//                                    notes, and the App Kit / Bridge Kit
+//                                    changelogs shipped on npm
 // MeshPort's own posts are written by admins, never here.
 //
 // Called by pg_cron every 30 minutes (migration 20261008120000_news_items).
@@ -16,13 +19,18 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
 import {
   parseArcBlogList, parseCircleBlogList, parseArticle, parseStatusRss,
-  type BlogListEntry,
+  parseReleaseNotesMd, parseChangelogMd,
+  type BlogListEntry, type DevUpdateEntry,
 } from '../_shared/newsParse.ts'
 
 const UA = 'Mozilla/5.0 (compatible; MeshPortNews/1.0; +https://meshport.xyz)'
 // New articles read per source per run. The first run backfills this many;
 // later runs usually find 0–1 new ones.
 const MAX_NEW_PER_SOURCE = 8
+// Only the newest this-many articles on a list page are considered, so a
+// list with hundreds of posts (circle.com/blog-all) backfills a sensible
+// history instead of years of it.
+const LIST_DEPTH = 60
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -40,7 +48,7 @@ async function fetchText(url: string, timeoutMs = 15000): Promise<string | null>
 }
 
 type Row = {
-  source: 'arc' | 'circle' | 'arc_status'
+  source: 'arc' | 'circle' | 'arc_status' | 'circle_dev'
   url: string; title: string; summary: string | null; body: string[]
   image_url: string | null; topic: string | null; read_minutes: number | null
   status_label: string | null; published_at: string; fetched_at: string
@@ -53,7 +61,7 @@ async function readBlog(
   if (!html) return { rows: [], found: 0, error: 'list page unreachable' }
   const entries = list(html)
   if (!entries.length) return { rows: [], found: 0, error: 'no articles found on list page (layout changed?)' }
-  const fresh = entries.filter(e => !known.has(e.url)).slice(0, MAX_NEW_PER_SOURCE)
+  const fresh = entries.slice(0, LIST_DEPTH).filter(e => !known.has(e.url)).slice(0, MAX_NEW_PER_SOURCE)
   const now = new Date().toISOString()
   const rows = (await Promise.all(fresh.map(async (e): Promise<Row | null> => {
     const page = await fetchText(e.url)
@@ -88,6 +96,53 @@ function keepListOrder(rows: { published_at: string }[]) {
   }
 }
 
+// Circle's release notes (one page per product per year, as Markdown) and
+// the Kits' changelogs (CHANGELOG.md inside the npm package; release dates
+// from the npm registry).
+const RELEASE_NOTES = [
+  { product: 'CCTP', slug: 'cctp' },
+  { product: 'Gateway', slug: 'gateway' },
+]
+const KIT_PACKAGES = [
+  { product: 'App Kit', pkg: '@circle-fin/app-kit' },
+  { product: 'Bridge Kit', pkg: '@circle-fin/bridge-kit' },
+]
+
+async function readDevUpdates(): Promise<{ rows: Row[]; found: number; error?: string }> {
+  const year = new Date().getUTCFullYear()
+  const now = new Date().toISOString()
+  const errors: string[] = []
+  const notes = RELEASE_NOTES.map(async ({ product, slug }) => {
+    const out: DevUpdateEntry[] = []
+    // January: last year's page still holds the recent updates.
+    for (const y of new Date().getUTCMonth() === 0 ? [year, year - 1] : [year]) {
+      const pageUrl = `https://developers.circle.com/release-notes/${slug}-${y}`
+      const md = await fetchText(`${pageUrl}.md`)
+      if (md) out.push(...parseReleaseNotesMd(md, product, pageUrl))
+    }
+    if (!out.length) errors.push(`${product} release notes: nothing read`)
+    return out
+  })
+  const kits = KIT_PACKAGES.map(async ({ product, pkg }) => {
+    const [md, meta] = await Promise.all([
+      fetchText(`https://unpkg.com/${pkg}/CHANGELOG.md`),
+      fetchText(`https://registry.npmjs.org/${pkg}`),
+    ])
+    let times: Record<string, string> = {}
+    try { times = meta ? JSON.parse(meta).time ?? {} : {} } catch { /* unreadable registry reply */ }
+    const out = md ? parseChangelogMd(md, product, pkg, times) : []
+    if (!out.length) errors.push(`${product} changelog: nothing read`)
+    return out
+  })
+  const entries = (await Promise.all([...notes, ...kits])).flat()
+  const rows = entries.map((e): Row => ({
+    source: 'circle_dev', url: e.url, title: e.title, summary: e.summary, body: e.body,
+    image_url: null, topic: e.topic, read_minutes: null, status_label: null,
+    published_at: e.published_at, fetched_at: now,
+  }))
+  return { rows, found: rows.length, error: errors.length ? errors.join('; ') : undefined }
+}
+
 async function readStatus(): Promise<{ rows: Row[]; found: number; error?: string }> {
   const xml = await fetchText('https://status.arc.io/history.rss')
   if (!xml) return { rows: [], found: 0, error: 'status feed unreachable' }
@@ -110,19 +165,22 @@ Deno.serve(async (req) => {
   if (readErr) return json({ error: readErr.message }, 500)
   const known = new Set((existing ?? []).map(r => r.url as string))
 
-  const [arc, circle, status] = await Promise.all([
+  const [arc, circle, status, dev] = await Promise.all([
     readBlog('arc', 'https://www.arc.io/blog', html => parseArcBlogList(html), known),
-    readBlog('circle', 'https://www.circle.com/blog', html => parseCircleBlogList(html), known),
+    // blog-all lists every post newest first; /blog only shows the latest 10.
+    readBlog('circle', 'https://www.circle.com/blog-all', html => parseCircleBlogList(html), known),
     readStatus(),
+    readDevUpdates(),
   ])
   const report = {
     arc:    { found: arc.found,    new: arc.rows.length,    error: arc.error },
     circle: { found: circle.found, new: circle.rows.length, error: circle.error },
     status: { found: status.found, upserted: status.rows.length, error: status.error },
+    dev:    { found: dev.found, error: dev.error },
   }
   for (const [k, v] of Object.entries(report)) if (v.error) console.warn(`[news-sync] ${k}: ${v.error}`)
 
-  if (dryRun) return json({ dryRun: true, report, rows: [...arc.rows, ...circle.rows, ...status.rows] })
+  if (dryRun) return json({ dryRun: true, report, rows: [...arc.rows, ...circle.rows, ...status.rows, ...dev.rows] })
 
   const blogRows = [...arc.rows, ...circle.rows]
   if (blogRows.length) {
@@ -135,6 +193,11 @@ Deno.serve(async (req) => {
     // refreshed in place. `hidden` isn't in the payload, so an admin's hide sticks.
     const { error } = await db.from('news_items').upsert(status.rows, { onConflict: 'url' })
     if (error) return json({ error: error.message, report }, 500)
+  }
+  if (dev.rows.length) {
+    // Saved on their own so a problem here never holds back the blog stories.
+    const { error } = await db.from('news_items').upsert(dev.rows, { onConflict: 'url', ignoreDuplicates: true })
+    if (error) { console.warn('[news-sync] dev updates:', error.message); return json({ ok: false, error: error.message, report }, 500) }
   }
   return json({ ok: true, report })
 })

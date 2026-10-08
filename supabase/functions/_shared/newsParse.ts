@@ -189,3 +189,122 @@ export function parseStatusRss(xml: string, limit = 10): StatusEntry[] {
   }
   return out
 }
+
+// ── Developer updates: Circle release notes + Kit changelogs ────────────────
+export interface DevUpdateEntry {
+  url: string
+  title: string
+  summary: string | null
+  body: string[]
+  topic: string
+  published_at: string
+}
+
+/** Markdown → plain text: links keep their text, code/emphasis marks and tags go. */
+export function markdownText(md: string): string {
+  return decodeEntities(md
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/[`*_]{1,3}([^`*_]+)[`*_]{1,3}/g, '$1')
+    .replace(/[`]/g, ''))
+    .replace(/\s+/g, ' ').trim()
+}
+
+function firstSentence(s: string, max = 110): string {
+  // Ends at the first sentence, or at a colon that introduces details.
+  const m = s.match(/^(.{20,}?)[.!?:](\s|$)/)
+  const one = (m ? m[1] : s).replace(/[.:]$/, '')
+  if (one.length <= max) return one
+  const cut = one.slice(0, max)
+  return cut.slice(0, cut.lastIndexOf(' ')).replace(/[,;:]$/, '') + '…'
+}
+
+/** A markdown chunk → readable paragraphs; a bullet list joins into one line (after its "Updated topics:" lead-in, if any). */
+function mdParagraphs(md: string): { heading: string | null; paras: string[] } {
+  let heading: string | null = null
+  const paras: string[] = []
+  for (const raw of md.split(/\n\s*\n/)) {
+    const block = raw.trim()
+    if (!block || block.startsWith('```')) continue
+    const lines = block.split('\n').map(l => l.trim()).filter(Boolean)
+    if (lines.every(l => l.startsWith('#'))) { heading ??= markdownText(lines[0].replace(/^#+\s*/, '')); continue }
+    if (/^[*-]\s/.test(lines[0])) {
+      // A list; a wrapped item continues on the next (unbulleted) line.
+      const raw: string[] = []
+      for (const l of lines) {
+        if (/^[*-]\s/.test(l)) raw.push(l.replace(/^[*-]\s+/, ''))
+        else raw[raw.length - 1] += ' ' + l
+      }
+      const items = raw.map(markdownText).filter(Boolean)
+      if (!items.length) continue
+      const joined = items.join('; ')
+      if (paras.length && /:$/.test(paras[paras.length - 1])) paras[paras.length - 1] += ' ' + joined
+      else paras.push(joined)
+      continue
+    }
+    const text = markdownText(lines.filter(l => !l.startsWith('#')).join(' '))
+    if (text) paras.push(text)
+  }
+  return { heading, paras }
+}
+
+/**
+ * developers.circle.com/release-notes/<product>-<year>.md: one
+ * <Update label="YYYY.MM.DD"> block per change, newest first.
+ */
+export function parseReleaseNotesMd(md: string, product: string, pageUrl: string, limit = 10): DevUpdateEntry[] {
+  const out: DevUpdateEntry[] = []
+  const seen = new Map<string, number>()
+  for (const m of md.matchAll(/<Update\s+label="(\d{4})\.(\d{2})\.(\d{2})"[^>]*>([\s\S]*?)<\/Update>/g)) {
+    const [, y, mo, d, inner] = m
+    const { heading, paras } = mdParagraphs(inner)
+    const lead = paras.find(p => !/:$/.test(p)) ?? paras[0] ?? heading
+    if (!lead) continue
+    const label = `${y}.${mo}.${d}`
+    const n = (seen.get(label) ?? 0) + 1
+    seen.set(label, n)
+    out.push({
+      url: `${pageUrl}#${label}${n > 1 ? `-${n}` : ''}`,
+      title: `${product}: ${firstSentence(lead)}`,
+      summary: clampParagraph(lead, 360),
+      body: paras.filter(p => p !== lead).slice(0, 3).map(p => clampParagraph(p)),
+      topic: product,
+      published_at: new Date(`${y}-${mo}-${d}T12:00:00Z`).toISOString(),
+    })
+    if (out.length >= limit) break
+  }
+  return out
+}
+
+/**
+ * A Changesets CHANGELOG.md shipped in an npm package ("## 1.16.0",
+ * "### Minor Changes", "- change…"). Only major/minor releases count as
+ * news; patch releases are fixes. Dates come from the npm registry (`times`).
+ */
+export function parseChangelogMd(md: string, product: string, pkg: string, times: Record<string, string>, limit = 8): DevUpdateEntry[] {
+  const out: DevUpdateEntry[] = []
+  const parts = md.split(/^## (\d+\.\d+\.\d+)\s*$/m)
+  for (let i = 1; i < parts.length && out.length < limit; i += 2) {
+    const version = parts[i], section = parts[i + 1] ?? ''
+    if (!/^### (Major|Minor) Changes/m.test(section)) continue
+    const when = times[version]
+    if (!when || Number.isNaN(Date.parse(when))) continue
+    // Changes under the major/minor headings only; each "- " at column 0 starts one.
+    const notable = section.split(/^### /m).filter(s => /^(Major|Minor) Changes/.test(s)).join('\n')
+    const items = notable.split(/^- /m).slice(1)
+      .map(it => mdParagraphs(it.replace(/^(Major|Minor) Changes.*$/m, '')).paras[0])
+      .filter((p): p is string => !!p)
+    if (!items.length) continue
+    out.push({
+      url: `https://www.npmjs.com/package/${pkg}/v/${version}`,
+      title: `${product} ${version}: ${firstSentence(items[0])}`,
+      summary: clampParagraph(items[0], 360),
+      body: items.slice(1, 4).map(p => clampParagraph(p)),
+      topic: product,
+      published_at: new Date(when).toISOString(),
+    })
+  }
+  return out
+}
