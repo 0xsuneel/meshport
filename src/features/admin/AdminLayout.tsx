@@ -15,7 +15,7 @@ const titles: Record<string, string> = {
   [`${ADMIN_PATH}/treasury`]:    'Treasury',
   [`${ADMIN_PATH}/analytics`]:   'Analytics',
   [`${ADMIN_PATH}/notifications`]: 'Notifications',
-  [`${ADMIN_PATH}/news`]:        'News',
+  [`${ADMIN_PATH}/news`]:        'Updates',
   [`${ADMIN_PATH}/maintenance`]: 'Maintenance',
   [`${ADMIN_PATH}/logs`]:        'Logs',
   [`${ADMIN_PATH}/support`]:     'Support Tickets',

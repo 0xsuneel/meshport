@@ -297,7 +297,7 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
     )
   }
 
-  return <Box title="News" onViewAll={() => navigate('/news')}>{content}</Box>
+  return <Box title="Updates" onViewAll={() => navigate('/news')}>{content}</Box>
 }
 
 export function RecentNewsRow({ navigate }: { navigate: NavigateFunction }) {
