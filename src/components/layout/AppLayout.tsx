@@ -7,7 +7,7 @@ import { DesktopHeader } from './DesktopHeader'
 import { Toast } from '@/components/ui/Toast'
 import { PushPermissionBanner } from '@/components/ui/PushPermissionBanner'
 import { PageTransition } from '@/components/ui/PageTransition'
-import { onReconnect, useOnReconnect } from '@/lib/connectivity'
+import { onReconnect, useOnReconnect, isSlowNetwork, whenNetworkOk } from '@/lib/connectivity'
 import { ModeToggle } from '@/components/admin/ModeToggle'
 import { useAuthStore, useP2PTradesCountStore, useWalletStore, useUIStore } from '@/store'
 import { fetchMyTrades, subscribeToMyTrades, isTradeExpired } from '@/lib/p2pService'
@@ -171,7 +171,10 @@ export function AppLayout() {
   useEffect(() => {
     if (!walletAddress) return
 
+    // Very slow network: the scan waits until it's better (balance first).
+    let cancelWait = () => {}
     const runScan = () => {
+      if (isSlowNetwork()) { cancelWait(); cancelWait = whenNetworkOk(runScan); return }
       // SUPABASE REDUCTION: replaced supabase.functions.invoke('claim-recovery-scan')
       // with a server-side proxy through /api/bridge-relay so the Supabase
       // anon key is never used as auth for a server-side action. The relay
@@ -252,7 +255,7 @@ export function AppLayout() {
     runScan()
     const onVisible = () => { if (document.visibilityState === 'visible') runScan() }
     document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
+    return () => { cancelWait(); document.removeEventListener('visibilitychange', onVisible) }
   }, [walletAddress])
 
   // ── Set up E2E chat encryption keys ─────────────────────────────────────
@@ -292,7 +295,7 @@ export function AppLayout() {
   // has signed in: now, on unlock, and every 2 minutes while the app is open.
   useEffect(() => {
     if (!walletAddress || !chatUserId) return
-    const run = () => import('@/lib/chatCrypto')
+    const run = () => isSlowNetwork() ? undefined : import('@/lib/chatCrypto') // very slow network: next tick
       .then(({ resealWaitingMessages }) => resealWaitingMessages(walletAddress, chatUserId)).catch(() => {})
     run()
     const iv = setInterval(run, 2 * 60_000)
@@ -341,6 +344,9 @@ export function AppLayout() {
     if (!walletAddress || !privateKey) return
     const run = () => {
       if (document.visibilityState !== 'visible') return
+      // Very slow network: sending now could time out mid-way — the next
+      // tick (or the network getting better) finishes it.
+      if (isSlowNetwork()) return
       import('@/lib/ubClaim').then(async ({ autoFinishUbClaims }) => {
         // Merchants too: this only finishes money already in the Ledger
         // (Unified Balance). Customer payments sitting in the wallet on other

@@ -3,7 +3,7 @@ import { createBrowserRouter, RouterProvider, Navigate, useLocation } from 'reac
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store'
 import { markSplashDone } from './lib/splash'
-import { useOnReconnect } from './lib/connectivity'
+import { useOnReconnect, isSlowNetwork, whenNetworkOk } from './lib/connectivity'
 import { AppLayout } from './components/layout/AppLayout'
 import { AuthShell } from './components/layout/AuthShell'
 import { ChatDesktopSplit } from './components/layout/ChatDesktopSplit'
@@ -681,10 +681,11 @@ export default function App() {
   // user sees announcements the next time they open the app, even if push
   // was never enabled (or can't be, e.g. iOS Safari not added to Home Screen).
   useEffect(() => {
-    const addr = useAuthStore.getState().walletAddress
-    syncBroadcastNotifications(addr)
-    const interval = setInterval(() => syncBroadcastNotifications(useAuthStore.getState().walletAddress), 60_000)
-    const onVisible = () => { if (document.visibilityState === 'visible') syncBroadcastNotifications(useAuthStore.getState().walletAddress) }
+    // Announcements can wait on a very slow network (the balance goes first).
+    const sync = () => { if (!isSlowNetwork()) syncBroadcastNotifications(useAuthStore.getState().walletAddress) }
+    sync()
+    const interval = setInterval(sync, 60_000)
+    const onVisible = () => { if (document.visibilityState === 'visible') sync() }
     document.addEventListener('visibilitychange', onVisible)
     return () => {
       clearInterval(interval)
@@ -700,7 +701,8 @@ export default function App() {
   useEffect(() => {
     const userId = useAuthStore.getState().user?.id
     if (!userId) return
-    import('./lib/pushNotifications').then(({ enablePushNotifications }) => {
+    // Waits for a usable network (on a very slow one the balance goes first).
+    return whenNetworkOk(() => { import('./lib/pushNotifications').then(({ enablePushNotifications }) => {
       // Renew the subscription at most once a day: the push service can
       // revoke one (reinstall, data cleared) while the browser still hands
       // back the old object, and pushes to it silently go nowhere.
@@ -709,7 +711,7 @@ export default function App() {
       enablePushNotifications(userId, { fresh }).then(r => {
         if (r.ok && fresh) { try { localStorage.setItem('mp_push_fresh_at', String(Date.now())) } catch { /* ignore */ } }
       }).catch(() => {})
-    })
+    }) })
   }, [useAuthStore(s => s.user?.id)])
 
   // ── Wait for Zustand auth store to rehydrate from localStorage ────────────

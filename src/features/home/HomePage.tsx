@@ -13,7 +13,7 @@ import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
 import { formatAmount, copyToClipboard, timeAgo, trimTrailingZeros } from '@/lib/utils'
-import { readArcBalance, readArcBalanceOrThrow, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT, EXTERNAL_SCAN_PROGRESS_EVENT } from '@/blockchain/BlockchainManager'
+import { readArcBalanceOrThrow, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT, EXTERNAL_SCAN_PROGRESS_EVENT } from '@/blockchain/BlockchainManager'
 import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpinner'
 import { notifyPaymentReceived, notifyPaymentReceivedFromAddress, notifyBulkPaymentReceived } from '@/lib/notifications'
 import { markP2PNotificationRead } from '@/lib/p2pNotifications'
@@ -23,7 +23,7 @@ import { getRemovedContacts, unblockIfNewerActivity } from '@/lib/removedContact
 import { searchUsersDb, getOrCreateConversation, fetchContactsDb, type DbUser } from '@/lib/supabase'
 import { filterServices } from '@/lib/searchServices'
 import { RecentNewsRow } from './RecentNewsRow'
-import { onReconnect, useReconnectCount } from '@/lib/connectivity'
+import { onReconnect, useReconnectCount, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { fetchRecentContacts, recentInitial, recentShortName, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
 import { useSettingsStore } from '@/store/settingsStore'
 import { activityLabel, activitySign, type ActivityType, type ActivityRecord } from '@/lib/ActivityService'
@@ -2541,7 +2541,8 @@ export function HomePage() {
       for (const tok of tokens) {
         if (tok === 'EURC')   { readArcBalanceOrThrow(walletAddress, 'EURC').then(setEurcBalance).catch(() => {}); continue }
         if (tok === 'CIRBTC') { readArcBalanceOrThrow(walletAddress, 'CIRBTC').then(setCirBtcBalance).catch(() => {}); continue }
-        readArcBalance(walletAddress, 'USDC').then(setBalance).catch(() => {})
+        // A failed read keeps the shown balance (never saves $0).
+        readArcBalanceOrThrow(walletAddress, 'USDC').then(setBalance).catch(() => {})
       }
     }, BALANCE_REFRESH_DEBOUNCE_MS)
   }
@@ -2923,7 +2924,10 @@ export function HomePage() {
     const SUPA_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
     if (!SUPA_URL || !SUPA_KEY) return
 
-    ;(async () => {
+    // Many small queries one after another — on a very slow network it waits
+    // so the balance comes first.
+    let stopped = false
+    const run = async () => {
       try {
         const { supabase } = await import('@/lib/supabase')
         const { authHeaders } = await import('@/lib/chatService')
@@ -2994,7 +2998,9 @@ export function HomePage() {
           })
         }
       } catch {}
-    })()
+    }
+    const cancelWait = whenNetworkOk(() => { if (!stopped) void run() })
+    return () => { stopped = true; cancelWait() }
   }, [walletAddress, user?.id])
 
   // ── Incoming bulk-payout notifications ──────────────────────────────────────
@@ -3340,10 +3346,12 @@ export function HomePage() {
     let retryCount = 0
 
     const fetchBalance = async () => {
+      const started = Date.now()
       try {
         // Throws when the read fails (offline): the last known balance stays
         // on screen instead of being replaced — and saved — as $0.
         const bal = await readArcBalanceOrThrow(address, 'USDC')
+        noteRequestTime(Date.now() - started)
         if (!cancelled) {
           // A genuine increase means new funds landed since the last
           // check — dispatching the same event useActivity.ts's on-chain
@@ -3358,6 +3366,7 @@ export function HomePage() {
           setBalance(bal); retryCount = 0
         }
       } catch {
+        noteRequestTime(Date.now() - started)
         if (retryCount < 3) { retryCount++; setTimeout(fetchBalance, 3000 * retryCount) }
       }
     }
@@ -3456,10 +3465,12 @@ export function HomePage() {
         if (cirbtc !== null) setCirBtcBalance(cirbtc)
       })
 
-      const priceEnrichmentPromise = Promise.all([
+      // Slow network: prices are extra requests to other sites (each a new
+      // connection) — use the last price instead and leave the pipe to balances.
+      const priceEnrichmentPromise = (isSlowNetwork() ? Promise.all([0, null]) : Promise.all([
         fetchBtcPrice(),
         fetchChange24h(),
-      ]).then(([btcP]) => {
+      ])).then(([btcP]) => {
         if (cancelled) return
         // Cache last known BTC price in sessionStorage so it survives API failures
         if (btcP > 0) {
@@ -3488,9 +3499,14 @@ export function HomePage() {
       // read to finish — a slow USDC read (429 backoff, retries) used to hold
       // them back. The short stagger still keeps the three off the same tick.
       const usdc = fetchBalance()
-      await new Promise(r => setTimeout(r, 150))
+      // Slow network: USDC goes alone first, the other tokens after it.
+      if (isSlowNetwork()) await usdc
+      else await new Promise(r => setTimeout(r, 150))
       if (cancelled) return
-      await Promise.all([usdc, fetchPortfolio()])
+      const portfolio = fetchPortfolio()
+      // The balance poll starts once USDC is read — not held back by the
+      // other tokens and prices.
+      await usdc
       if (cancelled) return
       // PHASE 6 — balance poll lengthened 30s -> 90s, NOT removed.
       // deposit_detected now invalidates the wallet's Arc scope via
@@ -3498,6 +3514,8 @@ export function HomePage() {
       // the fallback for a throttled/backgrounded tab, a dropped Realtime
       // socket, or SYNC_COORDINATOR_ENABLED being flipped off.
       bi = setInterval(fetchBalance, 90_000)
+      await portfolio
+      if (cancelled) return
       piStartTimer = setTimeout(() => {
         if (cancelled) return
         pi = setInterval(fetchPortfolio, 120_000)
@@ -3565,8 +3583,16 @@ export function HomePage() {
     // across the external RPCs). Skips the second trigger instead; the
     // next tick or the next reactive event picks it up.
     let inFlight = false
+    let cancelWaitScan = () => {}
     const fullScan = () => {
       if (inFlight) return
+      // ~21 chains read over public RPCs — on a very slow network this waits
+      // until the network is better (the last figure stays on screen).
+      if (isSlowNetwork()) {
+        if (unifiedLoadingRef.current) { unifiedLoadingRef.current = false; setUnifiedLoading(false) }
+        cancelWaitScan(); cancelWaitScan = whenNetworkOk(() => { if (!cancelled) fullScan() })
+        return
+      }
       inFlight = true
       readExternalBalances(walletAddress, settingsMap, settingsLoaded).then(result => {
         if (cancelled) return
@@ -3631,7 +3657,7 @@ export function HomePage() {
         .subscribe()
     })
 
-    return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal); window.removeEventListener(EXTERNAL_SCAN_PROGRESS_EVENT, onScanProgress) }
+    return () => { cancelled = true; cancelWaitScan(); clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal); window.removeEventListener(EXTERNAL_SCAN_PROGRESS_EVENT, onScanProgress) }
   }, [walletAddress, settingsMap, settingsLoaded])
 
   if (!user) return null

@@ -58,6 +58,7 @@
 
 import type { OnchainReceivedTx } from './onchainReceivedActivity'
 import { KNOWN_INTERNAL_CONTRACTS } from './onchainReceivedActivity'
+import { isSlowNetwork, whenNetworkOk } from './connectivity'
 
 // keccak256("Transfer(address,address,uint256)") — same constant as the
 // server's decodeTransferLog.ts / scanner.ts and the Arc docs.
@@ -458,7 +459,14 @@ export function createArcDepositWatcher(opts: {
    * just pins the cursor to head — it deliberately does NOT backfill history,
    * that is fetchActivity()/onchainReceivedActivity.ts's job.
    */
+  // Very slow network: the catch-up (log scans) waits until it's better, so
+  // the balance goes first. It's cursor-guarded, so running it later loses nothing.
+  let catchUpWaiting = false
   async function catchUp(): Promise<void> {
+    if (isSlowNetwork()) {
+      if (!catchUpWaiting) { catchUpWaiting = true; whenNetworkOk(() => { catchUpWaiting = false; if (!stopped) void catchUp() }) }
+      return
+    }
     let head: number
     try {
       head = await getHeadBlock()

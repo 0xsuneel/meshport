@@ -15,7 +15,15 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 
 const PROBE_URL = '/api/arc-rpc' // ARC_RPCS[0] in blockchain/chains.ts
-const PROBE_TIMEOUT_MS = 4000
+// Long enough for a very weak link (~1 KB/s) to answer: a slow answer means
+// "slow", not "offline". Nothing at all within this time is offline.
+const PROBE_TIMEOUT_MS = 12000
+// A probe slower than this → slow network (the app then saves data: the
+// balance goes first, extras wait — see isSlowNetwork()).
+const SLOW_PROBE_MS = 4000
+// While slow, check again this often to notice the network getting better.
+const SLOW_RECHECK_MS = 30_000
+const SLOW_HINT_KEY = 'mp_net_slow_at'
 const OFFLINE_POLL_MS = 4000
 // After the connection is confirmed, loads run at once and once more a few
 // seconds later (some services answer a moment after the network does).
@@ -31,10 +39,68 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 let waveTimer: ReturnType<typeof setTimeout> | null = null
 let probing: Promise<boolean> | null = null
 
+// ── Slow network ─────────────────────────────────────────────────────────
+// Online but very slow (e.g. 1 KB/s): every request shares that pipe, so the
+// app sends the balance first and holds back extras (other-chain scans,
+// prices, catch-ups) until the network is better.
+const slowListeners = new Set<() => void>()
+let slowTimer: ReturnType<typeof setInterval> | null = null
+function browserSaysSlow(): boolean {
+  const c = typeof navigator !== 'undefined' ? (navigator as any).connection : null
+  return !!c && (c.saveData === true || c.effectiveType === 'slow-2g' || c.effectiveType === '2g')
+}
+function recentlySlow(): boolean {
+  try { return Date.now() - Number(sessionStorage.getItem(SLOW_HINT_KEY) || 0) < 10 * 60_000 } catch { return false }
+}
+// Starts from the browser's hint and from this tab's last measurement, so a
+// reload on a weak link doesn't fire every extra request before measuring.
+let slow = typeof window !== 'undefined' && (browserSaysSlow() || recentlySlow())
+
+function setSlow(next: boolean) {
+  if (next === slow) return
+  slow = next
+  try { next ? sessionStorage.setItem(SLOW_HINT_KEY, String(Date.now())) : sessionStorage.removeItem(SLOW_HINT_KEY) } catch { /* private mode */ }
+  if (next && !slowTimer && typeof window !== 'undefined') slowTimer = setInterval(() => { void check() }, SLOW_RECHECK_MS)
+  if (!next && slowTimer) { clearInterval(slowTimer); slowTimer = null }
+  slowListeners.forEach(l => { try { l() } catch (e) { console.warn('[connectivity] slow listener failed:', e) } })
+}
+
+/**
+ * A real request (e.g. the balance) took this long: a very slow one switches
+ * on slow mode without waiting for the next probe.
+ */
+export function noteRequestTime(ms: number): void {
+  if (ms > 6000 && online) setSlow(true)
+}
+
+/** True while the connection works but is very slow. */
+export function isSlowNetwork(): boolean { return slow }
+
+/** Live slow-network state for UI and effects. */
+export function useSlowNetwork(): boolean {
+  return useSyncExternalStore(
+    l => { slowListeners.add(l); return () => { slowListeners.delete(l) } },
+    () => slow,
+    () => false,
+  )
+}
+
+/**
+ * Runs `fn` now on a normal connection, or once the network is no longer
+ * slow (for work that isn't needed to show the balance). Returns a cancel.
+ */
+export function whenNetworkOk(fn: () => void): () => void {
+  if (!slow) { fn(); return () => {} }
+  const l = () => { if (!slow) { slowListeners.delete(l); fn() } }
+  slowListeners.add(l)
+  return () => { slowListeners.delete(l) }
+}
+
 /** One small request that only succeeds when the internet really works. */
 export function probeConnection(): Promise<boolean> {
   if (probing) return probing
   probing = (async () => {
+    const started = Date.now()
     try {
       const r = await fetch(PROBE_URL, {
         method: 'POST', cache: 'no-store',
@@ -42,6 +108,7 @@ export function probeConnection(): Promise<boolean> {
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       })
+      if (r.ok) setSlow(browserSaysSlow() || Date.now() - started > SLOW_PROBE_MS)
       return r.ok
     } catch {
       return false
@@ -91,9 +158,12 @@ if (typeof window !== 'undefined') {
   // The OS says a network is back: confirm before telling anyone.
   window.addEventListener('online', () => { void check() })
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && !online) void check()
+    if (document.visibilityState === 'visible' && (!online || slow)) void check()
   })
   if (!online) startPolling()
+  if (slow) slowTimer = setInterval(() => { void check() }, SLOW_RECHECK_MS)
+  // The browser noticed the link type change (e.g. 2G → 4G): measure again.
+  ;(navigator as any).connection?.addEventListener?.('change', () => { void check() })
   // At start (including a refresh while offline): confirm the flag.
   setTimeout(() => { void check() }, 1200)
 }
@@ -139,3 +209,5 @@ export function useReconnectCount(): number {
 
 /** Test hook: drive the state without real network events. */
 export function __setOnlineForTest(next: boolean): void { setOnline(next) }
+/** Test hook: drive the slow state. */
+export function __setSlowForTest(next: boolean): void { setSlow(next) }

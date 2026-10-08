@@ -40,3 +40,28 @@ describe('connectivity', () => {
     expect(reload).not.toHaveBeenCalled()
   })
 })
+
+import { whenNetworkOk, isSlowNetwork, noteRequestTime, __setSlowForTest } from './connectivity'
+
+describe('slow network', () => {
+  it('holds extras back while slow and runs them once it is better', () => {
+    __setOnlineForTest(true); __setSlowForTest(true)
+    const fn = vi.fn()
+    whenNetworkOk(fn)
+    expect(fn).not.toHaveBeenCalled()
+    __setSlowForTest(false)
+    expect(fn).toHaveBeenCalledTimes(1)
+    whenNetworkOk(fn) // normal network: at once
+    expect(fn).toHaveBeenCalledTimes(2)
+  })
+  it('a cancelled wait never runs; a very slow request switches slow mode on', () => {
+    __setSlowForTest(true)
+    const fn = vi.fn()
+    whenNetworkOk(fn)()
+    __setSlowForTest(false)
+    expect(fn).not.toHaveBeenCalled()
+    noteRequestTime(2000); expect(isSlowNetwork()).toBe(false)
+    noteRequestTime(9000); expect(isSlowNetwork()).toBe(true)
+    __setSlowForTest(false)
+  })
+})
