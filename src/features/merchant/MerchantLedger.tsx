@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Copy, Share2, MessageCircle, QrCode, Search, Users, Clock, CheckCircle2, XCircle } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
+import { useSettingsStore } from '@/store/settingsStore'
 import { formatAmount, timeAgo, copyToClipboard } from '@/lib/utils'
 import {
   createPaymentRequest, listMyIntents, listMyPayments, subscribeMerchantPayments, paymentLink, orderPayLink, orderChainPayLink,
@@ -339,7 +340,12 @@ function ClaimAllCard({ chains, onClaimed, unified = false }: { chains?: ClaimCh
 
   const due = (chains ?? []).filter(c => c.balance >= CLAIM_ALL_MIN_CHAIN)
   const total = due.reduce((s, c) => s + c.balance, 0)
-  const nextAt = last ? last + CLAIM_ALL_COOLDOWN_MS : 0
+  // Admin → Features → Multichain "Claim All wait": off = no wait (testing);
+  // its value = hours between Claim Alls (default 6).
+  const cooldownOn = useSettingsStore(st => st.isEnabled('merchant_claim_all_cooldown', true))
+  const cooldownHours = Number(useSettingsStore(st => st.getValue('merchant_claim_all_cooldown'))) || CLAIM_ALL_COOLDOWN_MS / 3_600_000
+  const nextAt = last && cooldownOn ? last + cooldownHours * 3_600_000 : 0
+  const waitText = !cooldownOn ? 'Available any time' : `Available every ${cooldownHours} hour${cooldownHours === 1 ? '' : 's'}`
   const ready = last !== null && now >= nextAt
   const label = (id: string) => due.find(c => c.chainId === id)?.label ?? (chains ?? []).find(c => c.chainId === id)?.label ?? id.split('_')[0]
 
@@ -419,8 +425,8 @@ function ClaimAllCard({ chains, onClaimed, unified = false }: { chains?: ClaimCh
         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{unified ? 'Ledger balance' : 'Claim All'}</div>
         <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
           {unified
-            ? 'Every payment to you lands in your Ledger. Claim All moves it all to your Arc balance in one go — no gas needed, MeshPort pays it. Available every 6 hours.'
-            : 'Moves USDC from every chain to your Arc balance through CCTP — no gas needed, MeshPort pays it. Available every 6 hours; you can still claim one chain at a time below.'}
+            ? `Every payment to you lands in your Ledger. Claim All moves it all to your Arc balance in one go — no gas needed, MeshPort pays it. ${waitText}.`
+            : `Moves USDC from every chain to your Arc balance through CCTP — no gas needed, MeshPort pays it. ${waitText}; you can still claim one chain at a time below.`}
         </div>
       </div>
       {!scanning && (unified ? (

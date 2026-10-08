@@ -92,6 +92,24 @@ export function CategoryTogglePage({ sections }: CategoryTogglePageProps) {
                     onChange={(next) => handleToggle(row, next)}
                     badge={row.enabled ? 'ON' : 'OFF'}
                   />
+                  {row.feature === 'merchant_claim_all_cooldown' && row.enabled && (
+                    <div style={{ margin: '6px 4px 0', padding: '10px 12px', background: 'var(--surface)', border: '1px dashed var(--border)', borderRadius: 14 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                        Hours between a merchant's Claim Alls (default 6)
+                      </label>
+                      <input
+                        type="number" min={1} step={1} inputMode="numeric"
+                        value={reasonFor(row)}
+                        onChange={(e) => setReasonDraft((d) => ({ ...d, [row.feature]: e.target.value }))}
+                        onBlur={() => saveReason(row)}
+                        placeholder="6"
+                        style={{
+                          width: '100%', marginTop: 6, background: 'var(--bg)', border: '1px solid var(--border)',
+                          borderRadius: 10, padding: '8px 10px', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'inherit',
+                        }}
+                      />
+                    </div>
+                  )}
                   {section.category === 'chains_claim' && !row.enabled && (
                     <div style={{ margin: '6px 4px 0', padding: '10px 12px', background: 'var(--surface)', border: '1px dashed var(--border)', borderRadius: 14 }}>
                       <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
