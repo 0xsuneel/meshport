@@ -88,7 +88,7 @@ export default defineConfig({
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
       },
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-any-192x192.png', 'pwa-any-512x512.png'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'pwa-192x192.png', 'pwa-512x512.png', 'pwa-any-192x192.png', 'pwa-any-512x512.png', 'notification-icon.png'],
       manifest: {
         name: 'MeshPort - USDC Payments',
         short_name: 'MeshPort',

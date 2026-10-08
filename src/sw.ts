@@ -29,7 +29,7 @@ self.addEventListener('push', (event: PushEvent) => {
   const title = payload.title || 'MeshPort'
   const options: NotificationOptions = {
     body:  payload.body || '',
-    icon:  payload.icon  || '/pwa-192x192.png',
+    icon:  payload.icon  || '/notification-icon.png',
     // Android draws the badge (status bar + header icon) from its alpha only,
     // so it must be a white mark on transparent — not the solid app icon.
     badge: payload.badge || '/notification-badge.png',

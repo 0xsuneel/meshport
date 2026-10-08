@@ -12,7 +12,7 @@ export function ProcessingRing({ size = 80 }: { size?: number }) {
     return (
       <div role="progressbar" aria-label="Processing"
         style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        <MeshLoader size={Math.round(size * 0.85)} label="Processing" />
+        <MeshLoader size={Math.round(size * 0.75)} label="Processing" />
       </div>
     )
   }
