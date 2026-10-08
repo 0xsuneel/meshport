@@ -115,9 +115,19 @@ export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains
 // ── Home ───────────────────────────────────────────────────────────────────
 type Customer = { key: string; name: string; total: number; count: number; last: string; search: string }
 
-function customersOf(payments: MerchantPayment[]): Customer[] {
+/**
+ * Customers from order payments plus direct payments on other chains (chain
+ * receipts that aren't an order's — those are in `payments` already). A
+ * mint (faucet / CCTP) has no paying wallet, so it isn't anyone's.
+ */
+function customersOf(payments: MerchantPayment[], receipts: ChainReceipt[] = []): Customer[] {
   const map = new Map<string, Customer>()
-  for (const p of payments) {
+  const known = new Set(payments.map(p => `${p.chain}:${(p.txHash ?? '').toLowerCase()}`))
+  const extra = receipts
+    .filter(r => r.from && !r.orderNumber && !known.has(`${r.chain}:${r.txHash.toLowerCase()}`))
+    .map(r => ({ customerUsername: payments.find(p => p.from?.toLowerCase() === r.from!.toLowerCase())?.customerUsername ?? null,
+      from: r.from!, amount: r.amount, createdAt: r.createdAt }))
+  for (const p of [...payments, ...extra] as Array<Pick<MerchantPayment, 'customerUsername' | 'from' | 'amount' | 'createdAt'>>) {
     const key = p.customerUsername ? `u:${p.customerUsername}` : `w:${p.from}`
     const name = p.customerUsername ? `${p.customerUsername}.arc` : short(p.from)
     const c = map.get(key) ?? { key, name, total: 0, count: 0, last: p.createdAt, search: name.toLowerCase() }
@@ -147,12 +157,15 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
   // while the chain balances load.
   const waitingTotal = ledgerBalance ?? receipts.filter(r => r.status !== 'converted').reduce((sum, r) => sum + r.amount, 0)
   const onTheWay = arriving.reduce((s, p) => s + p.amount, 0)
-  const allCustomers = useMemo(() => customersOf(payments), [payments])
+  const allCustomers = useMemo(() => customersOf(payments, receipts), [payments, receipts])
   const needle = q.trim().toLowerCase().replace(/^@/, '')
   const customers = allCustomers.filter(c => !needle || c.search.includes(needle))
   const openRequests = intents.filter(i => ['pending', 'partially_paid', 'processing'].includes(i.status))
   const history = intents.filter(i => !['pending', 'partially_paid', 'processing'].includes(i.status))
-  const received = payments.reduce((s, p) => s + p.amount, 0)
+  // Direct payments on other chains (not an order's) count as received too.
+  const directReceipts = receipts.filter(r => !r.orderNumber)
+  const received = payments.reduce((s, p) => s + p.amount, 0) + directReceipts.reduce((s, r) => s + r.amount, 0)
+  const paymentCount = payments.length + directReceipts.length
   const intentByPay = new Map(intents.map(i => [i.id, i]))
   const LIMIT = 6
 
@@ -184,7 +197,7 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Summary — one compact row */}
       <div style={{ ...card, display: 'flex', alignItems: 'stretch' }}>
-        {stat('Received', `$${formatAmount(received)}`, `${payments.length} payment${payments.length === 1 ? '' : 's'}`)}
+        {stat('Received', `$${formatAmount(received)}`, `${paymentCount} payment${paymentCount === 1 ? '' : 's'}`)}
         {divider}
         {stat('Open', String(openRequests.length), 'requests', openRequests.length ? 'var(--warning)' : undefined)}
         {divider}

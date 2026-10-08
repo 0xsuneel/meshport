@@ -31,6 +31,10 @@ import { DesktopHistoryPanel } from '@/components/ui/DesktopHistoryPanel'
 import { HubPage, HubPageBack } from '@/components/multichain/HubPage'
 import { UbProgressTracker, type UbTrackerProgress } from '@/components/multichain/UbProgressTracker'
 import { TrackDetails, type TrackDetailRow } from '@/components/multichain/TrackDetails'
+
+// Below half a cent a balance shows as "0" — treat it as empty (no "$0 on
+// 1 chain", no highlighted "0 USDC" row).
+const DUST_USDC = 0.005
 import { useCctpProgress, fetchCctpProgress } from '@/lib/cctpTracker'
 const CHAIN_LABELS: Record<string, string> = {
   Ethereum_Sepolia: 'Ethereum', Base_Sepolia: 'Base', Arbitrum_Sepolia: 'Arbitrum',
@@ -333,7 +337,7 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
     const digits = Math.trunc(Math.abs(n)).toString().length
     return digits >= 8 ? 15 : digits >= 6 ? 18 : digits >= 5 ? 20 : 22
   }
-  const withFunds = chains.filter(c => c.balance > 0.001)
+  const withFunds = chains.filter(c => c.balance >= DUST_USDC)
   const shown = withFunds.slice(0, 4)
   const extra = withFunds.length - shown.length
   const line: React.CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }
@@ -574,13 +578,13 @@ export function MultichainPage() {
     let inFlight = false
     const applyChainMap = (map: Record<string, number>) => {
       const withBalance = Object.entries(map)
-        .filter(([, balance]) => balance > 0.001)
+        .filter(([, balance]) => balance >= DUST_USDC)
         .map(([id, balance]) => ({ id, label: CHAIN_LABELS[id] ?? id, balance }))
       setChainBalances(withBalance)
       setTotalExternal(withBalance.reduce((s, c) => s + c.balance, 0))
       setAllChainRows(Object.entries(map)
         .map(([id, balance]) => ({ id, label: id === 'Polygon_Sepolia' ? 'Polygon Amoy' : id.replace(/_/g, ' '), balance }))
-        .sort((x, y) => (y.balance > 0.001 ? 1 : 0) - (x.balance > 0.001 ? 1 : 0) || y.balance - x.balance))
+        .sort((x, y) => (y.balance >= DUST_USDC ? 1 : 0) - (x.balance >= DUST_USDC ? 1 : 0) || y.balance - x.balance))
     }
     const fullScan = () => {
       if (inFlight) return
@@ -1108,7 +1112,7 @@ export function MultichainPage() {
         <motion.div animate={{ y: -hubKeypadLift }} initial={false} transition={KEYPAD_SPRING}
           style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <HubHeroCard arcAvailable={arcBalance} scanning={scanning} scanChain={scanChain}
-          claimAvailable={isMerchant ? bringRows.reduce((sum, c) => sum + (c.balance > 0.001 ? c.balance : 0), 0) : totalExternal}
+          claimAvailable={isMerchant ? bringRows.reduce((sum, c) => sum + (c.balance >= DUST_USDC ? c.balance : 0), 0) : totalExternal}
           balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} chains={bringRows} />
 
         {/* Tab strip */}
@@ -1240,7 +1244,7 @@ export function MultichainPage() {
                   No chains to show. Get test USDC from the faucet.
                 </div>
               ) : bringRows.map(c => {
-                const has = c.balance > 0.001
+                const has = c.balance >= DUST_USDC
                 const ub = !isMerchant && isUbChain(c.id)
                 const cctp = isGaslessBridgeAvailable(c.id)
                 return (
@@ -1278,9 +1282,9 @@ export function MultichainPage() {
           return isMerchant
             ? <MerchantLedger boxStyle={{ ...cardS, borderRadius: 20, padding: isDesktop ? 20 : 18 }}
                 // Same real on-chain balance as the "In Ledger Chains" card above.
-                ledgerBalance={scanning ? undefined : bringRows.reduce((sum, c) => sum + (c.balance > 0.001 ? c.balance : 0), 0)}
-                ledgerChains={bringRows.filter(c => c.balance > 0.001).length}
-                claimChains={scanning ? undefined : bringRows.filter(c => c.balance > 0.001).map(c => ({ chainId: c.id, label: c.label, balance: c.balance }))}
+                ledgerBalance={scanning ? undefined : bringRows.reduce((sum, c) => sum + (c.balance >= DUST_USDC ? c.balance : 0), 0)}
+                ledgerChains={bringRows.filter(c => c.balance >= DUST_USDC).length}
+                claimChains={scanning ? undefined : bringRows.filter(c => c.balance >= DUST_USDC).map(c => ({ chainId: c.id, label: c.label, balance: c.balance }))}
                 // After Claim All: rescan so the chain list shows what moved.
                 onClaimed={() => { setScanning(true); setScanNonce(n => n + 1) }}>{chainCard}</MerchantLedger>
             : chainCard
