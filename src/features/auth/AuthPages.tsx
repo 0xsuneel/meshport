@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { MeshPortLogo } from '@/components/ui/MeshPortLogo'
 import { useStepDirection } from '@/hooks/useStepDirection'
 import { ScreenPush } from '@/components/ui/ScreenPush'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
@@ -144,7 +145,7 @@ export function LoginPage() {
     <div className="flex flex-col h-full bg-bg px-6 pt-16 pb-8">
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="text-center mb-10">
-          <img src="/favicon.svg" alt="MeshPort" className="w-20 h-20 rounded-3xl mx-auto mb-5 shadow-glow-blue" />
+          <MeshPortLogo className="w-20 h-20 mx-auto mb-5" />
           <h1 className="text-3xl font-bold text-text-primary">MeshPort</h1>
           <p className="text-text-secondary mt-2">USDC Payments, Made Simple</p>
         </div>
