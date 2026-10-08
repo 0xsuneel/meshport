@@ -6,8 +6,8 @@ import { fetchRecentContacts, recentInitial, recentShortName, recentSendTarget, 
 import { fetchHomeNews, readCachedHomeNews, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT, type NewsItem } from '@/lib/news'
 
 // ── Home: Recent + News, side by side ───────────────────────────────────────
-// Two equal boxes under the feature banner (mobile Home). Both hold a 56px
-// content row so the pair stays as short as the old Recent avatar row.
+// Two equal boxes under the feature banner (mobile Home), each with a 64px
+// content row.
 //
 // Recent: the last 5 people you paid. One sits in front on the right; the rest
 // wait in a queue to its left and step forward one at a time (a countdown ring
@@ -15,10 +15,14 @@ import { fetchHomeNews, readCachedHomeNews, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT,
 // With 1–3 people the left side would be empty, so the front person's name
 // shows there instead.
 //
-// News: the latest 4 stories, one at a time, cross-fading every 5 s. Swipe to
-// move, tap to open the short article.
+// News: the latest 4 stories, one at a time, cross-fading every 5 s: the cover
+// on top, a one-line headline under it. Swipe to move, tap to open the short
+// article.
 
-const CONTENT_H = 56
+// Cover (46) + gap (4) + one-line headline (14) in the News box; Recent uses
+// the same height so the two boxes line up.
+const CONTENT_H = 64
+const NEWS_PIC_H = 46
 const AVATAR = 44
 const QUEUE_STEP_MS = 2600
 const NEWS_STEP_MS = 5000
@@ -255,32 +259,34 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
         onPointerLeave={() => { x0.current = null; setPaused(false) }}
         onPointerCancel={() => { x0.current = null; setPaused(false) }}
         onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && item) { e.preventDefault(); navigate(`/news/${item.id}`) } }}
-        style={{ position: 'relative', height: CONTENT_H, borderRadius: 10, overflow: 'hidden', cursor: 'pointer',
+        style={{ position: 'relative', height: CONTENT_H, cursor: 'pointer',
           touchAction: 'pan-y', userSelect: 'none', WebkitTapHighlightColor: 'transparent' }}>
         {items.map((it, k) => {
           const on = k === cur
           return (
             <div key={it.id} aria-hidden={!on}
-              style={{ position: 'absolute', inset: 0, background: NEWS_SOURCE_TINT[it.source],
-                opacity: on ? 1 : 0, transform: on || reduce ? 'scale(1)' : 'scale(1.08)',
-                transition: reduce ? 'none' : 'opacity .7s ease, transform 5.5s cubic-bezier(.2,.6,.3,1)' }}>
-              {it.image_url && !broken[it.id] && (
-                <img src={it.image_url} alt="" draggable={false} loading={k === 0 ? 'eager' : 'lazy'}
-                  onError={() => setBroken(b => ({ ...b, [it.id]: true }))}
-                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-              )}
-              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0) 15%, rgba(0,0,0,0.74) 100%)' }} />
-              <span style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(0,0,0,0.42)', borderRadius: 999, padding: '1px 7px',
-                color: '#fff', fontSize: 9.5, fontWeight: 700, lineHeight: '15px' }}>{NEWS_SOURCE_LABEL[it.source]}</span>
-              <div style={{ position: 'absolute', left: 7, right: 7, bottom: 5, color: '#fff', fontSize: 11.5, fontWeight: 650, lineHeight: 1.22,
-                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', textShadow: '0 1px 2px rgba(0,0,0,0.35)' }}>
+              style={{ position: 'absolute', inset: 0, opacity: on ? 1 : 0, transition: reduce ? 'none' : 'opacity .7s ease' }}>
+              {/* The cover is shown as is: Arc's covers carry their own title text
+                  and Circle's are white, so nothing is drawn over it but the label. */}
+              <div style={{ position: 'relative', height: NEWS_PIC_H, borderRadius: 10, overflow: 'hidden', background: NEWS_SOURCE_TINT[it.source] }}>
+                {it.image_url && !broken[it.id] && (
+                  <img src={it.image_url} alt="" draggable={false} loading={k === 0 ? 'eager' : 'lazy'}
+                    onError={() => setBroken(b => ({ ...b, [it.id]: true }))}
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+                      transform: on || reduce ? 'scale(1)' : 'scale(1.08)', transition: reduce ? 'none' : 'transform 5.5s cubic-bezier(.2,.6,.3,1)' }} />
+                )}
+                <span style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(0,0,0,0.45)', borderRadius: 999, padding: '1px 7px',
+                  color: '#fff', fontSize: 9.5, fontWeight: 700, lineHeight: '15px' }}>{NEWS_SOURCE_LABEL[it.source]}</span>
+              </div>
+              <div style={{ marginTop: 4, fontSize: 11.5, fontWeight: 650, lineHeight: '14px', color: 'var(--text-primary)',
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {it.title}
               </div>
             </div>
           )
         })}
         {n > 1 && (
-          <div aria-hidden style={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 3 }}>
+          <div aria-hidden style={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 3, padding: '2px 3px', borderRadius: 4, background: 'rgba(0,0,0,0.28)' }}>
             {items.map((it, k) => (
               <i key={it.id} style={{ display: 'block', height: 4, width: k === cur ? 10 : 4, borderRadius: 2,
                 background: k === cur ? '#fff' : 'rgba(255,255,255,0.5)', transition: 'width .35s ease, background .35s' }} />
