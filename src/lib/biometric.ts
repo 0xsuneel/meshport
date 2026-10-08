@@ -1,3 +1,4 @@
+import { markPasscodeVerified, isPasscodeVerifiedThisSession } from './security'
 /**
  * lib/biometric.ts
  *
@@ -97,10 +98,28 @@ async function idbDelete(id: string): Promise<void> {
   } catch { /* best-effort */ }
 }
 
-type SecretRecord =
+type SecretRecord = (
   | { v?: undefined; key: string; iv: string; ciphertext: string }          // v1 legacy
   | { v: 2; iv: string; ciphertext: string; salt?: string }                 // v2 (salt kept for a later PRF upgrade)
   | { v: 3; salt: string; iv: string; ciphertext: string }                  // v3
+) & {
+  // The stored passcode HASH (public, already in localStorage) that this
+  // record's passcode was confirmed to match. When it still equals the
+  // current hash, a successful fingerprint unlock counts as verified at once
+  // — no second 600k-round passcode check. Not a passcode verifier itself.
+  forHash?: string
+}
+
+/** Remember that this record's passcode matches `storedHash`. */
+function setRecordForHash(walletAddress: string, storedHash: string): void {
+  try {
+    const raw = localStorage.getItem(SECRET_KEY(walletAddress))
+    if (!raw) return
+    const rec = JSON.parse(raw) as SecretRecord
+    if (rec.forHash === storedHash) return
+    localStorage.setItem(SECRET_KEY(walletAddress), JSON.stringify({ ...rec, forHash: storedHash }))
+  } catch { /* best-effort */ }
+}
 
 async function prfKey(prfOutput: BufferSource): Promise<CryptoKey> {
   const ikm = await crypto.subtle.importKey('raw', prfOutput, 'HKDF', false, ['deriveKey'])
@@ -292,7 +311,12 @@ export async function registerBiometric(walletAddress: string, rawPasscode: stri
  * failure/cancellation — never throws, so callers can treat this as a
  * plain "did it work" check without try/catch of their own.
  */
-export async function verifyBiometricAndGetPasscode(walletAddress: string): Promise<string | null> {
+/**
+ * `storedHash` (the current passcode hash) lets a successful scan count as
+ * already verified: see SecretRecord.forHash. Without it, callers verify the
+ * returned passcode the normal way.
+ */
+export async function verifyBiometricAndGetPasscode(walletAddress: string, storedHash?: string): Promise<string | null> {
   try {
     const credIdB64 = localStorage.getItem(CRED_KEY(walletAddress))
     const secretRaw = localStorage.getItem(SECRET_KEY(walletAddress))
@@ -335,6 +359,23 @@ export async function verifyBiometricAndGetPasscode(walletAddress: string): Prom
       if (prf && rec.v !== 3) await writeV3(walletAddress, passcode, saltB64, prf)
       else if (!rec.v) await writeV2(walletAddress, passcode, saltB64)
     } catch (e) { console.warn('[biometric] upgrade skipped:', e instanceof Error ? e.message : e) }
+    if (storedHash) {
+      if (rec.forHash === storedHash) {
+        // Confirmed against this exact hash before → verified now, instantly.
+        await markPasscodeVerified(passcode, storedHash)
+        setRecordForHash(walletAddress, storedHash) // the upgrade above may have rewritten the record
+      } else {
+        // Not confirmed yet (older record, or the passcode changed): the
+        // caller does the full check. Once that passes, remember it so the
+        // next scan is instant.
+        const pc = passcode
+        setTimeout(() => {
+          isPasscodeVerifiedThisSession(pc, storedHash)
+            .then(ok => { if (ok) setRecordForHash(walletAddress, storedHash) })
+            .catch(() => {})
+        }, 4000)
+      }
+    }
     return passcode
   } catch (e) {
     // Includes the user cancelling the OS prompt, or a wrong/no-longer-

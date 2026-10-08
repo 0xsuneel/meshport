@@ -434,10 +434,11 @@ export function PasscodeLockPage() {
     }
   }
 
+  const storedPasscodeHash = passcode
   const tryBiometric = async () => {
     if (!walletAddress || biometricTrying) return
     setBiometricTrying(true)
-    const pc = await verifyBiometricAndGetPasscode(walletAddress)
+    const pc = await verifyBiometricAndGetPasscode(walletAddress, storedPasscodeHash ?? undefined)
     setBiometricTrying(false)
     // A cancelled/failed biometric check just falls back to the normal
     // passcode entry already on screen — no error shown, since cancelling
@@ -467,7 +468,9 @@ export function PasscodeLockPage() {
   inputRef.current = input
   const tryBiometricRef = useRef(tryBiometric)
   tryBiometricRef.current = tryBiometric
-  const canAuto = biometricReady && liveSupported === true
+  // Don't wait for the capability probe: the prompt opens at once, and if
+  // the device can't do it the call just fails into the passcode pad.
+  const canAuto = biometricReady && liveSupported !== false
   useEffect(() => {
     if (!canAuto) return
     let timer: ReturnType<typeof setTimeout> | undefined
