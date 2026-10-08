@@ -341,19 +341,10 @@ export function AppLayout() {
     if (!walletAddress || !privateKey) return
     const run = () => {
       if (document.visibilityState !== 'visible') return
-      import('@/lib/ubClaim').then(async ({ autoFinishUbClaims, runMerchantAutoConvert }) => {
-        const { isMerchantNow, refreshMerchant } = await import('@/lib/merchant')
-        await refreshMerchant()
-        // Approved merchants: customer payments on other chains are NOT moved
-        // instantly — only the scheduled Auto-convert (if turned on) moves
-        // them, once per 6-hour slot. So the instant sweep is off for them.
-        if (isMerchantNow()) {
-          void runMerchantAutoConvert({
-            walletAddress,
-            makeAdapter: async () => (await import('@/features/multichain/MultichainClaimPage')).buildClaimAdapter(privateKey),
-          })
-          return
-        }
+      import('@/lib/ubClaim').then(async ({ autoFinishUbClaims }) => {
+        // Merchants too: this only finishes money already in the Ledger
+        // (Unified Balance). Customer payments sitting in the wallet on other
+        // chains wait for the merchant's Claim All — nothing collects them.
         const n = await autoFinishUbClaims({ walletAddress, privateKey })
         if (n > 0) {
           try {

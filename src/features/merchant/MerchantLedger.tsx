@@ -15,8 +15,17 @@ import {
   cancelPayment, submitPayment, STATUS_LABEL, paymentStageLabel, isArriving, orderLabel, paymentRequestMessage,
   listUnmatchedDeposits, assignDeposit, dismissDeposit, completeOrder,
   listChainReceipts, getAutoConvert, setAutoConvert,
-  type MerchantIntent, type MerchantPayment, type UnmatchedDeposit, type ChainReceipt, type AutoConvert,
+  type MerchantIntent, type MerchantPayment, type UnmatchedDeposit, type ChainReceipt,
 } from '@/lib/merchantPay'
+import { createPortal } from 'react-dom'
+import { AnimatePresence, motion } from 'framer-motion'
+import { PinKeypad } from '@/components/ui/PinKeypad'
+import { PopupDim } from '@/components/ui/PopupDim'
+import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { usePopupOpen } from '@/hooks/usePopupOpen'
+import { SHEET_PANEL } from '@/lib/motion'
+import { lastClaimAllAt, CLAIM_ALL_COOLDOWN_MS, CLAIM_ALL_MIN_CHAIN, type ClaimAllStep } from '@/lib/ubClaim'
 import { merchantQrChain, MERCHANT_QR_EXTERNAL } from '@/lib/merchantQr'
 import { ChainPicker, WalletPaymentDetails } from './MerchantQrPanel'
 import { SkeletonRows } from '@/components/ui/Skeleton'
@@ -47,8 +56,13 @@ const btnPrimary: React.CSSProperties = { padding: '13px 16px', borderRadius: 14
 const btnGhost: React.CSSProperties = { padding: '11px 14px', borderRadius: 14, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }
 const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 14, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-primary)', fontSize: 14, outline: 'none' }
 
-export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains }: {
+/** A chain with USDC waiting, as the Hub's chain list shows it. */
+export type ClaimChain = { chainId: string; label: string; balance: number }
+
+export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains, claimChains, onClaimed }: {
   children?: React.ReactNode; boxStyle?: React.CSSProperties
+  /** Chains with USDC for Claim All; undefined while scanning. */
+  claimChains?: ClaimChain[]; onClaimed?: () => void
   /** Real USDC on the Ledger chains (what the Hub card shows); undefined while scanning. */
   ledgerBalance?: number; ledgerChains?: number
 }) {
@@ -59,13 +73,16 @@ export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains
   const [loaded, setLoaded] = useState(false)
   const [review, setReview] = useState<UnmatchedDeposit[]>([])
   const [receipts, setReceipts] = useState<ChainReceipt[]>([])
-  const [auto, setAuto] = useState<AutoConvert | null>(null)
 
   const load = useCallback(async () => {
     const [i, p, r] = await Promise.all([listMyIntents(), listMyPayments(), listUnmatchedDeposits().catch(() => [])])
     setIntents(i); setPayments(p); setReview(r); setLoaded(true)
     listChainReceipts().then(setReceipts).catch(() => {})
-    getAutoConvert().then(setAuto).catch(() => {})
+  }, [])
+  // Auto-convert was replaced by Claim All: switch off an old schedule once,
+  // so the server no longer books runs for it.
+  useEffect(() => {
+    getAutoConvert().then(a => { if (a.enabled) void setAutoConvert(false).catch(() => {}) }).catch(() => {})
   }, [])
   useEffect(() => { void load() }, [load])
   useEffect(() => walletAddress ? subscribeMerchantPayments(walletAddress, () => { void load() }) : undefined, [walletAddress, load])
@@ -87,7 +104,7 @@ export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {review.length > 0 && box(<NeedsReview deposits={review} intents={intents} onDone={load} />)}
-      {box(<LedgerHome loaded={loaded} intents={intents} payments={payments} receipts={receipts} auto={auto} onAutoChange={setAuto} chains={children}
+      {box(<LedgerHome loaded={loaded} intents={intents} payments={payments} receipts={receipts} chains={children} claimChains={claimChains} onClaimed={onClaimed}
         ledgerBalance={ledgerBalance} ledgerChains={ledgerChains}
         onOpenRequest={code => setView({ kind: 'request', code })} onOpenCustomer={key => setView({ kind: 'customer', key })} />)}
     </div>
@@ -113,10 +130,10 @@ function customersOf(payments: MerchantPayment[]): Customer[] {
   return [...map.values()].sort((a, b) => b.last.localeCompare(a.last))
 }
 
-function LedgerHome({ loaded, intents, payments, receipts, auto, onAutoChange, chains, onOpenRequest, onOpenCustomer, ledgerBalance, ledgerChains }: {
+function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, onClaimed, onOpenRequest, onOpenCustomer, ledgerBalance, ledgerChains }: {
   loaded: boolean; intents: MerchantIntent[]; payments: MerchantPayment[]; chains?: React.ReactNode
   ledgerBalance?: number; ledgerChains?: number
-  receipts: ChainReceipt[]; auto: AutoConvert | null; onAutoChange: (a: AutoConvert) => void
+  receipts: ChainReceipt[]; claimChains?: ClaimChain[]; onClaimed?: () => void
   onOpenRequest: (code: string) => void; onOpenCustomer: (key: string) => void
 }) {
   const [tab, setTab] = useState<'requests' | 'customers' | 'chains'>('requests')
@@ -177,7 +194,7 @@ function LedgerHome({ loaded, intents, payments, receipts, auto, onAutoChange, c
         <button onClick={() => setTab('chains')} style={{ ...card, padding: '10px 12px', textAlign: 'left', cursor: 'pointer', borderColor: 'color-mix(in srgb, var(--warning) 35%, var(--border))' }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--warning)' }}>${formatAmount(waitingTotal)} USDC on {ledgerChains ? `${ledgerChains} other chain${ledgerChains === 1 ? '' : 's'}` : 'other chains'}</div>
           <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2 }}>
-            {auto?.enabled ? `Auto-convert moves it to Arc${auto.nextRunAt ? ` · next run ${fmtWhen(auto.nextRunAt)}` : ''}` : 'Auto-convert is off — turn it on in Chains to move it to Arc'}
+            Open Chains to move it to Arc with Claim All
           </div>
         </button>
       )}
@@ -247,7 +264,7 @@ function LedgerHome({ loaded, intents, payments, receipts, auto, onAutoChange, c
 
       {tab === 'chains' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <AutoConvertCard auto={auto} onChange={onAutoChange} />
+          <ClaimAllCard chains={claimChains} onClaimed={onClaimed} />
           <div style={{ margin: '0 -2px' }}>{chains}</div>
         </div>
       )}
@@ -261,48 +278,149 @@ const fmtWhen = (iso: string) => {
   return `${today ? '' : d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ', '}${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
 }
 
-/** Auto-convert: other-chain funds → Ledger → Arc, every 6 hours (off by default). */
-function AutoConvertCard({ auto, onChange }: { auto: AutoConvert | null; onChange: (a: AutoConvert) => void }) {
+/**
+ * Claim All: every chain's USDC to the Arc balance in one go — the merchant
+ * taps it (nothing moves by itself). Offered once every 6 hours; one chain
+ * can still be claimed any time from the list below. See merchantClaimAll.
+ */
+function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?: () => void }) {
+  const walletAddress = useAuthStore(s => s.walletAddress)
+  const storedPasscode = useAuthStore(s => s.passcode)
   const { showToastMessage } = useUIStore()
-  const [busy, setBusy] = useState(false)
-  const on = !!auto?.enabled
-  const toggle = async () => {
-    setBusy(true)
+  const isDesktop = useMediaQuery('(min-width: 980px)')
+  const [last, setLast] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+  const [pinOpen, setPinOpen] = useState(false)
+  const [pin, setPin] = useState('')
+  const [pinError, setPinError] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [steps, setSteps] = useState<Record<string, ClaimAllStep>>({})
+  const [result, setResult] = useState<string | null>(null)
+
+  useEffect(() => { if (walletAddress) lastClaimAllAt(walletAddress).then(setLast).catch(() => setLast(0)) }, [walletAddress])
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t) }, [])
+
+  const due = (chains ?? []).filter(c => c.balance >= CLAIM_ALL_MIN_CHAIN)
+  const total = due.reduce((s, c) => s + c.balance, 0)
+  const nextAt = last ? last + CLAIM_ALL_COOLDOWN_MS : 0
+  const ready = last !== null && now >= nextAt
+  const label = (id: string) => due.find(c => c.chainId === id)?.label ?? (chains ?? []).find(c => c.chainId === id)?.label ?? id.split('_')[0]
+
+  const run = async (passcode?: string) => {
+    if (!walletAddress) return
+    setRunning(true); setSteps({}); setResult(null)
     try {
-      const next = await setAutoConvert(!on)
-      onChange(next)
-      showToastMessage(next.enabled ? 'Auto-convert is on' : 'Auto-convert is off', 'success')
+      let key = useAuthStore.getState().privateKey
+      if (!key) {
+        const { restorePrivateKey } = await import('@/lib/restoreWallet')
+        await restorePrivateKey(passcode, { silent: true }).catch(() => false)
+        key = useAuthStore.getState().privateKey
+      }
+      if (!key) throw new Error('Wallet unavailable — unlock MeshPort and try again')
+      const { merchantClaimAll } = await import('@/lib/ubClaim')
+      const r = await merchantClaimAll({
+        walletAddress, privateKey: key,
+        chains: due.map(c => ({ chainId: c.chainId, balance: c.balance })),
+        onStep: s => setSteps(prev => ({ ...prev, [s.chainId]: s })),
+      })
+      const moved = r.cctp + r.ledger
+      if (moved > 0) setLast(Date.now())
+      setResult(moved > 0
+        ? `$${formatAmount(moved)} USDC is on its way to Arc.${r.failed.length ? ` ${r.failed.length} chain${r.failed.length === 1 ? '' : 's'} didn't go through — see above.` : ''}`
+        : 'Nothing was claimed — see the messages above.')
+      onClaimed?.()
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Could not change auto-convert', 'error')
+      showToastMessage(e instanceof Error ? e.message : 'Claim All failed', 'error')
     }
-    setBusy(false)
+    setRunning(false)
   }
-  const next = on && auto?.nextRunAt ? new Date(auto.nextRunAt) : null
-  const toArc = next ? new Date(next.getTime() + 60 * 60_000) : null
+
+  const tap = () => {
+    if (!ready || running || due.length === 0) return
+    if (storedPasscode) { setPin(''); setPinError(false); setPinOpen(true) } else void run()
+  }
+  const confirmPin = async (entered: string) => {
+    if (!storedPasscode) return
+    const { verifyPasscode } = await import('@/lib/security')
+    if (!await verifyPasscode(entered, storedPasscode)) { setPinError(true); setPin(''); return }
+    setPinOpen(false); setPin('')
+    void run(entered)
+  }
+
+  const scanning = chains === undefined
+  const btnText = running ? 'Claiming…'
+    : scanning || last === null ? 'Checking chains…'
+    : !ready ? `Next Claim All ${fmtWhen(new Date(nextAt).toISOString())}`
+    : due.length === 0 ? 'Nothing to claim'
+    : `Claim All · $${formatAmount(total)} USDC`
+  const enabled = ready && !running && !scanning && due.length > 0
+
+  const keypad = (
+    <PinKeypad value={pin} length={6} error={pinError}
+      onChange={v => { setPin(v); setPinError(false) }}
+      onComplete={p => { void confirmPin(p) }} />
+  )
+  const confirmText = pinError ? 'Incorrect passcode. Try again.' : `Confirm Claim All of $${formatAmount(total)} USDC`
+
   return (
-    <div style={{ ...card, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Auto-convert to Arc</div>
-          <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
-            Every 6 hours: all chains into your Ledger, then one transfer to your Arc balance an hour later. Minimum $2.
-          </div>
+    <div style={{ ...card, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Claim All</div>
+        <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
+          Moves USDC from every chain to your Arc balance. Available every 6 hours — you can still claim one chain at a time below.
         </div>
-        <button onClick={toggle} disabled={busy || !auto && busy} role="switch" aria-checked={on} aria-label="Auto-convert"
-          style={{ flexShrink: 0, width: 46, height: 26, borderRadius: 999, border: 'none', cursor: 'pointer', position: 'relative', opacity: busy ? 0.6 : 1,
-            background: on ? 'var(--brand)' : 'color-mix(in srgb, var(--text-primary) 18%, transparent)', transition: 'background 0.15s' }}>
-          <span style={{ position: 'absolute', top: 3, left: on ? 23 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.15s' }} />
-        </button>
       </div>
-      {on && next && toArc && (
-        <div style={{ fontSize: 12, color: 'var(--text-primary)', display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <span>Next: into Ledger <b>{fmtWhen(next.toISOString())}</b> · to Arc <b>{fmtWhen(toArc.toISOString())}</b></span>
-          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Runs when MeshPort is open at or after that time (it needs your wallet to sign).</span>
+      {!scanning && due.length > 0 && (
+        <div style={{ fontSize: 12.5, color: 'var(--text-primary)' }}>
+          <b>${formatAmount(total)} USDC</b> on {due.map(c => c.label).join(', ')}
         </div>
       )}
-      {!on && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Off — payments on other chains stay there until you turn this on or collect them yourself.</div>}
-      {auto?.lastResult && <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Last run{auto.lastRunAt ? ` (${fmtWhen(auto.lastRunAt)})` : ''}: {auto.lastResult}</div>}
+      <button onClick={tap} disabled={!enabled}
+        style={{ ...btnPrimary, width: '100%', cursor: enabled ? 'pointer' : 'default',
+          ...(enabled ? {} : { background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }) }}>
+        {btnText}
+      </button>
+      {Object.keys(steps).length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {Object.values(steps).map(st => (
+            <div key={st.chainId} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12 }}>
+              <b style={{ color: 'var(--text-primary)', flexShrink: 0 }}>{label(st.chainId)}</b>
+              <span style={{ textAlign: 'right', color: st.state === 'error' ? 'var(--danger, #D64545)' : st.state === 'done' ? 'var(--success)' : 'var(--text-secondary)' }}>{st.msg}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {result && <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{result}</div>}
+
+      <AnimatePresence>
+        {pinOpen && (isDesktop ? (
+          <DesktopTransactionAuthDialog key="pin" onClose={() => setPinOpen(false)} title="Confirm Claim All"
+            amountLabel={`$${formatAmount(total)} USDC`} subLabel={pinError ? <span role="alert" style={{ color: 'var(--danger, #D64545)' }}>Incorrect passcode. Try again.</span> : 'To your Arc balance'}>
+            {keypad}
+          </DesktopTransactionAuthDialog>
+        ) : (
+          <PinSheet key="pin" onClose={() => setPinOpen(false)} text={confirmText} error={pinError}>{keypad}</PinSheet>
+        ))}
+      </AnimatePresence>
     </div>
+  )
+}
+
+/** Mobile passcode sheet, rendered into document.body. */
+function PinSheet({ onClose, text, error, children }: { onClose: () => void; text: string; error: boolean; children: React.ReactNode }) {
+  usePopupOpen()
+  return createPortal(
+    <div onClick={e => { e.stopPropagation(); onClose() }} style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'flex-end' }}>
+      <PopupDim background="rgba(0,0,0,0.5)" />
+      <motion.div onClick={e => e.stopPropagation()} {...SHEET_PANEL}
+        style={{ position: 'relative', width: '100%', background: 'var(--surface)', borderRadius: '24px 24px 0 0',
+          padding: '20px 20px calc(env(safe-area-inset-bottom, 0px) + 20px)', boxShadow: 'var(--shadow-3)' }}>
+        <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0, textAlign: 'center' }}>Enter Passcode</p>
+        <p role={error ? 'alert' : undefined} style={{ fontSize: 12, margin: '6px 0 24px', textAlign: 'center', color: error ? 'var(--danger, #D64545)' : 'var(--text-secondary)' }}>{text}</p>
+        {children}
+      </motion.div>
+    </div>,
+    document.body,
   )
 }
 

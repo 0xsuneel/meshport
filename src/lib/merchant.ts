@@ -3,8 +3,8 @@
 // Merchant accounts. A user applies from Profile → Apply for merchant; an
 // admin approves or rejects it (Admin → Merchants). Only an APPROVED
 // application turns on the merchant flow:
-//   • Multichain Hub: "Bring Funds" becomes "Ledger" (UB chains only)
-//   • incoming USDC on UB chains is collected to Arc automatically
+//   • Multichain Hub: "Bring Funds" becomes "Ledger" (UB and CCTP chains)
+//   • USDC on other chains waits there until the merchant taps Claim All
 //   • those claims show as "Payment received" with the chain + address
 // Everyone else — no application, pending, rejected or revoked — keeps the
 // normal flow exactly as it is.
