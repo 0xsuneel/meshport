@@ -103,6 +103,23 @@ const RELEASE_NOTES = [
   { product: 'CCTP', slug: 'cctp' },
   { product: 'Gateway', slug: 'gateway' },
 ]
+// Release notes and changelogs carry no picture, so each product's updates
+// use the cover of its own launch article on circle.com / arc.io (read every
+// run, so it follows whatever image Circle / Arc currently publish there).
+const PRODUCT_COVER_ARTICLES: Record<string, string> = {
+  'CCTP': 'https://www.circle.com/blog/migrate-to-cctp-v2-ahead-of-cctp-v1-legacy-deprecation',
+  'Gateway': 'https://www.circle.com/blog/circle-gateway-redefining-crosschain-ux',
+  'Bridge Kit': 'https://www.circle.com/blog/introducing-bridge-kit-build-crosschain-apps-faster',
+  'App Kit': 'https://www.arc.io/blog/app-kits-a-suite-of-sdks-to-build-onchain',
+}
+
+async function productCovers(): Promise<Record<string, string>> {
+  const pairs = await Promise.all(Object.entries(PRODUCT_COVER_ARTICLES).map(async ([product, url]) => {
+    const html = await fetchText(url)
+    return [product, html ? parseArticle(html).image_url : null] as const
+  }))
+  return Object.fromEntries(pairs.filter((p): p is readonly [string, string] => !!p[1]))
+}
 const KIT_PACKAGES = [
   { product: 'App Kit', pkg: '@circle-fin/app-kit' },
   { product: 'Bridge Kit', pkg: '@circle-fin/bridge-kit' },
@@ -134,10 +151,10 @@ async function readDevUpdates(): Promise<{ rows: Row[]; found: number; error?: s
     if (!out.length) errors.push(`${product} changelog: nothing read`)
     return out
   })
-  const entries = (await Promise.all([...notes, ...kits])).flat()
+  const [entries, covers] = await Promise.all([Promise.all([...notes, ...kits]).then(r => r.flat()), productCovers()])
   const rows = entries.map((e): Row => ({
     source: 'circle_dev', url: e.url, title: e.title, summary: e.summary, body: e.body,
-    image_url: null, topic: e.topic, read_minutes: null, status_label: null,
+    image_url: covers[e.topic] ?? null, topic: e.topic, read_minutes: null, status_label: null,
     published_at: e.published_at, fetched_at: now,
   }))
   return { rows, found: rows.length, error: errors.length ? errors.join('; ') : undefined }
@@ -195,8 +212,17 @@ Deno.serve(async (req) => {
     if (error) return json({ error: error.message, report }, 500)
   }
   if (dev.rows.length) {
+    // A cover article that didn't load this run never wipes a cover saved earlier.
+    const missing = dev.rows.filter(r => !r.image_url).map(r => r.url)
+    if (missing.length) {
+      const { data: had } = await db.from('news_items').select('url,image_url').in('url', missing).not('image_url', 'is', null)
+      const keep = new Map((had ?? []).map(h => [h.url as string, h.image_url as string]))
+      for (const r of dev.rows) if (!r.image_url && keep.has(r.url)) r.image_url = keep.get(r.url)!
+    }
     // Saved on their own so a problem here never holds back the blog stories.
-    const { error } = await db.from('news_items').upsert(dev.rows, { onConflict: 'url', ignoreDuplicates: true })
+    // Refreshed in place (a wording fix or a new cover shows up); `hidden`
+    // isn't in the payload, so an admin's hide sticks.
+    const { error } = await db.from('news_items').upsert(dev.rows, { onConflict: 'url' })
     if (error) { console.warn('[news-sync] dev updates:', error.message); return json({ ok: false, error: error.message, report }, 500) }
   }
   return json({ ok: true, report })
