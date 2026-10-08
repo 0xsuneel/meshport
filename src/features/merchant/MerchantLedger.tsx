@@ -60,10 +60,12 @@ const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', pad
 /** A chain with USDC waiting, as the Hub's chain list shows it. */
 export type ClaimChain = { chainId: string; label: string; balance: number }
 
-export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains, claimChains, onClaimed }: {
+export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains, claimChains, onClaimed, unified = false }: {
   children?: React.ReactNode; boxStyle?: React.CSSProperties
   /** Chains with USDC for Claim All; undefined while scanning. */
   claimChains?: ClaimChain[]; onClaimed?: () => void
+  /** Admin switch "Unified merchant Ledger": one balance, no chain list. */
+  unified?: boolean
   /** Real USDC on the Ledger chains (what the Hub card shows); undefined while scanning. */
   ledgerBalance?: number; ledgerChains?: number
 }) {
@@ -107,7 +109,7 @@ export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {review.length > 0 && box(<NeedsReview deposits={review} intents={intents} onDone={load} />)}
-      {box(<LedgerHome loaded={loaded} intents={intents} payments={allPayments} receipts={receipts} chains={children} claimChains={claimChains} onClaimed={onClaimed}
+      {box(<LedgerHome loaded={loaded} intents={intents} payments={allPayments} receipts={receipts} chains={unified ? null : children} claimChains={claimChains} onClaimed={onClaimed} unified={unified}
         ledgerBalance={ledgerBalance} ledgerChains={ledgerChains}
         onOpenRequest={code => setView({ kind: 'request', code })} onOpenCustomer={key => setView({ kind: 'customer', key })} />)}
     </div>
@@ -155,10 +157,10 @@ export function customersOf(payments: MerchantPayment[]): Customer[] {
   return [...map.values()].sort((a, b) => b.last.localeCompare(a.last))
 }
 
-function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, onClaimed, onOpenRequest, onOpenCustomer, ledgerBalance, ledgerChains }: {
+function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, onClaimed, onOpenRequest, onOpenCustomer, ledgerBalance, ledgerChains, unified = false }: {
   loaded: boolean; intents: MerchantIntent[]; payments: MerchantPayment[]; chains?: React.ReactNode
   ledgerBalance?: number; ledgerChains?: number
-  receipts: ChainReceipt[]; claimChains?: ClaimChain[]; onClaimed?: () => void
+  receipts: ChainReceipt[]; claimChains?: ClaimChain[]; onClaimed?: () => void; unified?: boolean
   onOpenRequest: (code: string) => void; onOpenCustomer: (key: string) => void
 }) {
   const [tab, setTab] = useState<'requests' | 'customers' | 'chains'>('requests')
@@ -219,9 +221,9 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
 
       {waitingTotal > 0 && (
         <button onClick={() => setTab('chains')} style={{ ...card, padding: '10px 12px', textAlign: 'left', cursor: 'pointer', borderColor: 'color-mix(in srgb, var(--warning) 35%, var(--border))' }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--warning)' }}>${formatAmount(waitingTotal)} USDC on {ledgerChains ? `${ledgerChains} other chain${ledgerChains === 1 ? '' : 's'}` : 'other chains'}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--warning)' }}>${formatAmount(waitingTotal)} USDC {unified ? 'in your Ledger' : <>on {ledgerChains ? `${ledgerChains} other chain${ledgerChains === 1 ? '' : 's'}` : 'other chains'}</>}</div>
           <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Open Chains to move it to Arc with Claim All
+            {unified ? 'Open Balance to move it to Arc with Claim All' : 'Open Chains to move it to Arc with Claim All'}
           </div>
         </button>
       )}
@@ -244,7 +246,7 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
 
       {/* Sub-tabs keep the page short */}
       <div role="tablist" style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 12, border: '1px solid var(--border)' }}>
-        {([['chains', 'Chains'], ['requests', `Requests${openRequests.length ? ` (${openRequests.length})` : ''}`], ['customers', 'Customers']] as const).map(([id, text]) => (
+        {([['chains', unified ? 'Balance' : 'Chains'], ['requests', `Requests${openRequests.length ? ` (${openRequests.length})` : ''}`], ['customers', 'Customers']] as const).map(([id, text]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
             style={{ flex: 1, padding: '8px 4px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700,
               background: tab === id ? 'color-mix(in srgb, var(--brand) 16%, transparent)' : 'transparent', color: tab === id ? 'var(--brand-text)' : 'var(--text-secondary)' }}>
@@ -291,7 +293,7 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
 
       {tab === 'chains' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <ClaimAllCard chains={claimChains} onClaimed={onClaimed} />
+          <ClaimAllCard chains={claimChains} onClaimed={onClaimed} unified={unified} />
           <div style={{ margin: '0 -2px' }}>{chains}</div>
         </div>
       )}
@@ -310,7 +312,12 @@ const fmtWhen = (iso: string) => {
  * taps it (nothing moves by itself). Offered once every 6 hours; one chain
  * can still be claimed any time from the list below. See merchantClaimAll.
  */
-function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?: () => void }) {
+/**
+ * `unified` (admin switch "Unified merchant Ledger"): the Ledger is one balance
+ * — no chain names; one progress line; whatever didn't move stays in the
+ * Ledger with a Retry that skips the 6-hour wait.
+ */
+function ClaimAllCard({ chains, onClaimed, unified = false }: { chains?: ClaimChain[]; onClaimed?: () => void; unified?: boolean }) {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const storedPasscode = useAuthStore(s => s.passcode)
   const { showToastMessage } = useUIStore()
@@ -323,6 +330,9 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
   const [running, setRunning] = useState(false)
   const [steps, setSteps] = useState<Record<string, ClaimAllStep>>({})
   const [result, setResult] = useState<string | null>(null)
+  // Unified: chains whose claim didn't go through — Retry moves just those.
+  const [failedIds, setFailedIds] = useState<string[]>([])
+  const retryRef = useRef(false)
 
   useEffect(() => { if (walletAddress) lastClaimAllAt(walletAddress).then(setLast).catch(() => setLast(0)) }, [walletAddress])
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t) }, [])
@@ -333,9 +343,10 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
   const ready = last !== null && now >= nextAt
   const label = (id: string) => due.find(c => c.chainId === id)?.label ?? (chains ?? []).find(c => c.chainId === id)?.label ?? id.split('_')[0]
 
-  const run = async (passcode?: string) => {
+  const run = async (passcode?: string, onlyIds?: string[]) => {
     if (!walletAddress) return
-    setRunning(true); setSteps({}); setResult(null)
+    const batch = onlyIds ? due.filter(c => onlyIds.includes(c.chainId)) : due
+    setRunning(true); setSteps({}); setResult(null); setFailedIds([])
     try {
       let key = useAuthStore.getState().privateKey
       if (!key) {
@@ -347,12 +358,18 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
       const { merchantClaimAll } = await import('@/lib/ubClaim')
       const r = await merchantClaimAll({
         walletAddress, privateKey: key,
-        chains: due.map(c => ({ chainId: c.chainId, balance: c.balance })),
+        chains: batch.map(c => ({ chainId: c.chainId, balance: c.balance })),
         onStep: s => setSteps(prev => ({ ...prev, [s.chainId]: s })),
       })
       const moved = r.cctp
       if (moved > 0) setLast(Date.now())
-      setResult(moved > 0
+      const left = batch.filter(c => r.failed.includes(c.chainId)).reduce((sum, c) => sum + c.balance, 0)
+      if (unified) {
+        setFailedIds(r.failed)
+        setResult(moved > 0 && left > 0 ? `Moved $${formatAmount(moved)} to Arc · $${formatAmount(left)} is still in your Ledger.`
+          : moved > 0 ? `$${formatAmount(moved)} USDC is on its way to your Arc balance.`
+          : `Couldn't move $${formatAmount(left)} — it's still in your Ledger.`)
+      } else setResult(moved > 0
         ? `$${formatAmount(moved)} USDC is on its way to Arc.${r.failed.length ? ` ${r.failed.length} chain${r.failed.length === 1 ? '' : 's'} didn't go through — see above.` : ''}`
         : 'Nothing was claimed — see the messages above.')
       onClaimed?.()
@@ -364,22 +381,29 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
 
   const tap = () => {
     if (!ready || running || due.length === 0) return
+    retryRef.current = false
     if (storedPasscode) { setPin(''); setPinError(false); setPinOpen(true) } else void run()
+  }
+  // Retry what didn't move — not held to the 6-hour wait.
+  const retry = () => {
+    if (running || failedIds.length === 0) return
+    retryRef.current = true
+    if (storedPasscode) { setPin(''); setPinError(false); setPinOpen(true) } else void run(undefined, failedIds)
   }
   const confirmPin = async (entered: string) => {
     if (!storedPasscode) return
     const { verifyPasscode } = await import('@/lib/security')
     if (!await verifyPasscode(entered, storedPasscode)) { setPinError(true); setPin(''); return }
     setPinOpen(false); setPin('')
-    void run(entered)
+    void run(entered, retryRef.current ? failedIds : undefined)
   }
 
   const scanning = chains === undefined
-  const btnText = running ? 'Claiming…'
+  const btnText = running ? (unified ? 'Moving to Arc…' : 'Claiming…')
     : scanning || last === null ? 'Checking chains…'
     : !ready ? `Next Claim All ${fmtWhen(new Date(nextAt).toISOString())}`
     : due.length === 0 ? 'Nothing to claim'
-    : `Claim All · $${formatAmount(total)} USDC`
+    : unified ? `Claim All → Arc · $${formatAmount(total)} USDC` : `Claim All · $${formatAmount(total)} USDC`
   const enabled = ready && !running && !scanning && due.length > 0
 
   const keypad = (
@@ -392,22 +416,28 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
   return (
     <div style={{ ...card, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div>
-        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Claim All</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{unified ? 'Ledger balance' : 'Claim All'}</div>
         <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
-          Moves USDC from every chain to your Arc balance through CCTP — no gas needed, MeshPort pays it. Available every 6 hours; you can still claim one chain at a time below.
+          {unified
+            ? 'Every payment to you lands in your Ledger. Claim All moves it all to your Arc balance in one go — no gas needed, MeshPort pays it. Available every 6 hours.'
+            : 'Moves USDC from every chain to your Arc balance through CCTP — no gas needed, MeshPort pays it. Available every 6 hours; you can still claim one chain at a time below.'}
         </div>
       </div>
-      {!scanning && due.length > 0 && (
+      {!scanning && (unified ? (
+        <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.5px' }}>
+          ${formatAmount(total)} <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>USDC</span>
+        </div>
+      ) : due.length > 0 && (
         <div style={{ fontSize: 12.5, color: 'var(--text-primary)' }}>
           <b>${formatAmount(total)} USDC</b> on {due.map(c => c.label).join(', ')}
         </div>
-      )}
+      ))}
       <button onClick={tap} disabled={!enabled}
         style={{ ...btnPrimary, width: '100%', cursor: enabled ? 'pointer' : 'default',
           ...(enabled ? {} : { background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }) }}>
         {btnText}
       </button>
-      {Object.keys(steps).length > 0 && (
+      {!unified && Object.keys(steps).length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {Object.values(steps).map(st => (
             <div key={st.chainId} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12 }}>
@@ -418,6 +448,9 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
         </div>
       )}
       {result && <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{result}</div>}
+      {unified && failedIds.length > 0 && !running && (
+        <button onClick={retry} style={{ ...btnGhost, width: '100%' }}>Retry what's left</button>
+      )}
 
       <AnimatePresence>
         {pinOpen && (isDesktop ? (

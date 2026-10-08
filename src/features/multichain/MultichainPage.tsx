@@ -51,7 +51,7 @@ type TabType = 'all' | 'pending' | 'success' | 'failed'
 type HubTab = 'transfer' | 'bring' | 'activity' | 'recovery'
 type FlowFocus = 'none' | 'processing' | 'result'
 
-interface ActivityItem {
+export interface ActivityItem {
   id: string
   type: 'claim' | 'transfer'
   // Marks a UB fund-recovery row specifically (see recoveryItems below) —
@@ -78,6 +78,10 @@ interface ActivityItem {
   ownReceipt?: boolean
   /** A merchant claim moving their own transferred funds back to Arc. */
   ownClaim?: boolean
+  /** Unified merchant Ledger: shown without chain names. */
+  ledgerUnified?: boolean
+  /** Unified: how many chain claims this one "Moved to Arc" row stands for. */
+  groupCount?: number
   autoConvertChains?: string[]
   // 'ub' | 'cctp' when finished through Recover → "Recovered via UB/CCTP".
   recoveredVia?: string
@@ -140,17 +144,42 @@ function markOwnClaims(items: ActivityItem[]): ActivityItem[] {
   })
 }
 
+/**
+ * Unified merchant Ledger (admin switch): every row reads "Ledger" with no
+ * chain, and the claims one Claim All made (seconds apart) are one
+ * "Moved to Arc" row with their total — the merchant sees one balance.
+ */
+const CLAIM_ALL_GROUP_MS = 10 * 60_000
+export function unifyLedgerItems(items: ActivityItem[]): ActivityItem[] {
+  const out: ActivityItem[] = []
+  for (const i of items.map(x => (x.merchant || x.chainReceipt) ? { ...x, ledgerUnified: true } : x)) {
+    const isClaim = i.type === 'claim' && i.merchant && !i.chainReceipt && !i.autoConvert && !i.isRecovery
+    const prev = out[out.length - 1]
+    const prevClaim = prev && prev.type === 'claim' && prev.merchant && !prev.chainReceipt && !prev.autoConvert && !prev.isRecovery
+    if (isClaim && prevClaim && !!prev.ownClaim === !!i.ownClaim && Math.abs(prev.timestamp - i.timestamp) <= CLAIM_ALL_GROUP_MS) {
+      // Same Claim All: one row, total amount; pending if any part still moves.
+      out[out.length - 1] = {
+        ...prev, amount: prev.amount + i.amount, groupCount: (prev.groupCount ?? 1) + 1,
+        claimedAmount: undefined, arrivedAmount: undefined, // per-claim figures don't add up across a group
+        status: prev.status === 'pending' || i.status === 'pending' ? 'pending' : prev.status === 'failed' && i.status === 'failed' ? 'failed' : 'success',
+      }
+    } else out.push(i)
+  }
+  return out
+}
+
 /** Status line for a merchant's payment on another chain (Hub only). */
 function chainReceiptLabel(item: ActivityItem): string | null {
   if (!item.chainReceipt) return null
   const chain = item.chainLabel || item.chain
-  return item.chainReceipt === 'converted' ? 'Moved to Arc' : item.chainReceipt === 'converting' ? 'Moving to Arc' : `In ${chain} Ledger`
+  return item.chainReceipt === 'converted' ? 'Moved to Arc' : item.chainReceipt === 'converting' ? 'Moving to Arc'
+    : item.ledgerUnified ? 'In Ledger' : `In ${chain} Ledger`
 }
 
 // Row / detail title for Hub Activity.
 function hubItemTitle(item: ActivityItem): string {
   const chain = item.chainLabel || item.chain
-  if (item.chainReceipt) return item.ownReceipt ? 'Own payment received' : `Payment received in Ledger (${chain})`
+  if (item.chainReceipt) return item.ownReceipt ? 'Own payment received' : item.ledgerUnified ? 'Payment received in Ledger' : `Payment received in Ledger (${chain})`
   if (item.autoConvert && item.type === 'claim') return item.status === 'pending' ? 'Ledger funds moving to Arc' : 'Ledger payment received'
   // A merchant's claim moves Ledger money (already received) to Arc.
   if (item.merchant && item.type === 'claim') return item.ownClaim ? 'Moved to Arc (Own)' : 'Moved to Arc'
@@ -350,15 +379,17 @@ const SCAN_LOGOS = [...new Set(Object.values(CHAIN_LOGO_FILE))].map(f => ({ src:
 
 // ── Hero card — ticket style. Left: Available To Transfer (on Arc).
 // Right: Available To Bring (USDC on other chains, with their logos).
-function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null, balanceHidden, onToggleHidden, chains, bringLabel = 'Available To Bring' }: {
+function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null, balanceHidden, onToggleHidden, chains, bringLabel = 'Available To Bring', unified = false }: {
   arcAvailable: number; claimAvailable: number; scanning: boolean; scanChain?: string | null; balanceHidden: boolean; onToggleHidden: () => void; bringLabel?: string
+  /** Unified merchant Ledger: one total, no chain logos or chain count. */
+  unified?: boolean
   chains: Array<{ id: string; label: string; balance: number }>
 }) {
   const amountSize = (n: number) => {
     const digits = Math.trunc(Math.abs(n)).toString().length
     return digits >= 8 ? 15 : digits >= 6 ? 18 : digits >= 5 ? 20 : 22
   }
-  const withFunds = chains.filter(c => c.balance >= DUST_USDC)
+  const withFunds = unified ? [] : chains.filter(c => c.balance >= DUST_USDC)
   const shown = withFunds.slice(0, 4)
   const extra = withFunds.length - shown.length
   const line: React.CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }
@@ -372,7 +403,8 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
     boxSizing: 'border-box', objectFit: 'cover', marginLeft: overlap ? -7 : 0, flexShrink: 0,
   })
   const bringText = balanceHidden ? '••••' : scanning && claimAvailable === 0 ? '…' : `$${formatAmount(claimAvailable)}`
-  const bringSub = scanning && withFunds.length === 0 ? 'Checking chains…'
+  const bringSub = unified ? (scanning ? 'Updating…' : claimAvailable > 0 ? 'Waiting for Claim All' : 'Nothing waiting')
+    : scanning && withFunds.length === 0 ? 'Checking chains…'
     : withFunds.length === 0 ? 'No funds on other chains'
     : `${withFunds.length} chain${withFunds.length === 1 ? '' : 's'}`
 
@@ -424,7 +456,7 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, maxWidth: '100%' }}>
-          {scanning && <ChainScanSpinner chain={scanChain} size={22} />}
+          {scanning && !unified && <ChainScanSpinner chain={scanChain} size={22} />}
           <span style={{ ...amount(claimAvailable), minWidth: 0 }}>{bringText}</span>
         </div>
         <span style={sub}>{bringSub}</span>
@@ -444,6 +476,8 @@ export function MultichainPage() {
   const narrow      = useMediaQuery('(max-width: 399px)')
   // Approved merchants get the Ledger (CCTP chains, Claim All) instead of Bring Funds.
   const isMerchant  = useMerchant().isMerchant
+  // Admin → Features → Multichain: "Unified merchant Ledger" (off = per-chain Ledger).
+  const unifiedLedger = useSettingsStore(s => s.isEnabled('merchant_unified_ledger', false)) && isMerchant
   const navigate    = useNavigate()
   const walletAddress = useAuthStore(s => s.walletAddress)
   const { balance: arcBalance } = useWalletStore()
@@ -860,11 +894,12 @@ export function MultichainPage() {
 
   // Use dbActivity as the single source of truth for activity
   // Arrival seen on-chain wins over a row that still says "pending".
-  const allItems: ActivityItem[] = [...dbActivity]
+  const sortedItems: ActivityItem[] = [...dbActivity]
     .map(i => (i.status === 'pending' && i.id in arrived
       ? { ...i, status: 'success' as const, destinationTxHash: i.destinationTxHash || arrived[i.id] }
       : i))
     .sort((a, b) => b.timestamp - a.timestamp)
+  const allItems: ActivityItem[] = unifiedLedger ? unifyLedgerItems(sortedItems) : sortedItems
 
   // Follow pending CCTP moves in the background while the Hub is open, so
   // the list flips to Completed on its own (no need to open each one).
@@ -971,7 +1006,7 @@ export function MultichainPage() {
                 : isPending ? 'var(--warning)' : isSuccess ? 'var(--success)' : 'var(--danger)'
               const merchantClaim = isClaim && item.merchant && !item.chainReceipt && !item.autoConvert
               const statusLabel = receiptLabel ?? (isPending ? 'Processing...' : isSuccess
-                ? (merchantClaim ? `From ${item.chainLabel || item.chain} Ledger` : 'Completed') : 'Failed')
+                ? (merchantClaim ? (item.ledgerUnified ? 'From Ledger' : `From ${item.chainLabel || item.chain} Ledger`) : 'Completed') : 'Failed')
 
               return (
                 <div key={item.id}
@@ -1140,7 +1175,8 @@ export function MultichainPage() {
           style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <HubHeroCard arcAvailable={arcBalance} scanning={scanning} scanChain={scanChain}
           claimAvailable={isMerchant ? bringRows.reduce((sum, c) => sum + (c.balance >= DUST_USDC ? c.balance : 0), 0) : totalExternal}
-          balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} chains={bringRows} />
+          balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} chains={bringRows}
+          bringLabel={unifiedLedger ? 'Ledger Balance' : undefined} unified={unifiedLedger} />
 
         {/* Tab strip */}
         <div role="tablist" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 16,
@@ -1313,7 +1349,7 @@ export function MultichainPage() {
                 ledgerChains={bringRows.filter(c => c.balance >= DUST_USDC).length}
                 claimChains={scanning ? undefined : bringRows.filter(c => c.balance >= DUST_USDC).map(c => ({ chainId: c.id, label: c.label, balance: c.balance }))}
                 // After Claim All: rescan so the chain list shows what moved.
-                onClaimed={() => { setScanning(true); setScanNonce(n => n + 1) }}>{chainCard}</MerchantLedger>
+                onClaimed={() => { setScanning(true); setScanNonce(n => n + 1) }} unified={unifiedLedger}>{chainCard}</MerchantLedger>
             : chainCard
         })()}
 
@@ -1398,7 +1434,7 @@ export function MultichainPage() {
             ]}
             detailRows={[
               { label: 'Status', value: chainReceiptLabel(it) ?? (status === 'success' ? 'Confirmed' : status === 'failed' ? 'Failed' : 'Processing'), positive: status === 'success' },
-              { label: 'Type', value: it.isRecovery ? 'Refund to Arc' : it.merchant ? `Moved to Arc from ${it.chainLabel || it.chain} Ledger` : isClaimItem ? 'Claim to Arc' : 'Transfer out' },
+              { label: 'Type', value: it.isRecovery ? 'Refund to Arc' : it.merchant ? (it.ledgerUnified ? 'Moved to Arc from Ledger' : `Moved to Arc from ${it.chainLabel || it.chain} Ledger`) : isClaimItem ? 'Claim to Arc' : 'Transfer out' },
               ...(isClaimItem && it.route ? [{ label: 'Route', value: it.route === 'ub' ? 'Unified Balance' : 'CCTP' }] : []),
               ...(it.recoveredVia ? [{ label: 'Recovered', value: `Via ${it.recoveredVia.toUpperCase()}` }] : []),
               ...(feeWasDeducted ? [{ label: 'Fee', value: `-$${formatAmount(it.claimedAmount! - it.arrivedAmount!)} USDC` }] : []),
