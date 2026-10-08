@@ -7,16 +7,16 @@ import { useAuthStore, useChatUnreadStore } from '@/store'
 export const HomeIcon = ({ active }: { active: boolean }) => (
   <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
     <path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1H4a1 1 0 01-1-1V10.5z"
-      stroke={active ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="1.8" strokeLinejoin="round"/>
+      stroke={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth="1.8" strokeLinejoin="round"/>
     <path d="M9 22V15h6v7"
-      stroke={active ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="1.8" strokeLinejoin="round"/>
+      stroke={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth="1.8" strokeLinejoin="round"/>
   </svg>
 )
 
 export const ChatsIcon = ({ active }: { active: boolean }) => (
   <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
     <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-      stroke={active ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+      stroke={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 )
 
@@ -38,28 +38,28 @@ const ScannerIcon = () => (
 export const RewardsIcon = ({ active }: { active: boolean }) => (
   <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
     {/* box body */}
-    <rect x="3" y="12" width="18" height="9" rx="1.5" stroke={active ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="1.6"/>
+    <rect x="3" y="12" width="18" height="9" rx="1.5" stroke={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth="1.6"/>
     {/* vertical ribbon on box */}
-    <line x1="12" y1="12" x2="12" y2="21" stroke={active ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="1.6"/>
+    <line x1="12" y1="12" x2="12" y2="21" stroke={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth="1.6"/>
     {/* lid */}
-    <rect x="2" y="8.5" width="20" height="3.5" rx="1" stroke={active ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="1.6"/>
+    <rect x="2" y="8.5" width="20" height="3.5" rx="1" stroke={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth="1.6"/>
     {/* vertical ribbon on lid */}
-    <line x1="12" y1="8.5" x2="12" y2="12" stroke={active ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="1.6"/>
+    <line x1="12" y1="8.5" x2="12" y2="12" stroke={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth="1.6"/>
     {/* bow left */}
     <path d="M12 8.5 C10.5 7 8 5.5 7.5 4.5 C7 3.5 9 3.5 10 4.5 C11 5.5 12 8.5 12 8.5Z"
-      stroke={active ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="1.4" strokeLinejoin="round"/>
+      stroke={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth="1.4" strokeLinejoin="round"/>
     {/* bow right */}
     <path d="M12 8.5 C13.5 7 16 5.5 16.5 4.5 C17 3.5 15 3.5 14 4.5 C13 5.5 12 8.5 12 8.5Z"
-      stroke={active ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="1.4" strokeLinejoin="round"/>
+      stroke={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth="1.4" strokeLinejoin="round"/>
     {/* bow knot */}
-    <circle cx="12" cy="8.5" r="1" fill={active ? 'var(--brand)' : 'var(--text-secondary)'}/>
+    <circle cx="12" cy="8.5" r="1" fill={active ? 'var(--brand-text)' : 'var(--nav-idle)'}/>
   </svg>
 )
 
 export const ActivityIcon = ({ active }: { active: boolean }) => (
   <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
-    <circle cx="12" cy="12" r="9" stroke={active ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="1.7"/>
-    <path d="M12 7v5l3 3" stroke={active ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+    <circle cx="12" cy="12" r="9" stroke={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth="1.7"/>
+    <path d="M12 7v5l3 3" stroke={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
   </svg>
 )
 
@@ -255,7 +255,7 @@ export function BottomNav() {
                   </div>
                   <span style={{
                     fontSize: 11, fontWeight: isActive ? 700 : 500,
-                    color: isActive ? 'var(--brand)' : 'var(--text-secondary)',
+                    color: isActive ? 'var(--brand-text)' : 'var(--nav-idle)',
                     lineHeight: 1, fontFamily: '-apple-system,sans-serif',
                     transition: 'color 0.15s',
                   }}>

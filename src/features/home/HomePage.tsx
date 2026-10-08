@@ -847,7 +847,7 @@ function RecentRow({ navigate, compact, resultLimit = 5 }: { navigate: NavigateF
     return (
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: compact ? 8 : 14 }}>
-          <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.3px' }}>Recent</span>
+          <span style={{ fontSize: 16, fontWeight: 700 }}>Recent</span>
         </div>
         <div style={{ display: 'flex', gap: compact ? 12 : 16 }}>
           {Array.from({ length: resultLimit }, (_, i) => i).map(i => (
@@ -865,9 +865,9 @@ function RecentRow({ navigate, compact, resultLimit = 5 }: { navigate: NavigateF
     return (
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: compact ? 6 : 12 }}>
-          <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.3px' }}>Recent</span>
+          <span style={{ fontSize: 16, fontWeight: 700 }}>Recent</span>
           <button onClick={() => navigate('/pay')}
-            style={{ fontSize: 14, color: 'var(--brand)', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer' }}>
+            style={{ fontSize: 14, color: 'var(--brand-text)', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer' }}>
             Pay →
           </button>
         </div>
@@ -875,7 +875,7 @@ function RecentRow({ navigate, compact, resultLimit = 5 }: { navigate: NavigateF
           padding: compact ? '10px 14px' : '14px 18px', textAlign: 'center', cursor: 'pointer' }}
           onClick={() => navigate('/pay')}>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Your recent recipients will appear here</div>
-          <div style={{ fontSize: 14, color: 'var(--brand)', fontWeight: 600, marginTop: 6 }}>Make your first payment →</div>
+          <div style={{ fontSize: 14, color: 'var(--brand-text)', fontWeight: 600, marginTop: 6 }}>Make your first payment →</div>
         </div>
       </div>
     )
@@ -884,9 +884,9 @@ function RecentRow({ navigate, compact, resultLimit = 5 }: { navigate: NavigateF
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: compact ? 8 : 14 }}>
-        <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.3px' }}>Recent</span>
+        <span style={{ fontSize: 16, fontWeight: 700 }}>Recent</span>
         <button onClick={() => navigate('/recent-paid')}
-          style={{ fontSize: 14, color: 'var(--brand)', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer' }}>
+          style={{ fontSize: 14, color: 'var(--brand-text)', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer' }}>
           View all
         </button>
       </div>
@@ -1064,7 +1064,7 @@ function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: {
       </div>
       <button onClick={onCustomize} style={{
         width: '100%', marginTop: 8, padding: 7, borderRadius: 10, fontSize: 12, fontWeight: 600,
-        background: 'none', color: 'var(--brand)', border: '1px dashed var(--border)', cursor: 'pointer',
+        background: 'none', color: 'var(--brand-text)', border: '1px dashed var(--border)', cursor: 'pointer',
       }}>
         Customize
       </button>
@@ -2695,7 +2695,7 @@ export function HomePage() {
     return (
       <>
         {text.slice(0, idx)}
-        <span style={{ color: 'var(--brand)' }}>{text.slice(idx, idx + query.length)}</span>
+        <span style={{ color: 'var(--brand-text)' }}>{text.slice(idx, idx + query.length)}</span>
         {text.slice(idx + query.length)}
       </>
     )
@@ -3860,7 +3860,7 @@ export function HomePage() {
           {searchOpen ? (
             <>
               <SearchField autoFocus value={searchQuery} onChange={setSearchQuery} placeholder="Search people, services…" />
-              <button onClick={closeSearch} style={{ background: 'none', border: 'none', color: 'var(--brand)', fontSize: 14, fontWeight: 600, marginLeft: 10, cursor: 'pointer', flexShrink: 0 }}>
+              <button onClick={closeSearch} style={{ background: 'none', border: 'none', color: 'var(--brand-text)', fontSize: 14, fontWeight: 600, marginLeft: 10, cursor: 'pointer', flexShrink: 0 }}>
                 Cancel
               </button>
             </>
@@ -4150,7 +4150,7 @@ export function HomePage() {
                   }} />
                 )}
               </div>
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 500, lineHeight: 1 }}>{a.label}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 500, lineHeight: 1 }}>{a.label}</span>
             </div>
           ))}
         </div>
@@ -4173,15 +4173,15 @@ export function HomePage() {
         {/* ── ASSETS — all 3 tokens ────────────────────────────────────────── */}
         <div ref={assetsCardRef}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isDesktop ? 6 : 12 }}>
-            <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: '-0.3px' }}>Assets</span>
+            <span style={{ fontSize: 16, fontWeight: 700 }}>Assets</span>
             <button onClick={handleFaucet}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                fontSize: 15.4, color: 'var(--brand)', fontWeight: 500,
+                fontSize: 15.4, color: 'var(--brand-text)', fontWeight: 500,
               }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M12 3s6 6.5 6 10.5a6 6 0 01-12 0C6 9.5 12 3 12 3z" stroke="var(--brand)" strokeWidth="1.8" strokeLinejoin="round"/>
+                <path d="M12 3s6 6.5 6 10.5a6 6 0 01-12 0C6 9.5 12 3 12 3z" stroke="var(--brand-text)" strokeWidth="1.8" strokeLinejoin="round"/>
               </svg>
               Faucet
             </button>
@@ -4200,7 +4200,7 @@ export function HomePage() {
               name="USDC" sub="USD Coin"
               cryptoAmount={`${fmt(balance)} USDC`}
               usdValue={`$${fmt(balance)}`}
-              usdColor="var(--brand)"
+              usdColor="var(--brand-text)"
               onClick={() => openAssetHistory('USDC')}
               hidden={balanceHidden}
               changePct={isDesktop ? assetChange24h.USDC : undefined}
@@ -4212,7 +4212,7 @@ export function HomePage() {
               name="EURC" sub="Euro Coin"
               cryptoAmount={`${fmt(eurcBalance)} EURC`}
               usdValue={`$${fmt(eurcBalance * 1.08)}`}
-              usdColor="var(--brand)"
+              usdColor="var(--brand-text)"
               onClick={() => openAssetHistory('EURC')}
               hidden={balanceHidden}
               changePct={isDesktop ? assetChange24h.EURC : undefined}
@@ -4259,7 +4259,7 @@ export function HomePage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Recent Activity</span>
-              <span onClick={() => navigate('/activity')} style={{ fontSize: 11.5, color: 'var(--brand)', fontWeight: 600, cursor: 'pointer' }}>View all</span>
+              <span onClick={() => navigate('/activity')} style={{ fontSize: 11.5, color: 'var(--brand-text)', fontWeight: 600, cursor: 'pointer' }}>View all</span>
             </div>
             {homeRecentActivity.length === 0 ? (
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', padding: '20px 0' }}>No recent activity</p>
@@ -4351,7 +4351,7 @@ export function HomePage() {
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 9.5, color: 'var(--text-secondary)' }}>Swap Volume</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand)', marginTop: 1 }}>${trimTrailingZeros(insightsData.swapVolume.toFixed(2))}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)', marginTop: 1 }}>${trimTrailingZeros(insightsData.swapVolume.toFixed(2))}</div>
                 <div style={{ fontSize: 9, color: 'var(--text-secondary)' }}>{insightsData.swapCount} swaps</div>
               </div>
             </div>
