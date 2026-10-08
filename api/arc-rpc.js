@@ -39,8 +39,7 @@ const DRPC_KEY = process.env.DRPC_KEY ?? ''
 const CONFIGURED_ARC_RPC_URL = (process.env.ARC_RPC_URL || '').trim()
 
 // Alchemy — Arc's own partnered node provider (see
-// https://docs.arc.io/arc/references/rpc-endpoints, "Node providers", and
-// https://community.arc.network/public/blogs/arc-x-alchemy). Unlike
+// https://docs.arc.io/arc/references/rpc-endpoints, "Node providers"). Unlike
 // Blockdaemon/dRPC/QuickNode below, Alchemy has no free keyless public
 // endpoint for Arc — set ALCHEMY_ARC_KEY in Vercel (get one at
 // https://dashboard.alchemy.com/chains/arc) to use it. URL format confirmed
