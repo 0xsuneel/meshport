@@ -50,7 +50,7 @@ const FAQS = [
   },
   {
     q: 'Is MeshPort currently on Arc Testnet?',
-    a: 'Yes. Arc Mainnet has launched, but MeshPort still runs on Arc Testnet for now. Balances, transfers, and assets in the app today are testnet assets, not mainnet funds.',
+    a: 'Yes. MeshPort currently runs on Arc Testnet. Balances, transfers, and assets in the app today are testnet assets, not mainnet funds.',
   },
   {
     q: 'How is my account secured?',
