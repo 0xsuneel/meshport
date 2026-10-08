@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, type ComponentType } from 'react'
 import { MeshPortLogo } from '@/components/ui/MeshPortLogo'
+import { BiometricFirst } from '@/components/ui/BiometricFirst'
 import { handBiometricPasscode } from '@/lib/biometricHandoff'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, Fingerprint, ScanFace } from 'lucide-react'
@@ -357,6 +358,10 @@ export function PasscodeLockPage() {
 
   const biometricReady = biometricEnabled && !!walletAddress && hasBiometricRegistered(walletAddress)
   const canUseBiometric = biometricReady && liveSupported !== false
+  // Biometric on → fingerprint / Face ID first; the number pad appears once
+  // the scan fails or is cancelled, or on "Use passcode".
+  const [mode, setMode] = useState<'bio' | 'pin'>(() => (biometricReady ? 'bio' : 'pin'))
+  useEffect(() => { if (liveSupported === false) setMode('pin') }, [liveSupported])
 
   const handleUnlock = async (val: string) => {
     setChecking(true)
@@ -446,6 +451,8 @@ export function PasscodeLockPage() {
       // unlock "broken" too, even though they just authenticated for real.
       clearPasscodeLockout()
       handleUnlock(pc)
+    } else {
+      setMode('pin')
     }
   }
 
@@ -469,7 +476,7 @@ export function PasscodeLockPage() {
       autoTriedRef.current = true
       tryBiometricRef.current()
     }
-    const schedule = () => { timer = setTimeout(run, 150) }
+    const schedule = () => { timer = setTimeout(run, 0) }
     const onVisible = () => { if (document.visibilityState === 'visible') { document.removeEventListener('visibilitychange', onVisible); schedule() } }
     if (document.visibilityState === 'visible') schedule()
     else document.addEventListener('visibilitychange', onVisible)
@@ -494,7 +501,7 @@ export function PasscodeLockPage() {
         <MeshPortLogo className="w-20 h-20 mx-auto mb-2" />
         <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">MeshPort</h2>
         <p className="text-text-secondary text-[14px] leading-[1.5]">
-          {noPasscode ? `Signed in as ${displayName}` : 'Enter passcode to unlock'}
+          {noPasscode ? `Signed in as ${displayName}` : mode === 'bio' ? `Unlock with ${label === 'Fingerprint' ? 'your fingerprint' : label === 'Face ID' ? 'Face ID' : 'biometrics'}` : 'Enter passcode to unlock'}
         </p>
         {noPasscode ? (
           <div className="mt-8 w-full max-w-xs space-y-3">
@@ -508,6 +515,17 @@ export function PasscodeLockPage() {
             </button>
           </div>
         ) : (
+          mode === 'bio' ? (
+          <>
+            {/* Same space as dots + status line + number pad, so "Use
+                passcode" swaps in place without the logo moving. */}
+            <BiometricFirst Icon={BiometricIcon} label={label} trying={biometricTrying} onTry={tryBiometric}
+              onUsePasscode={() => setMode("pin")} height={374} />
+            <button onClick={handleSignOut} className="mt-6 text-text-muted text-sm hover:text-text-secondary transition-colors">
+              Sign out
+            </button>
+          </>
+          ) : (
           <>
             <PasscodeDots filled={input.length} error={error} />
             {/* One fixed-height status line (as on passcode setup): a message
@@ -538,6 +556,7 @@ export function PasscodeLockPage() {
               Sign out
             </button>
           </>
+          )
         )}
       </div>
     </div>

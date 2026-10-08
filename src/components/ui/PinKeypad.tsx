@@ -28,6 +28,7 @@ import { useAuthStore } from '@/store'
 import { hasBiometricRegistered, verifyBiometricAndGetPasscode, biometricLabel, isBiometricSupported } from '@/lib/biometric'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { hapticError } from '@/lib/feedback'
+import { BiometricFirst } from './BiometricFirst'
 
 interface PinKeypadProps {
   value: string
@@ -110,6 +111,14 @@ export function PinKeypad({
     hasBiometricRegistered(walletAddress)
   const canUseBiometric = biometricReady && liveSupported !== false
 
+  // Biometric on (phone) → fingerprint / Face ID first: the number pad only
+  // appears once the scan fails or is cancelled, or on "Use passcode".
+  const [mode, setMode] = useState<'bio' | 'pin'>(() =>
+    autoBiometric && biometricReady && !isDesktop ? 'bio' : 'pin')
+  useEffect(() => { if (liveSupported === false) setMode('pin') }, [liveSupported])
+  // A wrong passcode (e.g. a stale one from biometrics) → let them type.
+  useEffect(() => { if (error || shake) setMode('pin') }, [error, shake])
+
   const tryBiometric = async () => {
     if (!walletAddress || biometricTrying) return
     setBiometricTrying(true)
@@ -121,6 +130,8 @@ export function PinKeypad({
       viaBiometricRef.current = true
       onBiometric?.() // optional notification hook for a caller that wants one
       onChange(pc)
+    } else {
+      setMode('pin')
     }
   }
 
@@ -145,8 +156,8 @@ export function PinKeypad({
       autoTriedRef.current = true
       tryBiometricRef.current()
     }
-    // A short beat so the sheet has started opening behind the prompt.
-    const schedule = () => { timer = setTimeout(run, 150) }
+    // Straight away: the fingerprint view is what's on screen meanwhile.
+    const schedule = () => { timer = setTimeout(run, 0) }
     const onVisible = () => { if (document.visibilityState === 'visible') { document.removeEventListener('visibilitychange', onVisible); schedule() } }
     if (document.visibilityState === 'visible') schedule()
     else document.addEventListener('visibilitychange', onVisible)
@@ -183,6 +194,16 @@ export function PinKeypad({
       completedRef.current = false
     }
   }, [value, length, onComplete])
+
+  if (mode === 'bio' && !isDesktop) {
+    return (
+      <div className="w-full">
+        {/* Same height as dots (46) + number pad (4×56 + 3×10) */}
+        <BiometricFirst Icon={Icon} label={label} trying={biometricTrying} onTry={tryBiometric}
+          onUsePasscode={() => setMode('pin')} height={300} />
+      </div>
+    )
+  }
 
   return (
     <div className="w-full">
