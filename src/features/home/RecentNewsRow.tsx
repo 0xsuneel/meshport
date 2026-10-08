@@ -20,20 +20,17 @@ import { fetchHomeNews, readCachedHomeNews, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT,
 // on top, a one-line headline under it. Swipe to move, tap to open the short
 // article.
 
-// Recent's content row; the Updates box is taller (cover + headline) and
-// Recent's row sits centred in the matching height.
+// Cover (46) + gap (4) + one-line headline (14) in the News box; Recent uses
+// the same height so the two boxes line up.
 const CONTENT_H = 64
-// The Updates cover keeps Arc's and Circle's own 1200×630 shape, so its
-// title text and edges are never cropped; the box grows to fit it.
-const COVER_RATIO = '1200 / 630'
-const HEADLINE_H = 18 // 4px gap + one 14px line
+const NEWS_PIC_H = 46
 const AVATAR = 44
 const QUEUE_STEP_MS = 2600
 const NEWS_STEP_MS = 5000
 
 function Box({ title, onViewAll, children }: { title: string; onViewAll?: () => void; children: ReactNode }) {
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 10, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 10, minWidth: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginBottom: 4 }}>
         <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>{title}</span>
         {onViewAll && (
@@ -45,8 +42,7 @@ function Box({ title, onViewAll, children }: { title: string; onViewAll?: () => 
           </button>
         )}
       </div>
-      {/* Both boxes share the taller one's height; the shorter content sits centred. */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 0 }}>{children}</div>
+      {children}
     </div>
   )
 }
@@ -246,7 +242,7 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
   let content: ReactNode
   if (!n) {
     content = (
-      <div style={{ aspectRatio: COVER_RATIO, borderRadius: 10, display: 'flex', alignItems: 'center', padding: '0 8px',
+      <div style={{ height: CONTENT_H, borderRadius: 10, display: 'flex', alignItems: 'center', padding: '0 8px',
         background: loaded ? 'color-mix(in srgb, var(--text-primary) 4%, transparent)' : 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
         {loaded && <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', lineHeight: 1.3 }}>Arc, Circle and MeshPort updates show here</span>}
       </div>
@@ -264,20 +260,8 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
         onPointerLeave={() => { x0.current = null; setPaused(false) }}
         onPointerCancel={() => { x0.current = null; setPaused(false) }}
         onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && item) { e.preventDefault(); navigate(`/news/${item.id}`) } }}
-        style={{ position: 'relative', cursor: 'pointer',
+        style={{ position: 'relative', height: CONTENT_H, cursor: 'pointer',
           touchAction: 'pan-y', userSelect: 'none', WebkitTapHighlightColor: 'transparent' }}>
-        {/* Sizes the box: a cover-shaped area (with the dots) plus one headline line. The slides sit on top. */}
-        <div aria-hidden style={{ position: 'relative', aspectRatio: COVER_RATIO, zIndex: 2, pointerEvents: 'none' }}>
-          {n > 1 && (
-            <div style={{ position: 'absolute', bottom: 5, right: 5, display: 'flex', gap: 3, padding: '2px 3px', borderRadius: 4, background: 'rgba(0,0,0,0.28)' }}>
-              {items.map((it, k) => (
-                <i key={it.id} style={{ display: 'block', height: 4, width: k === cur ? 10 : 4, borderRadius: 2,
-                  background: k === cur ? '#fff' : 'rgba(255,255,255,0.5)', transition: 'width .35s ease, background .35s' }} />
-              ))}
-            </div>
-          )}
-        </div>
-        <div style={{ height: HEADLINE_H }} />
         {items.map((it, k) => {
           const on = k === cur
           return (
@@ -285,7 +269,7 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
               style={{ position: 'absolute', inset: 0, opacity: on ? 1 : 0, transition: reduce ? 'none' : 'opacity .7s ease' }}>
               {/* The cover is shown as is: Arc's covers carry their own title text
                   and Circle's are white, so nothing is drawn over it but the label. */}
-              <div style={{ position: 'relative', aspectRatio: COVER_RATIO, borderRadius: 10, overflow: 'hidden', background: NEWS_SOURCE_TINT[it.source] }}>
+              <div style={{ position: 'relative', height: NEWS_PIC_H, borderRadius: 10, overflow: 'hidden', background: NEWS_SOURCE_TINT[it.source] }}>
                 {it.image_url && !broken[it.id] ? (
                   <>
                     <img src={it.image_url} alt="" draggable={false} loading={k === 0 ? 'eager' : 'lazy'}
@@ -307,6 +291,15 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
             </div>
           )
         })}
+        {n > 1 && (
+          // Bottom-right of the cover, clear of the source label and of a drawn cover's text.
+          <div aria-hidden style={{ position: 'absolute', top: NEWS_PIC_H - 13, right: 5, display: 'flex', gap: 3, padding: '2px 3px', borderRadius: 4, background: 'rgba(0,0,0,0.28)' }}>
+            {items.map((it, k) => (
+              <i key={it.id} style={{ display: 'block', height: 4, width: k === cur ? 10 : 4, borderRadius: 2,
+                background: k === cur ? '#fff' : 'rgba(255,255,255,0.5)', transition: 'width .35s ease, background .35s' }} />
+            ))}
+          </div>
+        )}
       </div>
     )
   }
