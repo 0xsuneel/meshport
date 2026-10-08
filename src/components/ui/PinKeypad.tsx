@@ -79,6 +79,7 @@ export function PinKeypad({
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const walletAddress = useAuthStore(s => s.walletAddress)
   const biometricEnabled = useAuthStore(s => s.biometricEnabled)
+  const storedPasscodeHash = useAuthStore(s => s.passcode)
   const label = biometricLabel()
   const Icon = label === 'Face ID' ? ScanFace : Fingerprint
 
@@ -122,7 +123,7 @@ export function PinKeypad({
   const tryBiometric = async () => {
     if (!walletAddress || biometricTrying) return
     setBiometricTrying(true)
-    const pc = await verifyBiometricAndGetPasscode(walletAddress)
+    const pc = await verifyBiometricAndGetPasscode(walletAddress, storedPasscodeHash ?? undefined)
     setBiometricTrying(false)
     // A cancelled/failed check just leaves the keypad ready for manual
     // entry — no error shown, cancelling is a normal choice here.
@@ -147,7 +148,9 @@ export function PinKeypad({
   valueRef.current = value
   const tryBiometricRef = useRef(tryBiometric)
   tryBiometricRef.current = tryBiometric
-  const canAuto = autoBiometric && biometricReady && liveSupported === true
+  // Don't wait for the capability probe: the prompt opens at once, and if
+  // the device can't do it the call just fails into the passcode pad.
+  const canAuto = autoBiometric && biometricReady && liveSupported !== false
   useEffect(() => {
     if (!canAuto) return
     let timer: ReturnType<typeof setTimeout> | undefined

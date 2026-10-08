@@ -109,12 +109,57 @@ export function clearPasscodeLockout(): void {
   writeLockoutState({ failCount: 0, lockedUntil: 0 })
 }
 
+// ─── Passcodes already verified in this app session ──────────────────────────
+// The real check stretches the passcode 600,000 times on purpose (PBKDF2) —
+// about a second on a phone, which made every payment approval feel slow.
+// Once a passcode has passed that check, later checks of the SAME passcode
+// against the SAME stored hash in this page session are answered from
+// memory. Memory only (never stored), keyed by a SHA-256 tag rather than the
+// passcode itself, and cleared whenever the app locks or signs out — so the
+// first check after unlocking is always the full one (or a biometric
+// assertion, see markPasscodeVerified).
+const verifiedThisSession = new Set<string>()
+
+async function sessionTag(passcode: string, storedHash: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${storedHash}\n${passcode}`))
+  return toBase64(new Uint8Array(digest))
+}
+
+/**
+ * Records that `passcode` is known to match `storedHash` for this session.
+ * Called by verifyPasscode itself, and by the biometric unlock when a
+ * successful Face ID / fingerprint check recovered a passcode already
+ * confirmed against this exact stored hash (a check at least as strong as
+ * typing it, as with clearPasscodeLockout).
+ */
+export async function markPasscodeVerified(passcode: string, storedHash: string): Promise<void> {
+  if (!passcode || !storedHash) return
+  verifiedThisSession.add(await sessionTag(passcode, storedHash))
+}
+
+/** True when this exact passcode already passed for this stored hash this session. */
+export async function isPasscodeVerifiedThisSession(passcode: string, storedHash: string): Promise<boolean> {
+  if (!passcode || !storedHash || verifiedThisSession.size === 0) return false
+  return verifiedThisSession.has(await sessionTag(passcode, storedHash))
+}
+
+/** Forget every session verification (lock, sign-out). */
+export function forgetVerifiedPasscodes(): void {
+  verifiedThisSession.clear()
+}
+
 // ─── Verify passcode against stored hash ─────────────────────────────────────
 export async function verifyPasscode(passcode: string, storedHash: string): Promise<boolean> {
   const lockout = readLockoutState()
   if (lockout.lockedUntil > Date.now()) return false
 
+  if (await isPasscodeVerifiedThisSession(passcode, storedHash)) {
+    if (lockout.failCount) writeLockoutState({ failCount: 0, lockedUntil: 0 })
+    return true
+  }
+
   const result = await verifyPasscodeUnthrottled(passcode, storedHash)
+  if (result) await markPasscodeVerified(passcode, storedHash)
 
   if (result) {
     writeLockoutState({ failCount: 0, lockedUntil: 0 })

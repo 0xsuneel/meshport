@@ -239,6 +239,7 @@ export const useAuthStore = create<AuthStore>()(
 
       logout: () => {
         const currentAddr = get().walletAddress
+        import('@/lib/security').then(({ forgetVerifiedPasscodes }) => forgetVerifiedPasscodes()).catch(() => {})
         // This device's chat key (see chatCrypto.ts) goes with the session —
         // the tab copy and the device-sealed copy alike.
         for (const st of [() => sessionStorage, () => localStorage]) {
@@ -345,7 +346,7 @@ export const useAuthStore = create<AuthStore>()(
       lock:   () => {
         const addr = get().walletAddress
         set({ isLocked: true, privateKey: null })
-        import('@/lib/security').then(({ clearSessionPrivateKey }) => clearSessionPrivateKey(addr)).catch(() => {})
+        import('@/lib/security').then(({ clearSessionPrivateKey, forgetVerifiedPasscodes }) => { clearSessionPrivateKey(addr); forgetVerifiedPasscodes() }).catch(() => {})
       },
       unlock: () => set({ isLocked: false, lastActivityAt: Date.now() }),
       touchActivity: () => set({ lastActivityAt: Date.now() }),

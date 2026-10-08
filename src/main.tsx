@@ -40,9 +40,25 @@ window.addEventListener('vite:preloadError', (e) => {
 })
 window.setTimeout(markBuildHealthy, 15_000)
 import './store/themeStore'
+import { useAuthStore } from './store'
 
 // Clear all legacy mock/fake data from localStorage on startup
 clearLegacyData()
+
+// Lock on a fresh launch BEFORE the first render (see the long comment on
+// this rule in App.tsx). Doing it in an effect let Home paint first and
+// then swap to the lock screen — opening from the home screen showed a flash
+// of Home before the fingerprint prompt. The persisted auth store hydrates
+// synchronously from localStorage, so it can be decided right here.
+{
+  const SESSION_FLAG = 'meshport:session-alive'
+  let hadSession = true
+  try { hadSession = sessionStorage.getItem(SESSION_FLAG) === '1'; sessionStorage.setItem(SESSION_FLAG, '1') } catch { /* private mode */ }
+  const auth = useAuthStore.getState()
+  if (!hadSession && auth.isAuthenticated && auth.passcodeLockEnabled && !auth.isLocked) auth.lock()
+  // Start fetching the lock screen now, so the splash goes straight to it.
+  if (useAuthStore.getState().isLocked) import('./features/auth/PasscodeSetup').catch(() => {})
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

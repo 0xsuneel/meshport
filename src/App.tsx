@@ -539,18 +539,9 @@ export default function App() {
   // locked, editing the URL can't bypass /auth/lock, and unlocking there
   // always works the normal way regardless of whether an update/reload
   // just happened.
-  useEffect(() => {
-    const SESSION_FLAG = 'meshport:session-alive'
-    const hadSession = sessionStorage.getItem(SESSION_FLAG) === '1'
-    sessionStorage.setItem(SESSION_FLAG, '1')
-
-    if (!hadSession) {
-      const { isAuthenticated, passcodeLockEnabled, isLocked, lock } = useAuthStore.getState()
-      if (isAuthenticated && passcodeLockEnabled && !isLocked) {
-        lock()
-      }
-    }
-  }, [])
+  // The check itself now runs in main.tsx, before the first render, so a
+  // fresh launch goes straight from the splash to the lock screen instead
+  // of painting Home first.
 
   // ── Recover from long background suspension ────────────────────────────
   // Mobile browsers/PWAs aggressively suspend backgrounded tabs — timers
