@@ -6,6 +6,7 @@ import { createPublicClient, createWalletClient, parseUnits, encodeFunctionData,
 import { privateKeyToAccount } from 'viem/accounts'
 import { arcTransport, arcRpcJson } from './arc'
 import { ARC, ARC_TOKENS, ARC_CHAIN_INLINE as REGISTRY_ARC_CHAIN_INLINE } from '@/blockchain/chains'
+import { isSlowNetwork } from './connectivity'
 
 // ─── Chain/token constants re-exported from the shared registry ─────────────
 // Definitions moved to src/blockchain/chains.ts (Phase 0 of
@@ -54,7 +55,7 @@ export async function readUSDCBalanceOrThrow(address: string): Promise<number> {
     jsonrpc: '2.0', id: 1,
     method: 'eth_getBalance',    // Arc docs recommended method
     params: [address, 'latest'],
-  }, 15000)
+  }, isSlowNetwork() ? 30000 : 15000) // a very weak link needs longer to answer
   if (json?.error) throw new Error(json.error.message || 'eth_getBalance failed')
   const raw = json?.result
   if (!raw || raw === '0x' || raw === '0x0') return 0
