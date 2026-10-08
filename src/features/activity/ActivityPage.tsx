@@ -13,7 +13,7 @@ import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { SearchField } from '@/components/ui/SearchField'
-import { useMerchant } from '@/lib/merchant'
+import { useMerchant, isMerchantClaim } from '@/lib/merchant'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 
 const FILTERS: { id: ActivityType | 'all' | 'p2p' | 'merchant'; label: string }[] = [
@@ -255,7 +255,7 @@ export function deriveActivityRow(record: ActivityRecord) {
                  : isSwap     ? swapPair
                  : isBulk     ? bulkSubtitle
                  : isClaim && metadata.auto_convert && Array.isArray(metadata.chains) ? `From ${metadata.chains.map((c: string) => c.split('_')[0]).join(', ')} Ledger`
-                 : isClaim && metadata.merchant ? merchantSubtitle(chain, (record as any).walletAddress)
+                 : isClaim && isMerchantClaim(record as any) ? merchantSubtitle(chain, (record as any).walletAddress)
                  : isClaim    ? (chain || 'External')
                  : isTransfer ? counterpartyLabel
                  : (isP2PSellOrder || isP2PRefund || isP2PPurchase) ? p2pSubtitle
@@ -263,7 +263,7 @@ export function deriveActivityRow(record: ActivityRecord) {
 
   const recoveredTitle = recoveredViaLabel(record)
   const title = isClaim && metadata.auto_convert ? (status === 'pending' ? 'Ledger funds moving to Arc' : 'Ledger payment received')
-              : isClaim && metadata.merchant ? 'Payment received'
+              : isClaim && isMerchantClaim(record as any) ? 'Ledger payment received'
               : merchantOrder ? (isSend ? 'Order payment' : metadata.merchantPersonal ? 'Requested amount received' : metadata.merchantOrderKind === 'invoice' ? 'Bill payment received' : 'Requested payment received')
               : recoveredTitle ? recoveredTitle
               : isSelfTransfer && isSend    ? 'Paid to'
@@ -534,7 +534,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const isSwapType = type === 'swap'
 
   const rows = [
-    { label: 'Type',   value: (isClaim && (metadata as any)?.merchant) ? 'Payment received' : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
+    { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? 'Ledger payment received' : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
     { label: 'Chain',  value: chain },
     ...(merchantOrderDetail ? [{ label: 'Order', value: `#${merchantOrderDetail}` }] : []),
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Merchant', value: String((metadata as any).merchantName) }] : []),

@@ -140,6 +140,19 @@ export function isMerchantNow(): boolean {
   return state.status === 'approved'
 }
 
+/**
+ * A claim from another chain by an approved merchant moves customer payments
+ * to Arc — shown as "Ledger payment received". New rows carry metadata.merchant
+ * (tagged server-side when written); rows written before that tag existed
+ * are recognised by date: made on another chain after the approval.
+ */
+export function isMerchantClaim(p: { metadata?: any; createdAt?: string; sourceChain?: string }): boolean {
+  if (p.metadata?.merchant) return true
+  const approvedAt = state.status === 'approved' ? state.application?.reviewedAt : null
+  if (!approvedAt || !p.createdAt || !p.sourceChain || p.sourceChain === 'Arc_Testnet') return false
+  return new Date(p.createdAt).getTime() >= new Date(approvedAt).getTime()
+}
+
 function subscribe(cb: () => void) {
   listeners.add(cb)
   if (!state.loaded) void refreshMerchant()
