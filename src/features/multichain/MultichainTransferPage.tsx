@@ -27,8 +27,8 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForTransfer, resolveChainMechanism, resolveAvailableMechanisms } from '@/lib/featureFilters'
 import { ARC_EXPLORER, explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ARC_RPCS, ARC_NETWORK } from '@/lib/arc'
-import { circleForwarderMintsTo } from '@/lib/chainRpcs'
-import { GATEWAY_SELF_MINT_CHAINS, forwarderMintRetry } from '@/lib/ubClaim'
+import { circleForwarderMintsTo, noteForwarderMintFailed } from '@/lib/chainRpcs'
+import { gatewaySelfMintsTo, forwarderMintRetry } from '@/lib/ubClaim'
 import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -1755,11 +1755,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             adapter,
             allocations: [{ amount: spendAmount.toFixed(6), chain: ARC_CHAIN_KEY }],
           },
-          // GATEWAY_SELF_MINT_CHAINS (Sei, Ethereum Sepolia): Circle's
-          // forwarder mint keeps failing on-chain there, so the mint is
-          // submitted through MeshPort's relayer instead (relayedProviderFor).
-          // Recipient is unchanged.
-          to: (GATEWAY_SELF_MINT_CHAINS.has(chain.sdk)
+          // gatewaySelfMintsTo (Sei, Ethereum Sepolia, or any chain whose
+          // forwarder mint failed recently): the mint is submitted through
+          // MeshPort's relayer instead (relayedProviderFor). Recipient is
+          // unchanged.
+          to: (gatewaySelfMintsTo(chain.sdk)
             ? { chain: chain.sdk as any, recipientAddress: address, adapter, useForwarder: false }
             : { chain: chain.sdk as any, recipientAddress: address, useForwarder: true }) as any,
           token: 'USDC',
@@ -1802,6 +1802,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // bundle) as long as Circle attached the attestation + signature —
           // the strict check alone skipped real "ON_CHAIN_FAILURE" cases.
           const seed = forwarderMintRetry(err)
+          // The forwarder failed this mint: later transfers here skip it for a while.
+          if (seed) noteForwarderMintFailed(chain.sdk)
           const trace = seed ?? err?.cause?.trace
           if (!seed) {
             // UB FIX: this used to return null here with zero visibility —

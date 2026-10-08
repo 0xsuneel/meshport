@@ -30,4 +30,6 @@ export {
   chainSupportsForwarder,
   FORWARDER_MINT_FAILING_SDK_CHAINS,
   circleForwarderMintsTo,
+  forwarderMintFailing,
+  noteForwarderMintFailed,
 } from '@/blockchain/chains'
