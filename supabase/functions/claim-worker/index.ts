@@ -728,14 +728,19 @@ async function notifyClaimComplete(supabase: SupabaseClient, claim: Claim, amoun
       .eq('wallet_address', claim.wallet_address.toLowerCase())
       .maybeSingle()
     if (error || !user?.id) return
+    // A merchant's claim moves Ledger money to Arc — same wording as the Hub.
+    const { data: m } = await supabase.from('merchant_applications').select('status')
+      .eq('wallet_address', claim.wallet_address.toLowerCase()).eq('status', 'approved').limit(1)
+    const merchant = (m?.length ?? 0) > 0
     const chainLabel = (claim.source_chain || '').replace(/_Sepolia|_Testnet|_Fuji/g, '').replace(/_/g, ' ')
     await fetch(`${APP_BASE_URL}/api/push?action=send-internal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${PUSH_INTERNAL_SECRET}` },
       body: JSON.stringify({
         userId: user.id,
-        title:  'Claim Complete',
-        body:   `$${amount.toFixed(2)} USDC arrived on Arc from ${chainLabel}`,
+        ...(merchant
+          ? { title: `Moved to Arc from ${chainLabel} Ledger`, body: `$${amount.toFixed(2)} USDC from your ${chainLabel} Ledger is now in your Arc balance` }
+          : { title: 'Claim Complete', body: `$${amount.toFixed(2)} USDC arrived on Arc from ${chainLabel}` }),
         url:    '/multichain',
         tag:    `claim-complete-${claim.id}`,
       }),
