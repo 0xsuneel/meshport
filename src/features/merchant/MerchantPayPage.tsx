@@ -60,17 +60,21 @@ export function MerchantPayPage() {
   // Merchant QR: ?chain=<network> — a wallet pays there (default Arc).
   const wantChain = params.get('chain')
   const payChain = (wantChain && view?.chains?.find(c => c.id === wantChain)) || ARC_PAY_CHAIN
+  // A QR made for one network (Sepolia, Base…) is paid on that network only:
+  // no "Pay with MeshPort" (Arc) and no jump to the Arc pay screen. The plain
+  // order QR / link is the one that pays with MeshPort.
+  const chainOnly = !!wantChain && wantChain !== 'Arc_Testnet'
   const redirected = useRef(false)
   useEffect(() => {
-    if (!view || redirected.current || !isAuthenticated || isMerchantSelf || params.get('stay')) return
+    if (!view || redirected.current || !isAuthenticated || isMerchantSelf || params.get('stay') || chainOnly) return
     if (!isOrderPayable(view)) return
     redirected.current = true
     navigate(orderPaySendUrl(view), { replace: true })
-  }, [view, isAuthenticated, isMerchantSelf, params, navigate])
+  }, [view, isAuthenticated, isMerchantSelf, params, navigate, chainOnly])
 
   // About to go straight to the pay screen: keep showing the loader rather
   // than flashing this page for a moment first.
-  const willRedirect = !!view && isAuthenticated && !isMerchantSelf && !params.get('stay') && isOrderPayable(view)
+  const willRedirect = !!view && isAuthenticated && !isMerchantSelf && !params.get('stay') && !chainOnly && isOrderPayable(view)
   if (!view || willRedirect) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-3 px-6 text-center" style={{ background: 'var(--bg)' }}>
@@ -143,10 +147,10 @@ export function MerchantPayPage() {
         {/* Pay */}
         {!closed && !isMerchantSelf && (
           <>
-            {!isAuthenticated && remaining > 0 && (
+            {(!isAuthenticated || chainOnly) && remaining > 0 && (
               <WalletPayPanel to={view.merchantWallet} amount={remaining} code={view.code} orderNumber={view.orderNumber} chain={payChain} onPaid={() => setWalletPaid(true)} />
             )}
-            {!walletPaid && <button onClick={payWithMeshPort} disabled={isAuthenticated && arcBalance < remaining}
+            {!walletPaid && !chainOnly && <button onClick={payWithMeshPort} disabled={isAuthenticated && arcBalance < remaining}
               className="w-full bg-surface border border-border rounded-3xl p-4 flex items-center gap-3 text-left disabled:opacity-60">
               <img src={logo('Arc_Testnet')} alt="" className="w-10 h-10 rounded-full" />
               <div className="flex-1 min-w-0">
