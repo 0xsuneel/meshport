@@ -637,6 +637,26 @@ async function isUbClaimMint(supabase: SupabaseClient, walletAddress: string, tx
       const claimed = Number((r.metadata as any)?.claimed_amount ?? r.amount)
       if (amount >= claimed * 0.70 && amount <= claimed * 1.001) return true
     }
+    // Unified Balance money coming back to this wallet (Recover → "Send back
+    // to my wallet") mints from address(0) the same way. Its row is the
+    // stuck-transfer row (withdraw + ub_stuck_transfer), which the app only
+    // flips to ub_recovery a few seconds AFTER the mint — so match either
+    // state. Gateway's fee comes out of the amount, hence the same 70%..100%
+    // window as a pending UB claim. Without this, every refund also showed
+    // as "Received from 0x0000…" next to its "Recovered via UB" row.
+    const { data: ubRows } = await supabase
+      .from('activity')
+      .select('amount, metadata')
+      .eq('wallet_address', w)
+      .eq('activity_type', 'withdraw')
+      .gte('updated_at', since)
+    for (const r of ubRows ?? []) {
+      const m = (r.metadata ?? {}) as Record<string, unknown>
+      if (!m.ub_stuck_transfer && !m.ub_recovery) continue
+      if (m.completed_tx_hash && String(m.completed_tx_hash).toLowerCase() === h) return true
+      const expected = Number(r.amount)
+      if (amount >= expected * 0.70 && amount <= expected * 1.001) return true
+    }
   } catch { /* fall through */ }
   return false
 }
