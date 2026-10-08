@@ -417,7 +417,7 @@ function PersonRow({ person, first, busy, action, onClick }: {
         <span className="flex-shrink-0 flex items-center justify-center gap-1 h-8 min-w-[84px] px-3 rounded-full text-[12.5px] font-semibold"
           style={action === 'Add'
             ? { background: 'var(--brand)', color: '#fff' }
-            : { background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand)' }}>
+            : { background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)' }}>
           {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
             : action === 'Add' ? <><UserPlus className="w-3.5 h-3.5" /> Add</>
             : <><Send className="w-3.5 h-3.5" /> Message</>}
@@ -425,7 +425,7 @@ function PersonRow({ person, first, busy, action, onClick }: {
       ) : (
         <span className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
           style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--brand)' }} /> : <Send className="w-4 h-4" style={{ color: 'var(--brand)' }} />}
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--brand-text)' }} /> : <Send className="w-4 h-4" style={{ color: 'var(--brand-text)' }} />}
         </span>
       )}
     </button>
@@ -448,7 +448,7 @@ function PersonRowSkeleton({ first }: { first: boolean }) {
 function UsernameHint() {
   return (
     <div className="flex items-start gap-3 rounded-2xl px-4 py-3.5" style={{ background: 'color-mix(in srgb, var(--brand) 8%, var(--surface))', border: '1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
-      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-[15px] font-bold" style={{ background: 'color-mix(in srgb, var(--brand) 16%, transparent)', color: 'var(--brand)' }}>@</div>
+      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-[15px] font-bold" style={{ background: 'color-mix(in srgb, var(--brand) 16%, transparent)', color: 'var(--brand-text)' }}>@</div>
       <p className="text-[13px] leading-snug text-text-secondary">
         Enter someone's <span className="font-semibold text-text-primary">full username</span>, like <span className="font-semibold text-link">sunil.arc</span>, to find them.
       </p>
@@ -875,7 +875,7 @@ export function ChatListPage() {
                       <span className="text-[15px] font-semibold text-text-primary truncate">{name}</span>
                       {!isSelfChat && conv.other_user?.id && merchantIds.has(conv.other_user.id) && (
                         <span className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-[1px] rounded-md"
-                          style={{ color: 'var(--brand)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>
+                          style={{ color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>
                           Merchant
                         </span>
                       )}
@@ -905,7 +905,7 @@ export function ChatListPage() {
         <div className="px-5 pt-1 pb-5 space-y-4">
           <SearchField autoFocus value={newChatSearch} onChange={setNewChatSearch} placeholder="Enter username.arc"
             ariaLabel="Search by username"
-            trailing={searching ? <Loader2 className="w-4 h-4 mr-2 animate-spin flex-shrink-0" style={{ color: 'var(--brand)' }} /> : undefined} />
+            trailing={searching ? <Loader2 className="w-4 h-4 mr-2 animate-spin flex-shrink-0" style={{ color: 'var(--brand-text)' }} /> : undefined} />
           {searchResults.length > 0 ? (
             <PeopleCard title="Found">
               {searchResults.map((u: DbUser, i: number) => (
@@ -937,7 +937,7 @@ export function ChatListPage() {
           {/* One box: filters your contacts, and a full username.arc finds someone new to add */}
           <SearchField value={addContactSearch} onChange={setAddContactSearch} placeholder="Search or add username.arc"
             ariaLabel="Search contacts or add a username"
-            trailing={addContactSearching ? <Loader2 className="w-4 h-4 mr-2 animate-spin flex-shrink-0" style={{ color: 'var(--brand)' }} /> : undefined} />
+            trailing={addContactSearching ? <Loader2 className="w-4 h-4 mr-2 animate-spin flex-shrink-0" style={{ color: 'var(--brand-text)' }} /> : undefined} />
 
           {newPeople.length > 0 && (
             <PeopleCard title="Add to contacts">
@@ -968,7 +968,7 @@ export function ChatListPage() {
           ) : (
             <div className="text-center py-8">
               <div className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>
-                <Users className="w-6 h-6" style={{ color: 'var(--brand)' }} />
+                <Users className="w-6 h-6" style={{ color: 'var(--brand-text)' }} />
               </div>
               <p className="text-sm font-semibold text-text-primary">No contacts yet</p>
               <p className="text-xs text-text-secondary mt-1">Type someone's full username.arc above to add them</p>
@@ -1007,7 +1007,7 @@ export function ChatListPage() {
                     className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
                     style={{ background:'color-mix(in srgb, var(--brand) 10%, transparent)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
                     <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--brand) 20%, transparent)' }}>
-                      <Send className="w-4 h-4 text-brand" />
+                      <Send className="w-4 h-4 text-brand-text" />
                     </div>
                     <span className="text-[15px] font-semibold text-text-primary">Message</span>
                   </button>
@@ -1487,7 +1487,7 @@ const MessageBubble = memo(function MessageBubble({
                   borderLeft: `3px solid ${isMine ? 'var(--brand)' : 'var(--success)'}`,
                   background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
                 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: isMine ? 'var(--brand)' : 'var(--success)' }}>{billRef.startsWith('ORD-') ? `Order #${billRef}` : `🧾 Bill #${billRef}`}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: isMine ? 'var(--brand-text)' : 'var(--success)' }}>{billRef.startsWith('ORD-') ? `Order #${billRef}` : `🧾 Bill #${billRef}`}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{isMine ? 'Paid in full' : 'Paid by customer'}</div>
               </div>
             )}
@@ -4489,7 +4489,7 @@ export function ChatConversationPage() {
                       className="w-16 h-16 rounded-xl object-cover border border-border" />
                   ) : (
                     <div className="w-16 h-16 rounded-xl bg-surface border border-border flex flex-col items-center justify-center px-1">
-                      <File className="w-5 h-5 text-brand" />
+                      <File className="w-5 h-5 text-brand-text" />
                       <span className="text-[8px] text-text-secondary truncate max-w-full mt-0.5">{pf.file.name}</span>
                     </div>
                   )}
@@ -4513,7 +4513,7 @@ export function ChatConversationPage() {
           {/* Attach button */}
           <button onClick={() => { setAttachMode('attachments'); setShowAttach(v => !v); messageInputRef.current?.blur() }} type="button"
             aria-label="Attach" aria-expanded={showAttach && attachMode === 'attachments'}
-            className={`w-9 h-9 mb-1 rounded-full flex items-center justify-center active:bg-[rgb(var(--text-primary-rgb)/0.10)] flex-shrink-0 transition-colors ${showAttach && attachMode === 'attachments' ? 'text-brand' : 'text-text-secondary active:text-text-primary'}`}>
+            className={`w-9 h-9 mb-1 rounded-full flex items-center justify-center active:bg-[rgb(var(--text-primary-rgb)/0.10)] flex-shrink-0 transition-colors ${showAttach && attachMode === 'attachments' ? 'text-brand-text' : 'text-text-secondary active:text-text-primary'}`}>
             <Paperclip className="w-6 h-6" />
           </button>
 
@@ -4559,18 +4559,18 @@ export function ChatConversationPage() {
               style={{ overflow: 'hidden' }}>
               <div className="grid grid-cols-4 gap-x-2 gap-y-4 px-4 pt-3 pb-5">
                 {[
-                  { key: 'camera',   label: 'Camera',   color: 'var(--brand)', icon: (
+                  { key: 'camera',   label: 'Camera',   color: 'var(--brand-text)', icon: (
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/>
                     </svg>) },
-                  { key: 'gallery',  label: 'Gallery',  color: 'var(--brand)', icon: <Image className="w-6 h-6" /> },
-                  { key: 'document', label: 'Document', color: 'var(--brand)', icon: <FileText className="w-6 h-6" /> },
-                  { key: 'file',     label: 'File',     color: 'var(--brand)', icon: <File className="w-6 h-6" /> },
-                  { key: 'pay',      label: 'Pay',      color: 'var(--brand)', icon: (
+                  { key: 'gallery',  label: 'Gallery',  color: 'var(--brand-text)', icon: <Image className="w-6 h-6" /> },
+                  { key: 'document', label: 'Document', color: 'var(--brand-text)', icon: <FileText className="w-6 h-6" /> },
+                  { key: 'file',     label: 'File',     color: 'var(--brand-text)', icon: <File className="w-6 h-6" /> },
+                  { key: 'pay',      label: 'Pay',      color: 'var(--brand-text)', icon: (
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="12" cy="12" r="10"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6.5v11"/>
                     </svg>) },
-                  ...(merchant.isMerchant ? [{ key: 'bill', label: 'Bill', color: 'var(--brand)', icon: <Receipt className="w-6 h-6" /> }] : []),
+                  ...(merchant.isMerchant ? [{ key: 'bill', label: 'Bill', color: 'var(--brand-text)', icon: <Receipt className="w-6 h-6" /> }] : []),
                 ].map(item => (
                   <button key={item.key} type="button"
                     onClick={() => {
@@ -4643,7 +4643,7 @@ export function ChatConversationPage() {
               <div className="px-5 pb-4 flex gap-3">
                 <div className="flex-1 rounded-2xl p-3.5 text-center" style={{ background:'color-mix(in srgb, var(--brand) 10%, transparent)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
                   <p className="text-[11px] text-text-secondary mb-1">Total Sent</p>
-                  <p className="text-[17px] font-bold text-brand">{formatAmount(totalSent)}</p>
+                  <p className="text-[17px] font-bold text-brand-text">{formatAmount(totalSent)}</p>
                   <p className="text-[10px] text-text-secondary">USDC</p>
                 </div>
                 <div className="flex-1 rounded-2xl p-3.5 text-center" style={{ background:'color-mix(in srgb, var(--success) 8%, transparent)', border:'1px solid color-mix(in srgb, var(--success) 20%, transparent)' }}>
@@ -4661,7 +4661,7 @@ export function ChatConversationPage() {
                   className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
                   style={{ background:'color-mix(in srgb, var(--brand) 10%, transparent)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
                   <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--brand) 20%, transparent)' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <circle cx="12" cy="12" r="10"/><path d="M8 12h8M13 8l4 4-4 4"/>
                     </svg>
                   </div>
@@ -4735,7 +4735,7 @@ export function ChatConversationPage() {
               <div className="px-5 py-3 flex gap-3 border-b border-border">
                 <div className="flex-1 bg-surface rounded-2xl p-3">
                   <p className="text-xs text-text-secondary">Total Paid</p>
-                  <p className="text-lg font-bold text-brand">{formatAmount(totalSent)} USDC</p>
+                  <p className="text-lg font-bold text-brand-text">{formatAmount(totalSent)} USDC</p>
                 </div>
                 <div className="flex-1 bg-surface rounded-2xl p-3">
                   <p className="text-xs text-text-secondary">Total Received</p>
@@ -4750,16 +4750,16 @@ export function ChatConversationPage() {
                   return (
                     <div key={p.id} role="button" onClick={() => setHistoryReceipt(p)} className="flex items-center gap-3 bg-surface rounded-2xl p-3 cursor-pointer">
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${sent ? 'bg-brand/20' : 'bg-success/20'}`}>
-                        {sent ? <ArrowUpRight className="w-4 h-4 text-brand" /> : <ArrowDownLeft className="w-4 h-4 text-success" />}
+                        {sent ? <ArrowUpRight className="w-4 h-4 text-brand-text" /> : <ArrowDownLeft className="w-4 h-4 text-success" />}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-text-primary">{sent ? 'Paid' : 'Received'}</p>
                         <p className="text-xs text-text-secondary">{new Date(p.created_at).toLocaleDateString([], {month:'short',day:'numeric'}) + ' ' + new Date(p.created_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}</p>
                       </div>
                       <div className="text-right">
-                        <p className={`text-sm font-bold ${sent ? 'text-brand' : 'text-success'}`}>{sent ? '-' : '+'}{formatAmount(p.payment_amount || 0, chatPayTokenDecimals((p.token_symbol as ChatPayToken) || 'USDC'))} {p.token_symbol || 'USDC'}</p>
+                        <p className={`text-sm font-bold ${sent ? 'text-brand-text' : 'text-success'}`}>{sent ? '-' : '+'}{formatAmount(p.payment_amount || 0, chatPayTokenDecimals((p.token_symbol as ChatPayToken) || 'USDC'))} {p.token_symbol || 'USDC'}</p>
                         {p.payment_tx_hash && (
-                          <a href={arcExplorerTxUrl(p.payment_tx_hash)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[11px] text-brand">View →</a>
+                          <a href={arcExplorerTxUrl(p.payment_tx_hash)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[11px] text-brand-text">View →</a>
                         )}
                       </div>
                     </div>
@@ -4835,7 +4835,7 @@ export function ChatConversationPage() {
                       style={{
                         background: payToken === t ? 'color-mix(in srgb, var(--brand) 15%, transparent)' : 'var(--surface)',
                         border: payToken === t ? '1px solid var(--brand)' : '1px solid var(--border)',
-                        color: payToken === t ? 'var(--brand)' : 'var(--text-secondary)',
+                        color: payToken === t ? 'var(--brand-text)' : 'var(--text-secondary)',
                         fontWeight: payToken === t ? 700 : 500, fontSize: 13,
                       }}>
                       <span style={{ width: 18, height: 18, borderRadius: '50%',
@@ -4924,7 +4924,7 @@ export function ChatConversationPage() {
                             style={{
                               padding: '5px 14px', borderRadius: 100,
                               border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)',
-                              background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand)',
+                              background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)',
                               fontSize: 12, fontWeight: 700, cursor: 'pointer',
                             }}
                           >

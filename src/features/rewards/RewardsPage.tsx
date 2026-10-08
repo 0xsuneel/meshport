@@ -209,10 +209,10 @@ export function RewardsPage() {
   const pointsCardBody = (
     <>
       <div className="w-16 h-16 bg-brand/20 rounded-full flex items-center justify-center mx-auto mb-3">
-        <Star className="w-8 h-8 text-brand" />
+        <Star className="w-8 h-8 text-brand-text" />
       </div>
       {loading ? (
-        <Loader2 className="w-8 h-8 text-brand animate-spin mx-auto" />
+        <Loader2 className="w-8 h-8 text-brand-text animate-spin mx-auto" />
       ) : (
         <>
           <p className="text-4xl font-bold text-text-primary">{totalPoints.toLocaleString()}</p>
@@ -277,7 +277,7 @@ export function RewardsPage() {
               <span>{effectiveClaimPoints} pts selected</span>
               <button
                 onClick={() => setClaimPoints(maxClaimable)}
-                className="font-bold text-brand bg-brand/15 border border-brand/40 px-3 py-1.5 rounded-lg text-xs active:scale-95 transition-transform">
+                className="font-bold text-brand-text bg-brand/15 border border-brand/40 px-3 py-1.5 rounded-lg text-xs active:scale-95 transition-transform">
                 MAX — {maxClaimable} pts
               </button>
             </div>
@@ -345,7 +345,7 @@ export function RewardsPage() {
           {claimSuccess.txHash && (
             <a href={arcExplorerTxUrl(claimSuccess.txHash)}
               target="_blank" rel="noopener noreferrer"
-              className="text-xs text-brand flex items-center gap-1 ml-6">
+              className="text-xs text-brand-text flex items-center gap-1 ml-6">
               <ExternalLink className="w-3 h-3" /> View on ArcScan
             </a>
           )}
@@ -451,8 +451,8 @@ export function RewardsPage() {
                   this can never drift out of sync with the real limits. */}
               <div style={{ margin: '8px 14px 0', padding: '10px 12px', background: 'color-mix(in srgb, var(--brand) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 20%, transparent)', borderRadius: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                  <Gift className="w-3.5 h-3.5" style={{ color: 'var(--brand)', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand)' }}>Redeem</span>
+                  <Gift className="w-3.5 h-3.5" style={{ color: 'var(--brand-text)', flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand-text)' }}>Redeem</span>
                 </div>
                 <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>
                   1000 pts = ${formatAmount(pointsToUSDC(1000))} USDC · {MIN_CLAIM_POINTS}–{MAX_CLAIM_POINTS} pts per claim
@@ -490,13 +490,13 @@ export function RewardsPage() {
                       borderTop: i === 0 ? 'none' : '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)',
                     }}>
                       <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, background: 'color-mix(in srgb, var(--brand) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Star className="w-4 h-4 text-brand" />
+                        <Star className="w-4 h-4 text-brand-text" />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Points Earned</div>
                         <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{timeAgo(p.created_at)}</div>
                       </div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand)', flexShrink: 0 }}>+{p.points} pts</div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)', flexShrink: 0 }}>+{p.points} pts</div>
                     </div>
                   ))
                 )}
@@ -596,13 +596,13 @@ export function RewardsPage() {
               {earnedRows.slice(0, 5).map(p => (
                 <div key={p.id} className="flex items-center gap-3 px-4 py-3">
                   <div className="w-9 h-9 bg-brand/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <Star className="w-4 h-4 text-brand" />
+                    <Star className="w-4 h-4 text-brand-text" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-text-primary">Points Earned</p>
                     <p className="text-xs text-text-secondary">{timeAgo(p.created_at)}</p>
                   </div>
-                  <p className="text-sm font-bold text-brand">+{p.points} pts</p>
+                  <p className="text-sm font-bold text-brand-text">+{p.points} pts</p>
                 </div>
               ))}
             </div>

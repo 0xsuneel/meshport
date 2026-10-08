@@ -10,7 +10,7 @@ export function Toast() {
   const icons = {
     success: <CheckCircle className="w-5 h-5 text-success" />,
     error: <XCircle className="w-5 h-5 text-danger" />,
-    info: <Info className="w-5 h-5 text-brand" />,
+    info: <Info className="w-5 h-5 text-brand-text" />,
     warning: <Info className="w-5 h-5 text-warning" />,
   }
 

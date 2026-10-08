@@ -46,7 +46,7 @@ function NumPad({ onPress, onBiometric, showBiometric, biometricTrying, Biometri
             // kept as close to a raw native click as possible rather than
             // going through Framer Motion's gesture-recognition wrapper.
             <button key={i} onClick={onBiometric} disabled={biometricTrying}
-              className="flex items-center justify-center text-brand mp-key"
+              className="flex items-center justify-center text-brand-text mp-key"
               style={{ height: 56, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}
               aria-label="Use biometric unlock">
               <motion.div
@@ -263,7 +263,7 @@ export function PasscodeSetupPage() {
       <div className="flex-1 flex flex-col items-center">
         <div className="text-center mt-6 mb-2">
           <div className="w-16 h-16 bg-brand/15 rounded-3xl flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-brand" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-8 h-8 text-brand-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
             </svg>

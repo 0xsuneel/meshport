@@ -731,15 +731,15 @@ export function BulkPayoutPage() {
             Template link drops to its icon. */}
         <div className="flex gap-1.5 min-[360px]:gap-2 mt-3">
           <button onClick={() => setEntryMode('manual')}
-            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${entryMode === 'manual' ? 'bg-brand/15 text-brand border border-brand/30' : 'text-text-secondary border border-border'}`}>
+            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${entryMode === 'manual' ? 'bg-brand/15 text-brand-text border border-brand/30' : 'text-text-secondary border border-border'}`}>
             <Plus className="w-3.5 h-3.5" /> Manual Entry
           </button>
           <button onClick={() => setEntryMode('csv')}
-            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${entryMode === 'csv' ? 'bg-brand/15 text-brand border border-brand/30' : 'text-text-secondary border border-border'}`}>
+            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${entryMode === 'csv' ? 'bg-brand/15 text-brand-text border border-brand/30' : 'text-text-secondary border border-border'}`}>
             <Upload className="w-3.5 h-3.5" /> Upload CSV
           </button>
           <button onClick={downloadCSVTemplate} aria-label="Download CSV template" title="Download CSV template"
-            className="ml-auto flex items-center gap-1 text-xs text-brand hover:text-brand whitespace-nowrap">
+            className="ml-auto flex items-center gap-1 text-xs text-brand-text hover:text-brand-text whitespace-nowrap">
             <Download className="w-3.5 h-3.5 flex-shrink-0" /> <span className="max-[399px]:hidden">Template</span>
           </button>
         </div>
@@ -766,7 +766,7 @@ export function BulkPayoutPage() {
             ) : (
               <div className="flex items-center gap-2 bg-surface/50 border border-border rounded-xl px-4 py-3.5">
                 {rowSearching
-                  ? <Loader2 className="w-4 h-4 text-brand animate-spin flex-shrink-0" />
+                  ? <Loader2 className="w-4 h-4 text-brand-text animate-spin flex-shrink-0" />
                   : <Search className="w-4 h-4 text-text-secondary flex-shrink-0" />}
                 <input
                   type="text"
@@ -814,7 +814,7 @@ export function BulkPayoutPage() {
               <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border rounded-2xl z-20 shadow-xl">
                 {addressChecking ? (
                   <div className="flex items-center gap-3 px-4 py-3">
-                    <Loader2 className="w-4 h-4 text-brand animate-spin flex-shrink-0" />
+                    <Loader2 className="w-4 h-4 text-brand-text animate-spin flex-shrink-0" />
                     <p className="text-xs text-text-secondary">Checking if this is an MeshPort wallet...</p>
                   </div>
                 ) : addressMatch ? (
@@ -892,7 +892,7 @@ export function BulkPayoutPage() {
                   <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>USDC</span>
                   {balance > 0 && (
                     <button onClick={e => { e.stopPropagation(); setRowAmount(trimTrailingZeros((Math.floor(balance * 100) / 100).toFixed(2))) }}
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand)' }}>
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand-text)' }}>
                       Max: {formatAmount(balance)}
                     </button>
                   )}
@@ -900,7 +900,7 @@ export function BulkPayoutPage() {
               </div>
               <button onClick={() => { setShowBulkAmountPad(false); handleRowAdd() }}
                 disabled={!rowAmount || parseFloat(rowAmount) <= 0}
-                className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition-all">
+                className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand-text rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition-all">
                 <Plus className="w-4 h-4" /> Add Recipient
               </button>
             </div>
@@ -940,7 +940,7 @@ export function BulkPayoutPage() {
                   style={{
                     position: 'absolute', top: 14, right: 16, padding: '5px 14px', borderRadius: 100,
                     border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)',
-                    background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand)',
+                    background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)',
                     fontSize: 12, fontWeight: 700, cursor: 'pointer',
                   }}
                 >
@@ -952,7 +952,7 @@ export function BulkPayoutPage() {
           {isDesktop && (
             <button onClick={handleRowAdd}
               disabled={!rowAmount || parseFloat(rowAmount) <= 0}
-              className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition-all">
+              className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand-text rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition-all">
               <Plus className="w-4 h-4" /> Add Recipient
             </button>
           )}
@@ -1069,7 +1069,7 @@ export function BulkPayoutPage() {
       <p className={isDesktop ? "text-sm font-semibold text-text-primary mb-2" : "text-sm font-semibold text-text-primary mb-3"}>3. Summary</p>
       <div className={isDesktop ? "grid grid-cols-2 gap-2 mb-2" : "grid grid-cols-2 gap-3 mb-3"}>
         {[
-          { icon: <Users className="w-4 h-4 text-brand" />, label: 'Recipients', value: recipients.length.toString(), bg: 'bg-brand/10' },
+          { icon: <Users className="w-4 h-4 text-brand-text" />, label: 'Recipients', value: recipients.length.toString(), bg: 'bg-brand/10' },
           { icon: <DollarSign className="w-4 h-4 text-success" />, label: 'Total Amount', value: `${formatAmount(totalAmount)} USDC`, bg: 'bg-success/10' },
           { icon: <AlertCircle className="w-4 h-4 text-warning" />, label: 'Estimated Fee', value: `~${trimTrailingZeros(estimatedFee.toFixed(3))} USDC`, bg: 'bg-warning/10' },
           { icon: <ExternalLink className="w-4 h-4 text-accent-text" />, label: 'Network', value: 'Arc Testnet', bg: 'bg-accent/10' },
@@ -1167,7 +1167,7 @@ export function BulkPayoutPage() {
               <p className="text-xs text-text-secondary">${formatAmount(r.recipient.amount)} USDC</p>
               {r.txHash && (
                 <a href={`${ARC_EXPLORER}/tx/${r.txHash}`} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-brand flex items-center gap-1 mt-0.5">
+                  className="text-xs text-brand-text flex items-center gap-1 mt-0.5">
                   <ExternalLink className="w-3 h-3" /> View on ArcScan
                 </a>
               )}
@@ -1270,7 +1270,7 @@ export function BulkPayoutPage() {
             <h1 className="text-xl font-bold text-text-primary whitespace-nowrap">Bulk Payment</h1>
             <p className="text-xs text-text-secondary">Send USDC to multiple recipients in one transaction</p>
           </div>
-          <button onClick={() => setShowHowItWorks(true)} aria-label="How it works?" className="flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-2.5 min-[375px]:px-3 py-1.5 border border-brand/30 rounded-xl text-xs text-brand active:scale-95 transition-transform">
+          <button onClick={() => setShowHowItWorks(true)} aria-label="How it works?" className="flex-shrink-0 whitespace-nowrap flex items-center gap-1.5 px-2.5 min-[375px]:px-3 py-1.5 border border-brand/30 rounded-xl text-xs text-brand-text active:scale-95 transition-transform">
             <HelpCircle className="w-3.5 h-3.5" /> <span className="hidden min-[375px]:inline">How it works?</span>
           </button>
         </div>
@@ -1497,7 +1497,7 @@ export function BulkPayoutPage() {
                 ].map(item => (
                   <div key={item.n} className="flex gap-3">
                     <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
-                      style={{ background: 'color-mix(in srgb, var(--brand) 20%, transparent)', fontSize: '11px', fontWeight: 700, color: 'var(--brand)' }}>
+                      style={{ background: 'color-mix(in srgb, var(--brand) 20%, transparent)', fontSize: '11px', fontWeight: 700, color: 'var(--brand-text)' }}>
                       {item.n}
                     </div>
                     <div>

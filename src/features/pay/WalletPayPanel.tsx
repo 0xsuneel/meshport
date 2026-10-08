@@ -88,7 +88,7 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
         <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Payment sent</div>
         <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>${formatAmount(value)} USDC on {chain.label}{orderNumber ? ` · Order #${orderNumber}` : ''}</div>
         {hash && txExplorerUrl(chain.id, hash) && (
-          <a href={txExplorerUrl(chain.id, hash)!} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: 'var(--brand)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <a href={txExplorerUrl(chain.id, hash)!} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: 'var(--brand-text)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             View transaction <ExternalLink size={12} />
           </a>
         )}
@@ -101,7 +101,7 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
   return (
     <div style={box}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Wallet size={18} color="var(--brand)" />
+        <Wallet size={18} color="var(--brand-text)" />
         <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Pay from your wallet</span>
       </div>
 

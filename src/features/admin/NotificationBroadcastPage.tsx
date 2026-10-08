@@ -103,7 +103,7 @@ export function NotificationBroadcastPage() {
             width: 38, height: 38, borderRadius: 12, background: 'color-mix(in srgb, var(--brand) 15%, transparent)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Bell size={18} color="var(--brand)" />
+            <Bell size={18} color="var(--brand-text)" />
           </div>
           <div>
             <p style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)', fontSize: 15 }}>MeshPort Notification</p>

@@ -84,6 +84,7 @@
   --brand:          #12665F;
   --mesh-loader:    #5DE0C0;  /* moving logo: bright mint on dark so it never looks dim */
   --brand-text:     #5DCAA5;  /* brand-coloured TEXT (links, highlights): readable on this background */
+  --brand-text-rgb: 93 202 165;
   --nav-idle:       #C4C9D0;  /* inactive bottom-bar tabs */
   --header:         #12665F;
   --header-text:    #FFFFFF;
@@ -138,6 +139,7 @@
   --brand:          #12665F;
   --mesh-loader:    #5DE0C0;  /* moving logo: bright mint on dark so it never looks dim */
   --brand-text:     #5DCAA5;  /* brand-coloured TEXT (links, highlights): readable on this background */
+  --brand-text-rgb: 93 202 165;
   --nav-idle:       #C4C9D0;  /* inactive bottom-bar tabs */
   --header:         #12665F;
   --header-text:    #FFFFFF;
@@ -180,6 +182,7 @@
   --brand:          #0F5C57;
   --mesh-loader:    #0F5C57;  /* moving logo: brand teal on light */
   --brand-text:     #0F5C57;  /* brand-coloured TEXT (links, highlights): readable on this background */
+  --brand-text-rgb: 15 92 87;
   --nav-idle:       #5B6169;  /* inactive bottom-bar tabs */
   --header:         #0F5C57;
   --header-text:    #FFFFFF;

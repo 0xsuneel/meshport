@@ -44,7 +44,7 @@ import { SkeletonCards } from '@/components/ui/Skeleton'
 
 export const COLORS = {
   bg: 'var(--bg)', surface: 'var(--surface)', surfaceSecondary: 'var(--surface)',
-  primary: 'var(--brand)', success: 'var(--success)', error: 'var(--danger)', warning: 'var(--warning)',
+  primary: 'var(--brand)', primaryText: 'var(--brand-text)', success: 'var(--success)', error: 'var(--danger)', warning: 'var(--warning)',
   text: 'var(--text-primary)', muted: 'var(--text-secondary)', border: 'var(--border)',
 }
 

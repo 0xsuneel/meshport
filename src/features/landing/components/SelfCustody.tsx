@@ -27,7 +27,7 @@ export function SelfCustody() {
   return (
     <section id="self-custody" className="scroll-mt-24 mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28">
       <Reveal className="mx-auto max-w-2xl text-center">
-        <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand">Self-custody</p>
+        <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand-text">Self-custody</p>
         <h2 className="mt-3 text-[30px] font-extrabold tracking-tight text-text-primary sm:text-[38px]">
           Your keys. Your money. Your messages.
         </h2>
@@ -45,7 +45,7 @@ export function SelfCustody() {
             transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
             className="flex flex-col gap-3 rounded-[20px] border border-border bg-surface p-6 shadow-elevation-1"
           >
-            <p.icon size={22} className="text-brand" />
+            <p.icon size={22} className="text-brand-text" />
             <h3 className="text-[15.5px] font-bold text-text-primary">{p.title}</h3>
             <p className="text-[13px] leading-relaxed text-text-secondary">{p.desc}</p>
           </motion.div>
@@ -75,7 +75,7 @@ export function SelfCustody() {
             className="flex items-start gap-4 rounded-[20px] border border-border bg-surface p-6 shadow-elevation-1"
           >
             <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl bg-brand/10">
-              <p.icon size={21} className="text-brand" />
+              <p.icon size={21} className="text-brand-text" />
             </span>
             <div>
               <h3 className="text-[15.5px] font-bold text-text-primary">{p.title}</h3>

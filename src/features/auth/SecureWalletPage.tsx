@@ -97,7 +97,7 @@ export function SecureWalletPage() {
       <div className="flex-1 flex flex-col gap-6 pb-8" style={{ paddingTop: manage ? 8 : 'max(40px, 8vh)' }}>
         <div className="text-center">
           <div className="w-20 h-20 rounded-full flex items-center justify-center bg-brand/15 border border-brand/25 mx-auto mb-4">
-            <ShieldCheck className="w-10 h-10 text-brand" />
+            <ShieldCheck className="w-10 h-10 text-brand-text" />
           </div>
           <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary mb-2">Secure Your Wallet</h2>
           <p className="text-text-secondary text-[14px] leading-[1.5] max-w-xs mx-auto">
@@ -107,7 +107,7 @@ export function SecureWalletPage() {
 
         <div className="rounded-2xl border border-border bg-surface p-4 space-y-3">
           <div className="flex items-start gap-3">
-            <KeyRound className="w-6 h-6 text-brand flex-shrink-0 mt-0.5" />
+            <KeyRound className="w-6 h-6 text-brand-text flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-semibold text-text-primary">Passkey</p>
@@ -124,7 +124,7 @@ export function SecureWalletPage() {
 
         <div className="rounded-2xl border border-border bg-surface p-4 space-y-3">
           <div className="flex items-start gap-3">
-            <QrCode className="w-6 h-6 text-brand flex-shrink-0 mt-0.5" />
+            <QrCode className="w-6 h-6 text-brand-text flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-semibold text-text-primary">Recovery QR</p>
@@ -356,7 +356,7 @@ export function RecoverWalletPage() {
       <div className="flex-1 flex flex-col gap-5 pb-8" style={{ paddingTop: 'max(56px, 12vh)' }}>
         <div className="text-center">
           <div className="w-20 h-20 rounded-full flex items-center justify-center bg-brand/15 border border-brand/25 mx-auto mb-4">
-            <KeyRound className="w-10 h-10 text-brand" />
+            <KeyRound className="w-10 h-10 text-brand-text" />
           </div>
           <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary mb-2">Unlock your wallet</h2>
           <p className="text-text-secondary text-[14px] leading-[1.5] max-w-xs mx-auto">

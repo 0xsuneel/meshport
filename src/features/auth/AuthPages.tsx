@@ -311,7 +311,7 @@ export function GoogleAuthPage() {
         <p role="alert" className="text-danger">{error}</p>
       ) : (
         <>
-          <Loader2 className="w-8 h-8 text-brand animate-spin mb-4" />
+          <Loader2 className="w-8 h-8 text-brand-text animate-spin mb-4" />
           <p className="text-text-secondary">Signing you in…</p>
         </>
       )}
@@ -493,7 +493,7 @@ export function EmailOTPPage() {
               {resendTimer > 0
                 ? <p className="text-sm text-text-secondary">Resend in {resendTimer}s</p>
                 : <button onClick={() => { sendOTP(); setOtp(['','','','','','']); setError('') }}
-                    className="text-sm text-brand flex items-center gap-1 mx-auto">
+                    className="text-sm text-brand-text flex items-center gap-1 mx-auto">
                     <RefreshCw className="w-3.5 h-3.5" /> Resend OTP
                   </button>
               }
@@ -679,7 +679,7 @@ export function CreateWalletPage() {
               {[{Icon:Lock,t:'BIP39 Standard',s:'Industry standard 12-word phrase'},{Icon:Link2,t:'Compatible',s:'MetaMask, Trust, OKX, Coinbase'},{Icon:Zap,t:'Arc Testnet Ready',s:'Chain ID 5042002'}].map(i => (
                 <Card key={i.t} className="p-4 flex items-center gap-3">
                   <div className="w-10 h-10 bg-brand/15 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <i.Icon className="w-5 h-5 text-brand" strokeWidth={1.8} />
+                    <i.Icon className="w-5 h-5 text-brand-text" strokeWidth={1.8} />
                   </div>
                   <div><p className="text-sm font-bold text-text-primary">{i.t}</p><p className="text-xs text-text-secondary">{i.s}</p></div>
                 </Card>
@@ -1088,7 +1088,7 @@ export function ClaimUsernamePage() {
       <div className="flex-1 flex flex-col justify-center space-y-8 max-w-sm mx-auto w-full">
         <div className="text-center">
           <div className="w-16 h-16 bg-brand/20 rounded-3xl flex items-center justify-center mx-auto mb-4">
-            <AtSign className="w-8 h-8 text-brand" />
+            <AtSign className="w-8 h-8 text-brand-text" />
           </div>
           <h2 className="text-2xl font-bold text-text-primary">Claim Your Username</h2>
           <p className="text-text-secondary mt-2">Your permanent MeshPort identity</p>
@@ -1097,7 +1097,7 @@ export function ClaimUsernamePage() {
               <AlertTriangle className="w-4 h-4 text-danger flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm text-danger">No wallet found. Please set up a wallet first.</p>
-                <button onClick={() => navigate('/auth/wallet-setup', { replace: true })} className="text-xs text-brand mt-1 underline">Set up wallet →</button>
+                <button onClick={() => navigate('/auth/wallet-setup', { replace: true })} className="text-xs text-brand-text mt-1 underline">Set up wallet →</button>
               </div>
             </div>
           )}

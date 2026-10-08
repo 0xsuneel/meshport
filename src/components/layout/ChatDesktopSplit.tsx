@@ -39,7 +39,7 @@ export function ChatDesktopSplit({ list }: { list: ReactNode }) {
               border: '1px solid var(--border)', boxShadow: 'var(--shadow-1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <MessageCircle size={30} color="var(--brand)" />
+              <MessageCircle size={30} color="var(--brand-text)" />
             </div>
             <div style={{ textAlign: 'center' }}>
               <p style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>Select a conversation</p>

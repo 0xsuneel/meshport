@@ -46,6 +46,9 @@ export default {
         card:           withOpacity('--card-rgb'),
         border:         withOpacity('--border-rgb'),
         brand:          withOpacity('--brand-rgb'),
+        // Brand colour for TEXT and small icons: readable on the background
+        // (mint on dark, teal on light). Use for links/highlights, not fills.
+        'brand-text':   withOpacity('--brand-text-rgb'),
         header:         withOpacity('--header-rgb'),
         'header-text':    withOpacity('--header-text-rgb'),
         'header-subtext': withOpacity('--header-subtext-rgb'),

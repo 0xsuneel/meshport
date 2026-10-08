@@ -205,7 +205,7 @@ export function AmountKeypad({
           }}
           style={{
             padding: '5px 14px', borderRadius: 100, border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)',
-            background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand)', fontSize: 12, fontWeight: 700,
+            background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)', fontSize: 12, fontWeight: 700,
             cursor: 'pointer',
           }}
         >

@@ -272,7 +272,7 @@ export function AppearancePage() {
         return (
           <button key={opt.mode} onClick={() => setMode(opt.mode)}
             className="flex items-center gap-3 px-4 py-4 w-full text-left first:rounded-t-3xl last:rounded-b-3xl">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${selected ? 'bg-brand/15 text-brand' : 'bg-surface text-text-secondary'}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${selected ? 'bg-brand/15 text-brand-text' : 'bg-surface text-text-secondary'}`}>
               {opt.icon}
             </div>
             <div className="flex-1 min-w-0">
@@ -437,7 +437,7 @@ export function ChangePasscodePage() {
               <div className="flex gap-2 justify-center mb-1">
                 {steps.map(s => (
                   <div key={s.key} className="flex flex-col items-center gap-1">
-                    <div className="text-[10px] font-semibold" style={{ color: activeField === s.key ? 'var(--brand)' : s.done ? 'var(--success)' : 'var(--text-muted)' }}>{s.label}</div>
+                    <div className="text-[10px] font-semibold" style={{ color: activeField === s.key ? 'var(--brand-text)' : s.done ? 'var(--success)' : 'var(--text-muted)' }}>{s.label}</div>
                     <div className="h-0.5 w-16 rounded-full" style={{ background: activeField === s.key ? 'var(--brand)' : s.done ? 'var(--success)' : 'var(--border)' }} />
                   </div>
                 ))}
@@ -1002,7 +1002,7 @@ export function EditProfilePage() {
         </div>
         <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
         <button onClick={() => fileRef.current?.click()} disabled={uploading}
-          className="mt-3 text-sm text-brand font-medium disabled:opacity-50">
+          className="mt-3 text-sm text-brand-text font-medium disabled:opacity-50">
           {uploading ? 'Uploading...' : 'Change Photo'}
         </button>
       </div>
@@ -1092,7 +1092,7 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
     },
     admin_broadcast: {
       icon: <Bell className="w-4 h-4" />,
-      bg: 'bg-brand/20 text-brand',
+      bg: 'bg-brand/20 text-brand-text',
       dot: 'bg-brand',
     },
     swap_complete: {
@@ -1102,13 +1102,13 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
     },
     // ── P2P marketplace — server-driven, see lib/p2pNotifications.ts ────────
     buy_order_placed: { icon: <ShoppingCart className="w-4 h-4" />, bg: 'bg-success/20 text-success', dot: 'bg-success' },
-    sell_order_placed: { icon: <Tag className="w-4 h-4" />, bg: 'bg-brand/20 text-brand', dot: 'bg-brand' },
+    sell_order_placed: { icon: <Tag className="w-4 h-4" />, bg: 'bg-brand/20 text-brand-text', dot: 'bg-brand' },
     payment_marked_completed: { icon: <CheckCircle className="w-4 h-4" />, bg: 'bg-warning/20 text-warning', dot: 'bg-warning' },
     funds_released: { icon: <Wallet className="w-4 h-4" />, bg: 'bg-success/20 text-success', dot: 'bg-success' },
     trade_cancelled: { icon: <Ban className="w-4 h-4" />, bg: 'bg-danger/20 text-danger', dot: 'bg-danger' },
     trade_expired: { icon: <ClockIcon className="w-4 h-4" />, bg: 'bg-text-secondary/20 text-text-secondary', dot: 'bg-text-secondary' },
     dispute_opened: { icon: <Scale className="w-4 h-4" />, bg: 'bg-danger/20 text-danger', dot: 'bg-danger' },
-    dispute_resolved: { icon: <Scale className="w-4 h-4" />, bg: 'bg-brand/20 text-brand', dot: 'bg-brand' },
+    dispute_resolved: { icon: <Scale className="w-4 h-4" />, bg: 'bg-brand/20 text-brand-text', dot: 'bg-brand' },
     refund_completed: { icon: <RefreshCw className="w-4 h-4" />, bg: 'bg-accent/20 text-accent-text', dot: 'bg-accent' },
     // ── Merchant account decisions ──────────────────────────────────────
     merchant_approved: { icon: <Store className="w-4 h-4" />, bg: 'bg-success/20 text-success', dot: 'bg-success' },
@@ -1120,15 +1120,15 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
     merchant_payment_partial:  { icon: <ClockIcon className="w-4 h-4" />, bg: 'bg-warning/20 text-warning', dot: 'bg-warning' },
     merchant_order_paid:       { icon: <Wallet className="w-4 h-4" />, bg: 'bg-success/20 text-success', dot: 'bg-success' },
     merchant_order_completed:  { icon: <Store className="w-4 h-4" />, bg: 'bg-success/20 text-success', dot: 'bg-success' },
-    merchant_ledger_credited:  { icon: <Wallet className="w-4 h-4" />, bg: 'bg-brand/20 text-brand', dot: 'bg-brand' },
+    merchant_ledger_credited:  { icon: <Wallet className="w-4 h-4" />, bg: 'bg-brand/20 text-brand-text', dot: 'bg-brand' },
     merchant_chain_payment:    { icon: <Wallet className="w-4 h-4" />, bg: 'bg-success/20 text-success', dot: 'bg-success' },
-    merchant_funds_moved:      { icon: <Wallet className="w-4 h-4" />, bg: 'bg-brand/20 text-brand', dot: 'bg-brand' },
-    merchant_ledger_moving:    { icon: <ClockIcon className="w-4 h-4" />, bg: 'bg-brand/20 text-brand', dot: 'bg-brand' },
+    merchant_funds_moved:      { icon: <Wallet className="w-4 h-4" />, bg: 'bg-brand/20 text-brand-text', dot: 'bg-brand' },
+    merchant_ledger_moving:    { icon: <ClockIcon className="w-4 h-4" />, bg: 'bg-brand/20 text-brand-text', dot: 'bg-brand' },
   }
 
   const defaultConfig = {
     icon: <Bell className="w-4 h-4" />,
-    bg: 'bg-brand/20 text-brand',
+    bg: 'bg-brand/20 text-brand-text',
     dot: 'bg-accent',
   }
 
@@ -1152,14 +1152,14 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
           <div>
             <h1 className="text-xl font-bold text-text-primary">Notifications</h1>
             {unreadCount > 0 && (
-              <p className="text-xs text-brand">{unreadCount} unread</p>
+              <p className="text-xs text-brand-text">{unreadCount} unread</p>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2">
           {unreadCount > 0 && (
             <button onClick={handleMarkAllRead}
-              className="text-xs font-medium text-brand bg-brand/10 border border-brand/20 rounded-lg px-3 py-1.5 hover:bg-brand/15 transition-colors">
+              className="text-xs font-medium text-brand-text bg-brand/10 border border-brand/20 rounded-lg px-3 py-1.5 hover:bg-brand/15 transition-colors">
               Mark all read
             </button>
           )}

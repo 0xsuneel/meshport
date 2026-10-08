@@ -26,7 +26,7 @@ export function ProcessingRing({ size = 80 }: { size?: number }) {
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke}
           stroke="color-mix(in srgb, var(--brand) 16%, transparent)" />
         <circle className="mp-proc-arc" cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke}
-          stroke="var(--brand)" strokeLinecap="round" strokeDasharray={`${c * 0.28} ${c}`}
+          stroke="var(--brand-text)" strokeLinecap="round" strokeDasharray={`${c * 0.28} ${c}`}
           style={{ transformOrigin: '50% 50%' }} />
       </svg>
       <span className="mp-proc-dot" style={{

@@ -13,7 +13,7 @@ export function PaymentStory() {
     <section className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28">
       <div className="grid gap-14 lg:grid-cols-2 lg:items-center lg:gap-10">
         <Reveal>
-          <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand">Pay by username</p>
+          <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand-text">Pay by username</p>
           <h2 className="mt-3 text-[28px] font-extrabold leading-tight tracking-tight text-text-primary sm:text-[36px]">
             Payments without the wallet gymnastics.
           </h2>
@@ -24,7 +24,7 @@ export function PaymentStory() {
           <div className="mt-10 flex flex-col gap-5">
             {POINTS.map(p => (
               <div key={p.label} className="flex items-start gap-4">
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand/12 text-brand">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-brand/12 text-brand-text">
                   <p.icon size={18} />
                 </div>
                 <div>
@@ -43,7 +43,7 @@ export function PaymentStory() {
           >
             <div className="flex w-full items-center justify-between rounded-2xl border border-border bg-bg px-5 py-4">
               <span className="text-[13px] font-medium text-text-secondary">From</span>
-              <span className="text-[15px] font-bold text-brand">sunil.arc</span>
+              <span className="text-[15px] font-bold text-brand-text">sunil.arc</span>
             </div>
 
             <motion.div
@@ -57,7 +57,7 @@ export function PaymentStory() {
 
             <div className="flex w-full items-center justify-between rounded-2xl border border-border bg-bg px-5 py-4">
               <span className="text-[13px] font-medium text-text-secondary">To</span>
-              <span className="text-[15px] font-bold text-brand">john.arc</span>
+              <span className="text-[15px] font-bold text-brand-text">john.arc</span>
             </div>
           </div>
         </Reveal>

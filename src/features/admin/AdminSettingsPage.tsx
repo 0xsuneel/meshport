@@ -76,7 +76,7 @@ export function AdminSettingsPage() {
             width: 44, height: 44, borderRadius: 14, background: 'color-mix(in srgb, var(--brand) 15%, transparent)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <ShieldCheck size={20} color="var(--brand)" />
+            <ShieldCheck size={20} color="var(--brand-text)" />
           </div>
           <div>
             <p style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)', fontSize: 15 }}>Admin</p>
@@ -101,7 +101,7 @@ export function AdminSettingsPage() {
             width: 36, height: 36, borderRadius: 10, background: 'color-mix(in srgb, var(--brand) 15%, transparent)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}>
-            <KeyRound size={16} color="var(--brand)" />
+            <KeyRound size={16} color="var(--brand-text)" />
           </div>
           <p style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)', fontSize: 14.5 }}>Change Password</p>
         </div>

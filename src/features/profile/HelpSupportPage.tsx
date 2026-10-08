@@ -8,7 +8,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 const SUBJECTS = ['General', 'Payment issue', 'Wallet & security', 'Bug report', 'Other']
 
 const STATUS_STYLE: Record<SupportTicket['status'], { label: string; bg: string; text: string }> = {
-  open:        { label: 'Open',        bg: 'bg-brand/15',   text: 'text-brand' },
+  open:        { label: 'Open',        bg: 'bg-brand/15',   text: 'text-brand-text' },
   in_progress: { label: 'In progress', bg: 'bg-warning/15', text: 'text-warning' },
   resolved:    { label: 'Resolved',    bg: 'bg-success/15', text: 'text-success' },
   closed:      { label: 'Closed',      bg: 'bg-text-secondary/15', text: 'text-text-secondary' },
@@ -155,7 +155,7 @@ export function HelpSupportPage({ embedded, onClose }: { embedded?: boolean; onC
                     <p className="text-sm text-text-secondary leading-relaxed">{t.message}</p>
                     {t.adminReply && (
                       <div className="bg-[rgb(var(--text-primary-rgb)/0.04)] border border-brand/20 rounded-2xl p-3">
-                        <p className="text-xs font-semibold text-brand mb-1">MeshPort Support</p>
+                        <p className="text-xs font-semibold text-brand-text mb-1">MeshPort Support</p>
                         <p className="text-sm text-text-secondary leading-relaxed">{t.adminReply}</p>
                       </div>
                     )}

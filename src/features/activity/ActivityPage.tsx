@@ -325,10 +325,10 @@ function ActivityRow({ record, isFirst, isLast, onSelect }: {
           {(isClaim || isReceive || isBulkReceived || isP2PCredit)
             ? <><path d="M8 2v9M5 8l3 3 3-3M2 13h12" stroke="var(--success)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></>
             : isSwap
-            ? <><path d="M3 5h10M10 2l3 3-3 3M13 11H3M6 8l-3 3 3 3" stroke="var(--brand)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></>
+            ? <><path d="M3 5h10M10 2l3 3-3 3M13 11H3M6 8l-3 3 3 3" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></>
             : isBulk
-            ? <><circle cx="6" cy="5" r="2" stroke="var(--brand)" strokeWidth="1.4"/><path d="M2 13c0-2.2 1.8-4 4-4M9 7h5M9 10h5" stroke="var(--brand)" strokeWidth="1.4" strokeLinecap="round"/></>
-            : <><path d="M2 8h12M10 5l3 3-3 3" stroke="var(--brand)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></>
+            ? <><circle cx="6" cy="5" r="2" stroke="var(--brand-text)" strokeWidth="1.4"/><path d="M2 13c0-2.2 1.8-4 4-4M9 7h5M9 10h5" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round"/></>
+            : <><path d="M2 8h12M10 5l3 3-3 3" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></>
           }
         </svg>
         {isPending && (
@@ -674,10 +674,10 @@ function FilterSheet({ active, onSelect, onClose }: {
             <button key={f.id} onClick={() => { onSelect(f.id); onClose() }}
               className="w-full flex items-center justify-between px-3 py-3 rounded-2xl text-left"
               style={{ background: isActive ? 'color-mix(in srgb, var(--brand) 12%, transparent)' : 'transparent' }}>
-              <span className="text-sm font-semibold" style={{ color: isActive ? 'var(--brand)' : 'var(--text-primary)' }}>
+              <span className="text-sm font-semibold" style={{ color: isActive ? 'var(--brand-text)' : 'var(--text-primary)' }}>
                 {f.label}
               </span>
-              {isActive && <Check className="w-4 h-4" style={{ color: 'var(--brand)' }} />}
+              {isActive && <Check className="w-4 h-4" style={{ color: 'var(--brand-text)' }} />}
             </button>
           )
         })}

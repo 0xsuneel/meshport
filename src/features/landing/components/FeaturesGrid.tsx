@@ -35,7 +35,7 @@ export function FeaturesGrid() {
   return (
     <section id="features" className="scroll-mt-24 mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28">
       <Reveal className="mx-auto max-w-2xl text-center">
-        <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand">Everything in one app</p>
+        <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand-text">Everything in one app</p>
         <h2 className="mt-3 text-[30px] font-extrabold tracking-tight text-text-primary sm:text-[38px]">
           Built for how people actually pay
         </h2>
@@ -59,7 +59,7 @@ export function FeaturesGrid() {
                   transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
                   className="group flex flex-col gap-4 rounded-[20px] border border-border bg-surface p-6 shadow-elevation-1"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/12 text-brand transition-colors group-hover:bg-brand group-hover:text-white">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/12 text-brand-text transition-colors group-hover:bg-brand group-hover:text-white">
                     <f.icon size={21} />
                   </div>
                   <div>

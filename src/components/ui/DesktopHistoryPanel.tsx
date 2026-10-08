@@ -30,7 +30,7 @@ export function DesktopHistoryPanel({ title, onViewAll, viewAllLabel = 'View all
       }}>
         <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</span>
         {onViewAll && (
-          <span onClick={onViewAll} style={{ fontSize: 12.5, color: 'var(--brand)', fontWeight: 600, cursor: 'pointer' }}>
+          <span onClick={onViewAll} style={{ fontSize: 12.5, color: 'var(--brand-text)', fontWeight: 600, cursor: 'pointer' }}>
             {viewAllLabel}
           </span>
         )}
