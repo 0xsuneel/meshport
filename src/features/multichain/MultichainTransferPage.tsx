@@ -824,6 +824,15 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const selectedSpeed: SpeedId = 'fast'
   const [showAllChains,    setShowAllChains]    = useState(false)
   const [showChainPicker,  setShowChainPicker]  = useState(false)
+  // The chain picker lists every chain's logo; fetch and decode them while
+  // the form is open so the sheet opens complete instead of logos popping in.
+  useEffect(() => {
+    for (const url of new Set(Object.values(CHAIN_LOGOS))) {
+      const img = new Image()
+      img.src = url
+      img.decode?.().catch(() => { /* a missing logo falls back to its label */ })
+    }
+  }, [])
   const [passEntry, setPassEntry] = useState('')
   const [passError, setPassError] = useState('')
   const [loading, setLoading] = useState(false)

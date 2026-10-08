@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback, useRef, type ReactNode, type CSSPrope
 import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { PopupDim } from '@/components/ui/PopupDim'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import {
   ArrowLeft, ShieldAlert, ShieldCheck, TrendingUp, TrendingDown, Search, Filter, Plus,
@@ -1929,9 +1930,11 @@ export function P2PMyOffersPage() {
       {/* Stepped aside while its passcode sheet is up, so confirming doesn't
           uncover it undimmed for a moment before it fades out. */}
       {editingOffer && !showEditPasscode && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SHEET_BACKDROP.transition}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div className="mp-popup" style={{ width: '100%', maxWidth: 480, padding: 20, maxHeight: '100%', overflowY: 'auto', animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}>
+        <motion.div
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          {/* Only the dim fades; the card stays solid (PopupDim). */}
+          <PopupDim background="rgba(0,0,0,0.6)" />
+          <div className="mp-popup" style={{ position: 'relative', width: '100%', maxWidth: 480, padding: 20, maxHeight: '100%', overflowY: 'auto', animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <p style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, margin: 0 }}>Edit Offer</p>
               <button onClick={() => setEditingOffer(null)} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer' }}>
@@ -2015,9 +2018,11 @@ export function P2PMyOffersPage() {
 
       <AnimatePresence>
       {toppingUpOffer && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SHEET_BACKDROP.transition}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ width: '100%', maxWidth: 380, background: COLORS.surface, borderRadius: 18, padding: 20, animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}>
+        <motion.div
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          {/* Only the dim fades; the card stays solid (PopupDim). */}
+          <PopupDim background="rgba(0,0,0,0.5)" />
+          <div style={{ position: 'relative', width: '100%', maxWidth: 380, background: COLORS.surface, borderRadius: 18, padding: 20, animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <PlusCircle size={18} color={COLORS.success} />
               <p style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, margin: 0 }}>Top Up Escrow</p>
@@ -2073,9 +2078,11 @@ export function P2PMyOffersPage() {
           enough, no passcode/wallet unlock needed like Cancel/Top Up. */}
       <AnimatePresence>
       {offerToDelete && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SHEET_BACKDROP.transition}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ width: '100%', maxWidth: 380, background: COLORS.surface, borderRadius: 18, padding: 20, animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}>
+        <motion.div
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          {/* Only the dim fades; the card stays solid (PopupDim). */}
+          <PopupDim background="rgba(0,0,0,0.5)" />
+          <div style={{ position: 'relative', width: '100%', maxWidth: 380, background: COLORS.surface, borderRadius: 18, padding: 20, animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Trash2 size={18} color={COLORS.error} />
               <p style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, margin: 0 }}>Delete Offer</p>

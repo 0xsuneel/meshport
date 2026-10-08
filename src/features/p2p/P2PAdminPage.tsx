@@ -10,6 +10,7 @@ import { useState, useEffect, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ADMIN_PATH } from '@/lib/adminPath'
 import { motion, AnimatePresence } from 'framer-motion'
+import { PopupDim } from '@/components/ui/PopupDim'
 import { ArrowLeft, Snowflake, XCircle, Scale, Ban, ShieldAlert, PauseCircle, PlayCircle, Power, Tag, Lock, Unlock, Sliders, ListChecks } from 'lucide-react'
 import { useUIStore } from '@/store'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -623,9 +624,11 @@ export function P2PAdminPage() {
       {/* Ban modal */}
       <AnimatePresence>
       {banTarget && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ width: '100%', maxWidth: 380, background: COLORS.surface, borderRadius: 18, padding: 20 }}>
+        <motion.div
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          {/* Only the dim fades; the card stays solid (PopupDim). */}
+          <PopupDim background="rgba(0,0,0,0.5)" />
+          <div style={{ position: 'relative', width: '100%', maxWidth: 380, background: COLORS.surface, borderRadius: 18, padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <ShieldAlert size={18} color={COLORS.error} />
               <p style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, margin: 0 }}>Ban User</p>
@@ -645,9 +648,11 @@ export function P2PAdminPage() {
       {/* Dispute modal */}
       <AnimatePresence>
       {disputeTarget && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ width: '100%', maxWidth: 380, background: COLORS.surface, borderRadius: 18, padding: 20 }}>
+        <motion.div
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          {/* Only the dim fades; the card stays solid (PopupDim). */}
+          <PopupDim background="rgba(0,0,0,0.5)" />
+          <div style={{ position: 'relative', width: '100%', maxWidth: 380, background: COLORS.surface, borderRadius: 18, padding: 20 }}>
             <p style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, marginBottom: 12 }}>Resolve Dispute</p>
 
             <p style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Trade chat</p>

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { SHEET_BACKDROP } from '@/lib/motion'
+import { SHEET_BACKDROP, DIALOG_CARD } from '@/lib/motion'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {Zap, Camera, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, Flashlight} from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { PopupDim } from '@/components/ui/PopupDim'
 import { Button } from '@/components/ui/Button'
 import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
@@ -602,15 +603,15 @@ export function ScannerPage() {
       <AnimatePresence>
         {resolvedUser && (
           <motion.div key="resolved"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SHEET_BACKDROP.transition}
             className="absolute inset-0 z-30 flex items-center justify-center px-5"
-            style={{ background: 'rgba(0,0,0,0.6)' }}
           >
+          {/* Only the dim fades; the card stays solid (PopupDim). */}
+          <PopupDim background="rgba(0,0,0,0.6)" />
           <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 4 }}
+            initial={DIALOG_CARD.initial} animate={DIALOG_CARD.animate} exit={DIALOG_CARD.exit}
             transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
             className="mp-popup w-full p-6 space-y-5"
-            style={{ maxWidth: 420 }}
+            style={{ position: 'relative', maxWidth: 420 }}
           >
             <div className="flex items-center gap-4">
               <Avatar name={resolvedUser.display_name} src={resolvedUser.avatar_url} size="xl" />

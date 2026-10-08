@@ -1,7 +1,8 @@
 import { useEffect, type ComponentProps } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
-import { DIALOG_BACKDROP, DIALOG_CARD } from '@/lib/motion'
+import { PopupDim } from './PopupDim'
+import { DIALOG_CARD } from '@/lib/motion'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { SuccessReceipt } from './SuccessReceipt'
 
@@ -35,22 +36,22 @@ export function ReceiptPopup({ onClose, onPrimary, ...receipt }: Omit<ReceiptPro
   }, [onClose])
 
   return createPortal(
-    <motion.div
-      initial={DIALOG_BACKDROP.initial} animate={DIALOG_BACKDROP.animate} exit={DIALOG_BACKDROP.exit} transition={DIALOG_BACKDROP.transition}
+    <div
       onClick={e => { e.stopPropagation(); onClose() }}
       onMouseDown={stop} onMouseUp={stop} onTouchStart={stop} onTouchMove={stop} onTouchEnd={stop} onTouchCancel={stop}
       style={{
-        position: 'fixed', inset: 0, zIndex: 1000, // A plain dim, no backdrop blur: Android Chrome re-blurs every frame
-        // anything underneath animates (spinners, the chain scanner, live
-        // lists), which made the popup flicker.
-        background: 'rgba(0,0,0,0.68)',
+        position: 'fixed', inset: 0, zIndex: 1000,
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px',
       }}>
+      {/* A plain dim, no backdrop blur: Android Chrome re-blurs every frame
+          anything underneath animates (spinners, the chain scanner, live
+          lists), which made the popup flicker. Only the dim fades (PopupDim). */}
+      <PopupDim background="rgba(0,0,0,0.68)" />
       <motion.div
         initial={DIALOG_CARD.initial} animate={DIALOG_CARD.animate} exit={DIALOG_CARD.exit} transition={DIALOG_CARD.transition}
         onClick={e => e.stopPropagation()}
         role="dialog" aria-modal="true" aria-label={receipt.title}
-        style={{ width: '100%', maxWidth: 420, maxHeight: '100%', display: 'flex', flexDirection: 'column', borderRadius: 30, overflow: 'hidden', willChange: 'transform, opacity', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
+        style={{ position: 'relative', width: '100%', maxWidth: 420, maxHeight: '100%', display: 'flex', flexDirection: 'column', borderRadius: 30, overflow: 'hidden', willChange: 'transform, opacity', backfaceVisibility: 'hidden', WebkitBackfaceVisibility: 'hidden' }}>
         <SuccessReceipt
           celebrate={false}
           stamp="History"
@@ -60,7 +61,7 @@ export function ReceiptPopup({ onClose, onPrimary, ...receipt }: Omit<ReceiptPro
           style={{ flex: 1, minHeight: 0, height: 'auto', padding: 0, background: 'transparent', ...receipt.style }}
         />
       </motion.div>
-    </motion.div>,
+    </div>,
     document.body,
   )
 }
