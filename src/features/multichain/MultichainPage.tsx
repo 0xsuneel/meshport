@@ -31,11 +31,11 @@ import { DesktopHistoryPanel } from '@/components/ui/DesktopHistoryPanel'
 import { HubPage, HubPageBack } from '@/components/multichain/HubPage'
 import { UbProgressTracker, type UbTrackerProgress } from '@/components/multichain/UbProgressTracker'
 import { TrackDetails, type TrackDetailRow } from '@/components/multichain/TrackDetails'
+import { useCctpProgress, fetchCctpProgress } from '@/lib/cctpTracker'
 
 // Below half a cent a balance shows as "0" — treat it as empty (no "$0 on
 // 1 chain", no highlighted "0 USDC" row).
 const DUST_USDC = 0.005
-import { useCctpProgress, fetchCctpProgress } from '@/lib/cctpTracker'
 const CHAIN_LABELS: Record<string, string> = {
   Ethereum_Sepolia: 'Ethereum', Base_Sepolia: 'Base', Arbitrum_Sepolia: 'Arbitrum',
   Optimism_Sepolia: 'Optimism', Polygon_Sepolia: 'Polygon', Avalanche_Fuji: 'Avalanche',
