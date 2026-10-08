@@ -421,7 +421,7 @@ export function ContactsPage() {
       {/* List */}
       <div className="px-4 pb-6 relative">
         {loading && contacts.length === 0 ? (
-          <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 text-brand animate-spin" /></div>
+          <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 text-brand-text animate-spin" /></div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-16 h-16 bg-surface rounded-full flex items-center justify-center mx-auto mb-4">
@@ -444,7 +444,7 @@ export function ContactsPage() {
           <div className="space-y-4 pr-1">
             {letters.map(letter => (
               <div key={letter} id={`section-${letter}`}>
-                <p className="px-2 pb-1.5 text-sm font-bold text-brand">{letter}</p>
+                <p className="px-2 pb-1.5 text-sm font-bold text-brand-text">{letter}</p>
                 <div className="bg-surface rounded-3xl overflow-hidden divide-y divide-border border border-border" style={{boxShadow:"var(--shadow-1)"}}>
                   {grouped[letter].map(c => {
                     const clean = (c.username || '').replace(/\.arc$/, '')
@@ -481,7 +481,7 @@ export function ContactsPage() {
                     const el = document.getElementById(`section-${L}`)
                     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                   }}
-                  className={`text-[10px] leading-none font-semibold ${active ? 'text-brand' : 'text-text-muted'}`}>
+                  className={`text-[10px] leading-none font-semibold ${active ? 'text-brand-text' : 'text-text-muted'}`}>
                   {L}
                 </button>
               )
@@ -497,7 +497,7 @@ export function ContactsPage() {
           <p className="text-sm text-text-secondary">Search by username or name to find MeshPort users</p>
           <Input placeholder="username.arc (exact match)" value={addQuery}
             onChange={e => setAddQuery(e.target.value)} autoFocus
-            leftIcon={addLoading ? <Loader2 className="w-4 h-4 animate-spin text-brand" /> : <Search className="w-4 h-4" />} />
+            leftIcon={addLoading ? <Loader2 className="w-4 h-4 animate-spin text-brand-text" /> : <Search className="w-4 h-4" />} />
           {!addQuery.trim().toLowerCase().endsWith('.arc') && addQuery.trim() ? (
             <p className="text-center text-text-secondary text-xs py-2">
               Enter full username (example: sunil.arc)
@@ -515,7 +515,7 @@ export function ContactsPage() {
                     <p className="text-xs text-link">{(u.username || '').replace(/\.arc$/, '')}.arc</p>
                   </div>
                   <button onClick={() => handleAdd(u)} disabled={addingId === u.id}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-brand/20 text-brand border border-brand/30 rounded-xl text-xs font-semibold active:scale-90 transition-transform disabled:opacity-50">
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-brand/20 text-brand-text border border-brand/30 rounded-xl text-xs font-semibold active:scale-90 transition-transform disabled:opacity-50">
                     {addingId === u.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
                     {addingId === u.id ? '...' : 'Add'}
                   </button>
@@ -749,7 +749,7 @@ export function ContactsPage() {
                   <p className="text-sm text-text-secondary">{formatAmount(parseFloat(payAmount) || 0)} USDC sent to {(payTarget.username || '').replace(/\.arc$/, '')}.arc</p>
                   {payTxHash && (
                     <a href={arcExplorerTxUrl(payTxHash)} target="_blank" rel="noopener noreferrer"
-                      className="text-xs text-brand">View on ArcScan →</a>
+                      className="text-xs text-brand-text">View on ArcScan →</a>
                   )}
                 </div>
               )}

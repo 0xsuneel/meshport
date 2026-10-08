@@ -24,7 +24,7 @@ export function MultichainStory() {
               ].map(row => (
                 <div key={row.chain} className="flex items-center justify-between rounded-2xl border border-border bg-surface px-4 py-3.5">
                   <span className="text-[13.5px] font-semibold text-text-primary">{row.chain}</span>
-                  <span className="text-[13.5px] font-bold text-brand">{row.amount}</span>
+                  <span className="text-[13.5px] font-bold text-brand-text">{row.amount}</span>
                 </div>
               ))}
               <button className="mt-1 flex items-center justify-center gap-2 rounded-2xl bg-brand px-5 py-3.5 text-[14px] font-bold text-white">
@@ -35,7 +35,7 @@ export function MultichainStory() {
           </Reveal>
 
           <Reveal delay={0.05} className="order-1 lg:order-2">
-            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/12 text-brand">
+            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/12 text-brand-text">
               <Layers size={22} />
             </div>
             <h2 className="text-[28px] font-extrabold leading-tight tracking-tight text-text-primary sm:text-[36px]">

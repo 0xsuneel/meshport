@@ -35,7 +35,7 @@ import {
 
 const COLORS = {
   bg: 'var(--bg)', surface: 'var(--surface)', surfaceSecondary: 'var(--surface)',
-  primary: 'var(--brand)', success: 'var(--success)', error: 'var(--danger)', warning: 'var(--warning)',
+  primary: 'var(--brand)', primaryText: 'var(--brand-text)', success: 'var(--success)', error: 'var(--danger)', warning: 'var(--warning)',
   text: 'var(--text-primary)', muted: 'var(--text-secondary)', border: 'var(--border)',
 }
 
@@ -420,7 +420,7 @@ export function P2PAdminPage() {
                   { label: 'Investigator', on: connectedWalletIsInvestigator },
                   { label: 'Admin', on: connectedWalletIsAdmin },
                 ].filter(b => b.on).map(b => (
-                  <span key={b.label} style={{ fontSize: 10.5, fontWeight: 700, color: COLORS.primary, background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)', borderRadius: 999, padding: '3px 9px' }}>{b.label}</span>
+                  <span key={b.label} style={{ fontSize: 10.5, fontWeight: 700, color: COLORS.primaryText, background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)', borderRadius: 999, padding: '3px 9px' }}>{b.label}</span>
                 ))}
                 {!connectedWalletIsPauser && !connectedWalletIsInvestigator && !connectedWalletIsAdmin && (
                   <span style={{ fontSize: 11, color: COLORS.muted }}>This address holds no privileged role on this contract.</span>

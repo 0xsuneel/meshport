@@ -2773,7 +2773,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
       <div style={{ width: 44, height: 44, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'color-mix(in srgb, var(--brand) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 19, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>Cross-Chain Transfer</div>
@@ -2817,10 +2817,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               border: r.on ? '1.5px solid var(--brand)' : '1px solid var(--border)' }}>
             <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
               background: r.on ? 'color-mix(in srgb, var(--brand) 22%, transparent)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={r.on ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={r.on ? 'var(--brand-text)' : 'var(--text-secondary)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: r.on ? 'var(--brand)' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
+              <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: r.on ? 'var(--brand-text)' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
               <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.text}</span>
             </span>
           </button>
@@ -2850,7 +2850,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
         {senderAddress && (
-          <button onClick={() => handleAddressChange(senderAddress)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand)' }}>
+          <button onClick={() => handleAddressChange(senderAddress)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand-text)' }}>
             Use my address
           </button>
         )}
@@ -2907,7 +2907,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   const maxAmount = Math.max(0, balance - feeReserveEstimate)
                   setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
                 }}
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand)' }}>
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand-text)' }}>
                 Max: {formatAmount(balance)} (−{trimTrailingZeros(feeReserveEstimate.toFixed(2))} est.)
               </button>
             )}
@@ -3186,10 +3186,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   {/* Normal-range wait — calm/informational, not a warning. */}
                   {showStepInfo && (
                     <div className="flex items-start gap-2 p-3 mt-2 bg-brand/10 border border-brand/20 rounded-xl">
-                      <Clock className="w-4 h-4 text-brand flex-shrink-0 mt-0.5" />
+                      <Clock className="w-4 h-4 text-brand-text flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-xs text-brand font-semibold">Still processing ({activeStepElapsed}s)</p>
-                        <p className="text-xs text-brand/80 mt-0.5">{stepInfoHint}</p>
+                        <p className="text-xs text-brand-text font-semibold">Still processing ({activeStepElapsed}s)</p>
+                        <p className="text-xs text-brand-text/80 mt-0.5">{stepInfoHint}</p>
                       </div>
                     </div>
                   )}

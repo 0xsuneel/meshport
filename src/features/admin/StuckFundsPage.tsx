@@ -186,7 +186,7 @@ function Detail({ item, onClose, onChanged }: {
           <Field label={item.kind === 'claim' ? 'Burn tx' : item.kind === 'ub_withdrawal' ? 'Withdrawal tx' : 'Deposit / burn tx'}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <CopyText value={short(item.txHash, 10)} />
-              {link && <a href={link} target="_blank" rel="noopener noreferrer" aria-label="Open in explorer" style={{ color: 'var(--brand)', display: 'flex' }}><ExternalLink size={13} /></a>}
+              {link && <a href={link} target="_blank" rel="noopener noreferrer" aria-label="Open in explorer" style={{ color: 'var(--brand-text)', display: 'flex' }}><ExternalLink size={13} /></a>}
             </span>
           </Field>
         )}

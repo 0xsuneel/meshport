@@ -146,7 +146,7 @@ function HeroChart({ values }: { values: number[] }) {
           stroke="color-mix(in srgb, var(--text-primary) 5%, transparent)" strokeWidth="1"/>
       ))}
       <path d={area} fill="url(#hag)"/>
-      <path d={d} fill="none" stroke="var(--brand)" strokeWidth="2.5"
+      <path d={d} fill="none" stroke="var(--brand-text)" strokeWidth="2.5"
         strokeLinecap="round" strokeLinejoin="round"/>
       {/* end dot */}
       <circle cx={endX} cy={endY} r="7" fill="var(--brand)" opacity=".2"/>
@@ -169,7 +169,7 @@ function BarChart({ data, labels, highlightIdx, tooltip }:
           background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--brand) 38%, transparent)',
           borderRadius: 9, padding: '6px 10px', zIndex: 6, pointerEvents: 'none', whiteSpace: 'nowrap',
         }}>
-          <div style={{ fontSize: 11, color: 'var(--brand)', fontWeight: 600, marginBottom: 1 }}>{tooltip.label}</div>
+          <div style={{ fontSize: 11, color: 'var(--brand-text)', fontWeight: 600, marginBottom: 1 }}>{tooltip.label}</div>
           <div style={{ fontSize: 12, color: 'var(--text-primary)', fontWeight: 700 }}>{tooltip.value} transactions</div>
         </div>
       )}
@@ -593,7 +593,7 @@ export function InsightsPage() {
                 >
                   {p === period && !narrow && <Calendar size={12}/>}
                   {p === 'month' ? 'This Month' : p === 'week' ? 'This Week' : 'This Year'}
-                  {p === period && <ChevronDown size={10} color="var(--brand)"/>}
+                  {p === period && <ChevronDown size={10} color="var(--brand-text)"/>}
                 </button>
               ))}
             </div>
@@ -647,7 +647,7 @@ export function InsightsPage() {
                 <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 5, display: 'flex', alignItems: 'center', gap: 3 }}>
                   Swap Volume
                 </div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand)', letterSpacing: '-.4px', lineHeight: 1, marginBottom: 2 }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--brand-text)', letterSpacing: '-.4px', lineHeight: 1, marginBottom: 2 }}>
                   ${formatAmount(stats.swapVol)}
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{stats.swapCount} swaps</div>
@@ -662,7 +662,7 @@ export function InsightsPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, padding: '0 14px 12px' }}>
         {[
           {
-            icon: <ArrowUp size={14} color="var(--brand)"/>,
+            icon: <ArrowUp size={14} color="var(--brand-text)"/>,
             iconBg: 'color-mix(in srgb, var(--brand) 20%, transparent)',
             label: 'Paid',
             value: `$${formatAmount(stats.sentVol)}`,
@@ -743,11 +743,11 @@ export function InsightsPage() {
               background: 'color-mix(in srgb, var(--brand) 15%, transparent)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <Calendar size={16} color="var(--brand)"/>
+              <Calendar size={16} color="var(--brand-text)"/>
             </div>
             <div>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>Activity</div>
-              <div style={{ fontSize: 11, color: 'var(--brand)', marginTop: 2, fontWeight: 500 }}>
+              <div style={{ fontSize: 11, color: 'var(--brand-text)', marginTop: 2, fontWeight: 500 }}>
                 {stats.totalTxCount} transactions this {period}
               </div>
             </div>
@@ -800,7 +800,7 @@ export function InsightsPage() {
               background: 'color-mix(in srgb, var(--brand) 16%, transparent)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <Link2 size={14} color="var(--brand)"/>
+              <Link2 size={14} color="var(--brand-text)"/>
             </div>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Multichain Usage</span>
           </div>
@@ -833,7 +833,7 @@ export function InsightsPage() {
             paddingTop: 8, borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)', marginTop: 4,
           }}>
             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Total Transactions</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand)' }}>{stats.totalMcTxs}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)' }}>{stats.totalMcTxs}</span>
           </div>
         </motion.div>
 

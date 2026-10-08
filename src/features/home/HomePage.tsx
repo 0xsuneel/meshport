@@ -449,7 +449,7 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
         background: 'var(--bg-accent, rgba(59,130,246,0.12))',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <BiometricIcon size={18} style={{ color: 'var(--brand)' }} />
+        <BiometricIcon size={18} style={{ color: 'var(--brand-text)' }} />
       </div>
       <p style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', margin: 0, lineHeight: 1.35 }}>
         Unlock MeshPort and approve payments faster with biometrics
@@ -1161,7 +1161,7 @@ function InsightStatCard({ label, value, changePct, sparkValues }: {
           {up ? '↑' : '↓'}{Math.abs(changePct).toFixed(0)}%
         </span>
       )}
-      <Sparkline values={sparkValues} color="var(--brand)" height={16} />
+      <Sparkline values={sparkValues} color="var(--brand-text)" height={16} />
     </div>
   )
 }
@@ -3905,7 +3905,7 @@ export function HomePage() {
                 <button onClick={() => setSearchOpen(true)} aria-label="Search"
                   style={{ width: 38, height: 38, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
                     border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </button>
                 {/* Bell — notifications */}
                 <button onClick={() => navigate('/notifications')}
@@ -3913,8 +3913,8 @@ export function HomePage() {
                     background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-                    <path d="M9 1.5A5.5 5.5 0 0113.5 7v3l1.5 2H3L4.5 10V7A5.5 5.5 0 019 1.5z" stroke="var(--brand)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M7 13.5a2 2 0 004 0" stroke="var(--brand)" strokeWidth="1.4" strokeLinecap="round"/>
+                    <path d="M9 1.5A5.5 5.5 0 0113.5 7v3l1.5 2H3L4.5 10V7A5.5 5.5 0 019 1.5z" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M7 13.5a2 2 0 004 0" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round"/>
                   </svg>
                   {(unreadCount > 0 || badgeLabel) && (
                     <span style={{ position: 'absolute', top: 7, right: 8, width: 6, height: 6,
@@ -3958,7 +3958,7 @@ export function HomePage() {
                   <div key={s.path} onClick={() => { closeSearch(); navigate(s.path) }}
                     style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px', borderRadius: 12, cursor: 'pointer' }}>
                     <div style={{ width: 34, height: 34, borderRadius: 10, background: 'color-mix(in srgb, var(--brand) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h8l-1 8 10-12h-8l1-8z"/></svg>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h8l-1 8 10-12h-8l1-8z"/></svg>
                     </div>
                     <div style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>{highlightMatch(s.label, searchQuery.trim())}</div>
                   </div>
@@ -4067,8 +4067,8 @@ export function HomePage() {
                   borderRadius: 10, padding: '6px 10px' }}>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace', letterSpacing: '0.2px' }}>{shortAddr}</span>
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
-                  <rect x="5" y="1" width="10" height="10" rx="2" stroke="var(--brand)" strokeWidth="1.4"/>
-                  <path d="M1 5v9a1 1 0 001 1h9" stroke="var(--brand)" strokeWidth="1.4" strokeLinecap="round"/>
+                  <rect x="5" y="1" width="10" height="10" rx="2" stroke="var(--brand-text)" strokeWidth="1.4"/>
+                  <path d="M1 5v9a1 1 0 001 1h9" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round"/>
                 </svg>
               </div>
             </div>
@@ -4335,7 +4335,7 @@ export function HomePage() {
               <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Total Volume</div>
               <div style={{ fontSize: 27, fontWeight: 700, color: 'var(--text-primary)', marginTop: 1 }}>${trimTrailingZeros(insightsData.totalVolume.toFixed(2))}</div>
             </div>
-            <Sparkline values={volumeTrendBuckets.map(b => b.volume)} color="var(--brand)" height={34} fill />
+            <Sparkline values={volumeTrendBuckets.map(b => b.volume)} color="var(--brand-text)" height={34} fill />
             <div style={{ display: 'flex', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 9.5, color: 'var(--text-secondary)' }}>Net Flow</div>
@@ -4361,17 +4361,17 @@ export function HomePage() {
             <InsightStatCard
               label="Paid" value={`$${insightsData.sent.toFixed(2)}`} changePct={insightsData.sentChangePct}
               sparkValues={sentTrendBuckets.map(b => b.volume)}
-              icon={<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 12L12 2M12 2H6M12 2V8" stroke="var(--brand)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              icon={<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 12L12 2M12 2H6M12 2V8" stroke="var(--brand-text)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
             />
             <InsightStatCard
               label="Received" value={`$${insightsData.received.toFixed(2)}`} changePct={insightsData.receivedChangePct}
               sparkValues={receivedTrendBuckets.map(b => b.volume)}
-              icon={<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12 2L2 12M2 12H8M2 12V6" stroke="var(--brand)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              icon={<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12 2L2 12M2 12H8M2 12V6" stroke="var(--brand-text)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
             />
             <InsightStatCard
               label="Active Contacts" value={`${insightsData.activeContacts}`} changePct={insightsData.activeContactsChangePct}
               sparkValues={contactsTrendBuckets}
-              icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3" stroke="var(--brand)" strokeWidth="1.6"/><path d="M3 20v-1a6 6 0 016-6h0a6 6 0 016 6v1" stroke="var(--brand)" strokeWidth="1.6" strokeLinecap="round"/><circle cx="17" cy="8" r="2.4" stroke="var(--brand)" strokeWidth="1.4"/></svg>}
+              icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="8" r="3" stroke="var(--brand-text)" strokeWidth="1.6"/><path d="M3 20v-1a6 6 0 016-6h0a6 6 0 016 6v1" stroke="var(--brand-text)" strokeWidth="1.6" strokeLinecap="round"/><circle cx="17" cy="8" r="2.4" stroke="var(--brand-text)" strokeWidth="1.4"/></svg>}
             />
           </div>
 

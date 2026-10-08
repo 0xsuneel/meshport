@@ -154,7 +154,7 @@ function LedgerHome({ loaded, intents, payments, receipts, auto, onAutoChange, c
       onClick={() => onOpenRequest(i.code)} amountColor={i.status === 'paid' ? 'var(--success)' : undefined} />
   )
   const more = (shown: number, total: number, open: boolean, toggle: () => void) => total > shown || open ? (
-    <button onClick={toggle} style={{ ...btnGhost, border: 'none', padding: '6px', color: 'var(--brand)', fontSize: 12.5 }}>
+    <button onClick={toggle} style={{ ...btnGhost, border: 'none', padding: '6px', color: 'var(--brand-text)', fontSize: 12.5 }}>
       {open ? 'Show less' : `Show all (${total})`}
     </button>
   ) : null
@@ -203,7 +203,7 @@ function LedgerHome({ loaded, intents, payments, receipts, auto, onAutoChange, c
         {([['chains', 'Chains'], ['requests', `Requests${openRequests.length ? ` (${openRequests.length})` : ''}`], ['customers', 'Customers']] as const).map(([id, text]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
             style={{ flex: 1, padding: '8px 4px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700,
-              background: tab === id ? 'color-mix(in srgb, var(--brand) 16%, transparent)' : 'transparent', color: tab === id ? 'var(--brand)' : 'var(--text-secondary)' }}>
+              background: tab === id ? 'color-mix(in srgb, var(--brand) 16%, transparent)' : 'transparent', color: tab === id ? 'var(--brand-text)' : 'var(--text-secondary)' }}>
             {text}
           </button>
         ))}
@@ -236,7 +236,7 @@ function LedgerHome({ loaded, intents, payments, receipts, auto, onAutoChange, c
           {!loaded ? <SkeletonRows count={4} className="px-0" /> : customers.length === 0 ? <Empty text={needle ? 'No customer matches this username or address.' : 'Customers who pay you will show here.'} /> : (
             <>
               {custList.map(c => (
-                <Row key={c.key} icon={<Users size={16} color="var(--brand)" />} title={c.name}
+                <Row key={c.key} icon={<Users size={16} color="var(--brand-text)" />} title={c.name}
                   sub={`$${formatAmount(c.total)} received · ${c.count} transaction${c.count === 1 ? '' : 's'} · last ${timeAgo(c.last)}`} onClick={() => onOpenCustomer(c.key)} />
               ))}
               {more(LIMIT, customers.length, showAllCust, () => setShowAllCust(v => !v))}

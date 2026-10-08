@@ -87,7 +87,7 @@ export function DesktopDashboardMockup() {
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '10px 4px',
                 borderRadius: 14, background: 'var(--bg)', border: '1px solid var(--border)',
               }}>
-                <a.icon size={16} color="var(--brand)" />
+                <a.icon size={16} color="var(--brand-text)" />
                 <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--text-secondary)' }}>{a.label}</span>
               </div>
             ))}
@@ -98,7 +98,7 @@ export function DesktopDashboardMockup() {
             {assets.map(a => (
               <div key={a.symbol} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 12, background: 'var(--bg)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'color-mix(in srgb, var(--brand) 16%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--brand)' }}>
+                  <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'color-mix(in srgb, var(--brand) 16%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--brand-text)' }}>
                     {a.symbol.slice(0, 2)}
                   </div>
                   <div>
@@ -175,7 +175,7 @@ export function MobileDashboardMockup() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 14 }}>
             {[ArrowUpRight, ArrowDownLeft, Repeat, Users].map((Icon, i) => (
               <div key={i} style={{ aspectRatio: '1', borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Icon size={13} color="var(--brand)" />
+                <Icon size={13} color="var(--brand-text)" />
               </div>
             ))}
           </div>

@@ -44,7 +44,7 @@ function highlightMatch(text: string, query: string) {
   return (
     <>
       {text.slice(0, idx)}
-      <span style={{ color: 'var(--brand)' }}>{text.slice(idx, idx + query.length)}</span>
+      <span style={{ color: 'var(--brand-text)' }}>{text.slice(idx, idx + query.length)}</span>
       {text.slice(idx + query.length)}
     </>
   )
@@ -292,7 +292,7 @@ export function DesktopHeader() {
                     <div key={s.path} onClick={() => { closeSearch(); navigate(s.path) }}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 6px', borderRadius: 12, cursor: 'pointer' }}>
                       <div style={{ width: 34, height: 34, borderRadius: 10, background: 'color-mix(in srgb, var(--brand) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h8l-1 8 10-12h-8l1-8z"/></svg>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2 3 14h8l-1 8 10-12h-8l1-8z"/></svg>
                       </div>
                       <div style={{ color: 'var(--text-primary)', fontSize: 13, fontWeight: 600 }}>{highlightMatch(s.label, query.trim())}</div>
                     </div>

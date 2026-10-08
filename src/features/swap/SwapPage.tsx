@@ -42,7 +42,7 @@ const CIRBTC_CONTRACT = '0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF'
 
 const SWAP_TOKENS = [
   { id: 'USDC',   label: 'USDC',   sub: 'USD Coin',      logo: 'https://assets.coingecko.com/coins/images/6319/small/usdc.png',       color: 'var(--usdc-icon)', decimals: 6,  contract: '' },
-  { id: 'EURC',   label: 'EURC',   sub: 'Euro Coin',     logo: 'https://assets.coingecko.com/coins/images/26045/small/euro-coin.png', color: 'var(--brand)', decimals: 6,  contract: EURC_CONTRACT },
+  { id: 'EURC',   label: 'EURC',   sub: 'Euro Coin',     logo: 'https://assets.coingecko.com/coins/images/26045/small/euro-coin.png', color: 'var(--brand-text)', decimals: 6,  contract: EURC_CONTRACT },
   { id: 'cirBTC', label: 'cirBTC', sub: 'Circle Bitcoin', logo: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',       color: '#F7931A', decimals: 8,  contract: CIRBTC_CONTRACT },
 ]
 
@@ -381,7 +381,7 @@ function SwapChecklist({ step, error, txHash, progress }: { step: string; error:
                   {s.label}
                 </p>
                 {s.active && !isFailed && (
-                  <span style={{ fontSize: 11, color: 'var(--brand)', flexShrink: 0 }}>{fmt(elapsed)}</span>
+                  <span style={{ fontSize: 11, color: 'var(--brand-text)', flexShrink: 0 }}>{fmt(elapsed)}</span>
                 )}
               </div>
               <p style={{ fontSize: 12, margin: 0, color: 'var(--text-secondary)' }}>{isFailed && s.active ? (error || 'Transaction failed') : s.msg}</p>
@@ -389,7 +389,7 @@ function SwapChecklist({ step, error, txHash, progress }: { step: string; error:
                 const h = (i === 0 ? progress.approveHash : swapHash)!
                 return (
                   <a href={`${ARC_EXPLORER}/tx/${h}`} target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize: 10, color: 'var(--brand)', fontFamily: 'monospace', marginTop: 2, display: 'block', textDecoration: 'none' }}>
+                    style={{ fontSize: 10, color: 'var(--brand-text)', fontFamily: 'monospace', marginTop: 2, display: 'block', textDecoration: 'none' }}>
                     {h.slice(0, 16)}…
                   </a>
                 )
@@ -1528,7 +1528,7 @@ export function SwapPage() {
                     style={{
                       position: 'absolute', top: 14, right: 16, padding: '5px 14px', borderRadius: 100,
                       border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)',
-                      background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand)',
+                      background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)',
                       fontSize: 12, fontWeight: 700, cursor: 'pointer',
                     }}
                   >
@@ -1567,7 +1567,7 @@ export function SwapPage() {
                 background: 'var(--surface)', border: '1px solid var(--border)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-              <ArrowUpDown className="w-4 h-4" style={{ color: 'var(--brand)' }}/>
+              <ArrowUpDown className="w-4 h-4" style={{ color: 'var(--brand-text)' }}/>
             </button>
             <div className="flex-1" style={{ height: 1, background: 'var(--border)' }}/>
           </div>
@@ -1713,7 +1713,7 @@ export function SwapPage() {
                   style={{ background: 'color-mix(in srgb, var(--brand) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
                   {step !== 'confirming'
                     ? <ProcessingRing size={36} />
-                    : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                    : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                   }
                 </div>
 

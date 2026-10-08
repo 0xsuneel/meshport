@@ -109,7 +109,7 @@ export function ProcessingFlipCard({ open, phase, processingLabel, title, messag
                 gap: 16, padding: 28, boxShadow: '0 20px 50px rgba(0,0,0,0.35)',
               }}>
                 <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.9, ease: 'linear' }}>
-                  <Loader2 size={34} color="var(--brand)" />
+                  <Loader2 size={34} color="var(--brand-text)" />
                 </motion.div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center' }}>{processingLabel}</div>
               </div>

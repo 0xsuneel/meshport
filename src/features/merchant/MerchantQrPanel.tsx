@@ -31,7 +31,7 @@ export function ChainPicker({ value, onChange }: { value: string; onChange: (id:
             style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '7px 11px 7px 8px', borderRadius: 999, cursor: 'pointer',
               border: on ? '1px solid var(--brand)' : '1px solid var(--border)',
               background: on ? 'color-mix(in srgb, var(--brand) 14%, transparent)' : 'transparent',
-              color: on ? 'var(--brand)' : 'var(--text-secondary)', fontSize: 12.5, fontWeight: 700 }}>
+              color: on ? 'var(--brand-text)' : 'var(--text-secondary)', fontSize: 12.5, fontWeight: 700 }}>
             <img src={c.logo} alt="" width={18} height={18} style={{ borderRadius: '50%' }}
               onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
             {c.label}

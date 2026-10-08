@@ -33,7 +33,7 @@ export function TrackDetails({ rows }: { rows: TrackDetailRow[] }) {
                   <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                     {r.href ? (
                       <a href={r.href} target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand)', textDecoration: 'none', fontFamily: r.copy ? 'monospace' : undefined, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-text)', textDecoration: 'none', fontFamily: r.copy ? 'monospace' : undefined, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {r.value}
                       </a>
                     ) : (

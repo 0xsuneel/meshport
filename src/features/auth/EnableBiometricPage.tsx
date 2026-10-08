@@ -95,7 +95,7 @@ export function EnableBiometricPage() {
           transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
           className="w-24 h-24 rounded-full flex items-center justify-center bg-brand/15 border border-brand/25"
         >
-          <Icon className="w-11 h-11 text-brand" />
+          <Icon className="w-11 h-11 text-brand-text" />
         </motion.div>
 
         <div>

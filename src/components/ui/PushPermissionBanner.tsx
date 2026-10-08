@@ -58,7 +58,7 @@ export function PushPermissionBanner() {
       border: '1px solid var(--border)', boxShadow: 'var(--shadow-2)',
     }}>
       <div style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'color-mix(in srgb, var(--brand) 15%, transparent)', color: 'var(--brand)' }}>
+        background: 'color-mix(in srgb, var(--brand) 15%, transparent)', color: 'var(--brand-text)' }}>
         <Bell size={18} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>

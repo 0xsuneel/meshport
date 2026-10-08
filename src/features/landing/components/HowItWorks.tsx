@@ -15,7 +15,7 @@ export function HowItWorks() {
   return (
     <section id="how-it-works" className="scroll-mt-24 mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28">
       <Reveal className="mx-auto max-w-2xl text-center">
-        <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand">How it works</p>
+        <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand-text">How it works</p>
         <h2 className="mt-3 text-[30px] font-extrabold tracking-tight text-text-primary sm:text-[38px]">
           From zero to your first payment
         </h2>
@@ -41,7 +41,7 @@ export function HowItWorks() {
                   className="relative z-10 flex h-12 w-12 items-center justify-center rounded-2xl border-2"
                   style={{ background: 'var(--bg)', borderColor: 'var(--brand)' }}
                 >
-                  <s.icon size={20} className="text-brand" />
+                  <s.icon size={20} className="text-brand-text" />
                 </div>
                 <div
                   className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[10.5px] font-bold text-white"

@@ -73,7 +73,7 @@ const COLORS = {
   bg: 'var(--bg)',
   surface: 'var(--surface)',
   surfaceSecondary: 'var(--surface)',
-  primary: 'var(--brand)',
+  primary: 'var(--brand)', primaryText: 'var(--brand-text)',
   success: 'var(--success)',
   error: 'var(--danger)',
   text: 'var(--text-primary)',
@@ -1762,7 +1762,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ width: 44, height: 44, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: 'color-mix(in srgb, var(--brand) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg>
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 19, fontWeight: 800, color: COLORS.text, letterSpacing: '-0.3px' }}>Bring Funds to Arc</div>
@@ -1827,7 +1827,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                             setClaimAmounts(prev => ({ ...prev, [selected!]: parseFloat(selectedChain.claimable.toFixed(2)).toString() }))
                             setError('')
                           }}
-                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: COLORS.primary }}>
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: COLORS.primaryText }}>
                           Max: {formatAmount(selectedChain.claimable)}
                         </button>
                       )}
@@ -1858,10 +1858,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                           border: on ? '1.5px solid var(--brand)' : `1px solid ${COLORS.border}` }}>
                         <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                           background: on ? 'color-mix(in srgb, var(--brand) 22%, transparent)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={on ? 'var(--brand)' : 'var(--text-secondary)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={on ? 'var(--brand-text)' : 'var(--text-secondary)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
                         </span>
                         <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: on ? 'var(--brand)' : COLORS.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
+                          <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: on ? 'var(--brand-text)' : COLORS.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
                           <span style={{ display: 'block', fontSize: 11.5, color: COLORS.muted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.text}</span>
                         </span>
                       </button>

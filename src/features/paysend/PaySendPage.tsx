@@ -1185,7 +1185,7 @@ export function PaySendPage() {
                   <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                     {addressResolving ? (
                       <div className="py-6 flex items-center justify-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--brand)' }} />
+                        <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--brand-text)' }} />
                         <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Looking up address…</span>
                       </div>
                     ) : addressPreview && (
@@ -1217,7 +1217,7 @@ export function PaySendPage() {
                   <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                     {searching ? (
                       <div className="py-8 flex items-center justify-center">
-                        <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--brand)' }} />
+                        <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--brand-text)' }} />
                       </div>
                     ) : results.length > 0 ? results.map((u, i) => (
                       <button key={u.id} onClick={() => pickResult(u)}
@@ -1284,7 +1284,7 @@ export function PaySendPage() {
                                   <p className="text-[15px] font-semibold text-text-primary truncate">{c.display_name || c.username}</p>
                                   {isSelf && (
                                     <span className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-[1px] rounded-md"
-                                      style={{ color: 'var(--brand)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>You</span>
+                                      style={{ color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>You</span>
                                   )}
                                 </div>
                                 <p className="text-[12px] mt-0.5 truncate text-link">{c.username?.endsWith('.arc') ? c.username : `${c.username}.arc`}</p>
@@ -1346,7 +1346,7 @@ export function PaySendPage() {
               <div className="flex items-center gap-3 p-3.5 rounded-2xl" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                 {recipient.isUsername
                   ? <Avatar name={recipient.displayName} src={recipient.avatarUrl} size="md" />
-                  : <div className="w-[46px] h-[46px] rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }}><Wallet className="w-5 h-5" style={{ color: 'var(--brand)' }} /></div>
+                  : <div className="w-[46px] h-[46px] rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }}><Wallet className="w-5 h-5" style={{ color: 'var(--brand-text)' }} /></div>
                 }
                 <div className="flex-1 min-w-0">
                   {recipient.isUsername ? (
@@ -1405,7 +1405,7 @@ export function PaySendPage() {
                       badges below). */}
                   <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ background: token === 'USDC' ? 'var(--usdc-icon)' : token === 'EURC' ? 'var(--brand)' : '#F7931A' }}>{tokenSymbolChar(token)}</div>
                   <span className="text-sm font-bold text-text-primary">{token}</span>
-                  {!merchantPayCode && <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>}
+                  {!merchantPayCode && <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>}
                 </button>
               </div>
 
@@ -1487,7 +1487,7 @@ export function PaySendPage() {
                       }}
                       style={{
                         padding: '5px 14px', borderRadius: 100, border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)',
-                        background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand)', fontSize: 12, fontWeight: 700,
+                        background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)', fontSize: 12, fontWeight: 700,
                         cursor: 'pointer',
                       }}
                     >
@@ -1711,7 +1711,7 @@ export function PaySendPage() {
                     {/* Amount hero */}
                     <div className="text-center pt-2 pb-1">
                       <p className="text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>You are sending</p>
-                      <p className="font-bold" style={{ fontSize: '40px', color: 'var(--brand)', lineHeight: 1 }}>{tokenSymbolChar(token)}{formatAmount(numAmount, tokenDisplayDecimals(token))}</p>
+                      <p className="font-bold" style={{ fontSize: '40px', color: 'var(--brand-text)', lineHeight: 1 }}>{tokenSymbolChar(token)}{formatAmount(numAmount, tokenDisplayDecimals(token))}</p>
                       <div className="flex items-center justify-center gap-1.5 mt-2">
                         <div className="w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white" style={{ background: token === 'USDC' ? 'var(--usdc-icon)' : token === 'EURC' ? 'var(--brand)' : '#F7931A' }}>{tokenSymbolChar(token)}</div>
                         <span className="text-xs font-semibold text-text-primary">{token}</span>

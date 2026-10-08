@@ -13,7 +13,7 @@ const APP_URL = 'https://meshport.xyz'
 
 const BENEFITS = [
   {
-    icon: <Zap className="w-5 h-5" style={{ color: 'var(--brand)' }} />,
+    icon: <Zap className="w-5 h-5" style={{ color: 'var(--brand-text)' }} />,
     bg: 'color-mix(in srgb, var(--brand) 15%, transparent)',
     label: 'Sub-second',
     desc: 'Confirms in under a second',
@@ -106,7 +106,7 @@ export function PayPage() {
         </div>
         <h1 className="text-xl font-bold text-text-primary">User not found</h1>
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-          <span className="font-semibold" style={{ color: 'var(--brand)' }}>{clean}.arc</span> doesn't exist on MeshPort.
+          <span className="font-semibold" style={{ color: 'var(--brand-text)' }}>{clean}.arc</span> doesn't exist on MeshPort.
         </p>
         <button onClick={() => navigate('/')}
           className="mt-2 px-6 py-3 rounded-2xl text-sm font-bold text-white flex items-center gap-2"
@@ -148,7 +148,7 @@ export function PayPage() {
           <Avatar name={displayName} src={recipient.avatar_url} size="xl" showRing />
           <div className="text-center">
             <h2 className="text-2xl font-bold text-text-primary">{displayName}</h2>
-            <p className="font-semibold mt-1 text-sm" style={{ color: 'var(--brand)' }}>{clean}.arc</p>
+            <p className="font-semibold mt-1 text-sm" style={{ color: 'var(--brand-text)' }}>{clean}.arc</p>
             {requestedAmount ? (
               <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>is requesting</p>
             ) : (

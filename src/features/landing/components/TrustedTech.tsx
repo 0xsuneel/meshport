@@ -29,7 +29,7 @@ export function TrustedTech() {
               className="flex flex-col items-center gap-3 rounded-[20px] border border-border bg-bg px-5 py-7 text-center shadow-elevation-1"
             >
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand/12">
-                <t.icon size={20} color="var(--brand)" />
+                <t.icon size={20} color="var(--brand-text)" />
               </div>
               <div>
                 <p className="text-[14.5px] font-bold text-text-primary">{t.name}</p>

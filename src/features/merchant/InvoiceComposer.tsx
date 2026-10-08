@@ -131,7 +131,7 @@ export function InvoiceComposer({ merchantName, customerUsername, onCancel, onSe
         )
       })}
       <button onClick={addRow} disabled={rows.length >= 50}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 11, borderRadius: 14, border: '1px dashed color-mix(in srgb, var(--brand) 45%, var(--border))', background: 'transparent', color: 'var(--brand)', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 11, borderRadius: 14, border: '1px dashed color-mix(in srgb, var(--brand) 45%, var(--border))', background: 'transparent', color: 'var(--brand-text)', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
         <Plus size={16} /> Add item
       </button>
       <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

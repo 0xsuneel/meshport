@@ -580,7 +580,7 @@ export function ScannerPage() {
         {resolving && (
           <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/60">
             <div className="bg-surface rounded-3xl p-6 flex flex-col items-center gap-3 mx-8 shadow-elevation-3">
-              <Loader2 className="w-10 h-10 text-brand animate-spin" />
+              <Loader2 className="w-10 h-10 text-brand-text animate-spin" />
               <p className="text-text-primary font-medium">Looking up user...</p>
             </div>
           </div>

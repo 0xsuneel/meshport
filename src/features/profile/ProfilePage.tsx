@@ -129,7 +129,7 @@ export function ProfilePage() {
         <button onClick={handleCopyWallet}
           className="flex items-center justify-between w-full mt-4 bg-[rgb(var(--text-primary-rgb)/0.03)] border border-border rounded-xl px-3.5 py-2.5 text-text-secondary hover:text-text-primary transition-colors">
           <span className="text-xs font-mono text-text-secondary">{walletAddress.slice(0, 6)}...{walletAddress.slice(-6)}</span>
-          <span className="flex items-center gap-1 text-[11px] font-bold text-brand">
+          <span className="flex items-center gap-1 text-[11px] font-bold text-brand-text">
             {copied ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3" />}
             {copied ? 'Copied' : 'Copy'}
           </span>
@@ -152,8 +152,8 @@ export function ProfilePage() {
 
   const walletSection = (
     <Section title="Wallet">
-      <MenuItem icon={<Shield className="w-5 h-5" />} label="Security" color="bg-brand/20 text-brand" onClick={() => navigate('/security')} />
-      <MenuItem icon={<Palette className="w-5 h-5" />} label="Appearance" color="bg-brand/20 text-brand" onClick={() => navigate('/appearance')} />
+      <MenuItem icon={<Shield className="w-5 h-5" />} label="Security" color="bg-brand/20 text-brand-text" onClick={() => navigate('/security')} />
+      <MenuItem icon={<Palette className="w-5 h-5" />} label="Appearance" color="bg-brand/20 text-brand-text" onClick={() => navigate('/appearance')} />
       <MenuItem icon={<Store className="w-5 h-5" />}
         label={merchant.status === 'approved' ? 'Merchant account'
           : merchant.status === 'pending' ? 'Merchant application · In review'
@@ -205,7 +205,7 @@ export function ProfilePage() {
   const supportSection = (
     <Section title="Support">
       <MenuItem icon={<BookOpen className="w-5 h-5" />} label="MeshPort Feature Guide" color="bg-success/20 text-success" onClick={() => navigate('/feature-guide')} />
-      <MenuItem icon={<HelpCircle className="w-5 h-5" />} label="Help & Support" color="bg-brand/20 text-brand" onClick={() => navigate('/help-support')} />
+      <MenuItem icon={<HelpCircle className="w-5 h-5" />} label="Help & Support" color="bg-brand/20 text-brand-text" onClick={() => navigate('/help-support')} />
       <MenuItem icon={<Info className="w-5 h-5" />} label="About MeshPort" color="bg-accent/20 text-accent-text" onClick={() => navigate('/about')} />
       <MenuItem icon={<FileText className="w-5 h-5" />} label="Terms & Privacy" color="bg-surface text-text-secondary" onClick={() => navigate('/terms-privacy')} />
       <MenuItem icon={<XLogo className="w-4 h-4" />} label="Follow us on X" color="bg-[rgb(var(--text-primary-rgb)/0.10)] text-text-primary" onClick={() => window.open('https://x.com/meshport_xyz', '_blank', 'noopener,noreferrer')} />

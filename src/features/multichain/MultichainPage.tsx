@@ -1012,7 +1012,7 @@ export function MultichainPage() {
                       ) : isClaim ? (
                         <path d="M8 2v9M5 8l3 3 3-3M2 13h12" stroke="var(--success)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                       ) : (
-                        <path d="M2 8h12M10 5l3 3-3 3" stroke="var(--brand)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M2 8h12M10 5l3 3-3 3" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                       )}
                     </svg>
                   </div>
@@ -1091,10 +1091,10 @@ export function MultichainPage() {
           style={{
             display: 'flex', alignItems: 'center', gap: 5,
             background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-            fontSize: 15.4, color: 'var(--brand)', fontWeight: 500,
+            fontSize: 15.4, color: 'var(--brand-text)', fontWeight: 500,
           }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-            <path d="M12 3s6 6.5 6 10.5a6 6 0 01-12 0C6 9.5 12 3 12 3z" stroke="var(--brand)" strokeWidth="1.8" strokeLinejoin="round"/>
+            <path d="M12 3s6 6.5 6 10.5a6 6 0 01-12 0C6 9.5 12 3 12 3z" stroke="var(--brand-text)" strokeWidth="1.8" strokeLinejoin="round"/>
           </svg>
           Faucet
         </button>
@@ -1211,7 +1211,7 @@ export function MultichainPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ width: 44, height: 44, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: 'color-mix(in srgb, var(--brand) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>{isMerchant ? 'Collect from chains' : 'Bring Funds to Arc'}</div>
@@ -1257,7 +1257,7 @@ export function MultichainPage() {
                       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                         {ub && (
                           <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
-                            color: 'var(--brand)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>UB</span>
+                            color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>UB</span>
                         )}
                         {cctp && (
                           <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,

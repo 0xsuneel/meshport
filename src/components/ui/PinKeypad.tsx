@@ -205,7 +205,7 @@ export function PinKeypad({
               onClick={tryBiometric}
               disabled={biometricTrying}
               className="flex items-center justify-center mp-key"
-              style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand)', flexShrink: 0 }}
+              style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand-text)', flexShrink: 0 }}
               aria-label={`Use ${label}`}
             >
               <motion.div
@@ -235,7 +235,7 @@ export function PinKeypad({
                 onClick={tryBiometric}
                 disabled={biometricTrying}
                 className="w-full flex items-center justify-center mp-key"
-                style={{ height: 56, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand)' }}
+                style={{ height: 56, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand-text)' }}
                 aria-label={`Use ${label}`}
               >
                 <motion.div

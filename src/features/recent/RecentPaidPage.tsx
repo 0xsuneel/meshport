@@ -182,7 +182,7 @@ export function RecentPaidPage() {
                 <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'color-mix(in srgb, var(--brand) 12%, transparent)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: 4 }}>
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <path d="M2 12L12 2M12 2H5M12 2V9" stroke="var(--brand)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M2 12L12 2M12 2H5M12 2V9" stroke="var(--brand-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </div>
               </div>
