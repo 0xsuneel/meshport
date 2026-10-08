@@ -314,8 +314,8 @@ function ActivityRow({ record, isFirst, isLast, onSelect }: {
 
   return (
     <div onClick={onSelect} style={{
-      display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px',
-      borderTop: isFirst ? 'none' : '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)',
+      // A clean list: no card or divider lines, rows sit on the page.
+      display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px',
       cursor: 'pointer',
     }}>
       {/* Icon */}
@@ -880,7 +880,7 @@ export function ActivityPage() {
           {!loading && groups.map(group => (
             <div key={group.label} className="px-4 mb-4">
               <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 mt-4 px-1">{group.label}</p>
-              <div style={{ background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)', borderRadius: 20, overflow: 'hidden' }}>
+              <div>
                 {group.items.map((item, i, arr) => (
                   <ActivityRow key={item.id} record={item}
                     isFirst={i === 0} isLast={i === arr.length - 1}
