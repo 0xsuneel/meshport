@@ -22,7 +22,9 @@ export function filterServices(query: string, isMerchant = false) {
   const q = query.trim().toLowerCase()
   if (!q) return []
   const list = isMerchant
-    ? SERVICES.map(s => s.path === '/multichain' ? { ...s, label: 'Merchant Hub', keywords: [...s.keywords, ...MERCHANT_HUB_KEYWORDS] } : s)
+    ? SERVICES.map(s => s.path === '/multichain' ? { ...s, label: 'Merchant Hub', keywords: [...s.keywords, ...MERCHANT_HUB_KEYWORDS] }
+        : s.path === '/insights' ? { ...s, label: 'Ledger Insights', keywords: [...s.keywords, 'ledger insights', 'sales', 'revenue', 'customers'] }
+        : s)
     : SERVICES
   return list.filter(s =>
     s.label.toLowerCase().includes(q) ||
