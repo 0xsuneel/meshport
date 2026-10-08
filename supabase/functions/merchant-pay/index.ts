@@ -41,9 +41,11 @@ const ARC_RPCS = [
 ]
 const d = (net: string) => (DRPC_KEY ? [`https://lb.drpc.live/${net}/${DRPC_KEY}`] : [])
 
-// Chains a customer can pay on. Arc = direct; the rest are Unified Balance
-// chains with a known chain id + USDC contract (same values the app uses in
-// src/blockchain/chains.ts). Nothing here is guessed.
+// Chains a customer can pay on. Arc = direct; the rest are other chains with
+// a known chain id + USDC contract (same values the app uses in
+// src/blockchain/chains.ts). Nothing here is guessed. route 'ub' just means
+// "another chain" (stored as method external_ub); merchants collect them to
+// Arc over CCTP with Claim All.
 type ChainDef = { label: string; chainId: number; usdc: string; rpcs: string[]; route: 'direct' | 'ub' }
 export const PAY_CHAINS: Record<string, ChainDef> = {
   Arc_Testnet:      { label: 'Arc',       chainId: 5042002,  usdc: '0x3600000000000000000000000000000000000000', rpcs: ARC_RPCS, route: 'direct' },
@@ -56,6 +58,18 @@ export const PAY_CHAINS: Record<string, ChainDef> = {
   HyperEVM_Testnet: { label: 'HyperEVM',  chainId: 998,      usdc: '0x2B3370eE501B4a559b57D449569354196457D8Ab', rpcs: ['https://rpcs.chain.link/hyperevm/testnet', 'https://rpc.hyperliquid-testnet.xyz/evm'], route: 'ub' },
   Sei_Testnet:      { label: 'Sei',       chainId: 1328,     usdc: '0x4fCF1784B31630811181f670Aea7A7bEF803eaED', rpcs: [...d('sei-testnet'), 'https://evm-rpc-testnet.sei-apis.com'], route: 'ub' },
   Unichain_Sepolia: { label: 'Unichain',  chainId: 1301,     usdc: '0x31d0220469e10c4E71834a79b1f276d740d3768F', rpcs: [...d('unichain-sepolia'), 'https://sepolia.unichain.org'], route: 'ub' },
+  // MeshPort bridge-router (CCTP) chains — values copied from src/blockchain/chains.ts.
+  Sonic_Testnet: { label: 'Sonic', chainId: 14601, usdc: '0x0BA304580ee7c9a980CF72e55f5Ed2E9fd30Bc51', rpcs: ['https://rpc.testnet.soniclabs.com', 'https://sonic-testnet.rpc.thirdweb.com'], route: 'ub' },
+  World_Chain_Sepolia: { label: 'World Chain', chainId: 4801, usdc: '0x66145f38cBAC35Ca6F1Dfb4914dF98F1614aeA88', rpcs: ['https://worldchain-sepolia.g.alchemy.com/public', 'https://worldchain-sepolia.rpc.thirdweb.com'], route: 'ub' },
+  Linea_Sepolia: { label: 'Linea', chainId: 59141, usdc: '0xFEce4462D57bD51A6A552365A011b95f0E16d9B7', rpcs: ['https://rpc.sepolia.linea.build'], route: 'ub' },
+  Ink_Testnet: { label: 'Ink', chainId: 763373, usdc: '0xFabab97dCE620294D2B0b0e46C68964e326300Ac', rpcs: ['https://rpc-gel-sepolia.inkonchain.com', 'https://rpc-qnd-sepolia.inkonchain.com'], route: 'ub' },
+  Monad_Testnet: { label: 'Monad', chainId: 10143, usdc: '0x534b2f3A21130d7a60830c2Df862319e593943A3', rpcs: ['https://testnet-rpc.monad.xyz'], route: 'ub' },
+  Morph_Testnet: { label: 'Morph', chainId: 2910, usdc: '0x7433b41C6c5e1d58D4Da99483609520255ab661B', rpcs: ['https://rpc-hoodi.morphl2.io'], route: 'ub' },
+  Pharos_Testnet: { label: 'Pharos', chainId: 688689, usdc: '0xcfC8330f4BCAB529c625D12781b1C19466A9Fc8B', rpcs: ['https://atlantic.dplabs-internal.com'], route: 'ub' },
+  Plume_Testnet: { label: 'Plume', chainId: 98867, usdc: '0xcB5f30e335672893c7eb944B374c196392C19D18', rpcs: ['https://testnet-rpc.plume.org'], route: 'ub' },
+  Codex_Testnet: { label: 'Codex', chainId: 812242, usdc: '0x6d7f141b6819C2c9CC2f818e6ad549E7Ca090F8f', rpcs: ['https://rpc.codex-stg.xyz'], route: 'ub' },
+  Injective_Testnet: { label: 'Injective', chainId: 1439, usdc: '0x0C382e685bbeeFE5d3d9C29e29E341fEE8E84C5d', rpcs: ['https://k8s.testnet.json-rpc.injective.network'], route: 'ub' },
+  XDC_Apothem: { label: 'XDC', chainId: 51, usdc: '0xb5AB69F7bBada22B28e79C8FFAECe55eF1c771D4', rpcs: ['https://rpc.apothem.network', 'https://erpc.apothem.network'], route: 'ub' },
 }
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'

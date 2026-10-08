@@ -20,6 +20,17 @@ const EXTERNAL: Array<[id: string, label: string, logo: string]> = [
   ['HyperEVM_Testnet', 'HyperEVM', 'hyperevm'],
   ['Sei_Testnet', 'Sei', 'sei'],
   ['Unichain_Sepolia', 'Unichain', 'unichain'],
+  ['Sonic_Testnet', 'Sonic', 'sonic'],
+  ['World_Chain_Sepolia', 'World Chain', 'world'],
+  ['Linea_Sepolia', 'Linea', 'linea'],
+  ['Ink_Testnet', 'Ink', 'ink'],
+  ['Monad_Testnet', 'Monad', 'monad'],
+  ['Morph_Testnet', 'Morph', 'morph'],
+  ['Pharos_Testnet', 'Pharos', 'pharos'],
+  ['Plume_Testnet', 'Plume', 'plume'],
+  ['Codex_Testnet', 'Codex', 'codex'],
+  ['Injective_Testnet', 'Injective', 'injective'],
+  ['XDC_Apothem', 'XDC', 'xdc'],
 ]
 
 export const MERCHANT_QR_CHAINS: MerchantQrChain[] = [

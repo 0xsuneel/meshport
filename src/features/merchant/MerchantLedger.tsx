@@ -44,6 +44,7 @@ function chatMessageFor(i: MerchantIntent): string {
 const CHAIN_LABEL: Record<string, string> = {
   Arc_Testnet: 'Arc', Ethereum_Sepolia: 'Ethereum', Base_Sepolia: 'Base', Arbitrum_Sepolia: 'Arbitrum', Optimism_Sepolia: 'Optimism',
   Polygon_Sepolia: 'Polygon', Avalanche_Fuji: 'Avalanche', HyperEVM_Testnet: 'HyperEVM', Sei_Testnet: 'Sei', Unichain_Sepolia: 'Unichain',
+  Sonic_Testnet: 'Sonic', World_Chain_Sepolia: 'World Chain', Linea_Sepolia: 'Linea', Ink_Testnet: 'Ink', Monad_Testnet: 'Monad', Morph_Testnet: 'Morph', Pharos_Testnet: 'Pharos', Plume_Testnet: 'Plume', Codex_Testnet: 'Codex', Injective_Testnet: 'Injective', XDC_Apothem: 'XDC',
 }
 const routeLabel = (chain?: string | null) => !chain ? '' : chain === 'Arc_Testnet' ? 'Arc' : `${CHAIN_LABEL[chain] ?? chain.replace(/_/g, ' ')} → Arc`
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
