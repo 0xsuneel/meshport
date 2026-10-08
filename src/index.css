@@ -477,8 +477,8 @@
 @keyframes mpSheetUp { from { transform: translateY(100%); } to { transform: none; } }
 @keyframes mpDrawerIn { from { transform: translateX(100%); } to { transform: none; } }
 @keyframes mpFadeIn { from { opacity: 0; } to { opacity: 1; } }
-/* Opaque from the first frame (see DIALOG_CARD in lib/motion.ts): a fading card shows the page through it. */
-@keyframes mpDialogIn { from { transform: translateY(8px) scale(0.96); } to { transform: none; } }
+/* Same pop as DIALOG_CARD (lib/motion.ts): solid within the first few frames, then a soft grow into place. */
+@keyframes mpDialogIn { from { opacity: 0.85; transform: translateY(10px) scale(0.94); } 25% { opacity: 1; } to { opacity: 1; transform: none; } }
 .mp-dialog-in { animation: mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1); }
 .mp-sheet-up { animation: mpSheetUp 0.42s cubic-bezier(0.32, 0.72, 0, 1); }
 .mp-drawer-in { animation: mpDrawerIn 0.42s cubic-bezier(0.32, 0.72, 0, 1); }
@@ -540,6 +540,19 @@ body { overflow-wrap: break-word; }
    ScreenPush): cloned nodes would restart their CSS entrance animations from
    opacity 0, blinking parts of the old page out and back in as it slides. */
 .mp-page-snapshot, .mp-page-snapshot * { animation: none !important; transition: none !important; }
+
+/* Touch devices: no backdrop blur under #root at all. Turning the blurs off
+   only while a popup was open (below) made Android Chrome re-composite the
+   whole page the instant a popup opened and again when it closed: a one-frame
+   flash, most visible on light pages. Page headers are 94–95% opaque, so
+   without the blur they look the same; popups live outside #root and keep
+   their own styling. */
+@media (hover: none) and (pointer: coarse) {
+  #root *, #root *::before, #root *::after {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
 
 /* A popup is open (see src/hooks/usePopupOpen.ts): drop every backdrop blur
    on the page beneath it. Android Chrome re-blurs them each frame the popup

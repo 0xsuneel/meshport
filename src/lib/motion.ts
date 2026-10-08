@@ -84,24 +84,26 @@ export const SHEET_BACKDROP = {
 // ── Centered popups / dialogs ──────────────────────────────────────────────
 /** Popups move on plain tweens: springs overshoot (a rubber-band bounce),
  *  and on a spring the opacity overshoots and dips back, which reads as a blink. */
-const POPUP_FADE: Transition = { duration: 0.18, ease: EASE_OUT }
-// Cards are fully opaque from their first frame and only grow into place
-// (the dim behind them fades). Even at 70% opacity the page showed through
-// the card for the first frames: barely visible on dark pages, but on light
-// pages the text underneath read as a flicker inside the white card.
+// The card starts 85% solid and is fully solid within ~5 frames, so the page
+// behind barely shows through it (a full fade from 0 left the page's text
+// visible inside the white card — a flicker on light pages), and it grows
+// into place on a longer, soft ease-out, so it opens as a smooth pop rather
+// than appearing at once. Only the dim fades behind it (PopupDim).
+const POPUP_FADE: Transition = { duration: 0.08, ease: 'linear' }
+const POPUP_GROW = [0.16, 1, 0.3, 1] as const
 export const DIALOG_CARD = {
-  initial: { opacity: 1, scale: 0.96, y: 8 },
+  initial: { opacity: 0.85, scale: 0.94, y: 10 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.97, y: 4 },
-  transition: { duration: 0.22, ease: EASE_OUT, opacity: POPUP_FADE } as Transition, // no overshoot
+  transition: { duration: 0.32, ease: POPUP_GROW, opacity: POPUP_FADE } as Transition, // no overshoot
 } as const
 /** Centred popups (DesktopDialogFrame / Sheet): a slightly livelier pop-in
  *  than DIALOG_CARD, which the success receipt keeps. */
 export const POPUP_CARD = {
-  initial: { opacity: 1, scale: 0.92, y: 18 },
+  initial: { opacity: 0.85, scale: 0.9, y: 22 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } },
-  transition: { duration: 0.26, ease: EASE_OUT, opacity: POPUP_FADE } as Transition, // no overshoot
+  transition: { duration: 0.36, ease: POPUP_GROW, opacity: POPUP_FADE } as Transition, // no overshoot
 } as const
 export const DIALOG_BACKDROP = {
   initial: { opacity: 0 },
