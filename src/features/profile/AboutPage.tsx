@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { MeshPortLogo } from '@/components/ui/MeshPortLogo'
 import { ArrowLeft, AtSign, MessageCircle, Globe2, KeyRound, ChevronRight } from 'lucide-react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 
@@ -44,7 +45,7 @@ export function AboutPage() {
 
       <div className="px-5 pb-8 pt-2 space-y-5 lg:max-w-[760px] lg:mx-auto">
         <div className="flex flex-col items-center text-center gap-3 py-4">
-          <img src="/favicon.svg" alt="MeshPort" className="w-16 h-16" />
+          <MeshPortLogo className="w-16 h-16" />
           <div>
             <h2 className="text-xl font-bold text-text-primary">MeshPort</h2>
             <p className="text-sm text-text-secondary mt-1">USDC Payments, Made Simple</p>
