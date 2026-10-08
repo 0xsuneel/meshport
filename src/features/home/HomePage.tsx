@@ -1782,10 +1782,23 @@ function MultichainHubCard({
 // HomePage, not the hero carousel three levels away — regardless of how
 // many times this component is mounted (all 3 hero slots can each run
 // their own independent copy of this animation safely).
+// Coming back to Home: start from the number shown last time, and let the
+// first moments' recalculation (prices / balances arriving) settle without
+// counting up — the count-up used to replay on every return. Only a real
+// change while Home is open counts up.
+let lastShownBalance: number | null = null
+const SETTLE_MS = 1500
 function AnimatedBalanceText({ target, children }: { target: number; children: (displayed: number) => ReactNode }) {
-  const motionVal = useMotionValue(target)
-  const [displayed, setDisplayed] = useState(target)
+  const start = lastShownBalance ?? target
+  const motionVal = useMotionValue(start)
+  const [displayed, setDisplayed] = useState(start)
+  const mountedAt = useRef(Date.now())
   useEffect(() => {
+    lastShownBalance = target
+    if (Date.now() - mountedAt.current < SETTLE_MS) {
+      motionVal.set(target); setDisplayed(target)
+      return
+    }
     const controls = animate(motionVal, target, { duration: 0.6, ease: 'easeOut', onUpdate: setDisplayed })
     return () => controls.stop()
   }, [target])

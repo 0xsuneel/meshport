@@ -50,7 +50,7 @@ export function Toast() {
           key={toast.message}
           {...TOAST_MOTION}
         >
-          <div role="status" className={`flex items-start gap-3 px-4 py-3 rounded-2xl border shadow-elevation-2 backdrop-blur-md ${colors[toast.type]}`}>
+          <div role="status" className={`flex items-start gap-3 px-4 py-3 rounded-2xl border shadow-elevation-2 ${colors[toast.type]}`}>
             <span className="flex-shrink-0 mt-px">{icons[toast.type]}</span>
             {/* Long messages wrap inside the screen (never run off it). */}
             <p className="flex-1 min-w-0 text-sm font-medium text-text-primary" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{toast.message}</p>

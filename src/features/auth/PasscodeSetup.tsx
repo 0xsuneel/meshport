@@ -466,7 +466,12 @@ export function PasscodeLockPage() {
   return (
     <div className="flex flex-col h-full bg-bg px-6 py-safe">
       <div className="flex-1 flex flex-col items-center justify-center gap-2">
-        <img src="/favicon.svg" alt="MeshPort" className="w-20 h-20 rounded-3xl mx-auto mb-2 shadow-elevation-2" />
+        {/* Drawn inline so it shows with the first paint instead of loading a moment later. */}
+        <svg role="img" aria-label="MeshPort" viewBox="8 8 184 184" className="w-20 h-20 rounded-3xl mx-auto mb-2 shadow-elevation-2" style={{ display: 'block' }}>
+          <rect x="10" y="10" width="180" height="180" rx="42" fill="#FFFFFF" stroke="#DCE5E3" strokeWidth="2"/>
+          <g stroke="#0F5C57" strokeWidth="10" strokeLinecap="round"><line x1="100" y1="100" x2="62" y2="64"/><line x1="100" y1="100" x2="146" y2="58"/><line x1="100" y1="100" x2="150" y2="118"/><line x1="100" y1="100" x2="108" y2="152"/><line x1="100" y1="100" x2="54" y2="142"/></g>
+          <g fill="#FFFFFF" stroke="#0F5C57" strokeWidth="10"><circle cx="62" cy="64" r="12"/><circle cx="146" cy="58" r="13"/><circle cx="150" cy="118" r="9"/><circle cx="108" cy="152" r="8"/><circle cx="54" cy="142" r="16"/><circle cx="100" cy="100" r="22"/></g>
+        </svg>
         <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">MeshPort</h2>
         <p className="text-text-secondary text-[14px] leading-[1.5]">
           {noPasscode ? `Signed in as ${displayName}` : 'Enter passcode to unlock'}
