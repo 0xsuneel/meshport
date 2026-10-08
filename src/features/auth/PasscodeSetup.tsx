@@ -350,10 +350,13 @@ export function PasscodeLockPage() {
   // actually usable right now, e.g. iOS Safari's installed/home-screen PWA
   // context vs. a regular Safari tab, or a desktop machine with no Windows
   // Hello/Touch ID configured.
-  const [liveSupported, setLiveSupported] = useState(true)
+  // null until the probe answers (the key shows meanwhile); the automatic
+  // prompt waits for a real yes.
+  const [liveSupported, setLiveSupported] = useState<boolean | null>(null)
   useEffect(() => { isBiometricSupported().then(setLiveSupported) }, [])
 
-  const canUseBiometric = liveSupported && biometricEnabled && !!walletAddress && hasBiometricRegistered(walletAddress)
+  const biometricReady = biometricEnabled && !!walletAddress && hasBiometricRegistered(walletAddress)
+  const canUseBiometric = biometricReady && liveSupported !== false
 
   const handleUnlock = async (val: string) => {
     setChecking(true)
@@ -446,11 +449,32 @@ export function PasscodeLockPage() {
     }
   }
 
-  // Biometric only ever triggers on an explicit tap now — no auto-prompt on
-  // arrival. Previously auto-fired once on mount, which the screenshot this
-  // was changed from showed working, but the request was specifically to
-  // stop that and only show the OS prompt when the user taps the key.
-
+  // Biometric enabled → the fingerprint / Face ID prompt opens by itself
+  // when the lock screen appears (same as PinKeypad for transaction
+  // approvals). Cancelled, failed, or refused by the browser (iOS Safari
+  // may refuse a prompt nobody tapped for) → the passcode pad is already
+  // here, and the fingerprint key stays to try again. Once per visit, never
+  // after typing has started, and only while the page is visible.
+  const autoTriedRef = useRef(false)
+  const inputRef = useRef(input)
+  inputRef.current = input
+  const tryBiometricRef = useRef(tryBiometric)
+  tryBiometricRef.current = tryBiometric
+  const canAuto = biometricReady && liveSupported === true
+  useEffect(() => {
+    if (!canAuto) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const run = () => {
+      if (autoTriedRef.current || inputRef.current.length > 0) return
+      autoTriedRef.current = true
+      tryBiometricRef.current()
+    }
+    const schedule = () => { timer = setTimeout(run, 150) }
+    const onVisible = () => { if (document.visibilityState === 'visible') { document.removeEventListener('visibilitychange', onVisible); schedule() } }
+    if (document.visibilityState === 'visible') schedule()
+    else document.addEventListener('visibilitychange', onVisible)
+    return () => { if (timer) clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible) }
+  }, [canAuto])
 
   const handlePress = async (key: string) => {
     if (error) { setError(false); setInput(''); return }
