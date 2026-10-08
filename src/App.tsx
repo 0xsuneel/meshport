@@ -458,6 +458,39 @@ const router = createBrowserRouter([
   { path: '*',                 element: <Navigate to="/" replace /> },
 ].map(r => ({ ...r, errorElement: <RouteErrorPage /> })))
 
+// Fades out and removes index.html's splash once the first real page is on
+// screen. It sits inside the same Suspense boundary as the router, so it only
+// mounts after the first page's code has loaded — the splash used to go away
+// as soon as the store hydrated, leaving a blank loading screen (looked like
+// an empty Home) while the lock screen's code was still downloading.
+// It also waits for the page to actually draw something: the first route is
+// often just a redirect (e.g. "/" → the lock screen), which renders nothing
+// while the next page's code is still loading.
+function SplashRemover() {
+  useEffect(() => {
+    const splash = document.getElementById('splash')
+    const root = document.getElementById('root')
+    if (!splash || !root) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const hasPage = () => root.innerText.trim().length > 0 || !!root.querySelector('svg, img, canvas, input, button')
+    const hide = () => {
+      obs.disconnect()
+      splash.classList.add('splash-hide')
+      try { sessionStorage.setItem('mp_opened', '1') } catch { /* private mode */ }
+      timer = setTimeout(() => splash.remove(), 250)
+    }
+    const obs = new MutationObserver(() => { if (hasPage()) hide() })
+    if (hasPage()) hide()
+    else {
+      obs.observe(root, { childList: true, subtree: true, characterData: true })
+      // Never keep the splash forever (boot.js handles a genuinely stuck load).
+      timer = setTimeout(hide, 8000)
+    }
+    return () => { obs.disconnect(); if (timer) clearTimeout(timer) }
+  }, [])
+  return null
+}
+
 export default function App() {
   // Auto-restore the private key on app load / reload.
   // privateKey is never persisted (security), but mnemonic is — so we can
@@ -558,21 +591,33 @@ export default function App() {
   useEffect(() => {
     let hiddenAt: number | null = null
     const STALE_AFTER_MS = 2 * 60 * 1000 // 2 minutes
-    const AUTO_LOCK_AFTER_MS = 15 * 60 * 1000 // 15 minutes hidden
+    const AUTO_LOCK_AFTER_MS = 15 * 60 * 1000 // 15 minutes hidden — same value in main.tsx
+    const HIDDEN_AT_KEY = 'meshport:hidden-at'
 
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         hiddenAt = Date.now()
+        // Kept in sessionStorage too: if the phone discards the tab while
+        // it's in the background, main.tsx reads this on the reload and
+        // locks before anything is drawn.
+        try { sessionStorage.setItem(HIDDEN_AT_KEY, String(hiddenAt)) } catch { /* private mode */ }
         return
       }
       if (document.visibilityState === 'visible' && hiddenAt) {
         const awayMs = Date.now() - hiddenAt
         hiddenAt = null
+        try { sessionStorage.removeItem(HIDDEN_AT_KEY) } catch { /* private mode */ }
         // Auto-lock after a long time in the background (like other wallets
         // do), so a phone left unattended doesn't stay unlocked for hours.
         if (awayMs > AUTO_LOCK_AFTER_MS) {
           const { isAuthenticated, passcodeLockEnabled, isLocked, lock } = useAuthStore.getState()
-          if (isAuthenticated && passcodeLockEnabled && !isLocked) lock()
+          if (isAuthenticated && passcodeLockEnabled && !isLocked) {
+            // Hide the app in this same event, before the next frame, so the
+            // page underneath never shows before the lock screen does (the
+            // lock screen removes this class when it mounts).
+            document.documentElement.classList.add('mp-locking')
+            lock()
+          }
         }
         if (awayMs > STALE_AFTER_MS) {
           window.location.reload()
@@ -657,18 +702,6 @@ export default function App() {
     return () => clearTimeout(t)
   }, [])
 
-  // Once hydrated, the real app is about to render — fade out and remove
-  // the inline splash from index.html so it doesn't linger on top.
-  useEffect(() => {
-    if (!hydrated) return
-    const splash = document.getElementById('splash')
-    if (!splash) return
-    splash.classList.add('splash-hide')
-    try { sessionStorage.setItem('mp_opened', '1') } catch { /* private mode */ }
-    const t = setTimeout(() => splash.remove(), 250)
-    return () => clearTimeout(t)
-  }, [hydrated])
-
   // index.html's inline splash (animated logo) is still visible underneath
   // during this gap, so nothing needs to render here — avoids a double loader.
   if (!hydrated) return null
@@ -680,6 +713,7 @@ export default function App() {
             loading, the current page stays on screen (no blank loader flash
             between pages). */}
         <RouterProvider router={router} future={{ v7_startTransition: true }} />
+        <SplashRemover />
       </Suspense>
     </QueryClientProvider>
   )

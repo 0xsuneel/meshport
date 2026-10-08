@@ -435,6 +435,8 @@ export function PasscodeLockPage() {
   }
 
   const storedPasscodeHash = passcode
+  // Lock screen is up → show the app again (see 'mp-locking' in App.tsx).
+  useEffect(() => { document.documentElement.classList.remove('mp-locking') }, [])
   const tryBiometric = async () => {
     if (!walletAddress || biometricTrying) return
     setBiometricTrying(true)

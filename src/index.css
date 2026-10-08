@@ -543,3 +543,7 @@ html.popup-open #root *::after {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+
+/* Locking on return from the background: the app is hidden until the lock
+   screen mounts (App.tsx adds the class, PasscodeLockPage removes it). */
+html.mp-locking #root { visibility: hidden; }
