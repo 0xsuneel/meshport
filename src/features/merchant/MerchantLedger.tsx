@@ -162,7 +162,7 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
   receipts: ChainReceipt[]; claimChains?: ClaimChain[]; onClaimed?: () => void
   onOpenRequest: (code: string) => void; onOpenCustomer: (key: string) => void
 }) {
-  const [tab, setTab] = useState<'requests' | 'customers' | 'chains'>('requests')
+  const [tab, setTab] = useState<'requests' | 'customers' | 'chains'>('chains')
   const walletAddress = useAuthStore(s => s.walletAddress)
   const [q, setQ] = useState('')
   const [showAllReq, setShowAllReq] = useState(false)
