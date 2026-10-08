@@ -78,6 +78,11 @@ export function readArcBalance(
   return getArcBalance(wallet, asset, opts).catch(() => 0)
 }
 
+/** Same read, but a failure rejects instead of resolving to 0 — for screens that must keep the last known balance (offline). */
+export function readArcBalanceOrThrow(wallet: string, asset: ArcAsset, opts?: CacheOptions): Promise<number> {
+  return getArcBalance(wallet, asset, opts)
+}
+
 /** Last known value with no network call — for instant first paint. */
 export function peekBalance(wallet: string, asset: ArcAsset): number | null {
   return peekArcBalance(wallet, asset)

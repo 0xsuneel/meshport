@@ -797,8 +797,8 @@ export function MultichainPage() {
     // Also refresh Arc balance from chain directly — works on any device
     const refreshBalance = async () => {
       try {
-        const { getUSDCBalance } = await import('@/lib/arcService')
-        const bal = await getUSDCBalance(walletAddress)
+        const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
+        const bal = await readUSDCBalanceOrThrow(walletAddress) // throws offline: keep the last balance
         useWalletStore.getState().setBalance?.(bal)
       } catch {}
     }

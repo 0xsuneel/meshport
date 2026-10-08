@@ -55,8 +55,9 @@ export function AppLayout() {
   // payment in progress are never re-mounted (they'd lose it); Home and Chat
   // reload their own data in place.
   const [reloadKey, setReloadKey] = useState(0)
-  useOnReconnect(() => {
-    if (RELOAD_ON_RECONNECT.test(window.location.pathname)) setReloadKey(k => k + 1)
+  useOnReconnect(wave => {
+    // Once per reconnect (the later wave reloads only the data hooks).
+    if (wave === 0 && RELOAD_ON_RECONNECT.test(window.location.pathname)) setReloadKey(k => k + 1)
   })
   const showNav = !isNoNavRoute(location.pathname)
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -356,8 +357,8 @@ export function AppLayout() {
         const n = await autoFinishUbClaims({ walletAddress, privateKey })
         if (n > 0) {
           try {
-            const { getUSDCBalance } = await import('@/lib/arcService')
-            useWalletStore.getState().setBalance?.(await getUSDCBalance(walletAddress))
+            const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
+            useWalletStore.getState().setBalance?.(await readUSDCBalanceOrThrow(walletAddress))
           } catch { /* next balance poll picks it up */ }
         }
       }).catch(() => { /* best-effort — retries on next trigger */ })
