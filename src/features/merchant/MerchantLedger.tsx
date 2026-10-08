@@ -26,7 +26,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { SHEET_PANEL } from '@/lib/motion'
 import { lastClaimAllAt, CLAIM_ALL_COOLDOWN_MS, CLAIM_ALL_MIN_CHAIN, type ClaimAllStep } from '@/lib/ubClaim'
-import { merchantQrChain, MERCHANT_QR_EXTERNAL, merchantPaymentUri } from '@/lib/merchantQr'
+import { merchantQrChain, MERCHANT_QR_EXTERNAL } from '@/lib/merchantQr'
 import { ChainPicker, WalletPaymentDetails } from './MerchantQrPanel'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
@@ -494,12 +494,8 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
   const [qrChain, setQrChain] = useState(MERCHANT_QR_EXTERNAL[0].id)
   const dueNow = intent ? Math.max(0, Math.round((intent.amount - intent.received) * 1e6) / 1e6) : 0
   const shownChain = qrMode === 'wallet' ? qrChain : 'Arc_Testnet'
-  // Wallet mode: the QR is an EIP-681 USDC send (network, address, exact
-  // amount) any wallet's camera fills in; the order page for that network is
-  // what gets shared / copied as a link.
-  const walletLink = orderChainPayLink(code, intent?.orderNumber, qrChain)
   const qrValue = !walletAddress || !(dueNow > 0) ? link
-    : qrMode === 'wallet' ? merchantPaymentUri(qrChain, walletAddress, dueNow)
+    : qrMode === 'wallet' ? orderChainPayLink(code, intent?.orderNumber, qrChain)
     : link
 
   useEffect(() => {
@@ -509,7 +505,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
 
   const message = !intent ? link
     : qrMode === 'wallet' && walletAddress
-    ? `Pay $${formatAmount(dueNow)} USDC on ${merchantQrChain(qrChain).label} · Order #${orderLabel(intent)}\n${walletLink}`
+    ? `Pay $${formatAmount(dueNow)} USDC on ${merchantQrChain(qrChain).label} · Order #${orderLabel(intent)}\n${qrValue}`
     : `Payment request · Order #${orderLabel(intent)}: $${formatAmount(intent.amount)} USDC${intent.note ? ` · ${intent.note}` : ''}\n${link}`
 
   const copy = (text: string, what: string) =>
@@ -545,7 +541,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
         const withFile = file && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })
         await navigator.share(withFile
           ? { title: 'Payment request', text: message, files: [file!] }
-          : { title: 'Payment request', text: message, url: qrMode === 'wallet' ? walletLink : link })
+          : { title: 'Payment request', text: message, url: qrMode === 'wallet' ? qrValue : link })
         return
       } catch (e: any) { if (e?.name === 'AbortError') return }
     }
