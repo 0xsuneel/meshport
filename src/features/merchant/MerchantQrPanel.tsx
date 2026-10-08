@@ -185,7 +185,8 @@ export function MerchantQrPanel() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={save} style={ghost}><Download size={15} /> Save QR</button>
           <button onClick={share} style={ghost}><Share2 size={15} /> Share</button>
-          <button onClick={async () => { const ok = !!walletAddress && await copyToClipboard(walletAddress); showToastMessage(ok ? 'Address copied' : 'Could not copy', ok ? 'success' : 'error') }} style={ghost}><Copy size={15} /> Address</button>
+          {/* The order's pay link for this network (the address has its own copy above). */}
+          <button onClick={async () => { const ok = !!uri && await copyToClipboard(uri); showToastMessage(ok ? 'Payment link copied' : 'Could not copy', ok ? 'success' : 'error') }} style={ghost}><Copy size={15} /> Copy link</button>
         </div>
         <button onClick={reset} style={{ ...primary }}><Plus size={16} /> New payment QR</button>
       </div>
