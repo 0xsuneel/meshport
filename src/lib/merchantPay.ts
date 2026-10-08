@@ -23,10 +23,15 @@ export type PaymentStage = 'confirmed' | 'in_ledger' | 'collected'
 /** Where a merchant payment is right now, in merchant words. */
 export function paymentStageLabel(p: { method: string; status: PaymentStage }): string {
   if (p.method !== 'external_ub') return 'Received'
-  return p.status === 'confirmed' ? 'Received · waiting for Claim All' : p.status === 'in_ledger' ? 'In Ledger · moving to Arc' : 'In Arc balance'
+  return p.status === 'confirmed' ? 'Received in Ledger · waiting for Claim All' : p.status === 'in_ledger' ? 'In Ledger · moving to Arc' : 'In Arc balance'
 }
-/** Still on its way to the Arc balance. */
-export const isArriving = (p: { method: string; status: PaymentStage }) => p.method === 'external_ub' && p.status !== 'collected'
+/**
+ * Still on its way. A payment on another chain is already received the moment
+ * it lands in the merchant's wallet there (their Ledger) — moving it to Arc is
+ * the merchant's own Claim All later. Only a transfer already moving to Arc
+ * (older Unified Balance runs) is "arriving".
+ */
+export const isArriving = (p: { method: string; status: PaymentStage }) => p.method === 'external_ub' && p.status === 'in_ledger'
 
 export type PayChain = { id: string; label: string; chainId: number; usdc: string; route: 'direct' | 'ub' }
 
