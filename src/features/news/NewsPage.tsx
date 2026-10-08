@@ -132,7 +132,8 @@ export function NewsPage() {
           <button key={it.id} onClick={() => navigate(`/news/${it.id}`)}
             style={{ width: '100%', display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left', cursor: 'pointer',
               background: 'none', border: 'none', borderBottom: '1px solid var(--border)', padding: '12px 0', color: 'var(--text-primary)' }}>
-            <NewsCover item={it} style={{ width: 88, height: 64, borderRadius: 12, flex: 'none' }} />
+            {/* Same shape as the covers (1200×630), so their own title text isn't cut off at the sides. */}
+            <NewsCover item={it} style={{ width: 112, aspectRatio: '1200 / 630', borderRadius: 10, flex: 'none' }} />
             <span style={{ minWidth: 0, flex: 1 }}>
               <span style={{ fontSize: 14, fontWeight: 650, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{it.title}</span>
               <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{newsMeta(it)}</span>
@@ -142,7 +143,7 @@ export function NewsPage() {
 
         {loading && Array.from({ length: items.length ? 2 : 6 }, (_, i) => (
           <div key={`s${i}`} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ width: 88, height: 64, borderRadius: 12, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+            <div style={{ width: 112, aspectRatio: '1200 / 630', borderRadius: 10, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
             <div style={{ flex: 1 }}>
               <div style={{ width: '90%', height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', marginBottom: 8 }} />
               <div style={{ width: '50%', height: 10, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }} />
