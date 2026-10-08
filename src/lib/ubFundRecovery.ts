@@ -487,6 +487,9 @@ export async function resolveUbStuckTransfer(p: {
     // Shows as "Recovered via UB" (withdraw + ub_recovery) in Activity and the Hub.
     await supabase.from('activity').update({
       status: 'completed', amount: out.received, usd_value: out.received, destination_chain: ARC_CHAIN_KEY,
+      // The Arc mint — where the deposit scanners look, so it isn't also
+      // recorded as a separate "Received from 0x0000…".
+      ...(out.txHash && /^0x[0-9a-fA-F]{64}$/.test(out.txHash) ? { destination_tx_hash: out.txHash.toLowerCase() } : {}),
       metadata: { ...metadata, ub_recovery: true },
       explorer_url: out.txHash ? `${ARC_EXPLORER}/tx/${out.txHash}` : null,
     }).eq('id', item.id)

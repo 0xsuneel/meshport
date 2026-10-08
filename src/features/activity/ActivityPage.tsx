@@ -176,7 +176,10 @@ export function deriveActivityRow(record: ActivityRecord) {
   const isP2PSellOrder = type === 'p2p_sell_order'
   const isP2PRefund    = type === 'p2p_refund'
   const isP2PPurchase  = type === 'p2p_purchase'
-  const isP2PCredit    = isP2PRefund || isP2PPurchase // both show as '+', same as a receive
+  // Unified Balance money sent back to this wallet (Recover → "Send back to
+  // my wallet") — it arrives here, so it reads as '+' like a receive.
+  const isUbRefund     = type === 'withdraw' && !!metadata.ub_recovery && metadata.resolution !== 'forward'
+  const isP2PCredit    = isP2PRefund || isP2PPurchase || isUbRefund // all show as '+', same as a receive
 
   const isPending  = status === 'pending'
   const isSuccess  = status === 'completed'
@@ -402,7 +405,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const isP2PSellOrder = type === 'p2p_sell_order'
   const isP2PRefund    = type === 'p2p_refund'
   const isP2PPurchase  = type === 'p2p_purchase'
-  const isP2PCredit    = isP2PRefund || isP2PPurchase
+  const isUbRefund     = type === 'withdraw' && !!(metadata as any)?.ub_recovery && (metadata as any)?.resolution !== 'forward'
+  const isP2PCredit    = isP2PRefund || isP2PPurchase || isUbRefund // '+', same as a receive
 
   // Recovered claims (see claim-recovery-scan) genuinely don't know the real
   // source-chain burn hash — only the Arc-side mint was ever observed. Both
