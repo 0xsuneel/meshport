@@ -166,7 +166,6 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
   const [q, setQ] = useState('')
   const [showAllReq, setShowAllReq] = useState(false)
   const [showAllCust, setShowAllCust] = useState(false)
-  const [showAllRcpt, setShowAllRcpt] = useState(false)
   const arriving = payments.filter(isArriving)
   // The real USDC on the Ledger chains (same as the Hub card). Payment records
   // only cover what arrived since tracking began, so they're just a fallback
@@ -293,24 +292,6 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
       {tab === 'chains' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <ClaimAllCard chains={claimChains} onClaimed={onClaimed} />
-          {receipts.length > 0 && (
-            <Section title="Payments received on other chains">
-              {(showAllRcpt ? receipts : receipts.slice(0, LIMIT)).map(r => {
-                const own = isOwnReceipt(r, walletAddress)
-                const fromName = own ? 'your transfer from Arc' : isBridgeReceipt(r) ? MINT_SENDER.toLowerCase()
-                  : (allCustomers.find(c => c.search.includes(r.from!.toLowerCase()))?.name ?? short(r.from!))
-                const label = CHAIN_LABEL[r.chain] ?? r.chain.replace(/_/g, ' ')
-                return (
-                  <Row key={r.id} icon={<CheckCircle2 size={16} color={own ? 'var(--brand-text)' : 'var(--success)'} />}
-                    title={own ? `Own Ledger payment received · ${label}` : `Payment received in Ledger (${label})`}
-                    sub={`$${formatAmount(r.amount)} USDC · ${own ? fromName : `from ${fromName}`}${r.orderNumber ? ` · Order #${r.orderNumber}` : ''} · ${timeAgo(r.createdAt)}`}
-                    onClick={own ? undefined : () => { const pay = payments.find(x => x.chain === r.chain && x.txHash.toLowerCase() === r.txHash.toLowerCase()); onOpenCustomer(pay ? customerKey(pay) : `w:${r.from ?? ''}`) }}
-                    amountColor="var(--success)" />
-                )
-              })}
-              {more(LIMIT, receipts.length, showAllRcpt, () => setShowAllRcpt(v => !v))}
-            </Section>
-          )}
           <div style={{ margin: '0 -2px' }}>{chains}</div>
         </div>
       )}
