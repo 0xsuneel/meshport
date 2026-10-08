@@ -2059,8 +2059,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         } catch {}
 
         try {
-          const { getUSDCBalance } = await import('@/lib/arcService')
-          if (senderAddress) getUSDCBalance(senderAddress).then(b => useWalletStore.getState().setBalance(b)).catch(() => {})
+          const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
+          if (senderAddress) readUSDCBalanceOrThrow(senderAddress).then(b => useWalletStore.getState().setBalance(b)).catch(() => {})
         } catch {}
 
         try {
@@ -2597,8 +2597,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
       // Refresh balance
       try {
-        const { getUSDCBalance } = await import('@/lib/arcService')
-        if (senderAddress) getUSDCBalance(senderAddress).then(b => useWalletStore.getState().setBalance(b)).catch(() => {})
+        const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
+        if (senderAddress) readUSDCBalanceOrThrow(senderAddress).then(b => useWalletStore.getState().setBalance(b)).catch(() => {})
       } catch {}
 
       // Award points — fire-and-forget, same as the Activity.bridge() call

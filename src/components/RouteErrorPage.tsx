@@ -20,7 +20,7 @@ export function RouteErrorPage() {
   }, [stale, online])
 
   // Whatever failed while offline is tried again once the connection is back.
-  useOnReconnect(() => { if (!stale) window.location.reload() })
+  useOnReconnect(wave => { if (wave === 0 && !stale) window.location.reload() })
 
   useEffect(() => { console.error('[route error]', error) }, [error])
 

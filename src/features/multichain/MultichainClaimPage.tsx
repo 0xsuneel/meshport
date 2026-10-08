@@ -831,8 +831,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     }
     if (claims.every(c => c.status === 'completed' || mintedOnArc[c.id])) {
       if (walletAddress) refreshScope({ kind: 'arc', wallet: walletAddress })
-      import('@/lib/arcService').then(({ getUSDCBalance }) =>
-        getUSDCBalance(walletAddress ?? '').then(setBalance).catch(() => {})
+      import('@/lib/arcService').then(({ readUSDCBalanceOrThrow }) =>
+        readUSDCBalanceOrThrow(walletAddress ?? '').then(setBalance).catch(() => {})
       )
       setChainProgress(prev => prev.length
         ? prev.map(p => ({ ...p, stage: 'done', pct: 100 }))

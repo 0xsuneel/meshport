@@ -48,18 +48,23 @@ export function toPlainDecimalString(amount: number, decimals: number): string {
 }
 
 // ─── Get USDC balance — Arc docs: use eth_getBalance (18-decimal native wei) ──
+/** Like getUSDCBalance, but a failed read throws instead of looking like 0 (offline must never show $0). */
+export async function readUSDCBalanceOrThrow(address: string): Promise<number> {
+  const json = await arcRpcJson({
+    jsonrpc: '2.0', id: 1,
+    method: 'eth_getBalance',    // Arc docs recommended method
+    params: [address, 'latest'],
+  }, 15000)
+  if (json?.error) throw new Error(json.error.message || 'eth_getBalance failed')
+  const raw = json?.result
+  if (!raw || raw === '0x' || raw === '0x0') return 0
+  // Arc native balance: 18 decimals. Divide by 1e18 for USDC display value.
+  return Number(BigInt(raw)) / 1e18
+}
+
 export async function getUSDCBalance(address: string): Promise<number> {
   try {
-    const json = await arcRpcJson({
-      jsonrpc: '2.0', id: 1,
-      method: 'eth_getBalance',    // Arc docs recommended method
-      params: [address, 'latest'],
-    }, 15000)
-    const raw = json.result
-    if (!raw || raw === '0x' || raw === '0x0') return 0
-    // Arc native balance: 18 decimals. Divide by 1e18 for USDC display value.
-    const balance = Number(BigInt(raw)) / 1e18
-    return balance
+    return await readUSDCBalanceOrThrow(address)
   } catch (e: any) {
     console.error('[MeshPort] Balance fetch error:', e?.name === 'AbortError' ? 'timeout' : e?.message)
     return 0
@@ -546,36 +551,29 @@ export async function sendEURC(params: {
 }
 
 // ─── Get EURC balance (ERC-20 balanceOf) ─────────────────────────────────────
+async function readTokenBalanceOrThrow(address: string, contract: string, decimals: number): Promise<number> {
+  const padded = address.toLowerCase().replace('0x','').padStart(64,'0')
+  const json = await arcRpcJson({
+    jsonrpc: '2.0', id: 1,
+    method: 'eth_call',
+    params: [{ to: contract, data: '0x70a08231' + padded }, 'latest'],
+  }, 10000)
+  if (json?.error) throw new Error(json.error.message || 'balanceOf failed')
+  const hex = json?.result
+  if (!hex || hex === '0x' || hex === '0x0') return 0
+  return Number(BigInt(hex)) / 10 ** decimals
+}
+
+/** Throwing variants: a failed read is an error, not a 0 balance. */
+export const readEURCBalanceOrThrow = (address: string) => readTokenBalanceOrThrow(address, EURC_CONTRACT, 6)     // EURC = 6 decimals
+export const readCirBtcBalanceOrThrow = (address: string) => readTokenBalanceOrThrow(address, CIRBTC_CONTRACT, 8) // cirBTC = 8 decimals
+
 export async function getEURCBalance(address: string): Promise<number> {
-  try {
-    const padded = address.toLowerCase().replace('0x','').padStart(64,'0')
-    const json = await arcRpcJson({
-      jsonrpc: '2.0', id: 1,
-      method: 'eth_call',
-      params: [{ to: EURC_CONTRACT, data: '0x70a08231' + padded }, 'latest'],
-    }, 10000)
-    const hex = json?.result
-    if (!hex || hex === '0x' || hex === '0x0') return 0
-    return Number(BigInt(hex)) / 1e6   // EURC = 6 decimals
-  } catch {
-    return 0
-  }
+  try { return await readEURCBalanceOrThrow(address) } catch { return 0 }
 }
 
 export async function getCirBtcBalance(address: string): Promise<number> {
-  try {
-    const padded = address.toLowerCase().replace('0x','').padStart(64,'0')
-    const json = await arcRpcJson({
-      jsonrpc: '2.0', id: 1,
-      method: 'eth_call',
-      params: [{ to: CIRBTC_CONTRACT, data: '0x70a08231' + padded }, 'latest'],
-    }, 10000)
-    const hex = json?.result
-    if (!hex || hex === '0x' || hex === '0x0') return 0
-    return Number(BigInt(hex)) / 1e8   // cirBTC = 8 decimals
-  } catch {
-    return 0
-  }
+  try { return await readCirBtcBalanceOrThrow(address) } catch { return 0 }
 }
 
 // ─── Send cirBTC (ERC-20 transfer) ───────────────────────────────────────────

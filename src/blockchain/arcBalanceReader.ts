@@ -34,7 +34,7 @@
  *
  * TESTNET ONLY — same Arc Testnet tokens and endpoint as the legacy readers.
  */
-import { getUSDCBalance, getEURCBalance, getCirBtcBalance } from '@/lib/arcService'
+import { readUSDCBalanceOrThrow, readEURCBalanceOrThrow, readCirBtcBalanceOrThrow } from '@/lib/arcService'
 import { ARC_CHAIN_ID } from './chains'
 import { balanceKey, normalizeAddress } from './types'
 import { swr, peek, put } from './cache'
@@ -44,19 +44,24 @@ import { countRequest } from './rpcMetrics'
 export type ArcAsset = 'USDC' | 'EURC' | 'CIRBTC'
 
 /**
- * The legacy readers, used verbatim. Keep this mapping — swapping any entry
- * for a hand-rolled RPC call reintroduces the 429 problem described above.
+ * The legacy readers' throwing forms (same arcRpcJson path, same decimals).
+ * Keep this mapping — swapping any entry for a hand-rolled RPC call
+ * reintroduces the 429 problem described above.
+ *
+ * They throw on failure rather than returning 0: a 0 from a failed read used
+ * to be cached for up to two minutes and saved as the wallet's balance, so
+ * after a moment offline Home showed $0 — and kept showing it after the
+ * connection came back. Failures are now never cached; readArcBalance()
+ * below still turns them into 0 for callers that want that contract.
  */
 const FETCHERS: Record<ArcAsset, (address: string) => Promise<number>> = {
-  USDC:   getUSDCBalance,
-  EURC:   getEURCBalance,
-  CIRBTC: getCirBtcBalance,
+  USDC:   readUSDCBalanceOrThrow,
+  EURC:   readEURCBalanceOrThrow,
+  CIRBTC: readCirBtcBalanceOrThrow,
 }
 
 /**
- * One uncached read. Resolves to 0 on failure, because the underlying
- * arcService readers already catch and return 0 — that contract is preserved,
- * not re-derived.
+ * One uncached read. Rejects on failure (see FETCHERS).
  *
  * Counted as a single logical request. arcRpcJson's internal 429 retries are
  * not individually counted, so the metric slightly UNDER-reports raw HTTP

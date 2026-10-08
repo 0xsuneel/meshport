@@ -1002,13 +1002,14 @@ export function PaySendPage() {
       })()
 
       try {
-        const { getUSDCBalance } = await import('@/lib/arcService')
+        // Throwing read: a failed refresh never saves $0 as the balance.
+        const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
         const { deriveAddressFromPrivateKey } = await import('@/lib/arc')
         // Fire-and-forget — deriving the address then fetching the balance
         // is only for refreshing the displayed balance after send; no reason
         // to block the success screen on it.
         deriveAddressFromPrivateKey(activePrivateKey).then((realAddr: string) => {
-          getUSDCBalance(realAddr).then((bal: number) => setBalance(bal))
+          readUSDCBalanceOrThrow(realAddr).then((bal: number) => setBalance(bal)).catch(() => {})
         }).catch(() => {})
       } catch {}
 

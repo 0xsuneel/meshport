@@ -13,7 +13,7 @@ import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
 import { formatAmount, copyToClipboard, timeAgo, trimTrailingZeros } from '@/lib/utils'
-import { readArcBalance, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT, EXTERNAL_SCAN_PROGRESS_EVENT } from '@/blockchain/BlockchainManager'
+import { readArcBalance, readArcBalanceOrThrow, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT, EXTERNAL_SCAN_PROGRESS_EVENT } from '@/blockchain/BlockchainManager'
 import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpinner'
 import { notifyPaymentReceived, notifyPaymentReceivedFromAddress, notifyBulkPaymentReceived } from '@/lib/notifications'
 import { markP2PNotificationRead } from '@/lib/p2pNotifications'
@@ -3315,7 +3315,9 @@ export function HomePage() {
 
     const fetchBalance = async () => {
       try {
-        const bal = await readArcBalance(address, 'USDC')
+        // Throws when the read fails (offline): the last known balance stays
+        // on screen instead of being replaced — and saved — as $0.
+        const bal = await readArcBalanceOrThrow(address, 'USDC')
         if (!cancelled) {
           // A genuine increase means new funds landed since the last
           // check — dispatching the same event useActivity.ts's on-chain
@@ -3418,12 +3420,14 @@ export function HomePage() {
       // reads resolve and render on their own, as fast as they always
       // could; price/24h-change are strictly best-effort enrichment that
       // arrives whenever it arrives, never gating the balance display.
+      // A failed read (offline) keeps the last shown amount rather than 0.
       const balancesPromise = Promise.all([
-        readArcBalance(address, 'EURC').catch(() => 0),
-        readArcBalance(address, 'CIRBTC').catch(() => 0),
+        readArcBalanceOrThrow(address, 'EURC').catch(() => null),
+        readArcBalanceOrThrow(address, 'CIRBTC').catch(() => null),
       ]).then(([eurc, cirbtc]) => {
         if (cancelled) return
-        setEurcBalance(eurc); setCirBtcBalance(cirbtc)
+        if (eurc !== null) setEurcBalance(eurc)
+        if (cirbtc !== null) setCirBtcBalance(cirbtc)
       })
 
       const priceEnrichmentPromise = Promise.all([
