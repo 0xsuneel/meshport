@@ -559,33 +559,17 @@ export async function recordUbClaim(p: {
 // merchant taps Claim All (Hub → Ledger → Chains). Nothing moves by itself.
 // Claim All is offered once every 6 hours — single chains can still be
 // claimed any time from the chain list.
-//   • Chains with MeshPort's gasless router: one CCTP claim per chain
-//     (one signature each, minted on Arc in a few minutes).
-//   • Unified Balance-only chains: every chain into the Ledger, then ONE
-//     signed Ledger → Arc transfer. The server submits it as soon as the
-//     deposits confirm (ub-claim-worker), even if the app is closed.
+// Merchants use CCTP only (no Unified Balance): one gasless claim per chain
+// through MeshPort's bridge router — the relayer (api/bridge-relay) pays the
+// source-chain gas and MeshPort's fee is taken in the same transaction,
+// exactly like anyone's CCTP claim. The claim worker then mints on Arc.
 export const CLAIM_ALL_COOLDOWN_MS = 6 * 60 * 60_000
 export const CLAIM_ALL_MIN_CHAIN = 1
 const claimAllKey = (addr: string) => `meshport_claim_all_${addr.toLowerCase()}`
 
-/** When this merchant last ran Claim All (this device or, for Ledger chains, any device). */
+/** When this merchant last ran a Claim All that moved money (this device). */
 export async function lastClaimAllAt(walletAddress: string): Promise<number> {
-  let t = 0
-  try { t = Number(localStorage.getItem(claimAllKey(walletAddress)) || 0) || 0 } catch { /* storage off */ }
-  try {
-    const { supabase } = await import('./supabase')
-    const { data } = await supabase.from('ub_claim_intents').select('created_at')
-      .eq('wallet_address', walletAddress.toLowerCase()).eq('merchant', true).eq('auto_convert', true)
-      .order('created_at', { ascending: false }).limit(1).maybeSingle()
-    if (data?.created_at) t = Math.max(t, new Date(data.created_at).getTime())
-  } catch { /* local time is enough */ }
-  return t
-}
-
-async function withSweepLock(walletAddress: string, fn: () => Promise<void>): Promise<void> {
-  const locks = typeof navigator !== 'undefined' ? (navigator as any).locks : undefined
-  if (!locks?.request) return fn()
-  return locks.request(`meshport-ub-autosweep:${walletAddress.toLowerCase()}`, fn)
+  try { return Number(localStorage.getItem(claimAllKey(walletAddress)) || 0) || 0 } catch { return 0 }
 }
 
 export type ClaimAllStep = { chainId: string; state: 'working' | 'done' | 'error'; msg: string }
@@ -593,28 +577,28 @@ let claimingAll = false
 
 export async function merchantClaimAll(p: {
   walletAddress: string; privateKey: string
-  /** App chain ids (Polygon_Sepolia, not Polygon_Amoy_Testnet) with their wallet balance. */
+  /** App chain ids with their wallet balance. */
   chains: Array<{ chainId: string; balance: number }>
   onStep?: (s: ClaimAllStep) => void
-}): Promise<{ cctp: number; ledger: number; failed: string[] }> {
+}): Promise<{ cctp: number; failed: string[] }> {
   if (claimingAll) throw new Error('Claim All is already running')
   claimingAll = true
   const step = (chainId: string, state: ClaimAllStep['state'], msg: string) => p.onStep?.({ chainId, state, msg })
-  const out = { cctp: 0, ledger: 0, failed: [] as string[] }
+  const out = { cctp: 0, failed: [] as string[] }
   try {
-    const { isGaslessBridgeAvailable, bringFundsGasless } = await import('./gaslessBridge')
-    const toSdk = (c: string) => c === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : c
-    const due = p.chains.filter(c => c.balance >= CLAIM_ALL_MIN_CHAIN)
-    const cctpChains = due.filter(c => isGaslessBridgeAvailable(c.chainId))
-    const ubChains = due.filter(c => !isGaslessBridgeAvailable(c.chainId) && UB_CLAIM_CHAINS.has(toSdk(c.chainId)))
-
-    // 1) CCTP chains — one gasless claim each, handed to the claim worker.
-    for (const c of cctpChains) {
+    const [{ isGaslessBridgeAvailable, bringFundsGasless }, { submitClaim }] = await Promise.all([
+      import('./gaslessBridge'), import('./claimService'),
+    ])
+    const due = p.chains.filter(c => c.balance >= CLAIM_ALL_MIN_CHAIN && isGaslessBridgeAvailable(c.chainId))
+    for (const c of due) {
       const amount = Math.floor(c.balance * 1e6) / 1e6
       step(c.chainId, 'working', 'Signing…')
       try {
-        const r = await bringFundsGasless({ chainId: c.chainId, amountUsdc: amount, privateKey: p.privateKey, walletAddress: p.walletAddress })
-        const { submitClaim } = await import('./claimService')
+        const r = await bringFundsGasless({
+          chainId: c.chainId, amountUsdc: amount, privateKey: p.privateKey, walletAddress: p.walletAddress,
+          onStatus: msg => step(c.chainId, 'working', msg === 'Submitting…' || msg === 'Confirming…' ? 'MeshPort is sending the transfer…' : msg),
+        })
+        // The claim is the burned amount: MeshPort's fee was taken before the burn.
         await submitClaim({ walletAddress: p.walletAddress, sourceChain: c.chainId, amount: Math.max(0, amount - r.fee), txHash: r.txHash })
         out.cctp += amount
         step(c.chainId, 'done', 'On its way to Arc · a few minutes')
@@ -623,65 +607,8 @@ export async function merchantClaimAll(p: {
         step(c.chainId, 'error', (e instanceof Error ? e.message : 'Claim failed').slice(0, 90))
       }
     }
-
-    // 2) Unified Balance chains — into the Ledger, then one transfer to Arc.
-    // Holds the background sweep's lock (autoFinishUbClaims) so another tab
-    // can't move the same Ledger funds at the same time.
-    if (ubChains.length > 0) await withSweepLock(p.walletAddress, async () => {
-      const [{ AppKit }, { buildClaimAdapter }] = await Promise.all([
-        import('@circle-fin/app-kit'), import('@/features/multichain/MultichainClaimPage'),
-      ])
-      const kit = new AppKit({ disableErrorReporting: true } as any)
-      const adapter = await buildClaimAdapter(p.privateKey)
-      const serverOwned = await serverOwnedChains(p.walletAddress)
-      const ledger = new Map<string, number>()
-      for (const r of await getUnifiedBalances(kit, p.walletAddress).catch(() => [])) {
-        if (!serverOwned.has(r.chain)) ledger.set(r.chain, (ledger.get(r.chain) ?? 0) + r.confirmed + r.pending)
-      }
-      const deposited: string[] = []
-      for (const c of ubChains) {
-        const sdk = toSdk(c.chainId)
-        if (serverOwned.has(sdk)) { step(c.chainId, 'done', 'Already moving to Arc'); continue }
-        const amount = Math.floor(c.balance * 1e6) / 1e6
-        step(c.chainId, 'working', 'Moving into your Ledger…')
-        const ran = await withChainLock(p.walletAddress, sdk, async () => {
-          const dep: any = await kit.unifiedBalance.deposit({
-            from: { adapter, chain: sdk as any }, amount: amount.toFixed(6), token: 'USDC', allowanceStrategy: 'permit',
-          })
-          await assertDepositSucceeded(sdk, hashOf(dep))
-        }).catch(e => { step(c.chainId, 'error', (e instanceof Error ? e.message : 'Deposit failed').slice(0, 90)); return undefined })
-        if (ran) { ledger.set(sdk, (ledger.get(sdk) ?? 0) + amount); deposited.push(c.chainId) }
-        else { out.failed.push(c.chainId); if (ran === null) step(c.chainId, 'error', UB_CLAIM_BUSY_MESSAGE) }
-      }
-      const parts = [...ledger.entries()].map(([chain, amount]) => ({ chain, amount: Math.floor(amount * 1e6) / 1e6 })).filter(x => x.amount > 0)
-      const sum = parts.reduce((s, x) => s + x.amount, 0)
-      if (sum > 0) {
-        try {
-          const { body, send, allocations } = await signSpendAllToArc({ kit, adapter, walletAddr: p.walletAddress, parts })
-          const { supabase } = await import('./supabase')
-          const { error } = await supabase.from('ub_claim_intents').insert({
-            wallet_address: p.walletAddress.toLowerCase(),
-            source_chain:   allocations[0].chain,
-            source_chains:  allocations.map(a => a.chain),
-            merchant:       true,
-            auto_convert:   true, // shown as "Ledger funds moving to Arc"
-            amount:         Number(sum.toFixed(6)),
-            send_amount:    Number(send.toFixed(6)),
-            transfer_body:  body,
-          })
-          if (error) throw error
-          out.ledger = sum
-          for (const c of deposited) step(c, 'done', 'In your Ledger · to Arc once the chain confirms')
-        } catch (e) {
-          // The deposits are safe in the Ledger; Recover / the next Claim All moves them.
-          console.warn('[claimAll] Ledger → Arc transfer failed', e)
-          for (const c of deposited) step(c, 'error', 'In your Ledger — the transfer to Arc didn\'t start. Use Recover.')
-          out.failed.push(...deposited)
-        }
-      }
-    })
     // The 6-hour wait starts only when something actually moved.
-    if (out.cctp + out.ledger > 0) {
+    if (out.cctp > 0) {
       try { localStorage.setItem(claimAllKey(p.walletAddress), String(Date.now())) } catch { /* storage off */ }
     }
     return out
@@ -713,7 +640,7 @@ export async function autoCollectMerchantPayments(_p: { walletAddress: string; p
 let _sweepingSameTab = false
 
 export async function autoFinishUbClaims(p: { walletAddress: string; privateKey: string }): Promise<number> {
-  if (_sweepingSameTab || claimingAll) return 0
+  if (_sweepingSameTab) return 0
   const locks = typeof navigator !== 'undefined' ? (navigator as any).locks : undefined
   const lockName = `meshport-ub-autosweep:${p.walletAddress.toLowerCase()}`
   if (locks?.request) {

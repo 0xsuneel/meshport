@@ -3,9 +3,10 @@
 // the scanner opens its send screen on the right chain with the amount filled
 // in. The chains are the ones MeshPort watches for merchant payments (the
 // merchant-pay deposit watcher), so a payment from the QR is linked to its
-// order automatically; payments on other chains are collected to Arc.
+// order automatically; the merchant moves them to Arc with Claim All (CCTP).
 import { parseUnits, getAddress } from 'viem'
 import { ARC, EXTERNAL_CHAINS } from '@/blockchain/chains'
+import { isGaslessBridgeAvailable } from './gaslessBridge'
 
 export type MerchantQrChain = { id: string; label: string; chainId: number; usdc: string | null; logo: string; native?: boolean }
 
@@ -30,8 +31,14 @@ export const MERCHANT_QR_CHAINS: MerchantQrChain[] = [
   }),
 ]
 
-/** Merchant QR networks: the other chains (Arc is in the MeshPort QR). */
-export const MERCHANT_QR_EXTERNAL: MerchantQrChain[] = MERCHANT_QR_CHAINS.filter(c => !c.native)
+/**
+ * Merchant QR networks: the other chains (Arc is in the MeshPort QR) that
+ * have MeshPort's gasless CCTP router — merchants collect over CCTP only.
+ * (If no router is configured, e.g. a local build, the full list is kept.)
+ */
+const QR_EXTERNAL_ALL = MERCHANT_QR_CHAINS.filter(c => !c.native)
+const QR_EXTERNAL_CCTP = QR_EXTERNAL_ALL.filter(c => isGaslessBridgeAvailable(c.id))
+export const MERCHANT_QR_EXTERNAL: MerchantQrChain[] = QR_EXTERNAL_CCTP.length ? QR_EXTERNAL_CCTP : QR_EXTERNAL_ALL
 
 export const merchantQrChain = (id: string): MerchantQrChain => MERCHANT_QR_CHAINS.find(c => c.id === id) ?? MERCHANT_QR_CHAINS[0]
 

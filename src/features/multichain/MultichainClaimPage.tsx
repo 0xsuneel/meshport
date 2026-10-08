@@ -474,7 +474,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const reduceMotion = useReducedMotion()
   const [claimAmounts,   setClaimAmounts]  = useState<Record<string, string>>({})
   // Route for the claim: CCTP (burn → mint) or Unified Balance (Gateway deposit → spend).
-  // Merchants get both routes too (CCTP chains are open to them).
+  // Merchants: CCTP only (gasless — MeshPort's relayer pays the gas).
   const [claimRoute, setClaimRoute] = useState<'cctp' | 'ub'>('cctp')
   // Pre-claim fee estimate — shown on the amount screen, BEFORE the user
   // enters their passcode, so "You will receive" reflects what actually
@@ -1255,7 +1255,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
           // ── Unified Balance route (Gateway): deposit on source → spend to Arc ──
           const sdkId = toSdkChainId(chain.chainId)
-          if ((claimRoute === 'ub' || !isGaslessBridgeAvailable(chain.chainId)) && UB_CLAIM_CHAINS.has(sdkId)) {
+          if (!merchantMode && (claimRoute === 'ub' || !isGaslessBridgeAvailable(chain.chainId)) && UB_CLAIM_CHAINS.has(sdkId)) {
             const { AppKit, createEthersAdapterFromPrivateKey } = sdkRef.current ?? await loadSdk()
             const kit = new AppKit({ disableErrorReporting: true } as any)
             const adapter = await buildAdapter(createEthersAdapterFromPrivateKey, wallet.key)
@@ -1358,7 +1358,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       setChainProgress(prev => prev.map(p => p.stage !== 'done' ? { ...p, stage: 'error', msg: 'Failed', pct: 0 } : p))
       setStep('failed')
     }
-  }, [selectedTotal, chains, selected, claimAmounts, getKey, loadSdk, claimRoute])
+  }, [selectedTotal, chains, selected, claimAmounts, getKey, loadSdk, claimRoute, merchantMode])
 
   const handleClaimTap = useCallback(async () => {
     if (selectedTotal <= 0) return
@@ -1409,7 +1409,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const canConfirm = claimAmt >= MIN_CLAIM_AMOUNT && claimAmt <= (selectedChain?.claimable ?? 0) && estimateReady
   // Route (CCTP vs Unified Balance) — UB only for chains Gateway supports.
   const selectedSdkId = selected ? toSdkChainId(selected) : ''
-  const ubAvailable = UB_CLAIM_CHAINS.has(selectedSdkId)
+  // Merchants never get the Unified Balance route — CCTP only.
+  const ubAvailable = !merchantMode && UB_CLAIM_CHAINS.has(selectedSdkId)
   // CCTP here is the gasless router; a chain without one is Unified Balance only.
   const cctpAvailable = !!selected && isGaslessBridgeAvailable(selected)
   const effectiveRoute: 'cctp' | 'ub' = !ubAvailable ? 'cctp' : !cctpAvailable ? 'ub' : claimRoute
@@ -1466,8 +1467,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
   const chainsWithFunds  = chains
     .filter(c => c.claimable > 0 || c.pending > 0)
-    // Only chains Bring Funds can actually move: a gasless router, or Unified Balance.
-    .filter(c => isGaslessBridgeAvailable(c.chainId) || UB_CLAIM_CHAINS.has(toSdkChainId(c.chainId)))
+    // Only chains Bring Funds can actually move: a gasless router, or Unified
+    // Balance. Merchants: gasless router (CCTP) chains only.
+    .filter(c => isGaslessBridgeAvailable(c.chainId) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(c.chainId))))
     // `chains` only ever contains enabled chains to begin with — scan()
     // above reads via readExternalBalances, which is already settings-aware
     // and never even fetches a disabled chain's balance. This filter is now
@@ -1489,7 +1491,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // to (mis)count here.
   const disabledClaimChains = Object.keys(CHAIN_META)
     .filter(id => !isChainEnabledForClaim(settingsMap, id))
-    .filter(id => isGaslessBridgeAvailable(id) || UB_CLAIM_CHAINS.has(toSdkChainId(id)))
+    .filter(id => isGaslessBridgeAvailable(id) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(id))))
     .map(id => ({
       chainId: id,
       // Lets an admin set a specific reason per chain by putting text in
@@ -2071,7 +2073,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             const at = (st: string) => ORDER.indexOf(reached) >= ORDER.indexOf(st)
             // Same route decision claimOneChain makes.
             const isUbRoute = !!cp0 && (ubClaimChains.includes(cp0.chainId)
-              || ((claimRoute === 'ub' || !isGaslessBridgeAvailable(cp0.chainId)) && UB_CLAIM_CHAINS.has(toSdkChainId(cp0.chainId))))
+              || (!merchantMode && (claimRoute === 'ub' || !isGaslessBridgeAvailable(cp0.chainId)) && UB_CLAIM_CHAINS.has(toSdkChainId(cp0.chainId))))
             const srcLabel = cp0 ? getMeta(cp0.chainId).label : 'source chain'
 
             const raw = isUbRoute ? [
