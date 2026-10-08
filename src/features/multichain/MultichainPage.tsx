@@ -12,7 +12,7 @@ function InlineSpinner() {
 }
 import { UB_CLAIM_CHAINS } from '@/lib/ubClaim'
 import { isGaslessBridgeAvailable } from '@/lib/gaslessBridge'
-import { useMerchant } from '@/lib/merchant'
+import { useMerchant, isMerchantClaim } from '@/lib/merchant'
 import { MerchantLedger } from '@/features/merchant/MerchantLedger'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
@@ -132,7 +132,7 @@ function hubItemTitle(item: ActivityItem): string {
   const chain = item.chainLabel || item.chain
   if (item.chainReceipt) return `Payment received on ${chain}`
   if (item.autoConvert && item.type === 'claim') return item.status === 'pending' ? 'Ledger funds moving to Arc' : 'Ledger payment received'
-  if (item.merchant && item.type === 'claim') return `Payment received · ${chain}`
+  if (item.merchant && item.type === 'claim') return 'Ledger payment received'
   // 7-day Unified Balance withdrawal still running (or a refund row).
   if (item.isRecovery) {
     if (item.status === 'pending') {
@@ -696,6 +696,8 @@ export function MultichainPage() {
             error:      c.error ?? undefined,
             route:      'cctp',
             recoveredVia: c.recoveredVia ?? undefined,
+            // A merchant's claim from another chain = customer payments to Arc.
+            merchant:   isMerchantClaim({ createdAt: c.createdAt, sourceChain: c.sourceChain }),
           }
         })
 
@@ -729,7 +731,7 @@ export function MultichainPage() {
             destinationTxHash: item.destinationTxHash ?? undefined,
             ubIntentId: item.metadata?.ub_intent_id || undefined,
             ubHeld:     !!item.metadata?.ub_held,
-            merchant:   !!item.metadata?.merchant,
+            merchant:   isMerchantClaim(item),
             autoConvert: !!item.metadata?.auto_convert,
             autoConvertChains: Array.isArray(item.metadata?.chains) ? item.metadata.chains : undefined,
           }))
@@ -1371,7 +1373,7 @@ export function MultichainPage() {
             ]}
             detailRows={[
               { label: 'Status', value: chainReceiptLabel(it) ?? (status === 'success' ? 'Confirmed' : status === 'failed' ? 'Failed' : 'Processing'), positive: status === 'success' },
-              { label: 'Type', value: it.isRecovery ? 'Refund to Arc' : it.merchant ? 'Payment received' : isClaimItem ? 'Claim to Arc' : 'Transfer out' },
+              { label: 'Type', value: it.isRecovery ? 'Refund to Arc' : it.merchant ? 'Ledger payment received' : isClaimItem ? 'Claim to Arc' : 'Transfer out' },
               ...(isClaimItem && it.route ? [{ label: 'Route', value: it.route === 'ub' ? 'Unified Balance' : 'CCTP' }] : []),
               ...(it.recoveredVia ? [{ label: 'Recovered', value: `Via ${it.recoveredVia.toUpperCase()}` }] : []),
               ...(feeWasDeducted ? [{ label: 'Fee', value: `-$${formatAmount(it.claimedAmount! - it.arrivedAmount!)} USDC` }] : []),
