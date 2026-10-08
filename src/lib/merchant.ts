@@ -199,7 +199,8 @@ export async function adminReviewMerchant(id: string, status: 'approved' | 'reje
 
 /** Merchant accounts see the Multichain Hub as "Merchant Hub" (label only). */
 export function hubLabel(label: string, isMerchant: boolean): string {
-  return isMerchant && label === 'Multichain Hub' ? 'Merchant Hub' : label
+  if (!isMerchant) return label
+  return label === 'Multichain Hub' ? 'Merchant Hub' : label === 'Insights' ? 'Ledger Insights' : label
 }
 export function useHubLabel(): (label: string) => string {
   const { isMerchant } = useMerchant()
