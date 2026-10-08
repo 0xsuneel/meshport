@@ -134,7 +134,7 @@ function chainReceiptLabel(item: ActivityItem): string | null {
 // Row / detail title for Hub Activity.
 function hubItemTitle(item: ActivityItem): string {
   const chain = item.chainLabel || item.chain
-  if (item.chainReceipt) return item.ownReceipt ? `Own Ledger payment received · ${chain}` : `Payment received in Ledger (${chain})`
+  if (item.chainReceipt) return item.ownReceipt ? 'Own payment received' : `Payment received in Ledger (${chain})`
   if (item.autoConvert && item.type === 'claim') return item.status === 'pending' ? 'Ledger funds moving to Arc' : 'Ledger payment received'
   // A merchant's claim moves Ledger money (already received) to Arc.
   if (item.merchant && item.type === 'claim') return 'Moved to Arc'
@@ -1049,8 +1049,10 @@ export function MultichainPage() {
                   {/* Amount */}
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700,
-                      color: isFailed ? 'var(--danger)' : isClaim ? 'var(--success)' : 'var(--danger)' }}>
-                      {isFailed
+                      color: isFailed ? 'var(--danger)' : item.ownReceipt ? 'var(--text-secondary)' : isClaim ? 'var(--success)' : 'var(--danger)' }}>
+                      {/* Own transfer arriving on another chain: the same money as the
+                          "Transfer to …" row (already −), so no sign — not new income. */}
+                      {isFailed || item.ownReceipt
                         ? `$${formatAmount(item.amount)}`
                         : isClaim
                           ? `+$${formatAmount(item.amount)}`
