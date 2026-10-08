@@ -26,6 +26,21 @@
       // same tab (App.tsx sets the flag once loaded) gets the quiet version.
       try { if (sessionStorage.getItem('mp_opened')) document.documentElement.classList.add('mp-refresh'); } catch (e) {}
 
+// ── App open: one continuous opening screen ──
+      // The phone's own launch screen (manifest: teal + still logo) hands over
+      // to #splash. Keep them identical so they read as one screen: the same
+      // teal status bar (a theme-color that wins over index.html's per-theme
+      // ones; App.tsx removes it with the splash) and a still logo — it only
+      // starts pulsing if loading takes a while.
+      try {
+        if (!document.documentElement.classList.contains('mp-refresh')) {
+          var tc = document.createElement('meta');
+          tc.name = 'theme-color'; tc.content = '#0F5C57'; tc.id = 'mp-splash-theme';
+          document.head.insertBefore(tc, document.head.firstChild);
+          setTimeout(function () { document.documentElement.classList.add('mp-splash-slow'); }, 2500);
+        }
+      } catch (e) {}
+
 // ── Splash watchdog ──
       // ── Splash watchdog — pure vanilla JS, runs independently of the React
       // bundle ever loading at all. If the app hasn't mounted (and removed
