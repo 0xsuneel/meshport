@@ -443,6 +443,7 @@ export function ChangePasscodePage() {
                 ))}
               </div>
               <PinKeypad
+                autoBiometric={false} // choosing a new passcode — not a check of the current one
                 value={activeField === 'old' ? oldPass : activeField === 'new' ? newPass : confirmPass}
                 onChange={v => {
                   setError('')

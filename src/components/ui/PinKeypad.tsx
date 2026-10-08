@@ -46,6 +46,10 @@ interface PinKeypadProps {
   // suppress it for a specific screen if that's ever needed.
   onBiometric?: () => void
   biometricAvailable?: boolean
+  /** Open the fingerprint / Face ID prompt by itself when the pad appears
+   *  (default on). Off where the pad isn't asking for the current passcode,
+   *  e.g. choosing a new one. */
+  autoBiometric?: boolean
 }
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del']
@@ -61,6 +65,7 @@ export function PinKeypad({
   accentTo = 'var(--brand)',
   onBiometric,
   biometricAvailable,
+  autoBiometric = true,
 }: PinKeypadProps) {
   // Wrong PIN: two short knocks along with the shake / red dots.
   useEffect(() => { if (shake || error) hapticError() }, [shake, error])
@@ -88,7 +93,9 @@ export function PinKeypad({
   // (see its own comment — cancelling is normal), so the only visible
   // symptom was "biometric doesn't work here," with no error to explain
   // why. Checked live, same as EnableBiometricPage already does.
-  const [liveSupported, setLiveSupported] = useState(true)
+  // null until the live probe answers: the key shows meanwhile (as before),
+  // but the automatic prompt below waits for a real yes.
+  const [liveSupported, setLiveSupported] = useState<boolean | null>(null)
   useEffect(() => {
     if (biometricAvailable === false) return // caller already opted out — no need to probe
     let cancelled = false
@@ -96,12 +103,12 @@ export function PinKeypad({
     return () => { cancelled = true }
   }, [biometricAvailable])
 
-  const canUseBiometric =
+  const biometricReady =
     biometricAvailable !== false &&
-    liveSupported &&
     biometricEnabled &&
     !!walletAddress &&
     hasBiometricRegistered(walletAddress)
+  const canUseBiometric = biometricReady && liveSupported !== false
 
   const tryBiometric = async () => {
     if (!walletAddress || biometricTrying) return
@@ -117,9 +124,34 @@ export function PinKeypad({
     }
   }
 
-  // Biometric only ever triggers on an explicit tap of the key in the grid
-  // below — no auto-prompt on mount. (Previously auto-fired once per
-  // mount; changed to opt-in-per-tap only.)
+  // Biometric enabled → the fingerprint / Face ID prompt opens by itself as
+  // soon as the pad appears (unlock and every transaction approval). If the
+  // scan fails or is cancelled — or the browser refuses a prompt nobody
+  // tapped for (iOS Safari can) — nothing else happens: the PIN pad is
+  // already on screen and the fingerprint key stays there to try again.
+  // Once per pad, never after the person has started typing, and only while
+  // the page is actually visible.
+  const autoTriedRef = useRef(false)
+  const valueRef = useRef(value)
+  valueRef.current = value
+  const tryBiometricRef = useRef(tryBiometric)
+  tryBiometricRef.current = tryBiometric
+  const canAuto = autoBiometric && biometricReady && liveSupported === true
+  useEffect(() => {
+    if (!canAuto) return
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const run = () => {
+      if (autoTriedRef.current || valueRef.current.length > 0) return
+      autoTriedRef.current = true
+      tryBiometricRef.current()
+    }
+    // A short beat so the sheet has started opening behind the prompt.
+    const schedule = () => { timer = setTimeout(run, 150) }
+    const onVisible = () => { if (document.visibilityState === 'visible') { document.removeEventListener('visibilitychange', onVisible); schedule() } }
+    if (document.visibilityState === 'visible') schedule()
+    else document.addEventListener('visibilitychange', onVisible)
+    return () => { if (timer) clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible) }
+  }, [canAuto])
 
   const handleKey = (key: string) => {
     if (key === '') return
@@ -223,8 +255,8 @@ export function PinKeypad({
           (no dead space around a small circle), matching the Paytm-style
           reference and the same change made to AmountKeypad. Biometric key
           (when available) fills the grid's empty bottom-left cell instead
-          of sitting in a separate button above — a tap here is the only
-          thing that ever triggers the OS prompt now. */}
+          of sitting in a separate button above — tap it to try again after
+          the automatic prompt was cancelled or failed. */}
       <div className="grid grid-cols-3 gap-2.5 max-w-[320px] mx-auto">
         {KEYS.map((key, i) => {
           if (key === '') {
