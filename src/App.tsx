@@ -496,6 +496,7 @@ function SplashRemover() {
       if (wait > 0) { timer = setTimeout(hide, wait); return }
       hidden = true
       splash.classList.add('splash-hide')
+      document.getElementById('mp-splash-theme')?.remove() // back to the app's own status bar colour
       try { sessionStorage.setItem('mp_opened', '1') } catch { /* private mode */ }
       timer = setTimeout(() => { splash.remove(); markSplashDone() }, 250)
     }

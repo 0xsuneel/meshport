@@ -105,6 +105,10 @@
       #splash .tag { margin-top: 6px; font-size: 13px; color: #A9D9CF; }
       /* Animated logo (Pulse) — same as MeshLoader.tsx. */
       #splash .mark .n, #splash .mark .hub { transform-box: fill-box; transform-origin: center; }
+      /* App open: still, like the phone's launch screen it continues; the
+         pulse starts only if loading takes a while (boot.js). */
+      html:not(.mp-refresh):not(.mp-splash-slow) #splash .mark .n,
+      html:not(.mp-refresh):not(.mp-splash-slow) #splash .mark .hub { animation-name: none !important; }
       #splash .mark .n { animation: mplPop 1.8s ease-in-out infinite; }
       #splash .mark .s2 { animation-delay: .2s; } #splash .mark .s3 { animation-delay: .4s; }
       #splash .mark .s4 { animation-delay: .6s; } #splash .mark .s5 { animation-delay: .8s; }
