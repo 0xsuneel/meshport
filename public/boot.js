@@ -34,6 +34,7 @@
       // starts pulsing if loading takes a while.
       try {
         if (!document.documentElement.classList.contains('mp-refresh')) {
+          document.documentElement.classList.add('mp-opening');
           var tc = document.createElement('meta');
           tc.name = 'theme-color'; tc.content = '#0F5C57'; tc.id = 'mp-splash-theme';
           document.head.insertBefore(tc, document.head.firstChild);
