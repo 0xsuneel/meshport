@@ -68,7 +68,7 @@ const CCTP_DOMAINS: Record<string, number> = {
 const ARC_RPCS = [
   ...(CONFIGURED_ARC_RPC_URL ? [CONFIGURED_ARC_RPC_URL] : []),
   ...(DRPC_KEY ? [`https://lb.drpc.live/arc-testnet/${DRPC_KEY}`] : []), // dRPC authenticated (higher limits)
-  'https://rpc.testnet.arc.network',
+  'https://rpc.testnet.arc.io',
 ]
 const CIRCLE_IRIS_API = 'https://iris-api-sandbox.circle.com'
 const ARC_MESSAGE_TRANSMITTER =

@@ -33,7 +33,6 @@ const ARC_RPCS = [
   'https://rpc.blockdaemon.testnet.arc.io',
   'https://rpc.drpc.testnet.arc.io',
   'https://rpc.quicknode.testnet.arc.io',
-  'https://rpc.testnet.arc.network',
 ]
 
 async function rpcCall(method: string, params: unknown[]): Promise<unknown> {

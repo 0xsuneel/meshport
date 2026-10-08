@@ -574,7 +574,7 @@ DRAFT → REVIEWED → AUTHORIZING → SIGNED → SUBMITTED → CONFIRMING → C
 
 ## Supported Networks and Assets
 
-**Home chain:** Arc Testnet — chain ID `5042002`, RPC `https://rpc.testnet.arc.network` (accessed by the app only via `/api/arc-rpc`), explorer `https://testnet.arcscan.app`.
+**Home chain:** Arc Testnet — chain ID `5042002`, RPC `https://rpc.testnet.arc.io` (accessed by the app only via `/api/arc-rpc`), explorer `https://testnet.arcscan.app`.
 
 **Arc-native assets** (`src/blockchain/chains.ts` → `ARC_TOKENS`):
 

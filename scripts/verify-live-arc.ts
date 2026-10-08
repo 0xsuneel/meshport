@@ -24,7 +24,7 @@
  * Usage: npx tsx scripts/verify-live-arc.ts [blockCount]
  */
 
-const RPCS = ['https://rpc.testnet.arc.io', 'https://rpc.testnet.arc.network']
+const RPCS = ['https://rpc.testnet.arc.io', 'https://rpc.drpc.testnet.arc.io']
 const BLOCK_COUNT = Number(process.argv[2] ?? 40)
 const NATIVE_DECIMALS = 18
 const TRANSFER_TOPIC0 = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'

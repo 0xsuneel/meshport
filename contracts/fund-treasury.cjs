@@ -20,7 +20,7 @@ require('dotenv').config()
 const { createWalletClient, createPublicClient, http, parseUnits, formatUnits } = require('viem')
 const { privateKeyToAccount } = require('viem/accounts')
 
-const RPC_URL          = 'https://rpc.testnet.arc.network'
+const RPC_URL          = 'https://rpc.testnet.arc.io'
 const USDC_CONTRACT    = '0x3600000000000000000000000000000000000000'
 const REWARDS_CONTRACT = process.env.VITE_REWARDS_CONTRACT
 const PRIVATE_KEY      = process.env.ADMIN_PRIVATE_KEY

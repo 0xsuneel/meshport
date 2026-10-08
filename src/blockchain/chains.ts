@@ -47,7 +47,7 @@ export const NETWORK_MODE = 'testnet' as const
 export const ARC = {
   chainId:     5042002,
   name:        'Arc Testnet',
-  rpcUrl:      'https://rpc.testnet.arc.network',
+  rpcUrl:      'https://rpc.testnet.arc.io',
   explorerUrl: 'https://testnet.arcscan.app',
   faucetUrl:   'https://faucet.circle.com',
 } as const

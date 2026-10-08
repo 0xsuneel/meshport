@@ -1211,7 +1211,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         getProvider: ({ chain: sdkChain }: any) => {
           const rpcUrl: string | undefined = sdkChain?.rpcEndpoints?.[0]
           // The SDK always hands us a single default endpoint for Arc
-          // (rpc.testnet.arc.network) — trusting it directly meant we never
+          // (rpc.testnet.arc.io) — trusting it directly meant we never
           // failed over across ARC_RPCS when that one endpoint was rate
           // limited. Force the fallback list for Arc regardless of what the
           // SDK provides; only use its endpoint for non-Arc chains.
@@ -1598,7 +1598,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // default endpoint for Arc is trusted blindly here otherwise,
           // which skips ARC_RPCS failover entirely and was the direct cause
           // of "RPC endpoint error on Arc Testnet" bridge failures — every
-          // retry hit the same rate-limited rpc.testnet.arc.network with no
+          // retry hit the same rate-limited rpc.testnet.arc.io with no
           // failover to /api/arc-rpc or any other fallback.
           const isArc = sdkChain?.name?.toLowerCase?.().includes('arc') || /arc[.-]/i.test(rpcUrl ?? '')
           if (isArc) return getArcFallbackProvider(JsonRpcProvider, FallbackProvider)

@@ -38,7 +38,6 @@ const ARC_RPCS = [
   'https://rpc.blockdaemon.testnet.arc.io',
   'https://rpc.drpc.testnet.arc.io',
   'https://rpc.quicknode.testnet.arc.io',
-  'https://rpc.testnet.arc.network',
 ]
 const d = (net: string) => (DRPC_KEY ? [`https://lb.drpc.live/${net}/${DRPC_KEY}`] : [])
 

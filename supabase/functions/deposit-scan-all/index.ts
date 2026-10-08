@@ -140,7 +140,7 @@ const DRPC_KEY = Deno.env.get('DRPC_KEY') ?? ''
 const CONFIGURED_ARC_RPC_URL = (Deno.env.get('ARC_RPC_URL') ?? '').trim()
 
 // Authenticated-only Arc endpoints — no direct public gateways
-// (rpc.testnet.arc.network, Blockdaemon, dRPC public, QuickNode, thirdweb,
+// (rpc.testnet.arc.io, Blockdaemon, dRPC public, QuickNode, thirdweb,
 // drpc.org). Those were exactly how this scan could end up querying
 // arc-testnet.rpc.thirdweb.com even with an authenticated RPC configured.
 const ARC_RPCS = [

@@ -47,7 +47,7 @@ Two other things worth checking if a deploy still fails after fixing EVM version
 1. Deploy & Run tab → Environment: Injected Provider (MetaMask)
 2. Connect MetaMask to Arc Testnet:
    - Network Name: Arc Testnet
-   - RPC: https://rpc.testnet.arc.network
+   - RPC: https://rpc.testnet.arc.io
    - Chain ID: 5042002
    - Currency: USDC
 3. Set constructor arg: `_usdcToken` = `0x3600000000000000000000000000000000000000`
@@ -93,7 +93,7 @@ Call `treasuryBalance()` to see funded USDC.
 1. Deploy & Run tab → Environment: Injected Provider (MetaMask)
 2. Connect MetaMask to Arc Testnet:
    - Network Name: Arc Testnet
-   - RPC: https://rpc.testnet.arc.network
+   - RPC: https://rpc.testnet.arc.io
    - Chain ID: 5042002
    - Currency: USDC
 3. Set constructor arg `_roleManagerSigners` (type `address[3]`) as a single
