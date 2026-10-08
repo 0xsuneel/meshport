@@ -155,13 +155,6 @@ export function dedupeAndSortActivityRecords(records: ActivityRecord[]): Activit
   })
 }
 
-// Merchant payments (UB claims by an approved merchant): the chain the
-// customer paid on and the merchant address it was paid to.
-function merchantSubtitle(chain: string | undefined, wallet: string | undefined): string {
-  const addr = wallet ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : ''
-  return [chain || 'External', addr].filter(Boolean).join(' · ')
-}
-
 export function deriveActivityRow(record: ActivityRecord) {
   const { activityType: type, status, sourceChain, destinationChain, createdAt, amount, tokenSymbol } = record
   const metadata: any = (record as any).metadata || {}
@@ -255,7 +248,7 @@ export function deriveActivityRow(record: ActivityRecord) {
                  : isSwap     ? swapPair
                  : isBulk     ? bulkSubtitle
                  : isClaim && metadata.auto_convert && Array.isArray(metadata.chains) ? `From ${metadata.chains.map((c: string) => c.split('_')[0]).join(', ')} Ledger`
-                 : isClaim && isMerchantClaim(record as any) ? merchantSubtitle(chain, (record as any).walletAddress)
+                 : isClaim && isMerchantClaim(record as any) ? `From ${chain || 'other chain'} Ledger`
                  : isClaim    ? (chain || 'External')
                  : isTransfer ? counterpartyLabel
                  : (isP2PSellOrder || isP2PRefund || isP2PPurchase) ? p2pSubtitle
@@ -263,7 +256,7 @@ export function deriveActivityRow(record: ActivityRecord) {
 
   const recoveredTitle = recoveredViaLabel(record)
   const title = isClaim && metadata.auto_convert ? (status === 'pending' ? 'Ledger funds moving to Arc' : 'Ledger payment received')
-              : isClaim && isMerchantClaim(record as any) ? 'Ledger payment received'
+              : isClaim && isMerchantClaim(record as any) ? 'Payment received'
               : merchantOrder ? (isSend ? 'Order payment' : metadata.merchantPersonal ? 'Requested amount received' : metadata.merchantOrderKind === 'invoice' ? 'Bill payment received' : 'Requested payment received')
               : recoveredTitle ? recoveredTitle
               : isSelfTransfer && isSend    ? 'Paid to'
@@ -534,7 +527,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const isSwapType = type === 'swap'
 
   const rows = [
-    { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? 'Ledger payment received' : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
+    { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Payment received from ${chain || 'other chain'} Ledger` : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
     { label: 'Chain',  value: chain },
     ...(merchantOrderDetail ? [{ label: 'Order', value: `#${merchantOrderDetail}` }] : []),
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Merchant', value: String((metadata as any).merchantName) }] : []),
