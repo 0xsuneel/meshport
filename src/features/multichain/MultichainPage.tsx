@@ -76,6 +76,8 @@ interface ActivityItem {
   chainReceipt?: 'received' | 'converting' | 'converted'
   /** A chain receipt that is the merchant's own Transfer Funds from Arc. */
   ownReceipt?: boolean
+  /** A merchant claim moving their own transferred funds back to Arc. */
+  ownClaim?: boolean
   autoConvertChains?: string[]
   // 'ub' | 'cctp' when finished through Recover → "Recovered via UB/CCTP".
   recoveredVia?: string
@@ -124,6 +126,20 @@ async function loadChainReceiptItems(): Promise<ActivityItem[]> {
   } catch { return [] }
 }
 
+/**
+ * A merchant claim is "own" when the last money that arrived on that chain
+ * before it was the merchant's own transfer (not a customer's payment).
+ */
+function markOwnClaims(items: ActivityItem[]): ActivityItem[] {
+  const key = (c: string) => c === 'Polygon_Amoy_Testnet' ? 'Polygon_Sepolia' : c
+  const receipts = items.filter(i => i.chainReceipt).sort((a, b) => b.timestamp - a.timestamp)
+  return items.map(i => {
+    if (!(i.type === 'claim' && i.merchant && !i.chainReceipt && !i.autoConvert)) return i
+    const last = receipts.find(r => key(r.chain) === key(i.chain) && r.timestamp <= i.timestamp)
+    return last?.ownReceipt ? { ...i, ownClaim: true } : i
+  })
+}
+
 /** Status line for a merchant's payment on another chain (Hub only). */
 function chainReceiptLabel(item: ActivityItem): string | null {
   if (!item.chainReceipt) return null
@@ -137,7 +153,7 @@ function hubItemTitle(item: ActivityItem): string {
   if (item.chainReceipt) return item.ownReceipt ? 'Own payment received' : `Payment received in Ledger (${chain})`
   if (item.autoConvert && item.type === 'claim') return item.status === 'pending' ? 'Ledger funds moving to Arc' : 'Ledger payment received'
   // A merchant's claim moves Ledger money (already received) to Arc.
-  if (item.merchant && item.type === 'claim') return 'Moved to Arc'
+  if (item.merchant && item.type === 'claim') return item.ownClaim ? 'Moved to Arc (Own)' : 'Moved to Arc'
   // 7-day Unified Balance withdrawal still running (or a refund row).
   if (item.isRecovery) {
     if (item.status === 'pending') {
@@ -793,7 +809,7 @@ export function MultichainPage() {
 
         const receiptItems = await loadChainReceiptItems()
         if (!current()) return
-        setDbActivity([...claimItems, ...ubClaimItems, ...bridgeItems, ...recoveryItems, ...receiptItems].sort((a, b) => b.timestamp - a.timestamp))
+        setDbActivity(markOwnClaims([...claimItems, ...ubClaimItems, ...bridgeItems, ...recoveryItems, ...receiptItems]).sort((a, b) => b.timestamp - a.timestamp))
       } catch {
         // Even if the rest fails, a merchant still sees payments on other chains.
         const receipts = await loadChainReceiptItems()
@@ -1049,10 +1065,10 @@ export function MultichainPage() {
                   {/* Amount */}
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700,
-                      color: isFailed ? 'var(--danger)' : item.ownReceipt ? 'var(--text-secondary)' : isClaim ? 'var(--success)' : 'var(--danger)' }}>
+                      color: isFailed ? 'var(--danger)' : item.ownReceipt || item.ownClaim ? 'var(--text-secondary)' : isClaim ? 'var(--success)' : 'var(--danger)' }}>
                       {/* Own transfer arriving on another chain: the same money as the
                           "Transfer to …" row (already −), so no sign — not new income. */}
-                      {isFailed || item.ownReceipt
+                      {isFailed || item.ownReceipt || item.ownClaim
                         ? `$${formatAmount(item.amount)}`
                         : isClaim
                           ? `+$${formatAmount(item.amount)}`
@@ -1347,7 +1363,7 @@ export function MultichainPage() {
         const feeWasDeducted = isClaimItem && it.claimedAmount != null && it.arrivedAmount != null
           && Math.abs(it.claimedAmount - it.arrivedAmount) > 0.000001
         const status = it.status === 'success' ? 'success' : it.status === 'failed' ? 'failed' : 'pending'
-        const doneTitle = it.isRecovery ? 'Refunded to Arc' : it.merchant ? (it.chainReceipt ? 'Payment Received' : 'Moved to Arc') : isClaimItem ? 'Funds Arrived' : 'Transfer Complete'
+        const doneTitle = it.isRecovery ? 'Refunded to Arc' : it.merchant ? (it.chainReceipt ? 'Payment Received' : it.ownClaim ? 'Moved to Arc (Own)' : 'Moved to Arc') : isClaimItem ? 'Funds Arrived' : 'Transfer Complete'
         const title = status === 'success' ? doneTitle : status === 'failed' ? (isClaimItem ? 'Claim Failed' : 'Transfer Failed') : 'Processing…'
         const copyRow = (label: string, value: string) => async () => {
           const ok = await copyToClipboard(value)
