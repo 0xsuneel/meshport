@@ -41,6 +41,8 @@ const TransactionDetailPage = lazyRetry(() => import('./features/activity/Transa
 const InsightsPage          = lazyRetry(() => import('./features/insights/InsightsPage').then(m => ({ default: m.InsightsPage })), 'InsightsPage')
 const RewardsPage           = lazyRetry(() => import('./features/rewards/RewardsPage').then(m => ({ default: m.RewardsPage })), 'RewardsPage')
 const RecentPaidPage        = lazyRetry(() => import('./features/recent/RecentPaidPage').then(m => ({ default: m.RecentPaidPage })), 'RecentPaidPage')
+const NewsPage              = lazyRetry(() => import('./features/news/NewsPage').then(m => ({ default: m.NewsPage })), 'NewsPage')
+const NewsArticlePage       = lazyRetry(() => import('./features/news/NewsArticlePage').then(m => ({ default: m.NewsArticlePage })), 'NewsArticlePage')
 const BulkPayoutPage        = lazyRetry(() => import('./features/bulkpayout/BulkPayoutPage').then(m => ({ default: m.BulkPayoutPage })), 'BulkPayoutPage')
 const ProfilePage           = lazyRetry(() => import('./features/profile/ProfilePage').then(m => ({ default: m.ProfilePage })), 'ProfilePage')
 const SecurityPage          = lazyRetry(() => import('./features/profile/ProfileSubPages').then(m => ({ default: m.SecurityPage })), 'SecurityPage')
@@ -105,6 +107,7 @@ const AdminChainsPage          = lazyRetry(() => import('./features/admin/Chains
 const P2PAdminPage             = lazyRetry(() => import('./features/p2p/P2PAdminPage').then(m => ({ default: m.P2PAdminPage })), 'P2PAdminPage')
 const TreasuryAdminPage        = lazyRetry(() => import('./features/admin/TreasuryAdminPage').then(m => ({ default: m.TreasuryAdminPage })), 'TreasuryAdminPage')
 const AdminAnalyticsPage       = lazyRetry(() => import('./features/admin/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })), 'AdminAnalyticsPage')
+const NewsAdminPage = lazyRetry(() => import('./features/admin/NewsAdminPage').then(m => ({ default: m.NewsAdminPage })), 'NewsAdminPage')
 const NotificationBroadcastPage = lazyRetry(() => import('./features/admin/NotificationBroadcastPage').then(m => ({ default: m.NotificationBroadcastPage })), 'NotificationBroadcastPage')
 const AdminMaintenancePage     = lazyRetry(() => import('./features/admin/MaintenancePage').then(m => ({ default: m.MaintenancePage })), 'AdminMaintenancePage')
 const AdminLogsPage            = lazyRetry(() => import('./features/admin/LogsPage').then(m => ({ default: m.LogsPage })), 'AdminLogsPage')
@@ -383,6 +386,7 @@ const router = createBrowserRouter([
       { path: 'treasury',    element: <TreasuryAdminPage /> },
       { path: 'analytics',   element: <AdminAnalyticsPage /> },
       { path: 'notifications', element: <NotificationBroadcastPage /> },
+      { path: 'news',        element: <NewsAdminPage /> },
       { path: 'maintenance', element: <AdminMaintenancePage /> },
       { path: 'logs',        element: <AdminLogsPage /> },
       { path: 'support',     element: <AdminSupportTicketsPage /> },
@@ -416,6 +420,8 @@ const router = createBrowserRouter([
       { path: 'receive',                    element: <FeatureGate feature="receive_enabled"><ReceivePage /></FeatureGate> },
       { path: 'rewards',                    element: <FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate> },
       { path: 'recent-paid',                element: <RecentPaidPage /> },
+      { path: 'news',                       element: <NewsPage /> },
+      { path: 'news/:id',                   element: <NewsArticlePage /> },
       { path: 'bulk-payout',                element: <FeatureGate feature="bulk_payments_enabled"><BulkPayoutPage /></FeatureGate> },
       { path: 'multichain',                 element: <MultichainPage /> },
       { path: 'multichain-recovery',        element: <MultichainRecoveryPage /> },
