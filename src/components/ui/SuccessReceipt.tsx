@@ -194,16 +194,22 @@ export function SuccessReceipt({
       height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', boxSizing: 'border-box', overflow: 'hidden',
       ...style,
     } : {
+      // Column so the card can centre itself (margin: auto below).
       height: '100%', overflowY: 'auto', background: 'var(--bg)', boxSizing: 'border-box',
+      display: 'flex', flexDirection: 'column',
       padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 16px calc(env(safe-area-inset-bottom, 0px) + 24px)',
       ...style,
     }}>
       <div ref={scrollRef} style={hasActions ? {
         flex: 1, minHeight: 0, overflowY: 'auto', boxSizing: 'border-box',
+        display: 'flex', flexDirection: 'column',
         padding: 'calc(env(safe-area-inset-top, 0px) + 24px) 16px 16px',
       } : { display: 'contents' }}>
       <div ref={cardRef} className="shadow-elevation-1" style={{
-        position: 'relative', maxWidth: 480, margin: '0 auto', width: '100%', flexShrink: 0, boxSizing: 'border-box',
+        // margin auto: centred top-to-bottom with equal space above and below
+        // when it fits; when it's taller than the screen (details open) the
+        // auto margins collapse to 0 and it scrolls from the top as before.
+        position: 'relative', maxWidth: 480, margin: 'auto', width: '100%', flexShrink: 0, boxSizing: 'border-box',
         background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 30, overflow: 'hidden', paddingBottom: 16,
       }}>
         {burst && <Confetti />}

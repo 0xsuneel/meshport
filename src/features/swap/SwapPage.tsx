@@ -1400,7 +1400,9 @@ export function SwapPage() {
       {/* Swap form ⇄ Review push like pages (Review, swapping and the
           success flash are one screen). */}
       <ScreenPush screenKey={isDesktop ? 'desktop' : swapScreen} back={swapScreen === 'form'} style={isDesktop ? undefined : { minHeight: '100%' }}>
-      <div className="px-4 pt-4 pb-8 space-y-3">
+      {/* Phone success: this column fills the screen so the receipt card can
+          sit in the middle with equal space above and below. */}
+      <div className={cn("px-4 pt-4 pb-8 space-y-3", !isDesktop && step === 'done' && successPhase === 'collapsed' && "flex-1 flex flex-col")}>
 
         {/* Settings panel */}
         <AnimatePresence>
@@ -1811,8 +1813,9 @@ export function SwapPage() {
           const fmtIn  = `${trimTrailingZeros(inNum.toFixed(swapTokenDecimals(tokenIn.id)))} ${tokenIn.id}`
           const fmtOut = `${trimTrailingZeros(outNum.toFixed(swapTokenDecimals(tokenOut.id)))} ${tokenOut.id}`
           return (
-          <motion.div key="done" initial={false} style={{ margin: '-16px -16px 0' }}>
+          <motion.div key="done" initial={false} style={isDesktop ? { margin: '-16px -16px 0' } : { margin: '-16px -16px -32px', flex: 1, display: 'flex', flexDirection: 'column' }}>
             <SuccessReceipt
+              style={isDesktop ? undefined : { height: 'auto', flex: 1 }}
               title="Swap Successful!"
               subtitle={<>{fmtIn} became {fmtOut}</>}
               pill={`Completed in ${swapElapsedSeconds} Seconds`}
