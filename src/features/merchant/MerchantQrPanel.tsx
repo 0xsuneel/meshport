@@ -14,7 +14,7 @@ import {
   createPaymentRequest, watchPayment, orderLabel, STATUS_LABEL, orderChainPayLink,
   type MerchantIntent, type PaymentView,
 } from '@/lib/merchantPay'
-import { MERCHANT_QR_EXTERNAL, MERCHANT_QR_NETWORK_NAME, merchantQrChain, merchantPaymentUri } from '@/lib/merchantQr'
+import { MERCHANT_QR_EXTERNAL, MERCHANT_QR_NETWORK_NAME, merchantQrChain } from '@/lib/merchantQr'
 import { AmountHero } from '@/components/ui/AmountHero'
 
 
@@ -61,7 +61,7 @@ export function WalletPaymentDetails({ chainId, to, amount }: { chainId: string;
   return (
     <div style={{ width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.45 }}>
-        Scan with any wallet app (MetaMask, OKX, Trust, Coinbase…) — it opens a USDC send on <b style={{ color: 'var(--text-primary)' }}>{net}</b> with the address and amount filled in. The wallet needs {net} added.
+        Scan with any wallet app (MetaMask, OKX, Trust, Coinbase…) — it opens the payment on <b style={{ color: 'var(--text-primary)' }}>{net}</b> with the address and amount filled in, and adds the network if the wallet doesn't have it.
       </div>
       <div style={{ padding: '9px 11px', borderRadius: 12, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 5 }}>
         {row('Network', `${net} · chain ${c.chainId}`)}
@@ -85,18 +85,17 @@ export function MerchantQrPanel() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const c = merchantQrChain(chain)
-  // The QR is an EIP-681 payment URI (USDC token, network, address, exact
-  // amount): any wallet's camera opens its send screen with all of it filled
-  // in. The merchant-pay watcher links the payment to this order by its exact
-  // amount; MeshPort's scanner finds the order the same way. The order page
-  // for this network stays available as a link (Copy link / Share).
+  // The order page for this network: a wallet app's scanner opens it in the
+  // wallet's browser, which adds/switches to the network and fills in the
+  // address and amount (WalletPayPanel). MeshPort's scanner opens the order.
+  // Not an EIP-681 URI: OKX and Trust reject those for test networks
+  // ("QR code is incorrect or not supported"), while every wallet opens a link.
   const uri = order ? orderChainPayLink(order.code, order.orderNumber, chain) : ''
-  const qrValue = order && walletAddress ? merchantPaymentUri(chain, walletAddress, order.amount) : ''
 
   useEffect(() => {
-    if (!qrValue || !canvasRef.current) return
-    import('qrcode').then(Q => Q.toCanvas(canvasRef.current!, qrValue, { width: 220, margin: 2, color: { dark: '#000000', light: '#ffffff' }, errorCorrectionLevel: 'H' })).catch(() => {})
-  }, [qrValue])
+    if (!uri || !canvasRef.current) return
+    import('qrcode').then(Q => Q.toCanvas(canvasRef.current!, uri, { width: 220, margin: 2, color: { dark: '#000000', light: '#ffffff' }, errorCorrectionLevel: 'H' })).catch(() => {})
+  }, [uri])
 
   useEffect(() => (order ? watchPayment(order.code, setLive, 5000) : undefined), [order?.code])
 
