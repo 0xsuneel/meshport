@@ -73,7 +73,19 @@ async function readBlog(
       fetched_at: now,
     }
   }))).filter((r): r is Row => !!r)
+  if (source === 'arc') keepListOrder(rows)
   return { rows, found: entries.length }
+}
+
+// arc.io shows no date on its articles; the only one in the page is the
+// CMS publish time, which a site-wide republish resets (a whole batch of old
+// posts came back stamped with the same second). The list page is
+// newest-first, so a story is never dated later than the one listed above it.
+function keepListOrder(rows: { published_at: string }[]) {
+  for (let i = 1; i < rows.length; i++) {
+    const cap = Date.parse(rows[i - 1].published_at) - 1000
+    if (Date.parse(rows[i].published_at) > cap) rows[i].published_at = new Date(cap).toISOString()
+  }
 }
 
 async function readStatus(): Promise<{ rows: Row[]; found: number; error?: string }> {
