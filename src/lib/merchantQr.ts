@@ -74,6 +74,9 @@ export const MERCHANT_QR_NETWORK_NAME: Record<string, string> = {
   Arc_Testnet: 'Arc Testnet', Ethereum_Sepolia: 'Sepolia', Base_Sepolia: 'Base Sepolia', Arbitrum_Sepolia: 'Arbitrum Sepolia',
   Optimism_Sepolia: 'OP Sepolia', Polygon_Sepolia: 'Polygon Amoy', Avalanche_Fuji: 'Avalanche Fuji', HyperEVM_Testnet: 'HyperEVM Testnet',
   Sei_Testnet: 'Sei Testnet', Unichain_Sepolia: 'Unichain Sepolia',
+  Sonic_Testnet: 'Sonic Testnet', World_Chain_Sepolia: 'World Chain Sepolia', Linea_Sepolia: 'Linea Sepolia',
+  Ink_Testnet: 'Ink Sepolia', Monad_Testnet: 'Monad Testnet', Morph_Testnet: 'Morph Hoodi', Pharos_Testnet: 'Pharos Testnet',
+  Plume_Testnet: 'Plume Testnet', Codex_Testnet: 'Codex Testnet', Injective_Testnet: 'Injective EVM Testnet', XDC_Apothem: 'XDC Apothem',
 }
 
 /**
