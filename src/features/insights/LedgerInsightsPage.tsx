@@ -18,7 +18,6 @@ import { isMerchantClaim, useMerchant } from '@/lib/merchant'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { withChainReceipts, customersOf, customerKey } from '@/features/merchant/MerchantLedger'
 import { SkeletonRows } from '@/components/ui/Skeleton'
-import { useFeatureEnabled } from '@/store/settingsStore'
 
 type Period = 'week' | 'month' | 'year'
 
@@ -101,8 +100,6 @@ export function LedgerInsightsPage() {
   const navigate = useNavigate()
   const walletAddress = useAuthStore(s => s.walletAddress) ?? ''
   const { application } = useMerchant()
-  // Admin switch "Unified merchant Ledger": one Ledger, no chain names.
-  const unified = useFeatureEnabled('merchant_unified_ledger', false)
   const [period, setPeriod] = useState<Period>('month')
   const [payments, setPayments] = useState<MerchantPayment[]>([])
   const [intents, setIntents] = useState<MerchantIntent[]>([])
@@ -262,8 +259,8 @@ export function LedgerInsightsPage() {
               <Stat title="Largest" value={`$${formatAmount(s.largest)}`} sub="single payment" />
             </div>
 
-            {/* Where customers pay (per-chain Ledger only) */}
-            {!unified && <div style={card}>
+            {/* Where customers pay */}
+            <div style={card}>
               <div style={{ ...label, marginBottom: 12 }}>Where customers pay</div>
               {s.chains.length === 0 ? (
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No payments {PERIOD_LABEL[period].toLowerCase()} yet.</div>
@@ -280,14 +277,14 @@ export function LedgerInsightsPage() {
                   </div>
                 </div>
               ))}
-            </div>}
+            </div>
 
             {/* Other chains → Arc */}
             <div style={card}>
-              <div style={{ ...label, marginBottom: 10 }}>{unified ? 'Ledger → Arc' : 'Other chains → Arc'}</div>
+              <div style={{ ...label, marginBottom: 10 }}>Other chains → Arc</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{unified ? 'Received in Ledger' : 'Received on other chains'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Received on other chains</div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginTop: 2 }}>${formatAmount(s.external)}</div>
                 </div>
                 <div>
@@ -362,10 +359,10 @@ export function LedgerInsightsPage() {
                 <div style={{ ...label, marginBottom: 6 }}>Latest payments</div>
                 {s.recent.map((p, i) => (
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}>
-                    {!unified && <img src={chainLogo(p.chain)} alt="" width={22} height={22} style={{ borderRadius: '50%', flexShrink: 0 }}
-                      onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />}
+                    <img src={chainLogo(p.chain)} alt="" width={22} height={22} style={{ borderRadius: '50%', flexShrink: 0 }}
+                      onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
                     <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{customersOf([p])[0]?.name}</span> · {unified ? (p.chain === 'Arc_Testnet' ? 'Arc' : 'Ledger') : chainName(p.chain)}{p.orderNumber ? ` · #${p.orderNumber}` : ''} · {timeAgo(p.createdAt)}
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{customersOf([p])[0]?.name}</span> · {chainName(p.chain)}{p.orderNumber ? ` · #${p.orderNumber}` : ''} · {timeAgo(p.createdAt)}
                     </div>
                     <b style={{ fontSize: 13.5, color: 'var(--success)', flexShrink: 0 }}>+${formatAmount(p.amount)}</b>
                   </div>
