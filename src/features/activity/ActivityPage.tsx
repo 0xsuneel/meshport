@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useSettingsStore } from '@/store/settingsStore'
 import { motion, AnimatePresence } from 'framer-motion'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
@@ -155,6 +156,9 @@ export function dedupeAndSortActivityRecords(records: ActivityRecord[]): Activit
   })
 }
 
+/** Admin switch "Unified merchant Ledger": merchant rows name no chain. */
+const unifiedLedgerOn = () => useSettingsStore.getState().isEnabled('merchant_unified_ledger', false)
+
 export function deriveActivityRow(record: ActivityRecord) {
   const { activityType: type, status, sourceChain, destinationChain, createdAt, amount, tokenSymbol } = record
   const metadata: any = (record as any).metadata || {}
@@ -248,7 +252,7 @@ export function deriveActivityRow(record: ActivityRecord) {
                  : isSwap     ? swapPair
                  : isBulk     ? bulkSubtitle
                  : isClaim && metadata.auto_convert && Array.isArray(metadata.chains) ? `From ${metadata.chains.map((c: string) => c.split('_')[0]).join(', ')} Ledger`
-                 : isClaim && isMerchantClaim(record as any) ? `From ${chain || 'other chain'} Ledger`
+                 : isClaim && isMerchantClaim(record as any) ? (unifiedLedgerOn() ? 'From Ledger' : `From ${chain || 'other chain'} Ledger`)
                  : isClaim    ? (chain || 'External')
                  : isTransfer ? counterpartyLabel
                  : (isP2PSellOrder || isP2PRefund || isP2PPurchase) ? p2pSubtitle
@@ -527,7 +531,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const isSwapType = type === 'swap'
 
   const rows = [
-    { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Payment received from ${chain || 'other chain'} Ledger` : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
+    { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? (unifiedLedgerOn() ? 'Payment received from Ledger' : `Payment received from ${chain || 'other chain'} Ledger`) : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
     { label: 'Chain',  value: chain },
     ...(merchantOrderDetail ? [{ label: 'Order', value: `#${merchantOrderDetail}` }] : []),
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Merchant', value: String((metadata as any).merchantName) }] : []),
@@ -711,6 +715,8 @@ function FilterSheet({ active, onSelect, onClose }: {
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export function ActivityPage() {
+  // Re-render when the admin flips "Unified merchant Ledger" (row labels read it).
+  useSettingsStore(st => st.isEnabled('merchant_unified_ledger', false))
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const walletAddress = useAuthStore(s => s.walletAddress)
