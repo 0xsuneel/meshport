@@ -339,6 +339,9 @@ async function scanLogs(rpcs: string[], filter: Record<string, unknown>, from: n
   }
 }
 const ZERO = '0x0000000000000000000000000000000000000000'
+// A CCTP mint counts as the merchant's own transfer if they sent from Arc to
+// that chain within this window (the mint lands minutes after the burn).
+const OWN_TRANSFER_WINDOW_MS = 6 * 3600_000
 // Circle Gateway wallet + minter (same on every EVM testnet).
 const GATEWAY_CONTRACTS = new Set(['0x0077777d7eba4688bdef3e311b846f25870a19b9', '0x0022222abe238cc2c7bb1f21003f0a260052475b'])
 
@@ -422,11 +425,15 @@ async function watchDeposits() {
       for (const log of logs ?? []) {
         const to = ('0x' + String(log.topics?.[2]).slice(-40)).toLowerCase()
         const from = ('0x' + String(log.topics?.[1]).slice(-40)).toLowerCase()
-        // Mints (from 0x0) are skipped: on another chain they're usually the
-        // merchant's own Transfer Funds from Arc arriving (CCTP mints into
-        // their own wallet there), not a customer — customers send from a wallet.
-        if (from === ZERO || from === to) continue // mints and self-sends
+        if (from === to) continue // self-sends
         if (GATEWAY_CONTRACTS.has(from)) continue // the merchant's own Ledger withdrawals
+        // A mint (from 0x0) on another chain is USDC arriving through CCTP:
+        // usually the merchant's own Transfer Funds from Arc, otherwise
+        // someone paying through a bridge. Recorded (own transfers with the
+        // merchant's own address as sender, bridge payments with 0x0) and
+        // never auto-matched to an order — there's no paying wallet to check.
+        const minted = from === ZERO
+        if (minted && (isArc || !merchantWallets.has(to))) continue
         let atomic = 0n
         try { atomic = BigInt(log.data) } catch { continue }
         const amount = Number(isArc ? atomic / 1_000_000_000_000n : atomic) / 1e6
@@ -492,15 +499,24 @@ async function watchDeposits() {
         if (close.length > 0) { await park(close, 'amount_mismatch'); return }
         // 4) Nothing close — an ordinary transfer, not an order payment.
         }
-        if (!known && !queued) await matchOrder()
+        if (!known && !queued && !minted) await matchOrder()
 
         // Other chains: record the payment for the merchant (notified as
         // "Payment received on Base"; orders are named, so they aren't
         // notified twice). Moved to Arc by the merchant's Claim All.
         if (!isArc && merchantWallets.has(to)) {
           const { data: paid } = await db.from('merchant_payments').select('order_number').eq('source_chain', chainId).eq('tx_hash', tx).maybeSingle()
+          // Own transfer: the merchant sent USDC from Arc to this chain lately.
+          let sender = from
+          if (minted) {
+            const { data: own } = await db.from('activity').select('id')
+              .eq('wallet_address', to).eq('activity_type', 'bridge')
+              .in('destination_chain', [chainId, chainId === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : chainId])
+              .gte('created_at', new Date(Date.now() - OWN_TRANSFER_WINDOW_MS).toISOString()).limit(1)
+            sender = own?.length ? to : ZERO
+          }
           await db.from('merchant_chain_receipts').upsert({
-            merchant_wallet: to, source_chain: chainId, tx_hash: tx, from_address: from, amount,
+            merchant_wallet: to, source_chain: chainId, tx_hash: tx, from_address: sender, amount,
             order_number: paid?.order_number ?? null,
           }, { onConflict: 'source_chain,tx_hash,merchant_wallet', ignoreDuplicates: true })
         }

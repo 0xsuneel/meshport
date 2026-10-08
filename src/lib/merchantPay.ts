@@ -473,6 +473,13 @@ export type ChainReceipt = {
   id: string; chain: string; txHash: string; from: string | null; amount: number; orderNumber: string | null
   status: 'received' | 'converting' | 'converted'; createdAt: string; convertedAt: string | null
 }
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+/** The merchant's own Transfer Funds from Arc to that chain (sender = their own address; older rows: no sender). */
+export const isOwnReceipt = (r: Pick<ChainReceipt, 'from'>, ownWallet: string | null | undefined) =>
+  !r.from || (!!ownWallet && r.from.toLowerCase() === ownWallet.toLowerCase())
+/** Paid through a bridge (CCTP) by someone else — no paying wallet on this chain. */
+export const isBridgeReceipt = (r: Pick<ChainReceipt, 'from'>) => r.from?.toLowerCase() === ZERO_ADDRESS
+
 export async function listChainReceipts(limit = 50): Promise<ChainReceipt[]> {
   const { data } = await supabase.from('merchant_chain_receipts').select('*').order('created_at', { ascending: false }).limit(limit)
   return (data ?? []).map((r: any) => ({

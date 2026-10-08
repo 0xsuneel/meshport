@@ -14,7 +14,7 @@ import {
   createPaymentRequest, listMyIntents, listMyPayments, subscribeMerchantPayments, paymentLink, orderPayLink, orderChainPayLink,
   cancelPayment, submitPayment, STATUS_LABEL, paymentStageLabel, isArriving, orderLabel, paymentRequestMessage,
   listUnmatchedDeposits, assignDeposit, dismissDeposit, completeOrder,
-  listChainReceipts, getAutoConvert, setAutoConvert,
+  listChainReceipts, getAutoConvert, setAutoConvert, isOwnReceipt, isBridgeReceipt,
   type MerchantIntent, type MerchantPayment, type UnmatchedDeposit, type ChainReceipt,
 } from '@/lib/merchantPay'
 import { createPortal } from 'react-dom'
@@ -93,7 +93,7 @@ export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains
   const navigate = useNavigate()
   const box = (el: React.ReactNode) => <div style={boxStyle}>{el}</div>
   // Order payments + payments received straight to the wallet on other chains.
-  const allPayments = useMemo(() => withChainReceipts(payments, receipts), [payments, receipts])
+  const allPayments = useMemo(() => withChainReceipts(payments, receipts, walletAddress), [payments, receipts, walletAddress])
   // New payment requests / QR live in Home → Receive.
   const newRequest = (customer?: string) => navigate(`/receive?request=1${customer ? `&customer=${encodeURIComponent(customer)}` : ''}`)
   if (view.kind === 'request') {
@@ -123,11 +123,12 @@ export type Customer = { key: string; name: string; total: number; count: number
  * customer list and each customer's history all include them. A mint
  * (faucet / CCTP) has no paying wallet: its entry has no `from`.
  */
-export function withChainReceipts(payments: MerchantPayment[], receipts: ChainReceipt[]): MerchantPayment[] {
+export function withChainReceipts(payments: MerchantPayment[], receipts: ChainReceipt[], ownWallet: string | null | undefined): MerchantPayment[] {
   const known = new Set(payments.map(p => `${p.chain}:${(p.txHash ?? '').toLowerCase()}`))
   const usernameOf = (from: string) => payments.find(p => p.from?.toLowerCase() === from.toLowerCase())?.customerUsername ?? null
   const extra: MerchantPayment[] = receipts
-    .filter(r => !r.orderNumber && !known.has(`${r.chain}:${r.txHash.toLowerCase()}`))
+    // The merchant's own transfers are listed in the Ledger, but aren't revenue or a customer.
+    .filter(r => !r.orderNumber && !isOwnReceipt(r, ownWallet) && !known.has(`${r.chain}:${r.txHash.toLowerCase()}`))
     .map(r => ({
       id: `rcpt_${r.id}`, intentId: '', chain: r.chain, txHash: r.txHash, from: r.from ?? '', amount: r.amount,
       method: 'chain_receipt', status: r.status === 'converted' ? 'collected' : 'confirmed',
@@ -135,14 +136,14 @@ export function withChainReceipts(payments: MerchantPayment[], receipts: ChainRe
     }))
   return [...payments, ...extra].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
-export const MINT_SENDER = 'Faucet / bridge'
+export const MINT_SENDER = 'Via bridge (CCTP)'
 export const customerKey = (p: Pick<MerchantPayment, 'customerUsername' | 'from'>) => p.customerUsername ? `u:${p.customerUsername}` : `w:${p.from}`
 
 export function customersOf(payments: MerchantPayment[]): Customer[] {
   const map = new Map<string, Customer>()
   for (const p of payments) {
     const key = customerKey(p)
-    const name = p.customerUsername ? `${p.customerUsername}.arc` : p.from ? short(p.from) : MINT_SENDER
+    const name = p.customerUsername ? `${p.customerUsername}.arc` : p.from && !isBridgeReceipt(p) ? short(p.from) : MINT_SENDER
     const c = map.get(key) ?? { key, name, total: 0, count: 0, last: p.createdAt, search: name.toLowerCase() }
     c.total += p.amount; c.count += 1
     // Searchable by username and by every wallet address they paid from.
@@ -161,6 +162,7 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
   onOpenRequest: (code: string) => void; onOpenCustomer: (key: string) => void
 }) {
   const [tab, setTab] = useState<'requests' | 'customers' | 'chains'>('requests')
+  const walletAddress = useAuthStore(s => s.walletAddress)
   const [q, setQ] = useState('')
   const [showAllReq, setShowAllReq] = useState(false)
   const [showAllCust, setShowAllCust] = useState(false)
@@ -294,13 +296,15 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
           {receipts.length > 0 && (
             <Section title="Payments received on other chains">
               {(showAllRcpt ? receipts : receipts.slice(0, LIMIT)).map(r => {
-                const fromName = r.from ? (allCustomers.find(c => c.search.includes(r.from!.toLowerCase()))?.name ?? short(r.from)) : MINT_SENDER
+                const own = isOwnReceipt(r, walletAddress)
+                const fromName = own ? 'your transfer from Arc' : isBridgeReceipt(r) ? MINT_SENDER.toLowerCase()
+                  : (allCustomers.find(c => c.search.includes(r.from!.toLowerCase()))?.name ?? short(r.from!))
                 const label = CHAIN_LABEL[r.chain] ?? r.chain.replace(/_/g, ' ')
                 return (
-                  <Row key={r.id} icon={<CheckCircle2 size={16} color="var(--success)" />}
-                    title={`Payment received · ${label}`}
-                    sub={`$${formatAmount(r.amount)} USDC · from ${fromName}${r.orderNumber ? ` · Order #${r.orderNumber}` : ''} · ${timeAgo(r.createdAt)}`}
-                    onClick={() => { const pay = payments.find(x => x.chain === r.chain && x.txHash.toLowerCase() === r.txHash.toLowerCase()); onOpenCustomer(pay ? customerKey(pay) : `w:${r.from ?? ''}`) }}
+                  <Row key={r.id} icon={<CheckCircle2 size={16} color={own ? 'var(--brand-text)' : 'var(--success)'} />}
+                    title={own ? `Own Ledger payment received · ${label}` : `Payment received in Ledger (${label})`}
+                    sub={`$${formatAmount(r.amount)} USDC · ${own ? fromName : `from ${fromName}`}${r.orderNumber ? ` · Order #${r.orderNumber}` : ''} · ${timeAgo(r.createdAt)}`}
+                    onClick={own ? undefined : () => { const pay = payments.find(x => x.chain === r.chain && x.txHash.toLowerCase() === r.txHash.toLowerCase()); onOpenCustomer(pay ? customerKey(pay) : `w:${r.from ?? ''}`) }}
                     amountColor="var(--success)" />
                 )
               })}
@@ -739,7 +743,7 @@ function CustomerDetail({ keyId, payments, intents, onBack, onRequest, onOpenReq
   const [receiptFor, setReceiptFor] = useState<MerchantPayment | null>(null)
   const mine = payments.filter(p => customerKey(p) === keyId)
   const username = keyId.startsWith('u:') ? keyId.slice(2) : null
-  const name = username ? `${username}.arc` : keyId.length > 2 ? short(keyId.slice(2)) : MINT_SENDER
+  const name = username ? `${username}.arc` : keyId.length > 2 && !isBridgeReceipt({ from: keyId.slice(2) }) ? short(keyId.slice(2)) : MINT_SENDER
   const total = mine.reduce((s, p) => s + p.amount, 0)
   const intentById = new Map(intents.map(i => [i.id, i]))
   return (
