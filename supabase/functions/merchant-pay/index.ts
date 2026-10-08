@@ -422,14 +422,11 @@ async function watchDeposits() {
       for (const log of logs ?? []) {
         const to = ('0x' + String(log.topics?.[2]).slice(-40)).toLowerCase()
         const from = ('0x' + String(log.topics?.[1]).slice(-40)).toLowerCase()
-        if (from === to) continue // self-sends
+        // Mints (from 0x0) are skipped: on another chain they're usually the
+        // merchant's own Transfer Funds from Arc arriving (CCTP mints into
+        // their own wallet there), not a customer — customers send from a wallet.
+        if (from === ZERO || from === to) continue // mints and self-sends
         if (GATEWAY_CONTRACTS.has(from)) continue // the merchant's own Ledger withdrawals
-        // A mint (from 0x0) into a merchant's wallet on another chain is money
-        // arriving — a customer paying through CCTP, or the faucet. Merchants'
-        // own claims mint on Arc, never here. Recorded and notified below, but
-        // never auto-matched to an order (there's no paying wallet to check).
-        const minted = from === ZERO
-        if (minted && (isArc || !merchantWallets.has(to))) continue
         let atomic = 0n
         try { atomic = BigInt(log.data) } catch { continue }
         const amount = Number(isArc ? atomic / 1_000_000_000_000n : atomic) / 1e6
@@ -495,7 +492,7 @@ async function watchDeposits() {
         if (close.length > 0) { await park(close, 'amount_mismatch'); return }
         // 4) Nothing close — an ordinary transfer, not an order payment.
         }
-        if (!known && !queued && !minted) await matchOrder()
+        if (!known && !queued) await matchOrder()
 
         // Other chains: record the payment for the merchant (notified as
         // "Payment received on Base"; orders are named, so they aren't
@@ -503,7 +500,7 @@ async function watchDeposits() {
         if (!isArc && merchantWallets.has(to)) {
           const { data: paid } = await db.from('merchant_payments').select('order_number').eq('source_chain', chainId).eq('tx_hash', tx).maybeSingle()
           await db.from('merchant_chain_receipts').upsert({
-            merchant_wallet: to, source_chain: chainId, tx_hash: tx, from_address: minted ? null : from, amount,
+            merchant_wallet: to, source_chain: chainId, tx_hash: tx, from_address: from, amount,
             order_number: paid?.order_number ?? null,
           }, { onConflict: 'source_chain,tx_hash,merchant_wallet', ignoreDuplicates: true })
         }
