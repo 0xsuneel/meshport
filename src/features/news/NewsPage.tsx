@@ -11,9 +11,9 @@ import {
 
 const FILTERS: { key: NewsSource | null; label: string }[] = [
   { key: null, label: 'All' },
-  { key: 'meshport', label: 'MeshPort' },
   { key: 'arc', label: 'Arc' },
   { key: 'circle', label: 'Circle' },
+  { key: 'meshport', label: 'MeshPort' },
   { key: 'arc_status', label: 'Network status' },
 ]
 
