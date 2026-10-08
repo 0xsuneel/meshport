@@ -136,3 +136,110 @@ describe('news.ts', () => {
     expect(newsHost({ url: null })).toBeNull()
   })
 })
+
+// ── Developer updates (trimmed copies of the real files, 2026-10-08) ────────
+import { parseReleaseNotesMd, parseChangelogMd, markdownText } from '../../supabase/functions/_shared/newsParse'
+
+const CCTP_NOTES = `# CCTP release notes
+
+## October 2026
+
+<Update label="2026.10.08">
+  ### Blockchain expansion
+
+  Added Sui mainnet and testnet as supported blockchains for CCTP (domain 8).
+
+  Updated topics:
+
+  * [Sui packages and interfaces](/cctp/references/sui-packages)
+  * [Supported blockchains and domains](/cctp/concepts/supported-chains-and-domains)
+</Update>
+
+## August 2026
+
+<Update label="2026.08.26">
+  As of August 26, 2026, filtering Gateway x402 transfers by \`status\` requires a
+  narrowing filter. Supply at least one of \`from\`, \`to\`, or \`nonce\` in the same
+  request.
+
+  ### API updates
+
+  * [\`GET /v1/x402/transfers\`](/api-reference/gateway-nanopayments/search-x402transfers):
+    the \`status\` query parameter requires \`from\`, \`to\`, or \`nonce\`.
+</Update>
+`
+
+const APP_KIT_CHANGELOG = `# @circle-fin/app-kit
+
+## 1.16.0
+
+### Minor Changes
+
+- Add Borrow Kit to App Kit under \`kit.borrow\`:
+
+  \`\`\`ts
+  const kit = new AppKit();
+  \`\`\`
+
+  - Every Borrow Kit operation is available on \`kit.borrow\`.
+
+- Default the destination of FAST cross-chain deposits to Arc.
+
+### Patch Changes
+
+- Fix a typo.
+
+## 1.15.3
+
+### Patch Changes
+
+- Stop replacing a validation error with a \`TypeError\`.
+
+## 1.15.0
+
+### Minor Changes
+
+- Add Arc mainnet (\`Blockchain.Arc\`, chainId 5042) as a supported chain.
+`
+
+describe('parseReleaseNotesMd', () => {
+  it('turns each dated <Update> into a story with the product in the title', () => {
+    const items = parseReleaseNotesMd(CCTP_NOTES, 'CCTP', 'https://developers.circle.com/release-notes/cctp-2026')
+    expect(items).toHaveLength(2)
+    expect(items[0]).toMatchObject({
+      url: 'https://developers.circle.com/release-notes/cctp-2026#2026.10.08',
+      title: 'CCTP: Added Sui mainnet and testnet as supported blockchains for CCTP (domain 8)',
+      summary: 'Added Sui mainnet and testnet as supported blockchains for CCTP (domain 8).',
+      topic: 'CCTP',
+      published_at: '2026-10-08T12:00:00.000Z',
+    })
+    expect(items[0].body).toEqual(['Updated topics: Sui packages and interfaces; Supported blockchains and domains'])
+    // Wrapped bullet lines and inline code read as plain text.
+    expect(items[1].summary).toMatch(/^As of August 26, 2026, filtering Gateway x402 transfers by status requires/)
+    expect(items[1].body).toEqual(['GET /v1/x402/transfers: the status query parameter requires from, to, or nonce.'])
+  })
+})
+
+describe('parseChangelogMd', () => {
+  const times = { '1.16.0': '2026-09-30T13:44:36.370Z', '1.15.3': '2026-09-24T17:49:21.581Z', '1.15.0': '2026-09-16T00:43:03.500Z' }
+  it('keeps major/minor releases only, dated from npm', () => {
+    const items = parseChangelogMd(APP_KIT_CHANGELOG, 'App Kit', '@circle-fin/app-kit', times)
+    expect(items.map(i => i.url)).toEqual([
+      'https://www.npmjs.com/package/@circle-fin/app-kit/v/1.16.0',
+      'https://www.npmjs.com/package/@circle-fin/app-kit/v/1.15.0',
+    ])
+    expect(items[0].title).toBe('App Kit 1.16.0: Add Borrow Kit to App Kit under kit.borrow')
+    expect(items[0].body).toEqual(['Default the destination of FAST cross-chain deposits to Arc.'])
+    expect(items[0].published_at).toBe('2026-09-30T13:44:36.370Z')
+    expect(items[1].title).toBe('App Kit 1.15.0: Add Arc mainnet (Blockchain.Arc, chainId 5042) as a supported chain')
+  })
+  it('skips a release npm has no date for', () => {
+    expect(parseChangelogMd(APP_KIT_CHANGELOG, 'App Kit', '@circle-fin/app-kit', {})).toEqual([])
+  })
+})
+
+describe('markdownText', () => {
+  it('keeps link text, drops code fences, marks and tags', () => {
+    expect(markdownText('See **[Docs](/x)** and `kit.borrow` <Note>hi</Note>\n```ts\ncode\n```')).toBe('See Docs and kit.borrow hi')
+  })
+})

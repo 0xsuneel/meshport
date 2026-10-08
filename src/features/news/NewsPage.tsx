@@ -14,6 +14,7 @@ const FILTERS: { key: NewsSource | null; label: string }[] = [
   { key: null, label: 'All' },
   { key: 'arc', label: 'Arc' },
   { key: 'circle', label: 'Circle' },
+  { key: 'circle_dev', label: 'Developer' },
   { key: 'meshport', label: 'MeshPort' },
   { key: 'arc_status', label: 'Network status' },
 ]

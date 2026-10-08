@@ -1,12 +1,13 @@
 // ── News — Home "News" box, /news list, /news/:id short article ─────────────
-// Stories live in public.news_items: Arc and Circle blog posts plus Arc
-// network notices (filled every 30 minutes by the news-sync edge function)
+// Stories live in public.news_items: Arc and Circle blog posts, Circle
+// developer updates (CCTP / Gateway release notes, App Kit / Bridge Kit
+// releases), Arc network notices (filled every 30 minutes by the news-sync edge function)
 // and MeshPort's own posts (written by admins). The app only ever reads.
 // "Read full article" opens `url` on the original site.
 
 import { supabase } from './supabase'
 
-export type NewsSource = 'arc' | 'circle' | 'arc_status' | 'meshport'
+export type NewsSource = 'arc' | 'circle' | 'circle_dev' | 'arc_status' | 'meshport'
 
 export interface NewsItem {
   id: string
@@ -27,6 +28,7 @@ const COLUMNS = 'id,source,url,title,summary,body,image_url,topic,read_minutes,s
 export const NEWS_SOURCE_LABEL: Record<NewsSource, string> = {
   arc: 'Arc',
   circle: 'Circle',
+  circle_dev: 'Developer',
   arc_status: 'Arc status',
   meshport: 'MeshPort',
 }
@@ -35,6 +37,7 @@ export const NEWS_SOURCE_LABEL: Record<NewsSource, string> = {
 export const NEWS_SOURCE_TINT: Record<NewsSource, string> = {
   arc: 'linear-gradient(135deg, #0E3B37, #1F8A7E)',
   circle: 'linear-gradient(135deg, #1C2340, #4E5BD1)',
+  circle_dev: 'linear-gradient(135deg, #10172A, #3B4A6B)',
   arc_status: 'linear-gradient(135deg, #3B1F0F, #C9702E)',
   meshport: 'linear-gradient(135deg, #0F5C57, #2F9E8F)',
 }
