@@ -132,6 +132,10 @@
 }
 
 :root[data-theme="dark"] {
+  /* Page push (PageTransition / ScreenPush): how much the page underneath dims
+     and the shadow on the sliding page's edge. */
+  --push-dim: 0.22;
+  --push-shadow: -10px 0 28px rgba(0,0,0,0.28);
   /* Popups (DesktopDialogFrame / Sheet): lifted card edge + layered shadow */
   --popup-edge: color-mix(in srgb, var(--text-primary) 11%, transparent);
   --popup-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 28px 64px -16px rgba(0,0,0,0.75), 0 10px 24px -10px rgba(0,0,0,0.5);
@@ -175,6 +179,10 @@
 }
 
 :root[data-theme="light"] {
+  /* Page push: 22% black turns a white page muddy grey, so light pages only
+     dim slightly, with a soft edge shadow (as iOS does in light mode). */
+  --push-dim: 0.07;
+  --push-shadow: -6px 0 22px rgba(16,24,32,0.12);
   /* Popups (DesktopDialogFrame / Sheet): lifted card edge + layered shadow */
   --popup-edge: color-mix(in srgb, var(--text-primary) 8%, transparent);
   --popup-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 28px 64px -16px rgba(16,24,32,0.34), 0 10px 24px -10px rgba(16,24,32,0.18);
