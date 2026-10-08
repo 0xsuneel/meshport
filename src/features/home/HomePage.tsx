@@ -22,6 +22,7 @@ import { deriveAddressFromPrivateKey } from '@/lib/arc'
 import { getRemovedContacts, unblockIfNewerActivity } from '@/lib/removedContacts'
 import { searchUsersDb, getOrCreateConversation, fetchContactsDb, type DbUser } from '@/lib/supabase'
 import { filterServices } from '@/lib/searchServices'
+import { RecentNewsRow } from './RecentNewsRow'
 import { fetchRecentContacts, recentInitial, recentShortName, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
 import { useSettingsStore } from '@/store/settingsStore'
 import { activityLabel, activitySign, type ActivityType, type ActivityRecord } from '@/lib/ActivityService'
@@ -4161,14 +4162,18 @@ export function HomePage() {
         <FeatureBanner height={isDesktop ? 64 : 75} onOpen={path => navigate(path)} />
 
         {/* ── RECENT — people I sent money to ──────────────────────────────── */}
-        {/* Desktop-only bordered card, same language as the Multichain Hub
-            card above it. Mobile keeps the plain unboxed wrapper. */}
-        <div style={isDesktop ? {
-          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16,
-          padding: '12px 16px', boxShadow: 'var(--shadow-1)',
-        } : undefined}>
-        <RecentRow navigate={navigate} compact={isDesktop} resultLimit={isDesktop ? 7 : 5} />
-        </div>
+        {/* Desktop: bordered card, same language as the Multichain Hub card
+            above it. Mobile: Recent and News side by side (RecentNewsRow). */}
+        {isDesktop ? (
+          <div style={{
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16,
+            padding: '12px 16px', boxShadow: 'var(--shadow-1)',
+          }}>
+            <RecentRow navigate={navigate} compact resultLimit={7} />
+          </div>
+        ) : (
+          <RecentNewsRow navigate={navigate} />
+        )}
 
         {/* ── ASSETS — all 3 tokens ────────────────────────────────────────── */}
         <div ref={assetsCardRef}>
