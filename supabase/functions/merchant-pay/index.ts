@@ -299,9 +299,41 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
 // matches → "needs review" for the merchant; none → an ordinary transfer.
 // Arc: native USDC Transfer logs come from the EIP-7708 system emitter
 // (18 decimals) — https://docs.arc.io/integrate/exchanges/deposits
-const SCAN_RANGE: Record<string, number> = { Arc_Testnet: 3000 }
+// World Chain's and Monad's public RPCs only answer eth_getLogs for 100 blocks.
+const SCAN_RANGE: Record<string, number> = { Arc_Testnet: 3000, World_Chain_Sepolia: 100, Monad_Testnet: 100 }
 const DEFAULT_RANGE = 1000
 const START_LOOKBACK = 300
+// Fallbacks when a node refuses a log query (see scanLogs).
+const SMALL_RANGE = 100
+const PRUNED_JUMP = 1000
+const errText = (e: unknown) => e instanceof Error ? e.message : typeof e === 'object' ? JSON.stringify(e) : String(e)
+
+/**
+ * eth_getLogs for [from, to], recovering from the two refusals public RPCs
+ * give: "pruned history" (the node no longer keeps blocks that old — the
+ * cursor fell behind, e.g. Ethereum Sepolia's publicnode keeps ~10k blocks,
+ * which left this watcher stuck there for days) → skip ahead to recent
+ * blocks; and a block-range limit → retry with a 100-block window.
+ * Returns the range actually read, so the cursor moves on from there.
+ */
+async function scanLogs(rpcs: string[], filter: Record<string, unknown>, from: number, to: number, latest: number): Promise<{ fromBlock: number; toBlock: number; logs: any[] }> {
+  const query = async (f: number, t: number) => (await rpc(rpcs, 'eth_getLogs', [{ ...filter, fromBlock: hex(f), toBlock: hex(t) }])) ?? []
+  try {
+    return { fromBlock: from, toBlock: to, logs: await query(from, to) }
+  } catch (e) {
+    const msg = errText(e)
+    if (/prun|history|not available|missing trie/i.test(msg) && latest - from > PRUNED_JUMP) {
+      const f = latest - PRUNED_JUMP + 1, t = Math.min(latest, f + (to - from))
+      console.warn('[merchant-pay/watch] history pruned — skipping ahead to block', f)
+      return { fromBlock: f, toBlock: t, logs: await query(f, t) }
+    }
+    if (/range|limit|too many|exceed/i.test(msg) && to - from + 1 > SMALL_RANGE) {
+      const t = from + SMALL_RANGE - 1
+      return { fromBlock: from, toBlock: t, logs: await query(from, t) }
+    }
+    throw e
+  }
+}
 const ZERO = '0x0000000000000000000000000000000000000000'
 // Circle Gateway wallet + minter (same on every EVM testnet).
 const GATEWAY_CONTRACTS = new Set(['0x0077777d7eba4688bdef3e311b846f25870a19b9', '0x0022222abe238cc2c7bb1f21003f0a260052475b'])
@@ -359,12 +391,11 @@ async function watchDeposits() {
       // Arc: open orders only (plain Arc receives are handled by the app).
       const wallets = isArc ? orderWallets : [...new Set([...orderWallets, ...merchantWallets])]
       if (wallets.length === 0) return [chainId, { fromBlock, toBlock, logs: null }]
-      const logs: any[] = await rpc(chain.rpcs, 'eth_getLogs', [{
+      const read = await scanLogs(chain.rpcs, {
         address: isArc ? ARC_NATIVE_EMITTER : chain.usdc,
         topics: [TRANSFER_TOPIC, null, wallets.map(pad)],
-        fromBlock: hex(fromBlock), toBlock: hex(toBlock),
-      }])
-      return [chainId, { fromBlock, toBlock, logs: logs ?? [] }]
+      }, fromBlock, toBlock, latest)
+      return [chainId, read]
     } catch (e) {
       return [chainId, { error: e }]
     }
