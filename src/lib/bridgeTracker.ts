@@ -44,8 +44,8 @@ export function notifyClaimArrived(amount: number, sourceChain: string, timeTake
     // generic "Funds Arrived!".
     // A merchant's claim moves Ledger money to Arc — same wording as the Hub.
     ...(isMerchantClaim({ createdAt: createdAt ?? new Date().toISOString(), sourceChain })
-      ? { title: `Moved to Arc from ${chainLabel} Ledger`,
-          body:  `$${formatAmount(amount)} USDC from your ${chainLabel} Ledger is now in your Arc balance` }
+      ? { title: 'Moved to Arc',
+          body:  `$${formatAmount(amount)} USDC from your ${chainLabel} Ledger` }
       : { title: `Claimed from ${chainLabel}`,
           body:  `${formatAmount(amount)} USDC arrived on Arc from ${chainLabel}${timeStr}` }),
     isRead:  false,

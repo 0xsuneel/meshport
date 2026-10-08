@@ -141,7 +141,7 @@ async function notifyClaimComplete(
       body: JSON.stringify({
         userId: user.id,
         ...(merchant
-          ? { title: `Moved to Arc from ${chainLabel} Ledger`, body: `$${amount.toFixed(2)} USDC from your ${chainLabel} Ledger is now in your Arc balance` }
+          ? { title: 'Moved to Arc', body: `$${amount.toFixed(2)} USDC from your ${chainLabel} Ledger` }
           : { title: 'Claim Complete', body: `$${amount.toFixed(2)} USDC arrived on Arc from ${chainLabel}` }),
         url:    '/multichain',
         tag:    `claim-complete-${claimId}`,
