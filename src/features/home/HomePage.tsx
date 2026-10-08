@@ -3857,7 +3857,9 @@ export function HomePage() {
       {(!isDesktop || searchOpen) && (
       <div ref={stickyHeaderRef} style={{
         position: 'sticky', top: 0, zIndex: 20,
-        background: 'color-mix(in srgb, var(--bg) 70%, transparent)',
+        // Near-solid: phones show no backdrop blur (index.css), so a see-through
+        // header would let the content scrolling under it show sharply.
+        background: 'color-mix(in srgb, var(--bg) 94%, transparent)',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)',

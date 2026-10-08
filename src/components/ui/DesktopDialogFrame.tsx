@@ -46,7 +46,8 @@ export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex =
         animate={POPUP_CARD.animate}
         exit={POPUP_CARD.exit}
         transition={POPUP_CARD.transition}
-        style={{ position: 'relative', width: '100%', maxWidth, maxHeight: '100%', overflowY: 'auto', overscrollBehavior: 'contain' }}
+        // Its own compositor layer, so the grow animation never re-rasterizes the list inside.
+        style={{ position: 'relative', width: '100%', maxWidth, maxHeight: '100%', overflowY: 'auto', overscrollBehavior: 'contain', willChange: 'transform, opacity', backfaceVisibility: 'hidden' }}
       >
         {children}
       </motion.div>
