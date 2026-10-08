@@ -36,7 +36,7 @@ PRIVATE_KEY=$(echo "$PRIVATE_KEY" | sed 's/^0x//')
 PRIVATE_KEY="0x${PRIVATE_KEY}"
 
 USDC_CONTRACT="0x3600000000000000000000000000000000000000"
-RPC_URL="https://rpc.testnet.arc.network"
+RPC_URL="https://rpc.testnet.arc.io"
 
 echo ""
 echo "📋 Deployment Config:"

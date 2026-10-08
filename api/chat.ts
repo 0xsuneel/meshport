@@ -93,7 +93,6 @@ const ARC_RPCS = [
   'https://rpc.blockdaemon.testnet.arc.io', // arc-studio-allow-onchain-literal
   'https://rpc.drpc.testnet.arc.io',      // arc-studio-allow-onchain-literal
   'https://rpc.quicknode.testnet.arc.io', // arc-studio-allow-onchain-literal
-  'https://rpc.testnet.arc.network',      // arc-studio-allow-onchain-literal  legacy — last-resort fallback
 ].filter(Boolean)
 async function arcRpc(body: object): Promise<any> {
   let lastErr: unknown

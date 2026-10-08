@@ -70,7 +70,7 @@ export const CCTP_DOMAINS: Record<string, number> = {
 }
 
 // Authenticated-only Arc endpoints — no direct public gateways
-// (rpc.testnet.arc.network, Blockdaemon, dRPC public, QuickNode, thirdweb,
+// (rpc.testnet.arc.io, Blockdaemon, dRPC public, QuickNode, thirdweb,
 // drpc.org). Those were exactly how claim verification could end up
 // querying arc-testnet.rpc.thirdweb.com even with an authenticated RPC
 // configured elsewhere in the app.

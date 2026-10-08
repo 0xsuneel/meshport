@@ -352,7 +352,7 @@ const ARC_ADD_CHAIN = {
   chainId: `0x${(5042002).toString(16)}`,
   chainName: 'Arc Testnet',
   nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
-  rpcUrls: ['https://rpc.testnet.arc.network'],
+  rpcUrls: ['https://rpc.testnet.arc.io'],
   blockExplorerUrls: [ARC_EXPLORER],
 }
 

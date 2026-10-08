@@ -529,7 +529,7 @@ const WATCH_LOOP_MS = 58_000      // covers the whole minute until the next cron
 const WATCH_INTERVAL_MS = 2_000  // Arc makes ~2 blocks a second
 const ARC_RPC_URLS = [
   (Deno.env.get('ARC_RPC_URL') ?? '').trim(),
-  'https://rpc.testnet.arc.network',
+  'https://rpc.testnet.arc.io',
   'https://rpc.drpc.testnet.arc.io',
   'https://rpc.quicknode.testnet.arc.io',
 ].filter(Boolean)

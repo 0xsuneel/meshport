@@ -19,7 +19,7 @@ module.exports = {
   },
   networks: {
     arcTestnet: {
-      url: 'https://rpc.testnet.arc.network',
+      url: 'https://rpc.testnet.arc.io',
       chainId: 5042002,
       accounts: ADMIN_PRIVATE_KEY ? [ADMIN_PRIVATE_KEY] : [],
     },

@@ -11,7 +11,7 @@ if [ -z "$CONTRACT" ]; then
 fi
 
 USDC="0x3600000000000000000000000000000000000000"
-RPC="https://rpc.testnet.arc.network"
+RPC="https://rpc.testnet.arc.io"
 
 if [ -z "$PRIVATE_KEY" ]; then
   read -p "Enter admin private key (0x...): " PRIVATE_KEY

@@ -62,11 +62,11 @@ const DRPC_KEY = Deno.env.get('DRPC_KEY') ?? ''
 const CONFIGURED_ARC_RPC_URL = (Deno.env.get('ARC_RPC_URL') ?? '').trim()
 
 // Authenticated-only Arc endpoints — no direct public gateways
-// (rpc.testnet.arc.network, Blockdaemon, dRPC public, QuickNode, thirdweb,
+// (rpc.testnet.arc.io, Blockdaemon, dRPC public, QuickNode, thirdweb,
 // drpc.org). Those were exactly how this scan could end up querying
 // arc-testnet.rpc.thirdweb.com even with an authenticated RPC configured.
 //
-// LAST-RESORT FALLBACK ADDED (2026-09-18): rpc.testnet.arc.network, added
+// LAST-RESORT FALLBACK ADDED (2026-09-18): rpc.testnet.arc.io, added
 // deliberately and explicitly by name, not as a rotating pool. Diagnosed
 // this session with real, reproducible evidence: whatever
 // CONFIGURED_ARC_RPC_URL/DRPC_KEY currently resolve to was returning EMPTY
@@ -89,7 +89,7 @@ const CONFIGURED_ARC_RPC_URL = (Deno.env.get('ARC_RPC_URL') ?? '').trim()
 const ARC_RPCS = [
   ...(CONFIGURED_ARC_RPC_URL ? [CONFIGURED_ARC_RPC_URL] : []),
   ...(DRPC_KEY ? [`https://lb.drpc.live/arc-testnet/${DRPC_KEY}`] : []), // dRPC authenticated (higher limits)
-  'https://rpc.testnet.arc.network',
+  'https://rpc.testnet.arc.io',
 ]
 const ARC_USDC_CONTRACT = '0x3600000000000000000000000000000000000000'
 const TRANSFER_TOPIC0 = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'

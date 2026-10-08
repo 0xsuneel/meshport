@@ -57,14 +57,8 @@ const ALCHEMY_ARC_KEY = (process.env.ALCHEMY_ARC_KEY || '').trim()
 // it a single point of failure — any rate limit on that one key took down
 // every Arc-facing feature (Home balance polling, Swap, Multichain Transfer/
 // Claim, Rewards) at once, with nothing to fail over to.
-// Circle appears to have migrated Arc's documented RPC domain from
-// *.arc.network to *.arc.io at some point after this proxy was first
-// written (docs.arc.io/arc/references/connect-to-arc now lists .arc.io as
-// primary for every provider). Keeping BOTH domain families here rather
-// than swapping one for the other — if .network is being deprecated/
-// under-provisioned that would explain recent 502s, but until that's
-// confirmed, having every known-good endpoint in the race is strictly
-// safer than guessing which one to drop.
+// Only *.arc.io endpoints: Arc retired the legacy *.arc.network Testnet
+// RPC URLs after October 15, 2026 (Arc v0.8.1 announcement / status.arc.io).
 const ARC_RPCS = [
   ...(CONFIGURED_ARC_RPC_URL ? [CONFIGURED_ARC_RPC_URL] : []),
   ...(DRPC_KEY ? [`https://lb.drpc.live/arc-testnet/${DRPC_KEY}`] : []), // dRPC authenticated — tried first
@@ -74,12 +68,6 @@ const ARC_RPCS = [
   'https://rpc.blockdaemon.testnet.arc.io', // Blockdaemon
   'https://rpc.drpc.testnet.arc.io',        // dRPC (Circle-provisioned, keyless)
   'https://rpc.quicknode.testnet.arc.io',   // QuickNode
-  // Legacy/alternate domain — kept as extra fallback capacity, harmless if
-  // still live, free redundancy if .io ever has its own bad day.
-  'https://rpc.testnet.arc.network',
-  'https://rpc.blockdaemon.testnet.arc.network',
-  'https://rpc.drpc.testnet.arc.network',
-  'https://rpc.quicknode.testnet.arc.network',
 ]
 
 // RELIABILITY FIX: every known Arc testnet RPC provider (Alchemy,
