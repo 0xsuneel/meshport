@@ -54,8 +54,17 @@ clearLegacyData()
   const SESSION_FLAG = 'meshport:session-alive'
   let hadSession = true
   try { hadSession = sessionStorage.getItem(SESSION_FLAG) === '1'; sessionStorage.setItem(SESSION_FLAG, '1') } catch { /* private mode */ }
+  // Also lock when this is a reload of a tab the phone discarded after it
+  // sat in the background past the auto-lock time (App.tsx records when the
+  // app was hidden; 15 min, same as there).
+  let awayTooLong = false
+  try {
+    const hiddenAt = Number(sessionStorage.getItem('meshport:hidden-at') || 0)
+    awayTooLong = hiddenAt > 0 && Date.now() - hiddenAt > 15 * 60 * 1000
+    sessionStorage.removeItem('meshport:hidden-at')
+  } catch { /* private mode */ }
   const auth = useAuthStore.getState()
-  if (!hadSession && auth.isAuthenticated && auth.passcodeLockEnabled && !auth.isLocked) auth.lock()
+  if ((!hadSession || awayTooLong) && auth.isAuthenticated && auth.passcodeLockEnabled && !auth.isLocked) auth.lock()
   // Start fetching the lock screen now, so the splash goes straight to it.
   if (useAuthStore.getState().isLocked) import('./features/auth/PasscodeSetup').catch(() => {})
 }
