@@ -6,6 +6,7 @@
 // the wallet's send with address, amount and network filled in.
 // The server (merchant-pay) confirms every payment from the chain itself.
 import { useEffect, useRef, useState } from 'react'
+import { chainLogoSrc } from '@/lib/chainLogos'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { CheckCircle2, Clock, XCircle, ChevronRight, Home } from 'lucide-react'
@@ -16,12 +17,8 @@ import {
   watchPayment, STATUS_LABEL, orderPaySendUrl, isOrderPayable, ARC_PAY_CHAIN, type PaymentView,
 } from '@/lib/merchantPay'
 
-const CHAIN_LOGO: Record<string, string> = {
-  Arc_Testnet: 'arc', Ethereum_Sepolia: 'ethereum', Base_Sepolia: 'base', Arbitrum_Sepolia: 'arbitrum',
-  Optimism_Sepolia: 'optimism', Polygon_Sepolia: 'polygon', Avalanche_Fuji: 'avalanche', HyperEVM_Testnet: 'hyperevm',
-  Sei_Testnet: 'sei', Unichain_Sepolia: 'unichain',
-}
-const logo = (id: string) => `/logos/chains/${CHAIN_LOGO[id] ?? '_fallback'}.svg`
+// Every chain merchant-pay accepts has a logo in the shared map (Arc is separate).
+const logo = (id: string) => id === 'Arc_Testnet' ? '/logos/chains/arc.svg' : chainLogoSrc(id)
 
 export function MerchantPayPage() {
   const { code = '' } = useParams<{ code: string }>()
