@@ -3,6 +3,7 @@ import { createBrowserRouter, RouterProvider, Navigate, useLocation } from 'reac
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store'
 import { markSplashDone } from './lib/splash'
+import { useOnReconnect } from './lib/connectivity'
 import { AppLayout } from './components/layout/AppLayout'
 import { AuthShell } from './components/layout/AuthShell'
 import { ChatDesktopSplit } from './components/layout/ChatDesktopSplit'
@@ -654,6 +655,8 @@ export default function App() {
     const stop = useSettingsStore.getState().startRealtime()
     return stop
   }, [])
+  // Opened without internet (or the load timed out) → load again once it's back.
+  useOnReconnect(() => { void useSettingsStore.getState().load() })
 
   // ── Admin-disabled Biometric Login is enforced globally, not just on the
   // Security settings page — if an admin flips this off while a user already

@@ -1,11 +1,50 @@
 /// <reference lib="webworker" />
-import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching'
+import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching'
+import { registerRoute, NavigationRoute } from 'workbox-routing'
+import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies'
+import { ExpirationPlugin } from 'workbox-expiration'
+import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 
 declare let self: ServiceWorkerGlobalScope
 
 // ── Precache (same role generateSW used to handle automatically) ────────────
 precacheAndRoute(self.__WB_MANIFEST)
 cleanupOutdatedCaches()
+
+// ── Works on a weak or missing connection ──────────────────────────────────
+// Opening the app (or any page of it: /multichain, /activity…) is answered
+// from the installed copy at once, so a slow network never shows a blank
+// screen or the browser's offline page; only the data loads over the network.
+// A new deploy still arrives as before (the service worker updates itself).
+registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), {
+  // Server routes (incl. the pay links' preview pages, served by /api/og-pay)
+  // and files that aren't app pages always go to the network.
+  denylist: [/^\/api\//, /^\/pay(link)?\//, /^\/auth\/v1\//, /\/[^/?]+\.[a-z0-9]+$/i],
+}))
+
+// Inter font: the stylesheet refreshes in the background, font files are
+// kept (they never change at a given URL).
+registerRoute(({ url }) => url.origin === 'https://fonts.googleapis.com',
+  new StaleWhileRevalidate({ cacheName: 'mp-font-css' }))
+registerRoute(({ url }) => url.origin === 'https://fonts.gstatic.com',
+  new CacheFirst({
+    cacheName: 'mp-font-files',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({ maxEntries: 30, maxAgeSeconds: 365 * 24 * 3600 }),
+    ],
+  }))
+
+// Pictures (profile photos, token and chain logos from other sites): shown
+// from the device once seen, refreshed in the background.
+registerRoute(({ request, url }) => request.destination === 'image' && url.origin !== self.location.origin,
+  new StaleWhileRevalidate({
+    cacheName: 'mp-images',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 30 * 24 * 3600, purgeOnQuotaError: true }),
+    ],
+  }))
 
 self.addEventListener('install', () => {
   self.skipWaiting()

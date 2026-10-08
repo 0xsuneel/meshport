@@ -14,20 +14,39 @@ interface SettingsStore {
 
 let realtimeStarted = false
 
+// The last settings that loaded, kept on the device: on a slow or missing
+// connection the app opens with the admin's real switches instead of every
+// feature's default, and a failed load (an empty answer) never wipes them.
+const CACHE_KEY = 'mp_settings_cache'
+function readCache(): SettingsMap | null {
+  try { const v = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null'); return v && typeof v === 'object' ? v : null } catch { return null }
+}
+function writeCache(settings: SettingsMap) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(settings)) } catch { /* storage full / private mode */ }
+}
+const cached = readCache()
+// Set once a load has really come back from the server.
+let fetched = false
+
 export const useSettingsStore = create<SettingsStore>()((set, get) => ({
-  settings: {},
-  loaded: false,
+  settings: cached ?? {},
+  loaded: !!cached,
   loading: false,
 
   load: async () => {
-    if (get().loaded || get().loading) return
+    if (fetched || get().loading) return
     set({ loading: true })
     const settings = await fetchAllSettings()
-    set({ settings, loaded: true, loading: false })
+    const ok = Object.keys(settings).length > 0
+    if (ok) { fetched = true; writeCache(settings) }
+    set(ok ? { settings, loaded: true, loading: false } : { loaded: true, loading: false })
   },
 
   refresh: async () => {
     const settings = await fetchAllSettings()
+    if (Object.keys(settings).length === 0) return // failed — keep what we have
+    fetched = true
+    writeCache(settings)
     set({ settings, loaded: true })
   },
 
