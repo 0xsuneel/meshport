@@ -49,6 +49,7 @@ export interface CctpProgress {
 /** One Iris message record (only the fields used here). */
 export interface IrisMessage {
   status?: string
+  message?: string | null
   attestation?: string | null
   delayReason?: string | null
   forwardState?: string | null
@@ -70,6 +71,25 @@ export function progressFromIris(msg: IrisMessage | null | undefined, knownMintT
 }
 
 /** Fetches the current progress of a burn. null = couldn't tell right now (network). */
+/** The raw Iris record for a burn, or null (not seen yet / network trouble). */
+export async function fetchIrisMessage(srcChain: string, burnTxHash: string): Promise<IrisMessage | null> {
+  const domain = CCTP_DOMAINS[srcChain]
+  if (domain === undefined || !/^0x[0-9a-fA-F]{64}$/.test(burnTxHash)) return null
+  // Testnet burns are only known to Circle's sandbox Iris and mainnet burns
+  // only to production — try the configured one, then the other, so a
+  // mis-set VITE_IRIS_ENV can't hide a burn that's ready to finish.
+  const other = IRIS.includes('sandbox') ? 'https://iris-api.circle.com' : 'https://iris-api-sandbox.circle.com'
+  for (const base of [IRIS, other]) {
+    try {
+      const res = await fetch(`${base}/v2/messages/${domain}?transactionHash=${burnTxHash}`)
+      if (!res.ok) continue
+      const data = await res.json() as { messages?: IrisMessage[] }
+      if (data.messages?.[0]) return data.messages[0]
+    } catch { /* try the other one */ }
+  }
+  return null
+}
+
 export async function fetchCctpProgress(srcChain: string, burnTxHash: string, knownMintTx?: string): Promise<CctpProgress | null> {
   if (knownMintTx) return progressFromIris(null, knownMintTx)
   const domain = CCTP_DOMAINS[srcChain]

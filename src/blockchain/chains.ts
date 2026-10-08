@@ -468,6 +468,24 @@ export function chainSupportsForwarder(sdk: string): boolean {
   return FORWARDER_SUPPORTED_SDK_CHAINS.has(sdk)
 }
 
+// Destinations where Circle's forwarder is listed as supported but its mint
+// keeps failing on-chain, so MeshPort's relayer submits the mint instead (it
+// estimates gas; the recipient is fixed by the attested message either way).
+//
+// Ethereum_Sepolia (2026-10-08): since Oct 6 the destination mint there
+// needs ~237k gas (gatewayMint) / ~290k (CCTP receiveMessage), but Circle's
+// forwarders submit with a fixed 183,360 / 250,000 gas limit, so every
+// forwarded mint reverts out of gas (Gateway: "Forwarder transfer failed:
+// ON_CHAIN_FAILURE"; CCTP: Iris forwardState FAILED / INTERNAL_ERROR). The
+// same mints succeed when submitted with estimated gas. Remove a chain once
+// Circle's forwarder succeeds there again.
+export const FORWARDER_MINT_FAILING_SDK_CHAINS = new Set<string>(['Ethereum_Sepolia'])
+
+/** True when Circle's forwarder should submit the destination mint for `sdk`. */
+export function circleForwarderMintsTo(sdk: string): boolean {
+  return chainSupportsForwarder(sdk) && !FORWARDER_MINT_FAILING_SDK_CHAINS.has(sdk)
+}
+
 /** Every internal chain id known to the balance-scan registry. */
 export function externalChainIds(): string[] {
   return Object.keys(EXTERNAL_CHAINS)

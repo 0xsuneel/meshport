@@ -27,8 +27,8 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForTransfer, resolveChainMechanism, resolveAvailableMechanisms } from '@/lib/featureFilters'
 import { ARC_EXPLORER, explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ARC_RPCS, ARC_NETWORK } from '@/lib/arc'
-import { chainSupportsForwarder } from '@/lib/chainRpcs'
-import { GATEWAY_SELF_MINT_CHAINS } from '@/lib/ubClaim'
+import { circleForwarderMintsTo } from '@/lib/chainRpcs'
+import { GATEWAY_SELF_MINT_CHAINS, forwarderMintRetry } from '@/lib/ubClaim'
 import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -839,6 +839,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // existing "Retry anyway" flow. See the outer catch block below and
   // lib/ubFundRecovery.ts.
   const [ubRecoveryInitiated, setUbRecoveryInitiated] = useState(false)
+  // "Finish transfer" on the failed screen (CCTP burn done, mint missing).
+  const [finishingMint, setFinishingMint] = useState(false)
+  const [finishMintError, setFinishMintError] = useState('')
   const ubDepositTxRef = useRef<string | null>(null)
   const [bridgeSteps, setBridgeSteps] = useState<BridgeStepState[]>(makeDefaultSteps('Destination'))
   const [feeEstimate, setFeeEstimate] = useState<FeeEstimate>({ bridgeFee: 0, networkFee: 0, forwarderFee: 0, totalFee: 0, receiverGets: 0, loading: false, error: '' })
@@ -1319,7 +1322,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // otherwise we submit the destination mint ourselves via `adapter`
       // (same private key, reused across chains) after funding it with a
       // little native gas via /api/relay-gas. See FORWARDER_SUPPORTED_SDK_CHAINS.
-      const useForwarder = chainSupportsForwarder(chain.sdk)
+      // Not for chains where Circle's forwarder mint keeps failing
+      // (FORWARDER_MINT_FAILING_SDK_CHAINS) — MeshPort's relayer mints there.
+      const useForwarder = circleForwarderMintsTo(chain.sdk)
       const estimate = await kit.estimateBridge({
         from: { adapter, chain: ARC_CHAIN_KEY },
         to: useForwarder
@@ -1750,9 +1755,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             adapter,
             allocations: [{ amount: spendAmount.toFixed(6), chain: ARC_CHAIN_KEY }],
           },
-          // Sei (GATEWAY_SELF_MINT_CHAINS): Circle's forwarder mint keeps
-          // failing on-chain there, so the mint is submitted through
-          // MeshPort's relayer instead (relayedProviderFor). Recipient is unchanged.
+          // GATEWAY_SELF_MINT_CHAINS (Sei, Ethereum Sepolia): Circle's
+          // forwarder mint keeps failing on-chain there, so the mint is
+          // submitted through MeshPort's relayer instead (relayedProviderFor).
+          // Recipient is unchanged.
           to: (GATEWAY_SELF_MINT_CHAINS.has(chain.sdk)
             ? { chain: chain.sdk as any, recipientAddress: address, adapter, useForwarder: false }
             : { chain: chain.sdk as any, recipientAddress: address, useForwarder: true }) as any,
@@ -1791,9 +1797,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // possible. Factored out so both call sites can attempt it.
         const tryResumeSpend = async (err: any, attemptStartedAt: number): Promise<any | null> => {
           const isKitError = KitError && err instanceof KitError
-          const resumable = isKitError && err.recoverability === 'RESUMABLE'
-          const trace = err?.cause?.trace
-          if (!resumable || !trace?.attestation || !trace?.signature) {
+          // forwarderMintRetry also accepts a forwarder mint failure that
+          // isn't flagged RESUMABLE (or isn't a KitError instance from this
+          // bundle) as long as Circle attached the attestation + signature —
+          // the strict check alone skipped real "ON_CHAIN_FAILURE" cases.
+          const seed = forwarderMintRetry(err)
+          const trace = seed ?? err?.cause?.trace
+          if (!seed) {
             // UB FIX: this used to return null here with zero visibility —
             // every non-resumed failure looked identical in the logs to a
             // deliberately-non-resumable one, whether the SDK genuinely
@@ -1804,8 +1814,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             // a guess into something checkable in TestLogPanel.
             logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: 'unifiedBalance.spend resume NOT attempted', data: {
               isKitError,
-              recoverability: isKitError ? err.recoverability : undefined,
-              hasTrace: !!trace,
+              recoverability: err?.recoverability,
+              hasTrace: !!err?.cause?.trace,
               hasAttestation: !!trace?.attestation,
               hasSignature: !!trace?.signature,
               message: err?.message,
@@ -2255,7 +2265,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // Chains outside Circle's forwarder allow-list have no forwarder to
       // submit the destination mint, so `adapter` submits it — through
       // MeshPort's relayer (relayedProviderFor), so the wallet needs no gas.
-      const useForwarder = chainSupportsForwarder(chain.sdk)
+      // Not for chains where Circle's forwarder mint keeps failing
+      // (FORWARDER_MINT_FAILING_SDK_CHAINS) — MeshPort's relayer mints there.
+      const useForwarder = circleForwarderMintsTo(chain.sdk)
 
       const destTarget = useForwarder
         ? { chain: chain.sdk as any, recipientAddress: address, useForwarder: true }
@@ -2392,6 +2404,31 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           }
         } else {
           logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: 'skipping retryBridge — error confirmed non-retryable', data: { error: String(errForCheck).slice(0, 200) } })
+        }
+      }
+
+      // Burned but Circle's forwarder didn't deliver the mint (e.g. its mint
+      // ran out of gas on the destination) — finish it now through MeshPort's
+      // relayer instead of showing an error. Uses Circle's own attestation, so
+      // the recipient and amount can't change and it can't double-send.
+      if (result.state === 'error' && burnTxHashRef.current) {
+        try {
+          setBridgeSteps(prev => prev.map(s => s.name === 'mint' ? { ...s, status: 'active', message: `Finishing on ${chain.name}…` } : s))
+          const { finishCctpMintViaRelayer } = await import('@/lib/cctpRecovery')
+          const done = await finishCctpMintViaRelayer({ sourceChain: ARC_CHAIN_KEY, destinationChain: chain.sdk, burnTxHash: burnTxHashRef.current })
+          if (done?.mintTxHash) {
+            logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'mint finished via MeshPort relayer', data: done })
+            finalTxHashRef.current = done.mintTxHash
+            result = {
+              ...result, state: 'success',
+              steps: result.steps.map((s: any) => s.name === 'mint'
+                ? { ...s, state: 'success', txHash: done.mintTxHash }
+                : s.state === 'error' ? { ...s, state: 'success' } : s),
+            } as any
+          }
+        } catch (finishErr: any) {
+          console.error('[Bridge] relayer finish failed:', finishErr)
+          logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'error', label: 'relayer finish FAILED', data: { message: finishErr?.message } })
         }
       }
 
@@ -3463,12 +3500,55 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                       Open Recover
                     </button>
                   ) : (
+                    !chain.ub && burnTxHashRef.current ? (
+                    // The USDC already left Arc and Circle has (or will have)
+                    // attested it — finish THIS transfer's mint through
+                    // MeshPort's relayer. Never sends a second transfer.
+                    <>
+                      <button disabled={finishingMint}
+                        onClick={async () => {
+                          const burn = burnTxHashRef.current
+                          if (!burn) return
+                          setFinishingMint(true); setFinishMintError('')
+                          try {
+                            const { finishCctpMintViaRelayer } = await import('@/lib/cctpRecovery')
+                            const done = await finishCctpMintViaRelayer({ sourceChain: ARC_CHAIN_KEY, destinationChain: chain.sdk, burnTxHash: burn })
+                            if (!done?.mintTxHash) { setFinishMintError('Circle hasn’t confirmed this transfer yet — try again in a minute.'); return }
+                            setTxHash(done.mintTxHash)
+                            setSuccessInfo({
+                              sentAmount: numAmount,
+                              receiverGets: feeEstimate.receiverGets || Math.max(0, numAmount - feeEstimate.totalFee),
+                              totalFees: feeEstimate.totalFee,
+                              completionTime: Math.round((Date.now() - bridgeStartRef.current) / 1000),
+                              txHash: done.mintTxHash, mintTxHash: done.mintTxHash, burnTxHash: burn,
+                            })
+                            const { walletAddress: bwa } = useAuthStore.getState()
+                            import('@/lib/ActivityService').then(({ Activity }) => Activity.markBridgeCompleted({
+                              walletAddress: bwa ?? '', txHash: burn, destinationTxHash: done.mintTxHash,
+                              amount: parseFloat(amount) || 0, sourceChain: ARC_CHAIN_KEY,
+                              destinationChain: chain.sdk || chain.name || selectedChain, destinationAddress: address,
+                            })).catch(() => {})
+                            clearResumableOperation('multichain_transfer')
+                            setStep('success')
+                          } catch (e: any) {
+                            setFinishMintError(e?.message || 'Couldn’t finish the transfer — try again from Multichain Hub → Recover.')
+                          } finally {
+                            setFinishingMint(false)
+                          }
+                        }}
+                        className="w-full py-3 rounded-xl bg-transparent border border-border text-text-primary font-semibold text-sm">
+                        {finishingMint ? 'Finishing…' : 'Finish transfer'}
+                      </button>
+                      {finishMintError && <p role="alert" className="text-xs text-center" style={{ color: 'var(--danger)' }}>{finishMintError}</p>}
+                    </>
+                    ) : (
                     <button onClick={() => { setStep('confirm'); setPassEntry(''); setPassError('') }}
                       className="w-full py-3 rounded-xl bg-transparent border border-border text-text-secondary font-medium text-sm">
                       {chain.ub && depositAlreadyDone
                         ? 'Resume send (won’t deposit again)'
                         : 'Retry anyway (may double-send)'}
                     </button>
+                    )
                   )}
                 </>
               ) : (

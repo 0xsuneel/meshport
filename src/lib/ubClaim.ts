@@ -17,6 +17,7 @@
 // SDK chain ids that support Unified Balance deposits — see ubChains.ts.
 import { realTxHash } from './relayedProvider'
 import { UB_CLAIM_CHAINS } from './ubChains'
+import { FORWARDER_MINT_FAILING_SDK_CHAINS } from '@/blockchain/chains'
 export { UB_CLAIM_CHAINS }
 
 import { isMerchantNow } from './merchant'
@@ -143,8 +144,9 @@ export async function spendUnifiedToArc(params: {
 
 // Destinations where Circle's Gateway forwarder mint has been failing
 // on-chain ("Forwarder transfer failed: ON_CHAIN_FAILURE") — mint these
-// ourselves instead of waiting for the forwarder to fail first.
-export const GATEWAY_SELF_MINT_CHAINS = new Set(['Sei_Testnet'])
+// ourselves instead of waiting for the forwarder to fail first. Includes
+// every chain in FORWARDER_MINT_FAILING_SDK_CHAINS (see blockchain/chains.ts).
+export const GATEWAY_SELF_MINT_CHAINS = new Set(['Sei_Testnet', ...FORWARDER_MINT_FAILING_SDK_CHAINS])
 
 /** true when a Gateway spend failed at the forwarder's destination mint and can be minted by us. */
 export function forwarderMintRetry(err: any): { attestation: string; signature: string } | null {
