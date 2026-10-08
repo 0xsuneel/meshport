@@ -824,6 +824,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const selectedSpeed: SpeedId = 'fast'
   const [showAllChains,    setShowAllChains]    = useState(false)
   const [showChainPicker,  setShowChainPicker]  = useState(false)
+  const pendingChainRef = useRef<ChainId | null>(null)
   // The chain picker lists every chain's logo; fetch and decode them while
   // the form is open so the sheet opens complete instead of logos popping in.
   useEffect(() => {
@@ -3797,7 +3798,17 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       </AnimatePresence>
 
       {/* ── Chain Picker Sheet / Dialog ── */}
-      <AnimatePresence>
+      {/* The picked chain is applied once the popup has gone: switching it
+          while the card animates out re-laid the whole form underneath
+          (route, fees), which flickered through the closing popup. */}
+      <AnimatePresence onExitComplete={() => {
+        const id = pendingChainRef.current
+        pendingChainRef.current = null
+        if (id && id !== selectedChain) {
+          setSelectedChain(id)
+          if (address) handleAddressChange(address)
+        }
+      }}>
       {showChainPicker && (() => {
         const chainHeader = (
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
@@ -3810,17 +3821,16 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           </div>
         )
         const chainList = (
-          <div className="overflow-y-auto" style={{maxHeight: isDesktop ? '60vh' : '60vh'}}>
+          <div className="overflow-y-auto" style={{ maxHeight: '60vh', overscrollBehavior: 'contain' }}>
             {ENABLED_CHAINS.map((ch) => {
               const isSelected = selectedChain === ch.id
               return (
                 <button key={ch.id}
                   onClick={() => {
-                    setSelectedChain(ch.id as ChainId)
-                    if (address) handleAddressChange(address)
+                    pendingChainRef.current = ch.id as ChainId
                     setShowChainPicker(false)
                   }}
-                  className="w-full flex items-center gap-3 px-5 py-3.5 active:opacity-70 transition-all"
+                  className="w-full flex items-center gap-3 px-5 py-3.5 active:bg-text-primary/5 transition-colors"
                   style={{
                     background: isSelected ? 'color-mix(in srgb, var(--brand) 10%, transparent)' : 'transparent',
                   }}>
