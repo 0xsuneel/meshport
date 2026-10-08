@@ -74,6 +74,8 @@ interface ActivityItem {
   // Merchant: a payment received on another chain (Hub only — not in the
   // main Activity page until it reaches Arc as "Ledger payment received").
   chainReceipt?: 'received' | 'converting' | 'converted'
+  /** A chain receipt that is the merchant's own Transfer Funds from Arc. */
+  ownReceipt?: boolean
   autoConvertChains?: string[]
   // 'ub' | 'cctp' when finished through Recover → "Recovered via UB/CCTP".
   recoveredVia?: string
@@ -110,9 +112,11 @@ async function loadChainReceiptItems(): Promise<ActivityItem[]> {
     // The merchant check may still be loading when the Hub first loads.
     if (!isMerchantNow()) await refreshMerchant().catch(() => {})
     if (!isMerchantNow()) return []
-    const { listChainReceipts } = await import('@/lib/merchantPay')
+    const { listChainReceipts, isOwnReceipt } = await import('@/lib/merchantPay')
+    const { useAuthStore } = await import('@/store')
+    const wallet = useAuthStore.getState().walletAddress
     return (await listChainReceipts(50)).map(r => ({
-      id: `rcpt_${r.id}`, type: 'claim' as const, merchant: true, chainReceipt: r.status,
+      id: `rcpt_${r.id}`, type: 'claim' as const, merchant: true, chainReceipt: r.status, ownReceipt: isOwnReceipt(r, wallet),
       status: 'success' as const, amount: r.amount, chain: r.chain,
       chainLabel: CHAIN_LABELS[r.chain] ?? r.chain.replace(/_(Sepolia|Testnet|Fuji)$/, '').replace(/_/g, ' '),
       timestamp: new Date(r.createdAt).getTime(), sourceTxHash: r.txHash,
@@ -130,7 +134,7 @@ function chainReceiptLabel(item: ActivityItem): string | null {
 // Row / detail title for Hub Activity.
 function hubItemTitle(item: ActivityItem): string {
   const chain = item.chainLabel || item.chain
-  if (item.chainReceipt) return `Payment received on ${chain}`
+  if (item.chainReceipt) return item.ownReceipt ? `Own Ledger payment received · ${chain}` : `Payment received in Ledger (${chain})`
   if (item.autoConvert && item.type === 'claim') return item.status === 'pending' ? 'Ledger funds moving to Arc' : 'Ledger payment received'
   if (item.merchant && item.type === 'claim') return `Payment received from ${chain} Ledger`
   // 7-day Unified Balance withdrawal still running (or a refund row).

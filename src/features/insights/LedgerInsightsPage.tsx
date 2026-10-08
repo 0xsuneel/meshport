@@ -116,7 +116,7 @@ export function LedgerInsightsPage() {
       fetchActivity(walletAddress, { limit: 300 }).catch(() => []),
     ]).then(([p, i, r, acts]) => {
       if (cancelled) return
-      setPayments(withChainReceipts(p, r))
+      setPayments(withChainReceipts(p, r, walletAddress))
       setIntents(i)
       setClaims((acts as any[])
         .filter(a => a.activityType === 'claim' && a.status === 'completed' && isMerchantClaim(a))
