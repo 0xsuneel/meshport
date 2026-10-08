@@ -375,6 +375,21 @@ const ADD_CHAIN: Record<string, { chainName: string; nativeCurrency: { name: str
   HyperEVM_Testnet: { chainName: 'HyperEVM Testnet', nativeCurrency: { name: 'HYPE', symbol: 'HYPE', decimals: 18 }, rpcUrls: ['https://rpc.hyperliquid-testnet.xyz/evm'] },
   Sei_Testnet: { chainName: 'Sei Testnet', nativeCurrency: { name: 'SEI', symbol: 'SEI', decimals: 18 }, rpcUrls: ['https://evm-rpc-testnet.sei-apis.com'] },
   Unichain_Sepolia: { chainName: 'Unichain Sepolia', nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://sepolia.unichain.org'], blockExplorerUrls: ['https://sepolia.uniscan.xyz'] },
+  // The other MeshPort CCTP router chains (merchant QR networks). RPCs from
+  // blockchain/chains.ts, explorers from lib/chainExplorers.ts, gas coins
+  // from viem's chain definitions (Sonic / Morph testnets by family; Pharos
+  // has no viem definition — its testnet coin is PHRS).
+  Sonic_Testnet: { chainName: 'Sonic Testnet', nativeCurrency: { name: 'Sonic', symbol: 'S', decimals: 18 }, rpcUrls: ['https://rpc.testnet.soniclabs.com', 'https://sonic-testnet.rpc.thirdweb.com'], blockExplorerUrls: ['https://testnet.sonicscan.org'] },
+  World_Chain_Sepolia: { chainName: 'World Chain Sepolia', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://worldchain-sepolia.g.alchemy.com/public', 'https://worldchain-sepolia.rpc.thirdweb.com'], blockExplorerUrls: ['https://sepolia.worldscan.org'] },
+  Linea_Sepolia: { chainName: 'Linea Sepolia', nativeCurrency: { name: 'Linea Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://rpc.sepolia.linea.build'], blockExplorerUrls: ['https://sepolia.lineascan.build'] },
+  Ink_Testnet: { chainName: 'Ink Sepolia', nativeCurrency: { name: 'Sepolia Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://rpc-gel-sepolia.inkonchain.com', 'https://rpc-qnd-sepolia.inkonchain.com'], blockExplorerUrls: ['https://explorer-sepolia.inkonchain.com'] },
+  Monad_Testnet: { chainName: 'Monad Testnet', nativeCurrency: { name: 'Testnet MON Token', symbol: 'MON', decimals: 18 }, rpcUrls: ['https://testnet-rpc.monad.xyz'], blockExplorerUrls: ['https://testnet.monadscan.com'] },
+  Morph_Testnet: { chainName: 'Morph Hoodi', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://rpc-hoodi.morphl2.io'], blockExplorerUrls: ['https://explorer-hoodi.morphl2.io'] },
+  Pharos_Testnet: { chainName: 'Pharos Testnet', nativeCurrency: { name: 'Pharos', symbol: 'PHRS', decimals: 18 }, rpcUrls: ['https://atlantic.dplabs-internal.com'], blockExplorerUrls: ['https://atlantic.pharosscan.xyz'] },
+  Plume_Testnet: { chainName: 'Plume Testnet', nativeCurrency: { name: 'Plume', symbol: 'PLUME', decimals: 18 }, rpcUrls: ['https://testnet-rpc.plume.org'], blockExplorerUrls: ['https://testnet-explorer.plume.org'] },
+  Codex_Testnet: { chainName: 'Codex Testnet', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://rpc.codex-stg.xyz'], blockExplorerUrls: ['https://explorer.codex-stg.xyz'] },
+  Injective_Testnet: { chainName: 'Injective EVM Testnet', nativeCurrency: { name: 'Injective', symbol: 'INJ', decimals: 18 }, rpcUrls: ['https://k8s.testnet.json-rpc.injective.network'], blockExplorerUrls: ['https://testnet.explorer.injective.network'] },
+  XDC_Apothem: { chainName: 'XDC Apothem', nativeCurrency: { name: 'TXDC', symbol: 'TXDC', decimals: 18 }, rpcUrls: ['https://rpc.apothem.network', 'https://erpc.apothem.network'], blockExplorerUrls: ['https://testnet.xdcscan.com'] },
 }
 /** Coin the wallet pays gas with on `chainId` (for the hint under the Pay button). */
 export const gasCoin = (chainId: string) => ADD_CHAIN[chainId]?.nativeCurrency.symbol === 'USDC' ? 'USDC' : ADD_CHAIN[chainId]?.nativeCurrency.symbol ?? 'the network coin'
