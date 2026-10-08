@@ -89,8 +89,13 @@ function serviceKey(): string {
 }
 const db = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey())
 
+const errText = (e: unknown) => e instanceof Error ? e.message : typeof e === 'object' ? JSON.stringify(e) : String(e)
+
 async function rpc(urls: string[], method: string, params: unknown[]): Promise<any> {
-  let last: unknown = null
+  // Every endpoint's refusal is kept, not just the last one: a node's
+  // "pruned history" answer followed by a dead fallback's timeout must still
+  // read as pruned history to scanLogs.
+  const errors: string[] = []
   for (const url of urls) {
     if (!url || url.endsWith('/')) continue
     try {
@@ -100,11 +105,11 @@ async function rpc(urls: string[], method: string, params: unknown[]): Promise<a
         signal: AbortSignal.timeout(8000),
       })
       const j = await r.json()
-      if (j.error) { last = j.error; continue }
+      if (j.error) { errors.push(errText(j.error)); continue }
       return j.result
-    } catch (e) { last = e }
+    } catch (e) { errors.push(errText(e)) }
   }
-  throw last ?? new Error(`${method} failed`)
+  throw new Error(errors.join(' | ') || `${method} failed`)
 }
 
 async function caller(req: Request): Promise<{ authUid: string; userId: string | null; wallet: string | null; username: string | null } | null> {
@@ -306,7 +311,6 @@ const START_LOOKBACK = 300
 // Fallbacks when a node refuses a log query (see scanLogs).
 const SMALL_RANGE = 100
 const PRUNED_JUMP = 1000
-const errText = (e: unknown) => e instanceof Error ? e.message : typeof e === 'object' ? JSON.stringify(e) : String(e)
 
 /**
  * eth_getLogs for [from, to], recovering from the two refusals public RPCs
