@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { pushLook } from '@/lib/pushLook'
 import { useReducedMotion } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useNavDirection } from '@/hooks/useNavDirection'
@@ -25,7 +26,6 @@ const OPEN_MS = 300
 const BACK_MS = 250
 const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
 const PARALLAX = '-28%'
-const DIM = 0.22
 
 type Snapshot = {
   key: string; node: HTMLElement; scrolls: Array<[number, number, number]>
@@ -130,6 +130,7 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
     layer.appendChild(s.node)
     if (s.nav && !liveNav) layer.appendChild(s.nav)
     // A dim veil over whichever page sits underneath.
+    const look = pushLook()
     const veil = document.createElement('div')
     Object.assign(veil.style, { position: 'absolute', inset: '0', background: '#000', pointerEvents: 'none', opacity: '0' })
 
@@ -149,18 +150,18 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
       const el = i === -1 ? s.node : copies[i]
       if (el) { el.scrollTop = t; el.scrollLeft = l }
     }
-    ;(back ? layer : page).style.boxShadow = '-10px 0 28px rgba(0,0,0,0.28)'
+    ;(back ? layer : page).style.boxShadow = look.shadow
 
     const anims: Animation[] = back
       ? [
           layer.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }], opts),
           page.animate([{ transform: `translateX(${PARALLAX})` }, { transform: 'translateX(0)' }], opts),
-          veil.animate([{ opacity: DIM }, { opacity: 0 }], opts),
+          veil.animate([{ opacity: look.dim }, { opacity: 0 }], opts),
         ]
       : [
           page.animate([{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }], opts),
           layer.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${PARALLAX})` }], opts),
-          veil.animate([{ opacity: 0 }, { opacity: DIM }], opts),
+          veil.animate([{ opacity: 0 }, { opacity: look.dim }], opts),
         ]
     // A tab bar that belongs to the new page travels with it.
     if (navArrives && liveNav) {

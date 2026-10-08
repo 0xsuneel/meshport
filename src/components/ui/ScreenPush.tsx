@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react'
+import { pushLook } from '@/lib/pushLook'
 import { useReducedMotion } from 'framer-motion'
 
 // Screens that follow one another inside one page (Pay: search → amount →
@@ -17,7 +18,6 @@ const OPEN_MS = 300
 const BACK_MS = 250
 const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
 const PARALLAX = '-28%'
-const DIM = 0.22
 
 /** A frozen, non-interactive copy of what's on screen right now — without
  *  fixed-position overlays (sheets, dims) that happen to be inside it. The
@@ -81,6 +81,7 @@ export function ScreenPush({ screenKey, back = false, style, children }: {
     Object.assign(s.node.style, { position: 'absolute', left: '0', right: '0', top: '0', minHeight: '100%' })
     layer.appendChild(s.node)
     s.floats.forEach(f => layer.appendChild(f)) // pinned to the bottom of the picture
+    const look = pushLook()
     const veil = document.createElement('div')
     Object.assign(veil.style, { position: 'absolute', inset: '0', background: '#000', opacity: '0', pointerEvents: 'none' })
     // Front: the screen arriving (forward) or the one leaving (back).
@@ -91,18 +92,18 @@ export function ScreenPush({ screenKey, back = false, style, children }: {
     s.node.querySelectorAll<HTMLElement>('[data-mp-scroll-top]').forEach(el => { el.scrollTop = Number(el.dataset.mpScrollTop) })
     const prev = { position: live.style.position, zIndex: live.style.zIndex, background: live.style.background, boxShadow: live.style.boxShadow }
     Object.assign(live.style, { position: 'relative', zIndex: back ? '1' : '3', background: 'var(--bg)' })
-    ;(back ? layer : live).style.boxShadow = '-10px 0 28px rgba(0,0,0,0.28)'
+    ;(back ? layer : live).style.boxShadow = look.shadow
 
     const anims = back
       ? [
           layer.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }], opts),
           live.animate([{ transform: `translateX(${PARALLAX})` }, { transform: 'translateX(0)' }], opts),
-          veil.animate([{ opacity: DIM }, { opacity: 0 }], opts),
+          veil.animate([{ opacity: look.dim }, { opacity: 0 }], opts),
         ]
       : [
           live.animate([{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }], opts),
           layer.animate([{ transform: 'translateX(0)' }, { transform: `translateX(${PARALLAX})` }], opts),
-          veil.animate([{ opacity: 0 }, { opacity: DIM }], opts),
+          veil.animate([{ opacity: 0 }, { opacity: look.dim }], opts),
         ]
     let done = false
     const finish = () => {
