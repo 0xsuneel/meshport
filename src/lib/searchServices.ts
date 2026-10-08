@@ -16,7 +16,7 @@ export const SERVICES = [
 
 // Merchants see the Multichain Hub as "Merchant Hub" (same /multichain page),
 // findable by its name and the merchant things inside it.
-const MERCHANT_HUB_KEYWORDS = ['merchant', 'merchant hub', 'ledger', 'payment requests', 'requests', 'customers', 'orders', 'bills', 'auto convert', 'auto-convert']
+const MERCHANT_HUB_KEYWORDS = ['merchant', 'merchant hub', 'ledger', 'payment requests', 'requests', 'customers', 'orders', 'bills', 'claim all', 'auto convert', 'auto-convert']
 
 export function filterServices(query: string, isMerchant = false) {
   const q = query.trim().toLowerCase()

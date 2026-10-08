@@ -65,7 +65,7 @@ interface ActivityItem {
   ubHeld?: boolean
   // UB claim made by an approved merchant — a customer payment.
   merchant?: boolean
-  // Merchant auto-convert: one Ledger → Arc transfer covering several chains.
+  // Merchant Claim All (or the old auto-convert): one Ledger → Arc transfer covering several chains.
   autoConvert?: boolean
   // Merchant: a payment received on another chain (Hub only — not in the
   // main Activity page until it reaches Arc as "Ledger payment received").
@@ -417,7 +417,7 @@ export function MultichainPage() {
   const isDesktop   = useMediaQuery('(min-width: 980px)')
   // Phones narrower than ~400px (SE, small Androids): compact tab labels.
   const narrow      = useMediaQuery('(max-width: 399px)')
-  // Approved merchants get the Ledger (UB chains only) instead of Bring Funds.
+  // Approved merchants get the Ledger (UB and CCTP chains, Claim All) instead of Bring Funds.
   const isMerchant  = useMerchant().isMerchant
   const navigate    = useNavigate()
   const walletAddress = useAuthStore(s => s.walletAddress)
@@ -871,13 +871,10 @@ export function MultichainPage() {
   const failedCount  = allItems.filter(i => i.status === 'failed').length
 
   const cardS = { background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)' }
-  // Merchant Ledger: UB chains only (their payments show in the Hub's Activity).
   const isUbChain = (id: string) => UB_CLAIM_CHAINS.has(id === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : id)
   // Only chains Bring Funds can actually move: the gasless router (CCTP) or
-  // Unified Balance. Merchants: Unified Balance only.
-  const bringRows = isMerchant
-    ? allChainRows.filter(c => isUbChain(c.id))
-    : allChainRows.filter(c => isGaslessBridgeAvailable(c.id) || isUbChain(c.id))
+  // Unified Balance — merchants included.
+  const bringRows = allChainRows.filter(c => isGaslessBridgeAvailable(c.id) || isUbChain(c.id))
 
   // Desktop has no Activity tab (the list is always on the right), so a
   // link that opens the Hub on Activity lands on Transfer Funds instead.
@@ -1103,14 +1100,12 @@ export function MultichainPage() {
       <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
         {/* Hero — ticket card: Available To Transfer (left) | Available To Bring (right) */}
-        {/* Merchants: only Unified Balance (Ledger) chains count — no CCTP-only chains. */}
         {/* Glides up together with the Transfer / Bring form when the amount
             keypad opens, so the whole screen moves as one (useKeypadLift). */}
         <motion.div animate={{ y: -hubKeypadLift }} initial={false} transition={KEYPAD_SPRING}
           style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <HubHeroCard arcAvailable={arcBalance} scanning={scanning} scanChain={scanChain}
           claimAvailable={isMerchant ? bringRows.reduce((sum, c) => sum + (c.balance > 0.001 ? c.balance : 0), 0) : totalExternal}
-          bringLabel={isMerchant ? 'In Ledger Chains' : undefined}
           balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} chains={bringRows} />
 
         {/* Tab strip */}
@@ -1215,7 +1210,7 @@ export function MultichainPage() {
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>{isMerchant ? 'Collect from chains' : 'Bring Funds to Arc'}</div>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{isMerchant ? 'Payments on these chains are collected to Arc automatically' : 'Move USDC from any chain to Arc Testnet'}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{isMerchant ? 'Tap a chain to claim it, or use Claim All' : 'Move USDC from any chain to Arc Testnet'}</div>
               </div>
               <button onClick={() => { setScanning(true); setScanNonce(n => n + 1) }} disabled={scanning} aria-label="Refresh"
                 style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 12, cursor: scanning ? 'default' : 'pointer',
@@ -1244,7 +1239,7 @@ export function MultichainPage() {
               ) : bringRows.map(c => {
                 const has = c.balance > 0.001
                 const ub = isUbChain(c.id)
-                const cctp = !isMerchant && isGaslessBridgeAvailable(c.id)
+                const cctp = isGaslessBridgeAvailable(c.id)
                 return (
                   <button key={c.id} disabled={!has}
                     onClick={() => setClaimChain(c.id)}
@@ -1281,7 +1276,10 @@ export function MultichainPage() {
             ? <MerchantLedger boxStyle={{ ...cardS, borderRadius: 20, padding: isDesktop ? 20 : 18 }}
                 // Same real on-chain balance as the "In Ledger Chains" card above.
                 ledgerBalance={scanning ? undefined : bringRows.reduce((sum, c) => sum + (c.balance > 0.001 ? c.balance : 0), 0)}
-                ledgerChains={bringRows.filter(c => c.balance > 0.001).length}>{chainCard}</MerchantLedger>
+                ledgerChains={bringRows.filter(c => c.balance > 0.001).length}
+                claimChains={scanning ? undefined : bringRows.filter(c => c.balance > 0.001).map(c => ({ chainId: c.id, label: c.label, balance: c.balance }))}
+                // After Claim All: rescan so the chain list shows what moved.
+                onClaimed={() => { setScanning(true); setScanNonce(n => n + 1) }}>{chainCard}</MerchantLedger>
             : chainCard
         })()}
 

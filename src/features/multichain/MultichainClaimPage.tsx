@@ -474,8 +474,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const reduceMotion = useReducedMotion()
   const [claimAmounts,   setClaimAmounts]  = useState<Record<string, string>>({})
   // Route for the claim: CCTP (burn → mint) or Unified Balance (Gateway deposit → spend).
-  // Merchants collect through Unified Balance only (Ledger shows UB chains).
-  const [claimRoute, setClaimRoute] = useState<'cctp' | 'ub'>(merchantMode ? 'ub' : 'cctp')
+  // Merchants get both routes too (CCTP chains are open to them).
+  const [claimRoute, setClaimRoute] = useState<'cctp' | 'ub'>('cctp')
   // Pre-claim fee estimate — shown on the amount screen, BEFORE the user
   // enters their passcode, so "You will receive" reflects what actually
   // lands instead of the raw claim amount. Previously the only fee number
@@ -1466,8 +1466,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
   const chainsWithFunds  = chains
     .filter(c => c.claimable > 0 || c.pending > 0)
-    // Merchants: Unified Balance chains only (no CCTP-only chains).
-    .filter(c => !merchantMode || UB_CLAIM_CHAINS.has(toSdkChainId(c.chainId)))
     // Only chains Bring Funds can actually move: a gasless router, or Unified Balance.
     .filter(c => isGaslessBridgeAvailable(c.chainId) || UB_CLAIM_CHAINS.has(toSdkChainId(c.chainId)))
     // `chains` only ever contains enabled chains to begin with — scan()
@@ -1491,7 +1489,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // to (mis)count here.
   const disabledClaimChains = Object.keys(CHAIN_META)
     .filter(id => !isChainEnabledForClaim(settingsMap, id))
-    .filter(id => !merchantMode || UB_CLAIM_CHAINS.has(toSdkChainId(id)))
     .filter(id => isGaslessBridgeAvailable(id) || UB_CLAIM_CHAINS.has(toSdkChainId(id)))
     .map(id => ({
       chainId: id,
@@ -1846,7 +1843,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   {([
                     { id: 'ub' as const,   name: 'Unified Balance', text: `Gateway · ${ubClaimEta(selectedSdkId).replace('minutes', 'min').replace('minute', 'min')}`, show: ubAvailable,
                       icon: <path d="M13 2L4 14h7l-1 8 9-12h-7z"/> },
-                    { id: 'cctp' as const, name: 'CCTP',            text: 'Gasless · one signature', show: !merchantMode && cctpAvailable,
+                    { id: 'cctp' as const, name: 'CCTP',            text: 'Gasless · one signature', show: cctpAvailable,
                       icon: <path d="M4 8h14l-3-3M20 16H6l3 3"/> },
                   ]).filter(r => r.show).map(r => {
                     const on = effectiveRoute === r.id
