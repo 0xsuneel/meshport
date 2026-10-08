@@ -71,6 +71,11 @@
          matches the resolved theme. Values mirror --bg in src/index.css. */
       html, body { background: #F5F6F8; }
       html[data-theme="dark"], html[data-theme="dark"] body { background: #0B0E11; }
+      /* App open: the page itself is the launch-screen teal from its very
+         first frame (set by boot.js, removed with the splash). The phone's
+         launch screen closes on the first paint — if that frame was the
+         dark/light page instead of the splash, it flashed in between. */
+      html.mp-opening, html.mp-opening body { background: #0F5C57 !important; }
 
       /* ── Opening splash ──────────────────────────────────────────────
          Shown instantly when the app opens (refreshes get a quiet variant), on top of #root, so the
