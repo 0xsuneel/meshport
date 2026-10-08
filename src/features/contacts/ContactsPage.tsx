@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
-import { SHEET_SPRING, SHEET_BACKDROP, TOAST_MOTION, SHEET_EXIT } from '@/lib/motion'
+import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { useNavigate } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
@@ -410,7 +410,7 @@ export function ContactsPage() {
       {/* Added notification */}
       <AnimatePresence>
         {justAdded && (
-          <motion.div {...TOAST_MOTION}
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}
             className="mx-4 mb-2 p-3 bg-success/10 border border-success/30 rounded-2xl flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-success" />
             <p className="text-sm text-success font-medium">{justAdded} added to contacts</p>

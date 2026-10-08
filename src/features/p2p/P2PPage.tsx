@@ -749,15 +749,24 @@ export function P2PCreateOfferPage() {
           <input type="number" inputMode="decimal" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 1.02" style={inputStyle} />
         </div>
 
+        {/* Grows and shrinks in place (with the column gap) instead of
+            making the fields below jump when switching Sell / Buy. */}
+        <AnimatePresence initial={false}>
         {offerType === 'sell' && (
-          <div>
+          <motion.div key="sell-total"
+            initial={{ height: 0, opacity: 0, marginTop: -16 }}
+            animate={{ height: 'auto', opacity: 1, marginTop: 0 }}
+            exit={{ height: 0, opacity: 0, marginTop: -16 }}
+            transition={{ duration: 0.24, ease: [0.32, 0.72, 0, 1] }}
+            style={{ overflow: 'hidden' }}>
             <div style={labelStyle}>Total Amount to Sell (USDC)</div>
             <input type="number" inputMode="decimal" value={totalAmount} onChange={e => setTotalAmount(e.target.value)} style={inputStyle} />
             <div style={{ fontSize: 11.5, color: COLORS.muted, marginTop: 6 }}>
               Deposited to escrow up front. Buyers can each take between your Min and Max below, across as many trades as it takes to sell all of it.
             </div>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         <div style={{ display: 'flex', gap: 12 }}>
           <div style={{ flex: 1 }}>

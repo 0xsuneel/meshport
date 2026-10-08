@@ -109,10 +109,12 @@ export const DIALOG_BACKDROP = {
 } as const
 
 // ── Toasts / banners ───────────────────────────────────────────────────────
+// Slides down from above the screen fully opaque (like a phone
+// notification): fading in over the page header showed both texts at once.
 export const TOAST_MOTION = {
-  initial: { opacity: 0, y: -16, scale: 0.98 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: -12, scale: 0.98 },
+  initial: { opacity: 1, y: '-160%' },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 1, y: '-160%' },
   transition: { duration: 0.24, ease: EASE_OUT },
 } as const
 /** Bottom snackbars (e.g. "Deleted · UNDO"): same, rising from below. */
