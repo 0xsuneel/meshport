@@ -1,4 +1,5 @@
 import { lazy, type ComponentType } from 'react'
+import { isOnline, onReconnect } from './connectivity'
 
 // ── lazyRetry — resilient wrapper around React.lazy ─────────────────────────
 //
@@ -78,7 +79,15 @@ export function lazyRetry<T extends ComponentType<any>>(
   return lazy(async () => {
     try {
       return await importFn()
-    } catch (err) {
+    } catch (firstErr) {
+      let err = firstErr
+      // Offline isn't a stale build: clearing the caches and reloading now
+      // would drop the app's offline copy and land on the browser's own
+      // "no internet" page. Wait for the connection, then just load it.
+      if (isChunkLoadError(err) && !isOnline()) {
+        await new Promise<void>(resolve => { const off = onReconnect(() => { off(); resolve() }) })
+        try { return await importFn() } catch (again) { err = again }
+      }
       if (isChunkLoadError(err) && await recoverFromStaleBuild()) {
         // Never resolves — the reload replaces this page.
         return new Promise<{ default: T }>(() => {})

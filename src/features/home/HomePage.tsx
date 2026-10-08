@@ -23,6 +23,7 @@ import { getRemovedContacts, unblockIfNewerActivity } from '@/lib/removedContact
 import { searchUsersDb, getOrCreateConversation, fetchContactsDb, type DbUser } from '@/lib/supabase'
 import { filterServices } from '@/lib/searchServices'
 import { RecentNewsRow } from './RecentNewsRow'
+import { onReconnect, useReconnectCount } from '@/lib/connectivity'
 import { fetchRecentContacts, recentInitial, recentShortName, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
 import { useSettingsStore } from '@/store/settingsStore'
 import { activityLabel, activitySign, type ActivityType, type ActivityRecord } from '@/lib/ActivityService'
@@ -802,6 +803,7 @@ function RecentRow({ navigate, compact, resultLimit = 5 }: { navigate: NavigateF
     try { const c = recentsKey ? JSON.parse(localStorage.getItem(recentsKey) || 'null') : null; return Array.isArray(c) ? c : [] } catch { return [] }
   })
   const [loaded, setLoaded]   = useState(() => { try { return !!recentsKey && localStorage.getItem(recentsKey) != null } catch { return false } })
+  const reconnects = useReconnectCount()
 
   useEffect(() => {
     if (!walletAddress) return
@@ -833,7 +835,7 @@ function RecentRow({ navigate, compact, resultLimit = 5 }: { navigate: NavigateF
       }
     }
     load()
-  }, [walletAddress, resultLimit])
+  }, [walletAddress, resultLimit, reconnects])
 
   const COLORS = RECENT_AVATAR_COLORS
   const initials = recentInitial
@@ -3470,8 +3472,16 @@ export function HomePage() {
       }, 15_000) // offset so this tick never coincides with the balance tick
     })()
 
+    // Back online: refresh now instead of waiting for the next tick (a load
+    // that failed offline would otherwise sit until then).
+    const offReconnect = onReconnect(() => {
+      if (cancelled) return
+      fetchBalance().then(() => { if (!cancelled) return fetchPortfolio() }).catch(() => {})
+    })
+
     return () => {
       cancelled = true
+      offReconnect()
       if (bi) clearInterval(bi)
       if (pi) clearInterval(pi)
       if (piStartTimer) clearTimeout(piStartTimer)

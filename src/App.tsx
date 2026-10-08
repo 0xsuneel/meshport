@@ -8,6 +8,7 @@ import { ChatDesktopSplit } from './components/layout/ChatDesktopSplit'
 import { ADMIN_PATH } from './lib/adminPath'
 import { lazyRetry } from './lib/lazyRetry'
 import { RouteErrorPage } from './components/RouteErrorPage'
+import { OfflineBanner } from './components/ui/OfflineBanner'
 
 // ── Lazy-loaded pages ────────────────────────────────────────────────────────
 // Every page below used to be a static top-level import, meaning the entire
@@ -720,6 +721,7 @@ export default function App() {
             between pages). */}
         <RouterProvider router={router} future={{ v7_startTransition: true }} />
         <SplashRemover />
+        <OfflineBanner />
       </Suspense>
     </QueryClientProvider>
   )

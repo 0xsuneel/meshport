@@ -7,6 +7,7 @@ import { DesktopHeader } from './DesktopHeader'
 import { Toast } from '@/components/ui/Toast'
 import { PushPermissionBanner } from '@/components/ui/PushPermissionBanner'
 import { PageTransition } from '@/components/ui/PageTransition'
+import { onReconnect, useOnReconnect } from '@/lib/connectivity'
 import { ModeToggle } from '@/components/admin/ModeToggle'
 import { useAuthStore, useP2PTradesCountStore, useWalletStore, useUIStore } from '@/store'
 import { fetchMyTrades, subscribeToMyTrades, isTradeExpired } from '@/lib/p2pService'
@@ -43,8 +44,20 @@ function isNoNavRoute(pathname: string) {
 // The Hub's "Processing Claims" list (Supabase Realtime) is now the single
 // source of truth for in-flight claims across the whole app.
 
+// Read-only pages that are safe to re-mount when the connection comes back.
+const RELOAD_ON_RECONNECT = /^\/((activity|news)(\/[^/]+)?|recent-paid|notifications|rewards|insights|profile|about|feature-guide|p2p|p2p\/(my-offers|my-trades|history))\/?$/
+
 export function AppLayout() {
   const location = useLocation()
+  // Back online → pages that only show data load it again by themselves
+  // (re-mounting the page re-runs its loads), instead of staying on a failed
+  // load until a manual refresh. Pages with something being typed or a
+  // payment in progress are never re-mounted (they'd lose it); Home and Chat
+  // reload their own data in place.
+  const [reloadKey, setReloadKey] = useState(0)
+  useOnReconnect(() => {
+    if (RELOAD_ON_RECONNECT.test(window.location.pathname)) setReloadKey(k => k + 1)
+  })
   const showNav = !isNoNavRoute(location.pathname)
   const isDesktop = useMediaQuery('(min-width: 980px)')
   // The bottom tab bar steps aside while the phone keyboard is up (typing in
@@ -353,7 +366,8 @@ export function AppLayout() {
     const iv = setInterval(run, 90_000)
     const onVisible = () => { if (document.visibilityState === 'visible') run() }
     document.addEventListener('visibilitychange', onVisible)
-    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVisible) }
+    const offReconnect = onReconnect(run) // back online: finish claims now, not on the next tick
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVisible); offReconnect() }
   }, [walletAddress, privateKey])
 
   // ── Keep retrying wallet key restoration in the background ─────────────────
@@ -590,7 +604,7 @@ export function AppLayout() {
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {holdForWallet ? null : (
               <PageTransition locationKey={location.pathname}>
-                <Outlet />
+                <Outlet key={reloadKey} />
               </PageTransition>
             )}
           </div>
@@ -649,7 +663,7 @@ export function AppLayout() {
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', paddingBottom: navVisible ? 'calc(65px + env(safe-area-inset-bottom, 0px))' : 0, minHeight: 0 }}>
           {holdForWallet ? null : (
             <PageTransition locationKey={location.pathname}>
-              <Outlet />
+              <Outlet key={reloadKey} />
             </PageTransition>
           )}
         </div>

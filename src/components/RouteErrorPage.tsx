@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useRouteError } from 'react-router-dom'
 import { isChunkLoadError, recoverFromStaleBuild } from '@/lib/lazyRetry'
+import { useOnline, useOnReconnect } from '@/lib/connectivity'
 
 // Replaces React Router's default "Unexpected Application Error!" screen.
 // A stale-build error (app updated while this tab was open) reloads onto the
@@ -8,13 +9,18 @@ import { isChunkLoadError, recoverFromStaleBuild } from '@/lib/lazyRetry'
 // button instead of a raw stack trace.
 export function RouteErrorPage() {
   const error = useRouteError()
+  const online = useOnline()
   const stale = isChunkLoadError(error)
-  const [reloading, setReloading] = useState(stale)
+  const [reloading, setReloading] = useState(stale && online)
 
   useEffect(() => {
-    if (!stale) return
+    // Offline: a failed load isn't an update — wait for the connection (below).
+    if (!stale || !online) return
     recoverFromStaleBuild().then(ok => { if (!ok) setReloading(false) })
-  }, [stale])
+  }, [stale, online])
+
+  // Whatever failed while offline is tried again once the connection is back.
+  useOnReconnect(() => { if (!stale) window.location.reload() })
 
   useEffect(() => { console.error('[route error]', error) }, [error])
 
@@ -23,7 +29,14 @@ export function RouteErrorPage() {
       minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       gap: 14, padding: 24, textAlign: 'center', background: 'var(--bg, #0b0b0f)', color: 'var(--text-primary, #fff)',
     }}>
-      {reloading ? (
+      {!online ? (
+        <>
+          <p style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>No internet connection</p>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary, #9a9aa5)', maxWidth: 320 }}>
+            MeshPort will continue by itself as soon as you're back online. Your wallet and funds are not affected.
+          </p>
+        </>
+      ) : reloading ? (
         <>
           <div style={{ width: 28, height: 28, borderRadius: '50%', border: '3px solid var(--brand, #6d5dfc)', borderTopColor: 'transparent', animation: 'mp-spin 0.8s linear infinite' }} />
           <p style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Updating MeshPort…</p>

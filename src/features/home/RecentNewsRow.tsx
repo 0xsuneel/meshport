@@ -4,6 +4,7 @@ import type { NavigateFunction } from 'react-router-dom'
 import { useAuthStore } from '@/store'
 import { fetchRecentContacts, recentInitial, recentShortName, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
 import { NewsArt } from '@/features/news/NewsArt'
+import { useReconnectCount } from '@/lib/connectivity'
 import { fetchHomeNews, readCachedHomeNews, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT, type NewsItem } from '@/lib/news'
 
 // ── Home: Recent + News, side by side ───────────────────────────────────────
@@ -87,6 +88,7 @@ function RecentBox({ navigate }: { navigate: NavigateFunction }) {
     try { const c = cacheKey ? JSON.parse(localStorage.getItem(cacheKey) || 'null') : null; return Array.isArray(c) ? c : [] } catch { return [] }
   })
   const [loaded, setLoaded] = useState(() => { try { return !!cacheKey && localStorage.getItem(cacheKey) != null } catch { return false } })
+  const reconnects = useReconnectCount() // back online → load again
 
   useEffect(() => {
     if (!walletAddress) return
@@ -100,7 +102,7 @@ function RecentBox({ navigate }: { navigate: NavigateFunction }) {
       .catch(e => console.error('RecentBox load error:', e))
       .finally(() => { if (!cancelled) setLoaded(true) })
     return () => { cancelled = true }
-  }, [walletAddress, cacheKey])
+  }, [walletAddress, cacheKey, reconnects])
 
   const n = people.length
   // order[slot] = index into people; order[0] is in front.
@@ -222,12 +224,14 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
   const [cur, setCur] = useState(0)
   const [paused, setPaused] = useState(false)
   const [broken, setBroken] = useState<Record<string, true>>({})
+  const reconnects = useReconnectCount() // back online → load again
 
   useEffect(() => {
     let cancelled = false
+    if (reconnects) setBroken({}) // covers that failed offline get another try
     fetchHomeNews(4).then(list => { if (!cancelled) { setItems(list); setCur(0) } }).finally(() => { if (!cancelled) setLoaded(true) })
     return () => { cancelled = true }
-  }, [])
+  }, [reconnects])
 
   const n = items.length
   useEffect(() => {
