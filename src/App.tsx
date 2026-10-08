@@ -2,6 +2,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store'
+import { markSplashDone } from './lib/splash'
 import { AppLayout } from './components/layout/AppLayout'
 import { AuthShell } from './components/layout/AuthShell'
 import { ChatDesktopSplit } from './components/layout/ChatDesktopSplit'
@@ -473,6 +474,7 @@ const router = createBrowserRouter([
 // It also waits for the page to actually draw something: the first route is
 // often just a redirect (e.g. "/" → the lock screen), which renders nothing
 // while the next page's code is still loading.
+const MIN_OPEN_SPLASH_MS = 1200
 function SplashRemover() {
   useEffect(() => {
     const splash = document.getElementById('splash')
@@ -480,11 +482,21 @@ function SplashRemover() {
     if (!splash || !root) return
     let timer: ReturnType<typeof setTimeout> | undefined
     const hasPage = () => root.innerText.trim().length > 0 || !!root.querySelector('svg, img, canvas, input, button')
+    // A real app open (not a refresh) holds the opening screen for a moment,
+    // so the app settles underneath and the lock screen (and its fingerprint
+    // / Face ID prompt) comes up once, cleanly, instead of flickering in.
+    const freshOpen = !document.documentElement.classList.contains('mp-refresh')
+    const shownUntil = freshOpen ? MIN_OPEN_SPLASH_MS : 0
+    let hidden = false
     const hide = () => {
+      if (hidden) return
       obs.disconnect()
+      const wait = shownUntil - performance.now()
+      if (wait > 0) { timer = setTimeout(hide, wait); return }
+      hidden = true
       splash.classList.add('splash-hide')
       try { sessionStorage.setItem('mp_opened', '1') } catch { /* private mode */ }
-      timer = setTimeout(() => splash.remove(), 250)
+      timer = setTimeout(() => { splash.remove(); markSplashDone() }, 250)
     }
     const obs = new MutationObserver(() => { if (hasPage()) hide() })
     if (hasPage()) hide()

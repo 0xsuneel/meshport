@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore, useUIStore } from '@/store'
 import { hashPasscode, verifyPasscode, getPasscodeLockoutRemainingMs, clearPasscodeLockout } from '@/lib/security'
 import { hasBiometricRegistered, verifyBiometricAndGetPasscode, biometricLabel, isBiometricSupported, wasBiometricOfferSkippedRecently } from '@/lib/biometric'
+import { afterSplash } from '@/lib/splash'
 
 function PasscodeDots({ filled, error }: { filled: number; error: boolean }) {
   return (
@@ -476,16 +477,19 @@ export function PasscodeLockPage() {
   useEffect(() => {
     if (!canAuto) return
     let timer: ReturnType<typeof setTimeout> | undefined
+    let cancelSplash = () => {}
     const run = () => {
       if (autoTriedRef.current || inputRef.current.length > 0) return
       autoTriedRef.current = true
       tryBiometricRef.current()
     }
-    const schedule = () => { timer = setTimeout(run, 0) }
+    // On app open, wait for the opening splash to go first, so the prompt
+    // comes up over the lock screen rather than over the splash.
+    const schedule = () => { cancelSplash = afterSplash(() => { timer = setTimeout(run, 0) }) }
     const onVisible = () => { if (document.visibilityState === 'visible') { document.removeEventListener('visibilitychange', onVisible); schedule() } }
     if (document.visibilityState === 'visible') schedule()
     else document.addEventListener('visibilitychange', onVisible)
-    return () => { if (timer) clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible) }
+    return () => { cancelSplash(); if (timer) clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible) }
   }, [canAuto])
 
   const handlePress = async (key: string) => {
