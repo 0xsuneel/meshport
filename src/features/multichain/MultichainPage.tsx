@@ -417,7 +417,7 @@ export function MultichainPage() {
   const isDesktop   = useMediaQuery('(min-width: 980px)')
   // Phones narrower than ~400px (SE, small Androids): compact tab labels.
   const narrow      = useMediaQuery('(max-width: 399px)')
-  // Approved merchants get the Ledger (UB and CCTP chains, Claim All) instead of Bring Funds.
+  // Approved merchants get the Ledger (CCTP chains, Claim All) instead of Bring Funds.
   const isMerchant  = useMerchant().isMerchant
   const navigate    = useNavigate()
   const walletAddress = useAuthStore(s => s.walletAddress)
@@ -873,8 +873,11 @@ export function MultichainPage() {
   const cardS = { background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)' }
   const isUbChain = (id: string) => UB_CLAIM_CHAINS.has(id === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : id)
   // Only chains Bring Funds can actually move: the gasless router (CCTP) or
-  // Unified Balance — merchants included.
-  const bringRows = allChainRows.filter(c => isGaslessBridgeAvailable(c.id) || isUbChain(c.id))
+  // Unified Balance. Merchants: CCTP chains only — MeshPort's relayer pays
+  // the gas, same as anyone's CCTP claim.
+  const bringRows = isMerchant
+    ? allChainRows.filter(c => isGaslessBridgeAvailable(c.id))
+    : allChainRows.filter(c => isGaslessBridgeAvailable(c.id) || isUbChain(c.id))
 
   // Desktop has no Activity tab (the list is always on the right), so a
   // link that opens the Hub on Activity lands on Transfer Funds instead.
@@ -1238,7 +1241,7 @@ export function MultichainPage() {
                 </div>
               ) : bringRows.map(c => {
                 const has = c.balance > 0.001
-                const ub = isUbChain(c.id)
+                const ub = !isMerchant && isUbChain(c.id)
                 const cctp = isGaslessBridgeAvailable(c.id)
                 return (
                   <button key={c.id} disabled={!has}

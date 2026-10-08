@@ -323,7 +323,7 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
         chains: due.map(c => ({ chainId: c.chainId, balance: c.balance })),
         onStep: s => setSteps(prev => ({ ...prev, [s.chainId]: s })),
       })
-      const moved = r.cctp + r.ledger
+      const moved = r.cctp
       if (moved > 0) setLast(Date.now())
       setResult(moved > 0
         ? `$${formatAmount(moved)} USDC is on its way to Arc.${r.failed.length ? ` ${r.failed.length} chain${r.failed.length === 1 ? '' : 's'} didn't go through — see above.` : ''}`
@@ -367,7 +367,7 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
       <div>
         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Claim All</div>
         <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
-          Moves USDC from every chain to your Arc balance. Available every 6 hours — you can still claim one chain at a time below.
+          Moves USDC from every chain to your Arc balance through CCTP — no gas needed, MeshPort pays it. Available every 6 hours; you can still claim one chain at a time below.
         </div>
       </div>
       {!scanning && due.length > 0 && (
