@@ -56,7 +56,7 @@ export function NewsPage() {
       setItems(prev => reset ? page : [...prev, ...page.filter(p => !prev.some(q => q.id === p.id))])
       setMore(page.length === NEWS_PAGE_SIZE)
     } catch (e) {
-      if (id === reqId.current) setError(e instanceof Error ? e.message : 'Could not load news')
+      if (id === reqId.current) setError(e instanceof Error ? e.message : 'Could not load updates')
     } finally {
       if (id === reqId.current) setLoading(false)
     }
@@ -92,7 +92,7 @@ export function NewsPage() {
               </svg>
             </button>
           )}
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px' }}>News</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px' }}>Updates</div>
         </div>
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', margin: '8px -20px 0', padding: '0 20px 4px', scrollbarWidth: 'none' }}>
           {FILTERS.map(f => {
@@ -151,14 +151,14 @@ export function NewsPage() {
 
         {error && (
           <div style={{ textAlign: 'center', padding: '28px 0' }}>
-            <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 10 }}>Couldn't load news</div>
+            <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 10 }}>Couldn't load updates</div>
             <button onClick={() => load(items.length === 0)}
               style={{ fontSize: 14, fontWeight: 600, color: 'var(--brand-text)', background: 'none', border: 'none', cursor: 'pointer' }}>Try again</button>
           </div>
         )}
 
         {!loading && !error && items.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '56px 0', fontSize: 14, color: 'var(--text-secondary)' }}>No stories yet</div>
+          <div style={{ textAlign: 'center', padding: '56px 0', fontSize: 14, color: 'var(--text-secondary)' }}>No updates yet</div>
         )}
 
         <div ref={sentinel} style={{ height: 1 }} />

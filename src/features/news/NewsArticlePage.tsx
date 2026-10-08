@@ -71,7 +71,7 @@ export function NewsArticlePage() {
           <div style={{ textAlign: 'center', padding: '40px 0' }}>
             <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>This story isn't available</div>
             <button onClick={() => navigate('/news')}
-              style={{ fontSize: 14, fontWeight: 600, color: 'var(--brand-text)', background: 'none', border: 'none', cursor: 'pointer' }}>See all news</button>
+              style={{ fontSize: 14, fontWeight: 600, color: 'var(--brand-text)', background: 'none', border: 'none', cursor: 'pointer' }}>See all updates</button>
           </div>
         )}
 

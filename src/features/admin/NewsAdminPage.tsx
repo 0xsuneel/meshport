@@ -113,7 +113,7 @@ export function NewsAdminPage() {
           </div>
           <div>
             <p style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)', fontSize: 15 }}>{editingId ? 'Edit MeshPort post' : 'New MeshPort post'}</p>
-            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>Shows in the Home News box and the News page, next to Arc and Circle stories</p>
+            <p style={{ margin: 0, fontSize: 12, color: 'var(--text-secondary)' }}>Shows in the Home Updates box and the Updates page, next to Arc and Circle stories</p>
           </div>
         </div>
 
