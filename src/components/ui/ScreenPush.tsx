@@ -20,23 +20,28 @@ const PARALLAX = '-28%'
 const DIM = 0.22
 
 /** A frozen, non-interactive copy of what's on screen right now — without
- *  any fixed-position overlays (sheets, keypads) that happen to be inside it. */
-function pictureOf(el: HTMLElement): HTMLElement {
+ *  fixed-position overlays (sheets, dims) that happen to be inside it. The
+ *  amount keypad is the exception: it's returned separately (`floats`) so it
+ *  stays in the picture and slides away with the old screen, instead of
+ *  vanishing the instant its Review/Done button is tapped. */
+function pictureOf(el: HTMLElement): { node: HTMLElement; floats: HTMLElement[] } {
   const node = el.cloneNode(true) as HTMLElement
   const orig = el.querySelectorAll<HTMLElement>('*')
   const copy = node.querySelectorAll<HTMLElement>('*')
   const drop: HTMLElement[] = []
+  const floats: HTMLElement[] = []
   for (let i = 0; i < orig.length && i < copy.length; i++) {
     const o = orig[i], c = copy[i]
     if (o.scrollTop) c.dataset.mpScrollTop = String(o.scrollTop)
-    if (getComputedStyle(o).position === 'fixed') drop.push(c)
+    if (getComputedStyle(o).position === 'fixed') (o.hasAttribute('data-amount-keypad-sheet') ? floats : drop).push(c)
     if ((o instanceof HTMLInputElement || o instanceof HTMLTextAreaElement) && (c instanceof HTMLInputElement || c instanceof HTMLTextAreaElement)) c.value = o.value
     if (c.id) c.removeAttribute('id')
     if (c.hasAttribute('data-amount-keypad-sheet')) c.removeAttribute('data-amount-keypad-sheet')
   }
   drop.forEach(c => c.remove())
+  floats.forEach(c => { c.remove(); c.style.position = 'absolute' })
   node.removeAttribute('id')
-  return node
+  return { node, floats }
 }
 
 export function ScreenPush({ screenKey, back = false, style, children }: {
@@ -50,13 +55,13 @@ export function ScreenPush({ screenKey, back = false, style, children }: {
   const hostRef = useRef<HTMLDivElement>(null)
   const liveRef = useRef<HTMLDivElement>(null)
   const shown = useRef(screenKey)
-  const snap = useRef<{ key: string; node: HTMLElement } | null>(null)
+  const snap = useRef<{ key: string; node: HTMLElement; floats: HTMLElement[] } | null>(null)
   const cleanup = useRef<(() => void) | null>(null)
 
   // About to change screens: picture the old one while it's still on screen
   // (render runs before React touches the DOM).
   if (!reduce && shown.current !== screenKey && snap.current?.key !== screenKey && liveRef.current) {
-    try { snap.current = { key: screenKey, node: pictureOf(liveRef.current) } } catch { snap.current = null }
+    try { snap.current = { key: screenKey, ...pictureOf(liveRef.current) } } catch { snap.current = null }
   }
 
   useLayoutEffect(() => {
@@ -75,6 +80,7 @@ export function ScreenPush({ screenKey, back = false, style, children }: {
     Object.assign(layer.style, { position: 'absolute', inset: '0', pointerEvents: 'none', overflow: 'hidden', background: 'var(--bg)' })
     Object.assign(s.node.style, { position: 'absolute', left: '0', right: '0', top: '0', minHeight: '100%' })
     layer.appendChild(s.node)
+    s.floats.forEach(f => layer.appendChild(f)) // pinned to the bottom of the picture
     const veil = document.createElement('div')
     Object.assign(veil.style, { position: 'absolute', inset: '0', background: '#000', opacity: '0', pointerEvents: 'none' })
     // Front: the screen arriving (forward) or the one leaving (back).

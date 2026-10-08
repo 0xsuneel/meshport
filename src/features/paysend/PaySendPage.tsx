@@ -1704,8 +1704,10 @@ export function PaySendPage() {
                 )}
 
                 {/* ── REVIEW CARD (default) ── */}
+                {/* No fade-in: on phone the screen already slides in (ScreenPush), and a
+                    fade made the details blink in after the header and Pay button. */}
                 {processStage === 'idle' && (
-                  <motion.div key="reviewcard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4 flex-1">
+                  <motion.div key="reviewcard" initial={false} className="space-y-4 flex-1">
                     {/* Amount hero */}
                     <div className="text-center pt-2 pb-1">
                       <p className="text-sm mb-1" style={{ color: 'var(--text-secondary)' }}>You are sending</p>
