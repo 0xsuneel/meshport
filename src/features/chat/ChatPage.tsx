@@ -14,6 +14,7 @@ import { SearchField } from '@/components/ui/SearchField'
 import { readPeople, writePeople } from '@/lib/peopleCache'
 import { Search, Send, ArrowLeft, CheckCheck, Paperclip, Image, FileText, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, SquarePen, Trash2, ArrowDownToLine, Users, UserPlus, Globe, Clock, Receipt } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { PopupDim } from '@/components/ui/PopupDim'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
@@ -5349,12 +5350,14 @@ export function ChatConversationPage() {
           const n = deleteTargets.length
           const allMineRecent = deleteTargets.every((m: any) => m.isMine && m.content !== '[deleted]' && Date.now() - new Date(m.created_at).getTime() < DELETE_FOR_EVERYONE_MS)
           return (
-            <motion.div key="del" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={DIALOG_BACKDROP.transition}
-              className="absolute inset-0 z-50 flex items-center justify-center px-6" style={{ background: 'rgba(0,0,0,0.55)' }}
+            <motion.div key="del"
+              className="absolute inset-0 z-50 flex items-center justify-center px-6"
               onClick={() => !deleting && setDeleteTargets(null)}>
+          {/* Only the dim fades; the card stays solid (PopupDim). */}
+          <PopupDim background="rgba(0,0,0,0.55)" />
               <motion.div initial={DIALOG_CARD.initial} animate={DIALOG_CARD.animate} exit={DIALOG_CARD.exit} transition={DIALOG_CARD.transition}
                 onClick={e => e.stopPropagation()} className="w-full rounded-3xl px-6 pt-6 pb-3"
-                style={{ background: 'var(--surface)', border: '1px solid var(--border)', maxWidth: 360 }}>
+                style={{ position: 'relative', background: 'var(--surface)', border: '1px solid var(--border)', maxWidth: 360 }}>
                 <p className="text-[18px] font-bold text-text-primary">{n > 1 ? `Delete ${n} messages?` : 'Delete message?'}</p>
                 {n === 1 && deleteTargets[0].content !== '[deleted]' && (
                   <p className="mt-2 text-[13.5px] line-clamp-2" style={{ color: 'var(--text-secondary)' }}>“{messagePreview(deleteTargets[0].content)}”</p>

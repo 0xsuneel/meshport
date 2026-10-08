@@ -12,7 +12,8 @@
 // flickers.
 import { motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
-import { POPUP_CARD, DIALOG_BACKDROP } from '@/lib/motion'
+import { POPUP_CARD } from '@/lib/motion'
+import { PopupDim } from './PopupDim'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { type ReactNode } from 'react'
 
@@ -26,20 +27,17 @@ export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex =
 }) {
   usePopupOpen()
   return createPortal(
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={DIALOG_BACKDROP.transition}
+    <div
       onClick={e => { e.stopPropagation(); onClose() }}
       onMouseDown={stop} onMouseUp={stop} onTouchStart={stop} onTouchMove={stop} onTouchEnd={stop} onTouchCancel={stop}
       style={{
         position: 'fixed', inset: 0, zIndex,
-        background: 'rgba(6,10,14,0.62)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 'max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom))',
       }}
     >
+      {/* Only the dim fades; the card is solid from its first frame (PopupDim). */}
+      <PopupDim />
       <motion.div
         onClick={e => e.stopPropagation()}
         role="dialog" aria-modal="true"
@@ -48,11 +46,11 @@ export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex =
         animate={POPUP_CARD.animate}
         exit={POPUP_CARD.exit}
         transition={POPUP_CARD.transition}
-        style={{ width: '100%', maxWidth, maxHeight: '100%', overflowY: 'auto', overscrollBehavior: 'contain' }}
+        style={{ position: 'relative', width: '100%', maxWidth, maxHeight: '100%', overflowY: 'auto', overscrollBehavior: 'contain' }}
       >
         {children}
       </motion.div>
-    </motion.div>,
+    </div>,
     document.body,
   )
 }

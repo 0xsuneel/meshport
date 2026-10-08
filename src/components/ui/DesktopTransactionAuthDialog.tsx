@@ -13,8 +13,9 @@
 // ancestor — e.g. the Multichain Hub's embedded flows — can't become its
 // containing block: it always centres on the screen.
 import { motion } from 'framer-motion'
+import { PopupDim } from './PopupDim'
 import { createPortal } from 'react-dom'
-import { DIALOG_CARD, DIALOG_BACKDROP } from '@/lib/motion'
+import { DIALOG_CARD } from '@/lib/motion'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { type ReactNode } from 'react'
 
@@ -35,21 +36,17 @@ export function DesktopTransactionAuthDialog({
 }) {
   usePopupOpen()
   return createPortal(
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={DIALOG_BACKDROP.transition}
+    <div
       // A portal still delivers events to its React ancestors: stop them so
       // a click here can't also trigger the page's own handlers.
       onClick={e => { e.stopPropagation(); onClose() }}
       style={{
         position: 'fixed', inset: 0, zIndex: 100,
-        // A plain dim, no backdrop blur — see usePopupOpen.
-        background: 'rgba(0,0,0,0.6)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       }}
     >
+      {/* A plain dim, no backdrop blur — see usePopupOpen. Only the dim fades (PopupDim). */}
+      <PopupDim background="rgba(0,0,0,0.6)" />
       <motion.div
         onClick={e => e.stopPropagation()}
         initial={DIALOG_CARD.initial}
@@ -57,7 +54,7 @@ export function DesktopTransactionAuthDialog({
         exit={DIALOG_CARD.exit}
         transition={DIALOG_CARD.transition}
         style={{
-          width: '100%', maxWidth, maxHeight: '85vh', overflowY: 'auto',
+          position: 'relative', width: '100%', maxWidth, maxHeight: '85vh', overflowY: 'auto',
           background: 'var(--surface)', border: `1px solid color-mix(in srgb, ${accent} 25%, var(--border))`, borderRadius: 22,
           boxShadow: `0 0 0 1px color-mix(in srgb, ${accent} 12%, transparent), var(--shadow-3)`,
         }}
@@ -103,7 +100,7 @@ export function DesktopTransactionAuthDialog({
           </div>
         </div>
       </motion.div>
-    </motion.div>,
+    </div>,
     document.body,
   )
 }
