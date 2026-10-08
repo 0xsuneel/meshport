@@ -115,7 +115,7 @@ export function MerchantApplyPage() {
             <p className="text-sm text-text-secondary">{application.businessName}{application.businessType ? ` · ${application.businessType}` : ''}</p>
             <p className="text-xs text-text-secondary leading-relaxed max-w-[340px]">
               {status === 'pending' && 'MeshPort is reviewing your application. You’ll get a notification when it’s decided.'}
-              {status === 'approved' && 'Payments on supported chains are collected to your Arc wallet automatically. See them in Multichain Hub → Ledger.'}
+              {status === 'approved' && 'Payments on other chains wait there until you tap Claim All in Multichain Hub → Ledger (every 6 hours), or claim one chain at a time.'}
               {(status === 'rejected' || status === 'revoked') && (application.reviewNote || 'You can keep using MeshPort as usual.')}
             </p>
             <p className="text-[11px] text-text-secondary">Applied {new Date(application.createdAt).toLocaleDateString()}</p>
