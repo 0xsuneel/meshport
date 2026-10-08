@@ -1489,7 +1489,7 @@ export function P2PTradePage() {
         {processingPayment && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-            <MeshLoader size={52} color="#5DE0C0" label="Processing" />
+            <MeshLoader size={44} color="#5DE0C0" label="Processing" />
             <p style={{ fontSize: 14.5, fontWeight: 600, color: '#fff' }}>Processing demo payment…</p>
             <p style={{ fontSize: 11.5, color: COLORS.muted, textAlign: 'center', maxWidth: 260 }}>Simulating a real payment rail — no real money is moving.</p>
           </motion.div>

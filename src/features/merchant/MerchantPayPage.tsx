@@ -83,7 +83,7 @@ export function MerchantPayPage() {
             <p className="text-base font-bold text-text-primary">Payment request not found</p>
             <button onClick={() => navigate('/')} className="mt-2 px-5 py-3 rounded-2xl text-sm font-semibold text-white flex items-center gap-2" style={{ background: 'var(--brand)' }}><Home className="w-4 h-4" /> MeshPort</button>
           </>
-        ) : <MeshLoader size={56} />}
+        ) : <MeshLoader size={48} />}
       </div>
     )
   }

@@ -73,7 +73,7 @@ export async function sendPushToAll(payload: PushPayload): Promise<{ sent: numbe
   const notificationPayload = JSON.stringify({
     title: payload.title,
     body:  payload.body,
-    icon:  payload.icon || '/pwa-192x192.png',
+    icon:  payload.icon || '/notification-icon.png',
     badge: '/notification-badge.png',
     tag:   payload.tag,
     data:  { url: payload.url || '/', ...payload.data },
@@ -195,7 +195,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
   const notificationPayload = JSON.stringify({
     title: payload.title,
     body:  payload.body,
-    icon:  payload.icon || '/pwa-192x192.png',
+    icon:  payload.icon || '/notification-icon.png',
     badge: '/notification-badge.png',
     tag:   payload.tag,
     data:  { url: payload.url || '/', ...payload.data },

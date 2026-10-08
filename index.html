@@ -103,17 +103,15 @@
       #splash .txt { position: absolute; left: 0; right: 0; top: calc(50% + 52px + 20px); text-align: center; }
       #splash .name { font-size: 24px; font-weight: 700; letter-spacing: -0.4px; }
       #splash .tag { margin-top: 6px; font-size: 13px; color: #A9D9CF; }
-      /* Animated logo (Pulse + Twinkle) — same as MeshLoader.tsx. */
+      /* Animated logo (Pulse) — same as MeshLoader.tsx. */
       #splash .mark .n, #splash .mark .hub { transform-box: fill-box; transform-origin: center; }
-      #splash .mark .n { animation: mplPopTw 1.8s ease-in-out infinite; }
-      #splash .mark .l { animation: mplTw 1.8s ease-in-out infinite; }
+      #splash .mark .n { animation: mplPop 1.8s ease-in-out infinite; }
       #splash .mark .s2 { animation-delay: .2s; } #splash .mark .s3 { animation-delay: .4s; }
       #splash .mark .s4 { animation-delay: .6s; } #splash .mark .s5 { animation-delay: .8s; }
       #splash .mark .hub { animation: mplBreathe 1.8s ease-in-out infinite; }
-      @keyframes mplPopTw { 0%,60%,100% { transform: scale(1); opacity: .35; } 22% { transform: scale(1.38); opacity: 1; } 38% { opacity: 1; } }
-      @keyframes mplTw { 0%,100% { opacity: .3; } 35% { opacity: 1; } }
+      @keyframes mplPop { 0%,60%,100% { transform: scale(1); } 22% { transform: scale(1.3); } }
       @keyframes mplBreathe { 0%,100% { transform: scale(1); } 50% { transform: scale(.86); } }
-      @media (prefers-reduced-motion: reduce) { #splash .mark .n, #splash .mark .l, #splash .mark .hub { animation: none; opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { #splash .mark .n, #splash .mark .hub { animation: none; } }
       /* Refresh (this tab already opened the app): no teal brand screen —
          just the normal page background, and a small logo only if loading
          takes more than a moment. html.mp-refresh is set by the script below. */

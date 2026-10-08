@@ -35,7 +35,7 @@ export function mirrorToSystem(n: AppNotification): void {
     if (!Number.isFinite(t) || Date.now() - t > FRESH_MS) return
     navigator.serviceWorker.ready.then(reg => reg.showNotification(n.title, {
       body:  n.body,
-      icon:  '/pwa-192x192.png',
+      icon:  '/notification-icon.png',
       badge: '/notification-badge.png',
       tag:   tagFor(n),
       data:  { url: urlFor(n) },

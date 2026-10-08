@@ -93,7 +93,7 @@ export function PayPage() {
   if (loading) {
     return (
       <div className="h-full flex items-center justify-center" style={{ background: 'var(--bg)' }}>
-        <MeshLoader size={56} />
+        <MeshLoader size={48} />
       </div>
     )
   }
