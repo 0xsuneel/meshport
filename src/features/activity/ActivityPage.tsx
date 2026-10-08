@@ -159,6 +159,34 @@ export function dedupeAndSortActivityRecords(records: ActivityRecord[]): Activit
 /** Admin switch "Unified merchant Ledger": merchant rows name no chain. */
 const unifiedLedgerOn = () => useSettingsStore.getState().isEnabled('merchant_unified_ledger', false)
 
+/**
+ * Unified merchant Ledger: one Claim All moves each chain separately (one
+ * claim row per chain, seconds apart). Show them as one "Payment received"
+ * row with the total. Display only — the activity rows stay as they are.
+ */
+const CLAIM_ALL_GROUP_MS = 10 * 60_000
+export function groupLedgerClaims(records: ActivityRecord[]): ActivityRecord[] {
+  const isLedgerClaim = (r: ActivityRecord) => {
+    const md: any = (r as any).metadata || {}
+    return r.activityType === 'claim' && !md.auto_convert && isMerchantClaim(r as any)
+  }
+  const out: ActivityRecord[] = []
+  for (const r of records) {
+    const prev = out[out.length - 1]
+    if (prev && isLedgerClaim(r) && isLedgerClaim(prev) && prev.status === r.status &&
+        Math.abs(new Date(prev.createdAt).getTime() - new Date(r.createdAt).getTime()) <= CLAIM_ALL_GROUP_MS) {
+      const pmd: any = (prev as any).metadata || {}
+      const parts = pmd.ledgerGroup ?? [prev]
+      out[out.length - 1] = {
+        ...prev,
+        amount: Number(prev.amount) + Number(r.amount),
+        metadata: { ...pmd, ledgerGroup: [...parts, r] },
+      } as ActivityRecord
+    } else out.push(r)
+  }
+  return out
+}
+
 export function deriveActivityRow(record: ActivityRecord) {
   const { activityType: type, status, sourceChain, destinationChain, createdAt, amount, tokenSymbol } = record
   const metadata: any = (record as any).metadata || {}
@@ -530,9 +558,12 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     : ''
   const isSwapType = type === 'swap'
 
+  // One Claim All shown as one row (groupLedgerClaims): its parts.
+  const ledgerParts: ActivityRecord[] | null = Array.isArray((metadata as any)?.ledgerGroup) ? (metadata as any).ledgerGroup : null
+
   const rows = [
     { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? (unifiedLedgerOn() ? 'Payment received from Ledger' : `Payment received from ${chain || 'other chain'} Ledger`) : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
-    { label: 'Chain',  value: chain },
+    { label: 'Chain',  value: ledgerParts ? 'Ledger → Arc' : chain },
     ...(merchantOrderDetail ? [{ label: 'Order', value: `#${merchantOrderDetail}` }] : []),
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Merchant', value: String((metadata as any).merchantName) }] : []),
     ...(isClaim && (metadata as any)?.merchant && (record as any).walletAddress
@@ -550,8 +581,13 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     { label: 'Status', value: isFailed ? 'Failed ✗' : isSuccess ? 'Completed ✓' : 'Processing…' },
     { label: 'Date',   value: new Date(createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
     { label: 'Time',   value: new Date(createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) },
-    ...(txHash && !isRecoveredClaim ? [{ label: sourceHashLabel, value: txHash.slice(0,6) + '…' + txHash.slice(-6), copy: txHash }] : []),
-    ...((isClaim || isTransfer) && destinationTxHash ? [{ label: destinationHashLabel, value: destinationTxHash.slice(0,6) + '…' + destinationTxHash.slice(-6), copy: destinationTxHash }] : []),
+    ...(ledgerParts ? [{ label: 'Transfers', value: `${ledgerParts.length} to Arc` }] : []),
+    ...(ledgerParts ? ledgerParts.map((p: ActivityRecord, i: number) => {
+      const h = p.destinationTxHash || p.txHash
+      return { label: `Arc Tx ${i + 1} · $${formatAmt(p.amount)}`, value: h ? h.slice(0,6) + '…' + h.slice(-6) : '—', copy: h || undefined }
+    }) : []),
+    ...(txHash && !isRecoveredClaim && !ledgerParts ? [{ label: sourceHashLabel, value: txHash.slice(0,6) + '…' + txHash.slice(-6), copy: txHash }] : []),
+    ...((isClaim || isTransfer) && destinationTxHash && !ledgerParts ? [{ label: destinationHashLabel, value: destinationTxHash.slice(0,6) + '…' + destinationTxHash.slice(-6), copy: destinationTxHash }] : []),
   ]
 
   // Tapping a history card reopens the same receipt a live payment ends on
@@ -716,7 +752,7 @@ function FilterSheet({ active, onSelect, onClose }: {
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export function ActivityPage() {
   // Re-render when the admin flips "Unified merchant Ledger" (row labels read it).
-  useSettingsStore(st => st.isEnabled('merchant_unified_ledger', false))
+  const unifiedLedger = useSettingsStore(st => st.isEnabled('merchant_unified_ledger', false))
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const walletAddress = useAuthStore(s => s.walletAddress)
@@ -813,7 +849,7 @@ export function ActivityPage() {
   })
 
   const deduped = dedupeAndSortActivityRecords(displayed)
-  const sorted = deduped
+  const sorted = unifiedLedger ? groupLedgerClaims(deduped) : deduped
   const groups = groupByDate(sorted)
 
   return (
