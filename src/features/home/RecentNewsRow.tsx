@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import type { NavigateFunction } from 'react-router-dom'
 import { useAuthStore } from '@/store'
 import { fetchRecentContacts, recentInitial, recentShortName, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
+import { NewsArt } from '@/features/news/NewsArt'
 import { fetchHomeNews, readCachedHomeNews, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT, type NewsItem } from '@/lib/news'
 
 // ── Home: Recent + News, side by side ───────────────────────────────────────
@@ -269,14 +270,19 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
               {/* The cover is shown as is: Arc's covers carry their own title text
                   and Circle's are white, so nothing is drawn over it but the label. */}
               <div style={{ position: 'relative', height: NEWS_PIC_H, borderRadius: 10, overflow: 'hidden', background: NEWS_SOURCE_TINT[it.source] }}>
-                {it.image_url && !broken[it.id] && (
-                  <img src={it.image_url} alt="" draggable={false} loading={k === 0 ? 'eager' : 'lazy'}
-                    onError={() => setBroken(b => ({ ...b, [it.id]: true }))}
-                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
-                      transform: on || reduce ? 'scale(1)' : 'scale(1.08)', transition: reduce ? 'none' : 'transform 5.5s cubic-bezier(.2,.6,.3,1)' }} />
+                {it.image_url && !broken[it.id] ? (
+                  <>
+                    <img src={it.image_url} alt="" draggable={false} loading={k === 0 ? 'eager' : 'lazy'}
+                      onError={() => setBroken(b => ({ ...b, [it.id]: true }))}
+                      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
+                        transform: on || reduce ? 'scale(1)' : 'scale(1.08)', transition: reduce ? 'none' : 'transform 5.5s cubic-bezier(.2,.6,.3,1)' }} />
+                    <span style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(0,0,0,0.45)', borderRadius: 999, padding: '1px 7px',
+                      color: '#fff', fontSize: 9.5, fontWeight: 700, lineHeight: '15px' }}>{NEWS_SOURCE_LABEL[it.source]}</span>
+                  </>
+                ) : (
+                  // No picture: a drawn cover (icon + label) instead of an empty block.
+                  <NewsArt item={it} variant="row" />
                 )}
-                <span style={{ position: 'absolute', top: 4, left: 4, background: 'rgba(0,0,0,0.45)', borderRadius: 999, padding: '1px 7px',
-                  color: '#fff', fontSize: 9.5, fontWeight: 700, lineHeight: '15px' }}>{NEWS_SOURCE_LABEL[it.source]}</span>
               </div>
               <div style={{ marginTop: 4, fontSize: 11.5, fontWeight: 650, lineHeight: '14px', color: 'var(--text-primary)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -286,7 +292,8 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
           )
         })}
         {n > 1 && (
-          <div aria-hidden style={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 3, padding: '2px 3px', borderRadius: 4, background: 'rgba(0,0,0,0.28)' }}>
+          // Bottom-right of the cover, clear of the source label and of a drawn cover's text.
+          <div aria-hidden style={{ position: 'absolute', top: NEWS_PIC_H - 13, right: 5, display: 'flex', gap: 3, padding: '2px 3px', borderRadius: 4, background: 'rgba(0,0,0,0.28)' }}>
             {items.map((it, k) => (
               <i key={it.id} style={{ display: 'block', height: 4, width: k === cur ? 10 : 4, borderRadius: 2,
                 background: k === cur ? '#fff' : 'rgba(255,255,255,0.5)', transition: 'width .35s ease, background .35s' }} />
