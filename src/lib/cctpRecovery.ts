@@ -98,6 +98,49 @@ export async function relayMint(kind: 'claim' | 'transfer', id: string): Promise
   return { ...d, state: 'already_minted', destinationMintTxHash: out.txHash }
 }
 
+const MESSAGE_TRANSMITTER_V2 = '0xe737e5cebeeba77efe34d4aa090756590b1ce275' as const // same on every testnet
+
+/**
+ * Finishes a CCTP transfer straight from its burn hash when Circle's
+ * forwarder didn't deliver the mint: waits for Circle's attestation, then
+ * MeshPort's relayer submits receiveMessage on the destination (gas is
+ * estimated, so a mint that needs more gas than the forwarder gave it still
+ * goes through). The attested message fixes the recipient and amount, and a
+ * message can only be received once, so this can never double-send.
+ * Returns the mint tx hash, or null if it couldn't be finished right now.
+ */
+export async function finishCctpMintViaRelayer(p: {
+  sourceChain: string; destinationChain: string; burnTxHash: string; timeoutMs?: number
+}): Promise<{ mintTxHash: string } | null> {
+  const { fetchIrisMessage } = await import('./cctpTracker')
+  const deadline = Date.now() + (p.timeoutMs ?? 120_000)
+  let msg = await fetchIrisMessage(p.sourceChain, p.burnTxHash)
+  while (Date.now() < deadline && !(msg?.status === 'complete' && msg.message && msg.attestation && msg.attestation !== 'PENDING')) {
+    if ((msg?.forwardState ?? '').toUpperCase() === 'COMPLETE' && msg?.forwardTxHash) return { mintTxHash: msg.forwardTxHash }
+    await new Promise(r => setTimeout(r, 3000))
+    msg = await fetchIrisMessage(p.sourceChain, p.burnTxHash)
+  }
+  if ((msg?.forwardState ?? '').toUpperCase() === 'COMPLETE' && msg?.forwardTxHash) return { mintTxHash: msg.forwardTxHash }
+  if (!msg?.message || !msg.attestation || msg.attestation === 'PENDING') return null
+
+  const { encodeFunctionData } = await import('viem')
+  const { authApiHeaders } = await import('./supabase')
+  const r = await fetch('/api/bridge-relay', {
+    method: 'POST', headers: await authApiHeaders(),
+    body: JSON.stringify({
+      action: 'call', chain: p.destinationChain, to: MESSAGE_TRANSMITTER_V2,
+      data: encodeFunctionData({ abi: RECEIVE_MESSAGE_ABI, functionName: 'receiveMessage', args: [msg.message as Hex, msg.attestation as Hex] }),
+    }),
+  })
+  const out = await r.json().catch(() => null) as { txHash?: string; error?: string; pending?: boolean } | null
+  if (r.ok && out?.txHash) return { mintTxHash: out.txHash }
+  // The relayer simulates first, so a refusal usually means it was already
+  // minted (e.g. Circle's forwarder got there after all) — check Iris again.
+  const again = await fetchIrisMessage(p.sourceChain, p.burnTxHash)
+  if ((again?.forwardState ?? '').toUpperCase() === 'COMPLETE' && again?.forwardTxHash) return { mintTxHash: again.forwardTxHash }
+  throw new Error(out?.error || 'Relayer could not finish this mint')
+}
+
 /** Claim → Arc: MeshPort's relayer mints it on Arc (no gas needed). */
 export function retryClaimRelay(id: string): Promise<CctpDiagnosis> {
   return relayMint('claim', id)

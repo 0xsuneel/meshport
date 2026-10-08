@@ -28,4 +28,6 @@ export {
   SDK_CHAIN_RPCS as RPC_BY_CHAIN_NAME,
   FORWARDER_SUPPORTED_SDK_CHAINS,
   chainSupportsForwarder,
+  FORWARDER_MINT_FAILING_SDK_CHAINS,
+  circleForwarderMintsTo,
 } from '@/blockchain/chains'
