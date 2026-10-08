@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { NewsArt } from './NewsArt'
 import {
   fetchNewsPage, fetchLiveStatusNotices, newsDate, NEWS_PAGE_SIZE, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT,
   type NewsItem, type NewsSource,
@@ -22,15 +23,14 @@ export function newsMeta(it: NewsItem, withSource = true): string {
     it.read_minutes ? `${it.read_minutes} min read` : null].filter(Boolean).join(' · ')
 }
 
-export function NewsCover({ item, style, children }: { item: NewsItem; style?: React.CSSProperties; children?: ReactNode }) {
+export function NewsCover({ item, style, children, variant = 'stack' }: { item: NewsItem; style?: React.CSSProperties; children?: ReactNode; variant?: 'stack' | 'hero' }) {
   const [ok, setOk] = useState(true)
   return (
     <div style={{ position: 'relative', overflow: 'hidden', background: NEWS_SOURCE_TINT[item.source], ...style }}>
       {item.image_url && ok
         ? <img src={item.image_url} alt="" loading="lazy" onError={() => setOk(false)}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-        : <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'rgba(255,255,255,0.9)', fontSize: 12, fontWeight: 700, letterSpacing: '0.02em' }}>{NEWS_SOURCE_LABEL[item.source]}</span>}
+        : <NewsArt item={item} variant={variant} />}
       {children}
     </div>
   )

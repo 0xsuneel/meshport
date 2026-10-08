@@ -48,7 +48,7 @@ export function NewsArticlePage() {
     <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 100 }}>
       <div style={{ position: 'relative' }}>
         {item
-          ? <NewsCover item={item} style={{ width: '100%', aspectRatio: '1200 / 630', maxHeight: 320 }} />
+          ? <NewsCover item={item} variant="hero" style={{ width: '100%', aspectRatio: '1200 / 630', maxHeight: 320 }} />
           : <div style={{ width: '100%', aspectRatio: '1200 / 630', maxHeight: 320, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />}
         <button onClick={back} aria-label="Back"
           style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top, 0px) + 14px)', left: 14, width: 38, height: 38, borderRadius: '50%',
