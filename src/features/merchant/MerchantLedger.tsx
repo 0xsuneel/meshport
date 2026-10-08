@@ -115,7 +115,7 @@ export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains
 }
 
 // ── Home ───────────────────────────────────────────────────────────────────
-type Customer = { key: string; name: string; total: number; count: number; last: string; search: string }
+export type Customer = { key: string; name: string; total: number; count: number; last: string; search: string }
 
 /**
  * Direct payments on other chains (chain receipts that aren't an order's —
@@ -123,7 +123,7 @@ type Customer = { key: string; name: string; total: number; count: number; last:
  * customer list and each customer's history all include them. A mint
  * (faucet / CCTP) has no paying wallet: its entry has no `from`.
  */
-function withChainReceipts(payments: MerchantPayment[], receipts: ChainReceipt[]): MerchantPayment[] {
+export function withChainReceipts(payments: MerchantPayment[], receipts: ChainReceipt[]): MerchantPayment[] {
   const known = new Set(payments.map(p => `${p.chain}:${(p.txHash ?? '').toLowerCase()}`))
   const usernameOf = (from: string) => payments.find(p => p.from?.toLowerCase() === from.toLowerCase())?.customerUsername ?? null
   const extra: MerchantPayment[] = receipts
@@ -135,10 +135,10 @@ function withChainReceipts(payments: MerchantPayment[], receipts: ChainReceipt[]
     }))
   return [...payments, ...extra].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
-const MINT_SENDER = 'Faucet / bridge'
-const customerKey = (p: Pick<MerchantPayment, 'customerUsername' | 'from'>) => p.customerUsername ? `u:${p.customerUsername}` : `w:${p.from}`
+export const MINT_SENDER = 'Faucet / bridge'
+export const customerKey = (p: Pick<MerchantPayment, 'customerUsername' | 'from'>) => p.customerUsername ? `u:${p.customerUsername}` : `w:${p.from}`
 
-function customersOf(payments: MerchantPayment[]): Customer[] {
+export function customersOf(payments: MerchantPayment[]): Customer[] {
   const map = new Map<string, Customer>()
   for (const p of payments) {
     const key = customerKey(p)

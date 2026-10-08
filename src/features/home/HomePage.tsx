@@ -568,7 +568,7 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
               )}
             </div>
             <span style={{
-              fontSize: a.label.length > 10 ? 10.5 : 12, color: 'var(--text-primary)', fontWeight: 400, textAlign: 'center',
+              fontSize: hub(a.label).length > 10 ? 10.5 : 12, color: 'var(--text-primary)', fontWeight: 400, textAlign: 'center',
               lineHeight: 1.25, width: '100%', wordBreak: 'break-word',
             }}>{hub(a.label)}</span>
           </div>
@@ -1116,7 +1116,7 @@ function CustomizeQuickActionsSheet({ selectedIds, onToggle, onClose, warning }:
                 {a.icon}
               </div>
               <span style={{
-                fontSize: a.label.length > 10 ? 10.5 : 12, color: 'var(--text-primary)', fontWeight: 400, textAlign: 'center',
+                fontSize: hub(a.label).length > 10 ? 10.5 : 12, color: 'var(--text-primary)', fontWeight: 400, textAlign: 'center',
                 lineHeight: 1.25, width: '100%', wordBreak: 'break-word',
               }}>{hub(a.label)}</span>
               <span aria-hidden="true" style={{
