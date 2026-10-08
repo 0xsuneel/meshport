@@ -122,6 +122,12 @@ export async function finishCctpMintViaRelayer(p: {
   }
   if ((msg?.forwardState ?? '').toUpperCase() === 'COMPLETE' && msg?.forwardTxHash) return { mintTxHash: msg.forwardTxHash }
   if (!msg?.message || !msg.attestation || msg.attestation === 'PENDING') return null
+  // Circle's forwarder gave up on this mint: remember the chain so the next
+  // transfers there go straight to the relayer (see noteForwarderMintFailed).
+  if ((msg.forwardState ?? '').toUpperCase() === 'FAILED') {
+    const { noteForwarderMintFailed } = await import('@/blockchain/chains')
+    noteForwarderMintFailed(p.destinationChain)
+  }
 
   const { encodeFunctionData } = await import('viem')
   const { authApiHeaders } = await import('./supabase')

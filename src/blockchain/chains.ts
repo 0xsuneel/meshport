@@ -481,9 +481,40 @@ export function chainSupportsForwarder(sdk: string): boolean {
 // Circle's forwarder succeeds there again.
 export const FORWARDER_MINT_FAILING_SDK_CHAINS = new Set<string>(['Ethereum_Sepolia'])
 
+// Learned on this device: a chain where Circle's forwarder mint just failed
+// (CCTP: Iris forwardState FAILED; Gateway: forwarder ON_CHAIN_FAILURE). The
+// transfer that hit it is still finished by MeshPort's relayer; for the next
+// FORWARDER_FAILURE_MEMORY_MS, transfers to that chain skip the forwarder and
+// go straight to the relayer, then Circle's forwarder is tried again.
+const FORWARDER_FAILURE_KEY = 'meshport_forwarder_mint_failing_v1'
+export const FORWARDER_FAILURE_MEMORY_MS = 24 * 60 * 60 * 1000
+
+function learnedForwarderFailures(now = Date.now()): Record<string, number> {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(FORWARDER_FAILURE_KEY) : null
+    const all = raw ? JSON.parse(raw) as Record<string, number> : {}
+    return Object.fromEntries(Object.entries(all).filter(([, until]) => typeof until === 'number' && until > now))
+  } catch { return {} }
+}
+
+/** Record that Circle's forwarder failed to mint on `sdk` (no-op for chains it doesn't serve). */
+export function noteForwarderMintFailed(sdk: string, now = Date.now()): void {
+  if (!chainSupportsForwarder(sdk)) return
+  try {
+    if (typeof localStorage === 'undefined') return
+    const next = { ...learnedForwarderFailures(now), [sdk]: now + FORWARDER_FAILURE_MEMORY_MS }
+    localStorage.setItem(FORWARDER_FAILURE_KEY, JSON.stringify(next))
+  } catch { /* storage unavailable — the transfer itself is unaffected */ }
+}
+
+/** Circle's forwarder is known (listed above) or recently seen (this device) to fail its mint on `sdk`. */
+export function forwarderMintFailing(sdk: string, now = Date.now()): boolean {
+  return FORWARDER_MINT_FAILING_SDK_CHAINS.has(sdk) || sdk in learnedForwarderFailures(now)
+}
+
 /** True when Circle's forwarder should submit the destination mint for `sdk`. */
 export function circleForwarderMintsTo(sdk: string): boolean {
-  return chainSupportsForwarder(sdk) && !FORWARDER_MINT_FAILING_SDK_CHAINS.has(sdk)
+  return chainSupportsForwarder(sdk) && !forwarderMintFailing(sdk)
 }
 
 /** Every internal chain id known to the balance-scan registry. */

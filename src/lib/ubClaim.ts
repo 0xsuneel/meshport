@@ -17,7 +17,7 @@
 // SDK chain ids that support Unified Balance deposits — see ubChains.ts.
 import { realTxHash } from './relayedProvider'
 import { UB_CLAIM_CHAINS } from './ubChains'
-import { FORWARDER_MINT_FAILING_SDK_CHAINS } from '@/blockchain/chains'
+import { FORWARDER_MINT_FAILING_SDK_CHAINS, forwarderMintFailing, noteForwarderMintFailed } from '@/blockchain/chains'
 export { UB_CLAIM_CHAINS }
 
 import { isMerchantNow } from './merchant'
@@ -148,6 +148,11 @@ export async function spendUnifiedToArc(params: {
 // every chain in FORWARDER_MINT_FAILING_SDK_CHAINS (see blockchain/chains.ts).
 export const GATEWAY_SELF_MINT_CHAINS = new Set(['Sei_Testnet', ...FORWARDER_MINT_FAILING_SDK_CHAINS])
 
+/** Mint a Gateway spend to `sdk` ourselves: listed above, or the forwarder failed there recently (forwarderMintFailing). */
+export function gatewaySelfMintsTo(sdk: string): boolean {
+  return GATEWAY_SELF_MINT_CHAINS.has(sdk) || forwarderMintFailing(sdk)
+}
+
 /** true when a Gateway spend failed at the forwarder's destination mint and can be minted by us. */
 export function forwarderMintRetry(err: any): { attestation: string; signature: string } | null {
   const trace = err?.cause?.trace
@@ -186,7 +191,7 @@ export async function spendUnifiedTo(params: {
   const send = Math.max(0, amount - fee - spendMargin(params.cushion))
   if (send <= 0) throw new Error(`Amount too small to cover the Gateway fee (${fee.toFixed(4)} USDC)`)
 
-  const selfMint = toChain !== ARC_CHAIN_KEY && GATEWAY_SELF_MINT_CHAINS.has(toChain)
+  const selfMint = toChain !== ARC_CHAIN_KEY && gatewaySelfMintsTo(toChain)
   if (selfMint) {
     const r: any = await kit.unifiedBalance.spend({ from: alloc(send), to: selfMintTo, token: 'USDC', amount: send.toFixed(6) })
     return { txHash: hashOf(r), received: send }
@@ -199,6 +204,7 @@ export async function spendUnifiedTo(params: {
     // mint it ourselves on the destination (same recipient).
     const retry = forwarderMintRetry(err)
     if (!retry) throw err
+    noteForwarderMintFailed(toChain)
     const r: any = await kit.unifiedBalance.spend({
       from: alloc(send), to: selfMintTo, token: 'USDC', amount: send.toFixed(6), config: { retry },
     })
