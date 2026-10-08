@@ -2,7 +2,7 @@ import { useHubLabel, useMerchant } from '@/lib/merchant'
 import { handBiometricPasscode } from '@/lib/biometricHandoff'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { isUbChain } from '@/lib/ubChains'
-import {useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject, type MutableRefObject, type CSSProperties, type ReactNode} from 'react'
+import {useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type RefObject, type MutableRefObject, type CSSProperties, type ReactNode} from 'react'
 import { flushSync, createPortal } from 'react-dom'
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
 import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
@@ -2317,6 +2317,23 @@ function FeatureBanner({ height, onOpen }: { height: number; onOpen: (path: stri
   )
 }
 
+// Last EURC/cirBTC amounts per wallet, for instant first paint (USDC's lives
+// in the wallet store). Testnet balances only — nothing sensitive.
+type AssetSlot = { eurc: number; cirbtc: number }
+const assetSlotKey = (addr: string | null) => addr ? `meshport_assets_${addr.toLowerCase()}` : null
+function loadAssetSlot(addr: string | null): AssetSlot {
+  const k = assetSlotKey(addr)
+  try {
+    const v = k ? JSON.parse(localStorage.getItem(k) || 'null') : null
+    return { eurc: typeof v?.eurc === 'number' ? v.eurc : 0, cirbtc: typeof v?.cirbtc === 'number' ? v.cirbtc : 0 }
+  } catch { return { eurc: 0, cirbtc: 0 } }
+}
+function saveAssetSlot(addr: string | null, patch: Partial<AssetSlot>) {
+  const k = assetSlotKey(addr)
+  if (!k) return
+  try { localStorage.setItem(k, JSON.stringify({ ...loadAssetSlot(addr), ...patch })) } catch {}
+}
+
 export function HomePage() {
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
@@ -2451,8 +2468,17 @@ export function HomePage() {
     }
   }
 
-  const [eurcBalance,    setEurcBalance]    = useState(0)
-  const [cirBtcBalance,  setCirBtcBalance]  = useState(0)
+  // EURC/cirBTC: the last amounts read are saved per wallet (as USDC's is,
+  // in the wallet store) so Home shows them at once instead of 0 until the
+  // fresh read lands.
+  const [eurcBalance,    setEurcBalanceState]    = useState(() => loadAssetSlot(walletAddress).eurc)
+  const [cirBtcBalance,  setCirBtcBalanceState]  = useState(() => loadAssetSlot(walletAddress).cirbtc)
+  const setEurcBalance = useCallback((v: number) => { setEurcBalanceState(v); saveAssetSlot(walletAddress, { eurc: v }) }, [walletAddress])
+  const setCirBtcBalance = useCallback((v: number) => { setCirBtcBalanceState(v); saveAssetSlot(walletAddress, { cirbtc: v }) }, [walletAddress])
+  useEffect(() => {
+    const slot = loadAssetSlot(walletAddress)
+    setEurcBalanceState(slot.eurc); setCirBtcBalanceState(slot.cirbtc)
+  }, [walletAddress])
   const [btcPrice,       setBtcPrice]       = useState(0)
   const [unifiedBalance, setUnifiedBalance] = useState<number | null>(null)
   // True until the first all-chains scan for this wallet has finished.
@@ -2513,8 +2539,8 @@ export function HomePage() {
       // wallet address, so a wallet switch can't serve the old wallet's
       // number (balanceCache keyed by token alone).
       for (const tok of tokens) {
-        if (tok === 'EURC')   { readArcBalance(walletAddress, 'EURC').then(setEurcBalance).catch(() => {}); continue }
-        if (tok === 'CIRBTC') { readArcBalance(walletAddress, 'CIRBTC').then(setCirBtcBalance).catch(() => {}); continue }
+        if (tok === 'EURC')   { readArcBalanceOrThrow(walletAddress, 'EURC').then(setEurcBalance).catch(() => {}); continue }
+        if (tok === 'CIRBTC') { readArcBalanceOrThrow(walletAddress, 'CIRBTC').then(setCirBtcBalance).catch(() => {}); continue }
         readArcBalance(walletAddress, 'USDC').then(setBalance).catch(() => {})
       }
     }, BALANCE_REFRESH_DEBOUNCE_MS)
@@ -3458,11 +3484,13 @@ export function HomePage() {
     let piStartTimer: ReturnType<typeof setTimeout> | null = null
 
     ;(async () => {
-      await fetchBalance()
+      // EURC/cirBTC start a moment after USDC instead of waiting for USDC's
+      // read to finish — a slow USDC read (429 backoff, retries) used to hold
+      // them back. The short stagger still keeps the three off the same tick.
+      const usdc = fetchBalance()
+      await new Promise(r => setTimeout(r, 150))
       if (cancelled) return
-      await new Promise(r => setTimeout(r, 250)) // stagger — avoid firing USDC + EURC + cirBTC in the same tick
-      if (cancelled) return
-      await fetchPortfolio()
+      await Promise.all([usdc, fetchPortfolio()])
       if (cancelled) return
       // PHASE 6 — balance poll lengthened 30s -> 90s, NOT removed.
       // deposit_detected now invalidates the wallet's Arc scope via
