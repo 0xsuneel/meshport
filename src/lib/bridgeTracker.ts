@@ -24,6 +24,7 @@
  */
 import { useNotificationStore } from '@/store'
 import { formatAmount } from './utils'
+import { isMerchantClaim } from './merchant'
 
 // ── Push notification helpers ─────────────────────────────────────────────────
 export function notifyClaimArrived(amount: number, sourceChain: string, timeTakenMs?: number, createdAt?: string, claimId?: string) {
@@ -41,8 +42,12 @@ export function notifyClaimArrived(amount: number, sourceChain: string, timeTake
     // "Claimed from {chain}" — matches ActivityPage.tsx's label for the
     // same claim row (deriveActivityRow / DetailSheet), not the old
     // generic "Funds Arrived!".
-    title:   `Claimed from ${chainLabel}`,
-    body:    `${formatAmount(amount)} USDC arrived on Arc from ${chainLabel}${timeStr}`,
+    // A merchant's claim moves Ledger money to Arc — same wording as the Hub.
+    ...(isMerchantClaim({ createdAt: createdAt ?? new Date().toISOString(), sourceChain })
+      ? { title: `Moved to Arc from ${chainLabel} Ledger`,
+          body:  `$${formatAmount(amount)} USDC from your ${chainLabel} Ledger is now in your Arc balance` }
+      : { title: `Claimed from ${chainLabel}`,
+          body:  `${formatAmount(amount)} USDC arrived on Arc from ${chainLabel}${timeStr}` }),
     isRead:  false,
     timestamp: createdAt,
   })
