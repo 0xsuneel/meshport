@@ -3,15 +3,16 @@
 // over - with one quick reload - only:
 //   • when the page loads: app opened, browser reopened, or refreshed
 //     (behind the opening screen), or
-//   • when the app is about to reload anyway (back after a long time away).
-// Never while someone is using a screen, so an update can't break it.
+//   • when the app is about to reload anyway (back after a long time away), or
+//   • while open, on a resting screen nobody is touching (watchForUpdates).
+// Never in the middle of something, so an update can't break it.
 //
 // The browser only looks for a new version when a page loads, and a phone
 // can keep the app in memory for days. So we also ask for one ourselves:
-// on load, when the app comes back to the screen, and every 30 minutes.
+// on load, when the app comes back to the screen, and every minute while
+// it's open (see watchForUpdates below for switching while open).
 
 const GUARD_KEY = 'mp_sw_update_at'
-const CHECK_EVERY_MS = 30 * 60 * 1000
 
 async function registration(): Promise<ServiceWorkerRegistration | undefined> {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return undefined
@@ -77,23 +78,94 @@ export async function applyWaitingUpdate(opts: { checkMs?: number } = {}): Promi
   }
 }
 
-/** Keep looking for new versions while the app stays open / in memory. */
+// ── Instant updates while the app is open ──────────────────────────────────
+// A new deploy is noticed within a minute (cheap: the browser re-checks the
+// small sw.js file) and switched to as soon as it is safe:
+//   • right away on a "resting" screen (Home, Chats list, Activity, News,
+//     P2P lists, Profile, lock screen…) once nobody has touched the screen
+//     for a few seconds, nothing is being typed and no popup is open;
+//   • the moment the app goes to the background, on those same screens;
+//   • otherwise a small "Update ready" pill - tap it to update now; it also
+//     updates by itself once you're back on a resting screen.
+// Never on screens where money can be moving (Pay, Swap, Bulk, Transfer /
+// Bring, Receive request, Rewards claim, a chat, a P2P trade).
+const CHECK_OPEN_MS = 60 * 1000
+const IDLE_MS = 4000
+const RESTING = [
+  /^\/$/, /^\/chat\/?$/, /^\/activity\/?$/, /^\/insights\/?$/, /^\/news(\/.*)?$/, /^\/notifications\/?$/,
+  /^\/recent-paid\/?$/, /^\/p2p\/?$/, /^\/p2p\/my-(offers|trades)\/?$/, /^\/profile\/?$/, /^\/contacts\/?$/,
+  /^\/auth\/lock\/?$/,
+]
+let lastInput = Date.now()
+
+function onRestingScreen(): boolean {
+  return RESTING.some(r => r.test(window.location.pathname))
+}
+function safeToSwitchNow(): boolean {
+  if (!onRestingScreen()) return false
+  const el = document.activeElement as HTMLElement | null
+  if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return false
+  if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return false
+  return Date.now() - lastInput >= IDLE_MS
+}
+
+function showReadyPill(): void {
+  try {
+    if (document.getElementById('mp-update-ready')) return
+    const el = document.createElement('button')
+    el.id = 'mp-update-ready'
+    el.type = 'button'
+    el.textContent = 'Update ready · Tap to update'
+    Object.assign(el.style, {
+      position: 'fixed', left: '50%', transform: 'translateX(-50%)', zIndex: '10000',
+      top: 'calc(env(safe-area-inset-top, 0px) + 10px)', padding: '8px 14px', borderRadius: '999px',
+      border: 'none', background: 'var(--brand, #12665F)', color: '#fff', cursor: 'pointer',
+      font: '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
+    })
+    el.addEventListener('click', () => { el.remove(); void applyWaitingUpdate() })
+    document.body.appendChild(el)
+  } catch { /* cosmetic only */ }
+}
+
+/** Keep looking for new versions while the app stays open / in memory, and switch as soon as it's safe. */
 export function watchForUpdates(): () => void {
-  if (typeof document === 'undefined') return () => {}
+  if (typeof document === 'undefined' || !('serviceWorker' in navigator)) return () => {}
   let last = Date.now()
   const maybeCheck = () => {
-    if (Date.now() - last < 60_000) return // at most once a minute
+    if (Date.now() - last < 30_000) return
     last = Date.now()
     void checkForUpdate()
   }
-  const onVisible = () => { if (document.visibilityState === 'visible') maybeCheck() }
-  document.addEventListener('visibilitychange', onVisible)
+  const markInput = () => { lastInput = Date.now() }
+  const tryApply = async () => {
+    const reg = await registration()
+    if (!reg?.waiting || !navigator.serviceWorker.controller) return
+    if (document.visibilityState === 'hidden' ? onRestingScreen() : safeToSwitchNow()) {
+      document.getElementById('mp-update-ready')?.remove()
+      void applyWaitingUpdate()
+    } else if (document.visibilityState === 'visible') {
+      showReadyPill()
+    }
+  }
+  const onVisibility = () => {
+    if (document.visibilityState === 'visible') maybeCheck()
+    else void tryApply() // going to the background: switch now if it's safe
+  }
+  // A new version that finishes downloading while we're open.
+  void registration().then(reg => reg?.addEventListener('updatefound', () => {
+    const sw = reg.installing
+    sw?.addEventListener('statechange', () => { if (sw.state === 'installed') void tryApply() })
+  }))
+  for (const ev of ['pointerdown', 'keydown', 'touchstart', 'wheel']) window.addEventListener(ev, markInput, { passive: true, capture: true })
+  document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('online', maybeCheck)
-  const timer = setInterval(() => { if (document.visibilityState === 'visible') { last = 0; maybeCheck() } }, CHECK_EVERY_MS)
+  const checkTimer = setInterval(() => { if (document.visibilityState === 'visible') { last = 0; maybeCheck() } }, CHECK_OPEN_MS)
+  const applyTimer = setInterval(() => { void tryApply() }, 2000)
   return () => {
-    document.removeEventListener('visibilitychange', onVisible)
+    for (const ev of ['pointerdown', 'keydown', 'touchstart', 'wheel']) window.removeEventListener(ev, markInput, { capture: true })
+    document.removeEventListener('visibilitychange', onVisibility)
     window.removeEventListener('online', maybeCheck)
-    clearInterval(timer)
+    clearInterval(checkTimer); clearInterval(applyTimer)
   }
 }
 
