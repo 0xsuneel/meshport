@@ -248,7 +248,7 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
         {([['chains', 'Chains'], ['requests', `Requests${openRequests.length ? ` (${openRequests.length})` : ''}`], ['customers', 'Customers']] as const).map(([id, text]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
             style={{ flex: 1, padding: '8px 4px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700,
-              background: tab === id ? 'color-mix(in srgb, var(--brand) 16%, transparent)' : 'transparent', color: tab === id ? 'var(--brand-text)' : 'var(--text-secondary)' }}>
+              background: tab === id ? 'var(--brand)' : 'transparent', color: tab === id ? '#fff' : 'var(--text-secondary)' }}>
             {text}
           </button>
         ))}

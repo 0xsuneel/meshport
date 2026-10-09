@@ -232,9 +232,9 @@ export function LedgerInsightsPage() {
           {(['week', 'month', 'year'] as Period[]).map(p => (
             <button key={p} onClick={() => setPeriod(p)} style={{
               padding: '6px 12px', borderRadius: 22, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-              background: period === p ? 'color-mix(in srgb, var(--brand) 25%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
-              border: `1px solid color-mix(in srgb, var(--brand) ${period === p ? 45 : 20}%, transparent)`,
-              color: period === p ? 'var(--text-primary)' : 'var(--brand-text)',
+              background: period === p ? 'var(--brand)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
+              border: `1px solid ${period === p ? 'var(--brand)' : 'color-mix(in srgb, var(--brand) 20%, transparent)'}`,
+              color: period === p ? '#fff' : 'var(--brand-text)',
             }}>{PERIOD_LABEL[p]}</button>
           ))}
         </div>

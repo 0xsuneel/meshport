@@ -547,9 +547,9 @@ export function P2PAdminPage() {
           <button key={t} onClick={() => setOfferTab(t)} style={{
             padding: '6px 13px', borderRadius: 16,
             border: `1px solid ${offerTab === t ? COLORS.primary : COLORS.border}`,
-            background: offerTab === t ? 'color-mix(in srgb, var(--brand) 12%, transparent)' : 'none', cursor: 'pointer',
+            background: offerTab === t ? 'var(--brand)' : 'none', cursor: 'pointer',
           }}>
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: offerTab === t ? 'var(--accent-text)' : COLORS.muted, textTransform: 'capitalize' }}>{t}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: offerTab === t ? '#fff' : COLORS.muted, textTransform: 'capitalize' }}>{t}</span>
           </button>
         ))}
       </div>

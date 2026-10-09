@@ -696,11 +696,11 @@ export function BulkPayoutPage() {
             Template link drops to its icon. */}
         <div className="flex gap-1.5 min-[360px]:gap-2 mt-3">
           <button onClick={() => setEntryMode('manual')}
-            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${entryMode === 'manual' ? 'bg-brand/15 text-brand-text border border-brand/30' : 'text-text-secondary border border-border'}`}>
+            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${entryMode === 'manual' ? 'bg-brand text-white border border-brand' : 'text-text-secondary border border-border'}`}>
             <Plus className="w-3.5 h-3.5" /> Manual Entry
           </button>
           <button onClick={() => setEntryMode('csv')}
-            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${entryMode === 'csv' ? 'bg-brand/15 text-brand-text border border-brand/30' : 'text-text-secondary border border-border'}`}>
+            className={`flex items-center gap-1.5 px-2.5 min-[360px]:px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all ${entryMode === 'csv' ? 'bg-brand text-white border border-brand' : 'text-text-secondary border border-border'}`}>
             <Upload className="w-3.5 h-3.5" /> Upload CSV
           </button>
           <button onClick={downloadCSVTemplate} aria-label="Download CSV template" title="Download CSV template"
