@@ -1277,7 +1277,7 @@ export function MultichainPage() {
                       background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
                       border: has ? '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' : '1px solid var(--border)' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.25, overflowWrap: 'normal' }}>{c.label}</div>
+                      <div style={{ fontSize: 'min(15px, 4.1vw)', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.25, overflowWrap: 'normal' }}>{c.label}</div>
                       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                         {ub && (
                           <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
@@ -1291,8 +1291,9 @@ export function MultichainPage() {
                     </div>
                     {/* The name keeps at least ~40% of the row; a long amount shrinks
                         (and its USDC wraps under it) instead of squeezing the name. */}
-                    <span style={{ fontSize: 'min(16px, 4.2vw)', fontWeight: 800, color: has ? 'var(--text-primary)' : 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', flexShrink: 1, minWidth: 0, maxWidth: '58%', textAlign: 'right', overflowWrap: 'anywhere' }}>
-                      {has ? formatAmount(c.balance) : '0'} USDC
+                    <span style={{ fontSize: 'min(16px, 4.2vw)', fontWeight: 800, color: has ? 'var(--text-primary)' : 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', flexShrink: 1, minWidth: 0, maxWidth: '58%', textAlign: 'right' }}>
+                      {/* The number never breaks; "USDC" drops under it when needed. */}
+                      <span style={{ whiteSpace: 'nowrap' }}>{has ? formatAmount(c.balance) : '0'}</span> <span style={{ whiteSpace: 'nowrap' }}>USDC</span>
                     </span>
                   </button>
                 )
