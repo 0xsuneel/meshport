@@ -3,9 +3,11 @@
  * so it shows with the first paint instead of loading a moment later. One
  * component so Sign in, Lock and About show the same tile and shadow.
  */
-export function MeshPortLogo({ className = '' }: { className?: string }) {
+export function MeshPortLogo({ className = '', splashTarget = false }: { className?: string; splashTarget?: boolean }) {
   return (
     <svg role="img" aria-label="MeshPort" viewBox="8 8 184 184"
+      // The opening screen's logo glides into this one (SplashRemover in App.tsx).
+      data-splash-target={splashTarget ? '' : undefined}
       className={`shadow-elevation-2 ${className}`}
       // 23% matches the tile's own corner (rx 42 of 184), so the shadow hugs it.
       style={{ display: 'block', borderRadius: '23%' }}>

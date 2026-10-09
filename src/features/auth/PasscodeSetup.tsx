@@ -428,6 +428,7 @@ export function PasscodeLockPage() {
         }).catch(() => {})
     } else {
       setChecking(false)
+      setBiometricTrying(false) // a fingerprint that recovered a stale passcode: back to the keys
       setAttempts(a => a + 1)
       setLockoutMs(getPasscodeLockoutRemainingMs())
       setError(true); setInput('')
@@ -442,7 +443,9 @@ export function PasscodeLockPage() {
     if (!walletAddress || biometricTrying) return
     setBiometricTrying(true)
     const pc = await verifyBiometricAndGetPasscode(walletAddress, storedPasscodeHash ?? undefined)
-    setBiometricTrying(false)
+    // Accepted: stay on "Waiting…" until Home is up - switching back to "Tap
+    // to use biometrics" for that moment read like the scan had failed.
+    if (!pc) setBiometricTrying(false)
     // A cancelled/failed biometric check just falls back to the normal
     // passcode entry already on screen - no error shown, since cancelling
     // is an entirely normal choice here, not a mistake.
@@ -507,7 +510,7 @@ export function PasscodeLockPage() {
   return (
     <div className="flex flex-col h-full bg-bg px-6 py-safe">
       <div className="flex-1 flex flex-col items-center justify-center gap-2">
-        <MeshPortLogo className="w-20 h-20 mx-auto mb-2" />
+        <MeshPortLogo className="w-20 h-20 mx-auto mb-2" splashTarget />
         <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">MeshPort</h2>
         <p className="text-text-secondary text-[14px] leading-[1.5]">
           {noPasscode ? `Signed in as ${displayName}` : mode === 'bio' ? `Unlock with ${label === 'Fingerprint' ? 'your fingerprint' : label === 'Face ID' ? 'Face ID' : 'biometrics'}` : 'Enter passcode to unlock'}

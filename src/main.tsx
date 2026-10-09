@@ -66,7 +66,12 @@ clearLegacyData()
   const auth = useAuthStore.getState()
   if ((!hadSession || awayTooLong) && auth.isAuthenticated && auth.passcodeLockEnabled && !auth.isLocked) auth.lock()
   // Start fetching the lock screen now, so the splash goes straight to it.
-  if (useAuthStore.getState().isLocked) import('./features/auth/PasscodeSetup').catch(() => {})
+  if (useAuthStore.getState().isLocked) {
+    import('./features/auth/PasscodeSetup').catch(() => {})
+    // And Home behind it, so it shows the instant the fingerprint / passcode
+    // is accepted instead of loading only then (~1s on a mid-range phone).
+    setTimeout(() => { import('./features/home/HomePage').catch(() => {}) }, 400)
+  }
 }
 
 // Page loading (app opened, browser reopened or refreshed): if a new version
