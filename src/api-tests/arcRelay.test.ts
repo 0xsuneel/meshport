@@ -32,6 +32,20 @@ describe('meshport_sendRawTransactionAndWait', () => {
     expect(sends.length).toBeGreaterThan(1) // every endpoint, not just one
   })
 
+  it('does not wait for a slow node once another accepted', async () => {
+    let n = 0
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: any) => {
+      const { method, id } = JSON.parse(init.body)
+      if (method === 'eth_sendRawTransaction' && n++ === 0) await new Promise(r => setTimeout(r, 4000)) // first node hangs
+      const out = method === 'eth_sendRawTransaction' ? { result: HASH } : { result: { status: '0x1', blockNumber: '0x1' } }
+      return new Response(JSON.stringify({ jsonrpc: '2.0', id, ...out }), { status: 200 })
+    }))
+    const t0 = Date.now()
+    const r = await relay([RAW, HASH, 2000])
+    expect(r.result.status).toBe('success')
+    expect(Date.now() - t0).toBeLessThan(1500)
+  })
+
   it('a reverted receipt is failed', async () => {
     stub(m => m === 'eth_sendRawTransaction' ? { result: HASH } : { result: { status: '0x0', blockNumber: '0x2b' } })
     expect((await relay([RAW, HASH, 2000])).result.status).toBe('failed')

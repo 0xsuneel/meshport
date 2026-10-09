@@ -277,7 +277,7 @@ const RELAY_METHOD = 'meshport_sendRawTransactionAndWait'
 const RELAY_REJECTED = -32003
 const ALREADY_SENT = /already known|known transaction|already imported|nonce too low|replacement transaction underpriced/i
 
-async function relaySend(
+export async function relaySend(
   account: PrivateKeyAccount,
   tx: { to: `0x${string}`; value?: bigint; data?: `0x${string}`; gas: bigint; nonce: number },
   onSent: (hash: `0x${string}`) => void,
