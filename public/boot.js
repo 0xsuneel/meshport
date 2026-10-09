@@ -47,20 +47,28 @@
           // the launch screen's logo was (otherwise it jumps down at the
           // hand-over). With 3-button navigation the bar at the bottom is
           // missing too, so only the part above it is counted.
+          // Measured once: correcting it a frame later moved the logo on
+          // screen (a visible hop right after opening). If the viewport isn't
+          // known yet this early (0, or larger than the screen), the logo
+          // stays hidden until the next frame has the real size.
           var setLift = function () {
-            var missing = Math.max(0, (screen.height || 0) - window.innerHeight);
-            if (!window.innerHeight) return;
+            var h = window.innerHeight, sh = screen.height || 0;
+            if (!h || (sh && h > sh)) return false;
+            var missing = Math.max(0, sh - h);
             var lift = missing > 60 ? Math.max(0, missing - 48) / 2 : missing / 2;
             document.documentElement.style.setProperty('--mp-splash-lift', Math.min(lift, 40) + 'px');
+            return true;
           };
-          setLift();
-          // The viewport size may not be final this early: measure again
-          // before the first frame is drawn.
-          requestAnimationFrame(setLift);
+          if (!setLift()) {
+            document.documentElement.classList.add('mp-lift-pending');
+            requestAnimationFrame(function () {
+              setLift();
+              document.documentElement.classList.remove('mp-lift-pending');
+            });
+          }
           var tc = document.createElement('meta');
           tc.name = 'theme-color'; tc.content = '#0F5C57'; tc.id = 'mp-splash-theme';
           document.head.insertBefore(tc, document.head.firstChild);
-          setTimeout(function () { document.documentElement.classList.add('mp-splash-slow'); }, 2500);
         }
       } catch (e) {}
 

@@ -531,9 +531,14 @@ function SplashRemover() {
           tile.style.transformOrigin = 'center'
           splash.style.transition = `background-color ${FLY_MS}ms ease`
           splash.style.pointerEvents = 'none'
-          const start = performance.now()
+          // Timed from the first frame it draws, never from before it: a
+          // frame's timestamp can be earlier than performance.now() here (by a
+          // lot on a slow phone), and a negative progress made the logo jump
+          // down and grow for a frame before gliding up.
+          let start = -1
           const frame = (now: number) => {
-            const t = Math.min(1, (now - start) / FLY_MS), k = ease(t)
+            if (start < 0) start = now
+            const t = Math.min(1, Math.max(0, (now - start) / FLY_MS)), k = ease(t)
             const r = target.getBoundingClientRect()
             const dx = (r.left + r.width / 2) - (a.left + a.width / 2)
             const dy = (r.top + r.height / 2) - (a.top + a.height / 2)

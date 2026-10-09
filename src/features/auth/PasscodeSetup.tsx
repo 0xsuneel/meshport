@@ -362,7 +362,11 @@ export function PasscodeLockPage() {
   // Biometric on → fingerprint / Face ID first; the number pad appears once
   // the scan fails or is cancelled, or on "Use passcode".
   const [mode, setMode] = useState<'bio' | 'pin'>(() => (biometricReady ? 'bio' : 'pin'))
-  useEffect(() => { if (liveSupported === false) setMode('pin') }, [liveSupported])
+  // The prompt is about to open by itself (below): show "Waiting for…" from
+  // the first frame. Showing "Tap to use…" until the prompt opened flipped
+  // the text right as the lock screen appeared.
+  const [autoPending, setAutoPending] = useState(() => biometricReady && typeof document !== 'undefined' && document.visibilityState === 'visible')
+  useEffect(() => { if (liveSupported === false) { setMode('pin'); setAutoPending(false) } }, [liveSupported])
 
   const handleUnlock = async (val: string) => {
     setChecking(true)
@@ -442,6 +446,7 @@ export function PasscodeLockPage() {
   const tryBiometric = async () => {
     if (!walletAddress || biometricTrying) return
     setBiometricTrying(true)
+    setAutoPending(false)
     const pc = await verifyBiometricAndGetPasscode(walletAddress, storedPasscodeHash ?? undefined)
     // Accepted: stay on "Waiting…" until Home is up - switching back to "Tap
     // to use biometrics" for that moment read like the scan had failed.
@@ -478,11 +483,11 @@ export function PasscodeLockPage() {
   // the device can't do it the call just fails into the passcode pad.
   const canAuto = biometricReady && liveSupported !== false
   useEffect(() => {
-    if (!canAuto) return
+    if (!canAuto) { setAutoPending(false); return }
     let timer: ReturnType<typeof setTimeout> | undefined
     let cancelSplash = () => {}
     const run = () => {
-      if (autoTriedRef.current || inputRef.current.length > 0) return
+      if (autoTriedRef.current || inputRef.current.length > 0) { setAutoPending(false); return }
       autoTriedRef.current = true
       tryBiometricRef.current()
     }
@@ -531,8 +536,8 @@ export function PasscodeLockPage() {
           <>
             {/* Same space as dots + status line + number pad, so "Use
                 passcode" swaps in place without the logo moving. */}
-            <BiometricFirst Icon={BiometricIcon} label={label} trying={biometricTrying} onTry={tryBiometric}
-              onUsePasscode={() => setMode("pin")} height={374} />
+            <BiometricFirst Icon={BiometricIcon} label={label} trying={biometricTrying || autoPending} onTry={tryBiometric}
+              onUsePasscode={() => { setAutoPending(false); setMode("pin") }} height={374} />
             <button onClick={handleSignOut} className="mt-6 text-text-muted text-sm hover:text-text-secondary transition-colors">
               Sign out
             </button>
