@@ -17,7 +17,7 @@ export interface AuthState {
 }
 
 // Transactions
-// 'bridge' kept for backward-compat with old persisted records — treat as 'multichain'
+// 'bridge' kept for backward-compat with old persisted records - treat as 'multichain'
 export type TransactionType = 'sent' | 'received' | 'treasury' | 'rewards' | 'bulk_payout' | 'multichain' | 'bridge' | 'merchant'
 export type TransactionStatus = 'completed' | 'pending' | 'failed'
 

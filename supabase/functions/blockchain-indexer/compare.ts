@@ -3,7 +3,7 @@
 // Pure comparison logic for shadow mode: does BlockchainIndexer see the same
 // on-chain facts the legacy workers record?
 //
-// Pure (no I/O) so it is testable — this is the logic that decides the cutover
+// Pure (no I/O) so it is testable - this is the logic that decides the cutover
 // gate, so it gets the same scrutiny as the cursor math. The DB reads and the
 // report persistence live in monitor.ts; this file only classifies.
 //
@@ -23,7 +23,7 @@
 // ── Two scopes, with different ownership ────────────────────────────────────
 //   deposits : indexer deposit_detected/transfer_detected  vs  activity rows
 //              where activity_type = 'receive'. A genuine like-for-like
-//              comparison — both systems are supposed to detect these.
+//              comparison - both systems are supposed to detect these.
 //              Two populations are narrowed out of this scope before counting,
 //              both because the two systems have different remits rather than
 //              because either is wrong: rows for unregistered external
@@ -46,20 +46,20 @@ export type IndexerEventLike = {
    * Phase 3 (real-state audit finding #1): monitor.ts's query previously had
    * no status filter at all, so compareDeposits could be handed a mix of
    * 'pending' and 'confirmed' indexer events. status is now read and
-   * enforced HERE as well as at the query level (monitor.ts) — defense in
+   * enforced HERE as well as at the query level (monitor.ts) - defense in
    * depth, and what makes this rule unit-testable without a live database.
    * Optional so existing callers/tests that never populate it keep working
    * unchanged (treated as "unknown, don't filter on it" rather than
    * silently excluded).
    */
   status?: string | null
-  /** For the TIMING_DIFFERENCE classification — see classifyTiming below. */
+  /** For the TIMING_DIFFERENCE classification - see classifyTiming below. */
   created_at?: string | null
   /**
    * The scanner's event payload. Only the sender is read here, and it is
    * written under TWO different keys depending on which detection path
    * produced the event: `sender` (ERC-20 log path and native-transfer-log
-   * path) or `from` (the USDC wrapper path). Both are checked — reading only
+   * path) or `from` (the USDC wrapper path). Both are checked - reading only
    * one would leave that path's swap outputs still counted as indexer_only,
    * which is precisely the failure this exclusion exists to prevent.
    */
@@ -70,7 +70,7 @@ export type IndexerEventLike = {
  * Only a 'confirmed' indexer event may be compared at all. A 'pending' event
  * can still be reorged away and comparing it against activity (which only
  * ever contains confirmed, credited rows) is not a like-for-like comparison.
- * Mirrors activity-consumer/decide.ts's CREDITABLE_STATUS exactly — the two
+ * Mirrors activity-consumer/decide.ts's CREDITABLE_STATUS exactly - the two
  * should never disagree about what "confirmed enough to count" means.
  */
 export const COMPARABLE_STATUS = 'confirmed'
@@ -78,14 +78,14 @@ export const COMPARABLE_STATUS = 'confirmed'
 /**
  * Circle Kit / CCTP infrastructure contracts on Arc.
  *
- * Mirrors KNOWN_INTERNAL_CONTRACTS in deposit-scan-all/index.ts — kept in sync
+ * Mirrors KNOWN_INTERNAL_CONTRACTS in deposit-scan-all/index.ts - kept in sync
  * manually, exactly as that set in turn mirrors CIRCLE_CONTRACTS in
  * api/relay-rpc.js. These are static testnet deployment addresses.
  *
  * deposit-scan-all skips a candidate whose sender is one of these OUTRIGHT, on
  * the grounds that it is definitionally not an external deposit: a swap's
  * output leg is a Transfer FROM the Kit Adapter Contract, not from any wallet a
- * person or exchange controls. The indexer has no such rule — it reports the
+ * person or exchange controls. The indexer has no such rule - it reports the
  * transfer it observed, which is correct behaviour for a general-purpose
  * indexer. The disagreement is therefore a difference in SCOPE, not a defect on
  * either side, and it belongs in the comparison layer rather than in either
@@ -97,16 +97,16 @@ export const KNOWN_INTERNAL_CONTRACTS = new Set([
   '0x7865fafc2db2093669d92c0f33aeef291086befd',
   '0xacf1ceef35caac005e15888ddb8a3515c41b4872',
   '0xc5567a5e3370d4dbfb0540025078e283e36a363d', // Kit Bridge Contract testnet
-  '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b', // Kit Adapter Contract testnet — swaps route through this
+  '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b', // Kit Adapter Contract testnet - swaps route through this
   '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa', // CCTP V2 TokenMessenger
   '0xe737e5cebeeba77efe34d4aa090756590b1ce275', // CCTP V2 MessageTransmitter
-  // Multicall3 — BulkPay routes through this. deposit-scan-all's own copy of
+  // Multicall3 - BulkPay routes through this. deposit-scan-all's own copy of
   // this list (and activity-consumer's) were both missing this entry until
-  // 2026-09-02 (see those files' own comments — live production evidence,
+  // 2026-09-02 (see those files' own comments - live production evidence,
   // tx 0xac28f48b…/0x22b268c5…, both BulkPay self-sends). This file's own
   // header already documents that a KNOWN_INTERNAL_CONTRACTS-excluded sender
   // should be narrowed OUT of the deposit-comparison scope rather than
-  // counted as a worker_only discrepancy — without this entry, every future
+  // counted as a worker_only discrepancy - without this entry, every future
   // BulkPay self-send would misclassify as exactly that kind of false
   // discrepancy the moment the OTHER two files' fix landed and this one
   // didn't. Added to keep this file in the same state as its two siblings.
@@ -114,7 +114,7 @@ export const KNOWN_INTERNAL_CONTRACTS = new Set([
 ])
 
 /**
- * The event's sender, if it is a known internal contract — else null.
+ * The event's sender, if it is a known internal contract - else null.
  * Tolerates a missing/odd-shaped metadata payload rather than throwing: a
  * comparison run must never die on one malformed row.
  */
@@ -133,27 +133,27 @@ export type WorkerRowLike = {
   activity_type?: string
   status?: string
   destination_tx_hash?: string | null
-  /** For the TIMING_DIFFERENCE classification — see classifyTiming below. */
+  /** For the TIMING_DIFFERENCE classification - see classifyTiming below. */
   created_at?: string | null
 }
 
 /**
- * PASS            — a real comparison ran and the indexer matched the worker.
- * FAIL            — a real comparison ran and there was a discrepancy.
- * NOT_COMPARABLE  — the comparison could not be trusted (indexer behind head,
+ * PASS            - a real comparison ran and the indexer matched the worker.
+ * FAIL            - a real comparison ran and there was a discrepancy.
+ * NOT_COMPARABLE  - the comparison could not be trusted (indexer behind head,
  *                   or nothing in the window). Counts are meaningless.
- * NOT_APPLICABLE  — this scope is not the indexer's responsibility at all.
+ * NOT_APPLICABLE  - this scope is not the indexer's responsibility at all.
  */
 export type ComparisonStatus = 'PASS' | 'FAIL' | 'NOT_COMPARABLE' | 'NOT_APPLICABLE'
 
 /**
- * Fine-grained classification for one mismatch item — Phase 3 Fix 3. The
+ * Fine-grained classification for one mismatch item - Phase 3 Fix 3. The
  * point is to stop the raw indexer_only/worker_only counts from conflating
  * "the indexer or the worker genuinely missed something" with "this was
  * already correctly accounted for, just not under the activity_type this
  * comparison originally checked for" or "the two sides just haven't caught
  * up with each other yet". See docs/PHASE_3_REAL_STATE_AUDIT.md §7/§8 for
- * the live-traced evidence this classification is built from — every
+ * the live-traced evidence this classification is built from - every
  * `indexer_only` case actually traced in that audit fell into
  * ACCOUNTED_FOR_OTHER_ACTIVITY or TIMING_DIFFERENCE, none into
  * TRUE_INDEXER_ONLY.
@@ -169,7 +169,7 @@ export type MismatchClassification =
 export interface ClassifiedKey {
   wallet: string
   tx: string
-  /** Populated for ACCOUNTED_FOR_OTHER_ACTIVITY — which activity_type covered it. */
+  /** Populated for ACCOUNTED_FOR_OTHER_ACTIVITY - which activity_type covered it. */
   activityType?: string
 }
 
@@ -192,22 +192,22 @@ export interface ComparisonResult {
   reason: string | null
   /** RECEIVE_MATCH count. */
   matched: number
-  /** RAW worker_only total — every worker row with no indexer counterpart, unclassified. Kept for trend continuity with pre-Fix-3 reports. */
+  /** RAW worker_only total - every worker row with no indexer counterpart, unclassified. Kept for trend continuity with pre-Fix-3 reports. */
   workerOnly: number
-  /** RAW indexer_only total — every indexer event with no receive-type worker counterpart, unclassified (this is the number Fix 3 exists to stop being read as "the miss count"). */
+  /** RAW indexer_only total - every indexer event with no receive-type worker counterpart, unclassified (this is the number Fix 3 exists to stop being read as "the miss count"). */
   indexerOnly: number
   /**
    * Corrected recall: (matched + accountedForOtherActivity) / (matched +
    * accountedForOtherActivity + trueIndexerOnly). NULL unless a real
    * comparison ran. This is a DIFFERENT formula than before Fix 3 (which was
-   * matched / (matched + workerOnly)) — the old formula is still derivable
+   * matched / (matched + workerOnly)) - the old formula is still derivable
    * from the raw fields above if needed for historical trend comparison.
    */
   recallPct: number | null
   workerOnlyKeys: Array<{ wallet: string; tx: string }>
   indexerOnlyKeys: Array<{ wallet: string; tx: string }>
   /**
-   * Rows dropped because their wallet is not a registered MeshPort wallet —
+   * Rows dropped because their wallet is not a registered MeshPort wallet -
    * client-written bookkeeping for external recipients. Reported so an
    * operator can see the comparison narrowed, rather than the rows silently
    * vanishing. Absent when no registry was supplied.
@@ -221,9 +221,9 @@ export interface ComparisonResult {
    */
   internalExcluded?: number
   /**
-   * Phase 3 Fix 3 — the refined breakdown. Every item counted in indexerOnly
+   * Phase 3 Fix 3 - the refined breakdown. Every item counted in indexerOnly
    * or workerOnly above is classified into exactly one of these three
-   * buckets (they sum to indexerOnly + workerOnly). Nothing is hidden —
+   * buckets (they sum to indexerOnly + workerOnly). Nothing is hidden -
    * accountedForOtherActivity and timingDifference are still fully visible,
    * just correctly labeled as not being real misses.
    */
@@ -263,7 +263,7 @@ const DEPOSIT_EVENT_TYPES = new Set(['deposit_detected', 'transfer_detected'])
 /**
  * Events the indexer would emit if it owned claim detection.
  *
- * It does not, and that is deliberate — see D-3 and the file header. Keeping
+ * It does not, and that is deliberate - see D-3 and the file header. Keeping
  * this as its own set (rather than reusing DEPOSIT_EVENT_TYPES) is the actual
  * fix for the deployed defect where four ordinary USDC/EURC deposits were
  * counted as rogue claim events, producing indexer_only = 4 in the claims
@@ -277,7 +277,7 @@ const CLAIM_EVENT_TYPES = new Set(['claim_completed'])
  * The two systems observe the same on-chain event at very different wall-clock
  * times while the indexer is catching up: the worker records a deposit the
  * moment it lands, whereas the indexer writes its row when its cursor reaches
- * that block — potentially hours later. Since both tables are filtered by row
+ * that block - potentially hours later. Since both tables are filtered by row
  * creation time, a lagging indexer's events never meet their worker
  * counterparts, and every one is misreported as indexer_only.
  *
@@ -293,7 +293,7 @@ export function assessComparability(
   maxBacklogBlocks: number,
 ): Comparability {
   if (!cursor) {
-    return { comparable: false, reason: 'no cursor row — indexer has never run', backlogBlocks: null }
+    return { comparable: false, reason: 'no cursor row - indexer has never run', backlogBlocks: null }
   }
   if (cursor.sync_state === 'paused') {
     return { comparable: false, reason: 'chain is paused', backlogBlocks: null }
@@ -313,7 +313,7 @@ export function assessComparability(
     return {
       comparable: false,
       backlogBlocks: backlog,
-      reason: `indexer ${backlog} blocks behind head (max ${maxBacklogBlocks}) — ` +
+      reason: `indexer ${backlog} blocks behind head (max ${maxBacklogBlocks}) - ` +
               'its events describe blocks older than this window, so counts would be meaningless',
     }
   }
@@ -340,7 +340,7 @@ function notComparable(scope: 'deposits' | 'claims', reason: string): Comparison
  * cases: every one of the persistently-recurring `indexer_only` mismatches
  * resolved to a correctly-credited row under one of these four types. This
  * is deliberately NOT the same mechanism as Fix C (KNOWN_INTERNAL_CONTRACTS
- * — an indexer-side sender-address exclusion, applied before matching) —
+ * - an indexer-side sender-address exclusion, applied before matching) -
  * this is a worker-side classification, applied only to events that failed
  * to match a 'receive' row, exactly mirroring Fix C's own safety ordering
  * (see the comment on compareDeposits below) so it can only ever reclassify
@@ -365,21 +365,21 @@ function isRecent(isoTimestamp: string | null | undefined, now: number): boolean
  * ── registeredWallets, and why it is required ───────────────────────────────
  * Not every `activity` row with activity_type='receive' represents something
  * the indexer is supposed to detect. When a MeshPort user sends to an ordinary
- * external address, the CLIENT writes BOTH sides of the transfer at send time —
+ * external address, the CLIENT writes BOTH sides of the transfer at send time -
  * a `send_` row for the sender and a `recv_` row for the recipient, inserted
  * milliseconds apart. The recipient may be any valid address; it does not have
  * to be a MeshPort wallet.
  *
  * Confirmed on live data: two transfers to 0x70e3fb28…af8e produced `recv_`
  * rows even though that address appears NOWHERE in the database except
- * `activity` — not in users, not in wallet_vault, not in any other table. The
+ * `activity` - not in users, not in wallet_vault, not in any other table. The
  * indexer only watches wallets in users.wallet_address, so it correctly emitted
  * nothing for them. Comparing against those rows anyway manufactured permanent
  * worker_only misses that no indexer change could ever clear.
  *
  * So the comparison population is restricted to transactions involving a
  * CURRENTLY-REGISTERED MeshPort wallet. `activity.wallet_address` is emphatically
- * NOT a wallet registry — it contains external counterparties. users.wallet_address
+ * NOT a wallet registry - it contains external counterparties. users.wallet_address
  * is the canonical registry and is what the indexer itself reads.
  *
  * Both sides are filtered, not just worker rows. Filtering only one side would
@@ -393,13 +393,13 @@ function isRecent(isoTimestamp: string | null | undefined, now: number): boolean
  * ── Phase 3 Fix 3/4 additions ────────────────────────────────────────────────
  * `workerRows` is now expected to include non-'receive' activity_types too
  * (swap/bulk/p2p_purchase/p2p_refund) so ACCOUNTED_FOR_OTHER_ACTIVITY can be
- * computed — see ACCOUNTED_FOR_ACTIVITY_TYPES above. Passing only 'receive'
+ * computed - see ACCOUNTED_FOR_ACTIVITY_TYPES above. Passing only 'receive'
  * rows (the pre-Fix-3 caller shape) still works correctly, it just means
  * accountedForOtherActivity will always be 0 for that caller, which is the
  * same behavior as before Fix 3.
  *
  * `indexerEvents` with a `status` other than 'confirmed' are dropped before
- * anything else (Fix 4) — defense in depth alongside monitor.ts's own query
+ * anything else (Fix 4) - defense in depth alongside monitor.ts's own query
  * filter. Events with no `status` field at all are NOT dropped, so existing
  * tests/callers that never populate it are unaffected.
  */
@@ -414,7 +414,7 @@ export function compareDeposits(
     return notComparable('deposits', comparability.reason ?? 'window not comparable')
   }
 
-  // Fix 4 — defense in depth. A 'pending'/'reorged' event is not a like-for-
+  // Fix 4 - defense in depth. A 'pending'/'reorged' event is not a like-for-
   // like comparison against activity (always confirmed, credited rows).
   // Events with no status field at all pass through unfiltered, so this is
   // additive, not a behavior change for any existing caller that doesn't
@@ -444,7 +444,7 @@ export function compareDeposits(
     }
   }
 
-  // RECEIVE_MATCH population — unchanged from before Fix 3.
+  // RECEIVE_MATCH population - unchanged from before Fix 3.
   const receiveRows = scopedWorkerRows.filter(r => (r.activity_type ?? 'receive') === 'receive')
   const workerKeys = new Set<string>()
   for (const r of receiveRows) {
@@ -452,7 +452,7 @@ export function compareDeposits(
     if (k) workerKeys.add(`${k.wallet}:${k.tx}`)
   }
 
-  // ACCOUNTED_FOR_OTHER_ACTIVITY population — Fix 3. Keyed the same way, so
+  // ACCOUNTED_FOR_OTHER_ACTIVITY population - Fix 3. Keyed the same way, so
   // it can be consulted with the exact same `full` key used for matching.
   const accountedForByKey = new Map<string, string>() // "wallet:tx" -> activity_type
   for (const r of scopedWorkerRows) {
@@ -469,12 +469,12 @@ export function compareDeposits(
   const accountedForOtherActivityKeys: ClassifiedKey[] = []
   const timingDifferenceKeys: ClassifiedKey[] = []
   // Fix C. Suppression is applied ONLY to events that failed to match a worker
-  // row — never before matching. That ordering is the safety property:
+  // row - never before matching. That ordering is the safety property:
   //
   //   * If a worker row DOES exist for the transaction, the event matches
   //     normally. Filtering internal senders up front would have deleted the
   //     indexer's half of a genuine pair and manufactured a false worker_only
-  //     — turning a fix for a cosmetic mismatch into a fake recall drop.
+  //     - turning a fix for a cosmetic mismatch into a fake recall drop.
   //   * If no worker row exists, the event is the known scope difference:
   //     deposit-scan-all deliberately never wrote a row for it.
   //
@@ -523,7 +523,7 @@ export function compareDeposits(
   ).length
 
   // indexerOnlyKeys (raw, unclassified) is kept for backward-compatible
-  // trend continuity with pre-Fix-3 reports — it is exactly the union of the
+  // trend continuity with pre-Fix-3 reports - it is exactly the union of the
   // three classified buckets above.
   const indexerOnlyKeys: Array<{ wallet: string; tx: string }> = [
     ...trueIndexerOnlyKeys, ...accountedForOtherActivityKeys, ...timingDifferenceKeys,
@@ -554,7 +554,7 @@ export function compareDeposits(
   const timingDifference = timingDifferenceKeys.length
   const trueWorkerOnly = workerOnlyKeys.length - workerOnlyTimingKeys.length
 
-  // Corrected recall — see the ComparisonResult.recallPct doc comment for
+  // Corrected recall - see the ComparisonResult.recallPct doc comment for
   // why this formula differs from the pre-Fix-3 one.
   const recallDenom = matched + accountedForOtherActivity + trueIndexerOnly
   const recallPct = recallDenom === 0 ? null : Math.round(((matched + accountedForOtherActivity) / recallDenom) * 10000) / 100
@@ -562,12 +562,12 @@ export function compareDeposits(
   // A window whose entire content was suppressed proves nothing, exactly like
   // the empty window above. Without this, such a window would fall through to
   // the `clean` test, fail it on `matched > 0`, and be reported as a FAIL whose
-  // three counts are all zero — "not measured" wearing the costume of a
+  // three counts are all zero - "not measured" wearing the costume of a
   // discrepancy. Zero is never a stand-in for "not measured".
   if (matched === 0 && workerOnly === 0 && indexerOnly === 0 && internalExcluded > 0) {
     return {
       ...notComparable('deposits',
-        `no comparable deposit events in this window — all ${internalExcluded} indexer ` +
+        `no comparable deposit events in this window - all ${internalExcluded} indexer ` +
         'event(s) were Circle Kit/CCTP internal-contract transfers, which ' +
         'deposit-scan-all excludes by design'),
       externalExcluded: excludedExternal,
@@ -577,7 +577,7 @@ export function compareDeposits(
 
   // A window whose only content is timing-difference items hasn't actually
   // proven anything either way (mirrors the empty-window/all-internal-
-  // excluded principle above) — it's not a clean PASS (we don't yet know the
+  // excluded principle above) - it's not a clean PASS (we don't yet know the
   // true outcome) and forcing it to FAIL would misreport a probably-fine
   // situation as a discrepancy. NOT_COMPARABLE is the honest answer: wait
   // for the next window.
@@ -586,7 +586,7 @@ export function compareDeposits(
     return {
       scope: 'deposits',
       status: 'NOT_COMPARABLE',
-      reason: `no conclusive comparison in this window — the only discrepancy(ies) (${timingDifference}) ` +
+      reason: `no conclusive comparison in this window - the only discrepancy(ies) (${timingDifference}) ` +
         'are younger than the timing-difference threshold and likely just have not propagated to the other side yet',
       matched, workerOnly, indexerOnly, recallPct: null,
       workerOnlyKeys: workerOnlyKeys.slice(0, 50),
@@ -604,7 +604,7 @@ export function compareDeposits(
   // THE Fix 3 change: status is now driven by trueIndexerOnly/trueWorkerOnly,
   // not the raw indexerOnly/workerOnly totals. A window whose only
   // "mismatches" are all ACCOUNTED_FOR_OTHER_ACTIVITY and/or
-  // TIMING_DIFFERENCE is a real PASS, not a FAIL — the money was never at
+  // TIMING_DIFFERENCE is a real PASS, not a FAIL - the money was never at
   // risk, it was just compared against too narrow a worker-side population
   // (or hadn't propagated yet). Nothing is hidden: accountedForOtherActivity
   // and timingDifference remain fully visible in the returned counts/keys,
@@ -641,7 +641,7 @@ export function compareDeposits(
  * claim_completed events by design, so there is nothing of its own to compare
  * and this reports NOT_APPLICABLE. worker_only is still surfaced as factual
  * context (how many claims completed in the window) but must never be read as
- * an indexer failure — the status field is what disambiguates that.
+ * an indexer failure - the status field is what disambiguates that.
  *
  * The implementation is written generally rather than hardcoded to "always
  * NOT_APPLICABLE", so that if the indexer is ever given claim ownership the
@@ -661,7 +661,7 @@ export function compareClaims(
     return {
       scope: 'claims',
       status: 'NOT_APPLICABLE',
-      reason: 'BlockchainIndexer does not own claim detection — claim-worker handles ' +
+      reason: 'BlockchainIndexer does not own claim detection - claim-worker handles ' +
               'attestation, retries and settlement, and the indexer deliberately skips ' +
               'CCTP mints. No indexer claim events exist to compare, so this scope is ' +
               'not a valid cutover metric.',
@@ -684,7 +684,7 @@ export function compareClaims(
   const workerKeys = new Set<string>()
   for (const c of completedClaims) {
     // destination_tx_hash is an OPTIONAL field on WorkerRowLike (`?:`), so its
-    // effective type includes `undefined` as well as `null` — keyOf only
+    // effective type includes `undefined` as well as `null` - keyOf only
     // accepts `string | null`. Found as a genuine pre-existing type error
     // while Deno-typechecking this file during the Phase 3 indexer audit
     // (see docs/PHASE_3_INDEXER_AUDIT.md); fixed here as a one-line,
@@ -732,7 +732,7 @@ export function compareClaims(
     workerOnlyKeys: workerOnlyKeys.slice(0, 50),
     indexerOnlyKeys: indexerOnlyKeys.slice(0, 50),
     // Fix 3's classification (ACCOUNTED_FOR_OTHER_ACTIVITY/TIMING_DIFFERENCE)
-    // is deposits-scope specific — claims has no equivalent "other activity
+    // is deposits-scope specific - claims has no equivalent "other activity
     // type" concept, so this branch (unreachable today, since claimEvents is
     // always empty per the indexer's deliberate CCTP-mint skip) reports the
     // classified counts as equal to the raw ones rather than inventing a

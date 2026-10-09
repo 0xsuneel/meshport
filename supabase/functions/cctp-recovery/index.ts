@@ -1,7 +1,7 @@
 // supabase/functions/cctp-recovery/index.ts
 //
 // Recovery for stuck cross-chain moves. Blockchain is the source of truth
-// here — never a row's status.
+// here - never a row's status.
 //
 // USER actions (own rows only):
 //   POST { action: 'list' }
@@ -9,7 +9,7 @@
 //   POST { action: 'reattest', kind, id }                      expired fast-transfer attestation
 //   POST { action: 'confirm-mint', kind: 'transfer', id, mintTxHash }
 //
-// ADMIN actions (caller must be in public.admin_users) — the fallback when
+// ADMIN actions (caller must be in public.admin_users) - the fallback when
 // the user can't finish it themselves. Admins act ONLY by row id: no action
 // accepts an address, chain or amount, so recipients and destinations can
 // never be changed from the admin panel.
@@ -19,7 +19,7 @@
 //   POST { action: 'admin-notify', kind, id }     tell the user to finish it in Recover
 //
 // The missing mint itself is submitted by MeshPort's relayer
-// (api/bridge-relay, action 'call') from the app — this function only
+// (api/bridge-relay, action 'call') from the app - this function only
 // diagnoses and records. No private key is held here. Every admin action is
 // written to admin_recovery_log.
 
@@ -110,7 +110,7 @@ type Row = {
 
 // A recovery step already started for this row (by the user, or by MeshPort
 // from the admin panel). While it's running the Recover screen doesn't offer
-// the same step again — it shows "still processing" instead.
+// the same step again - it shows "still processing" instead.
 type RecoveryAction = { kind: 'relay' | 'reattest'; at: string; by: 'user' | 'meshport' }
 const ACTION_LOCK_MS = 30 * 60 * 1000
 
@@ -200,7 +200,7 @@ async function diagnose(r: Row): Promise<Diagnosis> {
   }
 
   // Iris puts expirationBlock under decodedMessage.decodedMessageBody for
-  // CCTP V2 — reading only decodedMessage.expirationBlock always gave 0, so
+  // CCTP V2 - reading only decodedMessage.expirationBlock always gave 0, so
   // an expired attestation was reported as "ready" and the relay then
   // reverted with "Message expired and must be re-signed".
   const expirationBlock = Number(
@@ -214,7 +214,7 @@ async function diagnose(r: Row): Promise<Diagnosis> {
   // is the judge of whether this attestation is still usable.
   const sim = await simulateReceive(r.destRpcs, msg.message, msg.attestation)
   if (sim && /expired/i.test(sim)) {
-    return { state: 'needs_reattest', nonce: decoded.nonce, detail: 'Attestation expired — request a new one' }
+    return { state: 'needs_reattest', nonce: decoded.nonce, detail: 'Attestation expired - request a new one' }
   }
 
   const caller = decoded.destinationCaller.toLowerCase()
@@ -271,7 +271,7 @@ async function markCompleted(r: Row, mintTx: string | null, recovered = false) {
     }
     const { error } = await db.from('claims').update({ ...base, ...(mintTx ? { destination_tx_hash: mintTx } : {}) })
       .eq('id', r.id).neq('status', 'completed')
-    // destination_tx_hash is unique — if another row already holds this mint
+    // destination_tx_hash is unique - if another row already holds this mint
     // hash (older amount-matching reconciliation), still mark it completed.
     if (error) await db.from('claims').update(base).eq('id', r.id).neq('status', 'completed')
   } else {
@@ -340,7 +340,7 @@ async function adminList() {
   if (wallets.size) {
     const { data: users } = await db.from('users').select('wallet_address, username').in('wallet_address', [...wallets])
     for (const u of users ?? []) names[String(u.wallet_address).toLowerCase()] = u.username
-    // wallet_address casing can differ — second pass case-insensitively for misses
+    // wallet_address casing can differ - second pass case-insensitively for misses
     const misses = [...wallets].filter(w => !names[w])
     for (const w of misses.slice(0, 50)) {
       const { data: u } = await db.from('users').select('username').ilike('wallet_address', w).maybeSingle()
@@ -399,7 +399,7 @@ async function notifyUser(kind: string, id: string): Promise<string> {
   if (!u?.id) throw new Error('User not found')
   const { error } = await db.from('notifications').insert({
     user_id: u.id, type: 'recovery_action_needed', title: 'Action needed: finish your transfer',
-    message: `We noticed ${what} didn't finish. Open Multichain Hub → Recover to complete it — your funds are safe.`,
+    message: `We noticed ${what} didn't finish. Open Multichain Hub → Recover to complete it - your funds are safe.`,
     read: false,
   })
   if (error) throw new Error(error.message)
@@ -429,7 +429,7 @@ Deno.serve(async (req: Request) => {
         const { data: i } = await db.from('ub_claim_intents').select('status').eq('id', id).maybeSingle()
         if (!i) return jsonFor(req, { error: 'Not found' }, 404)
         if (i.status === 'completed') return jsonFor(req, { error: 'Already completed' }, 409)
-        // Same signed intent, same recipient — only the retry state resets.
+        // Same signed intent, same recipient - only the retry state resets.
         await db.from('ub_claim_intents').update({
           status: 'waiting', attempts: 0, last_error: null, transfer_id: null, created_at: new Date().toISOString(),
         }).eq('id', id).neq('status', 'completed')
@@ -482,10 +482,10 @@ Deno.serve(async (req: Request) => {
 
     const d = await diagnose(row)
     // `selfMinted`: the app just minted it from Recover (MeshPort's relayer
-    // or the user's own wallet — lib/cctpRecovery) — label it as a recovery.
+    // or the user's own wallet - lib/cctpRecovery) - label it as a recovery.
     if (d.state === 'already_minted' && row.status !== 'completed') {
       // Iris only knows the mint hash for forwarded mints. For a Recover mint
-      // the app sends its tx hash — verified on-chain here — so the claim keeps
+      // the app sends its tx hash - verified on-chain here - so the claim keeps
       // its Arc mint hash (without it the recovery scan later sees an
       // "untracked" mint and records the same funds a second time).
       let mintTx = d.destinationMintTxHash ?? null
@@ -497,10 +497,10 @@ Deno.serve(async (req: Request) => {
       await markCompleted(row, mintTx, ownsRow && b.selfMinted === true)
     }
     // An in-flight claim whose attestation expired can never finish on its
-    // own — show it as failed (with the way out) instead of "Processing…".
+    // own - show it as failed (with the way out) instead of "Processing…".
     if (d.state === 'needs_reattest' && row.kind === 'claim' && row.status !== 'failed' && row.status !== 'completed') {
       await db.from('claims').update({
-        status: 'failed', error: 'Attestation expired — open Recover, request a new attestation, then finish the claim.',
+        status: 'failed', error: 'Attestation expired - open Recover, request a new attestation, then finish the claim.',
       }).eq('id', row.id).neq('status', 'completed')
     }
 
@@ -510,7 +510,7 @@ Deno.serve(async (req: Request) => {
     const reply: Record<string, unknown> = { ...d, action: running }
     if (running?.kind === 'reattest' && (d.state === 'needs_reattest' || d.state === 'waiting_attestation')) {
       reply.state = 'reattest_pending'
-      reply.detail = 'Circle is issuing a new attestation — check again in a few minutes.'
+      reply.detail = 'Circle is issuing a new attestation - check again in a few minutes.'
     } else if (running?.kind === 'relay' && (d.state === 'ready_relay' || d.state === 'waiting_attestation')) {
       reply.state = 'relay_queued'
     }
@@ -546,6 +546,6 @@ Deno.serve(async (req: Request) => {
     return jsonFor(req, { error: 'Unknown action' }, 400)
   } catch (e) {
     console.error('[cctp-recovery]', e instanceof Error ? e.message : e)
-    return jsonFor(req, { error: 'Recovery check failed — try again' }, 500)
+    return jsonFor(req, { error: 'Recovery check failed - try again' }, 500)
   }
 })

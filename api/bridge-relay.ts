@@ -1,4 +1,4 @@
-// api/bridge-relay.ts — MeshPort's gasless bridge relayer (Vercel).
+// api/bridge-relay.ts - MeshPort's gasless bridge relayer (Vercel).
 //
 // Stateless: it holds no user funds, keeps no job state, and can only submit
 // what a user signed (or what Circle attested). Three actions:
@@ -11,12 +11,12 @@
 //   POST { action:'relay', chain, bridge, authorization }
 //        Checks the request, simulates MeshPortBridgeRouter.bridgeWithAuthorization,
 //        submits it with the relayer key (paying source-chain gas) and returns
-//        { txHash } — the CCTP burn. Idempotent: an authorization that was
+//        { txHash } - the CCTP burn. Idempotent: an authorization that was
 //        already used returns the transaction that used it.
 //
 //   POST { action:'call', chain, to, data }
 //        Submits, from the relayer wallet, one of a few calls whose outcome
-//        doesn't depend on who sends them — so the user needs no gas:
+//        doesn't depend on who sends them - so the user needs no gas:
 //          · Circle Gateway Wallet deposits signed by the user
 //            (depositWithAuthorization / depositWithPermit; the depositor
 //            must be the signed-in user's wallet)
@@ -50,7 +50,7 @@ const ROUTER_GAS = 260_000n           // receiveWithAuthorization + transfer + a
 const MAX_AUTH_WINDOW_SEC = 2 * 60 * 60
 const MIN_TOTAL_UNITS = 1_000_000n    // 1 USDC
 
-// Chain id, USDC and CCTP domain per chain — from src/blockchain/chains.ts
+// Chain id, USDC and CCTP domain per chain - from src/blockchain/chains.ts
 // (EXTERNAL_CHAINS, verified ids only) and Circle's domain table;
 // src/lib/gaslessBridge.test.ts checks this stays in sync. `gasUsd` is a rough
 // USD price of the chain's gas token, only used to turn gas into a USDC fee
@@ -130,7 +130,7 @@ const USDC_ABI = [
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim()
 const SERVICE_KEY  = (process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim()
-if (!SUPABASE_URL) console.warn('[bridge-relay] SUPABASE_URL is not set — session verification will fail')
+if (!SUPABASE_URL) console.warn('[bridge-relay] SUPABASE_URL is not set - session verification will fail')
 
 const isHex = (v: unknown, bytes?: number): v is `0x${string}` =>
   typeof v === 'string' && (bytes ? new RegExp(`^0x[0-9a-fA-F]{${bytes * 2}}$`) : /^0x([0-9a-fA-F]{2})*$/).test(v)
@@ -147,11 +147,11 @@ function routers(): Record<string, `0x${string}`> {
 
 // Session cache: token → { wallet, exp }
 // PERF FIX: the original sessionWallet() made two sequential Supabase HTTP
-// requests on EVERY call — one to /auth/v1/user and one to /rest/v1/users.
+// requests on EVERY call - one to /auth/v1/user and one to /rest/v1/users.
 // sessionOwns() called sessionWallet() once per request, so every relay
 // (quote, bridge, relayCall) paid those two round-trips. For a fast chain
 // like Arc that doubled the perceived latency of every Gateway deposit.
-// Cache keyed on the session token with a 5-minute TTL — identical to the
+// Cache keyed on the session token with a 5-minute TTL - identical to the
 // pattern already in swap-proxy.js. The cache lives per warm Lambda instance
 // (resets on cold start); 5 min is safe because a JWT that expires mid-TTL
 // still fails the auth/v1/user check at next cache miss.
@@ -217,7 +217,7 @@ async function clients(chainKey: string) {
 // Extra chains a relayed call can run on, beyond CHAINS (public RPCs).
 // Arc_Testnet: prefer the env-configured RPC (higher rate limits); fall back
 // to Circle's official public endpoints. A single hardcoded endpoint was a
-// single point of failure — every Arc-facing relayed call failed when it was
+// single point of failure - every Arc-facing relayed call failed when it was
 // rate-limited. ARC_RPC_URL is set in Vercel environment variables.
 const EXTRA_RPCS: Record<string, string> = {
   // Prefer the env-overridden URL; the public fallback is documented at
@@ -285,10 +285,10 @@ export async function checkRelayable(to: string, data: `0x${string}`, caller: st
   return 'This call cannot be relayed'
 }
 
-// Static chain-id map for every chain reachable by a relayed call —
+// Static chain-id map for every chain reachable by a relayed call -
 // combining CHAINS (bridgeable) and EXTRA_RPCS (Arc, Edge, Injective).
 // PERF FIX: callClients() used to call probe.getChainId() (a live eth_chainId
-// round-trip) on EVERY relayed call — Gateway deposits, gatewayMint, and
+// round-trip) on EVERY relayed call - Gateway deposits, gatewayMint, and
 // receiveMessage are called once per bridge, and Gateway operations happen
 // on chains that poll every few seconds on some pages.  For Arc that extra
 // round-trip was going through arc-rpc, eating one of the 3-concurrent-race
@@ -297,7 +297,7 @@ export async function checkRelayable(to: string, data: `0x${string}`, caller: st
 // CHAINS (verified) and the known static ids for EXTRA_RPCS chains.
 const EXTRA_CHAIN_IDS: Record<string, number> = {
   Arc_Testnet:       5042002,
-  Edge_Testnet:      1116, // from api/relay-gas.ts — absent means auto-detect still applies
+  Edge_Testnet:      1116, // from api/relay-gas.ts - absent means auto-detect still applies
   Injective_Testnet: 1439,
 }
 
@@ -306,7 +306,7 @@ async function callClients(chainKey: string) {
   const { createPublicClient, createWalletClient, http, defineChain } = await import('viem')
   const rpc = process.env[`BRIDGE_RPC_${chainKey.toUpperCase()}`] || CHAINS[chainKey]?.rpc || EXTRA_RPCS[chainKey]
   if (!rpc) return null
-  // Use the known static chain id when available — skips a live eth_chainId
+  // Use the known static chain id when available - skips a live eth_chainId
   // round-trip (and its 15s timeout class) on every relayed call.
   const knownId = CHAINS[chainKey]?.id ?? EXTRA_CHAIN_IDS[chainKey]
   let id: number
@@ -354,7 +354,7 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
   if (!isHex(to, 20) || !isHex(data) || data.length < 10) return res.status(400).json({ error: 'Malformed call' })
   const caller = await sessionWallet(req)
   if (!caller) return res.status(403).json({ error: 'Not signed in' })
-  if (!allowRelay(caller)) return res.status(429).json({ error: 'Too many requests — try again in a few minutes' })
+  if (!allowRelay(caller)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
   const reason = await checkRelayable(to, data, caller)
   if (reason) return res.status(400).json({ error: reason })
   const cl = await callClients(chainKey)
@@ -397,7 +397,7 @@ async function relayFee(pub: any, chainKey: string): Promise<bigint> {
   const withMargin = (units * 130n) / 100n
   const floor = BigInt(process.env.BRIDGE_MIN_FEE_UNITS || '50000')
   // Testnet gas has no real value, but priced at mainnet rates a busy chain
-  // (Ethereum Sepolia) came out over 1 USDC — above the app's 5% fee limit,
+  // (Ethereum Sepolia) came out over 1 USDC - above the app's 5% fee limit,
   // so every quote there was rejected. Capped so the fee stays small.
   const cap = BigInt(process.env.BRIDGE_MAX_FEE_UNITS || '100000')
   const fee = withMargin > floor ? withMargin : floor
@@ -579,8 +579,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // The fee must still cover the relayer's gas (some slack for price moves since the quote).
     const now_q = await quote(chainKey, value)
-    if (fee * 100n < now_q.fee * 80n) return res.status(400).json({ error: 'Fee too low — please try again' })
-    if (maxFee * 100n < now_q.maxFee * 80n) return res.status(400).json({ error: 'Bridge fee too low — please try again' })
+    if (fee * 100n < now_q.fee * 80n) return res.status(400).json({ error: 'Fee too low - please try again' })
+    if (maxFee * 100n < now_q.maxFee * 80n) return res.status(400).json({ error: 'Bridge fee too low - please try again' })
 
     const bal = await pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'balanceOf', args: [a.from] }) as bigint
     if (bal < value) return res.status(400).json({ error: 'Not enough USDC on this chain' })
@@ -595,7 +595,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }).catch((e: any) => { throw Object.assign(new Error(e?.shortMessage || 'Transfer would fail'), { status: 400 }) })
     const txHash = await wallet.writeContract(request)
 
-    // Wait briefly for the burn; if it's slow, it's submitted (not failed) — tracking takes over.
+    // Wait briefly for the burn; if it's slow, it's submitted (not failed) - tracking takes over.
     try {
       const receipt = await pub.waitForTransactionReceipt({ hash: txHash, timeout: 40_000 })
       if (receipt.status !== 'success') return res.status(502).json({ error: 'Transaction reverted', txHash })

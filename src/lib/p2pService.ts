@@ -1,6 +1,6 @@
 // lib/p2pService.ts
 //
-// P2P Marketplace — TESTNET DEMO ONLY. See lib/p2pProviders.ts for the full
+// P2P Marketplace - TESTNET DEMO ONLY. See lib/p2pProviders.ts for the full
 // explanation of what's real (testnet USDC transfers via EscrowProvider) vs
 // simulated (every fiat/payment step, via PaymentProvider/FiatProvider).
 // "Payment confirmed" is purely a status flag the buyer sets on the honor
@@ -8,7 +8,7 @@
 //
 // This file is the data/business-logic layer: offers, trades, chat,
 // reputation, fraud protection, notifications, and admin actions. UI
-// components (features/p2p/) call these functions and render results —
+// components (features/p2p/) call these functions and render results -
 // they should never talk to Supabase or a provider directly.
 
 import { supabase } from './supabase'
@@ -23,7 +23,7 @@ import {
 
 const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
 
-// Re-exported for backward compatibility with existing UI imports —
+// Re-exported for backward compatibility with existing UI imports -
 // CURRENCY_REGISTRY in currencyRegistry.ts is the actual source of truth now.
 export { CURRENCY_REGISTRY as CURRENCIES, currencySymbol, formatFiat, getCurrency, type CurrencyEntry }
 
@@ -40,15 +40,15 @@ export const COUNTRY_REGIONS = [
 ]
 
 export type OfferType = 'buy' | 'sell'
-// 'cancelled' — seller withdrew real escrow via the contract (still had
-//   funds at cancel time). 'deleted' — seller removed an offer that
+// 'cancelled' - seller withdrew real escrow via the contract (still had
+//   funds at cancel time). 'deleted' - seller removed an offer that
 //   already had ZERO remaining capacity (fully sold, or previously
 //   emptied); no contract call is ever made for a 'deleted' offer. See
 //   deleteOfferAndDisconnect()'s own doc comment for the full reasoning.
 export type OfferStatus = 'active' | 'paused' | 'completed' | 'cancelled' | 'deleted'
-// 'awaiting_seller_confirmation' — SELL-offer trades only. The contract's
+// 'awaiting_seller_confirmation' - SELL-offer trades only. The contract's
 // registerTrade() can only be signed by the offer's actual escrow
-// depositor (the seller — see P2PMeshportEscrowV2.sol), but createTrade()
+// depositor (the seller - see P2PMeshportEscrowV2.sol), but createTrade()
 // runs on the ACCEPTING buyer's device. A trade starts here and only
 // advances to 'waiting_for_buyer' once the seller's own device signs
 // confirmSellTradeOnChain() below. See that function's own comment for
@@ -66,7 +66,7 @@ export interface P2POffer {
   pricePerUsdc: number
   minAmount: number
   maxAmount: number
-  // How much the seller wants to sell in TOTAL for this listing — what
+  // How much the seller wants to sell in TOTAL for this listing - what
   // actually gets deposited to escrow. Distinct from maxAmount, which is
   // only the ceiling on a single trade. See the p2p_offers_total_amount
   // migration for why these used to be conflated into one field.
@@ -78,7 +78,7 @@ export interface P2POffer {
   isVerifiedMerchant: boolean
   lockedByTradeId?: string
   // How long a trade against THIS offer waits for the counterparty before
-  // auto-expiring — see isTradeExpired/TRADE_WINDOW_MINUTES below and the
+  // auto-expiring - see isTradeExpired/TRADE_WINDOW_MINUTES below and the
   // trade_window_minutes migration. Not an offer-level expiry; offers
   // themselves never expire.
   tradeWindowMinutes: number
@@ -172,7 +172,7 @@ function messageFromRow(r: any): P2PMessage {
 
 /**
  * The single choke point for every P2P Activity write. Nothing in this file may
- * call saveActivity() with a p2p_* type directly — see the source assertion in
+ * call saveActivity() with a p2p_* type directly - see the source assertion in
  * p2pService.backfill.test.ts, which fails the build if that rule is broken.
  *
  * ── Why a row without a tx hash must not exist ──────────────────────────────
@@ -180,7 +180,7 @@ function messageFromRow(r: any): P2PMessage {
  * Without a transaction hash there is nothing to verify it against, so it is
  * indistinguishable from a row describing money that never moved. That is not
  * hypothetical: one wallet accumulated 45 such rows, including a
- * "-100 USDC Sell Order Created" for an offer whose escrow was never funded —
+ * "-100 USDC Sell Order Created" for an offer whose escrow was never funded -
  * getRemaining() returned 0 on BOTH deployed escrow contracts
  * (P2PEscrow 0xc44BcDa0…, P2PMeshportEscrow 0xe336E64c…) and no deposit
  * transaction for its offerKey exists on either.
@@ -196,7 +196,7 @@ function messageFromRow(r: any): P2PMessage {
  * escrow deposit / withdrawal / release has already succeeded or already failed
  * on its own terms, and the offer/trade row has already been written. Skipping
  * the activity row changes only whether an unverifiable entry appears in the
- * feed — the offer is still created, the trade still completes, the funds still
+ * feed - the offer is still created, the trade still completes, the funds still
  * move. p2p_offers and p2p_trades remain the source of truth for the event.
  *
  * Honor-system mode is the case that reaches here without a hash: with
@@ -213,10 +213,10 @@ export async function saveP2PActivity(
 ): Promise<boolean> {
   if (!params.txHash) {
     console.warn(
-      '[p2pService] P2P activity NOT recorded — no on-chain tx hash to verify it:',
+      '[p2pService] P2P activity NOT recorded - no on-chain tx hash to verify it:',
       params.activityType,
       params.metadata?.kind ?? '',
-      '— the P2P action itself was unaffected',
+      '- the P2P action itself was unaffected',
     )
     return false
   }
@@ -231,22 +231,22 @@ export async function isUserBanned(userId: string): Promise<boolean> {
 }
 
 /**
- * The P2P on/off kill switch admins can flip from P2PAdminPage — backed by
+ * The P2P on/off kill switch admins can flip from P2PAdminPage - backed by
  * the same app_settings table (feature: 'p2p_enabled') every other feature
  * toggle in this app already uses (swap_enabled, chat_enabled, etc.), so it
  * gets Realtime sync across every connected client for free via
  * useSettingsStore, with no separate mechanism needed.
  *
- * Deliberately checked only in createOffer/createTrade — the entry points
- * for NEW P2P activity — and not in markPaymentSent/releaseTrade/
+ * Deliberately checked only in createOffer/createTrade - the entry points
+ * for NEW P2P activity - and not in markPaymentSent/releaseTrade/
  * cancelTrade/openDispute. Disabling P2P should stop new trades from
  * starting, not strand people who already have money in an active trade
  * with no way to finish it out. (The route-level FeatureGate in App.tsx
- * follows the same split — see its comment there.)
+ * follows the same split - see its comment there.)
  */
 async function isP2PEnabled(): Promise<boolean> {
   const { useSettingsStore } = await import('../store/settingsStore')
-  // Ensure settings have actually been loaded at least once — a fresh page
+  // Ensure settings have actually been loaded at least once - a fresh page
   // load might call this before AppLayout's own load() has resolved, and
   // isEnabled() would otherwise fall back to "true" for a row it hasn't
   // fetched yet, which happens to be safe here but would be a race either way.
@@ -255,7 +255,7 @@ async function isP2PEnabled(): Promise<boolean> {
 }
 
 // Matches the p2p_offers_trade_window_minutes_check DB constraint exactly
-// — validated here too so a bad value fails with a clear message instead
+// - validated here too so a bad value fails with a clear message instead
 // of a raw Postgres constraint-violation error surfacing to the user.
 const VALID_TRADE_WINDOW_MINUTES = [15, 30, 60, 120, 360, 720, 1440] as const
 
@@ -275,7 +275,7 @@ export async function createOffer(p: {
   // maxAmount is the per-trade ceiling; totalAmount is what actually gets
   // escrowed. A per-trade ceiling larger than the total being sold makes
   // no sense (a single trade could never actually reach it), so this is a
-  // hard input-sanity check, not a business rule — the UI already prevents
+  // hard input-sanity check, not a business rule - the UI already prevents
   // this, this is just the server-side backstop.
   if (p.maxAmount > p.totalAmount) {
     return { offer: null, error: 'Max per trade can\u2019t be more than the total amount you\u2019re selling.' }
@@ -285,14 +285,14 @@ export async function createOffer(p: {
     ? new Date(Date.now() + p.offerExpiresInHours * 3600 * 1000).toISOString()
     : null
 
-  // Escrow only applies to SELL offers AT CREATION TIME — its creator is
+  // Escrow only applies to SELL offers AT CREATION TIME - its creator is
   // the one who will eventually release USDC to a buyer, so THEY are the
   // one who needs to lock funds up front. A BUY offer's creator wants to
-  // RECEIVE USDC; they hold none to escrow at offer-creation time —
+  // RECEIVE USDC; they hold none to escrow at offer-creation time -
   // whoever accepts a buy offer becomes the seller for THAT trade instead,
   // and deposits at acceptance time (see createTrade()'s
   // `escrowProvider.depositForTrade` call). So buy offers ARE escrow-
-  // backed end-to-end — just not until someone actually accepts one, since
+  // backed end-to-end - just not until someone actually accepts one, since
   // there's no seller (and no funds) to escrow before that happens.
   let escrowDepositTxHash: string | null = null
   let escrowBalance: number | null = null
@@ -301,7 +301,7 @@ export async function createOffer(p: {
   if (p.offerType === 'sell') {
     const { escrowProvider } = await import('./p2pProviders')
     // Deposit the TOTAL the seller wants to sell, not just the per-trade
-    // ceiling — see this function's own header on why these are now two
+    // ceiling - see this function's own header on why these are now two
     // separate numbers (p2p_offers_total_amount migration).
     const depositResult = await escrowProvider.depositForOffer(offerId, p.totalAmount)
     if (!depositResult.success) {
@@ -309,7 +309,7 @@ export async function createOffer(p: {
     }
     escrowDepositTxHash = depositResult.txHash ?? null
     // The deposit that just succeeded IS the offer's opening escrow
-    // balance — no need for a live contract read here, it can only be
+    // balance - no need for a live contract read here, it can only be
     // p.totalAmount (this is a fresh offerId, never deposited against
     // before this call).
     escrowBalance = p.totalAmount
@@ -326,11 +326,11 @@ export async function createOffer(p: {
       offer_expires_at: offerExpiresAt, escrow_deposit_tx_hash: escrowDepositTxHash, escrow_balance: escrowBalance,
     }),
   })
-  if (!res.ok) return { offer: null, error: 'Could not create offer — please try again.' }
+  if (!res.ok) return { offer: null, error: 'Could not create offer - please try again.' }
   const rows = await res.json()
   const created = rows[0] ? offerFromRow(rows[0]) : null
 
-  // Only for sell offers — a buy offer's creator hasn't escrowed anything
+  // Only for sell offers - a buy offer's creator hasn't escrowed anything
   // yet (see the comment above); logging this for buy offers would show a
   // "-" entry for money that hasn't actually moved.
   if (created && p.offerType === 'sell') {
@@ -349,13 +349,13 @@ export async function createOffer(p: {
  * and/or terms.
  *
  * Deliberately does NOT allow changing offerType, currency, or totalAmount
- * here — offerType/currency are structural (changing them mid-listing
+ * here - offerType/currency are structural (changing them mid-listing
  * would be confusing for anyone who already saw the old version), and
  * totalAmount is governed by actual escrowed capacity, not just a number a
  * seller can freely edit (see topUpOfferEscrow below for the correct,
  * on-chain-backed way to raise it).
  *
- * minAmount/maxAmount ARE editable here — unlike totalAmount, they're pure
+ * minAmount/maxAmount ARE editable here - unlike totalAmount, they're pure
  * business-rule numbers with no on-chain backing of their own (see the
  * p2p_offers_total_amount migration: only totalAmount ties to real
  * escrowed funds), so there's no blockchain interaction needed to change
@@ -365,9 +365,9 @@ export async function createOffer(p: {
  * reached by a real trade).
  *
  * Restricted to the offer's own owner (both the WHERE filter here AND
- * whatever RLS policy already exists on p2p_offers — this is defense in
+ * whatever RLS policy already exists on p2p_offers - this is defense in
  * depth, not the only check) and only while the offer is still 'active'
- * with no trade currently locking it — editing price/limits/payment
+ * with no trade currently locking it - editing price/limits/payment
  * methods out from under an in-progress trade would be actively harmful to
  * whoever's mid-trade against the old terms.
  */
@@ -432,7 +432,7 @@ export async function updateOfferDetails(
  * BUG FIX: this used to raise maxAmount instead of totalAmount, because
  * maxAmount used to BE the only "how much capacity does this offer have"
  * number. Now that totalAmount is the real total-capacity figure (see the
- * p2p_offers_total_amount migration), a top-up needs to grow totalAmount —
+ * p2p_offers_total_amount migration), a top-up needs to grow totalAmount -
  * raising maxAmount here would have silently also raised the per-trade
  * ceiling, letting a single buyer take more per trade than the seller ever
  * configured, just because they added more total funds to sell.
@@ -457,11 +457,11 @@ export async function topUpOfferEscrow(
   if (offer.userId !== userId) return { success: false, message: 'You can only top up your own offers.' }
   if (offer.offerType !== 'sell') return { success: false, message: 'Only sell offers hold escrow that can be topped up.' }
   // Fully-sold offers (status 'completed', zero remaining capacity) can
-  // still be topped up — that's how a seller relists the same offer
+  // still be topped up - that's how a seller relists the same offer
   // instead of creating a new one. 'cancelled'/'deleted' offers cannot:
   // those are terminal, and 'deleted' specifically means "already
   // disconnected from the escrow contract on purpose" (see
-  // deleteOfferAndDisconnect) — depositing into it here would silently
+  // deleteOfferAndDisconnect) - depositing into it here would silently
   // reconnect it, which is exactly what deleting was meant to prevent.
   if (offer.status !== 'active' && offer.status !== 'completed') {
     return { success: false, message: 'This offer can no longer be topped up.' }
@@ -495,7 +495,7 @@ export async function topUpOfferEscrow(
   }
 
   // Recorded as its own activity row (not a duplicate "Sell Order Created")
-  // — see metadata.kind: 'offer_topped_up', which ActivityPage.tsx checks
+  // - see metadata.kind: 'offer_topped_up', which ActivityPage.tsx checks
   // to label this "Escrow Top-up" instead of reusing the offer-creation
   // title. The toast in P2PPage.tsx already confirms success to the user
   // instantly; this row is the audit trail for it.
@@ -527,12 +527,12 @@ export async function fetchOffers(filters: {
   offerType: OfferType; currency?: string; countryRegion?: string; paymentMethod?: string
   excludeUserId?: string; merchantFilter?: MerchantFilter; limit?: number
 }): Promise<P2POffer[]> {
-  // Was locked_by_trade_id=is.null — hid an offer from EVERYONE the moment
+  // Was locked_by_trade_id=is.null - hid an offer from EVERYONE the moment
   // one trade started on it, even the same buyer wanting a second trade on
   // it, and even when most of its capacity was still uncommitted. Now
   // shows as long as any capacity remains; accept_p2p_offer_lock (called
   // from createTrade) is what actually enforces "no other buyer can race
-  // in while someone else's trade is active" — see that function's own
+  // in while someone else's trade is active" - see that function's own
   // comment for why the enforcement moved from a display filter to there.
   let url = `${SUPA_URL}/rest/v1/p2p_offers?offer_type=eq.${filters.offerType}&status=eq.active&available_amount=gt.0&order=created_at.desc&limit=${filters.limit ?? 50}`
   if (filters.currency) url += `&currency=eq.${encodeURIComponent(filters.currency)}`
@@ -568,7 +568,7 @@ export async function fetchMyOffers(userId: string): Promise<P2POffer[]> {
 }
 
 /**
- * Admin oversight view — every offer regardless of type/status, unlike
+ * Admin oversight view - every offer regardless of type/status, unlike
  * fetchOffers() (marketplace browse, active+unlocked only, single type at
  * a time) or fetchMyOffers() (one user's own offers only). Used by
  * P2PAdminPage.tsx's live Offers panel.
@@ -582,7 +582,7 @@ export async function fetchAllOffersAdmin(limit = 200): Promise<P2POffer[]> {
   return offers
 }
 
-/** Live updates for the admin Offers panel — new offers, cancellations, depletion (status flipping to 'completed'), all appear instantly. */
+/** Live updates for the admin Offers panel - new offers, cancellations, depletion (status flipping to 'completed'), all appear instantly. */
 export function subscribeToAllOffers(onChange: (offer: P2POffer) => void): () => void {
   return subscribeWithRetry(supabase, 'p2p-admin-offers', channel =>
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'p2p_offers' },
@@ -591,13 +591,13 @@ export function subscribeToAllOffers(onChange: (offer: P2POffer) => void): () =>
 
 /**
  * Live updates for "my trades" (marketplace History panel, My Trades list,
- * admin trades panel) — a payment marked sent, a release, a dispute, or a
+ * admin trades panel) - a payment marked sent, a release, a dispute, or a
  * brand-new trade against one of your offers should all appear instantly,
  * not just at the next full page load/reload.
  *
  * Postgres realtime's row filter only supports a single equality check, not
- * an OR across two columns — this trade could be *either* buyer_id or
- * seller_id for this user — so this opens two separate subscriptions (one
+ * an OR across two columns - this trade could be *either* buyer_id or
+ * seller_id for this user - so this opens two separate subscriptions (one
  * per side) and calls onChange for either. Both go through the same proven
  * subscribeWithRetry helper chat/P2P trade-detail already use, so this
  * survives a tab switch/network drop exactly the same way those do.
@@ -615,18 +615,18 @@ export function subscribeToMyTrades(userId: string, onChange: (trade: P2PTrade) 
 /**
  * How much of each offer's total capacity (totalAmount) has already been
  * consumed by trades that actually completed. This is the piece that was
- * missing entirely — an offer's min/max were only ever the ORIGINAL
+ * missing entirely - an offer's min/max were only ever the ORIGINAL
  * limits set at creation, with nothing tracking how much had already been
  * bought/sold against it, so a $100 sell offer kept showing "$100
  * available" forever, even after $10 of it had already been sold.
  *
  * Deliberately does NOT touch p2p_offers.escrow_balance as the source of
- * truth — that field is only ever set for sell offers (at creation and at
+ * truth - that field is only ever set for sell offers (at creation and at
  * cancellation), never updated per-trade, and buy offers don't have one at
  * all. Computing consumed amount directly from completed trades works
  * identically for both offer types and doesn't require a schema change.
  *
- * Only 'completed'/'released' trades count — a cancelled or expired trade
+ * Only 'completed'/'released' trades count - a cancelled or expired trade
  * never actually transferred anything, so it doesn't reduce what's left.
  */
 export async function fetchOfferConsumedAmounts(offerIds: string[]): Promise<Map<string, number>> {
@@ -643,20 +643,20 @@ export async function fetchOfferConsumedAmounts(offerIds: string[]): Promise<Map
     for (const r of rows) {
       map.set(r.offer_id, (map.get(r.offer_id) ?? 0) + parseFloat(String(r.amount_usdc)))
     }
-  } catch { /* non-fatal — callers fall back to showing the original totalAmount */ }
+  } catch { /* non-fatal - callers fall back to showing the original totalAmount */ }
   return map
 }
 
 /**
  * Remaining TOTAL capacity for a single offer, given its already-consumed
- * amount. Clamped at 0 — never negative even if something briefly
+ * amount. Clamped at 0 - never negative even if something briefly
  * over-consumed.
  *
- * BUG FIX: this used to compute against offer.maxAmount — the PER-TRADE
+ * BUG FIX: this used to compute against offer.maxAmount - the PER-TRADE
  * ceiling, not the total being sold. A $100 offer capped at $60/trade
  * showed only "$60 available" total (and depleted to $0 after a single
  * $60 trade) instead of "$100 available, up to $60 per trade." Now
- * computed against totalAmount, the actual total sellable capacity — see
+ * computed against totalAmount, the actual total sellable capacity - see
  * the p2p_offers_total_amount migration for the full history.
  */
 export function offerRemainingAmount(offer: P2POffer, consumed: number): number {
@@ -666,12 +666,12 @@ export function offerRemainingAmount(offer: P2POffer, consumed: number): number 
 /**
  * Called right after a trade against this offer completes. If what's left
  * can no longer even satisfy the offer's own minimum trade size, there's no
- * point leaving it listed as 'active' — nobody could accept it anyway (the
+ * point leaving it listed as 'active' - nobody could accept it anyway (the
  * remaining-capacity check in createTrade() would just reject them), so it
  * would otherwise sit in the marketplace forever showing a stale "Limit:
  * $X–$Y" that's no longer actually obtainable. Marking it 'completed' here
  * (an existing, valid OfferStatus) removes it from fetchOffers()'s
- * `status=eq.active` listing automatically — no separate cleanup job needed.
+ * `status=eq.active` listing automatically - no separate cleanup job needed.
  */
 async function retireOfferIfDepleted(offerId: string): Promise<void> {
   try {
@@ -681,7 +681,7 @@ async function retireOfferIfDepleted(offerId: string): Promise<void> {
     if (offerRemainingAmount(offer, consumed) < offer.minAmount) {
       await updateOfferStatus(offerId, 'completed')
     }
-  } catch { /* non-fatal — worst case the offer just stays listed until the next trade attempt is rejected by the remaining-capacity check */ }
+  } catch { /* non-fatal - worst case the offer just stays listed until the next trade attempt is rejected by the remaining-capacity check */ }
 }
 
 export async function updateOfferStatus(offerId: string, status: OfferStatus): Promise<void> {
@@ -693,21 +693,21 @@ export async function updateOfferStatus(offerId: string, status: OfferStatus): P
 }
 
 /**
- * The real function the "Cancel Offer" button should call — plain
+ * The real function the "Cancel Offer" button should call - plain
  * updateOfferStatus() only flips the status flag; this ALSO reclaims any
  * USDC still sitting in escrow for a sell offer (via EscrowProvider's
  * withdrawRemaining, which calls the real contract when one is deployed).
- * A locked offer (mid-trade) can't be cancelled this way — that has to go
+ * A locked offer (mid-trade) can't be cancelled this way - that has to go
  * through cancelling the trade itself first, same as before.
  */
 export async function cancelOfferAndWithdrawEscrow(offer: P2POffer, opts?: { adminTriggered?: boolean }): Promise<{ success: boolean; message: string }> {
   if (offer.lockedByTradeId) {
-    return { success: false, message: 'This offer has an active trade — cancel that trade first.' }
+    return { success: false, message: 'This offer has an active trade - cancel that trade first.' }
   }
   // 'deleted' offers were removed specifically BECAUSE they had zero
   // remaining escrow, with the explicit goal of never touching the
   // contract for them again (see deleteOfferAndDisconnect). Defensive
-  // guard — the UI shouldn't offer a Cancel button for one of these, but
+  // guard - the UI shouldn't offer a Cancel button for one of these, but
   // don't let a stale/replayed request slip through and fire a
   // withdrawRemaining() call on an offer key that's meant to be inert.
   if (offer.status === 'deleted') {
@@ -715,24 +715,24 @@ export async function cancelOfferAndWithdrawEscrow(offer: P2POffer, opts?: { adm
   }
   if (offer.offerType === 'sell') {
     // ROOT-CAUSE FIX: this used to unconditionally sign withdrawRemaining
-    // with whatever wallet is in this session — correct for a seller
+    // with whatever wallet is in this session - correct for a seller
     // cancelling their OWN offer, but silently broken for an
     // admin-triggered cancellation. That comment used to claim this
     // "matches contracts/P2PEscrow.sol's own authorization" (msg.sender ==
-    // e.seller || msg.sender == admin) — true of the legacy V1 contract,
+    // e.seller || msg.sender == admin) - true of the legacy V1 contract,
     // but P2PMeshportEscrowV2.sol deliberately REMOVED that admin bypass
     // (see its file header, vulnerability 3: "no withdrawAll/sweep/drain
     // function exists anywhere in this contract"). withdrawRemaining() on
-    // V2 is strictly `msg.sender == e.seller` — there is no path for admin
+    // V2 is strictly `msg.sender == e.seller` - there is no path for admin
     // to move a single unit of an offer's escrow. Worse, offerKeyFor()
     // derives the key from the CALLER's own address
     // (keccak256(offerId, callerAddress)), so signing with the admin's key
-    // doesn't even compute the real offerKey for this offer — it queries
+    // doesn't even compute the real offerKey for this offer - it queries
     // an empty, unrelated storage slot and reverts with "no active escrow
     // for this offer" (or previously "not the offer's seller"). Every
     // admin-triggered Cancel Offer click on a sell offer that still held
     // escrow was therefore a guaranteed-revert transaction dressed up as a
-    // normal action — exactly the "admin console isn't working" symptom
+    // normal action - exactly the "admin console isn't working" symptom
     // this fixes: fail immediately with an accurate explanation instead of
     // burning the admin's gas on a call that could never succeed.
     if (opts?.adminTriggered) {
@@ -741,16 +741,16 @@ export async function cancelOfferAndWithdrawEscrow(offer: P2POffer, opts?: { adm
       if (stillEscrowed > 0) {
         return {
           success: false,
-          message: `This offer still holds ${stillEscrowed} USDC in escrow that only the seller's own wallet can withdraw — P2PMeshportEscrowV2 has no admin bypass for offer-level funds (Investigate/Resolve only apply to a registered trade). Use "Freeze Offer" to block new trades against it in the meantime; the seller must cancel it themselves to get the funds back.`,
+          message: `This offer still holds ${stillEscrowed} USDC in escrow that only the seller's own wallet can withdraw - P2PMeshportEscrowV2 has no admin bypass for offer-level funds (Investigate/Resolve only apply to a registered trade). Use "Freeze Offer" to block new trades against it in the meantime; the seller must cancel it themselves to get the funds back.`,
         }
       }
-      // Nothing left in escrow — safe to just flip status, no contract
+      // Nothing left in escrow - safe to just flip status, no contract
       // call needed (same reasoning as deleteOfferAndDisconnect).
       await updateOfferStatus(offer.id, 'cancelled')
       return { success: true, message: 'Offer cancelled by admin (no funds were held in escrow).' }
     }
     // withdrawRemaining is offer-keyed, not trade-keyed like every other
-    // EscrowProvider method — called via the low-level contract module
+    // EscrowProvider method - called via the low-level contract module
     // directly here, same pattern depositForOffer already establishes for
     // offer-level (rather than trade-level) escrow operations.
     const { isEscrowContractDeployed, withdrawRemainingFromEscrow, isEscrowPaused, getOfferFrozenOnChain } = await import('./p2pEscrowContract')
@@ -759,14 +759,14 @@ export async function cancelOfferAndWithdrawEscrow(offer: P2POffer, opts?: { adm
         return { success: false, message: 'P2P escrow is currently paused by an admin. Please try again shortly.' }
       }
       // SECURITY FIX mirror (P2PMeshportEscrowV2.sol): withdrawRemaining()
-      // now reverts on-chain if a Pauser has frozen this specific offer —
+      // now reverts on-chain if a Pauser has frozen this specific offer -
       // previously a seller could drain a frozen offer's available balance
       // out from under an active dispute/investigation. Check the same
       // on-chain flag the admin console reads (getOfferFrozenOnChain) so
       // this fails with a clear message up front instead of a guaranteed
       // on-chain revert.
       if (await getOfferFrozenOnChain(offer.id, offer.walletAddress).catch(() => false)) {
-        return { success: false, message: 'This offer is currently frozen by an admin (an active dispute may be in progress) — it cannot be cancelled or withdrawn until unfrozen.' }
+        return { success: false, message: 'This offer is currently frozen by an admin (an active dispute may be in progress) - it cannot be cancelled or withdrawn until unfrozen.' }
       }
       try {
         const { useAuthStore } = await import('../store')
@@ -777,12 +777,12 @@ export async function cancelOfferAndWithdrawEscrow(offer: P2POffer, opts?: { adm
           method: 'PATCH', headers: { ...(await authHeaders()), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
           body: JSON.stringify({ status: 'cancelled', escrow_withdraw_tx_hash: txHash, escrow_balance: 0, updated_at: new Date().toISOString() }),
         })
-        // BUG FIX: previously logged `offer.escrowBalance` — the offer's
+        // BUG FIX: previously logged `offer.escrowBalance` - the offer's
         // ORIGINAL deposit ceiling, only ever set at creation, never
         // updated per-trade (see fetchOfferConsumedAmounts/
         // offerRemainingAmount's own comments). For a partially-sold
         // offer, withdrawRemaining() only ever returns what's actually
-        // still in escrow — maxAmount minus whatever already sold — so
+        // still in escrow - maxAmount minus whatever already sold - so
         // logging escrowBalance overstated the refund by exactly however
         // much had already been sold before cancelling. The backfill sweep
         // further down this file already computes this correctly
@@ -798,9 +798,9 @@ export async function cancelOfferAndWithdrawEscrow(offer: P2POffer, opts?: { adm
           activityType: 'p2p_refund', amount: actuallyRefunded, status: 'completed',
           metadata: { offerId: offer.id, kind: opts?.adminTriggered ? 'admin_cancelled_offer' : 'offer_cancelled' },
         })
-        return { success: true, message: opts?.adminTriggered ? 'Offer cancelled by admin — escrowed USDC returned to the seller.' : 'Offer cancelled and escrowed USDC returned to your wallet.' }
+        return { success: true, message: opts?.adminTriggered ? 'Offer cancelled by admin - escrowed USDC returned to the seller.' : 'Offer cancelled and escrowed USDC returned to your wallet.' }
       } catch (e: any) {
-        return { success: false, message: e?.message ?? 'Could not withdraw escrow — please try again.' }
+        return { success: false, message: e?.message ?? 'Could not withdraw escrow - please try again.' }
       }
     }
   }
@@ -809,11 +809,11 @@ export async function cancelOfferAndWithdrawEscrow(offer: P2POffer, opts?: { adm
 }
 
 /**
- * Admin-only variant — same underlying logic as cancelOfferAndWithdrawEscrow
+ * Admin-only variant - same underlying logic as cancelOfferAndWithdrawEscrow
  * (no separate implementation to keep in sync), just tagged for Activity/
  * audit purposes and exposed with an admin-specific name so
  * P2PAdminPage.tsx's intent is clear at the call site. There's no
- * ownership check to bypass here — cancelOfferAndWithdrawEscrow never
+ * ownership check to bypass here - cancelOfferAndWithdrawEscrow never
  * enforced "only the owner" itself (the regular My Offers UI is what
  * limits a normal user to their own offers); this function documents that
  * an admin calling it for someone else's offer is intentional.
@@ -823,7 +823,7 @@ export async function adminCancelOffer(offer: P2POffer): Promise<{ success: bool
 }
 
 /**
- * Removes a DEPLETED offer (zero remaining capacity — fully sold, or
+ * Removes a DEPLETED offer (zero remaining capacity - fully sold, or
  * already emptied some other way) without ever touching the escrow
  * contract. This is deliberately a different action from
  * cancelOfferAndWithdrawEscrow(), not just a different label on the same
@@ -836,7 +836,7 @@ export async function adminCancelOffer(offer: P2POffer): Promise<{ success: bool
  *     be a pointless transaction (gas spent to move zero USDC) at best,
  *     and at worst a confusing on-chain no-op the seller has to explain to
  *     themselves later. So this function never imports p2pProviders /
- *     escrowProvider at all — there is no code path here that CAN reach
+ *     escrowProvider at all - there is no code path here that CAN reach
  *     the contract, not just a check that happens to skip it.
  *
  * Sets status to 'deleted' rather than reusing 'cancelled', so it's
@@ -846,7 +846,7 @@ export async function adminCancelOffer(offer: P2POffer): Promise<{ success: bool
  * offer's escrow (topUpOfferEscrow, cancelOfferAndWithdrawEscrow, and
  * createTrade's own offer-locking query, which only matches
  * status=eq.active) already refuses anything that isn't 'active' (or, for
- * top-up, 'completed') — so once an offer is 'deleted', nothing in this
+ * top-up, 'completed') - so once an offer is 'deleted', nothing in this
  * file will ever call the contract using its offer key again.
  */
 export async function deleteOfferAndDisconnect(
@@ -854,18 +854,18 @@ export async function deleteOfferAndDisconnect(
   userId: string,
 ): Promise<{ success: boolean; message: string }> {
   if (offer.userId !== userId) return { success: false, message: 'You can only delete your own offers.' }
-  if (offer.lockedByTradeId) return { success: false, message: 'This offer has an active trade — resolve that first.' }
+  if (offer.lockedByTradeId) return { success: false, message: 'This offer has an active trade - resolve that first.' }
   if (offer.status === 'deleted') return { success: true, message: 'Offer already deleted.' }
 
   // Re-check remaining capacity against live trade data right before
-  // deleting — never trust a stale client-side number for the one check
+  // deleting - never trust a stale client-side number for the one check
   // that decides whether a contract call gets skipped. If anything is
   // still left, refuse and point the seller at Cancel instead, which
   // actually returns it.
   const consumedMap = await fetchOfferConsumedAmounts([offer.id])
   const remaining = offerRemainingAmount(offer, consumedMap.get(offer.id) ?? 0)
   if (remaining > 0) {
-    return { success: false, message: 'This offer still has USDC in escrow — use Cancel instead so those funds are returned to your wallet.' }
+    return { success: false, message: 'This offer still has USDC in escrow - use Cancel instead so those funds are returned to your wallet.' }
   }
 
   const res = await fetch(`${SUPA_URL}/rest/v1/p2p_offers?id=eq.${offer.id}&user_id=eq.${userId}`, {
@@ -873,18 +873,18 @@ export async function deleteOfferAndDisconnect(
     headers: { ...(await authHeaders()), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
     body: JSON.stringify({ status: 'deleted', updated_at: new Date().toISOString() }),
   })
-  if (!res.ok) return { success: false, message: 'Could not delete this offer — please try again.' }
+  if (!res.ok) return { success: false, message: 'Could not delete this offer - please try again.' }
   return { success: true, message: 'Offer deleted.' }
 }
 
 /**
- * OFFERS THEMSELVES NEVER EXPIRE — only a TRADE created against one does
+ * OFFERS THEMSELVES NEVER EXPIRE - only a TRADE created against one does
  * (see TRADE_WINDOW_MINUTES / isTradeExpired below, and the offer's own
  * tradeWindowMinutes field). This sweep only exists for pre-existing rows
  * that still carry an offer_expires_at from before that distinction was
  * made, and is scoped to BUY offers only (nothing is ever escrowed for a
  * buy offer at creation time, so flipping its status here can never orphan
- * funds — see createOffer's own comment on why). Nothing in the app writes
+ * funds - see createOffer's own comment on why). Nothing in the app writes
  * offer_expires_at anymore; this is a no-op for every offer created going
  * forward.
  */
@@ -902,7 +902,7 @@ export async function expireStaleOffers(): Promise<void> {
  * the lock succeeds but before the trade row is actually created, that
  * offer would stay locked forever with no trade to ever unlock it. This
  * releases any lock older than ORPHANED_LOCK_THRESHOLD_MS where no trade
- * with that id actually exists — a genuine, currently-active trade always
+ * with that id actually exists - a genuine, currently-active trade always
  * has a real row, so this only ever touches locks that were never backed
  * by one. Call alongside expireStaleOffers (same "check on read" shape).
  */
@@ -930,16 +930,16 @@ export async function releaseOrphanedLocks(): Promise<void> {
         body: JSON.stringify({ locked_by_trade_id: null, locked_at: null }),
       }).catch(() => {})
     }
-  } catch { /* best-effort cleanup — a failure here just means the next call retries it */ }
+  } catch { /* best-effort cleanup - a failure here just means the next call retries it */ }
 }
 
-// Fallback only — used when an offer somehow has no tradeWindowMinutes
+// Fallback only - used when an offer somehow has no tradeWindowMinutes
 // (a row from before that column existed and offerFromRow's own fallback
 // didn't run for some reason). Every offer created going forward always
 // carries a real value from VALID_TRADE_WINDOW_MINUTES above.
 const TRADE_WINDOW_MINUTES = 15
 
-/** "15 min" / "120 min" / "6 hours" — matches the labels TRADE_WINDOW_OPTIONS shows in Create Offer, so a trade's system messages read the same way the seller/buyer picked it. */
+/** "15 min" / "120 min" / "6 hours" - matches the labels TRADE_WINDOW_OPTIONS shows in Create Offer, so a trade's system messages read the same way the seller/buyer picked it. */
 function formatTradeWindow(minutes: number): string {
   if (minutes < 60) return `${minutes} min`
   const hours = minutes / 60
@@ -957,7 +957,7 @@ export async function createTrade(p: {
   // and how much of this offer is already consumed) don't depend on each
   // other's results, so they're issued concurrently instead of one after
   // another. The checks below still evaluate the results in the EXACT SAME
-  // order as before, so error precedence/messages are unchanged — a banned
+  // order as before, so error precedence/messages are unchanged - a banned
   // user still sees the ban message even if P2P also happens to be
   // disabled, exactly as today.
   const [banned, p2pEnabled, consumedMap] = await Promise.all([
@@ -975,7 +975,7 @@ export async function createTrade(p: {
     return { trade: null, error: `Amount must be between ${p.offer.minAmount} and ${p.offer.maxAmount} USDC.` }
   }
 
-  // The check above only guards against the offer's ORIGINAL limits — it
+  // The check above only guards against the offer's ORIGINAL limits - it
   // says nothing about how much of that capacity is already spoken for by
   // trades that already completed. Re-check against what's actually left,
   // or this offer could be oversold: e.g. a $100 sell offer that already
@@ -996,7 +996,7 @@ export async function createTrade(p: {
   const expiresAt = new Date(Date.now() + tradeWindowMinutes * 60 * 1000).toISOString()
   const amountFiat = Math.round(p.amountUsdc * p.offer.pricePerUsdc * 100) / 100
 
-  // Real id generated up front — see the fix note below for why. The trade
+  // Real id generated up front - see the fix note below for why. The trade
   // row is created FIRST, using this id, so it genuinely exists in
   // p2p_trades by the time the offer's locked_by_trade_id (a real foreign
   // key into that table) ever gets set to it. No placeholder value is used
@@ -1004,7 +1004,7 @@ export async function createTrade(p: {
   const tradeId = crypto.randomUUID()
 
   // Sell-offer trades start in 'awaiting_seller_confirmation' rather than
-  // the default 'waiting_for_buyer' — see this function's own note below,
+  // the default 'waiting_for_buyer' - see this function's own note below,
   // right before the on-chain registration step, for why. Buy-offer trades
   // keep the normal default: the accepting user IS the seller-for-this-
   // trade and registers it on-chain in this same call, further down.
@@ -1020,15 +1020,15 @@ export async function createTrade(p: {
     }),
   })
   if (!res.ok) {
-    return { trade: null, error: 'Could not start trade — please try again.' }
+    return { trade: null, error: 'Could not start trade - please try again.' }
   }
   const rows = await res.json()
   const trade = rows[0] ? tradeFromRow(rows[0]) : null
-  if (!trade) return { trade: null, error: 'Could not start trade — please try again.' }
+  if (!trade) return { trade: null, error: 'Could not start trade - please try again.' }
 
   // Fix note (superseded 2026-09-20, see accept_p2p_offer_lock's own
   // comment): the conditional PATCH below used to be the entire lock
-  // mechanism — correct for "only one trade at a time, period," but it
+  // mechanism - correct for "only one trade at a time, period," but it
   // couldn't distinguish "someone else already has this" from "I already
   // have this and want a second one," so a buyer's own repeat trade on an
   // offer they were already trading with looked identical to a race and
@@ -1040,7 +1040,7 @@ export async function createTrade(p: {
   })
   const lockRow = Array.isArray(lockResult) ? lockResult[0] : lockResult
   if (lockRpcError || !lockRow?.ok) {
-    // A genuine race this time — some OTHER buyer's real trade already holds
+    // A genuine race this time - some OTHER buyer's real trade already holds
     // the lock, or the offer's remaining balance can't cover this amount.
     // Roll back the trade row this attempt created.
     await fetch(`${SUPA_URL}/rest/v1/p2p_trades?id=eq.${trade.id}`, { method: 'DELETE', headers: await authHeaders() }).catch(() => {})
@@ -1048,11 +1048,11 @@ export async function createTrade(p: {
   }
 
   // Buy-offer trades: the accepting user becomes the seller for THIS
-  // trade and must deposit escrow now — the trade's own id already exists
+  // trade and must deposit escrow now - the trade's own id already exists
   // at this point (needed to key the deposit), so if this fails, the
   // trade row itself gets deleted and the offer unlocked, same "cannot
   // exist without a successful deposit" guarantee sell offers get at
-  // offer-creation time instead. Sell-offer trades skip this entirely —
+  // offer-creation time instead. Sell-offer trades skip this entirely -
   // that escrow was already deposited when the offer was created.
   if (p.offer.offerType === 'buy') {
     const depositResult = await escrowProvider.depositForTrade(trade.id, p.amountUsdc)
@@ -1062,7 +1062,7 @@ export async function createTrade(p: {
       return { trade: null, error: `Escrow deposit failed: ${depositResult.message}` }
     }
     // Accepting a buy offer makes THIS user the seller for this specific
-    // trade, and their USDC just got locked into escrow — same underlying
+    // trade, and their USDC just got locked into escrow - same underlying
     // event (and same '-' sign) as creating a sell offer locks funds at
     // offer-creation time, just triggered at accept-time instead.
     await saveP2PActivity({
@@ -1072,36 +1072,36 @@ export async function createTrade(p: {
     })
   }
 
-  // Registers the trade's buyer/amount on-chain — see p2pProviders.ts's
+  // Registers the trade's buyer/amount on-chain - see p2pProviders.ts's
   // lockFunds and P2PMeshportEscrowV2.sol's own header for why release()
   // requires this to have happened first.
   //
   // BUG FIX: this used to call lockFunds() unconditionally, right here, on
   // whichever device just called createTrade(). That's correct for BUY
-  // offers — the accepting user genuinely IS the seller-for-this-trade,
+  // offers - the accepting user genuinely IS the seller-for-this-trade,
   // deposited moments ago in this same call, and the contract's
   // `msg.sender == e.seller` check on registerTrade matches. It was WRONG
   // for SELL offers: escrow there was deposited by the ORIGINAL offer
-  // creator, days or minutes earlier, from THEIR OWN device — but this
+  // creator, days or minutes earlier, from THEIR OWN device - but this
   // code path runs on the ACCEPTING BUYER's device. lockFunds()/
   // registerTradeOnChain() would sign with the buyer's key, deriving the
   // wrong offerKey (offerKeyFor(offerId, buyerAddress) instead of the
   // seller's) and, even if that matched, would be rejected by the
   // contract's own seller-only check. Every single sell-offer trade
   // acceptance failed with "no active escrow for this offer" as a direct
-  // result — 100% reproducible, unrelated to which offer or how old it was.
+  // result - 100% reproducible, unrelated to which offer or how old it was.
   //
   // Fix: only call lockFunds() here for BUY offers. Sell-offer trades stay
   // in 'awaiting_seller_confirmation' (set at insert above) until the
   // actual seller's own device calls confirmSellTradeOnChain() below,
   // signing registerTrade with the same key that deposited the escrow in
-  // the first place — the only signer the contract will ever accept for it.
+  // the first place - the only signer the contract will ever accept for it.
   if (p.offer.offerType === 'buy') {
     const lockResult = await escrowProvider.lockFunds(trade)
     if (!lockResult.success) {
       await fetch(`${SUPA_URL}/rest/v1/p2p_trades?id=eq.${trade.id}`, { method: 'DELETE', headers: await authHeaders() }).catch(() => {})
       await supabase.rpc('release_p2p_offer_lock', { p_offer_id: p.offer.id, p_trade_id: trade.id, p_amount: p.amountUsdc }).then(() => {}, () => {})
-      // The deposit above already succeeded and is real money on-chain —
+      // The deposit above already succeeded and is real money on-chain -
       // best-effort claw it back into the depositor's own wallet rather
       // than leave it stranded in a trade-keyed bucket nothing references
       // anymore. If this ALSO fails, the funds are still safe (still the
@@ -1110,32 +1110,32 @@ export async function createTrade(p: {
       await escrowProvider.refund(trade).catch(() => {})
       return { trade: null, error: `Could not register this trade on-chain: ${lockResult.message}` }
     }
-    await sendTradeMessage(trade.id, 'system', `Trade started — ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC. Payment window: ${formatTradeWindow(tradeWindowMinutes)}.`, true)
+    await sendTradeMessage(trade.id, 'system', `Trade started - ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC. Payment window: ${formatTradeWindow(tradeWindowMinutes)}.`, true)
     // This is a buy-offer trade: the offer's original creator is the buyer
     // (buyerId), and the user who just accepted it (sellerId) is the seller
-    // for this trade — they're the one who acted, so the notification has
+    // for this trade - they're the one who acted, so the notification has
     // to go to the OTHER party, the buyer whose offer just got accepted.
     // notifyP2P removed here (2026-09-21): duplicated p2p_notify_trade_event's
     // INSERT case, which already sends this to the same recipient
-    // (the offer owner — buyerId here, since this is a buy offer) the
+    // (the offer owner - buyerId here, since this is a buy offer) the
     // moment the trade row above was inserted, reliably and without the
     // wrong-type bug (see this function's own history for that bug).
     return { trade }
   }
 
   // Sell-offer trade: nothing on-chain has happened yet for this trade
-  // specifically (the offer's escrow deposit already covers it — this
+  // specifically (the offer's escrow deposit already covers it - this
   // step only REGISTERS which buyer/amount is allowed to draw from it).
   // The seller needs to see this and sign it themselves.
-  await sendTradeMessage(trade.id, 'system', `Trade started — waiting for the seller to confirm on-chain. ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC.`, true)
-  // notifyP2P removed here (2026-09-21) — same reasoning as the buy-offer
+  await sendTradeMessage(trade.id, 'system', `Trade started - waiting for the seller to confirm on-chain. ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC.`, true)
+  // notifyP2P removed here (2026-09-21) - same reasoning as the buy-offer
   // branch above: the trigger's INSERT case already notified sellerId
   // (the offer owner for a sell offer) when the trade row was created.
   return { trade } // trade.status is already 'awaiting_seller_confirmation' from the insert above
 }
 
 /**
- * The seller's half of registering a sell-offer trade on-chain — see
+ * The seller's half of registering a sell-offer trade on-chain - see
  * createTrade()'s own comment above for why this can't happen on the
  * buyer's device. Called from the SELLER's own client, using THEIR OWN
  * device key (the same one that deposited this offer's escrow), once they
@@ -1150,7 +1150,7 @@ export async function confirmSellTradeOnChain(trade: P2PTrade): Promise<{ succes
   }
   const lockResult = await escrowProvider.lockFunds(trade)
   if (!lockResult.success) {
-    // Non-fatal — the trade just stays in 'awaiting_seller_confirmation',
+    // Non-fatal - the trade just stays in 'awaiting_seller_confirmation',
     // retryable (e.g. the seller can try again, or the expiry sweep below
     // will eventually cancel it if they never do).
     // The raw viem error is a wall of calldata. The two reverts a seller can
@@ -1167,17 +1167,17 @@ export async function confirmSellTradeOnChain(trade: P2PTrade): Promise<{ succes
   const claimed = await updateTradeStatusIf(trade.id, ['awaiting_seller_confirmation'], { status: 'waiting_for_buyer' })
   if (!claimed) {
     // Someone/something else already moved it on (e.g. it expired and got
-    // cancelled between the on-chain call succeeding and this write) —
+    // cancelled between the on-chain call succeeding and this write) -
     // the on-chain registration itself already happened and is harmless
     // to leave in place either way.
     return { success: false, message: 'This trade is no longer waiting for confirmation.' }
   }
   // trade.expiresAt was already set from the offer's own tradeWindowMinutes
-  // back in createTrade() — derive the window from it here rather than the
+  // back in createTrade() - derive the window from it here rather than the
   // fallback constant, so this message matches whatever was actually picked.
   const windowMinutes = Math.round((new Date(trade.expiresAt).getTime() - new Date(trade.createdAt).getTime()) / 60000)
-  await sendTradeMessage(trade.id, 'system', `Trade confirmed on-chain — ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC. Payment window: ${formatTradeWindow(windowMinutes)}.`, true)
-  // notifyP2P removed here (2026-09-21) — duplicated p2p_notify_trade_event's
+  await sendTradeMessage(trade.id, 'system', `Trade confirmed on-chain - ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC. Payment window: ${formatTradeWindow(windowMinutes)}.`, true)
+  // notifyP2P removed here (2026-09-21) - duplicated p2p_notify_trade_event's
   // seller_confirmed case, which fires on this exact status transition
   // (awaiting_seller_confirmation -> waiting_for_buyer) and notifies
   // trade.buyerId reliably, without the wrong-type bug.
@@ -1214,7 +1214,7 @@ export interface CounterpartyProfile { userId: string; username?: string; displa
 
 /**
  * Batch-resolves display info for the "other side" of each trade in
- * `trades`, keyed by userId — used by the History page's Counterparty
+ * `trades`, keyed by userId - used by the History page's Counterparty
  * column/search. Mirrors attachUserProfiles' single-query batching (one
  * `id=in.(...)` request instead of N), but returns a lookup map instead of
  * mutating the trades themselves, since a trade has two possible
@@ -1231,7 +1231,7 @@ export async function fetchCounterpartyProfiles(trades: P2PTrade[], myUserId: st
     for (const r of rows) {
       map.set(r.id, { userId: r.id, username: r.username, displayName: r.display_name, walletAddress: r.wallet_address })
     }
-  } catch { /* non-fatal — History page falls back to showing the raw wallet address */ }
+  } catch { /* non-fatal - History page falls back to showing the raw wallet address */ }
   return map
 }
 
@@ -1248,8 +1248,8 @@ export async function fetchMyTrades(userId: string): Promise<P2PTrade[]> {
 // ── P2P Activity backfill: idempotency machinery ─────────────────────────────
 //
 // Deliberately module-level rather than component-level. ActivityPage's effect
-// fires on EVERY mount of that page — and twice per mount under
-// React.StrictMode (see main.tsx) — so any guard living in component state or a
+// fires on EVERY mount of that page - and twice per mount under
+// React.StrictMode (see main.tsx) - so any guard living in component state or a
 // ref is reset at exactly the moment it is needed. These two live as long as the
 // JS context does; the localStorage latch outlives even that.
 const _backfillInFlight = new Map<string, Promise<void>>()
@@ -1259,11 +1259,11 @@ const _backfillInFlight = new Map<string, Promise<void>>()
 // Correctness comes from two things that do not depend on this latch at all:
 //   1. every row this backfill emits carries a real tx_hash, so saveActivity's
 //      on_conflict path plus activity_tx_hash_wallet_address_key make a repeat
-//      write a no-op at the DATABASE level — the guard that provably works;
+//      write a no-op at the DATABASE level - the guard that provably works;
 //   2. the fail-closed dedup read below.
 // The latch only spares a device the redundant round-trips once the work is
 // genuinely finished. It is therefore set ONLY when every write in a run
-// succeeded — a run that wrote nothing because a write failed must be allowed to
+// succeeded - a run that wrote nothing because a write failed must be allowed to
 // try again, otherwise a single 5xx would strand that wallet's history forever.
 //
 // Bump the version suffix if the emission rules change and a re-run is wanted.
@@ -1274,7 +1274,7 @@ function backfillAlreadyDone(wallet: string): boolean {
   try { return localStorage.getItem(backfillDoneKey(wallet)) === '1' } catch { return false }
 }
 function markBackfillDone(wallet: string): void {
-  try { localStorage.setItem(backfillDoneKey(wallet), '1') } catch { /* private mode — in-flight guard still applies */ }
+  try { localStorage.setItem(backfillDoneKey(wallet), '1') } catch { /* private mode - in-flight guard still applies */ }
 }
 
 /**
@@ -1289,7 +1289,7 @@ function markBackfillDone(wallet: string): void {
  * accumulated 72 p2p rows over ~6 Activity visits, including SIX copies each of
  * the same offer's sell_order and refund. Three compounding causes:
  *
- *   1. The dedup read FAILED OPEN — `existingRes.ok ? json : []`. Any non-2xx,
+ *   1. The dedup read FAILED OPEN - `existingRes.ok ? json : []`. Any non-2xx,
  *      or an RLS policy returning nothing, produced an empty "covered" set,
  *      which reads identically to "this wallet has no P2P history yet" and
  *      re-inserted the entire back catalogue.
@@ -1298,7 +1298,7 @@ function markBackfillDone(wallet: string): void {
  *      two quick navigations) both snapshot `covered` before either writes.
  *   3. Nothing downstream could catch it. Rows with a NULL tx_hash bypass
  *      saveActivity's on_conflict path, and `activity_tx_hash_wallet_address_key`
- *      is a plain UNIQUE (tx_hash, wallet_address) — Postgres treats NULLs as
+ *      is a plain UNIQUE (tx_hash, wallet_address) - Postgres treats NULLs as
  *      distinct, so every hashless row is an unguarded fresh INSERT.
  *
  * The tell is in the data: all 27 rows that DID carry a tx_hash are unique,
@@ -1309,8 +1309,8 @@ function markBackfillDone(wallet: string): void {
  * ── The invariant that fixes it ────────────────────────────────────────────
  * This function now emits a row ONLY when the offer/trade tables prove an
  * on-chain transaction happened, and it stamps that hash on the row. Every row
- * it writes therefore carries a tx_hash, which makes the DB constraint — the
- * guard that demonstrably works — the backstop. Duplication stops being a thing
+ * it writes therefore carries a tx_hash, which makes the DB constraint - the
+ * guard that demonstrably works - the backstop. Duplication stops being a thing
  * this code can do, whether or not the read above it succeeds.
  *
  * That deliberately drops two emissions the old version made:
@@ -1332,10 +1332,10 @@ export async function backfillP2PActivity(userId: string, walletAddress: string)
   const wallet = (walletAddress || '').toLowerCase()
   if (!userId || !wallet) return
 
-  // GUARD 1 — a completed backfill never runs again on this device.
+  // GUARD 1 - a completed backfill never runs again on this device.
   if (backfillAlreadyDone(wallet)) return
 
-  // GUARD 2 — concurrent callers share one run instead of racing it. Returning
+  // GUARD 2 - concurrent callers share one run instead of racing it. Returning
   // the SAME promise means StrictMode's second invocation awaits the first
   // rather than starting a second pass over the same offers.
   const inFlight = _backfillInFlight.get(wallet)
@@ -1359,19 +1359,19 @@ async function runP2PBackfill(userId: string, wallet: string): Promise<void> {
     // one, and guessing "empty" is what duplicated the back catalogue six times.
     // Bail without latching, so a genuine transient failure retries next visit.
     if (!existingRes.ok) {
-      console.warn('[p2pService] P2P backfill skipped — could not read existing activity:', existingRes.status)
+      console.warn('[p2pService] P2P backfill skipped - could not read existing activity:', existingRes.status)
       return
     }
     let existingRows: { activity_type: string; metadata: any }[]
     try {
       existingRows = await existingRes.json()
     } catch {
-      console.warn('[p2pService] P2P backfill skipped — existing activity response was unparseable')
+      console.warn('[p2pService] P2P backfill skipped - existing activity response was unparseable')
       return
     }
     if (!Array.isArray(existingRows)) return
 
-    // A row we cannot key contributes nothing — previously such a row produced
+    // A row we cannot key contributes nothing - previously such a row produced
     // the key "<type>:" and could mark an unrelated event as covered.
     const refOf = (m: any): string => m?.tradeId || m?.offerId || ''
     const covered = new Set(
@@ -1389,7 +1389,7 @@ async function runP2PBackfill(userId: string, wallet: string): Promise<void> {
       .filter(t => t.offerId === offerId && (t.status === 'completed' || t.status === 'released'))
       .reduce((sum, t) => sum + (t.amountUsdc || 0), 0)
 
-    // Every write goes through saveP2PActivity — the same choke point the live
+    // Every write goes through saveP2PActivity - the same choke point the live
     // paths use, so the "no hash, no row" invariant holds identically here. The
     // gates below already require the proving hash, so a false return means a
     // genuine write failure, not a skip; one is enough to withhold the latch.
@@ -1416,7 +1416,7 @@ async function runP2PBackfill(userId: string, wallet: string): Promise<void> {
 
       // A refund row must describe funds that actually came back. Requires the
       // withdrawal hash, and an amount that is still escrowed after subtracting
-      // whatever genuinely sold — never the bare offer ceiling, which overstates
+      // whatever genuinely sold - never the bare offer ceiling, which overstates
       // any partially-filled offer.
       if (o.status === 'cancelled' && o.escrowWithdrawTxHash && !already('p2p_refund', o.id)) {
         const refunded = Math.max(0, (o.totalAmount || 0) - soldAgainstOffer(o.id))
@@ -1433,7 +1433,7 @@ async function runP2PBackfill(userId: string, wallet: string): Promise<void> {
     for (const t of trades) {
       const isBuyer   = t.buyerId === userId
       const completed = t.status === 'completed' || t.status === 'released'
-      // t.txHash is the release transaction — the buyer genuinely received USDC,
+      // t.txHash is the release transaction - the buyer genuinely received USDC,
       // and it is recorded on the trade row, so this one IS provable.
       if (isBuyer && completed && t.txHash && !already('p2p_purchase', t.id)) {
         await emit({
@@ -1457,14 +1457,14 @@ async function runP2PBackfill(userId: string, wallet: string): Promise<void> {
  * Reports whether the write actually landed.
  *
  * BUG THIS FIXES: this used to be `await fetch(...)` with no result check and a
- * `Promise<void>` return. `await fetch` resolves for ANY status, so a 4xx/5xx —
- * RLS rejection, expired token, PostgREST error — was silently discarded. That
+ * `Promise<void>` return. `await fetch` resolves for ANY status, so a 4xx/5xx -
+ * RLS rejection, expired token, PostgREST error - was silently discarded. That
  * mattered most for the one call that matters most: releaseTrade's compensating
  * revert. When it failed, the trade stayed claimed as 'released' with no funds
  * sent, the offer stayed locked by locked_by_trade_id, and nothing anywhere
  * noticed. Two production trades ended up in exactly that state.
  *
- * Compare updateTradeStatusIf below, which always checked res.ok — the claim was
+ * Compare updateTradeStatusIf below, which always checked res.ok - the claim was
  * verified, the release of that claim was not.
  */
 async function updateTradeStatus(tradeId: string, fields: Record<string, unknown>): Promise<boolean> {
@@ -1487,7 +1487,7 @@ async function updateTradeStatus(tradeId: string, fields: Record<string, unknown
 
 /**
  * Same as updateTradeStatus, but only applies if the row's current status
- * is still one of `allowedStatuses` at write time — a conditional PATCH
+ * is still one of `allowedStatuses` at write time - a conditional PATCH
  * (PostgREST turns the extra query filter into a WHERE clause) so a status
  * change that lands between our last read and this write (e.g. the buyer
  * marks paid a moment after we loaded the trade) can't be silently
@@ -1497,11 +1497,11 @@ async function updateTradeStatusIf(tradeId: string, allowedStatuses: TradeStatus
   // SECURITY/CORRECTNESS FIX: this used to have no try/catch at all, and
   // was called from releaseTrade() OUTSIDE that function's own try/catch
   // block too. A thrown fetch error here (confirmed in production as
-  // net::ERR_NETWORK_CHANGED — a WiFi/cellular handoff mid-request) became
+  // net::ERR_NETWORK_CHANGED - a WiFi/cellular handoff mid-request) became
   // a fully uncaught promise rejection: it skipped every cleanup step in
   // both this function's and the UI's calling code, including
   // setActing(false) and showToastMessage(). The result was a button
-  // stuck on "Releasing..." forever with zero visible feedback — the
+  // stuck on "Releasing..." forever with zero visible feedback - the
   // exact symptom behind this whole investigation. Catching it here and
   // returning false (matching updateTradeStatus's existing pattern) lets
   // releaseTrade() report a clean, visible failure instead.
@@ -1523,14 +1523,14 @@ async function updateTradeStatusIf(tradeId: string, allowedStatuses: TradeStatus
 export const CANCEL_BLOCKED_MESSAGE =
   'This trade can no longer be cancelled because the counterparty has already fulfilled their obligation. Please complete the trade or open a dispute.'
 
-// Exact copy the UI shows anywhere a disputed trade blocks an action —
+// Exact copy the UI shows anywhere a disputed trade blocks an action -
 // keep this the single source of truth so every surface (cancel, pay,
 // release, the trade-detail lock banner) says the same thing.
 export const DISPUTE_LOCKED_MESSAGE =
   'This trade is currently under dispute and is locked until an administrator resolves it.'
 
 /**
- * Same idea as updateTradeStatusIf, generalized to any column — used to
+ * Same idea as updateTradeStatusIf, generalized to any column - used to
  * atomically CLAIM a transition before doing anything irreversible (moving
  * funds, flipping a dispute's resolution) so a second concurrent call
  * (double-click, retried request, a second open tab) sees the row no
@@ -1553,7 +1553,7 @@ async function updateTradeIf(tradeId: string, column: string, value: string, fie
 }
 
 /**
- * Single source of truth for "can this trade still be cancelled" — the
+ * Single source of truth for "can this trade still be cancelled" - the
  * Cancel button's visibility, cancelTrade() itself, and adminCancelTrade()
  * all defer to this instead of each re-deriving the rule independently.
  * The DB trigger added alongside this fix (see
@@ -1562,7 +1562,7 @@ async function updateTradeIf(tradeId: string, column: string, value: string, fie
  * through this module at all (a direct REST call, another client, etc.).
  *
  * Sell-offer trades: the seller's escrow was deposited back at OFFER
- * creation time, before this trade ever existed — so on its own it doesn't
+ * creation time, before this trade ever existed - so on its own it doesn't
  * block anyone. The buyer's "I've Paid" tap is what fulfills THEIR
  * obligation; once that lands (status -> payment_sent) neither side can
  * cancel anymore, matching the spec: "Once payment_sent, the seller can no
@@ -1570,7 +1570,7 @@ async function updateTradeIf(tradeId: string, column: string, value: string, fie
  *
  * Buy-offer trades: accepting a buy offer deposits the seller's escrow
  * synchronously inside createTrade() (see the `if (p.offer.offerType ===
- * 'buy')` block above) — there is no possible state where a buy-offer
+ * 'buy')` block above) - there is no possible state where a buy-offer
  * trade exists in the database and the seller hasn't already fulfilled
  * that obligation. So per spec ("After the seller has fulfilled their
  * obligation, the buyer can no longer cancel"), the buyer is blocked from
@@ -1585,16 +1585,16 @@ export function canCancelTrade(trade: P2PTrade, actorId: string): { allowed: boo
   if (!isBuyer && !isSeller) {
     return { allowed: false, reason: 'You are not a party to this trade.' }
   }
-  // Disputed trades are locked to both parties, full stop — only an admin
+  // Disputed trades are locked to both parties, full stop - only an admin
   // can move them from here (see adminResolveDispute / the DB-level
   // p2p_enforce_dispute_lock trigger, which is the real backstop for this).
   if (trade.disputeStatus === 'open') {
     return { allowed: false, reason: DISPUTE_LOCKED_MESSAGE }
   }
   if (trade.adminFrozen) {
-    return { allowed: false, reason: 'This trade is under admin review — only support can resolve it now.' }
+    return { allowed: false, reason: 'This trade is under admin review - only support can resolve it now.' }
   }
-  // The buyer already fulfilled their own obligation (payment sent) —
+  // The buyer already fulfilled their own obligation (payment sent) -
   // from here the trade must be released or disputed, never cancelled.
   if (trade.status === 'payment_sent') {
     return { allowed: false, reason: CANCEL_BLOCKED_MESSAGE }
@@ -1613,7 +1613,7 @@ export async function cancelTrade(trade: P2PTrade, reason: string, actorId: stri
 
   const updated = await updateTradeStatusIf(trade.id, ['awaiting_seller_confirmation', 'waiting_for_buyer', 'payment_sent'], { status: 'cancelled', cancel_reason: reason })
   if (!updated) {
-    // Status moved out from under us (e.g. buyer just marked paid) — the
+    // Status moved out from under us (e.g. buyer just marked paid) - the
     // conditional PATCH only fails this way when the row is no longer in
     // a cancellable state.
     return { success: false, message: CANCEL_BLOCKED_MESSAGE }
@@ -1623,7 +1623,7 @@ export async function cancelTrade(trade: P2PTrade, reason: string, actorId: stri
   if (trade.offerType === 'sell') {
     // ROOT-CAUSE FIX: a sell-offer trade that reached 'waiting_for_buyer'
     // was already registered on-chain (registerTrade reserved its amount
-    // against the offer) — escrowProvider.refund() is a no-op for these,
+    // against the offer) - escrowProvider.refund() is a no-op for these,
     // by design (see its own comment), which used to silently leave that
     // reservation stuck forever with no on-chain path back. See
     // releaseAbandonedSellReservation's own comment: it resolves this
@@ -1636,7 +1636,7 @@ export async function cancelTrade(trade: P2PTrade, reason: string, actorId: stri
     if (!resolved) {
       await updateTradeStatus(trade.id, { status: trade.status, cancel_reason: null })
       await openDispute(trade, trade.sellerId, "This trade was cancelled with its USDC already registered on-chain, and this device could not sign the seller's own on-chain cancellation. Needs Freeze -> Investigate -> Resolve to return it to the seller.").catch(() => {})
-      return { success: true, message: 'Trade cancelled — its escrowed USDC needs a quick admin review to be released back to the seller.' }
+      return { success: true, message: 'Trade cancelled - its escrowed USDC needs a quick admin review to be released back to the seller.' }
     }
   } else {
     const refundResult = await escrowProvider.refund(trade).catch(() => null)
@@ -1648,12 +1648,12 @@ export async function cancelTrade(trade: P2PTrade, reason: string, actorId: stri
       })
     }
   }
-  await sendTradeMessage(trade.id, 'system', `Trade cancelled — ${reason}`, true)
+  await sendTradeMessage(trade.id, 'system', `Trade cancelled - ${reason}`, true)
   return { success: true, message: 'Trade cancelled.' }
 }
 
 /**
- * Lets either party flag a trade for admin review instead of cancelling —
+ * Lets either party flag a trade for admin review instead of cancelling -
  * the escape hatch the spec requires to stay available for the whole
  * lifetime of an active trade, including once cancellation is no longer
  * possible (e.g. seller claiming payment was never actually received).
@@ -1673,16 +1673,16 @@ export async function openDispute(trade: P2PTrade, actorId: string, reason: stri
   await updateTradeStatus(trade.id, { dispute_status: 'open', dispute_reason: reason, admin_frozen: true })
   // Best-effort on-chain freeze, in addition to the DB flag above. The DB
   // flag + the p2p_enforce_dispute_lock trigger are what actually gate
-  // every UI/API path in THIS app — but the contract's own tradeFrozen
+  // every UI/API path in THIS app - but the contract's own tradeFrozen
   // check is what stops release() from succeeding if someone calls it
   // directly against the contract, bypassing this app entirely. Genuinely
   // non-fatal if it can't go through right now (no escrow contract
-  // configured, this device has no signing key, network hiccup) — the DB
+  // configured, this device has no signing key, network hiccup) - the DB
   // lock still holds for every normal path; an admin can freeze on-chain
   // separately from the admin console if this attempt didn't land.
   await freezeTradeOnChainBestEffort(trade.id)
   await sendTradeMessage(trade.id, 'system', `Dispute opened: ${reason}`, true)
-  // notifyP2P removed here (2026-09-21) — duplicated p2p_notify_trade_event's
+  // notifyP2P removed here (2026-09-21) - duplicated p2p_notify_trade_event's
   // dispute_opened case, which fires on this exact dispute_status
   // transition and notifies BOTH parties (this one-sided otherPartyId
   // version was actually less complete).
@@ -1692,13 +1692,13 @@ export async function openDispute(trade: P2PTrade, actorId: string, reason: stri
 /**
  * Best-effort wrapper for calling the contract's freezeTrade from a
  * REGULAR buyer/seller's own device (see openDispute, the one remaining
- * caller) — always signs with whatever wallet is active on THIS device
+ * caller) - always signs with whatever wallet is active on THIS device
  * (see p2pEscrowContract.ts), never a backend-held key. A normal user has
  * no external-wallet-connect flow, so this is genuinely best-effort: their
  * session key is essentially never a Pauser, so the on-chain call usually
- * reverts and this just logs it — the app-level DB lock (which every
+ * reverts and this just logs it - the app-level DB lock (which every
  * UI path actually enforces) is unaffected either way. The ADMIN console's
- * own Freeze/Unfreeze (trade and offer) no longer uses this — see
+ * own Freeze/Unfreeze (trade and offer) no longer uses this - see
  * adminFreezeTradeViaWallet below, which signs through a connected wallet
  * instead, since Pauser is a genuinely separate wallet from whoever is
  * logged into the dashboard.
@@ -1730,14 +1730,14 @@ async function unfreezeTradeOnChainBestEffort(tradeId: string): Promise<void> {
 }
 
 // Timeout expiry is deliberately scoped to 'waiting_for_buyer' and
-// 'awaiting_seller_confirmation' only (see isTradeExpired) — the same
+// 'awaiting_seller_confirmation' only (see isTradeExpired) - the same
 // window canCancelTrade() treats as still-cancellable. It is not a party
 // unilaterally cancelling; it's the system resolving a trade where either
 // the seller never confirmed it on-chain, or the buyer never fulfilled
-// THEIR obligation (payment), within the window — refunding/releasing
+// THEIR obligation (payment), within the window - refunding/releasing
 // whatever's held back to wherever it came from. It can never fire on a
 // payment_sent trade (buyer already fulfilled their side) or a buy-offer
-// trade past creation in a way that harms the seller — the seller's
+// trade past creation in a way that harms the seller - the seller's
 // escrow is what gets returned to them, never taken from them.
 /**
  * Releases a SELL-offer trade's on-chain reservation once it's abandoned
@@ -1800,7 +1800,7 @@ export async function autoCancelExpiredTrades(userId: string): Promise<void> {
         await updateTradeStatus(t.id, { status: 'expired' })
         await sendTradeMessage(t.id, 'system', 'Trade expired - payment window closed. The escrowed USDC for this trade was released back to your available balance.', true)
         // notifyP2P calls removed here (2026-09-21): were client-side only
-        // (gated to whichever device happens to run this sweep — see
+        // (gated to whichever device happens to run this sweep - see
         // notifyP2P's own user.id === userId check) and always said
         // "payment window closed" even when this branch's real cause is
         // the seller never confirming, before any payment window started.
@@ -1823,30 +1823,30 @@ export async function autoCancelExpiredTrades(userId: string): Promise<void> {
         metadata: { tradeId: t.id, kind: 'trade_expired' },
       })
     }
-    await sendTradeMessage(t.id, 'system', 'Trade expired — payment window closed.', true)
-    // Same removal as above — p2p_notify_trade_event's trade_expired case
+    await sendTradeMessage(t.id, 'system', 'Trade expired - payment window closed.', true)
+    // Same removal as above - p2p_notify_trade_event's trade_expired case
     // (triggered by the status update to 'expired' just above) sends the
     // reason-accurate notification to both parties now.
   }
 }
 
 // Extra time given to the BUYER past the trade's own selected payment
-// window (whatever the offer creator picked — 15 min through 24 hours)
+// window (whatever the offer creator picked - 15 min through 24 hours)
 // before the trade is considered truly abandoned. A flat, fixed 15
-// minutes regardless of the original window's length — this exists so a
+// minutes regardless of the original window's length - this exists so a
 // buyer who's mid-payment right as the countdown hits zero (e.g. a bank
 // transfer submitted a second before the deadline) isn't punished by a
 // hard cutoff at the exact wall-clock second. Marking payment sent at ANY
 // point during this grace window still counts as on-time; only after
 // grace elapses with no payment does the trade actually expire.
 //
-// Deliberately scoped to 'waiting_for_buyer' only — 'awaiting_seller_
+// Deliberately scoped to 'waiting_for_buyer' only - 'awaiting_seller_
 // confirmation' is the SELLER's own on-chain confirmation step, not a
 // buyer payment step, so no grace applies there.
 export const GRACE_PERIOD_MINUTES = 15
 
 export function isTradeExpired(trade: P2PTrade): boolean {
-  // 'awaiting_seller_confirmation' shares the same base expiry window — a
+  // 'awaiting_seller_confirmation' shares the same base expiry window - a
   // trade the seller never confirms should expire and release the offer's
   // lock, same as one the buyer never pays. It does not get the buyer's
   // grace period (see GRACE_PERIOD_MINUTES's own comment).
@@ -1860,7 +1860,7 @@ export function isTradeExpired(trade: P2PTrade): boolean {
 // A release is a two-part operation: claim the trade ('payment_sent' →
 // 'released'), then move funds on-chain. releaseTrade now compensates on every
 // failure path it can see, but it cannot compensate for what it never gets to
-// run — a closed tab, a killed process, or a lost connection between the claim
+// run - a closed tab, a killed process, or a lost connection between the claim
 // and the revert. That window is small but real, and two production trades fell
 // into it: status 'released', released_at NULL, completed_at NULL, tx_hash NULL,
 // and the offer left locked by locked_by_trade_id forever.
@@ -1870,7 +1870,7 @@ export function isTradeExpired(trade: P2PTrade): boolean {
 // unambiguous signature for the stuck state. This pass finds those and repairs
 // them using the CONTRACT as the source of truth, never an inference.
 
-// The repair policy itself lives in stuckReleasePolicy.ts — pure, dependency
+// The repair policy itself lives in stuckReleasePolicy.ts - pure, dependency
 // free, and shared by name with the scheduled server-side reconciler
 // (supabase/functions/p2p-release-reconcile), whose mirror copy is held to this
 // one by stuckReleasePolicy.parity.test.ts. Re-exported from the single import at
@@ -1891,12 +1891,12 @@ export interface StuckReleaseOutcome {
 
 /**
  * Finds this user's stuck releases and repairs the ones that can be repaired
- * safely. Follows the same shape as autoCancelExpiredTrades — a per-user sweep,
+ * safely. Follows the same shape as autoCancelExpiredTrades - a per-user sweep,
  * scoped to trades the caller is party to, safe to run on page mount.
  *
  * This is the FALLBACK path. It only runs while a user has the P2P page open, so
  * it cannot be relied on (a seller who never returns leaves a buyer waiting
- * indefinitely) — supabase/functions/p2p-release-reconcile is the reliable one.
+ * indefinitely) - supabase/functions/p2p-release-reconcile is the reliable one.
  * Both are gated by the same fail-closed activation boundary, so neither can
  * sweep historical trades that predate activation.
  *
@@ -1932,7 +1932,7 @@ export async function reconcileStuckReleases(
     for (const t of stuck) {
       // Buy-offer trades escrow into a TRADE-keyed bucket; sell-offer trades
       // draw from the OFFER's pool (which now requires the seller's address
-      // to derive the correct on-chain key — see offerKeyFor's own comment
+      // to derive the correct on-chain key - see offerKeyFor's own comment
       // on the front-run fix). Probe whichever one actually holds funds.
       const [onChainReleased, escrowRemaining] = await Promise.all([
         probeTradeReleasedOnChain(t.id),
@@ -1957,20 +1957,20 @@ export async function reconcileStuckReleases(
         if (applied) await unlockOffer(t.offerId, t.id, t.amountUsdc)
       } else if (verdict === 'restore') {
         applied = await updateTradeStatus(t.id, { status: 'payment_sent' })
-        // The offer stays locked on purpose — the trade is live again.
+        // The offer stays locked on purpose - the trade is live again.
       } else if (verdict === 'cancel') {
         applied = await updateTradeStatus(t.id, {
           status: 'cancelled',
-          cancel_reason: 'Escrow was never funded — release could not be completed',
+          cancel_reason: 'Escrow was never funded - release could not be completed',
         })
         if (applied) await unlockOffer(t.offerId, t.id, t.amountUsdc)
       }
       // 'investigate' applies nothing, by design.
 
       if (verdict !== 'investigate') {
-        console.warn('[p2pService] reconcileStuckReleases:', t.id, verdict, applied ? 'applied' : 'FAILED TO APPLY', '—', reason)
+        console.warn('[p2pService] reconcileStuckReleases:', t.id, verdict, applied ? 'applied' : 'FAILED TO APPLY', '-', reason)
       } else {
-        console.warn('[p2pService] reconcileStuckReleases:', t.id, 'INVESTIGATE —', reason)
+        console.warn('[p2pService] reconcileStuckReleases:', t.id, 'INVESTIGATE -', reason)
       }
       outcomes.push({ tradeId: t.id, amountUsdc: t.amountUsdc, verdict, reason, applied })
     }
@@ -1998,7 +1998,7 @@ export async function markPaymentSent(trade: P2PTrade): Promise<{ success: boole
     try { await escrowMod.markTradePaidOnChain(pk, trade.id) }
     catch (e: any) {
       return { success: false, message: /not active|only the trade's buyer/i.test(e?.message || '')
-        ? "The seller's USDC isn't locked in escrow for this trade — don't send money. Open a dispute if you already paid."
+        ? "The seller's USDC isn't locked in escrow for this trade - don't send money. Open a dispute if you already paid."
         : `Couldn't confirm on-chain: ${e?.message || 'please try again'}` }
     }
   }
@@ -2006,7 +2006,7 @@ export async function markPaymentSent(trade: P2PTrade): Promise<{ success: boole
   const result = await paymentProvider.confirmPayment(trade)
   if (!result.success) return result
 
-  // Claim the transition atomically — only succeeds if the row is still
+  // Claim the transition atomically - only succeeds if the row is still
   // 'waiting_for_buyer' at write time, so a double-tap on "I've Paid" (or
   // any other concurrent call) can only ever mark payment once. The DB
   // trigger added in 20260729140000 additionally blocks this entirely once
@@ -2016,7 +2016,7 @@ export async function markPaymentSent(trade: P2PTrade): Promise<{ success: boole
     return { success: false, message: 'Payment has already been marked for this trade.' }
   }
   await sendTradeMessage(trade.id, 'system', result.message, true)
-  // notifyP2P removed here (2026-09-21) — duplicated p2p_notify_trade_event's
+  // notifyP2P removed here (2026-09-21) - duplicated p2p_notify_trade_event's
   // payment_marked_completed case, which fires on this exact status
   // transition (waiting_for_buyer -> payment_sent) and notifies
   // trade.sellerId reliably.
@@ -2024,17 +2024,17 @@ export async function markPaymentSent(trade: P2PTrade): Promise<{ success: boole
 }
 
 /**
- * Retries a database write a few times with a short backoff — used ONLY
+ * Retries a database write a few times with a short backoff - used ONLY
  * for the two writes in releaseTrade() that happen right after a real
  * on-chain wait (see sendContractTxOnce's waitForTransactionReceipt).
  *
  * Root cause this hardens against: updateTradeStatus() previously got
  * exactly one un-retried attempt for the finalize/revert write, at the
- * single highest-risk moment for it to fail — right after the browser has
+ * single highest-risk moment for it to fail - right after the browser has
  * just spent real seconds waiting on a blockchain confirmation. A brief
  * connectivity blip, a mobile tab losing focus, or a momentarily expired
  * session token at that exact instant left the trade permanently stuck
- * "released" with no tx_hash — indistinguishable from a genuine on-chain
+ * "released" with no tx_hash - indistinguishable from a genuine on-chain
  * failure, but actually just a single failed HTTP request. Confirmed as
  * a repeating pattern across multiple independent trades, not a one-off.
  */
@@ -2052,7 +2052,7 @@ export async function releaseTrade(trade: P2PTrade): Promise<{ success: boolean;
 
   // Claim the release BEFORE touching escrow at all. Previously
   // escrowProvider.release() ran first and the status only got updated
-  // afterwards — nothing stopped a double-click, a retried network
+  // afterwards - nothing stopped a double-click, a retried network
   // request, or two open tabs on the same trade from each seeing
   // status === 'payment_sent', each calling escrowProvider.release(), and
   // USDC actually moving twice. This conditional PATCH only succeeds for
@@ -2062,16 +2062,16 @@ export async function releaseTrade(trade: P2PTrade): Promise<{ success: boolean;
   const claimed = await updateTradeStatusIf(trade.id, ['payment_sent'], { status: 'released' })
   if (!claimed) {
     // Could be a genuine double-release attempt, OR a network/fetch error
-    // (now caught inside updateTradeStatusIf rather than throwing) — this
+    // (now caught inside updateTradeStatusIf rather than throwing) - this
     // function's boolean return can't distinguish the two, so the message
     // stays accurate for both rather than confidently asserting one.
-    return { success: false, message: 'Could not start the release — the trade may already be released, or there was a network issue. Please refresh and try again.' }
+    return { success: false, message: 'Could not start the release - the trade may already be released, or there was a network issue. Please refresh and try again.' }
   }
 
   // Everything from here on is inside the claim window: the trade now says
   // 'released' while no funds have moved yet. Any exit path that leaves it that
   // way permanently is the bug that stranded two production trades, so the whole
-  // window is wrapped — a throw must not be able to skip the compensation.
+  // window is wrapped - a throw must not be able to skip the compensation.
   let result: { success: boolean; txHash?: string; message: string }
   try {
     result = await escrowProvider.release(trade)
@@ -2081,7 +2081,7 @@ export async function releaseTrade(trade: P2PTrade): Promise<{ success: boolean;
     // dynamic import, a wallet-store read). Previously a throw propagated
     // straight out of this function and the revert below never ran.
     console.error('[p2pService] releaseTrade: escrow release threw', trade.id, e?.message)
-    result = { success: false, message: e?.message ?? 'Release failed unexpectedly — please try again.' }
+    result = { success: false, message: e?.message ?? 'Release failed unexpectedly - please try again.' }
   }
 
   if (result.success) {
@@ -2089,15 +2089,15 @@ export async function releaseTrade(trade: P2PTrade): Promise<{ success: boolean;
     const finalized = await withRetry(() => updateTradeStatus(trade.id, { status: 'completed', released_at: now, completed_at: now, tx_hash: result.txHash ?? null }))
     if (!finalized) {
       // The USDC HAS moved on-chain but the row could not be finalized. Do NOT
-      // revert the claim — that would invite a second release of the same funds.
+      // revert the claim - that would invite a second release of the same funds.
       // Leave it claimed and let reconcileStuckReleases finalize it: the
       // contract's own tradeReleased flag will prove the release happened.
-      console.error('[p2pService] releaseTrade: on-chain release SUCCEEDED but finalize failed after retries — reconciler will repair', trade.id, result.txHash)
+      console.error('[p2pService] releaseTrade: on-chain release SUCCEEDED but finalize failed after retries - reconciler will repair', trade.id, result.txHash)
     }
     await unlockOffer(trade.offerId, trade.id, trade.amountUsdc)
     await retireOfferIfDepleted(trade.offerId)
-    await sendTradeMessage(trade.id, 'system', `USDC released${result.txHash ? ` — tx ${result.txHash.slice(0, 10)}...` : ''}. Trade complete.`, true)
-    // notifyP2P removed here (2026-09-21) — duplicated p2p_notify_trade_event's
+    await sendTradeMessage(trade.id, 'system', `USDC released${result.txHash ? ` - tx ${result.txHash.slice(0, 10)}...` : ''}. Trade complete.`, true)
+    // notifyP2P removed here (2026-09-21) - duplicated p2p_notify_trade_event's
     // funds_released case, which fires on this exact status transition
     // (payment_sent -> released/completed) and notifies trade.buyerId
     // reliably.
@@ -2107,13 +2107,13 @@ export async function releaseTrade(trade: P2PTrade): Promise<{ success: boolean;
       metadata: { tradeId: trade.id, offerId: trade.offerId },
     })
   } else {
-    // The claim succeeded but no funds moved — release the claim so the seller
+    // The claim succeeded but no funds moved - release the claim so the seller
     // can retry. If even THIS write fails after retries, the trade is stuck;
     // say so plainly rather than reporting a bare failure, and let the
     // reconciler pick it up.
     const reverted = await withRetry(() => updateTradeStatus(trade.id, { status: 'payment_sent' }))
     if (!reverted) {
-      console.error('[p2pService] releaseTrade: revert FAILED after retries — trade left claimed, reconciler will repair', trade.id)
+      console.error('[p2pService] releaseTrade: revert FAILED after retries - trade left claimed, reconciler will repair', trade.id)
       return {
         success: false,
         message: `${result.message} The trade could not be returned to its previous state automatically; it will be repaired shortly.`,
@@ -2141,7 +2141,7 @@ export async function sendTradeMessage(tradeId: string, senderId: string, conten
 /**
  * System lines written by the dispute roles used to include the wallet that
  * acted ("Pauser 0x9e9b…069b4 reviewed…"). People only need what happened,
- * not who's key did it — shown without the address (old lines too).
+ * not who's key did it - shown without the address (old lines too).
  */
 export function cleanSystemText(text: string): string {
   return text
@@ -2178,7 +2178,7 @@ export async function submitRating(p: { tradeId: string; raterId: string; ratedI
 }
 
 /**
- * Whether `raterId` has already rated `tradeId` — used to decide whether
+ * Whether `raterId` has already rated `tradeId` - used to decide whether
  * to (re-)show the rating prompt. Without this, reopening an already-rated
  * completed trade (or the buyer's side of one, see the effect that calls
  * this in P2PPage.tsx) would pop the star sheet again every single time;
@@ -2242,14 +2242,14 @@ export function formatReleaseTime(seconds: number | null): string {
   return `${Math.round(seconds / 3600)}h`
 }
 
-// notifyP2P (and its call sites) removed entirely on 2026-09-21 — this
+// notifyP2P (and its call sites) removed entirely on 2026-09-21 - this
 // comment used to explain why it was "left in place (harmless)" despite
 // being superseded by the server-side p2p_notify_trade_event trigger (see
 // supabase/migrations/20260730160000_p2p_notifications_system.sql) +
 // lib/p2pNotifications.ts, which deliver these same events for BOTH
 // parties, cross-device, including while offline. This function only ever
 // fired for the CURRENT browser session, and only when that session's
-// logged-in user happened to equal the target userId — never true in real
+// logged-in user happened to equal the target userId - never true in real
 // two-different-people trading, so every call was already a no-op in
 // production. All 10 call sites have now been removed (each replaced with
 // a comment pointing at the specific trigger case that already covers it);
@@ -2265,7 +2265,7 @@ export async function adminFetchAllActiveTrades(): Promise<P2PTrade[]> {
   return (rows as any[]).map(tradeFromRow)
 }
 
-/** Live updates for the admin Trades panel — mirrors subscribeToAllOffers's own reasoning; no per-user filter, since this view is every active trade regardless of who's on it. */
+/** Live updates for the admin Trades panel - mirrors subscribeToAllOffers's own reasoning; no per-user filter, since this view is every active trade regardless of who's on it. */
 export function subscribeToAllTrades(onChange: (trade: P2PTrade) => void): () => void {
   return subscribeWithRetry(supabase, 'p2p-admin-trades', channel =>
     channel.on('postgres_changes', { event: '*', schema: 'public', table: 'p2p_trades' },
@@ -2274,17 +2274,17 @@ export function subscribeToAllTrades(onChange: (trade: P2PTrade) => void): () =>
 
 /**
  * ROOT-CAUSE FIX: this used to sign with whatever wallet is logged into
- * this dashboard's own MeshPort session (useAuthStore) — via
+ * this dashboard's own MeshPort session (useAuthStore) - via
  * freezeTradeOnChainBestEffort/unfreezeTradeOnChainBestEffort, best-effort
  * and silent about failing. That's the correct signer for a regular
  * buyer/seller opening their own dispute (see openDispute, which still
- * uses those helpers) — but for the ADMIN CONSOLE it was always the wrong
+ * uses those helpers) - but for the ADMIN CONSOLE it was always the wrong
  * signer: Pauser is a genuinely separate role/wallet from whoever is
  * logged into this dashboard (see the contract's own file header on
  * separation of duties), so this call silently failed on-chain almost
  * every time, with only the DB flag actually doing anything. Fixed by
  * signing through the browser's injected wallet instead, same pattern as
- * adminFreezeDisputeViaWallet/adminFreezeOfferViaWallet below — and,
+ * adminFreezeDisputeViaWallet/adminFreezeOfferViaWallet below - and,
  * unlike the best-effort version, this surfaces a real success/failure
  * message instead of swallowing the on-chain result.
  */
@@ -2297,28 +2297,28 @@ export async function adminFreezeTradeViaWallet(tradeId: string, frozen: boolean
     return { success: true, message: frozen ? 'Trade frozen.' : 'Trade unfrozen.' }
   } catch (e: any) {
     // The DB flag above still applies regardless (every UI/API path in
-    // this app already gates on it) — but be honest that the on-chain
+    // this app already gates on it) - but be honest that the on-chain
     // mirror failed, rather than reporting a silent success.
-    return { success: false, message: e?.shortMessage || e?.message || 'Trade flag updated, but the on-chain freeze failed — check that your connected wallet holds the Pauser role.' }
+    return { success: false, message: e?.shortMessage || e?.message || 'Trade flag updated, but the on-chain freeze failed - check that your connected wallet holds the Pauser role.' }
   }
 }
 
 /**
  * GAP FIX: freezeOffer()/unfreezeOffer() have existed on the contract
  * since P2PMeshportEscrowV2 shipped, but nothing in this app ever called
- * them — P2PAdminPage only exposed trade-level Freeze, never offer-level.
+ * them - P2PAdminPage only exposed trade-level Freeze, never offer-level.
  * A Pauser reviewing a suspicious SELL offer (e.g. before a ban clears)
  * had no way to block new trades against it short of the blunt "pause the
  * entire escrow contract for everyone" button. This is the offer-level
- * equivalent of adminFreezeTradeViaWallet above — same signing pattern
+ * equivalent of adminFreezeTradeViaWallet above - same signing pattern
  * (connected browser wallet, not this dashboard's own session key) and
  * same reasoning (Pauser is a genuinely separate wallet). Unlike trade
  * freeze there's no DB column to mirror this onto (p2p_offers has no
- * admin_frozen field) — the on-chain call IS the whole action.
+ * admin_frozen field) - the on-chain call IS the whole action.
  */
 /**
  * ROOT-CAUSE FIX: this used to sign with this dashboard's own MeshPort
- * session key (useAuthStore) — same mismatch as adminFreezeTradeViaWallet
+ * session key (useAuthStore) - same mismatch as adminFreezeTradeViaWallet
  * above: Pauser is a genuinely separate wallet from whoever is logged
  * into this dashboard, so this reverted on-chain almost every time in
  * practice. Now signs through the browser's injected wallet instead.
@@ -2329,13 +2329,13 @@ export async function adminFreezeOfferViaWallet(offer: P2POffer, frozen: boolean
     if (!isEscrowContractDeployed()) return { success: false, message: 'No escrow contract configured.' }
     if (frozen) await freezeOfferOnChainViaWallet(offer.id, offer.walletAddress)
     else await unfreezeOfferOnChainViaWallet(offer.id, offer.walletAddress)
-    return { success: true, message: frozen ? 'Offer frozen — new deposits and trades against it are blocked.' : 'Offer unfrozen.' }
+    return { success: true, message: frozen ? 'Offer frozen - new deposits and trades against it are blocked.' : 'Offer unfrozen.' }
   } catch (e: any) {
-    return { success: false, message: e?.shortMessage || e?.message || 'Could not update this offer’s freeze state — make sure your connected wallet holds the Pauser role.' }
+    return { success: false, message: e?.shortMessage || e?.message || 'Could not update this offer’s freeze state - make sure your connected wallet holds the Pauser role.' }
   }
 }
 
-/** Read-only — is this offer currently frozen on-chain? Used by the admin console to show accurate Freeze/Unfreeze state instead of guessing from the last click. Returns false for anything not a sell offer (nothing was ever escrowed for a buy offer to freeze). */
+/** Read-only - is this offer currently frozen on-chain? Used by the admin console to show accurate Freeze/Unfreeze state instead of guessing from the last click. Returns false for anything not a sell offer (nothing was ever escrowed for a buy offer to freeze). */
 export async function adminFetchOfferFrozen(offer: P2POffer): Promise<boolean> {
   if (offer.offerType !== 'sell') return false
   try {
@@ -2350,11 +2350,11 @@ export async function adminFetchOfferFrozen(offer: P2POffer): Promise<boolean> {
 /**
  * Admin override for the manual "Cancel Trade" console action. Subject to
  * the same counterparty-fulfilled protection as everyone else UNLESS the
- * trade is already flagged for review (frozen, or has an open dispute) —
+ * trade is already flagged for review (frozen, or has an open dispute) -
  * that's the signal an admin is actively investigating rather than
  * short-circuiting a trade the counterparty already did their part on.
  * To force-cancel a fulfilled trade, freeze it first (Freeze button) or
- * open/await a dispute, then cancel — same two-step pattern as any other
+ * open/await a dispute, then cancel - same two-step pattern as any other
  * admin override in this codebase. Dispute-driven cancellations should
  * normally go through adminResolveDispute instead, which records the
  * resolution properly.
@@ -2362,7 +2362,7 @@ export async function adminFetchOfferFrozen(offer: P2POffer): Promise<boolean> {
 export async function adminCancelTrade(trade: P2PTrade, note: string): Promise<{ success: boolean; message: string }> {
   const counterpartyFulfilled = trade.status === 'payment_sent' || trade.offerType === 'buy'
   if (counterpartyFulfilled && !trade.adminFrozen && trade.disputeStatus !== 'open') {
-    return { success: false, message: 'Freeze this trade or open a dispute before cancelling — the counterparty has already fulfilled their obligation.' }
+    return { success: false, message: 'Freeze this trade or open a dispute before cancelling - the counterparty has already fulfilled their obligation.' }
   }
   // Same double-fire guard as everywhere else that touches escrow: claim
   // the cancellation atomically first so two overlapping calls (double
@@ -2387,14 +2387,14 @@ export async function adminCancelTrade(trade: P2PTrade, note: string): Promise<{
 
 export async function adminResolveDispute(trade: P2PTrade, resolution: 'resolved_buyer' | 'resolved_seller', note: string): Promise<{ success: boolean; message: string }> {
   // Same double-fire hazard as releaseTrade(): claim the resolution
-  // atomically — only succeeds while dispute_status is still 'open' at
-  // write time — BEFORE calling escrowProvider. Without this, a
+  // atomically - only succeeds while dispute_status is still 'open' at
+  // write time - BEFORE calling escrowProvider. Without this, a
   // double-click on "Favor Buyer (Release)"/"Favor Seller" (or a retried
   // request) could each pass a stale check and each move funds. This claim
   // is also the actual mechanism behind "only an admin may resolve a
   // dispute": once it succeeds, dispute_status is no longer 'open', so the
   // DB-level p2p_enforce_dispute_lock trigger closes the window immediately
-  // — there is no gap where a second resolution (by this admin or anyone
+  // - there is no gap where a second resolution (by this admin or anyone
   // else) can slip through.
   const claimed = await updateTradeIf(trade.id, 'dispute_status', 'open', { dispute_status: resolution, admin_note: note, admin_frozen: false })
   if (!claimed) {
@@ -2402,7 +2402,7 @@ export async function adminResolveDispute(trade: P2PTrade, resolution: 'resolved
   }
 
   if (resolution === 'resolved_buyer') {
-    // Unfreeze on-chain BEFORE releasing — release() itself checks
+    // Unfreeze on-chain BEFORE releasing - release() itself checks
     // tradeFrozen and would revert otherwise, since dispute-open already
     // froze this trade on-chain (see freezeTradeOnChainBestEffort).
     await unfreezeTradeOnChainBestEffort(trade.id)
@@ -2417,13 +2417,13 @@ export async function adminResolveDispute(trade: P2PTrade, resolution: 'resolved
         metadata: { tradeId: trade.id, offerId: trade.offerId, kind: 'dispute_resolved_buyer' },
       })
     } else {
-      // Escrow release failed after we already claimed the resolution —
+      // Escrow release failed after we already claimed the resolution -
       // reopen the dispute (re-frozen) so an admin can retry, rather than
       // leaving the trade permanently stuck "resolved" with no funds ever
       // actually sent to the buyer.
       await updateTradeStatus(trade.id, { dispute_status: 'open', admin_frozen: true })
       await freezeTradeOnChainBestEffort(trade.id)
-      await sendTradeMessage(trade.id, 'system', `Dispute resolution failed — release did not complete: ${result.message}`, true)
+      await sendTradeMessage(trade.id, 'system', `Dispute resolution failed - release did not complete: ${result.message}`, true)
       return { success: false, message: result.message }
     }
   } else {
@@ -2446,18 +2446,18 @@ export async function adminResolveDispute(trade: P2PTrade, resolution: 'resolved
 // branch above calls escrowProvider.release(trade), which signs with
 // WHATEVER wallet is logged into the admin dashboard session
 // (useAuthStore). On the deployed P2PMeshportEscrowV2 contract,
-// release(tradeKey) requires msg.sender == the trade's actual SELLER — the
+// release(tradeKey) requires msg.sender == the trade's actual SELLER - the
 // dashboard admin essentially never is that seller, so this call reverts
 // on-chain with "only the trade's seller can release it" every time a real
 // V2 contract is configured. This function is left in place only for the
 // no-escrow-contract-configured fallback path (HonorSystemFallbackEscrowProvider,
-// which has no on-chain signer restriction) — do NOT wire new UI to this
+// which has no on-chain signer restriction) - do NOT wire new UI to this
 // function. Use adminInvestigateDisputeViaWallet() + adminExecuteDisputeResolutionViaWallet()
 // below instead, which correctly go through the real on-chain
 // Pauser -> Investigator -> Admin flow with genuine role separation.
 
 /**
- * Step 0 of the on-chain dispute flow (PAUSER tier) — was previously only
+ * Step 0 of the on-chain dispute flow (PAUSER tier) - was previously only
  * ever a passive instruction ("Freeze this trade first, using the toggle
  * in the trade list") pointing at a DIFFERENT control that signs with the
  * dashboard session's own key, not a connected wallet. That meant there
@@ -2465,7 +2465,7 @@ export async function adminResolveDispute(trade: P2PTrade, resolution: 'resolved
  * escalating a dispute before investigate()/adminResolve() become
  * reachable. This is the wallet-signed equivalent (mirrors
  * adminInvestigateDisputeViaWallet/adminExecuteDisputeResolutionViaWallet
- * below) — requires a real reason, and records it as a system message so
+ * below) - requires a real reason, and records it as a system message so
  * the Investigator and Admin both see WHY this trade was escalated before
  * they act on it, not just that it happened.
  */
@@ -2477,16 +2477,16 @@ export async function adminFreezeDisputeViaWallet(trade: P2PTrade, reason: strin
     const wallet = await getConnectedInjectedWalletAddress()
     await updateTradeStatus(trade.id, { admin_frozen: true })
     await sendTradeMessage(trade.id, 'system', `Pauser reviewed this dispute and forwarded it to an Investigator. Reason: ${reason.trim()}`, true)
-    return { success: true, message: 'Frozen and forwarded to an Investigator — a DIFFERENT wallet must now investigate.' }
+    return { success: true, message: 'Frozen and forwarded to an Investigator - a DIFFERENT wallet must now investigate.' }
   } catch (e: any) {
-    return { success: false, message: e?.shortMessage || e?.message || 'Freeze failed — check that your connected wallet holds the Pauser role.' }
+    return { success: false, message: e?.shortMessage || e?.message || 'Freeze failed - check that your connected wallet holds the Pauser role.' }
   }
 }
 
 /**
  * Step 1 of the on-chain dispute flow (INVESTIGATOR tier). Trade must
  * already be Frozen (see adminFreezeDisputeViaWallet above). Signs through
- * the browser's injected wallet — must be a DIFFERENT address from
+ * the browser's injected wallet - must be a DIFFERENT address from
  * whoever froze this specific trade, or the contract itself rejects it
  * (per-dispute independence, enforced on-chain, not just here). Records a
  * recommendation only; moves no funds.
@@ -2500,13 +2500,13 @@ export async function adminInvestigateDisputeViaWallet(trade: P2PTrade, approveR
     await sendTradeMessage(trade.id, 'system', `Investigator reviewed this dispute and forwarded it to an Admin, recommending ${approveRelease ? 'release to buyer' : 'refund to seller'}. Reason: ${reason.trim()}`, true)
     return { success: true, message: `Investigation recorded: recommend ${approveRelease ? 'release to buyer' : 'refund to seller'}. An Admin (a THIRD, different wallet) can now execute this.` }
   } catch (e: any) {
-    return { success: false, message: e?.shortMessage || e?.message || 'Investigation failed — check that your connected wallet holds the Investigator role and is different from whoever froze this trade.' }
+    return { success: false, message: e?.shortMessage || e?.message || 'Investigation failed - check that your connected wallet holds the Investigator role and is different from whoever froze this trade.' }
   }
 }
 
 /**
  * Lets whoever is running the admin console speak directly in a trade's
- * chat — e.g. asking either party for proof of payment during a dispute.
+ * chat - e.g. asking either party for proof of payment during a dispute.
  * Sent as a system-style message (senderId 'admin', distinct from the
  * plain 'system' used for audit-log lines like "Dispute opened: ...")
  * so both the admin console and the buyer/seller-facing chat can render
@@ -2522,12 +2522,12 @@ export async function sendAdminTradeMessage(tradeId: string, content: string): P
 /**
  * Step 2 (final) of the correct on-chain dispute resolution (Admin tier).
  * Trade must already be Investigated. Signs through the browser's
- * injected wallet — must be a DIFFERENT address from both whoever froze
+ * injected wallet - must be a DIFFERENT address from both whoever froze
  * AND whoever investigated this specific trade (enforced on-chain).
- * Moves funds using ONLY the trade's stored buyer/amount/outcome — this
+ * Moves funds using ONLY the trade's stored buyer/amount/outcome - this
  * function cannot choose a recipient or amount, it only triggers the
  * already-recorded resolution. DB state is synced from the CONFIRMED
- * on-chain result afterward, via syncDisputeResolutionFromChain — never
+ * on-chain result afterward, via syncDisputeResolutionFromChain - never
  * written speculatively before the chain confirms it.
  */
 export async function adminExecuteDisputeResolutionViaWallet(trade: P2PTrade, note?: string): Promise<{ success: boolean; message: string }> {
@@ -2536,12 +2536,12 @@ export async function adminExecuteDisputeResolutionViaWallet(trade: P2PTrade, no
     const txHash = await adminResolveTradeOnChainViaWallet(trade.id)
     return await syncDisputeResolutionFromChain(trade, txHash, note)
   } catch (e: any) {
-    return { success: false, message: e?.shortMessage || e?.message || 'Resolution failed — check that your connected wallet holds the Admin role and is different from whoever froze/investigated this trade.' }
+    return { success: false, message: e?.shortMessage || e?.message || 'Resolution failed - check that your connected wallet holds the Admin role and is different from whoever froze/investigated this trade.' }
   }
 }
 
 /**
- * Reads the trade's ACTUAL on-chain state and syncs the DB to match — the
+ * Reads the trade's ACTUAL on-chain state and syncs the DB to match - the
  * only place dispute_status/trade status get set to a resolved value as a
  * result of the new on-chain flow. Deliberately re-reads from the chain
  * rather than trusting the caller's belief that the transaction succeeded,
@@ -2550,7 +2550,7 @@ export async function adminExecuteDisputeResolutionViaWallet(trade: P2PTrade, no
 export async function syncDisputeResolutionFromChain(trade: P2PTrade, txHash?: string, note?: string): Promise<{ success: boolean; message: string }> {
   const { getTradeOnChain } = await import('./p2pEscrowContract')
   const onChain = await getTradeOnChain(trade.id)
-  if (!onChain) return { success: false, message: 'Resolved on-chain, but could not re-read the trade\u2019s state to confirm — check the block explorer and sync manually if needed.' }
+  if (!onChain) return { success: false, message: 'Resolved on-chain, but could not re-read the trade\u2019s state to confirm - check the block explorer and sync manually if needed.' }
 
   if (onChain.state === 'Released') {
     const claimed = await updateTradeIf(trade.id, 'dispute_status', 'open', {
@@ -2590,20 +2590,20 @@ export async function syncDisputeResolutionFromChain(trade: P2PTrade, txHash?: s
     return { success: true, message: 'Confirmed on-chain: refunded to seller.' }
   }
 
-  return { success: false, message: `Trade is not yet resolved on-chain (state: ${onChain.state}) — the resolution transaction may still be pending.` }
+  return { success: false, message: `Trade is not yet resolved on-chain (state: ${onChain.state}) - the resolution transaction may still be pending.` }
 }
 
 /**
- * Emergency stop for the whole escrow contract — blocks new deposits,
+ * Emergency stop for the whole escrow contract - blocks new deposits,
  * releases, and withdrawals contract-wide until unpaused.
  *
  * ROOT-CAUSE FIX: this used to sign with this dashboard's own MeshPort
- * session key (useAuthStore) — but pause()/unpause() are Pauser-only
- * on-chain (onlyPauser, NOT admin — see pauseEscrowViaWallet's own
+ * session key (useAuthStore) - but pause()/unpause() are Pauser-only
+ * on-chain (onlyPauser, NOT admin - see pauseEscrowViaWallet's own
  * comment in p2pEscrowContract.ts), and Pauser is a genuinely separate
  * wallet from whoever is logged into this dashboard. That mismatch is
  * exactly what the old "session's wallet isn't a Pauser" banner used to
- * warn about instead of fixing — this signs through the browser's
+ * warn about instead of fixing - this signs through the browser's
  * injected wallet instead, same as every other Pauser/Investigator/Admin
  * action in this console.
  */
@@ -2612,9 +2612,9 @@ export async function adminPauseEscrowViaWallet(): Promise<{ success: boolean; m
     const { isEscrowContractDeployed, pauseEscrowViaWallet } = await import('./p2pEscrowContract')
     if (!isEscrowContractDeployed()) return { success: false, message: 'No escrow contract configured.' }
     await pauseEscrowViaWallet()
-    return { success: true, message: 'Escrow contract paused — deposits, releases, and withdrawals are blocked until unpaused.' }
+    return { success: true, message: 'Escrow contract paused - deposits, releases, and withdrawals are blocked until unpaused.' }
   } catch (e: any) {
-    return { success: false, message: e?.shortMessage || e?.message || 'Could not pause the escrow contract — make sure your connected wallet holds the Pauser role.' }
+    return { success: false, message: e?.shortMessage || e?.message || 'Could not pause the escrow contract - make sure your connected wallet holds the Pauser role.' }
   }
 }
 
@@ -2625,7 +2625,7 @@ export async function adminUnpauseEscrowViaWallet(): Promise<{ success: boolean;
     await unpauseEscrowViaWallet()
     return { success: true, message: 'Escrow contract unpaused.' }
   } catch (e: any) {
-    return { success: false, message: e?.shortMessage || e?.message || 'Could not unpause the escrow contract — make sure your connected wallet holds the Pauser role.' }
+    return { success: false, message: e?.shortMessage || e?.message || 'Could not unpause the escrow contract - make sure your connected wallet holds the Pauser role.' }
   }
 }
 
@@ -2641,7 +2641,7 @@ export async function adminFetchEscrowPaused(): Promise<boolean> {
 /**
  * Surfaces the contract's actual authorized admin wallet so P2PAdminPage.tsx
  * can warn directly if the currently logged-in admin's own wallet doesn't
- * match it — release()/pause()/unpause() all require msg.sender===admin
+ * match it - release()/pause()/unpause() all require msg.sender===admin
  * on-chain, so a mismatch here means those actions will never work no
  * matter how many times they're retried, regardless of whether this
  * device's wallet is unlocked.
@@ -2656,11 +2656,11 @@ export async function adminFetchEscrowAdminAddress(): Promise<string | null> {
 }
 
 /**
- * P2PMeshportEscrow only — whether the given wallet currently has
+ * P2PMeshportEscrow only - whether the given wallet currently has
  * PAUSER-level access (pause/unpause, freeze/unfreeze), separate from
  * full fund-moving ADMIN access. Always false against the old
  * single-admin P2PEscrow contract (no such concept there), which is the
- * correct fallback — P2PAdminPage.tsx falls back to the plain admin-match
+ * correct fallback - P2PAdminPage.tsx falls back to the plain admin-match
  * check in that case.
  */
 export async function adminFetchIsPauser(walletAddress: string): Promise<boolean> {

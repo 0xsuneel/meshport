@@ -125,7 +125,7 @@ Deno.test('reverting also transitions the parent intent SUBMITTED -> FAILED', as
   assertEquals(updateRepo.reverted, ['attempt-1'])
 })
 
-Deno.test('a mismatch clears the attempt for the EXISTING nonce-recovery mechanism to resolve — does not transition the intent', async () => {
+Deno.test('a mismatch clears the attempt for the EXISTING nonce-recovery mechanism to resolve - does not transition the intent', async () => {
   const verifier = makeVerifier({ hash: REAL_TX, from: SENDER, to: '0xADifferentDestination', nonce: '0xc' }, { status: '0x1', blockNumber: '0x100' })
   const updateRepo = makeUpdateRepo()
   await sweepSubmittedAttempts([nativeAttempt()], verifier, updateRepo.repo)

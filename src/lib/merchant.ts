@@ -6,7 +6,7 @@
 //   • Multichain Hub: "Bring Funds" becomes "Ledger" (UB and CCTP chains)
 //   • USDC on other chains waits there until the merchant taps Claim All
 //   • those claims show as "Payment received" with the chain + address
-// Everyone else — no application, pending, rejected or revoked — keeps the
+// Everyone else - no application, pending, rejected or revoked - keeps the
 // normal flow exactly as it is.
 //
 // Identity (user id, wallet, username) is filled in by the database from the
@@ -80,7 +80,7 @@ let channel: ReturnType<typeof supabase.channel> | null = null
 let channelUid: string | null = null
 // Right after a sign-in the account's new login id may not be linked to its
 // merchant rows for a moment (the database does it when the users row gets
-// the new login) — so a "no application" answer is re-checked once shortly
+// the new login) - so a "no application" answer is re-checked once shortly
 // after, and again whenever a new session signs in.
 let recheckedUid: string | null = null
 try {
@@ -90,7 +90,7 @@ try {
     }
   })
 } catch { /* no auth client (tests) */ }
-// This session was just linked to the account (wallet-signed) — merchant rows
+// This session was just linked to the account (wallet-signed) - merchant rows
 // follow the link, so load again.
 try {
   window.addEventListener('meshport:session-bound', () => { loading = null; void refreshMerchant() })
@@ -142,7 +142,7 @@ export function isMerchantNow(): boolean {
 
 /**
  * A claim from another chain by an approved merchant moves customer payments
- * to Arc — shown as "Ledger payment received". New rows carry metadata.merchant
+ * to Arc - shown as "Ledger payment received". New rows carry metadata.merchant
  * (tagged server-side when written); rows written before that tag existed
  * are recognised by date: made on another chain after the approval.
  */

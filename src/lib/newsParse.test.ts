@@ -27,7 +27,7 @@ const CIRCLE_ARTICLE = `<head><meta content="Settle globally via USDC without di
 
 const STATUS_RSS = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Arc Status - Incident History</title>
 <item>
-<title>Arc Testnet arc.network URL deprecation — October 8 brownout</title>
+<title>Arc Testnet arc.network URL deprecation - October 8 brownout</title>
 <description>
 &lt;p&gt; &lt;small&gt;Oct &lt;var data-var=&apos;date&apos;&gt; 8&lt;/var&gt;, &lt;var data-var=&apos;time&apos;&gt;00:00&lt;/var&gt; UTC&lt;/small&gt;&lt;br&gt; &lt;strong&gt;In progress&lt;/strong&gt; - Scheduled maintenance is currently in progress. We will provide updates as necessary. &lt;/p&gt; &lt;p&gt; &lt;small&gt;Oct &lt;var data-var=&apos;date&apos;&gt; 1&lt;/var&gt;, &lt;var data-var=&apos;time&apos;&gt;16:46&lt;/var&gt; UTC&lt;/small&gt;&lt;br&gt; &lt;strong&gt;Scheduled&lt;/strong&gt; - The arc.network endpoint URLs are scheduled for a brownout on October 8, 2026.&lt;br /&gt;&lt;br /&gt;rpc.testnet.arc.network → rpc.testnet.arc.io &lt;/p&gt;      </description>
 <pubDate>Thu, 08 Oct 2026 00:00:08 +0000</pubDate>
@@ -97,7 +97,7 @@ describe('parseArticle', () => {
 describe('parseStatusRss', () => {
   it('reads each notice with its latest status first', () => {
     const [first, second] = parseStatusRss(STATUS_RSS)
-    expect(first.title).toBe('Arc Testnet arc.network URL deprecation — October 8 brownout')
+    expect(first.title).toBe('Arc Testnet arc.network URL deprecation - October 8 brownout')
     expect(first.url).toBe('https://status.arc.io/incidents/5l16zk7f1p9g')
     expect(first.status_label).toBe('In progress')
     expect(first.summary).toBe('Scheduled maintenance is currently in progress. We will provide updates as necessary.')

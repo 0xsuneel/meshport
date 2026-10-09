@@ -10,11 +10,11 @@
 // Standard deposits wait for source finality: seconds on Avalanche, Polygon,
 // Sonic, Sei and HyperEVM; up to ~15 min on Ethereum, Base, Arbitrum, OP,
 // Unichain and World Chain (Arc docs: app-kit/tutorials/unified-balance).
-// If the page is closed while waiting, nothing is lost — the USDC sits in
+// If the page is closed while waiting, nothing is lost - the USDC sits in
 // the user's own Unified Balance and `spendUnifiedToArc` (Recovery panel)
 // finishes it later.
 
-// SDK chain ids that support Unified Balance deposits — see ubChains.ts.
+// SDK chain ids that support Unified Balance deposits - see ubChains.ts.
 import { realTxHash } from './relayedProvider'
 import { UB_CLAIM_CHAINS } from './ubChains'
 import { FORWARDER_MINT_FAILING_SDK_CHAINS, forwarderMintFailing, noteForwarderMintFailed } from '@/blockchain/chains'
@@ -28,12 +28,12 @@ export function ubClaimEta(sdkChainId: string): string {
   return FAST_FINALITY.has(sdkChainId) ? 'under a minute' : 'up to 15 minutes'
 }
 
-// Chains whose claim is being driven right now by runUbClaim on this device —
+// Chains whose claim is being driven right now by runUbClaim on this device -
 // the background auto-finish leaves those alone so the two never race.
 const inFlight = new Set<string>()
 
 /**
- * One collect/claim per wallet + chain at a time — across the manual claim,
+ * One collect/claim per wallet + chain at a time - across the manual claim,
  * the merchant auto-collect and other open tabs. Two runs at once both try to
  * deposit the same USDC: the second deposit reverts on-chain, but used to be
  * recorded as a claim anyway (a "Processing" row that never finishes).
@@ -52,7 +52,7 @@ async function withChainLock<T>(walletAddr: string, sdkChainId: string, fn: () =
   }
 }
 
-export const UB_CLAIM_BUSY_MESSAGE = 'A payment from this chain is already being collected — it will finish on its own. Check Activity in a minute.'
+export const UB_CLAIM_BUSY_MESSAGE = 'A payment from this chain is already being collected - it will finish on its own. Check Activity in a minute.'
 
 /** Throws when the deposit transaction reverted on-chain (nothing moved). */
 async function assertDepositSucceeded(sdkChainId: string, txHash: string | undefined): Promise<void> {
@@ -63,16 +63,16 @@ async function assertDepositSucceeded(sdkChainId: string, txHash: string | undef
     const appChain = SDK_TO_APP_CHAIN[sdkChainId] ?? sdkChainId
     receipt = await getClient(appChain).waitForTransactionReceipt({ hash: txHash as `0x${string}`, timeout: 120_000 })
   } catch (e) {
-    // Couldn't read it (RPC trouble / slow chain) — carry on as before.
+    // Couldn't read it (RPC trouble / slow chain) - carry on as before.
     console.warn('[ubClaim] could not read deposit receipt', e)
     return
   }
   if (receipt?.status === 'reverted') {
-    throw new Error('The deposit failed on-chain — nothing was moved. If another collection was running, it has already taken this payment.')
+    throw new Error('The deposit failed on-chain - nothing was moved. If another collection was running, it has already taken this payment.')
   }
 }
 // Below this, a chain's Unified Balance is leftover fee dust. Dust is never
-// shown or swept — it stays in the Unified Balance as the safety margin for
+// shown or swept - it stays in the Unified Balance as the safety margin for
 // the next spend from that chain (see spendMargin below).
 export const UB_MIN_SWEEP = 0.5
 // Kept for older imports; dust is no longer offered back to the user.
@@ -106,7 +106,7 @@ const UB_NETWORK_TYPE = (import.meta.env.VITE_NETWORK_ENV as string | undefined)
   ? 'mainnet'
   : 'testnet'
 
-// The Arc destination chain key for UB spends — resolved from env so a
+// The Arc destination chain key for UB spends - resolved from env so a
 // mainnet build targets Arc mainnet instead of the testnet chain ID.
 const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
   ? 'Arc'
@@ -117,7 +117,7 @@ export async function getUnifiedBalances(kit: any, walletAddr: string): Promise<
   const res: any = await kit.unifiedBalance.getBalances({
     token: 'USDC', sources: { address: walletAddr }, includePending: true,
     // An address-only source can't tell the network, and App Kit then
-    // defaults to MAINNET — which reported 0 for every testnet deposit, so
+    // defaults to MAINNET - which reported 0 for every testnet deposit, so
     // claims never saw their deposit confirm and Recover never listed it.
     networkType: UB_NETWORK_TYPE,
   })
@@ -143,7 +143,7 @@ export async function spendUnifiedToArc(params: {
 }
 
 // Destinations where Circle's Gateway forwarder mint has been failing
-// on-chain ("Forwarder transfer failed: ON_CHAIN_FAILURE") — mint these
+// on-chain ("Forwarder transfer failed: ON_CHAIN_FAILURE") - mint these
 // ourselves instead of waiting for the forwarder to fail first. Includes
 // every chain in FORWARDER_MINT_FAILING_SDK_CHAINS (see blockchain/chains.ts).
 export const GATEWAY_SELF_MINT_CHAINS = new Set(['Sei_Testnet', ...FORWARDER_MINT_FAILING_SDK_CHAINS])
@@ -166,9 +166,9 @@ export function forwarderMintRetry(err: any): { attestation: string; signature: 
 /**
  * Spend `amount` of `fromChain`'s Unified Balance to any chain/recipient
  * (fees come out of `amount`). Uses Circle's forwarder; if the forwarder's
- * mint fails on-chain — or the destination is in GATEWAY_SELF_MINT_CHAINS —
+ * mint fails on-chain - or the destination is in GATEWAY_SELF_MINT_CHAINS -
  * the mint is submitted by the user's own wallet on the destination
- * (`destAdapter`, submitted through MeshPort's relayer — see relayedProvider). The recipient never
+ * (`destAdapter`, submitted through MeshPort's relayer - see relayedProvider). The recipient never
  * changes; only who pays for and submits the mint.
  */
 export async function spendUnifiedTo(params: {
@@ -200,7 +200,7 @@ export async function spendUnifiedTo(params: {
     const r: any = await kit.unifiedBalance.spend({ from: alloc(send), to: forwarderTo, token: 'USDC', amount: send.toFixed(6) })
     return { txHash: hashOf(r), received: send }
   } catch (err) {
-    // Forwarder mint failed on-chain: the attestation is still valid —
+    // Forwarder mint failed on-chain: the attestation is still valid -
     // mint it ourselves on the destination (same recipient).
     const retry = forwarderMintRetry(err)
     if (!retry) throw err
@@ -236,19 +236,19 @@ async function runUbClaimInner(params: {
     from: { adapter, chain: sdkChainId }, amount: amount.toFixed(6), token: 'USDC', allowanceStrategy: 'permit',
   })
   const depositTx = hashOf(dep)
-  // A reverted deposit moved nothing — don't record it as a claim.
+  // A reverted deposit moved nothing - don't record it as a claim.
   await assertDepositSucceeded(sdkChainId, depositTx)
-  // From here the USDC is in the user's Unified Balance — never "failed".
+  // From here the USDC is in the user's Unified Balance - never "failed".
   onStep('attesting', `Waiting for ${chainLabel} to finalize (${ubClaimEta(sdkChainId)})…`, 50, { txHash: depositTx })
 
   // Preferred path: sign the Arc spend now and hand it to MeshPort's server
-  // (ub-claim-worker), which submits it once the deposit is final — so the
+  // (ub-claim-worker), which submits it once the deposit is final - so the
   // claim completes even if the phone is locked or the app is closed.
   let serverId: string | null = null
   try {
     serverId = await registerServerClaim({ kit, adapter, walletAddr, sdkChainId, amount, depositTx, cushion: before })
   } catch (e) {
-    console.warn('[ubClaim] server hand-off failed — finishing on this device', e)
+    console.warn('[ubClaim] server hand-off failed - finishing on this device', e)
   }
   // Server path: the ub_claim_intents trigger already wrote the "Processing"
   // Activity row. Device path: write it here so the Hub shows it right away.
@@ -260,7 +260,7 @@ async function runUbClaimInner(params: {
   }
   if (serverId && params.detach) return
   if (serverId) {
-    onStep('attesting', `Waiting for ${chainLabel} to finalize (${ubClaimEta(sdkChainId)}). MeshPort finishes this automatically — you can close the app.`, 50, { txHash: depositTx })
+    onStep('attesting', `Waiting for ${chainLabel} to finalize (${ubClaimEta(sdkChainId)}). MeshPort finishes this automatically - you can close the app.`, 50, { txHash: depositTx })
     await followServerClaim(serverId, chainLabel, depositTx, onStep)
     return
   }
@@ -278,7 +278,7 @@ async function runUbClaimInner(params: {
 
   onStep('minting', 'Sending to your Arc wallet…', 80, { txHash: depositTx })
   const out = await spendUnifiedToArc({ kit, adapter, walletAddr, fromChain: sdkChainId, amount, cushion: before })
-  // History: "Claimed from <chain>" in Activity and the Hub (best effort —
+  // History: "Claimed from <chain>" in Activity and the Hub (best effort -
   // the funds have already arrived either way).
   await recordUbClaim({ walletAddr, sdkChainId, received: out.received, claimedAmount: amount, depositTxHash: depositTx, arcTxHash: out.txHash })
   onStep('done', `Received ${out.received.toFixed(2)} USDC on Arc`, 100, { txHash: depositTx, mintTxHash: out.txHash })
@@ -326,8 +326,8 @@ export async function spendDustToArc(params: {
 //
 //   Tab A patches: globalThis.fetch = patchA  (saves realA = original)
 //   Tab B patches: globalThis.fetch = patchB  (saves realB = patchA, NOT original)
-//   Tab A restores: globalThis.fetch = realA  (original — correct)
-//   Tab B restores: globalThis.fetch = realB  (patchA — Tab A's stale patch)
+//   Tab A restores: globalThis.fetch = realA  (original - correct)
+//   Tab B restores: globalThis.fetch = realB  (patchA - Tab A's stale patch)
 //
 // After that, every future fetch goes through Tab A's stale intercept: all
 // subsequent /v1/transfer calls (real spend/claim calls) are swallowed and
@@ -336,22 +336,22 @@ export async function spendDustToArc(params: {
 // Fix: serialise all fetch-patch sections behind a single Web Lock
 // (cross-tab, cross-worker, cross-document) and a same-tab boolean guard.
 // Any concurrent call that cannot acquire the lock immediately returns an
-// error — it never patches fetch, and the caller gets a clear error message
+// error - it never patches fetch, and the caller gets a clear error message
 // rather than a silent failure or a corrupted fetch state.
 let _fetchPatchActive = false
 
 async function withFetchPatch<T>(fn: (realFetch: typeof fetch) => Promise<T>): Promise<T> {
   // Same-tab guard: prevents two sign calls within the same JS context from
   // patching simultaneously even before the Web Lock check runs.
-  if (_fetchPatchActive) throw new Error('A transfer is already being prepared — please wait a moment and try again')
+  if (_fetchPatchActive) throw new Error('A transfer is already being prepared - please wait a moment and try again')
 
   const locks = typeof navigator !== 'undefined' ? (navigator as any).locks : undefined
   if (locks?.request) {
     // Cross-tab lock: any other tab holding this lock must release it first.
     // { ifAvailable: true } returns immediately with lock=null if busy, so
-    // we never stall — we fail fast and let the caller retry instead.
+    // we never stall - we fail fast and let the caller retry instead.
     return locks.request('meshport-fetch-patch', { ifAvailable: true }, async (lock: unknown) => {
-      if (!lock) throw new Error('A transfer is already being prepared in another tab — please wait a moment and try again')
+      if (!lock) throw new Error('A transfer is already being prepared in another tab - please wait a moment and try again')
       return _runWithFetchPatch(fn)
     })
   }
@@ -412,7 +412,7 @@ export async function signSpendToArc(params: {
         amount: send.toFixed(6),
         from: { adapter, allocations: [{ amount: send.toFixed(6), chain: fromChain }] },
       })
-    } catch { /* expected — the transfer call was intercepted */ }
+    } catch { /* expected - the transfer call was intercepted */ }
     return cap
   })
 
@@ -467,7 +467,7 @@ export async function signSpendAllToArc(params: {
         from: { adapter, allocations: allocations.map(a => ({ amount: a.amount.toFixed(6), chain: a.chain })) },
         to, token: 'USDC', amount: send.toFixed(6),
       })
-    } catch { /* expected — the transfer call was intercepted */ }
+    } catch { /* expected - the transfer call was intercepted */ }
     return cap
   })
   if (!Array.isArray(captured) || captured.length === 0) throw new Error('Could not prepare the Arc transfer')
@@ -520,7 +520,7 @@ async function followServerClaim(id: string, chainLabel: string, depositTx: stri
       throw new Error(`Your USDC is safe in your Unified Balance on ${chainLabel}. MeshPort will send it to Arc next time the app is open, or finish it from Multichain Hub → Recover.`)
     }
   }
-  // Still running on the server — it will arrive by itself.
+  // Still running on the server - it will arrive by itself.
 }
 
 /** Chains with a claim the server is still finishing (auto-finish leaves them alone). */
@@ -557,10 +557,10 @@ export async function recordUbClaim(p: {
 // ── Merchant Claim All ────────────────────────────────────────────────────
 // Approved merchants: customer payments on other chains stay there until the
 // merchant taps Claim All (Hub → Ledger → Chains). Nothing moves by itself.
-// Claim All is offered once every 6 hours — single chains can still be
+// Claim All is offered once every 6 hours - single chains can still be
 // claimed any time from the chain list.
 // Merchants use CCTP only (no Unified Balance): one gasless claim per chain
-// through MeshPort's bridge router — the relayer (api/bridge-relay) pays the
+// through MeshPort's bridge router - the relayer (api/bridge-relay) pays the
 // source-chain gas and MeshPort's fee is taken in the same transaction,
 // exactly like anyone's CCTP claim. The claim worker then mints on Arc.
 export const CLAIM_ALL_COOLDOWN_MS = 6 * 60 * 60_000
@@ -626,7 +626,7 @@ export async function autoCollectMerchantPayments(_p: { walletAddress: string; p
 // Fallback for deposits the server isn't finishing (older claims, a failed
 // hand-off, a Gateway error): whenever the app is open and unlocked, sweep
 // any CONFIRMED Unified Balance on other chains into the Arc wallet. Chains
-// with an open ub_claim_intents row are skipped — the server owns those.
+// with an open ub_claim_intents row are skipped - the server owns those.
 //
 // CROSS-TAB DEDUP FIX: the old approach used a module-level `sweeping`
 // boolean, which only guards the same JS context. Two browser tabs open at
@@ -668,7 +668,7 @@ async function _runAutoFinish(p: { walletAddress: string; privateKey: string }):
     const adapter = (createEthersAdapterFromPrivateKey as any)({ privateKey: p.privateKey })
     for (const r of ready) {
       if (inFlight.has(r.chain)) continue
-      // Per-chain Web Lock mirrors what withChainLock does for manual claims —
+      // Per-chain Web Lock mirrors what withChainLock does for manual claims -
       // same guard, same lock namespace, so a manual claim and an auto-sweep
       // for the same chain never race.
       const ran = await withChainLock(p.walletAddress, r.chain, async () => {
@@ -676,7 +676,7 @@ async function _runAutoFinish(p: { walletAddress: string; privateKey: string }):
         await recordUbClaim({ walletAddr: p.walletAddress, sdkChainId: r.chain, received: out.received, claimedAmount: r.confirmed, arcTxHash: out.txHash })
         finished++
       })
-      if (!ran) console.warn('[ubClaim] auto-finish: chain lock busy for', r.chain, '— skipping this chain this sweep')
+      if (!ran) console.warn('[ubClaim] auto-finish: chain lock busy for', r.chain, '- skipping this chain this sweep')
     }
   } catch (e) {
     console.warn('[ubClaim] auto-finish check failed', e)

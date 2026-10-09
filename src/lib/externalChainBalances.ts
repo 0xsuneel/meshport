@@ -2,13 +2,13 @@
 //
 // ── Why this exists ─────────────────────────────────────────────────────────
 // Home, Multichain Hub, and the Claim page each had their OWN independent
-// copy of "check every supported chain's USDC balance for this wallet" —
+// copy of "check every supported chain's USDC balance for this wallet" -
 // three separately-maintained chain lists, three separate fetch
 // implementations, three separate 21-request bursts on three separate 60s
 // timers. That's how they drifted: Home and Hub had only ONE RPC per chain
 // (no fallback if it failed), while Claim page had accumulated a properly
 // verified, multi-RPC-per-chain fallback list over many rounds of real
-// production debugging (see the per-chain comments below — several of
+// production debugging (see the per-chain comments below - several of
 // these were wrong at some point and fixed against Circle's own SDK
 // source or developers.circle.com directly). Home and Hub were silently
 // missing all of that hard-won reliability. This file is the single
@@ -16,14 +16,14 @@
 // specifically because it was the most battle-tested of the three.
 //
 // ── What changed for each caller ────────────────────────────────────────────
-// Home and Hub now get Claim page's per-chain RPC fallback for free — a
+// Home and Hub now get Claim page's per-chain RPC fallback for free - a
 // single flaky RPC no longer means that chain silently reports $0 for
 // them the way it used to. All three now also share ONE staggered request
 // batch (see staggeredMap in utils.ts) and one short-lived cache (see
 // below) instead of three independent bursts.
 //
 // ── Shared cache ─────────────────────────────────────────────────────────────
-// A full scan hits every enabled chain — expensive enough that re-running
+// A full scan hits every enabled chain - expensive enough that re-running
 // it from scratch every time a user taps between Home → Hub → Claim within
 // a few seconds of each other is pure waste: the underlying balances
 // almost certainly haven't changed in that window. Cached per wallet
@@ -37,7 +37,7 @@ import type { SettingsMap } from './adminSupabase'
 import { EXTERNAL_CHAINS, resolveRpcList } from '@/blockchain/chains'
 
 // ── Phase 0 note ────────────────────────────────────────────────────────────
-// The chain table itself moved to src/blockchain/chains.ts (EXTERNAL_CHAINS) —
+// The chain table itself moved to src/blockchain/chains.ts (EXTERNAL_CHAINS) -
 // the single client-side chain registry. Re-exported under its original name
 // so nothing that reads CHAIN_CONFIG has to change. Values are identical; the
 // scanning/caching logic below is untouched.
@@ -54,7 +54,7 @@ export async function getChainUSDCBalance(chainId: string, walletAddress: string
   const data = BALANCE_OF_SELECTOR + paddedAddr
 
   // Endpoint list from the shared registry. Alchemy was removed from the client
-  // balance path (see the note in blockchain/chains.ts) — these are now the
+  // balance path (see the note in blockchain/chains.ts) - these are now the
   // keyless public/native RPCs only, which is what was already serving every
   // balance whenever the shared Alchemy key was rate-limited.
   const rpcs = resolveRpcList(cfg.rpcs)
@@ -91,7 +91,7 @@ let inFlight: Promise<ChainBalanceResult[]> | null = null
 /**
  * Scans every claim-enabled chain for this wallet's USDC balance, staggered
  * (see staggeredMap) rather than firing all ~21 requests at once, and
- * shared across callers via a short-lived cache — if Home, Hub, and Claim
+ * shared across callers via a short-lived cache - if Home, Hub, and Claim
  * all request this within the same ~20s window (e.g. a user tapping
  * between them), only the first call actually hits the network; the rest
  * get the same result instantly. Also collapses truly-concurrent callers
@@ -117,7 +117,7 @@ export async function scanAllChainBalances(
     chainId,
     balance: await getChainUSDCBalance(chainId, addr),
   })).then(result => {
-    // Only persist to the cache once settings have genuinely loaded — a
+    // Only persist to the cache once settings have genuinely loaded - a
     // scan run before that point treats every chain as enabled (the safe
     // per-call default), which is fine for that one call, but caching it
     // would keep a since-disabled chain's balance visible for the full

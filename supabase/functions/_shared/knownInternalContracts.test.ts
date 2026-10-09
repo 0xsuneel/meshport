@@ -4,7 +4,7 @@
 // docs/CLAIM_RECOVERY_SENDER_CLASSIFICATION_FIX.md. Run with:
 //   deno test supabase/functions/_shared/knownInternalContracts.test.ts
 //
-// Zero external imports — matches the convention already established in
+// Zero external imports - matches the convention already established in
 // blockchain-indexer's test files (see cursorMath.test.ts's header for why).
 import { KNOWN_INTERNAL_CONTRACTS, isKnownInternalContract } from './knownInternalContracts.ts'
 
@@ -12,7 +12,7 @@ function assert(cond: boolean, msg: string): void {
   if (!cond) throw new Error(`assertion failed: ${msg}`)
 }
 
-// Real addresses, taken directly from the static list — not fabricated.
+// Real addresses, taken directly from the static list - not fabricated.
 const KIT_ADAPTER = '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b'   // swap router
 const MULTICALL3 = '0xca11bde05977b3631167028862be2a173976ca11'    // BulkPay
 const CCTP_TOKEN_MESSENGER = '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa'
@@ -29,7 +29,7 @@ Deno.test('2. known Multicall3 (BulkPay) is excluded', () => {
 
 Deno.test('3. known P2P escrow (via the `extra` runtime parameter) is excluded', () => {
   // No real P2P escrow address is hardcoded (see the module's own doc comment
-  // for why) — a configured caller supplies it via `extra`, mirroring
+  // for why) - a configured caller supplies it via `extra`, mirroring
   // p2p-release-reconcile/index.ts's own P2P_ESCROW_CONTRACT pattern.
   const configuredEscrow = '0xfeedfacefeedfacefeedfacefeedfacefeedface'
   assert(!isKnownInternalContract(configuredEscrow), 'sanity check: not internal without `extra` supplied')
@@ -45,10 +45,10 @@ Deno.test('5. unknown EOA remains RECEIVE-eligible (not excluded)', () => {
 })
 
 Deno.test('6. unknown contract remains RECEIVE-eligible (not excluded)', () => {
-  assert(!isKnownInternalContract(UNKNOWN_CONTRACT), 'an unrecognized contract must never be excluded — only explicitly known ones are')
+  assert(!isKnownInternalContract(UNKNOWN_CONTRACT), 'an unrecognized contract must never be excluded - only explicitly known ones are')
 })
 
-Deno.test('9. EURC regression — the exact traced sender (Kit Adapter) is now excluded', () => {
+Deno.test('9. EURC regression - the exact traced sender (Kit Adapter) is now excluded', () => {
   // docs/ACTIVITY_WRITER_AUDIT.md §2 / docs/CLAIM_RECOVERY_AUDIT.md §5: the
   // traced duplicate's swap output leg came from the Kit Adapter Contract.
   // This is the direct regression check for that exact case.
@@ -63,8 +63,8 @@ Deno.test('11. case-insensitive address matching', () => {
   assert(isKnownInternalContract(`  ${KIT_ADAPTER}  `), 'whitespace must be trimmed')
 })
 
-Deno.test('12. no duplicate address-list implementation — this module is the only place these entries live outside compare.ts', () => {
-  // Not a runtime behavior test — a structural documentation check that the
+Deno.test('12. no duplicate address-list implementation - this module is the only place these entries live outside compare.ts', () => {
+  // Not a runtime behavior test - a structural documentation check that the
   // list has the exact expected size (catches an accidental second/partial
   // list being pasted in alongside this one during a future edit).
   assert(KNOWN_INTERNAL_CONTRACTS.size === 9, `expected exactly 9 entries (8 mirrored from compare.ts + Multicall3), got ${KNOWN_INTERNAL_CONTRACTS.size}`)

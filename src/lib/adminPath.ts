@@ -1,8 +1,8 @@
 /**
- * Admin panel URL prefix — single source of truth.
+ * Admin panel URL prefix - single source of truth.
  *
  * Previously hardcoded as '/adminsun' in 6 different files. That's a
- * fixed, guessable path — anyone (a bot, a curious user, a scanner) could
+ * fixed, guessable path - anyone (a bot, a curious user, a scanner) could
  * type it directly and immediately learn "this app has an admin panel"
  * and land on its login screen, even though AdminGuard correctly blocks
  * actual admin CONTENT from anyone not in admin_users. Knowing the panel
@@ -15,11 +15,11 @@
  *   VITE_ADMIN_PANEL_PATH=mp-ctrl-7f2a9d
  *
  * If unset, falls back to the original '/adminsun' so nothing breaks for
- * anyone who hasn't set this yet — but you should set a real one. Do NOT
+ * anyone who hasn't set this yet - but you should set a real one. Do NOT
  * commit your actual chosen value to a public repo; keep it only in your
  * env vars, the same way you'd treat any other access credential.
  *
- * Note: this is "security by obscurity" for the DISCOVERY step only — it
+ * Note: this is "security by obscurity" for the DISCOVERY step only - it
  * is not, and was never meant to be, the actual security boundary.
  * AdminGuard's admin_users check is what actually protects the panel's
  * content; this just stops the login page itself from being trivially

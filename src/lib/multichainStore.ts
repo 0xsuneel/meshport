@@ -1,10 +1,10 @@
 /**
- * multichainStore.ts — IndexedDB-backed cross-device multichain tx registry.
+ * multichainStore.ts - IndexedDB-backed cross-device multichain tx registry.
  *
  * REPLACES the Supabase `multichain_transactions` table.
  *
  * Why IndexedDB instead of Supabase here:
- *  • Multichain tx hashes are already on-chain — they don't need a server DB.
+ *  • Multichain tx hashes are already on-chain - they don't need a server DB.
  *    The only reason they were in Supabase was cross-device sync, but the
  *    functions were never actually called outside supabase.ts.
  *  • IDB survives pause/resume and is synchronous-fast for Set lookups used
@@ -14,7 +14,7 @@
  *    can push/pull the IDB store in one batch call; no Supabase tables needed.
  *
  * Schema (IDB db: 'meshport_multichain', version 1):
- *   store 'txs'  — keyPath: 'txHash'
+ *   store 'txs'  - keyPath: 'txHash'
  *     txHash:      string  (lowercase)
  *     walletAddress: string (lowercase)
  *     type:        'claim' | 'deposit' | 'bridge' | 'swap'
@@ -24,8 +24,8 @@
  *     note:        string | null   (JSON for swap amountOut/status)
  *     createdAt:   number          (Date.now())
  *
- *   index 'by_wallet' on walletAddress — allows per-wallet range queries
- *   index 'by_wallet_type' on [walletAddress, type] — swap filter
+ *   index 'by_wallet' on walletAddress - allows per-wallet range queries
+ *   index 'by_wallet_type' on [walletAddress, type] - swap filter
  *
  * All functions are silent-fail: IDB errors are logged but never thrown to
  * the caller (the classification pass must never break activity rendering).

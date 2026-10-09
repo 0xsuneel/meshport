@@ -61,7 +61,7 @@ function RewardClaimReceipt({ claim, onClose }: { claim: ClaimRecord; onClose: (
       title={status === 'success' ? 'Reward Claimed' : status === 'failed' ? 'Reward Claim Failed' : 'Processing…'}
       subtitle={<>
         <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: claimColor(status), marginBottom: 4 }}>{status === 'success' ? '+' : ''}${formatAmount(claim.usdc_received)} USDC</span>
-        {status === 'success' ? `${claim.points_claimed} points converted to USDC` : status === 'failed' ? 'Claim did not go through — your points were not deducted' : `${claim.points_claimed} points being converted…`}
+        {status === 'success' ? `${claim.points_claimed} points converted to USDC` : status === 'failed' ? 'Claim did not go through - your points were not deducted' : `${claim.points_claimed} points being converted…`}
       </>}
       rows={[
         { label: status === 'success' ? 'Received' : 'Amount', value: `$${formatAmount(claim.usdc_received)} USDC`, positive: status === 'success' },
@@ -100,7 +100,7 @@ export function RewardsPage() {
   const [claiming, setClaiming]             = useState(false)
   const [claimError, setClaimError]         = useState<string | null>(null)
   const [claimSuccess, setClaimSuccess]     = useState<{ usdcReceived: number; txHash: string | null } | null>(null)
-  // claimPoints: how many points user wants to claim — defaults to all
+  // claimPoints: how many points user wants to claim - defaults to all
   const [claimPoints, setClaimPoints]       = useState<number>(0)
 
   const userId = user?.id && !user.id.startsWith('usr_')
@@ -118,7 +118,7 @@ export function RewardsPage() {
       walletAddress ? getDailyClaimedOnChain(walletAddress) : Promise.resolve(0),
     ])
     // The contract's own daily counter is the real source of truth for the
-    // 200/day cap — it's independent of Supabase's reward_claims bookkeeping,
+    // 200/day cap - it's independent of Supabase's reward_claims bookkeeping,
     // which only counts claims THIS app saw succeed end-to-end. A claim that
     // landed on-chain but whose DB update step failed would undercount here,
     // showing a claim option that's guaranteed to fail again. Taking the max
@@ -130,7 +130,7 @@ export function RewardsPage() {
     setPointHistory(history as PointRecord[])
     setDailyClaimedPoints(dailyClaimed)
     // Cap to what's both available AND within daily limit AND the new
-    // per-claim ceiling (MAX_CLAIM_POINTS — a single claim transaction can
+    // per-claim ceiling (MAX_CLAIM_POINTS - a single claim transaction can
     // never redeem more than this, independent of balance or daily limit).
     const dailyRemaining = Math.max(0, MAX_DAILY_POINTS - dailyClaimed)
     const maxClaimable = Math.min(pts.totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
@@ -143,7 +143,7 @@ export function RewardsPage() {
   const handleClaim = async () => {
     setClaimError(null)
     if (!walletAddress)        { setClaimError('Wallet not connected'); return }
-    if (!userId)               { setClaimError('User not found — please log out and back in'); return }
+    if (!userId)               { setClaimError('User not found - please log out and back in'); return }
     if (!username)             { setClaimError('Username not set'); return }
     if (totalPoints < MIN_CLAIM_POINTS) { setClaimError(`Need at least ${MIN_CLAIM_POINTS} points to claim`); return }
 
@@ -186,14 +186,14 @@ export function RewardsPage() {
     setClaimSuccess({ usdcReceived: result.usdcReceived, txHash: result.txHash })
     setTotalPoints(prev => Math.max(0, prev - pointsToUse))
 
-    // Reward claim tracked in Supabase reward_claims — shown in Rewards page only
+    // Reward claim tracked in Supabase reward_claims - shown in Rewards page only
 
     await load()
     setClaiming(false)
   }
 
   const dailyRemaining = Math.max(0, MAX_DAILY_POINTS - dailyClaimedPoints)
-  // MAX_CLAIM_POINTS: new per-claim ceiling (2026-09-17) — independent of
+  // MAX_CLAIM_POINTS: new per-claim ceiling (2026-09-17) - independent of
   // both balance and the on-chain daily limit, see rewards.ts's own comment.
   const maxClaimable = Math.min(totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
   const canClaim = maxClaimable >= MIN_CLAIM_POINTS && !!userId && !!walletAddress && !claiming && !loading
@@ -203,7 +203,7 @@ export function RewardsPage() {
   const showSlider = maxClaimable > MIN_CLAIM_POINTS
   const dailyCapHit = totalPoints >= MIN_CLAIM_POINTS && dailyRemaining < MIN_CLAIM_POINTS && dailyClaimedPoints > 0
 
-  // Points balance card content — held in a variable so it renders
+  // Points balance card content - held in a variable so it renders
   // identically whether it's the top of the single mobile column or the
   // top of the desktop left column, never duplicated.
   const pointsCardBody = (
@@ -230,7 +230,7 @@ export function RewardsPage() {
     </>
   )
 
-  // Claim card content — same variable-not-duplicated reasoning, top of
+  // Claim card content - same variable-not-duplicated reasoning, top of
   // the single mobile column or top of the desktop right column.
   const claimCardBody = (
     <>
@@ -246,7 +246,7 @@ export function RewardsPage() {
             You need <span className="text-text-primary font-semibold">{MIN_CLAIM_POINTS} points</span> to claim
           </p>
           <p className="text-xs text-text-muted">
-            You have {totalPoints} pts — {MIN_CLAIM_POINTS - totalPoints} more needed
+            You have {totalPoints} pts - {MIN_CLAIM_POINTS - totalPoints} more needed
           </p>
           <div className="w-full bg-surface rounded-full h-2">
             <div className="bg-brand h-2 rounded-full transition-all"
@@ -278,7 +278,7 @@ export function RewardsPage() {
               <button
                 onClick={() => setClaimPoints(maxClaimable)}
                 className="font-bold text-brand-text bg-brand/15 border border-brand/40 px-3 py-1.5 rounded-lg text-xs active:scale-95 transition-transform">
-                MAX — {maxClaimable} pts
+                MAX - {maxClaimable} pts
               </button>
             </div>
 
@@ -294,7 +294,7 @@ export function RewardsPage() {
               />
             )}
 
-            {/* Number input — always visible */}
+            {/* Number input - always visible */}
             <div className="flex items-center gap-2">
               <input
                 type="number"
@@ -367,7 +367,7 @@ export function RewardsPage() {
   return (
     // Desktop: h-full (not h-screen) so this root's height matches the
     // space AppLayout's desktop shell actually gives it (below
-    // DesktopHeader), not the full 100vh — otherwise the two-column split
+    // DesktopHeader), not the full 100vh - otherwise the two-column split
     // below would be taller than the visible area. Mobile keeps h-screen,
     // matching its own single-pane shell exactly. overflow-hidden stays
     // for both: desktop's own two columns each manage their own scroll
@@ -409,7 +409,7 @@ export function RewardsPage() {
 
               {/* Earn items */}
               {/* BUG FIX (2026-09-17): rewritten for the new per-action-type
-                  earning rule (see rewards.ts's own header comment) — was
+                  earning rule (see rewards.ts's own header comment) - was
                   "+20 pts per transaction/transfer/swap/batch", which is no
                   longer true (repeating the same action again the same day
                   earns nothing now). Also added ChatPay, which earns points
@@ -437,13 +437,13 @@ export function RewardsPage() {
                   <Star className="w-3.5 h-3.5" style={{ color: 'var(--warning)', flexShrink: 0 }} />
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--warning)' }}>Daily Limit</span>
                 </div>
-                {/* BUG FIX (2026-09-17): was MAX_DAILY_POINTS (1000) / 10 txs —
+                {/* BUG FIX (2026-09-17): was MAX_DAILY_POINTS (1000) / 10 txs -
                     the OLD per-transaction cap. The new earn cap is
                     MAX_DAILY_EARN_POINTS (100): 5 action types, once each. */}
                 <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>Max {MAX_DAILY_EARN_POINTS} pts / 5 actions per day</p>
               </div>
 
-              {/* NEW (2026-09-17): "How to Earn" only ever explained earning —
+              {/* NEW (2026-09-17): "How to Earn" only ever explained earning -
                   added a Redeem section so the same panel also answers "how
                   much is a point worth" and "how many can I cash out at
                   once", using the same MIN/MAX_CLAIM_POINTS and
@@ -466,7 +466,7 @@ export function RewardsPage() {
       {isDesktop ? (
         // Desktop: left column = available points (top) + earned points
         // history (bottom); right column = claiming (top) + claimed
-        // history (bottom) — same full-bleed/no-maxWidth-cap, height:100%,
+        // history (bottom) - same full-bleed/no-maxWidth-cap, height:100%,
         // trimmed-bottom-padding spacing treatment as Swap's 2-column
         // desktop layout, so both columns reach down close to the
         // viewport's bottom edge instead of stopping short of it.

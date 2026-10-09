@@ -1,10 +1,10 @@
-// ── Recent contacts — single source of truth ────────────────────────────────
+// ── Recent contacts - single source of truth ────────────────────────────────
 // This is the "Home Avatar Recent" logic, factored out so every surface that
 // shows a Recent list (Home avatar row, Send/Pay recent row, View-all Recent
 // page) stays perfectly in sync:
 //   1. Pull the wallet's most recent send + receive activity
 //   2. Order counterparties by most-recent-first, de-duped
-//   3. Only ever show registered MeshPort users (must have a `username`) —
+//   3. Only ever show registered MeshPort users (must have a `username`) -
 //      raw/unresolved wallet addresses are never shown as "Recent"
 //   4. Hide anything the user has explicitly removed from their contacts
 //
@@ -25,7 +25,7 @@ export interface RecentContact {
   last_paid: string
   total_sent: number
   times_sent: number
-  /** True when this "contact" is the viewer's own wallet — a self-transfer
+  /** True when this "contact" is the viewer's own wallet - a self-transfer
    * (paid your own username or address). See fetchRecentContacts's own
    * comment on why self is now included here at all. */
   isSelf: boolean
@@ -44,7 +44,7 @@ export interface FetchRecentContactsOpts {
 // Send/"Pay on Arc"'s Recent row, and the View-all Recent page all call this
 // with the same or similar opts). Without it, navigating Home → Pay on Arc
 // re-runs the full fetch from scratch every time, even seconds after Home
-// just loaded the identical data — which is what made Recent feel slow to
+// just loaded the identical data - which is what made Recent feel slow to
 // load on both screens. Keyed by wallet + opts so different callers (e.g.
 // the View-all page asking for 20 results vs the 5-avatar row) don't share
 // a result that doesn't match what they asked for.
@@ -68,7 +68,7 @@ export async function fetchRecentContacts(
   const headers = await authHeaders()
   const myAddr = walletAddress.toLowerCase()
 
-  // Fetch sent + received in parallel — same as Home Avatar Recent
+  // Fetch sent + received in parallel - same as Home Avatar Recent
   const [sentRes, recvRes] = await Promise.all([
     fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.send&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at`, { headers }),
     fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.receive&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at`, { headers }),
@@ -87,7 +87,7 @@ export async function fetchRecentContacts(
   for (const r of rows) {
     const addr = (r.counterparty_address || '').toLowerCase()
     // Self-transfer (paid your own username/address) is now included here
-    // deliberately — previously skipped via `addr === myAddr`, which is why
+    // deliberately - previously skipped via `addr === myAddr`, which is why
     // Recent used to never show a self-payment at all. isSelf below is what
     // lets callers label this entry "You" instead of resolving it as if it
     // were an ordinary contact.
@@ -101,7 +101,7 @@ export async function fetchRecentContacts(
   const candidateAddrs = addrs.slice(0, maxAddresses)
   if (!candidateAddrs.length) return []
 
-  // Batch resolve all profiles in one query — resolves myAddr to your own
+  // Batch resolve all profiles in one query - resolves myAddr to your own
   // profile the same as any other address, since you're a registered user too.
   const profileMap = await getUsersByWalletAddresses(candidateAddrs).catch(() => new Map())
   const removed = getRemovedContacts(walletAddress)
@@ -112,7 +112,7 @@ export async function fetchRecentContacts(
     // Home Avatar Recent rule: only ever show registered MeshPort users
     .filter(u => !!u.username)
     // Self is never in the removed-contacts blocklist, but this filter
-    // should never accidentally hide it either way — checked by isSelf,
+    // should never accidentally hide it either way - checked by isSelf,
     // not skipped here.
     .filter(u => u.wallet_address.toLowerCase() === myAddr || !removed.has(u.id))
     .map(u => {
@@ -157,7 +157,7 @@ export async function fetchLastActivityByAddress(walletAddress: string, limit = 
   return out
 }
 
-/** Call after sending/receiving a payment or removing a contact — clears the
+/** Call after sending/receiving a payment or removing a contact - clears the
  * short-lived cache above so the next Recent-row fetch reflects the change
  * immediately instead of returning a snapshot from just before it. */
 export function invalidateRecentContactsCache() {

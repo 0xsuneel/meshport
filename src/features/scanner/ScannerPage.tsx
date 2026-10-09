@@ -22,18 +22,18 @@ export function ScannerPage() {
   const { setSendRecipient } = useUIStore()
   // mode=wallet → only accept EVM addresses, return to returnTo path
   const walletMode = searchParams.get('mode') === 'wallet'
-  // Only our own in-app pages — never a value that could leave the app
+  // Only our own in-app pages - never a value that could leave the app
   // (e.g. "/\\evil.com" resolves to another site).
   const returnTo   = ['/pay', '/multichain'].includes(searchParams.get('returnTo') || '') ? searchParams.get('returnTo')! : '/pay'
   // align=left → opened from a page with its own desktop 2-column layout
   // (e.g. Pay's search screen) where "column 1" sits at the left, not
-  // centered across the full content width — pin the scanner to that same
+  // centered across the full content width - pin the scanner to that same
   // left edge (24px, matching those pages' own column padding) instead of
   // centering it, so it visually stays "in column 1" rather than drifting
   // toward where column 2 (history panel) used to be.
   const alignLeft  = searchParams.get('align') === 'left'
   const [resolvedUser, setResolvedUser] = useState<DbUser | null>(null)
-  // The requested amount, if the scanned QR encoded one — see MyQrCard's
+  // The requested amount, if the scanned QR encoded one - see MyQrCard's
   // "Collect USDC" flow in HomePage.tsx, which generates
   // `${APP_URL}/paylink/<username>?amount=<amount>`. Previously this scanner
   // extracted only the recipient from that URL and silently dropped
@@ -60,7 +60,7 @@ export function ScannerPage() {
   // ── Start camera ──
   // `cancelled` guards against React 18 StrictMode's dev-only double-invoke
   // (mount → cleanup → mount again) racing the async getUserMedia/play()
-  // calls below — without it, the first mount's camera stream could attach
+  // calls below - without it, the first mount's camera stream could attach
   // to the video element AFTER the second mount already started its own,
   // producing a visible black-frame/attach flicker on every open. Checked
   // after each await so a stream started before cleanup never gets wired
@@ -89,7 +89,7 @@ export function ScannerPage() {
 
     if (isCancelled()) {
       // This mount was already cleaned up (StrictMode's double-invoke, or a
-      // fast unmount) while getUserMedia was pending — stop whatever we
+      // fast unmount) while getUserMedia was pending - stop whatever we
       // just got instead of wiring it up to a video element that a second,
       // newer effect run may already be using.
       stream?.getTracks().forEach(t => t.stop())
@@ -106,7 +106,7 @@ export function ScannerPage() {
 
     clearTimeout(timeoutId)
     streamRef.current = stream
-    // Torch (flashlight) — Android Chrome exposes it on the camera track;
+    // Torch (flashlight) - Android Chrome exposes it on the camera track;
     // iOS Safari doesn't, so the button is shown dimmed there.
     try {
       const caps = (stream.getVideoTracks()[0]?.getCapabilities?.() ?? {}) as { torch?: boolean }
@@ -158,7 +158,7 @@ export function ScannerPage() {
   //   1) how many pixels jsQR has to scan per attempt (bigger = slower)
   //   2) how many frames we skip between attempts (more skipped = slower)
   // The old version tried to control cost by skipping 3 of every 4 frames
-  // while still decoding the full 1280x720 capture — the expensive part.
+  // while still decoding the full 1280x720 capture - the expensive part.
   // Downscaling the working canvas cuts jsQR's per-attempt cost by ~4-6x,
   // which lets us scan nearly every frame instead and detect much faster
   // in wall-clock time, without spiking CPU/battery.
@@ -175,7 +175,7 @@ export function ScannerPage() {
       const video = videoRef.current
       const canvas = canvasRef.current
       // Require at least HAVE_CURRENT_DATA (readyState >= 2) AND real
-      // dimensions — readyState alone can be HAVE_ENOUGH_DATA while
+      // dimensions - readyState alone can be HAVE_ENOUGH_DATA while
       // videoWidth/videoHeight are still 0 on some browsers right after
       // the stream attaches, which produces a 0x0 canvas and silently
       // fails every decode.
@@ -194,7 +194,7 @@ export function ScannerPage() {
       if (!ctx) { rafRef.current = requestAnimationFrame(tick); return }
 
       // Downscale to DECODE_MAX_DIM on the long edge. drawImage does the
-      // scaling for us in one call — this is much cheaper than decoding
+      // scaling for us in one call - this is much cheaper than decoding
       // the full-resolution frame, and a QR code that's actually readable
       // on camera doesn't need 720p worth of pixels to decode correctly.
       const srcW = video.videoWidth
@@ -242,7 +242,7 @@ export function ScannerPage() {
       let value = raw.trim()
 
       // MeshPort payment request / order QR (…/paylink/r/<code>?order=ORD-…, or older …/pay/r/…):
-      // open the order — amount and order number are fixed for the payer.
+      // open the order - amount and order number are fixed for the payer.
       if (!walletMode) {
         // Also inside a wallet QR (ethereum:…&link=<encoded pay link>).
         let decoded = value
@@ -251,13 +251,13 @@ export function ScannerPage() {
         if (orderCode) { setResolving(false); navigate(`/paylink/r/${orderCode.toLowerCase()}`); return }
       }
 
-      // EIP-681 payment URI — ethereum:<address>@<chainId>?value=<wei>.
+      // EIP-681 payment URI - ethereum:<address>@<chainId>?value=<wei>.
       // This is the format MyQrCard now generates for an amount-QR (see its
       // own comment on why): the real cross-wallet standard, not a
       // MeshPort-only link, so MetaMask/Rabby/Coinbase Wallet/OKX/Binance
       // all understand "pay this address this amount" directly from it.
       // Parsed here, BEFORE the generic prefix-stripping below (which only
-      // ever extracts the address) — otherwise `value=` gets silently
+      // ever extracts the address) - otherwise `value=` gets silently
       // dropped the exact same way the old MeshPort-URL `?amount=` param
       // used to.
       if (value.toLowerCase().startsWith('ethereum:') || /^https:\/\/metamask\.app\.link\/send\//i.test(value)) {
@@ -317,7 +317,7 @@ export function ScannerPage() {
           const addrParam = urlObj.searchParams.get('address') || urlObj.searchParams.get('wallet')
           const pathParts = urlObj.pathname.split('/').filter(Boolean)
           const pathUser = pathParts[pathParts.length - 1]
-          // "Collect USDC" QR (MyQrCard) — /paylink/<username>?amount=<amount>.
+          // "Collect USDC" QR (MyQrCard) - /paylink/<username>?amount=<amount>.
           // Read alongside the recipient below, not instead of it, so a
           // scan still resolves the recipient normally either way.
           const amountParam = urlObj.searchParams.get('amount')
@@ -335,7 +335,7 @@ export function ScannerPage() {
       if (addrMatch2) value = addrMatch2[1]
       value = value.trim()
 
-      // Wallet-only mode (multichain send) — accept EVM addresses
+      // Wallet-only mode (multichain send) - accept EVM addresses
       if (walletMode) {
         if (isValidAddress(value)) {
           setResolvedUser({
@@ -374,7 +374,7 @@ export function ScannerPage() {
         ])
         user = walletUser || hintUser
         if (!user) {
-          // External wallet — allow payment without profile
+          // External wallet - allow payment without profile
           setResolvedUser({
             id: value, username: '', display_name: 'External Wallet',
             wallet_address: value, email: '', avatar_url: null, created_at: '',
@@ -414,7 +414,7 @@ export function ScannerPage() {
     } catch { setTorchSupported(false) }
   }
 
-  // Upload QR — decode a QR from a picked image (several sizes, then a 4×4
+  // Upload QR - decode a QR from a picked image (several sizes, then a 4×4
   // grid of regions for a small QR inside a big photo).
   const handleUploadFile = (file: File) => {
     setUploadError(null)
@@ -463,7 +463,7 @@ export function ScannerPage() {
     stopCamera()
 
     if (walletMode) {
-      // Wallet-only mode — navigate back to multichain send with address pre-filled
+      // Wallet-only mode - navigate back to multichain send with address pre-filled
       navigate(`${returnTo}?scannedAddress=${encodeURIComponent(resolvedUser.wallet_address)}`)
       return
     }
@@ -474,7 +474,7 @@ export function ScannerPage() {
 
     if (scannedAmount) {
       // Route through the SAME `?to=&amount=` URL param path PayPage.tsx's
-      // "Pay on Arc" links already use — PaySendPage already fully supports
+      // "Pay on Arc" links already use - PaySendPage already fully supports
       // it (parses `to` with the identical compound format, then applies
       // `amount` once the recipient resolves). The `sendRecipient` store
       // path below carries no amount slot at all, which is exactly why
@@ -509,7 +509,7 @@ export function ScannerPage() {
           onPlaying={() => setCameraReady(true)}
           autoPlay playsInline muted
         />
-        {/* Hidden canvas used for frame capture — not visible */}
+        {/* Hidden canvas used for frame capture - not visible */}
         <canvas ref={canvasRef} className="hidden" />
 
         <div className="absolute inset-0 bg-black/30" />
@@ -519,7 +519,7 @@ export function ScannerPage() {
           <span className="text-white font-semibold">Scan QR Code</span>
         </div>
 
-        {/* Scanner frame + Upload QR / Torch — only when actively scanning */}
+        {/* Scanner frame + Upload QR / Torch - only when actively scanning */}
         {scanning && !resolvedUser && !resolving && !error && (
           <div className="relative z-10 flex flex-col items-center">
             <div className="w-64 h-64 relative rounded-[28px]"
@@ -599,7 +599,7 @@ export function ScannerPage() {
         )}
       </div>
 
-      {/* Resolved user — a card centred over the scanner */}
+      {/* Resolved user - a card centred over the scanner */}
       <AnimatePresence>
         {resolvedUser && (
           <motion.div key="resolved"
@@ -631,7 +631,7 @@ export function ScannerPage() {
                 {!resolvedUser.username && (
                   <div className="flex items-center gap-1 mt-1">
                     <AlertCircle className="w-3.5 h-3.5 text-warning" />
-                    <p className="text-xs text-warning">External wallet — payment still works</p>
+                    <p className="text-xs text-warning">External wallet - payment still works</p>
                   </div>
                 )}
                 {scannedAmount && (
@@ -660,7 +660,7 @@ export function ScannerPage() {
 
   // Desktop: the card is inset within the same padded content area every
   // other desktop page uses (20/24/14px), bounded to that area's actual
-  // height instead of stretching h-full past the viewport — that mismatch
+  // height instead of stretching h-full past the viewport - that mismatch
   // was why the black viewfinder previously overflowed above the header
   // and below the fold. alignLeft (opened from a page with its own 2-column
   // layout, e.g. Pay's search screen) keeps the card pinned to the left

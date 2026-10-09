@@ -2,9 +2,9 @@
  * MeshPort Rewards System
  *
  * EARNING (2026-09-17 redesign, explicit product requirement): 5 distinct
- * action types — Multichain Transfer, Pay Send, ChatPay, BulkPay, Swap.
+ * action types - Multichain Transfer, Pay Send, ChatPay, BulkPay, Swap.
  * Each awards +20 points, but only the FIRST successful use of THAT action
- * type per calendar day — a second Pay Send (or a tenth) the same day earns
+ * type per calendar day - a second Pay Send (or a tenth) the same day earns
  * 0 additional points, it isn't a per-transaction reward anymore. Max
  * possible earn per day: 5 actions x 20 = 100 points (MAX_DAILY_EARN_POINTS
  * below), reached only by actually using all five different features in one
@@ -12,13 +12,13 @@
  *
  * This EARN-side cap (100) is intentionally a DIFFERENT number from
  * MAX_DAILY_POINTS (1000) below, which is the on-chain smart contract's own
- * CLAIM limit (see REWARDS_ABI's DailyLimitExceeded) — a user can still
+ * CLAIM limit (see REWARDS_ABI's DailyLimitExceeded) - a user can still
  * accumulate points across several days and claim up to 1000/day of their
  * banked balance. Only how points are EARNED changed.
  *
  * Conversion: 1000 points = 0.50 USDC (500_000 micro-USDC per 1000 points).
  * The ON-CHAIN contract (usdcPerThousandPoints = 500_000) is the source of
- * truth for what is actually paid — USDC_PER_1000_PTS below MUST match it.
+ * truth for what is actually paid - USDC_PER_1000_PTS below MUST match it.
  *
  * Contract: MeshPortRewards.sol on Arc Testnet
  * Treasury: Admin funds with USDC; users claim on-chain
@@ -35,18 +35,18 @@ export const POINTS_PER_TX       = 20
 export const MAX_DAILY_POINTS    = 1000
 export const MAX_DAILY_TX        = 10
 // BUG FIX (2026-10-06): this was changed to 1.0 on 2026-09-17, but the deployed
-// MeshPortRewards contract was never changed — it still pays
+// MeshPortRewards contract was never changed - it still pays
 // usdcPerThousandPoints = 500_000 (0.5 USDC per 1000 points). The app therefore
 // showed/recorded $1.00 for a 1000-point claim while only $0.50 actually reached
 // the wallet. Must mirror the contract: 1000 points = 0.5 USDC. If the rate is
 // ever changed for real, change it on the contract FIRST (scheduleSetConversionRate,
 // then setConversionRate once the 2-day timelock has passed), then update this
-// constant — never the other way round.
+// constant - never the other way round.
 export const USDC_PER_1000_PTS   = 0.5      // 0.5 USDC per 1000 points (matches contract)
 export const MIN_CLAIM_POINTS    = 100       // minimum points per claim
 // NEW (2026-09-17, explicit product requirement): maximum points redeemable
 // in a single claim. Distinct from MAX_DAILY_POINTS (1000) above, which is
-// the on-chain contract's own daily claim ceiling — this is a PER-CLAIM cap
+// the on-chain contract's own daily claim ceiling - this is a PER-CLAIM cap
 // on top of that: even with a much larger banked balance, one claim
 // transaction can never redeem more than this many points (= $0.50 at the
 // current rate) at once. A user with more than this simply claims again
@@ -59,7 +59,7 @@ export const REWARD_ACTION_TYPES: RewardActionType[] = ['multichain_transfer', '
 export const MAX_DAILY_EARN_POINTS = REWARD_ACTION_TYPES.length * POINTS_PER_TX // 100
 
 function rewardReasonFor(actionType: RewardActionType): string {
-  // Distinct, stable per action type — this string IS the dedup key (see
+  // Distinct, stable per action type - this string IS the dedup key (see
   // awardTransactionPoints below), not just a label. Never rename an
   // existing value without a data migration, or previously-earned actions
   // would silently become eligible to earn again the same day.
@@ -79,7 +79,7 @@ const REWARDS_ABI = [{
   ],
   outputs: [{ name: 'usdcAmount', type: 'uint256' as const }],
 },
-// Custom errors — without these, viem can't decode a revert into a
+// Custom errors - without these, viem can't decode a revert into a
 // readable name and everything falls back to "execution reverted
 // for an unknown reason", which is what made this failure
 // undiagnosable. With them, the catch block below can report e.g.
@@ -96,7 +96,7 @@ const REWARDS_ABI = [{
 ]
 
 
-// RewardClaimed event — used to read the real on-chain payout after a claim.
+// RewardClaimed event - used to read the real on-chain payout after a claim.
 const REWARDS_EVENTS_ABI = [{
   type: 'event' as const, name: 'RewardClaimed',
   inputs: [
@@ -121,12 +121,12 @@ export function usdcToPoints(usdc: number): number {
 // BUG FIX / REDESIGN (2026-09-17, explicit product requirement): this used
 // to award +20 for EVERY confirmed transaction of ANY kind, up to 10
 // transactions / 1000 points per day (MAX_DAILY_TX/MAX_DAILY_POINTS above,
-// now used only for legacy/claim-side bookkeeping — see the file header
+// now used only for legacy/claim-side bookkeeping - see the file header
 // comment). The new rule is per ACTION TYPE, not per transaction: a user
 // earns +20 the first time they successfully use Multichain Transfer, Pay
 // Send, ChatPay, BulkPay, or Swap on a given day, and NOTHING for repeating
 // that same action again that day, however many more times they use it. Max
-// possible per day is 100 (all 5, once each) — see MAX_DAILY_EARN_POINTS.
+// possible per day is 100 (all 5, once each) - see MAX_DAILY_EARN_POINTS.
 export async function awardTransactionPoints(params: {
   userId: string
   walletAddress: string
@@ -137,7 +137,7 @@ export async function awardTransactionPoints(params: {
   const todayStartIso = `${today}T00:00:00.000Z`
   const reason = rewardReasonFor(params.actionType)
 
-  // 1. Check duplicate tx reward (unchanged — the same on-chain transaction
+  // 1. Check duplicate tx reward (unchanged - the same on-chain transaction
   // must never be rewarded twice, regardless of the new per-action rule).
   const { data: existingTx } = await supabase
     .from('point_transactions')
@@ -150,7 +150,7 @@ export async function awardTransactionPoints(params: {
 
   // 2. Check whether THIS action type already earned its one reward today.
   // The reason string itself is the dedup key (see rewardReasonFor's own
-  // comment) — a distinct value per action type, so Pay Send earning today
+  // comment) - a distinct value per action type, so Pay Send earning today
   // has zero effect on whether Swap can still earn today, and vice versa.
   const { data: earnedToday } = await supabase
     .from('point_transactions')
@@ -163,7 +163,7 @@ export async function awardTransactionPoints(params: {
     return { pointsAwarded: 0, error: null }
   }
 
-  // 3. Record point transaction — reason encodes the action type, which is
+  // 3. Record point transaction - reason encodes the action type, which is
   // both the audit trail and (per step 2 above) the actual enforcement
   // mechanism for "once per action type per day."
   const { error: ptError } = await supabase.from('point_transactions').insert({
@@ -178,7 +178,7 @@ export async function awardTransactionPoints(params: {
     return { pointsAwarded: 0, error: `Could not record points: ${ptError.message}` }
   }
 
-  // 4. Update daily tracking — still one row per user per day (unchanged
+  // 4. Update daily tracking - still one row per user per day (unchanged
   // shape, so notifications.ts's existing today-so-far query keeps working
   // unmodified), just incremented at most 5 times a day now (once per
   // distinct action type) instead of once per transaction.
@@ -199,14 +199,14 @@ export async function awardTransactionPoints(params: {
     return { pointsAwarded: 0, error: `Could not update daily tracking: ${dtrError.message}` }
   }
 
-  // 5. Update user total points — atomic increment via RPC (see
+  // 5. Update user total points - atomic increment via RPC (see
   // supabase-fix-points-race.sql). Previously this read the current
-  // total_points, added 20 in JS, then wrote it back — two overlapping
+  // total_points, added 20 in JS, then wrote it back - two overlapping
   // calls to this function (e.g. two payments sent close together) could
   // both read the same starting value and one increment would silently
   // overwrite the other. No error occurred either time since the write
   // itself always succeeded; it just wrote a stale number. This function
-  // must exist in the database (run supabase-fix-points-race.sql) — if it
+  // must exist in the database (run supabase-fix-points-race.sql) - if it
   // doesn't yet, this call fails loudly below rather than silently
   // corrupting the balance the old way.
   const { error: upError } = await supabase.rpc('increment_user_points', {
@@ -217,7 +217,7 @@ export async function awardTransactionPoints(params: {
   if (upError) {
     console.error('[Rewards] increment_user_points failed:', upError.code, upError.message)
     // point_transactions + daily_tx_rewards already succeeded above, so the
-    // points aren't fully lost — but the balance shown to the user won't
+    // points aren't fully lost - but the balance shown to the user won't
     // reflect them until this is retried. Report it honestly rather than
     // claiming success.
     return { pointsAwarded: 0, error: `Points recorded but balance update failed: ${upError.message}` }
@@ -266,7 +266,7 @@ export async function getTreasuryBalance(): Promise<number> {
 
 // ─── Get today's on-chain claimed points for a wallet ──────────────────────────
 // The contract's own dailyClaimed[wallet][day] mapping is the real source of
-// truth for the 1000-point/day cap — it's independent of (and can drift from)
+// truth for the 1000-point/day cap - it's independent of (and can drift from)
 // Supabase's own daily_tx_rewards/reward_claims bookkeeping, which only
 // tracks what the app itself has seen succeed. Reading this directly lets
 // the UI correctly hide/disable claiming once the on-chain cap is actually
@@ -304,10 +304,10 @@ export async function claimPointsAsUSDC(params: {
     return { txHash: null, usdcReceived: 0, error: `Minimum ${MIN_CLAIM_POINTS} points required to claim` }
   }
   if (points > MAX_CLAIM_POINTS) {
-    return { txHash: null, usdcReceived: 0, error: `Maximum ${MAX_CLAIM_POINTS} points per claim — claim in multiple transactions for more` }
+    return { txHash: null, usdcReceived: 0, error: `Maximum ${MAX_CLAIM_POINTS} points per claim - claim in multiple transactions for more` }
   }
 
-  // 1. Check user actually has enough points — try userId first, then wallet address fallback
+  // 1. Check user actually has enough points - try userId first, then wallet address fallback
   let { data: userPts } = await supabase
     .from('user_points')
     .select('total_points, user_id')
@@ -333,7 +333,7 @@ export async function claimPointsAsUSDC(params: {
 
   const usdcAmount = pointsToUSDC(points)
 
-  // 2. Claim id — reuse an unfinished claim's id for the same amount: the
+  // 2. Claim id - reuse an unfinished claim's id for the same amount: the
   // server already reserved those points for it and re-issues the same
   // voucher, so a failed send never costs points twice.
   const pendingKey = `mp_reward_claim_${walletAddress.toLowerCase()}`
@@ -356,7 +356,7 @@ export async function claimPointsAsUSDC(params: {
   }).select().single()
 
   // 4. Execute on-chain claim using exact Arc docs pattern
-  // Arc docs: walletClient WITHOUT chain — chain passed inline to sendTransaction
+  // Arc docs: walletClient WITHOUT chain - chain passed inline to sendTransaction
   const account = privateKeyToAccount(privateKey as `0x${string}`)
   const walletClient = createWalletClient({
     account,
@@ -381,7 +381,7 @@ export async function claimPointsAsUSDC(params: {
       // ── Step 3b: obtain signed voucher from the edge function ────────────
       // The contract now requires a server-issued signature over
       // (contractAddress, chainId, walletAddress, points, claimId).
-      // This is the security boundary — the contract will revert with
+      // This is the security boundary - the contract will revert with
       // InvalidSignature if this step is skipped or fails.
       // Identity comes from the session server-side; the server reserves
       // (deducts) the points before signing.
@@ -402,7 +402,7 @@ export async function claimPointsAsUSDC(params: {
         const { encodeFunctionData, parseGwei } = await import('viem')
         const callData = encodeFunctionData({ abi: REWARDS_ABI, functionName: 'claimRewards', args: [BigInt(points), claimIdBytes32, claimSignature] })
 
-        // Validate with simulateContract FIRST — this uses eth_call under the
+        // Validate with simulateContract FIRST - this uses eth_call under the
         // hood, which (unlike eth_estimateGas on Arc's testnet RPC, based on
         // what actually came back) reliably returns revert data, and viem
         // automatically decodes it into a named ContractFunctionRevertedError
@@ -430,7 +430,7 @@ export async function claimPointsAsUSDC(params: {
         // Cast: viem's sendTransaction overload resolution (in the installed
         // viem/typescript combination) spuriously demands an EIP-4844 `kzg`
         // field for this plain EIP-1559 transaction. Runtime behavior is
-        // unaffected — this is purely a type-level viem overload issue.
+        // unaffected - this is purely a type-level viem overload issue.
         const hash = await walletClient.sendTransaction({
           to: REWARDS_CONTRACT,
           data: callData,
@@ -461,7 +461,7 @@ export async function claimPointsAsUSDC(params: {
         // Points were already deducted server-side when the voucher was signed.
         try { localStorage.removeItem(pendingKey) } catch { /* none */ }
 
-        // Record in the shared activity table — previously this claim was
+        // Record in the shared activity table - previously this claim was
         // only ever written to reward_claims (a separate table), never to
         // activity, so a genuinely successful on-chain claim (real USDC
         // landing in the wallet) never showed up in Received/All at all.
@@ -478,7 +478,7 @@ export async function claimPointsAsUSDC(params: {
           })
         }).catch(() => {})
 
-        // In-app notification — guaranteed to show regardless of push state
+        // In-app notification - guaranteed to show regardless of push state
         import('./notifications').then(({ notifyRewardClaimed }) => {
           notifyRewardClaimed({ usdcAmount: paidUsdc, points })
         }).catch(() => {})
@@ -489,9 +489,9 @@ export async function claimPointsAsUSDC(params: {
         return { txHash: hash, usdcReceived: paidUsdc, error: null }
       } catch (err: any) {
         // sendTransaction (unlike writeContract) never auto-decodes custom
-        // errors even with the ABI present — the raw revert data has to be
+        // errors even with the ABI present - the raw revert data has to be
         // pulled out and decoded by hand. Prefer the name already captured
-        // by the simulateContract pre-check above (most reliable — it uses
+        // by the simulateContract pre-check above (most reliable - it uses
         // eth_call, which returns revert data even when eth_estimateGas on
         // this RPC does not), falling back to manual decoding for anything
         // that reverts only at the actual send/estimate stage.
@@ -504,39 +504,39 @@ export async function claimPointsAsUSDC(params: {
               const { decodeErrorResult } = await import('viem')
               errorName = decodeErrorResult({ abi: REWARDS_ABI, data: rawData }).errorName
             }
-          } catch { /* raw data missing or not one of our known errors — fall through */ }
+          } catch { /* raw data missing or not one of our known errors - fall through */ }
         }
 
         const FRIENDLY_ERRORS: Record<string, string> = {
-          DailyLimitExceeded:   `You've hit today's 1000-point claim limit per wallet — try again after midnight UTC.`,
-          InsufficientTreasury: 'The rewards treasury ran out of USDC between checking and claiming — try again shortly.',
-          AlreadyClaimed:       'This claim was already processed — refresh the page, your points should already be updated.',
+          DailyLimitExceeded:   `You've hit today's 1000-point claim limit per wallet - try again after midnight UTC.`,
+          InsufficientTreasury: 'The rewards treasury ran out of USDC between checking and claiming - try again shortly.',
+          AlreadyClaimed:       'This claim was already processed - refresh the page, your points should already be updated.',
           InsufficientPoints:   'You need at least 100 points to claim.',
           ZeroPoints:           'Select at least 100 points to claim.',
-          ContractPaused:       'Reward claims are temporarily paused — try again later.',
-          TransferFailed:       'The USDC transfer failed on-chain — your points were not deducted, try again.',
-          NotOwner:             'Unexpected permissions error — please contact support.',
-          InvalidSignature:     'This claim could not be verified — please try again.',
+          ContractPaused:       'Reward claims are temporarily paused - try again later.',
+          TransferFailed:       'The USDC transfer failed on-chain - your points were not deducted, try again.',
+          NotOwner:             'Unexpected permissions error - please contact support.',
+          InvalidSignature:     'This claim could not be verified - please try again.',
         }
         const msg = (errorName && FRIENDLY_ERRORS[errorName]) || err?.shortMessage || err?.message || 'Contract error'
         console.error('[Rewards] On-chain claim failed:', errorName || msg, err)
-        // Mark as failed — do NOT fake success
+        // Mark as failed - do NOT fake success
         await supabase.from('reward_claims').update({ status: 'failed' }).eq('id', claimRecord?.id)
         if (errorName === 'AlreadyClaimed') { try { localStorage.removeItem(pendingKey) } catch { /* none */ } }
-        return { txHash: null, usdcReceived: 0, error: `Claim failed: ${msg}. Your points are kept for this claim — try again to finish it.` }
+        return { txHash: null, usdcReceived: 0, error: `Claim failed: ${msg}. Your points are kept for this claim - try again to finish it.` }
       }
     } else {
-      // Treasury genuinely empty — honest error, do NOT deduct points
+      // Treasury genuinely empty - honest error, do NOT deduct points
       await supabase.from('reward_claims').update({ status: 'treasury_empty' }).eq('id', claimRecord?.id)
       return {
         txHash: null,
         usdcReceived: 0,
-        error: `Rewards treasury is empty (has ${trimTrailingZeros(treasuryUsdc.toFixed(4))} USDC, need ${trimTrailingZeros(usdcAmount.toFixed(4))} USDC). Your points are safe — try again later.`,
+        error: `Rewards treasury is empty (has ${trimTrailingZeros(treasuryUsdc.toFixed(4))} USDC, need ${trimTrailingZeros(usdcAmount.toFixed(4))} USDC). Your points are safe - try again later.`,
       }
     }
   }
 
-  // No contract deployed — honest message, do NOT deduct points or fake success
+  // No contract deployed - honest message, do NOT deduct points or fake success
   await supabase.from('reward_claims').update({ status: 'pending_contract' }).eq('id', claimRecord?.id)
   return {
     txHash: null,

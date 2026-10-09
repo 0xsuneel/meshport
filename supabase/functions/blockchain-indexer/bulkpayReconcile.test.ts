@@ -19,7 +19,7 @@ const TOKENS = [{ symbol: 'EURC', contract: EURC_CONTRACT, decimals: 6 }]
 const TRANSFER_TOPIC0 = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 const pad32 = (addr: string) => '0x' + addr.replace(/^0x/, '').padStart(64, '0')
 
-// ── PHASE 4 — real transaction regression ───────────────────────────────
+// ── PHASE 4 - real transaction regression ───────────────────────────────
 //
 // Real facts, from docs/BULKPAY_INDEXER_FORENSIC_AUDIT.md and live
 // production chain_events/activity data: tx 0xb179c4f0..., block 58592562,
@@ -234,7 +234,7 @@ Deno.test('merges the transaction_attempts source alongside bulk_payments, proce
   assertEquals(inserted.length, 4) // 2 events from each real transaction
 })
 
-Deno.test('deduplicates by tx_hash when both sources reference the SAME real transaction — processes it once, not twice', async () => {
+Deno.test('deduplicates by tx_hash when both sources reference the SAME real transaction - processes it once, not twice', async () => {
   const bulkPaymentsRow: BulkPaymentWorklistRow = { id: 'bp-dup', tx_hash: REAL_TX_HASH, created_at: new Date().toISOString(), source: 'bulk_payments' }
   const attemptRow: BulkPaymentWorklistRow = { id: 'attempt-dup', tx_hash: REAL_TX_HASH, created_at: new Date().toISOString(), source: 'transaction_attempt' }
   const { repo, inserted, verifiedIds } = makeFakeRepo([bulkPaymentsRow])
@@ -301,7 +301,7 @@ function realBulkPayReceiptWithMulticall3FundingLeg(): RawReceipt {
   }
 }
 
-Deno.test('BUG FIX: the payer-into-Multicall3 funding leg (wallet === Multicall3) is excluded — only the 3 real recipient legs are decoded', () => {
+Deno.test('BUG FIX: the payer-into-Multicall3 funding leg (wallet === Multicall3) is excluded - only the 3 real recipient legs are decoded', () => {
   const worklistRow: BulkPaymentWorklistRow = { id: 'bp-real2', tx_hash: REAL_TX_HASH_2, created_at: new Date().toISOString(), source: 'bulk_payments' }
   const outcome = decodeBulkPayReceipt(worklistRow, realBulkPayReceiptWithMulticall3FundingLeg(), CHAIN_ID, NATIVE_LOG_CONTRACT, TOKENS)
   assertEquals(outcome.outcome, 'reconciled')

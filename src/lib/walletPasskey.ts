@@ -7,7 +7,7 @@
 // (the WebAuthn PRF extension) that only it can produce, after Face ID /
 // fingerprint. The wallet key is locked with that secret (HKDF → AES-256-GCM)
 // on the device; the server stores only the locked copy, the credential id
-// and the PRF salt — none of which open the wallet. Passkeys sync through
+// and the PRF salt - none of which open the wallet. Passkeys sync through
 // iCloud Keychain / Google Password Manager, so a new phone signed into the
 // same Apple / Google account unlocks the same wallet.
 //
@@ -98,7 +98,7 @@ export async function registerWalletPasskey(opts: {
       publicKey: {
         challenge: crypto.getRandomValues(new Uint8Array(32)),
         rp: { name: RP_NAME },
-        // The account id (not the email or a login id) — one account, many passkeys.
+        // The account id (not the email or a login id) - one account, many passkeys.
         user: { id: new TextEncoder().encode(opts.userId), name: label, displayName: label },
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
         authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
@@ -136,7 +136,7 @@ export async function registerWalletPasskey(opts: {
     wallet_address: opts.walletAddress.toLowerCase(),
     label: deviceLabel(),
   })
-  if (error) throw new PasskeyError('failed', "Couldn't save the passkey — try again")
+  if (error) throw new PasskeyError('failed', "Couldn't save the passkey - try again")
 }
 
 /** Ask the authenticator for the PRF secret of one of these credentials. */
@@ -173,7 +173,7 @@ export async function listWalletPasskeys(userId: string): Promise<WalletPasskey[
 export async function unlockWithPasskey(userId: string, walletAddress: string): Promise<string> {
   const { data, error } = await supabase.from('wallet_passkeys')
     .select('credential_id, prf_salt, encrypted_wallet, iv, wallet_address').eq('user_id', userId)
-  if (error) throw new PasskeyError('failed', "Couldn't reach MeshPort — check your connection")
+  if (error) throw new PasskeyError('failed', "Couldn't reach MeshPort - check your connection")
   const rows = (data ?? []).filter(r => r.wallet_address?.toLowerCase() === walletAddress.toLowerCase())
   if (rows.length === 0) throw new PasskeyError('none', 'No passkey is set up for this wallet')
   let got: { credentialId: string; prf: Uint8Array } | null
@@ -183,7 +183,7 @@ export async function unlockWithPasskey(userId: string, walletAddress: string): 
     throw new PasskeyError('cancelled', e instanceof Error && e.name === 'NotAllowedError'
       ? 'Passkey not available on this device, or cancelled' : "Couldn't use the passkey")
   }
-  if (!got) throw new PasskeyError('no-prf', "This device's passkeys can't unlock a wallet — use your Recovery QR")
+  if (!got) throw new PasskeyError('no-prf', "This device's passkeys can't unlock a wallet - use your Recovery QR")
   const row = rows.find(r => r.credential_id === got!.credentialId)
   if (!row) { got.prf.fill(0); throw new PasskeyError('none', 'That passkey is not set up for this wallet') }
   const key = await lockKey(got.prf, fromB64(row.prf_salt))

@@ -14,7 +14,7 @@ export function RouteErrorPage() {
   const [reloading, setReloading] = useState(stale && online)
 
   useEffect(() => {
-    // Offline: a failed load isn't an update — wait for the connection (below).
+    // Offline: a failed load isn't an update - wait for the connection (below).
     if (!stale || !online) return
     recoverFromStaleBuild().then(ok => { if (!ok) setReloading(false) })
   }, [stale, online])

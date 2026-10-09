@@ -132,7 +132,7 @@ export async function resolveAdminFromToken(accessToken: string | undefined): Pr
 }
 
 /**
- * Resolves a Supabase access token to THIS APP's own user id (users.id) —
+ * Resolves a Supabase access token to THIS APP's own user id (users.id) -
  * not just the raw Supabase auth uid. Every account, including wallet-only
  * ones that never do email/OTP login, gets a real Supabase session via
  * anonymous sign-in (see ensureAnonSession in src/lib/supabase.ts), and
@@ -144,7 +144,7 @@ export async function resolveAdminFromToken(accessToken: string | undefined): Pr
  * Used to authorize action=send: the caller must prove (via their own
  * session token) that they ARE the userId they're asking to be pushed to,
  * so one account can't push arbitrary notification content to another.
- * Fails closed — if auth_uid isn't populated yet for an account (e.g. the
+ * Fails closed - if auth_uid isn't populated yet for an account (e.g. the
  * backfill in syncAuthUidToProfile hasn't run for it), this returns null
  * and the push is denied rather than allowed by default.
  */
@@ -175,7 +175,7 @@ export async function resolveUserFromToken(accessToken: string | undefined): Pro
 /**
  * Sends a push notification to every device a user has subscribed on.
  * Silently no-ops (returns { sent: 0 }) if VAPID isn't configured or the
- * user has no subscriptions — callers should never let this block the
+ * user has no subscriptions - callers should never let this block the
  * underlying payment/swap/reward flow.
  */
 export async function sendPushToUser(userId: string, payload: PushPayload): Promise<{ sent: number; failed: number }> {
@@ -218,7 +218,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
       sent++
     } catch (err: any) {
       failed++
-      // 404/410 = subscription expired or unsubscribed — clean it up
+      // 404/410 = subscription expired or unsubscribed - clean it up
       if (err?.statusCode === 404 || err?.statusCode === 410) deadIds.push(sub.id)
       else console.warn('[push] send failed:', err?.statusCode, err?.message)
     }

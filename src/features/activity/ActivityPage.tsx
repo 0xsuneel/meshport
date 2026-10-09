@@ -28,7 +28,7 @@ const FILTERS: { id: ActivityType | 'all' | 'p2p' | 'merchant'; label: string }[
   { id: 'merchant', label: 'Merchant' },
 ]
 
-// Non-MeshPort-username senders/recipients (system-generated activity) — shown
+// Non-MeshPort-username senders/recipients (system-generated activity) - shown
 // as-is, never given the '.arc' suffix real usernames get.
 const SYSTEM_LABELS: Record<string, string> = {
   'MeshPort Reward':  'MeshPort Reward',
@@ -42,7 +42,7 @@ const CHAIN_LABELS: Record<string, string> = {
   Unichain_Sepolia: 'Unichain', World_Chain_Sepolia: 'World Chain', Arc_Testnet: 'Arc',
 }
 
-// EXPLORERS map removed — this was a fifth independently-maintained copy of
+// EXPLORERS map removed - this was a fifth independently-maintained copy of
 // the same chain→explorer-URL data (see MultichainTransferPage.tsx,
 // MultichainPage.tsx, and src/lib/chainExplorers.ts's own header comment for
 // the history of how these drifted apart and produced wrong links). Now
@@ -55,7 +55,7 @@ function chainLabel(raw?: string) {
 }
 
 // Shared by the mobile card (ActivityRow) and the desktop table
-// (ActivityTableRow) — see this file's own header comment on
+// (ActivityTableRow) - see this file's own header comment on
 // activityDisplayFields. Picks a precision tier by magnitude so small
 // amounts still show meaningful digits, then trims any trailing zeros that
 // tier's toFixed() padded on (e.g. "1.00" -> "1", "0.00000100" ->
@@ -63,7 +63,7 @@ function chainLabel(raw?: string) {
 //
 // BUG FIX: the small-amount precision tiers used to only apply to
 // BTC/ETH-like symbols. A USDC/EURC amount like 0.000004 fell into the
-// plain "else" branch (toFixed(4)), which rounds 0.000004 to "0.0000" —
+// plain "else" branch (toFixed(4)), which rounds 0.000004 to "0.0000" -
 // trimmed, that's "0", silently hiding a real, nonzero received amount.
 // Chat-pay/dust-size transfers on this testnet can be this small for ANY
 // token, so the fine-precision tiers now apply regardless of symbol; only
@@ -80,13 +80,13 @@ function formatAmt(n: number, symbol?: string) {
 }
 
 // Pure derivation shared by the mobile card (ActivityRow) and the desktop
-// table (ActivityTableRow) — same record in, same title/subtitle/status/
+// table (ActivityTableRow) - same record in, same title/subtitle/status/
 // amount fields out, so the two render paths can never drift apart.
 // Exported so other surfaces showing the same records (currently:
 // HomePage's desktop "Recent Activity" panel) can reuse the exact same
-// title/subtitle wording — including self-transfer "Self" labeling, the
+// title/subtitle wording - including self-transfer "Self" labeling, the
 // chain-aware Claimed from/Transfer to text, and the P2P Sell Order
-// Cancelled rename — instead of drifting from a second, hand-copied
+// Cancelled rename - instead of drifting from a second, hand-copied
 // implementation. Nothing about this changes the row/table rendering
 // itself, only makes the derivation reusable.
 // ── Dedup + deterministic sort for the Activity list ────────────────────────
@@ -99,15 +99,15 @@ export function dedupeAndSortActivityRecords(records: ActivityRecord[]): Activit
   const base = records.filter(r => {
     // BUG FIX (2026-09-02): a self-bulk-payout (you're one of your own
     // batch's recipients) writes TWO rows under the SAME activityType
-    // ('bulk') and the SAME on-chain hash — a sent-summary row and a
+    // ('bulk') and the SAME on-chain hash - a sent-summary row and a
     // received-leg row, distinguished only by metadata.direction (see
     // Activity.bulk()/bulkReceived()'s bulk_/bulkrecv_ prefix comment;
-    // the client-facing `txHash` here is the STRIPPED, unprefixed hash —
-    // see ActivityService.ts's stripHashPrefix — so both legs collapse to
+    // the client-facing `txHash` here is the STRIPPED, unprefixed hash -
+    // see ActivityService.ts's stripHashPrefix - so both legs collapse to
     // the identical `bulk:0x...` string). Every other type-pair (send vs
     // receive, p2p_purchase vs p2p_refund, etc.) already has a different
     // activityType per leg, so this collision is unique to bulk
-    // self-payouts — this was silently dropping one of the two rows from
+    // self-payouts - this was silently dropping one of the two rows from
     // history, intermittently, depending on array order. Including
     // direction in the key (when present) keeps both legs distinct
     // without changing dedup behavior for every other type, which never
@@ -134,7 +134,7 @@ export function dedupeAndSortActivityRecords(records: ActivityRecord[]): Activit
     return !isSwapOutputLeg
   })
 
-  // Sort strictly by timestamp, newest first — with a deterministic
+  // Sort strictly by timestamp, newest first - with a deterministic
   // tiebreaker. `createdAt` alone isn't enough: Postgres stores
   // microsecond precision but JS's `Date` truncates to milliseconds, so
   // two rows genuinely can tie at this resolution (e.g. a bulk payout's
@@ -143,7 +143,7 @@ export function dedupeAndSortActivityRecords(records: ActivityRecord[]): Activit
   // guaranteed by the spec in modern engines but still leaves the ORDER
   // dependent on whatever order the array happened to be in beforehand
   // (pagination arrival order, realtime insert order, dedup filtering
-  // order) rather than on anything about the records themselves — so the
+  // order) rather than on anything about the records themselves - so the
   // same two rows could visibly swap position across a refresh even
   // though nothing about the underlying data changed. `id` (a UUID, but
   // still a fixed value per row) as a secondary key makes the final order
@@ -170,7 +170,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   const isP2PRefund    = type === 'p2p_refund'
   const isP2PPurchase  = type === 'p2p_purchase'
   // Unified Balance money sent back to this wallet (Recover → "Send back to
-  // my wallet") — it arrives here, so it reads as '+' like a receive.
+  // my wallet") - it arrives here, so it reads as '+' like a receive.
   const isUbRefund     = type === 'withdraw' && !!metadata.ub_recovery && metadata.resolution !== 'forward'
   const isP2PCredit    = isP2PRefund || isP2PPurchase || isUbRefund // all show as '+', same as a receive
 
@@ -189,7 +189,7 @@ export function deriveActivityRow(record: ActivityRecord) {
     ? 'Arc'
     : ''
 
-  // Subtitle line — shows who / what
+  // Subtitle line - shows who / what
   const counterparty = (record as any).counterpartyAddress || ''
   const meta = (record as any).metadata || {}
   const counterpartyUsername = meta.toUsername || meta.fromUsername || ''
@@ -206,13 +206,13 @@ export function deriveActivityRow(record: ActivityRecord) {
     ? `${formatAmt(metadata.amountIn ?? amount, metadata.tokenIn || tokenSymbol)} ${metadata.tokenIn || tokenSymbol || 'USDC'} → ${formatAmt(metadata.amountOut ?? 0, metadata.tokenOut)} ${metadata.tokenOut || '?'}`
     : ''
 
-  // Self-transfer: the counterparty IS this same wallet — a send/receive
+  // Self-transfer: the counterparty IS this same wallet - a send/receive
   // pair created by paying your own username (see ActivityService.ts's own
   // comment on the send_/recv_ hash-prefix convention this relies on to
   // keep the two legs from colliding on the DB's unique index). Detected
   // purely by address equality, not by username, so it's correct even if
   // toUsername/fromUsername metadata is ever missing. Also covers a bulk
-  // payout that includes the payer's own wallet as one recipient — that
+  // payout that includes the payer's own wallet as one recipient - that
   // received-leg row carries the same counterpartyAddress == walletAddress
   // shape (see Activity.bulk()/bulkReceived()'s own bulk_/bulkrecv_ prefix
   // comment for why both legs can now coexist at all).
@@ -227,10 +227,10 @@ export function deriveActivityRow(record: ActivityRecord) {
     ? meta.recipientCount ? `${meta.recipientCount} recipients` : meta.purpose || ''
     : ''
 
-  // P2P subtitle: "Offer #ab12cd34" / "Trade #ab12cd34" — the short id is
+  // P2P subtitle: "Offer #ab12cd34" / "Trade #ab12cd34" - the short id is
   // enough to tell entries apart without needing a full counterparty
-  // lookup here (the P2P History page is where the full trade detail —
-  // counterparty, status, etc. — actually lives).
+  // lookup here (the P2P History page is where the full trade detail -
+  // counterparty, status, etc. - actually lives).
   const p2pRefId = meta.tradeId || meta.offerId
   const p2pSubtitle = (isP2PSellOrder || isP2PRefund || isP2PPurchase) && p2pRefId
     ? `${meta.tradeId ? 'Trade' : 'Offer'} #${String(p2pRefId).slice(0, 8)}`
@@ -238,7 +238,7 @@ export function deriveActivityRow(record: ActivityRecord) {
 
   // Merchant order payment received on Arc (tagged server-side with the order).
   // Order payments (bill / request with an order number) are never shown as a
-  // plain receive / paid — merchant side "Payment received", customer side
+  // plain receive / paid - merchant side "Payment received", customer side
   // "Order payment".
   const merchantOrder = (isReceive || isSend) && metadata.merchantOrder ? String(metadata.merchantOrder) : null
   const subtitle = merchantOrder ? `Order #${merchantOrder} · ${isSend && metadata.merchantName ? metadata.merchantName : counterpartyLabel}`
@@ -269,14 +269,14 @@ export function deriveActivityRow(record: ActivityRecord) {
               : isBulk     ? 'Bulk Payment'
               // BUG FIX: a top-up (topUpOfferEscrow) writes the same
               // p2p_sell_order activityType as the original offer, so it
-              // showed the exact same "P2P Sell Order Created" title —
+              // showed the exact same "P2P Sell Order Created" title -
               // looking like a brand-new offer had been created again,
               // when it was really just added funds. metadata.kind
               // distinguishes the two (see topUpOfferEscrow's own comment).
               : isP2PSellOrder ? (meta.kind === 'offer_topped_up' ? 'Escrow Top-up' : 'P2P Sell Order Created')
               // P2P Refund covers both a cancelled sell offer and a
               // cancelled/expired buy-offer trade (see the ActivityType
-              // comment at the top of this file) — labeled here as "Sell
+              // comment at the top of this file) - labeled here as "Sell
               // Order Cancelled" per product decision, not a claim that
               // every p2p_refund row is literally a sell-order cancellation.
               : isP2PRefund    ? 'P2P Sell Order Cancelled'
@@ -294,7 +294,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   }
 }
 
-// ── Single row — hub style ─────────────────────────────────────────────────────
+// ── Single row - hub style ─────────────────────────────────────────────────────
 function ActivityRow({ record, isFirst, isLast, onSelect }: {
   record: ActivityRecord; isFirst: boolean; isLast: boolean; onSelect: () => void
 }) {
@@ -347,14 +347,14 @@ function ActivityRow({ record, isFirst, isLast, onSelect }: {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: subtitle ? 2 : 2 }}>
           <span style={{ fontSize: 11, color: statusColor, fontWeight: 600 }}>{statusLabel}</span>
           {/* BUG FIX: claim rows already show the source chain as the
-              subtitle right above ("Claimed from" / "Linea") — showing it
+              subtitle right above ("Claimed from" / "Linea") - showing it
               again here duplicated the chain name on the same card, and
               the two ended up visually overlapping on narrow screens.
               Every other row type doesn't repeat itself this way (their
               subtitle is the counterparty/swap pair/etc., not the chain),
               so this only needed to be suppressed for claims specifically. */}
           {/* BUG FIX: swap rows already show a long "X USDC → Y EURC"
-              subtitle right above — adding "· Arc ·" into the meta line
+              subtitle right above - adding "· Arc ·" into the meta line
               here on top of that pushed the line onto a second row on
               narrow screens, wrapping the timestamp underneath and right
               on top of the row below it. Every swap on this app happens on
@@ -402,20 +402,20 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const isP2PCredit    = isP2PRefund || isP2PPurchase || isUbRefund // '+', same as a receive
 
   // Recovered claims (see claim-recovery-scan) genuinely don't know the real
-  // source-chain burn hash — only the Arc-side mint was ever observed. Both
+  // source-chain burn hash - only the Arc-side mint was ever observed. Both
   // tx_hash and destinationTxHash get set to that same mint hash as a
   // required-field placeholder, which would otherwise render a "Source Tx
   // (Burn on X)" link built from an Arc hash under the SOURCE chain's
-  // explorer — a link to a transaction that doesn't exist there at all.
+  // explorer - a link to a transaction that doesn't exist there at all.
   //
   // BUG FIX: this used to be `!!metadata?.recovered && !metadata?.hasRealSourceHash`
-  // with no `isClaim` check at all — but `metadata.recovered` is ALSO set to
+  // with no `isClaim` check at all - but `metadata.recovered` is ALSO set to
   // true on plain 'receive' rows, by both claim-recovery-scan's backstop
   // path and deposit-scan-all's reconcile path (see supabase/functions/
-  // deposit-scan-all and claim-recovery-scan — `recovered` there just means
+  // deposit-scan-all and claim-recovery-scan - `recovered` there just means
   // "found via the slower backstop scan, not the fast direct one," nothing
-  // to do with claims). That meant ANY backstop-caught receive — including
-  // things like a Circle testnet faucet claim — had its Explorer link
+  // to do with claims). That meant ANY backstop-caught receive - including
+  // things like a Circle testnet faucet claim - had its Explorer link
   // silently hidden, even though its tx_hash is a completely real, valid,
   // linkable Arc transaction hash. Only actual multichain claims are
   // missing a real source hash; receives always have one.
@@ -424,10 +424,10 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const isFailed   = status === 'failed'
   const isSuccess  = status === 'completed'
 
-  // Both Claim and Transfer now show the chain matching the PRIMARY txHash —
+  // Both Claim and Transfer now show the chain matching the PRIMARY txHash -
   // Claims: sourceChain (the external chain being claimed from, where the
   // burn happens). Transfers: sourceChain is 'Arc_Testnet' (where the burn
-  // happens on this side) — previously this used destinationChain instead,
+  // happens on this side) - previously this used destinationChain instead,
   // which meant the link opened the destination chain's explorer while
   // txHash could still be Arc's burn hash (whenever destinationTxHash
   // wasn't captured), producing a link to a hash that doesn't exist on that
@@ -438,7 +438,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     : isTransfer ? chainLabel(destinationChain || sourceChain)
     : 'Arc'
 
-  // Self-transfer detection — see deriveActivityRow's identical comment
+  // Self-transfer detection - see deriveActivityRow's identical comment
   // above (ActivityRow/ActivityTableRow's shared derivation) for why this
   // is address-based, not username-based.
   const isSelfTransferDetail = !!(
@@ -459,7 +459,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
               : isTransfer ? 'Transfer to'
               : type === 'send' ? 'Paid to' : type === 'receive' ? 'Received from' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment'
               // See deriveActivityRow's identical comment on why p2p_refund
-              // is labeled "Sell Order Cancelled" here — product decision,
+              // is labeled "Sell Order Cancelled" here - product decision,
               // not a claim every row is literally that.
               : isP2PSellOrder ? (metadata?.kind === 'offer_topped_up' ? 'Escrow Top-up' : 'P2P Sell Order Created') : isP2PRefund ? 'P2P Sell Order Cancelled' : isP2PPurchase ? 'P2P Purchase'
               : 'Transaction'
@@ -470,15 +470,15 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   // Claims: source = the external chain's burn (sourceChain + txHash);
   // destination = Arc's mint (destinationTxHash). Transfers: source = Arc's
   // burn (txHash, Activity.bridge() always records this on the `txHash`
-  // field for transfers — see MultichainTransferPage.tsx); destination = the
+  // field for transfers - see MultichainTransferPage.tsx); destination = the
   // external chain's mint (destinationChain + destinationTxHash).
   //
-  // BUG FIX: `showDestLink` used to require `isTransfer` — meaning claims
+  // BUG FIX: `showDestLink` used to require `isTransfer` - meaning claims
   // NEVER showed a destination (Arc mint) link at all, even though
   // destinationTxHash was already present in the data the whole time (see
   // the Hub page, which already displayed it correctly). Only a single
   // "View on Explorer" link (source only) ever rendered for claims. Also
-  // switched off the local EXPLORERS map (incomplete + several wrong URLs —
+  // switched off the local EXPLORERS map (incomplete + several wrong URLs -
   // see chainExplorers.ts's header comment) onto the same shared, verified
   // map every other page now uses.
   const sourceHref = isRecoveredClaim
@@ -501,10 +501,10 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     : `View Mint on ${chainLabel(destinationChain) || 'Destination'} ↗`
 
   // Row labels for the plain copyable hash text (distinct from the button
-  // labels above) — same source/destination split as the Hub page, so a
+  // labels above) - same source/destination split as the Hub page, so a
   // claim/transfer card here shows both hashes as rows AND both explorer
   // links as buttons, instead of the single generic "Tx Hash" row it used
-  // to collapse everything into (which only ever showed the source hash —
+  // to collapse everything into (which only ever showed the source hash -
   // the destination hash existed in the data but was never surfaced here).
   const sourceHashLabel = isClaim
     ? `Source Tx (Burn on ${chainLabel(sourceChain) || 'Source'})`
@@ -551,7 +551,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   ]
 
   // Tapping a history card reopens the same receipt a live payment ends on
-  // (see ReceiptPopup) — incoming records get the receiver version.
+  // (see ReceiptPopup) - incoming records get the receiver version.
   const isIncoming = isClaim || isReceive || isBulkReceived || isP2PCredit
   const receiptStatus = isFailed ? 'failed' : isSuccess ? 'success' : 'pending'
   const doneTitle = isClaim ? ((metadata as any)?.merchant ? 'Payment Received' : 'Funds Arrived')
@@ -642,7 +642,7 @@ function groupByDate(records: ActivityRecord[]) {
 // ── Filter sheet ──────────────────────────────────────────────────────────────
 // Every category label that used to sit as a permanently-visible row of tabs
 // under the header now lives in here instead, opened from the slider icon
-// next to Search. "All" is always the default on load/reset — nothing here
+// next to Search. "All" is always the default on load/reset - nothing here
 // changes that; the user has to explicitly tap a label to narrow the list.
 // Opens as a right-edge drawer (both mobile and desktop) rather than a
 // bottom sheet or centered dialog, per product request.
@@ -682,7 +682,7 @@ function FilterSheet({ active, onSelect, onClose }: {
     </>
   )
 
-  // A plain dim (no backdrop blur — Android re-blurs it every frame of the
+  // A plain dim (no backdrop blur - Android re-blurs it every frame of the
   // fade), and it slides back out when closed instead of vanishing.
   usePopupOpen()
   return (
@@ -743,7 +743,7 @@ export function ActivityPage() {
 
   // Debounce the search box → useActivity's `search` state, which re-queries
   // Supabase (see fetchActivity's search clause) rather than only filtering
-  // whatever page of records happens to already be loaded — so a hash or
+  // whatever page of records happens to already be loaded - so a hash or
   // username from months ago still surfaces even if it isn't in the first
   // loaded page.
   useEffect(() => {
@@ -752,7 +752,7 @@ export function ActivityPage() {
   }, [searchInput, setSearch])
 
   // One-time catch-up for P2P history that happened before this feature
-  // existed — see backfillP2PActivity's own doc comment for why this is
+  // existed - see backfillP2PActivity's own doc comment for why this is
   // safe to call every time this page mounts (self-deduplicating).
   useEffect(() => {
     if (!userId || !walletAddress) return
@@ -765,7 +765,7 @@ export function ActivityPage() {
     if (tab === 'all') setFilter(undefined)
     else if (tab === 'bridge') setFilter('bridge' as ActivityType)  // handled below in fetchActivity
     else if (tab === 'p2p') setFilter('p2p' as ActivityType)        // handled below in fetchActivity
-    // 'merchant' isn't an activity_type — fetch everything and narrow client-side (displayed below).
+    // 'merchant' isn't an activity_type - fetch everything and narrow client-side (displayed below).
     else if (tab === 'merchant') setFilter(undefined)
     else setFilter(tab as ActivityType)
   }, [setFilter])
@@ -831,7 +831,7 @@ export function ActivityPage() {
             <div className="w-px h-5 flex-shrink-0" style={{ background: 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }} />
             <button onClick={() => setFilterOpen(true)} aria-label="Filter"
               className="flex-shrink-0 flex items-center justify-center relative w-7 h-7 -mr-1 rounded-full active:scale-90 transition-transform">
-              {/* Two-line filter icon (was SlidersHorizontal's 3 rows) — same
+              {/* Two-line filter icon (was SlidersHorizontal's 3 rows) - same
                   slider-row visual language, one row fewer, per request. */}
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                 style={{ color: activeTab === 'all' ? 'var(--text-secondary)' : 'var(--brand)' }}>
@@ -867,7 +867,7 @@ export function ActivityPage() {
         )}
 
         {/* Mobile: grouped cards. Desktop: a proper table below, driven by
-            the exact same `groups` data and onSelect handler — no
+            the exact same `groups` data and onSelect handler - no
             duplicated fetching/filtering, just a different markup shape. */}
         <div className="lg:hidden">
           {!loading && groups.map(group => (
@@ -904,8 +904,8 @@ export function ActivityPage() {
                         <tr key={item.id} onClick={() => setSelected(item)} className="desktop-table-row"
                           style={{ cursor: 'pointer', borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)', background: 'var(--dt-hover-bg, transparent)', transition: 'background-color 150ms ease' }}>
                           <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{row.title}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)', fontFamily: row.counterpartyLabel && !row.isSwap ? 'monospace' : undefined }}>{row.subtitle || '—'}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{row.chain || '—'}</td>
+                          <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)', fontFamily: row.counterpartyLabel && !row.isSwap ? 'monospace' : undefined }}>{row.subtitle || '-'}</td>
+                          <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{row.chain || '-'}</td>
                           <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: row.statusColor }}>{row.statusLabel}</td>
                           <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)' }}>{timeAgo(row.createdAt)}</td>
                           <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: row.isSwap ? 'var(--success)' : row.amountColor, textAlign: 'right' }}>

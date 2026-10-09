@@ -3,7 +3,7 @@
 // Merchant payment requests (client side).
 //   Merchant: create a request (amount, optional customer, note, expiry) →
 //             link /paylink/r/<code> + QR; follow its status live; Ledger data.
-//   Customer: open the link and pay —
+//   Customer: open the link and pay -
 //     • MeshPort user with Arc USDC  → the normal Pay/Send flow on Arc
 //     • external wallet on Arc       → a USDC transfer on Arc, signed in the wallet
 //     • external wallet on a UB chain→ a USDC transfer to the merchant's
@@ -27,7 +27,7 @@ export function paymentStageLabel(p: { method: string; status: PaymentStage }): 
 }
 /**
  * Still on its way. A payment on another chain is already received the moment
- * it lands in the merchant's wallet there (their Ledger) — moving it to Arc is
+ * it lands in the merchant's wallet there (their Ledger) - moving it to Arc is
  * the merchant's own Claim All later. Only a transfer already moving to Arc
  * (older Unified Balance runs) is "arriving".
  */
@@ -112,7 +112,7 @@ export const isOrderPayable = (v: { status: string; amount: number; received: nu
 
 /**
  * MeshPort's pay screen for an order: recipient, amount (what's due) and the
- * order number are fixed — the payer can't change them.
+ * order number are fixed - the payer can't change them.
  */
 export function orderPaySendUrl(v: PaymentView): string {
   const name = v.merchantUsername ?? v.merchantWallet
@@ -143,7 +143,7 @@ export function hasRecentPaymentRequest(days = 8): boolean {
   try { return Date.now() - Number(localStorage.getItem(PAYREQ_KEY) || 0) < days * 864e5 } catch { return false }
 }
 
-/** Short, human bill / request number (first 6 of the code) — only a
+/** Short, human bill / request number (first 6 of the code) - only a
  *  fallback for requests created before order numbers existed. */
 export function billNumber(code: string): string {
   return code.slice(0, 6).toUpperCase()
@@ -196,7 +196,7 @@ export type MerchantPayment = {
   matchedBy: 'customer' | 'merchant' | 'watcher' | null
 }
 
-/** A direct deposit that matched more than one open order — the merchant picks. */
+/** A direct deposit that matched more than one open order - the merchant picks. */
 export type UnmatchedDeposit = {
   id: string; chain: string; txHash: string; from: string; amount: number; candidateCodes: string[]; createdAt: string
   /** multiple_orders: exact amount, several orders; amount_mismatch: close but not exact. */
@@ -269,7 +269,7 @@ export type ChatPendingOrder = {
   note: string | null; merchantName: string | null; iAmMerchant: boolean; createdAt: string; expiresAt: string | null
 }
 
-/** Open orders between me and `otherUserId` — whichever of us is the merchant. */
+/** Open orders between me and `otherUserId` - whichever of us is the merchant. */
 export async function listChatPendingOrders(otherUserId: string): Promise<ChatPendingOrder[]> {
   const { data, error } = await supabase.rpc('chat_pending_orders', { p_other: otherUserId })
   if (error) throw error
@@ -310,7 +310,7 @@ export function subscribeMerchantPayments(merchantWallet: string, onChange: () =
   return () => { supabase.removeChannel(ch) }
 }
 
-/** Live updates for one request (pay page / chat card). Polls — customers may not be signed in. */
+/** Live updates for one request (pay page / chat card). Polls - customers may not be signed in. */
 export function watchPayment(code: string, onUpdate: (v: PaymentView) => void, everyMs = 5000): () => void {
   let stop = false
   let iv: ReturnType<typeof setInterval> | null = null
@@ -319,7 +319,7 @@ export function watchPayment(code: string, onUpdate: (v: PaymentView) => void, e
       const v = await getPayment(code)
       if (stop) return
       onUpdate(v)
-      // Final states don't change any more — stop asking.
+      // Final states don't change any more - stop asking.
       if (['paid', 'expired', 'cancelled', 'failed'].includes(v.status) && iv) { clearInterval(iv); iv = null }
     } catch { /* keep last */ }
   }
@@ -367,7 +367,7 @@ export async function connectWallet(w: BrowserWallet): Promise<string> {
   return accounts[0].toLowerCase()
 }
 
-// Networks a wallet may not have yet — added (the wallet asks the user) when
+// Networks a wallet may not have yet - added (the wallet asks the user) when
 // switching fails. Public RPCs; explorers only where certain.
 const ADD_CHAIN: Record<string, { chainName: string; nativeCurrency: { name: string; symbol: string; decimals: number }; rpcUrls: string[]; blockExplorerUrls?: string[] }> = {
   Arc_Testnet: ARC_ADD_CHAIN,
@@ -383,7 +383,7 @@ const ADD_CHAIN: Record<string, { chainName: string; nativeCurrency: { name: str
   // The other MeshPort CCTP router chains (merchant QR networks). RPCs from
   // blockchain/chains.ts, explorers from lib/chainExplorers.ts, gas coins
   // from viem's chain definitions (Sonic / Morph testnets by family; Pharos
-  // has no viem definition — its testnet coin is PHRS).
+  // has no viem definition - its testnet coin is PHRS).
   Sonic_Testnet: { chainName: 'Sonic Testnet', nativeCurrency: { name: 'Sonic', symbol: 'S', decimals: 18 }, rpcUrls: ['https://rpc.testnet.soniclabs.com', 'https://sonic-testnet.rpc.thirdweb.com'], blockExplorerUrls: ['https://testnet.sonicscan.org'] },
   World_Chain_Sepolia: { chainName: 'World Chain Sepolia', nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://worldchain-sepolia.g.alchemy.com/public', 'https://worldchain-sepolia.rpc.thirdweb.com'], blockExplorerUrls: ['https://sepolia.worldscan.org'] },
   Linea_Sepolia: { chainName: 'Linea Sepolia', nativeCurrency: { name: 'Linea Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: ['https://rpc.sepolia.linea.build'], blockExplorerUrls: ['https://sepolia.lineascan.build'] },
@@ -413,7 +413,7 @@ export async function ensureChain(w: BrowserWallet, chain: PayChain) {
   } catch (e: any) {
     if (e?.code === 4001) throw new Error(`Switch your wallet to ${chain.label} to pay.`)
     // Unknown network: wallets report it differently (4902, -32603, a
-    // message…) — add it (the wallet asks the user) and switch.
+    // message…) - add it (the wallet asks the user) and switch.
     const add = ADD_CHAIN[chain.id]
     if (!add) throw new Error(`Switch your wallet to ${chain.label} to pay.`)
     await w.provider.request({ method: 'wallet_addEthereumChain', params: [{ chainId: want, ...add }] })
@@ -428,7 +428,7 @@ export const ARC_PAY_CHAIN: PayChain = { id: 'Arc_Testnet', label: 'Arc', chainI
 /**
  * Pay on Arc from the wallet this page is open in (MetaMask / OKX / Trust /
  * Coinbase in-app browser, or a desktop extension): adds Arc Testnet to the
- * wallet if needed, then a plain native USDC send — the wallet shows
+ * wallet if needed, then a plain native USDC send - the wallet shows
  * "Send <amount> USDC to <address>".
  */
 export async function payArcFromBrowserWallet(w: BrowserWallet, to: string, amount: number): Promise<string> {
@@ -497,7 +497,7 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 /** The merchant's own Transfer Funds from Arc to that chain (sender = their own address; older rows: no sender). */
 export const isOwnReceipt = (r: Pick<ChainReceipt, 'from'>, ownWallet: string | null | undefined) =>
   !r.from || (!!ownWallet && r.from.toLowerCase() === ownWallet.toLowerCase())
-/** Paid through a bridge (CCTP) by someone else — no paying wallet on this chain. */
+/** Paid through a bridge (CCTP) by someone else - no paying wallet on this chain. */
 export const isBridgeReceipt = (r: Pick<ChainReceipt, 'from'>) => r.from?.toLowerCase() === ZERO_ADDRESS
 
 export async function listChainReceipts(limit = 50): Promise<ChainReceipt[]> {

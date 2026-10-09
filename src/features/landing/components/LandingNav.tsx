@@ -96,7 +96,7 @@ export function LandingNav() {
           {/* Text shrinks and drops its padding first on the smallest
               viewports so it never wraps to two lines and blows up the
               header's height alongside the two 44px circular buttons and
-              the wordmark — see the mobile screenshot this fixes. */}
+              the wordmark - see the mobile screenshot this fixes. */}
           <button
             onClick={() => navigate('/auth')}
             className="whitespace-nowrap rounded-xl bg-brand px-3 py-2 text-[12.5px] font-bold text-white shadow-elevation-1 transition-transform active:scale-[0.97] sm:px-5 sm:py-2.5 sm:text-[13.5px]"

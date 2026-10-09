@@ -1,13 +1,13 @@
 // supabase/functions/blockchain-indexer/bulkpayReconcile.ts
 //
-// BulkPay reconciliation — docs/BULKPAY_RECONCILIATION_IMPLEMENTATION.md,
+// BulkPay reconciliation - docs/BULKPAY_RECONCILIATION_IMPLEMENTATION.md,
 // implementing Option B-refined from docs/BULKPAY_INTENT_SCOPED_WATCH_DESIGN.md.
 //
 // ── The one rule this entire file exists to enforce ────────────────────────
 // A chain_events row is NEVER created from client-declared data (activity,
 // bulk_payments_received, or bulk_payments' own row content beyond its
-// tx_hash). bulk_payments.tx_hash is used ONLY as a pointer — "check this
-// transaction" — never as authorization. The actual recipient/amount/token
+// tx_hash). bulk_payments.tx_hash is used ONLY as a pointer - "check this
+// transaction" - never as authorization. The actual recipient/amount/token
 // data always comes from an independently, server-side re-fetched
 // transaction receipt, decoded with the exact same logic
 // blockchain-indexer's main scan already uses (decodeTransferLog.ts).
@@ -15,12 +15,12 @@
 // This directly closes the gap traced in docs/BULKPAY_INDEXER_FORENSIC_AUDIT.md:
 // a BulkPay recipient who isn't in users.wallet_address never gets a
 // chain_events row from the main scan (knownWallets filtering, by design).
-// This module produces one for them anyway — WITHOUT ever adding their
+// This module produces one for them anyway - WITHOUT ever adding their
 // address to knownWallets, permanently or temporarily (docs/
 // BULKPAY_INTENT_SCOPED_WATCH_DESIGN.md §7's explicit requirement).
 //
 // ── Dependency injection ─────────────────────────────────────────────────
-// No Supabase client and no RPC client is instantiated in this file — both
+// No Supabase client and no RPC client is instantiated in this file - both
 // are supplied by the caller (index.ts, via new interfaces below), matching
 // the exact discipline already used throughout server/ledger/ and
 // server/transactionStateMachine/. This is what makes the logic here
@@ -28,28 +28,28 @@
 
 import { decodeTransferLog, isMintTransfer, isSelfTransfer, TRANSFER_TOPIC0, type DecodedTransferLog } from './decodeTransferLog.ts'
 
-// Multicall3's canonical, deterministic deployment address — identical on
+// Multicall3's canonical, deterministic deployment address - identical on
 // every EVM chain, and the exact constant BulkPayoutPage.tsx itself sends
 // transactions to (src/features/bulkpayout/BulkPayoutPage.tsx). Used here
 // only as a defensive sanity check (see decodeBulkPayReceipt's doc comment)
-// — never as the source of recipient data.
+// - never as the source of recipient data.
 export const MULTICALL3_ADDRESS = '0xca11bde05977b3631167028862be2a173976ca11'
 
-/** Minimal shape of a bulk_payments row this module reads — a pointer only, never trusted for recipient data. */
+/** Minimal shape of a bulk_payments row this module reads - a pointer only, never trusted for recipient data. */
 export interface BulkPaymentWorklistRow {
   id: string
   tx_hash: string
   created_at: string
   /**
-   * Which table this pointer came from — 'bulk_payments' (client-written,
+   * Which table this pointer came from - 'bulk_payments' (client-written,
    * post-broadcast, the original worklist source) or 'transaction_attempt'
    * (server-verified via Phase 4's confirmation sweep, added so a
    * BulkPay transaction that reaches CONFIRMED server-side gets
    * chain_events reconciled even if the client never successfully writes
-   * to bulk_payments at all — the exact gap the transaction_intent/attempt
+   * to bulk_payments at all - the exact gap the transaction_intent/attempt
    * architecture was built to survive, docs/
    * BULKPAY_TRANSACTION_INTENT_IMPLEMENTATION.md's Phase 5). Neither
-   * source is trusted for recipient/amount data either way — this field
+   * source is trusted for recipient/amount data either way - this field
    * only ever routes which "already reconciled" column gets marked.
    */
   source: 'bulk_payments' | 'transaction_attempt'
@@ -73,7 +73,7 @@ export interface RawReceipt {
   }>
 }
 
-/** The only RPC operation this module needs — supplied by the caller. */
+/** The only RPC operation this module needs - supplied by the caller. */
 export interface ReceiptFetcher {
   getTransactionReceipt(txHash: string): Promise<RawReceipt | null>
 }
@@ -104,21 +104,21 @@ export type ReconcileOutcome =
 
 /**
  * Independently decodes ONE real, already-broadcast transaction's actual
- * recipients — the core of Option B-refined. `worklistRow.tx_hash` is used
+ * recipients - the core of Option B-refined. `worklistRow.tx_hash` is used
  * only to know WHICH transaction to fetch; every other field in the
  * returned events comes from `receipt`, fetched by the caller via
  * `ReceiptFetcher`, never from `worklistRow` or any other client-declared
  * table.
  *
  * `nativeTransferLogContract` and `tokens` mirror chains.ts's own
- * `IndexedChain` shape — passed in rather than imported, so this function
+ * `IndexedChain` shape - passed in rather than imported, so this function
  * has no dependency on chains.ts's Deno-specific env-var reads and stays
  * trivially unit-testable.
  *
  * Why check receipt.to === Multicall3 (Phase 5 test 8): a tx_hash is
  * globally unique on a real chain, so this check can never be defeated by
  * an attacker (they cannot cause a real, unrelated transaction to also
- * match a tx_hash they control) — but it IS a meaningful defense against a
+ * match a tx_hash they control) - but it IS a meaningful defense against a
  * bulk_payments row whose tx_hash was copy-pasted incorrectly, or points at
  * a real transaction that was never actually a BulkPay batch. Returning
  * not_bulkpay rather than silently decoding whatever logs a wrong-but-real
@@ -127,7 +127,7 @@ export type ReconcileOutcome =
  *
  * Why status='confirmed' directly, not 'pending': this function is only
  * ever called for a receipt whose status is '0x1' (checked before this
- * point) — a mined, successful transaction, on a chain with
+ * point) - a mined, successful transaction, on a chain with
  * confirmationDepth = 0 (Arc). There is no meaningful 'pending' state to
  * represent here; the main scan's own 'pending' status exists for blocks
  * that haven't yet crossed the confirmation-depth frontier, which for Arc
@@ -143,7 +143,7 @@ export function decodeBulkPayReceipt(
   // Defense in depth: confirms the fetched receipt actually corresponds to
   // the tx_hash this worklist row pointed at, not a caller bug (e.g. the
   // wrong receipt passed in). worklistRow itself still never supplies any
-  // recipient/amount data — this is the ONLY thing it's used for.
+  // recipient/amount data - this is the ONLY thing it's used for.
   const receiptTxHash = (receipt.transactionHash ?? '').toLowerCase()
   if (receiptTxHash && receiptTxHash !== worklistRow.tx_hash.toLowerCase()) {
     return { outcome: 'not_found', reason: `receipt tx_hash (${receiptTxHash}) does not match worklist tx_hash (${worklistRow.tx_hash})` }
@@ -234,15 +234,15 @@ export interface WorklistItemResult {
  *
  * Idempotent by construction: `insertChainEvent` relies on the existing
  * chain_events dedup constraint (Phase 6), and `markVerified` is only ever
- * called after a `tx_hash`'s legs are fully processed for this pass — a
+ * called after a `tx_hash`'s legs are fully processed for this pass - a
  * crash mid-batch simply means the next invocation re-processes the same
  * still-unverified rows, safely (§ "resume after crash" below).
  *
  * `not_found`/`reverted`/`not_bulkpay`/`no_legs_found` outcomes still mark
- * the row verified — there is nothing more this reconciliation can ever
+ * the row verified - there is nothing more this reconciliation can ever
  * learn about a `tx_hash` that doesn't resolve, reverted, or wasn't really
  * a BulkPay call; retrying it forever would not change the outcome. This is
- * a deliberate, bounded "give up cleanly" behavior, not silent data loss —
+ * a deliberate, bounded "give up cleanly" behavior, not silent data loss -
  * every outcome is returned to the caller to log/alert on.
  */
 export async function runBulkpayReconciliation(
@@ -286,7 +286,7 @@ export async function runBulkpayReconciliation(
       try {
         receipt = await fetcher.getTransactionReceipt(row.tx_hash)
       } catch (e) {
-        // RPC failure — retryable, per Phase 5 test 9. Deliberately does NOT
+        // RPC failure - retryable, per Phase 5 test 9. Deliberately does NOT
         // call markVerified here, so this exact row is picked up again on the
         // next pass rather than being given up on due to a transient network
         // problem.
@@ -295,7 +295,7 @@ export async function runBulkpayReconciliation(
       }
 
       if (!receipt) {
-        // Genuinely unresolvable — a fabricated tx_hash, or one that hasn't
+        // Genuinely unresolvable - a fabricated tx_hash, or one that hasn't
         // landed yet. This function itself stays simple and always retries
         // an unresolved receipt on the next pass, since `sinceIso` already
         // bounds how long that can go on for (docs/
@@ -316,15 +316,15 @@ export async function runBulkpayReconciliation(
       }
 
       // Every terminal outcome (including reverted/not_bulkpay/no_legs_found)
-      // marks the row verified — nothing further can be learned by retrying a
+      // marks the row verified - nothing further can be learned by retrying a
       // transaction that has already been definitively read and classified.
       await repo.markVerified(row, new Date().toISOString())
     } catch (e) {
       // A single row's unexpected failure (e.g. insertChainEvent throwing)
-      // must never abort the rest of the batch — matching the same
+      // must never abort the rest of the batch - matching the same
       // resilience already established throughout this codebase (e.g.
       // cursors.ts's insertEvents, scanner.ts's per-chunk error isolation).
-      // Deliberately NOT marked verified, so this row is retried next pass —
+      // Deliberately NOT marked verified, so this row is retried next pass -
       // this is exactly what makes a partially-processed batch safe to
       // resume (Phase 5 test 10).
       results.push({ bulkPaymentId: row.id, txHash: row.tx_hash ?? '', outcome: 'not_found', eventsWritten: 0, reason: `unexpected error, will retry: ${e instanceof Error ? e.message : String(e)}` })

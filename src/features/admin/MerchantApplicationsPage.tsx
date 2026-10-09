@@ -45,7 +45,7 @@ export function MerchantApplicationsPage() {
 
   const decide = async (status: 'approved' | 'rejected' | 'revoked') => {
     if (!active) return
-    if (status !== 'approved' && !note.trim()) { setError('Add a short reason — the user will see it.'); return }
+    if (status !== 'approved' && !note.trim()) { setError('Add a short reason - the user will see it.'); return }
     setBusy(true)
     try {
       await adminReviewMerchant(active.id, status, note, adminEmail || 'admin')

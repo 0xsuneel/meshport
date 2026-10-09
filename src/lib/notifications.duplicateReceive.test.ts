@@ -4,30 +4,30 @@
 // (2026-09-05): AppLayout.tsx's claim-recovery-scan handler called
 // notifyPaymentReceived/notifyPaymentReceivedFromAddress with NO `id`, so
 // each call fell back to a fresh random id in addNotification (store/index.ts)
-// — meaning the store's own id-based dedup ledger could never catch a repeat.
+// - meaning the store's own id-based dedup ledger could never catch a repeat.
 //
 // runScan() there fires on every tab/app visibilitychange, and the server-side
 // claim-recovery-scan function's "already recovered" check is a SELECT-then-
-// upsert with no advisory lock — racy across two concurrent invocations of the
+// upsert with no advisory lock - racy across two concurrent invocations of the
 // same scan (e.g. two fast tab-switches in a row). Both invocations can see
 // the same not-yet-written deposit, both report it in their `recovered` list,
-// and both land in the client-side handler — which then wrote two separate
+// and both land in the client-side handler - which then wrote two separate
 // "Payment received" notifications for the exact same underlying transaction.
 //
 // Fix: pass a stable `id` instead of leaving it undefined. This test
 // simulates that race directly: two calls describing the "same" received
 // payment (same id, as the fix now guarantees) must only ever produce one
-// notification — regardless of how many times the racy scan re-discovers it.
+// notification - regardless of how many times the racy scan re-discovers it.
 //
 // UPDATE (2026-09-05, /investigate follow-up): the id AppLayout.tsx actually
 // passes was changed from `ext_recv_${row.tx_hash}` to `ext_recv_${row.id}`.
 // The original fix above assumed tx_hash was "the same pattern already used
-// everywhere else... HomePage.tsx's... ext_recv_ prefixed ids" — but
+// everywhere else... HomePage.tsx's... ext_recv_ prefixed ids" - but
 // HomePage.tsx's fireIfReceived() actually keys ext_recv_ on the activity
 // row's `id` column, not tx_hash. Two different id spaces for the same row
 // meant AppLayout's claim-recovery-scan handler and HomePage's live
 // subscription each notified the same external deposit under a different,
-// never-colliding id — a real, reproduced duplicate-notification bug this
+// never-colliding id - a real, reproduced duplicate-notification bug this
 // test's own dedup assertions did not catch, because it never modeled the
 // cross-file id mismatch, only same-file repeats. See AppLayout.tsx's own
 // comment at the notifId line for the full account.
@@ -36,7 +36,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // notifications.ts imports @/lib/supabase (for the reward-cap check in a
 // different function), which constructs a real Supabase client at module
-// load and throws without env vars — same issue every other test in this
+// load and throws without env vars - same issue every other test in this
 // suite that touches @/lib/notifications or @/store already works around.
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -54,7 +54,7 @@ import { notifyPaymentReceived, notifyPaymentReceivedFromAddress } from './notif
 
 describe('duplicate-receive-notification race (AppLayout claim-recovery-scan)', () => {
   beforeEach(() => {
-    // Fresh slate per test — same wallet-switch reset the real app performs.
+    // Fresh slate per test - same wallet-switch reset the real app performs.
     useNotificationStore.getState()._resetForAddress(null)
   })
 
@@ -80,16 +80,16 @@ describe('duplicate-receive-notification race (AppLayout claim-recovery-scan)', 
     expect(notifications).toHaveLength(1)
   })
 
-  it('sanity check: the bug this guards against — omitting `id` really does produce a duplicate', () => {
+  it('sanity check: the bug this guards against - omitting `id` really does produce a duplicate', () => {
     // Without a stable id, addNotification falls back to a random one every
-    // call — this is the exact regression AppLayout.tsx used to have. Proves
+    // call - this is the exact regression AppLayout.tsx used to have. Proves
     // the test above is actually exercising the dedup path, not passing
     // vacuously.
     notifyPaymentReceived({ amount: 5, fromUsername: 'alice' })
     notifyPaymentReceived({ amount: 5, fromUsername: 'alice' })
 
     const { notifications } = useNotificationStore.getState()
-    expect(notifications).toHaveLength(2) // the bug, reproduced — id-less calls are NOT deduped
+    expect(notifications).toHaveLength(2) // the bug, reproduced - id-less calls are NOT deduped
   })
 
   it('different tx_hash ids are genuinely different notifications, not over-deduped', () => {
@@ -140,16 +140,16 @@ describe('duplicate-receive-notification race (AppLayout claim-recovery-scan)', 
   // Root cause: an in-app username payment (PaySendPage.tsx) is still a real
   // on-chain transfer, so TWO independent paths see it and each fired its own
   // notification under a DIFFERENT id:
-  //   1. lib/arcDepositWatcher.ts's on-chain log watcher — id
+  //   1. lib/arcDepositWatcher.ts's on-chain log watcher - id
   //      `ext_recv_tx_<hash>` (it has no concept of the in-app chat message,
   //      it only sees the Transfer log).
   //   2. HomePage.tsx's `messages`-table subscription (and its catch-up scan)
-  //      — id `payment_recv_msg_<msg.id>`, keyed on the chat message row
+  //      - id `payment_recv_msg_<msg.id>`, keyed on the chat message row
   //      instead of the transaction hash.
   // Two different id namespaces for the same transfer meant the store's
   // id-based dedup ledger could never recognize them as the same event.
   // A genuine external-wallet deposit has no `payment_sent` chat message at
-  // all, so only path 1 ever fires for it — which is why external deposits
+  // all, so only path 1 ever fires for it - which is why external deposits
   // already showed correctly as a single notification.
   //
   // Fix: HomePage.tsx's two `messages`-subscription handlers now key their
@@ -181,7 +181,7 @@ describe('duplicate-receive-notification race (AppLayout claim-recovery-scan)', 
   // HomePage.tsx's two `messages`-table handlers read `msg.tx_hash`, but the
   // real column (see chatService.ts / ChatPage.tsx) is `payment_tx_hash`.
   // `msg.tx_hash` is always `undefined` on the actual row, so the id there
-  // ALWAYS fell back to `payment_recv_msg_<msg.id>` — the exact bug the test
+  // ALWAYS fell back to `payment_recv_msg_<msg.id>` - the exact bug the test
   // above thought it was guarding against. This models the real row shape
   // (payment_tx_hash, no tx_hash) and asserts the id-selection logic used in
   // HomePage.tsx actually produces the tx-hash-keyed id from the real field,

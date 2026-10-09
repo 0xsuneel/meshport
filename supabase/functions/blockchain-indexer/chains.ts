@@ -1,6 +1,6 @@
 // supabase/functions/blockchain-indexer/chains.ts
 //
-// Which chains the indexer observes, and how. Server-side only — Deno cannot
+// Which chains the indexer observes, and how. Server-side only - Deno cannot
 // import the frontend's src/lib/chains.ts (Vite `import.meta.env`), so this is
 // a deliberate second registry with the SAME shape, matching how
 // deposit-scan-all already keeps its own ARC_RPCS copy.
@@ -10,7 +10,7 @@
 // scanning costs one eth_getBlockByNumber(full) per block. On Arc (~2s blocks,
 // one chain) that is affordable and it replaces work deposit-scan-all is
 // ALREADY doing. Turning it on for 21 chains at once would multiply RPC spend
-// before anything consumes the events — the exact "optimize where the
+// before anything consumes the events - the exact "optimize where the
 // bottleneck is" mistake Phase 3 was scoped to avoid. Other chains are
 // declared here (so the registry is complete and cursors exist) but flagged
 // enabled:false until a consumer justifies the spend.
@@ -18,7 +18,7 @@
 // TESTNET ONLY.
 
 export interface IndexedChain {
-  /** Stable id — matches the frontend's chain ids. */
+  /** Stable id - matches the frontend's chain ids. */
   id: string
   name: string
   /** RPC endpoints in priority order. Empty = chain cannot be indexed. */
@@ -33,7 +33,7 @@ export interface IndexedChain {
    *
    * Everything else: conservative real-world values, NOT copied from the
    * frontend (which has no notion of finality). Polygon PoS is deliberately
-   * high — it has produced reorgs well past 100 blocks.
+   * high - it has produced reorgs well past 100 blocks.
    */
   confirmationDepth: number
   /** Max blocks one pass may scan, so a stale cursor cannot run unboundedly. */
@@ -55,7 +55,7 @@ export interface IndexedChain {
    * the wallet is genuinely credited.
    *
    * Left null for chains where the relationship has not been verified on real
-   * data — guessing here would create phantom deposits.
+   * data - guessing here would create phantom deposits.
    */
   nativeTransferLogContract: string | null
   /** ERC-20s worth watching via eth_getLogs. */
@@ -66,7 +66,7 @@ const DRPC_KEY = Deno.env.get('DRPC_KEY') ?? ''
 const CONFIGURED_ARC_RPC_URL = (Deno.env.get('ARC_RPC_URL') ?? '').trim()
 const ALCHEMY_KEY = Deno.env.get('ALCHEMY_KEY') ?? ''
 
-// Authenticated-only Arc endpoints — identical policy and ordering to
+// Authenticated-only Arc endpoints - identical policy and ordering to
 // deposit-scan-all/index.ts. Public gateways are deliberately excluded: that
 // is how a scan could end up on arc-testnet.rpc.thirdweb.com despite an
 // authenticated RPC being configured.
@@ -82,22 +82,22 @@ export const INDEXED_CHAINS: IndexedChain[] = [
     id: 'arc',
     name: 'Arc Testnet',
     rpcs: ARC_RPCS,
-    confirmationDepth: 0,          // see note above — Arc docs: 1 conf = final
+    confirmationDepth: 0,          // see note above - Arc docs: 1 conf = final
     maxBlocksPerPass: 3000,
     logChunkSize: 5000,
     enabled: true,
     nativeAsset: 'USDC',           // Arc's native gas currency is USDC
     // ── Why 0xffff…fffe and NOT the 0x3600 ERC-20 wrapper ────────────────────
     // Arc exposes native USDC two ways, and BOTH emit a Transfer log:
-    //   0xffff…fffe  — 18 decimals, the native representation
-    //   0x3600…0000  — 6 decimals, the ERC-20 wrapper view
+    //   0xffff…fffe  - 18 decimals, the native representation
+    //   0x3600…0000  - 6 decimals, the ERC-20 wrapper view
     //
     // Measured over 3,000 live blocks (20,098 wrapper logs):
     //   * every wrapper log carrying a REAL credit also has an identical
     //     0xffff…fffe log in the same tx, same from, same to, differing only
     //     by the 1e12 decimal scale
     //   * the 510 wrapper logs WITHOUT such a twin are, after the scanner's
-    //     existing filters, 100% self-transfers (from == to) or zero-value —
+    //     existing filters, 100% self-transfers (from == to) or zero-value -
     //     already rejected, so nothing real is lost
     //   * 11,268 fffe logs had no wrapper twin: ordinary native transfers
     //

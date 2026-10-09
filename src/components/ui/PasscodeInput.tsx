@@ -1,5 +1,5 @@
 /**
- * PasscodeInput — unified 6-digit passcode input
+ * PasscodeInput - unified 6-digit passcode input
  * Used across: Send, Swap, Chat, Contacts, Claim, Bulk Pay, Profile
  */
 import { forwardRef, useEffect, useRef } from 'react'
@@ -32,7 +32,7 @@ export const PasscodeInput = forwardRef<HTMLInputElement, PasscodeInputProps>(
         try { inputRef.current?.focus() } catch {}
       }, 200)
       return () => clearTimeout(t)
-    }, []) // empty deps — only run on mount
+    }, []) // empty deps - only run on mount
 
     return (
       <div className="space-y-2">

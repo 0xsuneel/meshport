@@ -1,6 +1,6 @@
 // Home → Receive → "Merchant QR" (approved merchants only).
 // The merchant enters an amount and picks the network; MeshPort creates an
-// order (unique order number) and shows an EIP-681 QR — any wallet that scans
+// order (unique order number) and shows an EIP-681 QR - any wallet that scans
 // it (MetaMask, OKX, Trust…) opens on that network with the amount filled in.
 // The deposit watcher links the payment to the order within about a minute;
 // the status below updates live. The network can be switched for the same
@@ -61,7 +61,7 @@ export function WalletPaymentDetails({ chainId, to, amount }: { chainId: string;
   return (
     <div style={{ width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.45 }}>
-        Scan with any wallet app (MetaMask, OKX, Trust, Coinbase…) — it opens the payment on <b style={{ color: 'var(--text-primary)' }}>{net}</b> with the address and amount filled in, and adds the network if the wallet doesn't have it.
+        Scan with any wallet app (MetaMask, OKX, Trust, Coinbase…) - it opens the payment on <b style={{ color: 'var(--text-primary)' }}>{net}</b> with the address and amount filled in, and adds the network if the wallet doesn't have it.
       </div>
       <div style={{ padding: '9px 11px', borderRadius: 12, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 5 }}>
         {row('Network', `${net} · chain ${c.chainId}`)}

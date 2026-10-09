@@ -46,12 +46,12 @@ type Screen = 'search' | 'amount' | 'review'
 type Token = 'USDC' | 'EURC' | 'cirBTC'
 type ProcessStage = 'idle' | 'verifying' | 'preparing' | 'sending' | 'confirming' | 'delivered' | 'failed'
 
-// USDC/EURC are both ~$1-pegged, so 3 decimals used to read fine — but
+// USDC/EURC are both ~$1-pegged, so 3 decimals used to read fine - but
 // that cap also silently rounded away dust-size amounts (e.g. a real
 // 0.000004 USDC payment showed as "$0"). Now that every display in this
 // file trims trailing zeros (see formatAmount in lib/utils.ts), there's no
-// downside to giving every token full 8-decimal precision — a normal "5
-// USDC" still renders as "5", not "5.00000000" — so this now matches
+// downside to giving every token full 8-decimal precision - a normal "5
+// USDC" still renders as "5", not "5.00000000" - so this now matches
 // AmountKeypad.tsx's decimalCap (also raised to 8 for every token).
 // USDC/EURC: 6 decimals (their on-chain precision). cirBTC: 8.
 function tokenDisplayDecimals(t: Token): number {
@@ -122,7 +122,7 @@ export function PaySendPage() {
   // the component never mounts on the autoFocus search screen only to yank the
   // keyboard shut a tick later when the redirect effect fires. Only the truly
   // async case (a raw wallet address needing a DB lookup) still starts on
-  // 'search' — see the effect below, which no longer autofocuses in that case.
+  // 'search' - see the effect below, which no longer autofocuses in that case.
   const initialRecipient = useState<Recipient | null>(() => {
     if (sendRecipient) return resolveCompound(sendRecipient)
     const toParam = searchParams.get('to')
@@ -137,7 +137,7 @@ export function PaySendPage() {
   const goBack2   = (s: Screen) => { setDirection('back');    setScreen(s) }
   const [recipient, setRecipient] = useState<Recipient | null>(initialRecipient)
   // True while we're still waiting on an async recipient resolution (raw
-  // address lookup) that will redirect away from the search screen shortly —
+  // address lookup) that will redirect away from the search screen shortly -
   // used to suppress autoFocus so we don't open the keyboard just to close it.
   const hasPendingRedirect = !initialRecipient && !!(sendRecipient || searchParams.get('to'))
 
@@ -176,7 +176,7 @@ export function PaySendPage() {
   const [showPasscodeSheet, setShowPasscodeSheet] = useState(false)
   const [pin, setPin] = useState('')
   // Whether THIS payment's passcode came from a biometric check vs typed
-  // manually — drives which icon (checkmark vs fingerprint/Face ID) shows
+  // manually - drives which icon (checkmark vs fingerprint/Face ID) shows
   // on the processing->success animation. Set from PinKeypad's onComplete
   // second argument (see PinKeypad.tsx's own comment on why that exists).
   const [paidViaBiometric, setPaidViaBiometric] = useState(false)
@@ -187,11 +187,11 @@ export function PaySendPage() {
   const [txError, setTxError] = useState('')
   const [hashCopied, setHashCopied] = useState(false)
   // Wall-clock duration of the send, measured start-to-finish, purely for
-  // the success screen's "Completed in X Seconds" pill — doesn't affect
+  // the success screen's "Completed in X Seconds" pill - doesn't affect
   // payment/transaction logic at all.
   const sendStartRef = useRef(0)
   const [elapsedSeconds, setElapsedSeconds] = useState('0.00')
-  // Broadcast but not confirmed within the send's wait — shown as
+  // Broadcast but not confirmed within the send's wait - shown as
   // "submitted", never as success or failure (see waitForConfirmation).
   const [payPending, setPayPending] = useState(false)
 
@@ -206,7 +206,7 @@ export function PaySendPage() {
   // link or QR without a username).
   const [merchantUsername, setMerchantUsername] = useState<string | null>(null)
   // Order payments: amount, order number and recipient come from the order on
-  // the server — not from the link — so they can't be changed by editing it.
+  // the server - not from the link - so they can't be changed by editing it.
   const recipientRef = useRef(recipient)
   recipientRef.current = recipient
   useEffect(() => {
@@ -251,7 +251,7 @@ export function PaySendPage() {
         setRecipientError(`This payment link doesn't match ${r.display}'s wallet, so it was blocked. Ask them for a new link.`)
         setDirection('back'); setScreen('search')
       }
-    }).catch(() => { /* stays unverified — sending stays blocked */ })
+    }).catch(() => { /* stays unverified - sending stays blocked */ })
     return () => { cancelled = true }
   }, [recipient?.walletAddress, recipient?.verified, merchantPayCode])
   const recipientUnverified = recipient?.verified === false
@@ -265,7 +265,7 @@ export function PaySendPage() {
   // ─── Resume an in-flight payment after a refresh ────────────────────────
   // If the page reloads while a send was still "confirming" (or even just
   // finishing up in the background), don't drop back to a blank search
-  // screen with zero record that a payment might already be on-chain —
+  // screen with zero record that a payment might already be on-chain -
   // that's exactly the situation most likely to make someone send it again
   // by accident. Restore the review screen and check the real activity
   // table (the actual source of truth, not this marker) for what happened.
@@ -300,10 +300,10 @@ export function PaySendPage() {
         return
       }
       if (attempts >= 8) {
-        // Couldn't confirm either way within a reasonable window — don't
+        // Couldn't confirm either way within a reasonable window - don't
         // spin forever, and don't silently drop the marker either. Point
         // at Activity, the real source of truth, instead of guessing.
-        setTxError('Still confirming — check Activity for the latest status.')
+        setTxError('Still confirming - check Activity for the latest status.')
         return
       }
       setTimeout(poll, 1500)
@@ -315,12 +315,12 @@ export function PaySendPage() {
 
   // ─── Full-screen success takeover, matching the reference video ────────
   // The earlier version moved a small circle from the processing spot up
-  // into a header — the actual reference video does something bigger: the
+  // into a header - the actual reference video does something bigger: the
   // ENTIRE screen flashes to brand color with a large checkmark + "Paid
   // Successfully", holds briefly, then that whole panel shrinks away while
   // the detailed success screen (same content as before, same text)
   // fades in underneath. Two phases, driven by plain initial/animate/exit
-  // — not layout-prop or manual-FLIP geometry tracking. This matches the
+  // - not layout-prop or manual-FLIP geometry tracking. This matches the
   // pattern already used successfully everywhere else in this exact file
   // (the search/amount/review screen transitions below all use plain
   // initial/animate/exit), which is why this replaces the fancier
@@ -333,7 +333,7 @@ export function PaySendPage() {
   }, [isDone])
 
   // Gates FlashAuthIcon's own bio->check swap (see that component's
-  // comment) — flips true only once the white circle below has actually
+  // comment) - flips true only once the white circle below has actually
   // finished its spring entrance (onAnimationComplete), not on a guessed
   // timer. Reset alongside successPhase so a second payment in the same
   // session gets a fresh flash instead of starting pre-armed.
@@ -342,7 +342,7 @@ export function PaySendPage() {
 
   // ─── Traveling checkmark: flash position -> hero card's own checkmark
   // spot, then the rest of the hero card drops in ────────────────────────
-  // Not Framer's layout/layoutId — that's the exact mechanism that
+  // Not Framer's layout/layoutId - that's the exact mechanism that
   // produced zero visible motion in production earlier (see the extensive
   // comment history on this feature). This is the same manual
   // getBoundingClientRect + transform technique already proven working
@@ -364,13 +364,13 @@ export function PaySendPage() {
   const [travelRect, setTravelRect] = useState<{ from: DOMRect; to: DOMRect } | null>(null)
   const [travelDone, setTravelDone] = useState(false)
   // Desktop's flash overlay used to portal straight to `document.body` with
-  // `position:fixed; inset:0` — meaning it flashed the ENTIRE screen,
+  // `position:fixed; inset:0` - meaning it flashed the ENTIRE screen,
   // covering the Recent History column too, not just the flow column the
   // rest of this page's desktop layout confines itself to. It was ported
   // to `document.body` in the first place because PageTransition's
   // motion.div (wraps every route) leaves a stray transform on itself,
   // which makes it the containing block for any `position:fixed`
-  // descendant — so a naive non-portalled fixed overlay rendered sized/
+  // descendant - so a naive non-portalled fixed overlay rendered sized/
   // positioned to that transformed ancestor instead of the viewport. The
   // portal still needs to happen for that reason, but on desktop the
   // overlay's rect is now pinned to this ref (the same flow-column
@@ -380,7 +380,7 @@ export function PaySendPage() {
   const [flashColumnRect, setFlashColumnRect] = useState<DOMRect | null>(null)
 
   // Continuously snapshot the flash checkmark's real position while it's
-  // still mounted and settled (not mid-entrance-spring) — the LAST one
+  // still mounted and settled (not mid-entrance-spring) - the LAST one
   // captured here, right before successPhase flips away, is what the
   // travel effect below uses as its starting point. Measuring live at
   // transition time instead would be unreliable: the flash panel has no
@@ -394,7 +394,7 @@ export function PaySendPage() {
     }
   })
 
-  // Separate, dependency-gated effect — NOT folded into the unconditional
+  // Separate, dependency-gated effect - NOT folded into the unconditional
   // one above. That one has no dep array on purpose (it needs to keep
   // re-measuring flashCheckRef every render while flash is up), but
   // getBoundingClientRect() always returns a brand-new DOMRect object, so
@@ -417,7 +417,7 @@ export function PaySendPage() {
     if (!heroCheckEl) return
     const from = lastFlashRectRef.current
     const to = heroCheckEl.getBoundingClientRect()
-    // Couldn't measure the flash circle — don't leave an invisible checkmark.
+    // Couldn't measure the flash circle - don't leave an invisible checkmark.
     if (!from) { setTravelDone(true); return }
     setTravelRect({ from, to })
     const t = setTimeout(() => setTravelDone(true), 520)
@@ -435,7 +435,7 @@ export function PaySendPage() {
   // the moment the transaction actually lands on-chain.
   const SAFETY_BUFFER_MULT = 1.2
   const feeReserve = token === 'USDC' ? estimatedFee * SAFETY_BUFFER_MULT : 0
-  // The true ceiling for anything the user types or taps Max for — not the
+  // The true ceiling for anything the user types or taps Max for - not the
   // raw balance. Reusing this one value for Max, the keypad's own Done
   // button, and the Preview/Continue footer means every path into Review
   // is validated the same way, so an amount that can't afford gas can never
@@ -464,7 +464,7 @@ export function PaySendPage() {
     return null
   }
 
-  // Async version — looks up MeshPort profile for a plain wallet address
+  // Async version - looks up MeshPort profile for a plain wallet address
   async function resolveCompoundAsync(input: string): Promise<Recipient | null> {
     const sync = resolveCompound(input)
     if (!sync) return null
@@ -482,7 +482,7 @@ export function PaySendPage() {
   // The two modules below are the largest dynamic imports on the send
   // critical path. arcService pulls in viem (heavy); payIntentService is
   // imported inside sendUSDC/sendEURC right before the broadcast. Both
-  // cold-parse on first use — typically 200–600ms — and that cost used to
+  // cold-parse on first use - typically 200–600ms - and that cost used to
   // land squarely on the PIN-submit → broadcast leg, making the send FEEL
   // slow even when Arc's own finality is sub-second. Kicking the imports
   // the instant the component mounts means V8 has parsed and cached them
@@ -496,14 +496,14 @@ export function PaySendPage() {
 
   // ─── Fee estimation, fetched up front on the Amount screen ─────────────
   // Runs immediately on mount and re-runs whenever something that could
-  // change the network fee changes (token, recipient, network) — but NOT
+  // change the network fee changes (token, recipient, network) - but NOT
   // when the passcode/Review screens are reached. The result is cached in
   // `estimatedFee` and reused everywhere else (Max, validation, the Review
   // page's fee row) rather than recomputed later.
   useEffect(() => {
     let cancelled = false
     // BUG FIX (2026-09-17): estimateTransferFee's gas-unit assumption
-    // depends on which kind of transfer this is — see its own comment in
+    // depends on which kind of transfer this is - see its own comment in
     // arcService.ts. USDC is a native send (21,000 gas); EURC and cirBTC
     // are ERC-20 transfer() calls (~65,000 gas, per Arc's own docs) and
     // were silently getting the native-send number here before, understating
@@ -536,7 +536,7 @@ export function PaySendPage() {
       if (m.getCirBtcBalance && walletAddress) m.getCirBtcBalance(walletAddress).then((b: number) => setCirbtcBalance(b)).catch(() => {})
     }).catch(() => {})
 
-    // Same logic as Home Avatar Recent (see src/lib/recentContacts.ts) — only
+    // Same logic as Home Avatar Recent (see src/lib/recentContacts.ts) - only
     // registered MeshPort users show up here, kept in sync with Home + the
     // View-all Recent page.
     const loadRecents = async () => {
@@ -566,13 +566,13 @@ export function PaySendPage() {
 
     if (sendRecipient) {
       // Sync-resolvable case was already applied before first paint (see
-      // initialRecipient above) — only fall back to the async DB lookup here.
+      // initialRecipient above) - only fall back to the async DB lookup here.
       if (!initialRecipient) resolveCompoundAsync(sendRecipient).then(r => { if (r) { setRecipient(r); goForward('amount') } })
       setSendRecipient(null)
     } else {
       const toParam = searchParams.get('to'); const amountParam = searchParams.get('amount')
       if (toParam && !initialRecipient) {
-        // Raw address — needs async DB lookup (compound format was already
+        // Raw address - needs async DB lookup (compound format was already
         // resolved synchronously before first paint)
         resolveCompoundAsync(toParam).then(r => {
           if (r) { setRecipient(r); if (amountParam) setAmount(amountParam); goForward('amount') }
@@ -582,7 +582,7 @@ export function PaySendPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Load contacts eagerly on mount — saved + conversation partners, merged A-Z, excluding removed
+  // Load contacts eagerly on mount - saved + conversation partners, merged A-Z, excluding removed
   useEffect(() => {
     const { user: u, walletAddress: wa } = useAuthStore.getState()
     import('@/lib/removedContacts').then(({ getRemovedContacts }) => {
@@ -598,13 +598,13 @@ export function PaySendPage() {
         if (!savedRes.ok && readPeople('pay-contacts', u?.id)) { setContactsLoaded(true); return }
         const savedRows = savedRes.rows
         const merged = new Map<string, DbUser>()
-        // Exclude your own id here — self is handled separately below as a
+        // Exclude your own id here - self is handled separately below as a
         // single pinned synthetic entry. Without this, a self-conversation
-        // (created when you pay yourself by username — see PaySendPage's
+        // (created when you pay yourself by username - see PaySendPage's
         // chat block, which creates a conversation between user.id and
         // otherUser.id even when they're the same id) makes fetchConversations
         // return YOU as your own "other_user", merging you into this list a
-        // second time — then the explicit `self` entry gets prepended on top
+        // second time - then the explicit `self` entry gets prepended on top
         // of that, producing two "(You)" rows.
         for (const c of savedRows) if (!removed.has(c.id) && c.id !== u?.id) merged.set(c.id, c)
         for (const conv of convs) {
@@ -615,7 +615,7 @@ export function PaySendPage() {
           (a.display_name || a.username).localeCompare(b.display_name || b.username)
         )
         // Self-transfer: pin your own profile at the top of Contacts, as a
-        // synthetic entry — never written to `user_contacts`, purely a UI
+        // synthetic entry - never written to `user_contacts`, purely a UI
         // convenience so "pay yourself" is always one tap away without
         // requiring you to add yourself as a contact first. isSelf-tagged
         // rendering (the "(You)" label) happens where this list is mapped
@@ -649,7 +649,7 @@ export function PaySendPage() {
 
     if (!raw) { setSearching(false); return }
 
-    // Wallet address — resolve inline, no search
+    // Wallet address - resolve inline, no search
     if (isValidAddress(raw)) {
       setSearching(false)
       setAddressResolving(true)
@@ -675,18 +675,18 @@ export function PaySendPage() {
     // 2. Only hit the DB if user typed a FULL username.arc (new contact search)
     const isFullUsername = /\.arc$/i.test(raw.trim())
     if (!isFullUsername) {
-      // Partial: show saved contacts only — no open DB search
+      // Partial: show saved contacts only - no open DB search
       setResults(savedMatches)
       setSearching(false)
       return
     }
 
-    // Full username.arc — exact match only (this is a specific person's handle,
+    // Full username.arc - exact match only (this is a specific person's handle,
     // not a fuzzy prefix search, so don't surface similarly-named results).
     setSearching(true)
     const timer = setTimeout(async () => {
       try {
-        // No excludeUserId here — self-transfer is permitted (see
+        // No excludeUserId here - self-transfer is permitted (see
         // arcService.ts's sendUSDC/sendEURC), and typing your own exact
         // username.arc should find yourself, tagged "You" at render time
         // below (isSelfResult), same as the pinned Contacts entry above.
@@ -717,7 +717,7 @@ export function PaySendPage() {
   const pickResult = (u: DbUser) => {
     setRecipient({ id: u.id, display: u.username?.endsWith('.arc') ? u.username : u.username + '.arc', displayName: u.display_name, walletAddress: u.wallet_address, isUsername: true, avatarUrl: u.avatar_url })
     // BUG FIX: amount (and any stale validation error) used to carry over
-    // from a previous recipient — go back and pick someone new, and
+    // from a previous recipient - go back and pick someone new, and
     // whatever you'd typed for the last person was still sitting there.
     // Clearing here means every fresh recipient selection starts blank,
     // matching what you'd expect from Venmo/Cash App/etc.
@@ -765,14 +765,14 @@ export function PaySendPage() {
   // RESILIENCE FIX (2026-09-17, explicit product requirement: Pay must
   // still work correctly on a bad/flaky connection, not just fail or
   // double-send on retry). This used to be a plain `crypto.randomUUID()`
-  // generated fresh inside runProcessing on every single call — meaning
+  // generated fresh inside runProcessing on every single call - meaning
   // every retry (wrong PIN re-entry aside, any retry after a genuinely
   // dropped response on a bad connection) minted a BRAND NEW key. Since
   // pay-intent's own dedup is keyed on (wallet_address, idempotencyKey),
   // a fresh key on every retry gave that protection nothing to match
   // against: if the first attempt's response never reached this device
   // but had already broadcast server/chain-side, retrying would create a
-  // second, entirely separate intent+attempt+nonce — a genuine
+  // second, entirely separate intent+attempt+nonce - a genuine
   // double-send, exactly the failure mode idempotency keys exist to
   // prevent, and exactly the scenario most likely on a bad connection.
   //
@@ -783,7 +783,7 @@ export function PaySendPage() {
   // own comment on intentResult.existingTxHash) can recognize a repeat
   // and resume instead of re-broadcasting. The moment any of the three
   // actually changes, this naturally computes a fresh key with no manual
-  // invalidation to remember — safer than trying to catch every place
+  // invalidation to remember - safer than trying to catch every place
   // recipient/amount/token could change and reset a ref by hand.
   const idempotencyKeyRef = useRef<{ signature: string; key: string } | null>(null)
   const getIdempotencyKey = (): string => {
@@ -797,7 +797,7 @@ export function PaySendPage() {
   const openPasscodeSheet = () => { setPin(''); setPinError(false); setTxError(''); setShowPasscodeSheet(true) }
 
   const verifyAndSend = async () => {
-    // Synchronous guard — `isProcessing` (React state) doesn't flip until
+    // Synchronous guard - `isProcessing` (React state) doesn't flip until
     // AFTER the async verifyPasscode() call below resolves, leaving a window
     // where a second onComplete fire would pass the isProcessing check and
     // trigger a second real on-chain send. A ref is checked/set synchronously
@@ -875,7 +875,7 @@ export function PaySendPage() {
 
     // One Pay operation = one idempotency key. Now stable across retries
     // of the SAME payment (see idempotencyKeyRef/getIdempotencyKey above)
-    // — a genuinely new send (different recipient, amount, or token) still
+    // - a genuinely new send (different recipient, amount, or token) still
     // gets a fresh key automatically; nothing here needs to track that by
     // hand.
     const idempotencyKey = getIdempotencyKey()
@@ -891,7 +891,7 @@ export function PaySendPage() {
         : await sendUSDC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
 
       // The send now waits for the real receipt (see waitForConfirmation in
-      // arcService.ts). A reverted payment moved nothing — show the failed
+      // arcService.ts). A reverted payment moved nothing - show the failed
       // screen, and drop the idempotency key so a retry is a genuinely new
       // payment instead of a replay of this failed one.
       if (result.state === 'failed') {
@@ -907,7 +907,7 @@ export function PaySendPage() {
       }
 
       // Persist enough to resume this exact screen if the page gets
-      // refreshed while still "confirming"/finishing up below — without
+      // refreshed while still "confirming"/finishing up below - without
       // this, a refresh mid-send drops back to a blank search screen with
       // no record a payment might have already gone out, which is exactly
       // the situation most likely to make someone send it again by
@@ -919,13 +919,13 @@ export function PaySendPage() {
         recipientIsUsername: recipient?.isUsername, recipientId: recipient?.id,
       })
 
-      // Clear recipient from removed contacts — user chose to pay them
+      // Clear recipient from removed contacts - user chose to pay them
       if (recipient?.id) {
         import('@/lib/removedContacts').then(({ removeFromRemovedContacts: clearRemoved }) => {
           clearRemoved(result.senderAddress, recipient.id!)
         })
         // Paying someone is exactly the "return pay" signal that should save
-        // them as a real contact — dedup-safe, never creates duplicates no
+        // them as a real contact - dedup-safe, never creates duplicates no
         // matter how many times you pay the same person.
         if (user?.id) {
           import('@/lib/supabase').then(({ upsertContactDb }) => {
@@ -939,20 +939,20 @@ export function PaySendPage() {
         Activity.send({ walletAddress: result.senderAddress, txHash: result.txHash, amount: numAmount, tokenSymbol: token, toAddress: result.recipientAddress, fee: estimatedFee, toUsername: recipient?.isUsername ? recipient.display : undefined }).catch(() => {})
 
         // Write the RECEIVE-side row directly, right here, in the same
-        // processing event as the confirmed on-chain transfer — instead of
+        // processing event as the confirmed on-chain transfer - instead of
         // relying on the recipient's own client to notice a `payment_sent`
         // chat message over Realtime and create it themselves. That indirect
         // path (persist message → recipient app open & subscribed → recipient
         // writes its own Activity.receive) only fires the moment the
         // recipient happens to be online, and is skipped entirely for a raw
         // wallet address that never resolved to a known MeshPort user (see
-        // resolveCompoundAsync above) — which is exactly why wallet-address
+        // resolveCompoundAsync above) - which is exactly why wallet-address
         // receives could take minutes (or forever) to show up while
         // username/contact payments felt instant.
         //
         // activity rows are keyed by wallet_address, not by user id, so this
         // insert succeeds even for a destination that isn't a registered
-        // MeshPort account yet — the row is simply waiting there the moment
+        // MeshPort account yet - the row is simply waiting there the moment
         // that wallet is ever opened in the app. subscribeToActivity's
         // Realtime channel (already correct) picks up this INSERT instantly
         // for anyone with that wallet currently subscribed.
@@ -968,7 +968,7 @@ export function PaySendPage() {
         }).catch(() => {})
 
         // A payment is exactly the kind of change the short-lived Recent
-        // cache (see recentContacts.ts) can't know about on its own —
+        // cache (see recentContacts.ts) can't know about on its own -
         // invalidate it so Home/Send's Recent row picks up this recipient
         // right away rather than waiting out the cache window.
         import('@/lib/recentContacts').then(({ invalidateRecentContactsCache }) => invalidateRecentContactsCache())
@@ -980,11 +980,11 @@ export function PaySendPage() {
           if (success) { setPayPending(false); return }
           updateActivityStatus(`send_${result.txHash.toLowerCase()}`, result.senderAddress, 'failed')
           updateActivityStatus(`recv_${result.txHash.toLowerCase()}`, result.recipientAddress, 'failed')
-          showToastMessage('Payment failed to confirm on-chain — please check Activity', 'error')
+          showToastMessage('Payment failed to confirm on-chain - please check Activity', 'error')
         })
       }
 
-      // PERF FIX: fire-and-forget — rewards points are a nice-to-have on top
+      // PERF FIX: fire-and-forget - rewards points are a nice-to-have on top
       // of an already-confirmed payment; awaiting this server round trip
       // before showing success only added latency with no correctness
       // benefit (same pattern already used for the balance refresh and chat
@@ -1004,7 +1004,7 @@ export function PaySendPage() {
 
       try {
         const { deriveAddressFromPrivateKey } = await import('@/lib/arc')
-        // Fire-and-forget — deriving the address then fetching the balance
+        // Fire-and-forget - deriving the address then fetching the balance
         // is only for refreshing the displayed balance after send; no reason
         // to block the success screen on it.
         deriveAddressFromPrivateKey(activePrivateKey).then((realAddr: string) => {
@@ -1017,7 +1017,7 @@ export function PaySendPage() {
       // BUG FIX: this whole block used to be `await`-ed inline, meaning the
       // success screen sat on "processing" through FOUR sequential network
       // round-trips (ensureAnonSession, a user lookup, ensureConversation,
-      // persistMessage) — all just to log a "Sent $X to Y" chat message —
+      // persistMessage) - all just to log a "Sent $X to Y" chat message -
       // even though the actual on-chain transfer had already completed.
       // It's already wrapped in try/catch that silently swallows any
       // failure either way, so awaiting it bought zero error-handling
@@ -1028,7 +1028,7 @@ export function PaySendPage() {
           const { supabase, ensureAnonSession } = await import('@/lib/supabase')
           const { ensureConversation, persistMessage, touchConversation } = await import('@/lib/chatService')
           // Paying an order by link / QR: the chat gets the same payment card
-          // as paying the request in chat — with "Order #… · Paid in full".
+          // as paying the request in chat - with "Order #… · Paid in full".
           const orderTag = merchantPayCode && merchantOrderNumber ? ` · Order #${merchantOrderNumber}` : ''
           const chatName = recipient.isUsername ? recipient.display.replace('.arc', '') : merchantPayCode ? merchantUsername : null
           if (chatName && user) {
@@ -1042,23 +1042,23 @@ export function PaySendPage() {
             const otherUser = _profileRows[0] ?? null
             const lookupErr = _profileRes.ok ? null : { message: `profile lookup ${_profileRes.status}` }
             if (lookupErr) {
-              // Was previously swallowed with zero trace — this is the
+              // Was previously swallowed with zero trace - this is the
               // single most likely failure point (recipient lookup needs a
               // Supabase session; ensureAnonSession is best-effort and can
               // fail/time out, e.g. anonymous sign-in disabled on the
               // project, or a slow/dropped connection right after the send).
-              console.error('[PaySend] chat: recipient lookup failed — payment card will not be created:', lookupErr.message, { username: name })
+              console.error('[PaySend] chat: recipient lookup failed - payment card will not be created:', lookupErr.message, { username: name })
             } else if (!otherUser?.id) {
-              console.error('[PaySend] chat: no user found for username — payment card will not be created:', name)
+              console.error('[PaySend] chat: no user found for username - payment card will not be created:', name)
             } else {
               const convId = await ensureConversation(user.id, otherUser.id)
               if (!convId) {
-                console.error('[PaySend] chat: ensureConversation returned no id — payment card will not be created:', { myId: user.id, otherId: otherUser.id })
+                console.error('[PaySend] chat: ensureConversation returned no id - payment card will not be created:', { myId: user.id, otherId: otherUser.id })
               } else {
                 const content = `Sent ${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token} to ${otherUser.username}.arc${orderTag}`
                 const persisted = await persistMessage({ conversationId: convId, senderId: user.id, content, type: 'payment_sent', paymentAmount: numAmount, paymentTxHash: result.txHash, tokenSymbol: token, senderWalletAddress: result.senderAddress, recipientWalletAddress: result.recipientAddress, toUsername: recipient?.isUsername ? recipient.display : `${otherUser.username}.arc` })
                 if (!persisted) {
-                  console.error('[PaySend] chat: persistMessage failed — payment card will not be created:', { convId, txHash: result.txHash })
+                  console.error('[PaySend] chat: persistMessage failed - payment card will not be created:', { convId, txHash: result.txHash })
                 } else {
                   touchConversation(convId, content)
                 }
@@ -1096,7 +1096,7 @@ export function PaySendPage() {
   }
 
   // ── Desktop-only: Pay History (right column) ────────────────────────────
-  // Real data — this wallet's own outgoing 'send' rows, same ActivityService
+  // Real data - this wallet's own outgoing 'send' rows, same ActivityService
   // fetch pattern used across the app. Skipped entirely on mobile (that
   // column doesn't render there), and re-fetched once a payment actually
   // delivers so the new one appears without needing a page reload.
@@ -1116,13 +1116,13 @@ export function PaySendPage() {
 
   // Held in a variable (not returned directly) so the exact same JSX can be
   // placed either as the whole page (mobile, unchanged) or as the left
-  // column of the desktop 2-column layout below — never duplicated.
-  // Desktop: no root-level overflow-hidden — each screen already has its
+  // column of the desktop 2-column layout below - never duplicated.
+  // Desktop: no root-level overflow-hidden - each screen already has its
   // own bounded h-full + inner flex-1 overflow-y-auto (mobile's proven
   // pattern), and the desktop column wrapping `flow` already has its own
   // overflowY:'auto'. Hard-clipping here too (on top of that) was cutting
-  // off the bottom of tall content — the Success screen's summary card +
-  // buttons — with no way to reach it, since this was the innermost clip
+  // off the bottom of tall content - the Success screen's summary card +
+  // buttons - with no way to reach it, since this was the innermost clip
   // boundary. Mobile keeps overflow-hidden, unchanged.
   const flow = (
     <div className={`flex flex-col ${isDesktop ? 'h-full' : 'h-screen overflow-hidden'}`} style={{ background: 'var(--bg)' }}>
@@ -1132,7 +1132,7 @@ export function PaySendPage() {
       <ScreenPush screenKey={isDesktop ? 'desktop' : screen} back={direction === 'back'}>
       <AnimatePresence initial={false} mode="popLayout">
 
-        {/* ══════════════ SCREEN 1 — SEARCH RECIPIENT ══════════════ */}
+        {/* ══════════════ SCREEN 1 - SEARCH RECIPIENT ══════════════ */}
         {screen === 'search' && (
           <motion.div key="search"
             {...(reduceMotion || !isDesktop ? INSTANT_SCREEN : slideStepVariants(direction))}
@@ -1155,7 +1155,7 @@ export function PaySendPage() {
             </div>
 
               {/* Single combined search box. Desktop gets a QR button next
-                  to it — works like Home's "Scan QR" quick action, but
+                  to it - works like Home's "Scan QR" quick action, but
                   passes align=left so the scanner lands pinned to this
                   page's own column 1 instead of centering across the full
                   content width (which would drift toward column 2). */}
@@ -1245,7 +1245,7 @@ export function PaySendPage() {
               {/* ── Empty state ── */}
               {!query.trim() && (
                 <>
-                  {/* Recent — a row of avatars, like a phone's recent-contacts strip */}
+                  {/* Recent - a row of avatars, like a phone's recent-contacts strip */}
                   {recents.length > 0 && (
                     <div>
                       <SectionLabel>Recent</SectionLabel>
@@ -1269,7 +1269,7 @@ export function PaySendPage() {
                     </div>
                   )}
 
-                  {/* Contacts — saved only, sorted A–Z, in one card */}
+                  {/* Contacts - saved only, sorted A–Z, in one card */}
                   {savedContacts.length > 0 ? (
                     <div>
                       <SectionLabel count={savedContacts.length}>Contacts</SectionLabel>
@@ -1327,7 +1327,7 @@ export function PaySendPage() {
           </motion.div>
         )}
 
-        {/* ══════════════ SCREEN 2 — ENTER AMOUNT ══════════════ */}
+        {/* ══════════════ SCREEN 2 - ENTER AMOUNT ══════════════ */}
         {screen === 'amount' && recipient && (
           <motion.div key="amount"
             {...(reduceMotion || !isDesktop ? INSTANT_SCREEN : slideStepVariants(direction))}
@@ -1376,7 +1376,7 @@ export function PaySendPage() {
                 </p>
               )}
 
-              {/* Tappable amount display — mobile only. Desktop shows just
+              {/* Tappable amount display - mobile only. Desktop shows just
                   the token picker here; the live amount input itself is
                   the AmountKeypad card right below (no separate display to
                   tap, it's always there and always editable). */}
@@ -1421,7 +1421,7 @@ export function PaySendPage() {
                   padding: '28px 20px', minHeight: 108, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
                 }}>
                   {/* Symbol pinned to a fixed left inset, not inline before
-                      the input — that keeps the digits truly centered in
+                      the input - that keeps the digits truly centered in
                       the box no matter how many are typed, instead of the
                       whole "symbol+digits" group drifting off-center as it
                       grows. BUG FIX: was hardcoded to "$" regardless of
@@ -1455,7 +1455,7 @@ export function PaySendPage() {
                   token={token}
                   quickAmounts={QUICK_AMOUNTS}
                   // feeReserve/maxSpendable are computed once above from the
-                  // fee cached at page-open — Max, this keypad's own Done
+                  // fee cached at page-open - Max, this keypad's own Done
                   // button, and the footer's Preview button all validate
                   // against the same fee-safe ceiling.
                   feeReserve={feeReserve}
@@ -1500,11 +1500,11 @@ export function PaySendPage() {
               </div>
             </div>
 
-            {/* Back + Preview footer — the keypad sheet has its own "Review"
+            {/* Back + Preview footer - the keypad sheet has its own "Review"
                 button while it's open, but once it's dismissed (tap outside,
                 swipe down) or the user comes back from the Review screen,
                 there was no way to continue without reopening the keypad.
-                Show a persistent footer instead — but only once an amount
+                Show a persistent footer instead - but only once an amount
                 has actually been entered, so it doesn't appear on a blank
                 $0 screen. Desktop's AmountKeypad card is always "open"
                 (see its `open` prop above) and has no Back button of its
@@ -1538,25 +1538,25 @@ export function PaySendPage() {
           </motion.div>
         )}
 
-        {/* ══════════════ SCREEN 3 — REVIEW + INLINE STATES ══════════════ */}
+        {/* ══════════════ SCREEN 3 - REVIEW + INLINE STATES ══════════════ */}
         {screen === 'review' && recipient && (
           <motion.div key="review"
             {...(reduceMotion || !isDesktop ? INSTANT_SCREEN : slideStepVariants(direction))}
             transition={MOBILE_SLIDE_TRANSITION}
             className="flex flex-col h-full">
 
-            {/* This is the REAL isDone branch — the one that actually
+            {/* This is the REAL isDone branch - the one that actually
                 renders (confirmed against a live screenshot: this hero
                 card's exact copy, "Pay again"/"Back to Home", is what
                 really shows up). Every earlier animation attempt was
                 spent editing a visually-similar-looking but structurally
                 dead copy further down this same file, inside the `: (`
-                branch below — reachable only when isDone is FALSE, so it
+                branch below - reachable only when isDone is FALSE, so it
                 could never fire for the actual success case no matter how
                 correct the code inside it was. Confirmed by finding that
                 exact "Pay again" text only exists once in this whole file:
                 right here.
-                The flash phase is the only new piece — everything from
+                The flash phase is the only new piece - everything from
                 the hero card onward (all text, the whole detail card,
                 both buttons) is completely unchanged. */}
             {/* Instant hide, not a graceful fade - a fading flash panel
@@ -1571,7 +1571,7 @@ export function PaySendPage() {
   <SuccessFlash title={payPending ? "Payment Submitted" : "Paid Successfully"} checkRef={flashCheckRef} viaBiometric={paidViaBiometric} circleReady={flashCircleReady} onCircleReady={() => setFlashCircleReady(true)} rect={isDesktop ? flashColumnRect : null} radius={20} />
 )}
 
-            {/* Traveling checkmark clone — bridges the flash checkmark's
+            {/* Traveling checkmark clone - bridges the flash checkmark's
                 measured position to the hero card's own checkmark spot
                 (measured separately, different size/decoration). Fixed,
                 on top of everything, only exists during the ~520ms travel
@@ -1635,7 +1635,7 @@ export function PaySendPage() {
             )}
 
             {/* Desktop-only compact "Success" header (same padding/size as
-                MultichainClaimPage's own done-step header) — this step had
+                MultichainClaimPage's own done-step header) - this step had
                 no header at all before, so its content started right at
                 the column's top edge instead of level with
                 DesktopHistoryPanel's own header row next to it. */}
@@ -1654,13 +1654,13 @@ export function PaySendPage() {
                 {/* ── PROCESSING → SUCCESS ──────────────────────────────────
                      Matches the reference video's actual pattern: the
                      checkmark isn't a small circle that slides into place
-                     — the whole screen flashes to brand color with a big
+                     - the whole screen flashes to brand color with a big
                      checkmark + "Paid Successfully", holds briefly, then
                      that panel shrinks away while the detailed success
                      screen fades in underneath. Two named phases
                      (successPhase, declared above with the rest of this
                      screen's state), switched via plain initial/animate/
-                     exit — the same pattern every other screen transition
+                     exit - the same pattern every other screen transition
                      in this file already uses successfully (see the
                      search/amount/review screens above), not layout-prop
                      or manual position-tracking, both of which turned out
@@ -1677,14 +1677,14 @@ export function PaySendPage() {
                 )}
 
                 {/* NOTE: there is no isDone-driven success rendering here
-                    anymore. It used to be here, but is structurally dead —
+                    anymore. It used to be here, but is structurally dead -
                     this whole tree only ever renders when the OUTER
                     isDone-check (at the top of the "review" screen, a few
                     hundred lines up) has already evaluated to FALSE, so by
                     the time control reaches this point isDone can never be
                     true. That outer branch owns the entire success screen
                     now (hero card + the new full-screen flash phase before
-                    it) — see that block's own comment. */}
+                    it) - see that block's own comment. */}
 
                 {/* ── FAILED STATE (inline) ── */}
                 {processStage === 'failed' && (
@@ -1749,7 +1749,7 @@ export function PaySendPage() {
                       <div className="flex items-center justify-between">
                         <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Fee</span>
                         {/* Reuses the fee already calculated on the Amount
-                            page (see `estimatedFee` above) — the Review
+                            page (see `estimatedFee` above) - the Review
                             screen never recomputes it, it just displays the
                             cached value. */}
                         <span className="text-sm font-semibold text-green-400">
@@ -1774,7 +1774,7 @@ export function PaySendPage() {
               </AnimatePresence>
             </div>
 
-            {/* Pay button — only visible on review idle/failed */}
+            {/* Pay button - only visible on review idle/failed */}
             {!isProcessing && !isDone && processStage !== 'failed' && (
               <div className="px-5 pb-6 pt-2 flex-shrink-0">
                 <button onClick={openPasscodeSheet}

@@ -1,12 +1,12 @@
 /**
- * store/blockchainStore.ts — the reactive blockchain store
+ * store/blockchainStore.ts - the reactive blockchain store
  *
  * Phase 1 of docs/BLOCKCHAIN_ARCHITECTURE_PROPOSAL.md (§7, §17).
  *
  * ── The problem ─────────────────────────────────────────────────────────────
  * Today the global store holds exactly ONE blockchain field: useWalletStore's
- * `balance: number` (Arc USDC). Everything else — EURC, cirBTC, external chain
- * balances, claimable totals, pending transactions, history — lives in per-page
+ * `balance: number` (Arc USDC). Everything else - EURC, cirBTC, external chain
+ * balances, claimable totals, pending transactions, history - lives in per-page
  * useState. Unmounting a page throws that state away, so Home → Hub → Home
  * refetches everything, and two pages showing "the same" number are really
  * showing two independently-fetched values that can disagree (the documented
@@ -18,7 +18,7 @@
  * ── Writers ─────────────────────────────────────────────────────────────────
  * Only BlockchainManager writes here. Pages get read-only selectors
  * (store/blockchainSelectors.ts). That one-way rule is what makes request
- * deduplication possible at all — if a page can write, it can also fetch, and
+ * deduplication possible at all - if a page can write, it can also fetch, and
  * then there is no chokepoint to deduplicate at.
  *
  * ── Phase 1 status: ADDITIVE AND UNWIRED ────────────────────────────────────
@@ -29,7 +29,7 @@
  *
  * ── Why zustand, not react-query ────────────────────────────────────────────
  * Matches the app's existing store layer (src/store/index.ts), and non-React
- * callers — SyncCoordinator, the Realtime event handler, write paths — must be
+ * callers - SyncCoordinator, the Realtime event handler, write paths - must be
  * able to read and patch state. react-query is React-coupled and would be the
  * wrong dependency direction for those.
  */
@@ -110,7 +110,7 @@ export const useBlockchainStore = create<BlockchainStoreState>()((set, get) => (
     const k = balanceKey(wallet, chain, asset)
     const prev = s.balances[k] ?? emptyEntry()
     // Deliberately preserves `amount` and `updatedAt`. A failed or in-flight
-    // refresh must never blank a previously-good balance — that's what produces
+    // refresh must never blank a previously-good balance - that's what produces
     // the "balance flashes to $0 then comes back" artifact. The UI decides how
     // to present a stale/errored value; it always still has one to show.
     return { balances: { ...s.balances, [k]: { ...prev, status, error } } }
@@ -162,7 +162,7 @@ export const useBlockchainStore = create<BlockchainStoreState>()((set, get) => (
     const w = normalizeAddress(wallet)
     const { balances, claimable, pending } = get()
     // Balance keys are address-prefixed, so a wallet's data is removable
-    // precisely — no risk of clearing another account's cached values.
+    // precisely - no risk of clearing another account's cached values.
     const nextBalances: Record<string, BalanceEntry> = {}
     for (const [k, v] of Object.entries(balances)) {
       if (!k.startsWith(`${w}:`)) nextBalances[k] = v

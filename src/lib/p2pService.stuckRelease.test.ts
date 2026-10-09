@@ -23,7 +23,7 @@
  * updateTradeStatus/unlockOffer now report success; releaseTrade compensates on
  * every path including a throw, and never reverts a claim once funds have
  * actually moved; and reconcileStuckReleases() repairs the state afterwards
- * using the contract as the oracle — classifyStuckRelease() is the pure decision
+ * using the contract as the oracle - classifyStuckRelease() is the pure decision
  * function, tested exhaustively here, whose governing rule is that "unknown" is
  * never treated as "zero" and no verdict ever moves funds.
  */
@@ -35,7 +35,7 @@ vi.mock('@/lib/ActivityService', () => ({ saveActivity: (p: any) => saveActivity
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     auth: { getSession: vi.fn() },
-    // Offer unlocks go through the release_p2p_offer_lock RPC — record it
+    // Offer unlocks go through the release_p2p_offer_lock RPC - record it
     // like the REST calls so the tests can assert on it.
     rpc: vi.fn(async (fn: string, args: any) => { recorded.push({ url: `/rest/v1/rpc/${fn}`, method: 'POST', body: args }); return { data: true, error: null } }),
   },
@@ -89,7 +89,7 @@ import {
 const SELLER = '0x05d00ab75bcbe15450143f810cd5e5164ee126e0'
 const BUYER  = '0xfe2ac69fe72e91f1642e98ce0cdf55b8d1800e43'
 // Activation cutoff for these tests: before the fixture trade (Aug 7) so it is
-// in scope. The sweep is dormant without one — asserted separately below.
+// in scope. The sweep is dormant without one - asserted separately below.
 const ACTIVATION = '2026-08-01T00:00:00.000Z'
 
 function trade(over: Partial<P2PTrade> = {}): P2PTrade {
@@ -150,7 +150,7 @@ function installFetch(opts: { stuckTrades?: any[] } = {}) {
 
 const tradePatches = () => recorded.filter(r => r.url.includes('/p2p_trades?id=eq.') && r.method === 'PATCH')
 // The offer is unlocked through the release_p2p_offer_lock RPC (atomic,
-// server-side) — older code PATCHed p2p_offers.locked_by_trade_id directly.
+// server-side) - older code PATCHed p2p_offers.locked_by_trade_id directly.
 const offerUnlocks = () => recorded.filter(r =>
   (r.url.includes('/rpc/release_p2p_offer_lock') && r.method === 'POST')
   || (r.url.includes('/p2p_offers?id=eq.') && r.method === 'PATCH' && r.body && 'locked_by_trade_id' in r.body))
@@ -180,7 +180,7 @@ afterEach(() => { vi.unstubAllGlobals() })
 
 // ── releaseTrade ────────────────────────────────────────────────────────────
 
-describe('releaseTrade — successful release', () => {
+describe('releaseTrade - successful release', () => {
   it('finalizes the trade, unlocks the offer and writes a hashed activity row', async () => {
     const res = await releaseTrade(trade())
 
@@ -195,7 +195,7 @@ describe('releaseTrade — successful release', () => {
   })
 })
 
-describe('releaseTrade — contract release FAILURE reverts the claim', () => {
+describe('releaseTrade - contract release FAILURE reverts the claim', () => {
   it('returns the trade to payment_sent and writes no activity row', async () => {
     chain.releaseSucceeds = false
 
@@ -208,7 +208,7 @@ describe('releaseTrade — contract release FAILURE reverts the claim', () => {
   })
 })
 
-describe('releaseTrade — an EXCEPTION after the claim still compensates', () => {
+describe('releaseTrade - an EXCEPTION after the claim still compensates', () => {
   it('does not propagate, and reverts the claim to payment_sent', async () => {
     chain.releaseThrows = true
 
@@ -221,7 +221,7 @@ describe('releaseTrade — an EXCEPTION after the claim still compensates', () =
   })
 })
 
-describe('releaseTrade — the revert PATCH itself failing is surfaced', () => {
+describe('releaseTrade - the revert PATCH itself failing is surfaced', () => {
   it('reports that the trade could not be restored, instead of failing silently', async () => {
     chain.releaseSucceeds = false
     failPatch.tradeStatus = true
@@ -234,7 +234,7 @@ describe('releaseTrade — the revert PATCH itself failing is surfaced', () => {
   })
 })
 
-describe('releaseTrade — funds moved but finalize failed: never revert', () => {
+describe('releaseTrade - funds moved but finalize failed: never revert', () => {
   it('does NOT revert to payment_sent when the on-chain release succeeded', async () => {
     chain.releaseSucceeds = true
     failPatch.tradeStatus = true          // finalize PATCH fails
@@ -246,7 +246,7 @@ describe('releaseTrade — funds moved but finalize failed: never revert', () =>
   })
 })
 
-describe('releaseTrade — no double release', () => {
+describe('releaseTrade - no double release', () => {
   it('a second caller loses the claim race and never touches escrow', async () => {
     const fetchMock = vi.fn(async (url: string, init?: any) => {
       const method = init?.method ?? 'GET'
@@ -268,7 +268,7 @@ describe('releaseTrade — no double release', () => {
     // Regression test for the actual production bug: updateTradeStatusIf
     // had no try/catch and was called outside releaseTrade()'s own
     // try/catch too, so a thrown fetch() error here became a fully
-    // uncaught promise rejection — skipping every cleanup step, including
+    // uncaught promise rejection - skipping every cleanup step, including
     // the UI's setActing(false) and toast. This proves releaseTrade()
     // now resolves normally with success:false instead of throwing.
     const fetchMock = vi.fn(async (url: string, init?: any) => {
@@ -287,7 +287,7 @@ describe('releaseTrade — no double release', () => {
   })
 })
 
-// ── classifyStuckRelease — the safety-critical decision ─────────────────────
+// ── classifyStuckRelease - the safety-critical decision ─────────────────────
 
 describe('classifyStuckRelease', () => {
   it('FINALIZES when the contract says the release happened', () => {
@@ -305,7 +305,7 @@ describe('classifyStuckRelease', () => {
     expect(r.verdict).toBe('cancel')
   })
 
-  it('INVESTIGATES when the release flag cannot be read — never guesses', () => {
+  it('INVESTIGATES when the release flag cannot be read - never guesses', () => {
     const r = classifyStuckRelease({ onChainReleased: null, escrowRemaining: 23, everDeposited: true, amountUsdc: 5 })
     expect(r.verdict).toBe('investigate')
   })
@@ -351,7 +351,7 @@ describe('classifyStuckRelease', () => {
 
 // ── reconcileStuckReleases ──────────────────────────────────────────────────
 
-describe('reconcileStuckReleases — detection', () => {
+describe('reconcileStuckReleases - detection', () => {
   it('detects a stale released trade with null released_at', async () => {
     chain.onChainReleased = false; chain.escrowRemaining = 23
     installFetch({ stuckTrades: [stuckRow()] })
@@ -375,7 +375,7 @@ describe('reconcileStuckReleases — detection', () => {
   })
 })
 
-describe('reconcileStuckReleases — repair', () => {
+describe('reconcileStuckReleases - repair', () => {
   it('successfully restores a stuck trade whose funds are intact', async () => {
     chain.onChainReleased = false; chain.escrowRemaining = 23
     installFetch({ stuckTrades: [stuckRow()] })
@@ -469,7 +469,7 @@ describe('reconcileStuckReleases — repair', () => {
 
 // ── The client sweep is also gated by the activation boundary ────────────────
 
-describe('reconcileStuckReleases — activation boundary applies to the client sweep too', () => {
+describe('reconcileStuckReleases - activation boundary applies to the client sweep too', () => {
   it('is DORMANT with no cutoff configured, even with a stuck trade present', async () => {
     chain.onChainReleased = false; chain.escrowRemaining = 23
     installFetch({ stuckTrades: [stuckRow()] })

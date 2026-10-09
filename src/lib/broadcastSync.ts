@@ -2,7 +2,7 @@
  * Pulls admin broadcast announcements (sent from the Admin Control Panel's
  * Notifications page) into the user's in-app Notification list.
  *
- * This exists alongside — not instead of — OS-level Web Push. Web Push
+ * This exists alongside - not instead of - OS-level Web Push. Web Push
  * requires the user to grant permission, have a device subscription saved,
  * and (on iOS) have installed the app to their Home Screen. Those are a lot
  * of things that can silently not be true. This sync guarantees every user
@@ -20,7 +20,7 @@ interface BroadcastRow {
 }
 
 // v2 + per-wallet scoping: the old key ('meshport-broadcast-last-sync') was a
-// single global value shared by every account on the device — unlike every
+// single global value shared by every account on the device - unlike every
 // other notification-related storage key in this app (notifKey/seenKey/
 // walletKey in store/index.ts), which are all scoped per wallet address.
 // Since this sync effect re-runs on account switch (see App.tsx), logging

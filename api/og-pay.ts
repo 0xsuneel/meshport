@@ -8,11 +8,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
  * and /paylink/r/:code, plus the older /pay/… forms). A link with an amount
  * (?amount=10, or a merchant bill) shows that amount on the card: "Pay $10".
  *
- * WHY THIS EXISTS: MeshPort is a client-side React app — the actual HTML the
+ * WHY THIS EXISTS: MeshPort is a client-side React app - the actual HTML the
  * server sends back is the same empty shell for every route, and the real
  * page content (including who a payment link is for) only appears after
  * JavaScript runs. Link-preview bots (WhatsApp, iMessage, Telegram, Slack,
- * etc.) do NOT run JavaScript — they only ever look at the raw HTML's <head>
+ * etc.) do NOT run JavaScript - they only ever look at the raw HTML's <head>
  * meta tags. So without this function, every payment link would show the
  * exact same generic "MeshPort" card, never the actual recipient's name.
  *
@@ -20,7 +20,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
  * EVERY request (both bots and real people). This function then branches:
  *   - Bot request  → looks up the user, returns a small HTML page with
  *                    that person's name baked into the og:title/description
- *                    meta tags. Bots read this and stop — they never load
+ *                    meta tags. Bots read this and stop - they never load
  *                    the JS app, so this is all they ever see.
  *   - Real browser → this function fetches the actual built index.html and
  *                    returns it unchanged, so the real React app boots
@@ -31,7 +31,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
  * CAVEAT: Apple's iMessage link-preview fetcher doesn't always identify
  * itself with a distinct User-Agent the way other platforms do, so it's the
  * one platform this can't reliably guarantee a personalized card for even
- * with this function in place — everything else (WhatsApp, Telegram, Slack,
+ * with this function in place - everything else (WhatsApp, Telegram, Slack,
  * Discord, Facebook, Twitter/X, LinkedIn) is covered by the check below.
  */
 
@@ -61,7 +61,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const code = String(req.query.code || '').trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64)
   const username = String(req.query.username || '').replace(/\.arc$/i, '').trim().replace(/[^A-Za-z0-9_]/g, '').slice(0, 32)
   const userAgent = String(req.headers['user-agent'] || '')
-  // Only our own hosts — a forged Host header must not decide where this
+  // Only our own hosts - a forged Host header must not decide where this
   // function fetches from or which origin the preview card points at.
   const rawHost = String(req.headers.host || '')
   const host = /^(meshport\.xyz|www\.meshport\.xyz|[a-z0-9-]+\.vercel\.app|localhost(:\d+)?)$/i.test(rawHost) ? rawHost : 'meshport.xyz'
@@ -136,7 +136,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           avatarUrl = rows[0].avatar_url || ''
         }
       } catch {
-        // Fall through with the raw username as a reasonable default — a
+        // Fall through with the raw username as a reasonable default - a
         // slightly plainer card beats a broken one.
       }
     }
@@ -158,7 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (avatarUrl) imageParams.set('avatar', avatarUrl)
   if (amountText) imageParams.set('amount', String(Math.round(amount * 100) / 100))
   if (label) imageParams.set('label', label)
-  imageParams.set('v', '3') // new logo — a fresh URL for every preview cache
+  imageParams.set('v', '3') // new logo - a fresh URL for every preview cache
   const image = `${proto}://${host}/api/og-image?${imageParams.toString()}`
   const shareUrl = pageUrl + (amountText && !code ? `?amount=${encodeURIComponent(String(amount))}` : '')
 

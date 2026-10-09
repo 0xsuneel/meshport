@@ -2,7 +2,7 @@
 //
 // ── End-to-end encrypted chat (messages, photos, files) ──────────────────
 //
-// IDENTITY — one per person, on every device.
+// IDENTITY - one per person, on every device.
 //   Each user's chat identity is an X25519 key pair DERIVED from their wallet
 //   private key (deriveMyChatIdentity). Logging in on any device restores the
 //   wallet (Google/email accounts with their passkey or Recovery QR, others
@@ -12,28 +12,28 @@
 //   Only the PUBLIC key is uploaded (users.chat_public_key), together with
 //   a signature by the WALLET over it (users.chat_key_sig).
 //
-// SIGNED KEYS — the server can't swap them.
+// SIGNED KEYS - the server can't swap them.
 //   A key is used only if its signature recovers to that user's wallet
 //   address (which no client can change). Someone with database access who
 //   replaces a key can't produce that signature, so the swapped key is
-//   ignored and nothing gets sealed for it — messages wait (e2e:q2) instead.
+//   ignored and nothing gets sealed for it - messages wait (e2e:q2) instead.
 //   Like WhatsApp's safety numbers, but checked automatically, because the
 //   identity is already the wallet.
 //
-// REMEMBERED IDENTITIES — "security info changed".
+// REMEMBERED IDENTITIES - "security info changed".
 //   The signature ties a key to the wallet address the server reports. To
 //   also catch that address being changed, this device remembers each
 //   contact's wallet + key the first time it sees them signed (like
 //   WhatsApp's security code). If either later differs, the new key isn't
-//   used — messages wait and Pay is held — until the user confirms in the
+//   used - messages wait and Pay is held - until the user confirms in the
 //   chat (trustNewIdentity). A user's real key never changes on its own:
 //   it's derived from their wallet.
 //
-// EVERY MESSAGE CARRIES ITS OWN KEY — format "e2e:v2:".
+// EVERY MESSAGE CARRIES ITS OWN KEY - format "e2e:v2:".
 //   For each message (and each photo/file) a fresh random 256-bit key K is
 //   made, the content is sealed with AES-256-GCM under K, and K itself is
 //   sealed for the two people in the chat with a key from X25519(sender,
-//   recipient) — which both of them, and only they, can recompute. The
+//   recipient) - which both of them, and only they, can recompute. The
 //   message also names the sender's and recipient's public keys, so reading
 //   it never depends on looking anyone's key up on the server (that lookup
 //   failing, e.g. an account still showing an outdated key, was what made
@@ -45,23 +45,23 @@
 //   lets any signed-in device read everything. The trade-off: whoever holds
 //   the wallet key can read that wallet's chats (as they can move its funds).
 //
-// WAITING FOR THE RECIPIENT — format "e2e:q2:".
+// WAITING FOR THE RECIPIENT - format "e2e:q2:".
 //   Someone who hasn't signed in since chat encryption started has no key to
 //   seal for. Nothing is ever sent readable: the message is sealed for the
 //   SENDER's own identity (same e2e:v2 layout, recipient key = sender key),
-//   so only the sender can open it — not the server, not an admin. Once the
+//   so only the sender can open it - not the server, not an admin. Once the
 //   recipient signs in and publishes a key, the sender's app (any device)
 //   re-seals it for both of them as e2e:v2 (resealWaitingMessages); the
 //   database only lets the sender make exactly that q2 → v2 change.
 //
-// OLDER FORMATS — still readable, never sent any more.
+// OLDER FORMATS - still readable, never sent any more.
 //   "e2e:v1:" messages used one shared key per conversation. They are still
 //   decrypted (from the same identities), so no history is lost. Text with
 //   no prefix was sent before encryption existed and is shown as is.
 //
 // KEY ON THIS DEVICE.
-//   The wallet key lives in memory only, so after a reload — or a tab Android
-//   discarded — chat used to wait for it (for created/imported wallets: until
+//   The wallet key lives in memory only, so after a reload - or a tab Android
+//   discarded - chat used to wait for it (for created/imported wallets: until
 //   the passcode was entered) and showed every message locked meanwhile. The
 //   chat identity seed (it reads chat; it can't move funds) is now also kept
 //   on this device, sealed with the browser's non-extractable device key
@@ -75,15 +75,15 @@ const V1_PREFIX = 'e2e:v1:'
 const V2_PREFIX = 'e2e:v2:'
 const Q2_PREFIX = 'e2e:q2:' // sealed for the sender only, waiting for the recipient's key
 const MEDIA_V2_PREFIX = 'v2.'
-// Domain separation — this seed is only ever a chat identity.
+// Domain separation - this seed is only ever a chat identity.
 const CHAT_IDENTITY_INFO = new TextEncoder().encode('meshport-chat-identity-v2')
 const MSG_KEY_INFO = new TextEncoder().encode('meshport-chat-msgkey-v2')
 
 /** The placeholder shown for a message this device cannot open. */
-export const LOCKED_TEXT = '🔒 Encrypted message — unable to decrypt on this device'
-const BROKEN_TEXT = '🔒 Encrypted message — unable to decrypt'
+export const LOCKED_TEXT = '🔒 Encrypted message - unable to decrypt on this device'
+const BROKEN_TEXT = '🔒 Encrypted message - unable to decrypt'
 /** What the recipient sees for a message still waiting to be re-sealed for them. */
-export const WAITING_TEXT = '⏳ Waiting for this message — it appears when the sender is next online'
+export const WAITING_TEXT = '⏳ Waiting for this message - it appears when the sender is next online'
 
 function hexToBytes(hex: string): Uint8Array {
   const clean = hex.startsWith('0x') ? hex.slice(2) : hex
@@ -249,7 +249,7 @@ export async function verifyChatKey(walletAddress: string | null | undefined, pu
 
 /**
  * Publishes this wallet's chat public key to users.chat_public_key (replacing
- * a missing or outdated one). Cheap to call repeatedly — AppLayout calls it
+ * a missing or outdated one). Cheap to call repeatedly - AppLayout calls it
  * on start and again whenever the wallet key unlocks.
  */
 export async function ensureChatKeysReady(walletAddress: string, myUserId: string): Promise<void> {
@@ -275,7 +275,7 @@ export async function ensureChatKeysReady(walletAddress: string, myUserId: strin
 }
 
 // ── Keys for one conversation ──────────────────────────────────────────────
-/** What getConversationKey returns. Opaque to callers — pass it back in. */
+/** What getConversationKey returns. Opaque to callers - pass it back in. */
 export interface ChatKeys {
   readonly kind: 'chat-keys'
   readonly seed: Uint8Array
@@ -380,7 +380,7 @@ async function openRawMsgKey(keys: ChatKeys, header: string[]): Promise<ArrayBuf
   const other = sameBytes(spk, keys.myPub) ? rpk : sameBytes(rpk, keys.myPub) ? spk : null
   if (!other) return null // sealed for a different identity
   // With their wallet-signed key known, only that key (or my own, for my
-  // waiting messages) may be the other side — a message made with some
+  // waiting messages) may be the other side - a message made with some
   // other key (forged by whoever controls the server) doesn't open.
   if (keys.otherPub && !sameBytes(other, keys.otherPub) && !sameBytes(other, keys.myPub)) return null
   const wrapKey = await wrappingKey(keys.seed, other, spk, rpk)
@@ -410,7 +410,7 @@ async function rewrapHeader(keys: ChatKeys, header: string[]): Promise<string | 
 /**
  * Encrypts text for sending. Every message gets its own key (e2e:v2). When
  * the recipient has no key yet it is sealed for the sender alone (e2e:q2)
- * and handed over later by resealWaitingMessages — never sent readable.
+ * and handed over later by resealWaitingMessages - never sent readable.
  * Returns the text unchanged only with no keys at all (callers must not send
  * then). A bare CryptoKey still produces the legacy e2e:v1 format (tests).
  */
@@ -491,7 +491,7 @@ export async function decryptBlob(encryptedBytes: ArrayBuffer, ivBase64: string 
     return new Blob([await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(ivBase64) }, v1, encryptedBytes)])
   } catch (e) {
     console.error('[chatCrypto] decryptBlob failed:', e instanceof Error ? e.message : e)
-    throw e // caller shows a "couldn't decrypt this file" state — see ChatPage.tsx
+    throw e // caller shows a "couldn't decrypt this file" state - see ChatPage.tsx
   }
 }
 

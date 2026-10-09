@@ -1,15 +1,15 @@
 // src/lib/socialWallet.ts
 //
-// Self-custodial wallets for Google / email accounts — the pieces shared by
+// Self-custodial wallets for Google / email accounts - the pieces shared by
 // sign-up, unlock, recovery and the Security page.
 //
 //   MeshPort account (users.id) ──▶ one wallet address
-//        ├─ passkeys (walletPasskey.ts)  — unlock on any device they sync to
-//        └─ Recovery QR (recoveryQr.ts) — unlock anywhere with the password
+//        ├─ passkeys (walletPasskey.ts)  - unlock on any device they sync to
+//        └─ Recovery QR (recoveryQr.ts) - unlock anywhere with the password
 //
 // The wallet key is made on the device and never sent to MeshPort. On THIS
 // device a copy is kept sealed with the browser's non-extractable device key
-// (security.ts sealForDevice), so a reload doesn't need Face ID or the QR —
+// (security.ts sealForDevice), so a reload doesn't need Face ID or the QR -
 // the same layer the chat identity uses. Logout removes it.
 
 import { supabase } from './supabase'
@@ -35,7 +35,7 @@ export async function saveDeviceCopy(walletAddress: string, privateKey: string):
     const { sealForDevice } = await import('./security')
     const sealed = await sealForDevice(privateKey)
     if (sealed) localStorage.setItem(DEVICE_COPY_PREFIX + walletAddress.toLowerCase(), sealed)
-  } catch { /* storage blocked — the wallet then opens with the passkey / QR */ }
+  } catch { /* storage blocked - the wallet then opens with the passkey / QR */ }
 }
 
 /** This device's copy of the wallet key, if it has one and it's this wallet's. */

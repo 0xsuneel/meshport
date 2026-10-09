@@ -13,14 +13,14 @@
 //   recovery password ─Argon2id(salt, m, t, p)─▶ 256-bit key
 //   key ─AES-256-GCM(nonce, AAD = every byte before the ciphertext)─▶ private key
 //
-// Every header byte is authenticated (AAD), so changing any byte of the QR —
-// parameters, salt, address or ciphertext — makes decryption fail and the
+// Every header byte is authenticated (AAD), so changing any byte of the QR -
+// parameters, salt, address or ciphertext - makes decryption fail and the
 // recovery is rejected. After decrypting, the key's own address must match
 // the address in the QR AND the account's wallet, or it's rejected too.
 //
 // Runs entirely on the device: the password and the decrypted key are never
 // sent anywhere, stored or logged. Primitives come from @noble/hashes
-// (Argon2id) and WebCrypto (AES-GCM) — nothing hand-rolled.
+// (Argon2id) and WebCrypto (AES-GCM) - nothing hand-rolled.
 
 import { argon2idAsync } from '@noble/hashes/argon2'
 
@@ -32,7 +32,7 @@ const ALG_ARGON2ID_AES256GCM = 1
 // Above OWASP's Argon2id minimum (19 MiB, t=2). Stored in the QR, so later
 // QRs can use stronger settings without breaking older ones.
 const DEFAULT_KDF = { m: 32 * 1024, t: 2, p: 1 }
-// Bounds for parameters read from a QR — a crafted QR must not make the
+// Bounds for parameters read from a QR - a crafted QR must not make the
 // phone allocate gigabytes or spin for minutes.
 const KDF_LIMITS = { mMin: 8 * 1024, mMax: 256 * 1024, tMin: 1, tMax: 10, pMin: 1, pMax: 4 }
 
@@ -53,8 +53,8 @@ export class RecoveryError extends Error {
 /** Why a recovery password isn't strong enough, or null if it's fine. */
 export function checkRecoveryPassword(pw: string): string | null {
   if (pw.length < 12) return 'Use at least 12 characters'
-  if (/^\d+$/.test(pw)) return "Don't use only numbers — add letters or words"
-  if (new Set(pw).size < 6) return 'Too repetitive — use more different characters'
+  if (/^\d+$/.test(pw)) return "Don't use only numbers - add letters or words"
+  if (new Set(pw).size < 6) return 'Too repetitive - use more different characters'
   return null
 }
 
@@ -143,7 +143,7 @@ function parse(text: string) {
     throw new RecoveryError('format', 'Not a MeshPort Recovery QR')
   }
   if (bytes[3] !== VERSION || bytes[4] !== ALG_ARGON2ID_AES256GCM) {
-    throw new RecoveryError('unsupported', 'This Recovery QR was made by a newer MeshPort — update the app')
+    throw new RecoveryError('unsupported', 'This Recovery QR was made by a newer MeshPort - update the app')
   }
   if (bytes.length !== TOTAL_LEN) throw new RecoveryError('format', 'This Recovery QR is incomplete or damaged')
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
@@ -164,8 +164,8 @@ function parse(text: string) {
 
 /**
  * Decrypt a Recovery QR on this device. Throws RecoveryError:
- *   'decrypt'  — wrong password or the QR was changed (indistinguishable, by design)
- *   'mismatch' — it isn't `expectedAddress`'s wallet
+ *   'decrypt'  - wrong password or the QR was changed (indistinguishable, by design)
+ *   'mismatch' - it isn't `expectedAddress`'s wallet
  * Returns the private key only after its address has been checked.
  */
 export async function openRecoveryPayload(text: string, password: string, expectedAddress: string): Promise<{ privateKey: string; address: string }> {

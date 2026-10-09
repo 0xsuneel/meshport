@@ -242,7 +242,7 @@ async function scanBlockHeader(urls: string[], blockNumber: number): Promise<{ h
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  // Scheduled job only — the pg_cron caller's secret, never a user session.
+  // Scheduled job only - the pg_cron caller's secret, never a user session.
   if (!isCronOrLegacyServiceCaller(req)) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } })
 
   const supabase = createClient(

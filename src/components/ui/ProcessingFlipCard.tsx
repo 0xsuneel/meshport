@@ -4,7 +4,7 @@
 // money or state on-chain (create offer, top up escrow, release, cancel).
 // Front face shows a spinner while the action is in flight; once it
 // resolves, the card does a 3D flip to reveal a success/error face with
-// the actual message — never a silent toast for something this
+// the actual message - never a silent toast for something this
 // consequential. useProcessingFlip() below is the state/driver half;
 // ProcessingFlipCard is the pure render half. Kept in one file since
 // neither is useful without the other.
@@ -32,7 +32,7 @@ const INITIAL_STATE: FlipState = { open: false, phase: 'processing', processingL
  *   await runFlip('Creating offer…', () => createOfferAndReturnResult(), { successTitle: 'Offer Created' })
  *   <ProcessingFlipCard {...flipState} onDismiss={dismissFlip} />
  *
- * `action` must resolve to { success, message } — matches the shape every
+ * `action` must resolve to { success, message } - matches the shape every
  * p2pService.ts action already returns, so call sites rarely need to
  * reshape anything.
  */
@@ -75,7 +75,7 @@ export function ProcessingFlipCard({ open, phase, processingLabel, title, messag
   onExited?: () => void
 }) {
   const resultColor = phase === 'success' ? 'var(--success)' : 'var(--danger)'
-  // Solid card on a plain dim — no backdrop blur. Blurs under a layer that
+  // Solid card on a plain dim - no backdrop blur. Blurs under a layer that
   // fades in render wrong until it's fully opaque on Android, so the card's
   // text ghosted over the page and then the blur snapped on.
   const glassCardStyle = {
@@ -101,7 +101,7 @@ export function ProcessingFlipCard({ open, phase, processingLabel, title, messag
               transition={{ duration: 0.55, ease: 'easeInOut' }}
               style={{ position: 'relative', width: 280, minHeight: 200, transformStyle: 'preserve-3d' }}
             >
-              {/* Front face — processing */}
+              {/* Front face - processing */}
               <div style={{
                 position: 'absolute', inset: 0, backfaceVisibility: 'hidden',
                 ...glassCardStyle, borderRadius: 20,
@@ -114,7 +114,7 @@ export function ProcessingFlipCard({ open, phase, processingLabel, title, messag
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center' }}>{processingLabel}</div>
               </div>
 
-              {/* Back face — result */}
+              {/* Back face - result */}
               <div style={{
                 position: 'absolute', inset: 0, backfaceVisibility: 'hidden', transform: 'rotateY(180deg)',
                 ...glassCardStyle, borderRadius: 20,

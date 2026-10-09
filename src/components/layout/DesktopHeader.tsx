@@ -1,6 +1,6 @@
 // DesktopHeader.tsx
 // Sticky top bar shown only at desktop widths, alongside DesktopSidebar.
-// The search box is a real, live input owned entirely by this component —
+// The search box is a real, live input owned entirely by this component -
 // typing here searches people + services and shows results in a dropdown
 // anchored directly under this same box. It used to just navigate to
 // `/?search=1` and open a second search panel on Home's own page instead,
@@ -21,7 +21,7 @@ import { filterServices } from '@/lib/searchServices'
 import { useMerchant } from '@/lib/merchant'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 
-// Loaded on demand — the notifications popup's own content (list rendering,
+// Loaded on demand - the notifications popup's own content (list rendering,
 // P2P read-state sync, etc.) already lives in NotificationsPage; lazy so the
 // header's own chunk doesn't pull all of that in until someone actually
 // opens the bell.
@@ -29,7 +29,7 @@ const NotificationsPage = lazy(() =>
   import('@/features/profile/ProfileSubPages').then(m => ({ default: m.NotificationsPage }))
 )
 
-// Same lazy + embedded-dialog treatment as the notifications bell above —
+// Same lazy + embedded-dialog treatment as the notifications bell above -
 // Help & Support now opens as a popup over whatever page the person is on
 // (desktop only) instead of navigating away to /help-support.
 const HelpSupportPage = lazy(() =>
@@ -58,7 +58,7 @@ export function DesktopHeader() {
   const { unreadCount, badgeLabel } = useNotificationStore()
   const { showToastMessage } = useUIStore()
   // Same store ProfileSubPages' Appearance settings and LandingNav's own
-  // header toggle already use — clicking here just flips light/dark
+  // header toggle already use - clicking here just flips light/dark
   // directly (bypassing "system"), matching LandingNav's toggle exactly.
   // Appearance settings remains the only place to pick "System".
   const mode = useThemeStore(s => s.mode)
@@ -73,7 +73,7 @@ export function DesktopHeader() {
   const handleFaucet = () => {
     if (walletAddress) {
       copyText(walletAddress)
-      showToastMessage('Address copied — paste it on the faucet page', 'success')
+      showToastMessage('Address copied - paste it on the faucet page', 'success')
     }
     window.open('https://faucet.circle.com/', '_blank', 'noopener,noreferrer')
   }
@@ -105,10 +105,10 @@ export function DesktopHeader() {
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
   }, [open])
 
-  // Fetch known people once, lazily, the first time the dropdown opens —
+  // Fetch known people once, lazily, the first time the dropdown opens -
   // merges explicit saved contacts with people from recent send/receive
   // activity, same source+reasoning as Home's own mobile search (see
-  // HomePage.tsx) — kept as a separate fetch here rather than shared state
+  // HomePage.tsx) - kept as a separate fetch here rather than shared state
   // since this dropdown's lifecycle spans every route, not just Home.
   useEffect(() => {
     if (!open || savedContacts !== null || !user?.id || !walletAddress) return
@@ -134,7 +134,7 @@ export function DesktopHeader() {
             )]
             if (!addrs.length) return []
             // SUPABASE REDUCTION: replaced supabase.from('users').or(wallets)
-            // with /api/profile?wallets= — same payload, no anon key in auth header.
+            // with /api/profile?wallets= - same payload, no anon key in auth header.
             const profileRes = await fetch(`/api/profile?wallets=${encodeURIComponent(addrs.join(','))}`)
             const data = profileRes.ok ? await profileRes.json().catch(() => []) : []
             return (data || []) as DbUser[]
@@ -216,7 +216,7 @@ export function DesktopHeader() {
     }}>
       <div ref={boxRef} style={{ position: 'relative', flex: '0 1 340px', minWidth: 160 }}>
         {/* One continuous box, not an input plus a separate floating
-            dropdown card below it — when results are showing, THIS same
+            dropdown card below it - when results are showing, THIS same
             element grows taller and wider (absolutely positioned so it
             overlays instead of pushing the rest of the header) rather
             than opening a second, visually distinct box underneath. */}
@@ -304,7 +304,7 @@ export function DesktopHeader() {
                 <p style={{ color: 'var(--text-secondary)', fontSize: 12, textAlign: 'center', padding: '16px 0' }}>
                   {query.trim().toLowerCase().endsWith('.arc')
                     ? `No results for "${query.trim()}"`
-                    : 'No saved contact matches — enter the full username.arc to find someone new'}
+                    : 'No saved contact matches - enter the full username.arc to find someone new'}
                 </p>
               )}
             </div>
@@ -429,7 +429,7 @@ export function DesktopHeader() {
       </motion.button>
     </header>
 
-    {/* Notifications — a popup dialog rather than navigating to /notifications
+    {/* Notifications - a popup dialog rather than navigating to /notifications
         as a separate page, so checking notifications never leaves whatever
         the person was doing underneath. */}
     <AnimatePresence>
@@ -446,7 +446,7 @@ export function DesktopHeader() {
       )}
     </AnimatePresence>
 
-    {/* Help & Support — same popup-dialog treatment as Notifications above,
+    {/* Help & Support - same popup-dialog treatment as Notifications above,
         desktop only (this header itself is desktop-only). Mobile keeps
         navigating to the real /help-support route via ProfilePage's own
         menu item, untouched. */}

@@ -1,13 +1,13 @@
 // ChatDesktopSplit.tsx
 // Pathless layout route wrapping the existing `/chat` and `/chat/:id`
-// routes (see App.tsx) — adds a structural wrapper only, the routes'
+// routes (see App.tsx) - adds a structural wrapper only, the routes'
 // paths/params/navigation behavior are completely unchanged. On mobile
 // this renders <Outlet/> and nothing else, identical to before this file
-// existed. On desktop it pins the chat list (passed in as `list` — App.tsx
+// existed. On desktop it pins the chat list (passed in as `list` - App.tsx
 // hands it the same lazy-loaded <ChatListPage/> element already used for
 // the bare `/chat` route, so this doesn't statically import it and undo
 // the route-level code-splitting) in a fixed-width left column, and
-// renders <Outlet/> — ChatConversationPage — in the remaining right column
+// renders <Outlet/> - ChatConversationPage - in the remaining right column
 // whenever `:id` is present; otherwise a lightweight "select a
 // conversation" placeholder (Outlet would otherwise just render the list
 // a second time, since that's literally what the bare `/chat` route's own

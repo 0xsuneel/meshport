@@ -1,11 +1,11 @@
 // lib/p2pChain.ts
 //
-// Requirement 3 ("Blockchain Integration — Navigation Activity Page - All
+// Requirement 3 ("Blockchain Integration - Navigation Activity Page - All
 // section"): after escrow release, look up a trade's on-chain confirmation
-// state for display — block number, timestamp, live confirmation count,
+// state for display - block number, timestamp, live confirmation count,
 // and the explorer link. Reuses the exact same viem client construction
 // arcService.ts already uses (confirmTransactionInBackground) rather than
-// standing up a second RPC pattern — every P2P escrow tx lives on Arc, same
+// standing up a second RPC pattern - every P2P escrow tx lives on Arc, same
 // chain as the rest of the app's transfers.
 
 import { createPublicClient } from 'viem'
@@ -24,8 +24,8 @@ export interface TxChainInfo {
 /**
  * Looks up a transaction's current on-chain state. Safe to call for a tx
  * that's still pending (returns confirmations: 0, status: 'pending') or one
- * the RPC can't find at all (status: 'unknown' — e.g. a stale/incorrect
- * hash) — callers should treat both as "don't show confirmation details
+ * the RPC can't find at all (status: 'unknown' - e.g. a stale/incorrect
+ * hash) - callers should treat both as "don't show confirmation details
  * yet" rather than errors.
  */
 export async function fetchTxChainInfo(txHash: string): Promise<TxChainInfo> {
@@ -42,7 +42,7 @@ export async function fetchTxChainInfo(txHash: string): Promise<TxChainInfo> {
 
     if (!receipt) {
       // No receipt yet could mean genuinely pending, or the RPC just
-      // doesn't have it (wrong hash) — either way there's nothing more
+      // doesn't have it (wrong hash) - either way there's nothing more
       // specific to report than "not confirmed yet".
       return { ...base, status: 'pending' }
     }
@@ -54,7 +54,7 @@ export async function fetchTxChainInfo(txHash: string): Promise<TxChainInfo> {
     try {
       const block = await client.getBlock({ blockNumber: receipt.blockNumber })
       timestamp = new Date(Number(block.timestamp) * 1000).toISOString()
-    } catch { /* best-effort — omit timestamp if the block lookup fails */ }
+    } catch { /* best-effort - omit timestamp if the block lookup fails */ }
 
     return {
       txHash, blockNumber, timestamp, confirmations,

@@ -1,18 +1,18 @@
 // features/p2p/RoleManagersPanel.tsx
 //
-// The "Role Managers" section of the P2P admin console — the UI for the
+// The "Role Managers" section of the P2P admin console - the UI for the
 // 2-of-3 role-manager multisig on P2PMeshportEscrowV2.sol.
 //
 // ── Key handling ──────────────────────────────────────────────────────────
 // SECURITY FIX: this used to ask each role manager signer to paste their
 // private key directly into a browser input field. That was flagged and
-// removed — the fix isn't a safer way to handle a pasted key, it's not
+// removed - the fix isn't a safer way to handle a pasted key, it's not
 // asking for one at all. Every action here goes through the browser's
 // injected wallet extension (MetaMask or any EIP-1193 provider): the
 // signer connects their own wallet, reviews the transaction inside their
 // OWN extension, and approves it there. The private key never enters this
 // page's JavaScript, is never held in any React state, and is never
-// transmitted anywhere by this app — there is nothing here for
+// transmitted anywhere by this app - there is nothing here for
 // localStorage/sessionStorage/Supabase/an API request/a log line to leak,
 // because this code never possesses the key in the first place. See
 // connectInjectedWallet()/sendContractTxViaInjectedWallet() in
@@ -24,7 +24,7 @@ import { useUIStore } from '@/store'
 import { AddressChip } from './AddressChip'
 import { ARC } from '@/blockchain/chains'
 
-// Friendlier labels + a semantic color per raw event name — the contract
+// Friendlier labels + a semantic color per raw event name - the contract
 // emits precise Solidity-style names (PauserAdded, RoleProposalApproved,
 // etc.); this is purely a display layer, the underlying event/args are
 // unchanged and still shown in full below.
@@ -89,14 +89,14 @@ export function RoleManagersPanel() {
   const [disconnecting, setDisconnecting] = useState(false)
 
   // ── Current Pauser(s) / Investigator(s) ──────────────────────────────
-  // Derived live from on-chain events + on-chain role checks — see
+  // Derived live from on-chain events + on-chain role checks - see
   // getCurrentRoleHolders(). There's no on-chain array to read directly,
   // so this is the only accurate way to answer "who holds these roles
   // right now" without trusting a database record.
   const [roleHolders, setRoleHolders] = useState<RoleHolders>({ pausers: [], investigators: [] })
   const [loadingRoleHolders, setLoadingRoleHolders] = useState(true)
   // Live-ish clock for rendering "execution available in Xh Ym" countdowns.
-  // Purely a UI display aid — every actual execute attempt is checked
+  // Purely a UI display aid - every actual execute attempt is checked
   // on-chain regardless of what this shows; see executeRoleProposalViaWallet.
   const [nowMs, setNowMs] = useState(Date.now())
   const [connecting, setConnecting] = useState(false)
@@ -107,12 +107,12 @@ export function RoleManagersPanel() {
 
   // Admin, Pauser, Investigator, and Role Manager Signer are mutually
   // exclusive ON-CHAIN now (see P2PMeshportEscrowV2.sol's role-hierarchy
-  // note) — a proposal granting any one of them to an address that
+  // note) - a proposal granting any one of them to an address that
   // already holds another is guaranteed to revert at executeRoleProposal,
   // AFTER the 2-of-3 confirmations and the full 2-hour timelock have
   // already been spent. This client-side check catches that BEFORE a
   // signature is even requested, so it's a hard block, not a dismissible
-  // warning — there is no "propose anyway" that could actually succeed.
+  // warning - there is no "propose anyway" that could actually succeed.
   const [overlapWarning, setOverlapWarning] = useState<string | null>(null)
 
   // Any edit to the action or target invalidates whatever overlap check was showing.
@@ -139,7 +139,7 @@ export function RoleManagersPanel() {
     setLoadingAdmin(false)
   }, [])
 
-  // ── Security notifications — derived from on-chain events only ────────
+  // ── Security notifications - derived from on-chain events only ────────
   const [events, setEvents] = useState<GovernanceEvent[]>([])
   const [loadingEvents, setLoadingEvents] = useState(true)
   const loadEvents = useCallback(async () => {
@@ -183,7 +183,7 @@ export function RoleManagersPanel() {
     getConnectedInjectedWalletAddress().then(addr => { setConnectedWallet(addr); refreshConnectedWalletRoles(addr) })
   }, [loadSigners, loadProposals, loadAdminState, loadEvents, loadRoleHolders, refreshConnectedWalletRoles])
 
-  // Ticks the countdown display every 30s — display-only, never consulted
+  // Ticks the countdown display every 30s - display-only, never consulted
   // for any actual authorization decision (the contract's own
   // isRoleProposalExecutable / executeRoleProposal are the real checks).
   useEffect(() => {
@@ -194,13 +194,13 @@ export function RoleManagersPanel() {
   const isConnectedWalletASigner = connectedWallet ? signerAddresses.some(s => s.toLowerCase() === connectedWallet.toLowerCase()) : false
 
   // GAP FIX: the proposal list only ever showed a raw "X/2 approvals"
-  // count — no signer could tell from the UI alone whether THEY were one
+  // count - no signer could tell from the UI alone whether THEY were one
   // of the ones who'd already confirmed, short of clicking Confirm and
   // either succeeding or getting a revert ("already confirmed by this
   // signer"). The contract already emits a RoleProposalConfirmed(
   // proposalId, signer, confirmations) event for every confirmation
   // (including the proposer's own, since proposing counts as the first
-  // one) — reuse the SAME events feed already fetched for Security
+  // one) - reuse the SAME events feed already fetched for Security
   // Notifications rather than adding a second RPC round-trip per proposal.
   const confirmedByForProposal = useCallback((proposalId: bigint): string[] => {
     const seen = new Set<string>()
@@ -235,13 +235,13 @@ export function RoleManagersPanel() {
       await disconnectInjectedWallet()
     } finally {
       // Always forget the address on this app's side, even if the wallet
-      // extension itself doesn't support a real revoke — see
+      // extension itself doesn't support a real revoke - see
       // disconnectInjectedWallet()'s own comment on why this half is the
       // part that's actually guaranteed.
       setConnectedWallet(null)
       setConnectedWalletRoles(null)
       setDisconnecting(false)
-      showToastMessage('Wallet disconnected from this page. If your extension supports it, its own permission was revoked too — otherwise switch/lock accounts there to fully disconnect.', 'success')
+      showToastMessage('Wallet disconnected from this page. If your extension supports it, its own permission was revoked too - otherwise switch/lock accounts there to fully disconnect.', 'success')
     }
   }
 
@@ -249,7 +249,7 @@ export function RoleManagersPanel() {
     if (proposedAction !== 'AddPauser' && proposedAction !== 'AddInvestigator' && proposedAction !== 'TransferAdmin') return null
     const roles = await getAddressRoles(targetAddr)
     // Admin, Pauser, Investigator, and Role Manager Signer are mutually
-    // exclusive — this address must hold NONE of the other three
+    // exclusive - this address must hold NONE of the other three
     // categories before this specific grant. (isAdmin/isRoleManagerSigner
     // are always dangerous; for AddPauser the other tier is Investigator,
     // for AddInvestigator it's Pauser, for TransferAdmin it's both.)
@@ -259,7 +259,7 @@ export function RoleManagersPanel() {
     if (proposedAction !== 'AddPauser' && roles.isPauser) dangerous.push('Pauser')
     if (proposedAction !== 'AddInvestigator' && roles.isInvestigator) dangerous.push('Investigator')
     if (dangerous.length === 0) return null
-    return `${shortAddr(targetAddr)} is already ${dangerous.join(' and ')}. This proposal would revert on-chain at execution — Admin, Pauser, Investigator, and Role Manager Signer are mutually exclusive; no address may ever hold more than one.`
+    return `${shortAddr(targetAddr)} is already ${dangerous.join(' and ')}. This proposal would revert on-chain at execution - Admin, Pauser, Investigator, and Role Manager Signer are mutually exclusive; no address may ever hold more than one.`
   }
 
   const handlePropose = async () => {
@@ -277,7 +277,7 @@ export function RoleManagersPanel() {
     try {
       const targetAddr = (needsTarget ? target.trim() : '0x0000000000000000000000000000000000000000') as `0x${string}`
       await proposeRoleChangeViaWallet(action, targetAddr)
-      showToastMessage('Proposed and signed — 1 of 2 confirmations. A DIFFERENT role manager signer must connect their own wallet to confirm.', 'success')
+      showToastMessage('Proposed and signed - 1 of 2 confirmations. A DIFFERENT role manager signer must connect their own wallet to confirm.', 'success')
       setTarget('')
       await Promise.all([loadProposals(), loadEvents()])
     } catch (e: any) {
@@ -292,10 +292,10 @@ export function RoleManagersPanel() {
     setSubmitting(true)
     try {
       await confirmRoleChangeViaWallet(proposalId)
-      showToastMessage('Confirmed — if this reached 2-of-3, a 2-hour timelock has now started. It will need a separate Execute step once that elapses.', 'success')
+      showToastMessage('Confirmed - if this reached 2-of-3, a 2-hour timelock has now started. It will need a separate Execute step once that elapses.', 'success')
       await Promise.all([loadProposals(), loadSigners(), loadAdminState(), loadEvents(), loadRoleHolders(), refreshConnectedWalletRoles(connectedWallet)])
     } catch (e: any) {
-      showToastMessage(e?.shortMessage || e?.message || 'Could not confirm — make sure you\'re a different signer from whoever proposed this.', 'error')
+      showToastMessage(e?.shortMessage || e?.message || 'Could not confirm - make sure you\'re a different signer from whoever proposed this.', 'error')
     } finally {
       setSubmitting(false)
     }
@@ -306,10 +306,10 @@ export function RoleManagersPanel() {
     setSubmitting(true)
     try {
       await executeRoleProposalViaWallet(proposalId)
-      showToastMessage('Executed — the role/governance change is now live.', 'success')
+      showToastMessage('Executed - the role/governance change is now live.', 'success')
       await Promise.all([loadProposals(), loadSigners(), loadAdminState(), loadEvents(), loadRoleHolders(), refreshConnectedWalletRoles(connectedWallet)])
     } catch (e: any) {
-      showToastMessage(e?.shortMessage || e?.message || 'Could not execute — the 2-hour timelock may not have elapsed yet.', 'error')
+      showToastMessage(e?.shortMessage || e?.message || 'Could not execute - the 2-hour timelock may not have elapsed yet.', 'error')
     } finally {
       setSubmitting(false)
     }
@@ -337,7 +337,7 @@ export function RoleManagersPanel() {
     setRotating(true)
     try {
       await proposeSignerRotationViaWallet(rotateIndex, rotateTarget.trim() as `0x${string}`)
-      showToastMessage(`Rotation proposed for slot ${rotateIndex + 1} — 1 of 2 confirmations needed from a DIFFERENT signer.`, 'success')
+      showToastMessage(`Rotation proposed for slot ${rotateIndex + 1} - 1 of 2 confirmations needed from a DIFFERENT signer.`, 'success')
       setRotateTarget('')
       await Promise.all([loadProposals(), loadEvents()])
     } catch (e: any) {
@@ -349,7 +349,7 @@ export function RoleManagersPanel() {
 
   // ── Admin rotation (compromise recovery) ─────────────────────────────
   // The current Admin has NO ability to block, veto, or delay any of
-  // these three actions — proposeRoleChange/confirmRoleChange/
+  // these three actions - proposeRoleChange/confirmRoleChange/
   // cancelRoleProposal are gated by onlyRoleManagerSigner ONLY, never
   // onlyAdmin. This is what makes recovery from a compromised Admin
   // actually work: 2 of the 3 role manager signers are enough, and the
@@ -364,12 +364,12 @@ export function RoleManagersPanel() {
     try {
       const roles = await getAddressRoles(newAdminInput.trim())
       if (roles.isPauser || roles.isInvestigator || roles.isRoleManagerSigner) {
-        showToastMessage('That address already holds a Pauser, Investigator, or Role Manager Signer role — Admin must be a genuinely separate address. This proposal would revert on-chain at execution.', 'error')
+        showToastMessage('That address already holds a Pauser, Investigator, or Role Manager Signer role - Admin must be a genuinely separate address. This proposal would revert on-chain at execution.', 'error')
         setProposingAdmin(false)
         return
       }
       await proposeAdminRotationViaWallet(newAdminInput.trim() as `0x${string}`)
-      showToastMessage('Admin replacement proposed — 1 of 2 confirmations needed from a DIFFERENT signer. The current Admin cannot block this.', 'success')
+      showToastMessage('Admin replacement proposed - 1 of 2 confirmations needed from a DIFFERENT signer. The current Admin cannot block this.', 'success')
       setNewAdminInput('')
       await Promise.all([loadProposals(), loadAdminState(), loadEvents()])
     } catch (e: any) {
@@ -384,7 +384,7 @@ export function RoleManagersPanel() {
     setProposingAdmin(true)
     try {
       await proposeCancelPendingAdminViaWallet()
-      showToastMessage('Cancellation of the pending admin nomination proposed — needs a 2nd confirmation from a different signer.', 'success')
+      showToastMessage('Cancellation of the pending admin nomination proposed - needs a 2nd confirmation from a different signer.', 'success')
       await Promise.all([loadProposals(), loadAdminState(), loadEvents()])
     } catch (e: any) {
       showToastMessage(e?.shortMessage || e?.message || 'Could not propose cancellation.', 'error')
@@ -401,7 +401,7 @@ export function RoleManagersPanel() {
       showToastMessage('You are now Admin.', 'success')
       await Promise.all([loadAdminState(), refreshConnectedWalletRoles(connectedWallet)])
     } catch (e: any) {
-      showToastMessage(e?.shortMessage || e?.message || 'Could not accept — you may no longer be the pending admin, or you now hold a Pauser/Investigator/Role Manager Signer role.', 'error')
+      showToastMessage(e?.shortMessage || e?.message || 'Could not accept - you may no longer be the pending admin, or you now hold a Pauser/Investigator/Role Manager Signer role.', 'error')
     } finally {
       setAcceptingAdmin(false)
     }
@@ -414,7 +414,7 @@ export function RoleManagersPanel() {
         <h2 style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, margin: 0 }}>Role Managers</h2>
       </div>
       <p style={{ fontSize: 12.5, color: COLORS.muted, marginBottom: 16, lineHeight: 1.5 }}>
-        2-of-3 multisig, signed through your own wallet extension — no private key ever entered into this page.
+        2-of-3 multisig, signed through your own wallet extension - no private key ever entered into this page.
         Every Pauser/Investigator/Admin change, and any rotation of the 3 signers themselves, needs two of these
         three signers to confirm.
       </p>
@@ -434,7 +434,7 @@ export function RoleManagersPanel() {
               </button>
             </div>
             <div style={{ fontSize: 11.5, marginTop: 4, color: isConnectedWalletASigner ? COLORS.success : COLORS.warning }}>
-              {isConnectedWalletASigner ? '✓ This is a role manager signer' : 'Not a role manager signer — connect the right wallet to act'}
+              {isConnectedWalletASigner ? '✓ This is a role manager signer' : 'Not a role manager signer - connect the right wallet to act'}
             </div>
             {/* ── Which privileged roles this address holds, checked live on-chain ── */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
@@ -495,7 +495,7 @@ export function RoleManagersPanel() {
 
       {/* ── Current Pauser(s) / Investigator(s) ──────────────────────────── */}
       {/* There is no on-chain array for these roles (see getCurrentRoleHolders'
-          own comment) — this list is derived from every PauserAdded/
+          own comment) - this list is derived from every PauserAdded/
           PauserRemoved/InvestigatorAdded/InvestigatorRemoved event this
           contract has ever emitted, then double-checked against the live
           isPauser()/isInvestigator() mappings, so it always reflects
@@ -541,12 +541,12 @@ export function RoleManagersPanel() {
       <div style={{ background: COLORS.surface, border: `1px solid color-mix(in srgb, var(--warning) 40%, transparent)`, borderRadius: 14, padding: 14, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
           <AlertTriangle size={14} color={COLORS.warning} />
-          <span style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.text }}>Admin Rotation — Compromise Recovery</span>
+          <span style={{ fontSize: 13.5, fontWeight: 700, color: COLORS.text }}>Admin Rotation - Compromise Recovery</span>
         </div>
         <p style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 10, lineHeight: 1.4 }}>
-          If the Admin wallet is compromised, 2 of these 3 role manager signers can replace it — the current
+          If the Admin wallet is compromised, 2 of these 3 role manager signers can replace it - the current
           Admin has no way to block, veto, or delay this. The new address must NOT already hold Pauser,
-          Investigator, or Role Manager Signer status — Admin must be a genuinely separate address.
+          Investigator, or Role Manager Signer status - Admin must be a genuinely separate address.
           <strong style={{ color: COLORS.warning }}> Once executed and accepted, replacement is irreversible</strong> unless
           another valid 2-of-3 rotation is performed afterward.
         </p>
@@ -556,10 +556,10 @@ export function RoleManagersPanel() {
         ) : (
           <div style={{ marginBottom: 12 }}>
             <div style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 2 }}>Current Admin</div>
-            <div style={{ marginBottom: 8 }}>{currentAdmin ? <AddressChip address={currentAdmin} size={13} /> : <span style={{ fontSize: 13, color: COLORS.muted }}>—</span>}</div>
+            <div style={{ marginBottom: 8 }}>{currentAdmin ? <AddressChip address={currentAdmin} size={13} /> : <span style={{ fontSize: 13, color: COLORS.muted }}>-</span>}</div>
             <div style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 2 }}>Pending Admin</div>
             <div>
-              {pendingAdminAddr ? <AddressChip address={pendingAdminAddr} size={13} color={COLORS.warning} /> : <span style={{ fontSize: 13, color: COLORS.muted }}>None — no rotation in progress</span>}
+              {pendingAdminAddr ? <AddressChip address={pendingAdminAddr} size={13} color={COLORS.warning} /> : <span style={{ fontSize: 13, color: COLORS.muted }}>None - no rotation in progress</span>}
             </div>
           </div>
         )}
@@ -603,7 +603,7 @@ export function RoleManagersPanel() {
           <div style={{ marginBottom: 10, padding: 10, borderRadius: 10, background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 35%, transparent)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               <AlertTriangle size={13} color={COLORS.error} />
-              <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.error }}>Blocked — would revert on-chain</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.error }}>Blocked - would revert on-chain</span>
             </div>
             <p style={{ fontSize: 11.5, color: COLORS.muted, margin: 0, lineHeight: 1.4 }}>{overlapWarning}</p>
           </div>
@@ -621,7 +621,7 @@ export function RoleManagersPanel() {
           <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>Rotate a signer</span>
         </div>
         <p style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 10, lineHeight: 1.4 }}>
-          Replace one of the 3 fixed signer slots — e.g. a key was lost or compromised. Also requires 2-of-3
+          Replace one of the 3 fixed signer slots - e.g. a key was lost or compromised. Also requires 2-of-3
           confirmation; the new address can't already be one of the 3 current signers.
         </p>
         <select value={rotateIndex} onChange={e => setRotateIndex(Number(e.target.value))}
@@ -654,8 +654,8 @@ export function RoleManagersPanel() {
             const minutes = Math.floor((remaining % 3600) / 60)
             const statusLabel = p.executed ? 'Executed' : p.cancelled ? 'Cancelled'
               : isReady ? 'Ready to execute'
-              : isTimelocked ? `Timelocked — execution available in ${hours}h ${minutes}m`
-              : `Pending Role Change — ${p.confirmations}/2 approvals`
+              : isTimelocked ? `Timelocked - execution available in ${hours}h ${minutes}m`
+              : `Pending Role Change - ${p.confirmations}/2 approvals`
             const statusColor = p.executed ? COLORS.success : p.cancelled ? COLORS.error
               : isReady ? COLORS.primary : COLORS.warning
             const confirmedBy = confirmedByForProposal(p.id)
@@ -664,11 +664,11 @@ export function RoleManagersPanel() {
               <div key={String(p.id)} style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>
-                    #{String(p.id)} — {p.action}{p.action === 'RotateSigner' ? ` (slot ${p.signerIndex + 1})` : ''}
+                    #{String(p.id)} - {p.action}{p.action === 'RotateSigner' ? ` (slot ${p.signerIndex + 1})` : ''}
                   </span>
                 </div>
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: statusColor, marginTop: 4 }}>{statusLabel}</div>
-                {/* Per-signer confirmation status — which of the 3 fixed
+                {/* Per-signer confirmation status - which of the 3 fixed
                     signers has actually confirmed, not just a count, so a
                     signer can tell at a glance whether they still need to
                     act without risking an "already confirmed" revert. */}
@@ -700,7 +700,7 @@ export function RoleManagersPanel() {
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
                     {isPendingApproval && (
                       <button onClick={() => handleConfirm(p.id)} disabled={!connectedWallet || !isConnectedWalletASigner || submitting || connectedAlreadyConfirmed}
-                        title={connectedAlreadyConfirmed ? 'This wallet already confirmed — a DIFFERENT signer needs to confirm next.' : !isConnectedWalletASigner ? 'Connected wallet is not one of the 3 role manager signers.' : undefined}
+                        title={connectedAlreadyConfirmed ? 'This wallet already confirmed - a DIFFERENT signer needs to confirm next.' : !isConnectedWalletASigner ? 'Connected wallet is not one of the 3 role manager signers.' : undefined}
                         style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 11.5, fontWeight: 700, color: COLORS.success, background: 'color-mix(in srgb, var(--success) 10%, transparent)', border: 'none', borderRadius: 8, padding: '6px 0', cursor: 'pointer', opacity: (connectedAlreadyConfirmed || !isConnectedWalletASigner) ? 0.5 : 1 }}>
                         <CheckCircle2 size={12} /> {connectedAlreadyConfirmed ? 'Already confirmed' : 'Confirm'}
                       </button>
@@ -713,7 +713,7 @@ export function RoleManagersPanel() {
                       </button>
                     )}
                     {/* SECURITY FIX mirror (P2PMeshportEscrowV2.sol cancelRoleProposal):
-                        cancellation is now only possible pre-threshold — once 2-of-3
+                        cancellation is now only possible pre-threshold - once 2-of-3
                         is reached (isTimelocked/isReady, executableAfter != 0), the
                         contract permanently rejects cancellation, and a signer who
                         already confirmed can never cancel their own confirmation
@@ -721,7 +721,7 @@ export function RoleManagersPanel() {
                         button always fail on-chain for those states. */}
                     {isPendingApproval && (
                       <button onClick={() => handleCancel(p.id)} disabled={!connectedWallet || !isConnectedWalletASigner || submitting || connectedAlreadyConfirmed}
-                        title={connectedAlreadyConfirmed ? 'You already confirmed this proposal — a confirmer cannot cancel their own confirmation. A different, non-confirming signer must cancel it.' : !isConnectedWalletASigner ? 'Connected wallet is not one of the 3 role manager signers.' : undefined}
+                        title={connectedAlreadyConfirmed ? 'You already confirmed this proposal - a confirmer cannot cancel their own confirmation. A different, non-confirming signer must cancel it.' : !isConnectedWalletASigner ? 'Connected wallet is not one of the 3 role manager signers.' : undefined}
                         style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 11.5, fontWeight: 700, color: COLORS.error, background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: 'none', borderRadius: 8, padding: '6px 0', cursor: 'pointer', opacity: (!isConnectedWalletASigner || connectedAlreadyConfirmed) ? 0.5 : 1 }}>
                         <XCircle size={12} /> Cancel
                       </button>
@@ -734,12 +734,12 @@ export function RoleManagersPanel() {
         </div>
       )}
 
-      {/* ── Security notifications — derived from on-chain events only ──── */}
+      {/* ── Security notifications - derived from on-chain events only ──── */}
       <div style={{ fontSize: 12, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.3, marginTop: 20, marginBottom: 8 }}>
         Security Notifications
       </div>
       <p style={{ fontSize: 11, color: COLORS.muted, marginBottom: 10, lineHeight: 1.4 }}>
-        Every entry below is read directly from an on-chain event this contract emitted — never from a database
+        Every entry below is read directly from an on-chain event this contract emitted - never from a database
         record. Tap a transaction hash to see the real event that produced it.
       </p>
       {loadingEvents ? (

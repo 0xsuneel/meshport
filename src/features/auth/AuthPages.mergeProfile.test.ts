@@ -3,7 +3,7 @@
 // Regression test for a re-imported wallet losing its profile photo and
 // display name (2026-09-03). ClaimUsernamePage detects when an imported
 // wallet already has a registered MeshPort profile and restores id/
-// username/walletAddress from it — but used to stop there, silently
+// username/walletAddress from it - but used to stop there, silently
 // dropping display_name and avatar_url even though both were already
 // present in the same query result. A wallet re-imported on a fresh
 // device or after a reinstall kept its correct username but reverted its
@@ -12,7 +12,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
 // AuthPages.tsx imports @/lib/supabase, which constructs a real client at
-// module load and throws without env vars — same recurring issue as the
+// module load and throws without env vars - same recurring issue as the
 // other component test files in this repo.
 vi.mock('@/lib/supabase', () => ({
   supabase: { auth: { getSession: async () => ({ data: { session: null } }) } },

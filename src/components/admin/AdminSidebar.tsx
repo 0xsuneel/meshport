@@ -13,7 +13,7 @@ const navItems = [
   { to: `${ADMIN_PATH}/chains`,       label: 'Chains',        icon: Link2 },
   // BUG FIX: P2P Admin (P2PAdminPage.tsx, route `${ADMIN_PATH}/p2p`) has existed
   // in the router since this admin panel was built, but was never added to
-  // this nav list — it was only reachable by typing the URL directly. It's
+  // this nav list - it was only reachable by typing the URL directly. It's
   // the console for freezing/cancelling trades, resolving buyer/seller
   // disputes, and banning marketplace users, so it belongs alongside the
   // other moderation pages.
@@ -38,7 +38,7 @@ interface AdminSidebarProps {
 export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
   return (
     <>
-      {/* Overlay — mobile only */}
+      {/* Overlay - mobile only */}
       {open && (
         <div
           onClick={onClose}

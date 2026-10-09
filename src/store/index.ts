@@ -71,12 +71,12 @@ function addSeenId(addr: string | null, id: string) {
   try {
     const ids = loadSeenIds(addr)
     ids.add(id)
-    // Cap so this never grows unbounded — only the most recent ids matter
+    // Cap so this never grows unbounded - only the most recent ids matter
     // for de-duping catch-up scans, which only look back a limited window.
     // Was 500: an active account could push a cleared/already-seen id out
     // of that window, and the next catch-up scan (which re-checks recent
     // rows on every mount) would then treat it as never-before-seen and
-    // show it again — a cleared notification silently coming back. 5000
+    // show it again - a cleared notification silently coming back. 5000
     // gives enough headroom that eviction essentially never happens for
     // realistic usage, while still bounding storage.
     const capped = Array.from(ids).slice(-5000)
@@ -125,22 +125,22 @@ interface AuthStore {
 
 // Extracted as a standalone, exported function (rather than inlined in the
 // persist() config below) so it's directly unit-testable without dragging in
-// the whole store's dependency graph — mirrors the pattern already used for
+// the whole store's dependency graph - mirrors the pattern already used for
 // ChatPage.tsx's formatPaymentMessagePreview. Called by Zustand's persist
 // middleware exactly once per browser, the first time a user with an
 // existing lower-versioned localStorage blob loads a build carrying this
-// version bump — see zustand's own `persist` docs for that "runs only when
+// version bump - see zustand's own `persist` docs for that "runs only when
 // versions differ" contract.
 export function migrateAuthStore(persisted: any): any {
-  // Clear all avatar cache — DB is source of truth
+  // Clear all avatar cache - DB is source of truth
   delete persisted.persistedAvatarUrl
   delete persisted.persistedAvatars
   // SECURITY FIX (v5): the raw BIP-39 mnemonic used to be persisted in
-  // plain text right here — see partialize below, and security.ts's
+  // plain text right here - see partialize below, and security.ts's
   // encryptMnemonic/storeEncryptedMnemonic for the full reasoning and
   // the new, properly-encrypted replacement. This scrubs any
   // already-written plaintext copy sitting in an existing user's
-  // localStorage from before this fix shipped — persist's `migrate`
+  // localStorage from before this fix shipped - persist's `migrate`
   // is the correct, one-time hook for that; a `partialize` change
   // alone only stops FUTURE writes; it does nothing about a value
   // already on disk from a previous version.
@@ -183,20 +183,20 @@ export const useAuthStore = create<AuthStore>()(
           mnemonic: mnemonic !== undefined ? mnemonic : s.mnemonic,
           walletSource: source !== undefined ? source : (s.walletSource || 'create'),
         }))
-        // Mirror the decrypted key into sessionStorage — this is what lets a
+        // Mirror the decrypted key into sessionStorage - this is what lets a
         // plain refresh skip the passcode prompt (see cacheSessionPrivateKey's
         // own comment in lib/security.ts for the tradeoff). Widened (was
         // import-privkey ONLY) to cover create/import-seed too: those wallet
         // types used to get this same "instant refresh" property for free by
         // persisting the raw mnemonic in plain text and re-deriving the key
-        // from it on every load — see the SECURITY FIX in this file's persist
+        // from it on every load - see the SECURITY FIX in this file's persist
         // `migrate` above. Now that the mnemonic is no longer persisted in
         // plaintext, this sessionStorage cache is what preserves the exact
-        // same "no passcode needed on a plain refresh, but a real gap —
-        // tab/browser close, offline — asks again" UX those wallets already
+        // same "no passcode needed on a plain refresh, but a real gap -
+        // tab/browser close, offline - asks again" UX those wallets already
         // had, using the identical, already-reviewed mechanism import-privkey
         // wallets have relied on for this all along. social-auto is still
-        // deliberately excluded — see this function's own header comment
+        // deliberately excluded - see this function's own header comment
         // and security.ts for why that wallet type never caches its key
         // locally in ANY form.
         const effectiveSource = source !== undefined ? source : get().walletSource
@@ -205,7 +205,7 @@ export const useAuthStore = create<AuthStore>()(
           // sessionStorage); fire-and-forget from this sync setter.
           void cacheSessionPrivateKey(address, privateKey)
         }
-        // A real key means recovery is no longer needed — no matter which
+        // A real key means recovery is no longer needed - no matter which
         // of the several paths got us here (mnemonic derive, local
         // passcode-decrypt, the social-auto server-side vault fetch, or a
         // fresh login/import). This is the single choke point every one of
@@ -218,7 +218,7 @@ export const useAuthStore = create<AuthStore>()(
         // the banner on, and the key could then become available a moment
         // later through a DIFFERENT path that never calls
         // restorePrivateKey() at all (e.g. PasscodeSetup unlocking
-        // directly) — nothing ever told the banner the wallet was fine
+        // directly) - nothing ever told the banner the wallet was fine
         // after that. That's exactly the "couldn't restore your wallet"
         // banner sitting on top of an already-working wallet (balance
         // loaded, address showing, everything functional).
@@ -240,7 +240,7 @@ export const useAuthStore = create<AuthStore>()(
       logout: () => {
         const currentAddr = get().walletAddress
         import('@/lib/security').then(({ forgetVerifiedPasscodes }) => forgetVerifiedPasscodes()).catch(() => {})
-        // This device's chat key (see chatCrypto.ts) goes with the session —
+        // This device's chat key (see chatCrypto.ts) goes with the session -
         // the tab copy and the device-sealed copy alike.
         for (const st of [() => sessionStorage, () => localStorage]) {
           try {
@@ -252,7 +252,7 @@ export const useAuthStore = create<AuthStore>()(
           } catch { /* storage blocked */ }
         }
         import('@/lib/chatCrypto').then(({ clearChatSessionSeeds }) => clearChatSessionSeeds()).catch(() => {})
-        // Google / email wallets: this device's sealed copy goes too — signing
+        // Google / email wallets: this device's sealed copy goes too - signing
         // back in opens the wallet with the passkey or Recovery QR. Done here,
         // synchronously: a lazy import could still be loading when the page
         // navigates away to Google, leaving the copy behind.
@@ -262,19 +262,19 @@ export const useAuthStore = create<AuthStore>()(
             if (k?.startsWith('meshport_social_dv_') || k?.startsWith('meshport_social_secured_')) localStorage.removeItem(k)
           }
         } catch { /* storage blocked */ }
-        // Merchant status is per account — drop the cached one.
+        // Merchant status is per account - drop the cached one.
         import('@/lib/merchant').then(({ resetMerchant }) => resetMerchant()).catch(() => {})
 
-        // Clear any registered biometric credential for this wallet —
+        // Clear any registered biometric credential for this wallet -
         // logging out should mean a genuinely fresh start: no lingering
         // Face ID/fingerprint unlock left bound to an account the user
         // explicitly signed out of. Fire-and-forget (dynamic import,
         // not awaited) for the same reason the rest of this function
-        // doesn't block on anything — local state should clear instantly.
+        // doesn't block on anything - local state should clear instantly.
         if (currentAddr) {
           import('@/lib/biometric').then(({ removeBiometric, clearBiometricOfferSkip }) => {
             removeBiometric(currentAddr)
-            // A logout is a genuine fresh start — don't let a stale "user
+            // A logout is a genuine fresh start - don't let a stale "user
             // skipped this before logging out" cooldown from the PREVIOUS
             // session silently suppress the auto-offer for up to 24h into
             // the NEXT login/re-import. If they skip again this session,
@@ -292,19 +292,19 @@ export const useAuthStore = create<AuthStore>()(
         // Clear notification store
         useNotificationStore.getState()._resetForAddress(currentAddr)
 
-        // Unsubscribe this device from Web Push entirely — see
+        // Unsubscribe this device from Web Push entirely - see
         // pushNotifications.ts's disablePushNotifications for the full
         // reasoning. Without this, a subscription created while this
         // account was logged in stayed bound to it indefinitely, so a
         // shared/borrowed device could keep silently receiving push
         // notifications meant for this account even after logging out.
         // Fire-and-forget, same reasoning as everything else in this
-        // function — local state should clear instantly regardless.
+        // function - local state should clear instantly regardless.
         import('@/lib/pushNotifications').then(({ disablePushNotifications }) => {
           disablePushNotifications()
         }).catch(() => {})
 
-        // Clear this wallet's session-cached decrypted key (import-privkey) —
+        // Clear this wallet's session-cached decrypted key (import-privkey) -
         // logging out should mean the next login for ANY account on this
         // browser starts from a real passcode prompt, not a leftover cache.
         clearSessionPrivateKey(currentAddr)
@@ -319,15 +319,15 @@ export const useAuthStore = create<AuthStore>()(
           }
         } catch {}
 
-        // IMPORTANT: this used to only clear MeshPort's own local state —
+        // IMPORTANT: this used to only clear MeshPort's own local state -
         // it never actually revoked the underlying Supabase Auth session.
         // That meant "logging out" was cosmetic: the Supabase JWT stayed
         // fully valid, and (for Google logins) the browser's Google session
-        // cookie was untouched too — so re-authenticating could skip
+        // cookie was untouched too - so re-authenticating could skip
         // straight through with no real prompt, since there was nothing to
         // actually re-authenticate. Fire-and-forget (not awaited) so the
         // local state clear above still happens instantly, same UX as
-        // before — this just also does the part that was silently missing.
+        // before - this just also does the part that was silently missing.
         import('@/lib/supabase').then(({ supabase }) => {
           supabase.auth.signOut().catch((e) => console.warn('[logout] supabase.auth.signOut failed:', e))
         }).catch(() => {})
@@ -341,7 +341,7 @@ export const useAuthStore = create<AuthStore>()(
         }))
       },
       // Locking also drops the decrypted key from memory and this tab's
-      // session cache — unlocking restores it with the passcode (see
+      // session cache - unlocking restores it with the passcode (see
       // PasscodeLockPage), so a locked app holds nothing usable.
       lock:   () => {
         const addr = get().walletAddress
@@ -374,7 +374,7 @@ export const useAuthStore = create<AuthStore>()(
   )
 )
 
-// ─── Wallet Store — NO Zustand persist (eliminates async rehydration race) ────
+// ─── Wallet Store - NO Zustand persist (eliminates async rehydration race) ────
 // All persistence is done manually and synchronously via saveWalletSlot /
 // loadWalletSlot so that data is never written to or read from the wrong key.
 
@@ -408,10 +408,10 @@ export const useWalletStore = create<WalletStore>()((set, get) => ({
   },
 }))
 
-// ─── Notifications Store — per-wallet, no Zustand persist ─────────────────────
+// ─── Notifications Store - per-wallet, no Zustand persist ─────────────────────
 export type NotificationType =
   | 'payment_received' | 'reward_earned' | 'security_alert' | 'admin_broadcast' | 'swap_complete'
-  // P2P marketplace events — sourced from Supabase `notifications` (see
+  // P2P marketplace events - sourced from Supabase `notifications` (see
   // src/lib/p2pNotifications.ts), not created directly by this store.
   // Server-driven (supabase/migrations/20260730160000_p2p_notifications_system.sql)
   // so they arrive for BOTH parties to a trade, on any device, even if the
@@ -426,7 +426,7 @@ export interface AppNotification {
   body: string
   isRead: boolean
   timestamp: string
-  // Present only for P2P notifications — lets the notification center link
+  // Present only for P2P notifications - lets the notification center link
   // straight to `/p2p/trade/:tradeId` instead of just showing text.
   tradeId?: string
   // 'server' = a row of the `notifications` table (P2P and merchant), whose
@@ -476,7 +476,7 @@ export const useNotificationStore = create<NotificationStore>()((set, get) => ({
 
   addNotification: (notif) =>
     set((s) => {
-      // Date.now() alone isn't unique enough here — sending several
+      // Date.now() alone isn't unique enough here - sending several
       // payments back-to-back can easily produce two notifications in the
       // same millisecond (e.g. the reward-points notification for a fast
       // second send). Since addNotification dedupes by id just below, an
@@ -492,7 +492,7 @@ export const useNotificationStore = create<NotificationStore>()((set, get) => ({
       // catch-up scan that re-discovers the same underlying event.
       const existing = s.notifications.find(n => n.id === id)
       if (existing) {
-        // Already listed — only carry over a read state that changed
+        // Already listed - only carry over a read state that changed
         // elsewhere (another device marked it read on the server).
         if (notif.isRead && !existing.isRead) {
           const notifications = s.notifications.map(n => n.id === id ? { ...n, isRead: true } : n)
@@ -503,7 +503,7 @@ export const useNotificationStore = create<NotificationStore>()((set, get) => ({
       }
       if (loadSeenIds(s._currentAddr).has(id)) return s
       const ts = (t?: string) => { const v = t ? Date.parse(t) : NaN; return Number.isFinite(v) ? v : 0 }
-      // Newest first by the event's own time — catch-up scans and seed
+      // Newest first by the event's own time - catch-up scans and seed
       // fetches add older events after newer ones.
       const notifications = [
         { ...notif, id, timestamp: notif.timestamp || new Date().toISOString() },
@@ -525,12 +525,12 @@ export const useNotificationStore = create<NotificationStore>()((set, get) => ({
   clearAll: () =>
     set((s) => {
       saveNotifSlot(s._currentAddr, [])
-      // Only clears the visible list — deliberately NOT the seen-ids
+      // Only clears the visible list - deliberately NOT the seen-ids
       // ledger. A prior version of this wiped both, on the reasoning that
       // "Clear" should mean gone forever, everywhere. In practice that
       // broke something more important: HomePage's payment catch-up scan
       // runs on every single mount (not just once) and depends entirely on
-      // this ledger's dedup to know which payments it's already shown —
+      // this ledger's dedup to know which payments it's already shown -
       // that's explicitly what makes it safe to re-run constantly instead
       // of flooding. Wiping the ledger meant the very next Home mount had
       // no memory of anything, and re-notified for the last 20 payment
@@ -539,11 +539,11 @@ export const useNotificationStore = create<NotificationStore>()((set, get) => ({
       // was meant to close (a genuinely rediscovered event reappearing
       // once), so keeping the ledger intact here is the right call.
       //
-      // But the ledger is still only local storage — clearing browser
+      // But the ledger is still only local storage - clearing browser
       // history wipes it exactly the same as this action does, and at
       // that point the app has no memory of "already cleared" left
       // ANYWHERE. So this now also persists the clear moment server-side
-      // (users.notifications_cleared_at) — every catch-up scan checks that
+      // (users.notifications_cleared_at) - every catch-up scan checks that
       // watermark too, so even a fully wiped browser correctly shows
       // nothing from before the last real Clear tap, because the boundary
       // itself no longer depends on local storage surviving.
@@ -563,12 +563,12 @@ export const useNotificationStore = create<NotificationStore>()((set, get) => ({
     if (curr !== null) saveNotifSlot(curr, get().notifications)
     // Restore this address's slot. This used to always start empty here
     // (on every app entry, not just after a real logout) to stop old
-    // notifications from reappearing — but that also wiped a perfectly
+    // notifications from reappearing - but that also wiped a perfectly
     // normal page refresh or app reopen while STILL logged in, which
     // should show real history, not a blank list. The actual fix belongs
     // at logout: _resetForAddress already clears both the visible list
     // AND this address's localStorage slot when the user explicitly logs
-    // out (see below) — so by the time someone logs back in, this slot is
+    // out (see below) - so by the time someone logs back in, this slot is
     // already empty and correctly restores nothing. A plain revisit never
     // touched the slot, so it correctly restores what was really there.
     const notifications = loadNotifSlot(addr)
@@ -576,7 +576,7 @@ export const useNotificationStore = create<NotificationStore>()((set, get) => ({
   },
 
   _resetForAddress: (addr) => {
-    // Hides the visible notification list on logout — re-logging in starts
+    // Hides the visible notification list on logout - re-logging in starts
     // with an empty list, never showing old notification cards sitting
     // around from a previous session.
     //
@@ -585,7 +585,7 @@ export const useNotificationStore = create<NotificationStore>()((set, get) => ({
     // catch-up scan, etc.) know "a notification for this exact event was
     // already generated once" and don't fire a second one. Wiping it here
     // meant every one of those scans treated the account's entire history
-    // as never-before-seen the moment you logged back in — regenerating
+    // as never-before-seen the moment you logged back in - regenerating
     // fresh "funds received" notifications for transactions that happened
     // in a previous session and were already seen and dismissed. Logout
     // should clear what's showing, not make the app forget what it's
@@ -608,7 +608,7 @@ useAuthStore.subscribe((state, prevState) => {
 // ─── Bootstrap on app startup ─────────────────────────────────────────────────
 // Auth store has already rehydrated synchronously from 'meshport-auth-v2' by the
 // time this module-level code runs (Zustand persist with localStorage is sync).
-// Load the correct wallet slot immediately — no race possible.
+// Load the correct wallet slot immediately - no race possible.
 ;(() => {
   const addr = useAuthStore.getState().walletAddress
   useWalletStore.getState().switchWallet(addr)
@@ -624,12 +624,12 @@ interface UIStore {
   // exhausted for the current wallet (no local key, no server-side backup
   // backup reachable). Drives a persistent, app-wide banner (see
   // WalletRecoveryBanner.tsx) pointing the user at manually re-entering
-  // their recovery phrase — instead of each of the 13+ call sites of
+  // their recovery phrase - instead of each of the 13+ call sites of
   // restorePrivateKey() individually deciding what to do about a failure,
   // which previously meant most of them just failed silently or showed a
   // one-off toast with no path forward for the user.
   walletRecoveryNeeded: boolean
-  // A full-height bottom sheet is open — the bottom navigation hides
+  // A full-height bottom sheet is open - the bottom navigation hides
   // underneath it (its space stays reserved, so the page doesn't jump).
   navHidden: boolean
   setNavHidden: (hidden: boolean) => void
@@ -659,7 +659,7 @@ export const useUIStore = create<UIStore>()((set) => ({
 // conversation and marking it read can push an instant update to the bottom
 // nav badge without waiting on the nav's own realtime round trip (DB write →
 // postgres_changes event → re-fetch). The nav still resyncs from the DB on
-// its own schedule to correct any drift — this only makes the common case
+// its own schedule to correct any drift - this only makes the common case
 // (you open a chat, its unread count clears) feel instant.
 interface ChatUnreadStore {
   unreadChats: number
@@ -673,18 +673,18 @@ export const useChatUnreadStore = create<ChatUnreadStore>()((set) => ({
   decrementBy: (n) => set((s) => ({ unreadChats: Math.max(0, s.unreadChats - n) })),
 }))
 
-// ── Ongoing P2P trades count — the red dot on "More"/the P2P entry in
+// ── Ongoing P2P trades count - the red dot on "More"/the P2P entry in
 // MoreSheet/the desktop sidebar, and the "+N" badge on "My Trades" ────────
 // BUG FIX (2026-09-22): this used to be fetched+subscribed independently in
 // THREE separate components (HomePage, P2PPage, DesktopSidebar), each
 // calling subscribeToMyTrades(userId, ...) with its own effect. That
 // function's channel names are fixed per userId
-// (`p2p-my-trades-buyer-${userId}`), not unique per caller — on desktop,
+// (`p2p-my-trades-buyer-${userId}`), not unique per caller - on desktop,
 // DesktopSidebar is always mounted alongside whichever page is active, so
 // two of these three effects fired for the SAME userId at the same time,
 // both trying to subscribe to the identical channel name. Supabase's
 // realtime client throws exactly this for that: "cannot add
-// postgres_changes callbacks for realtime:<channel>" — a hard crash, plus
+// postgres_changes callbacks for realtime:<channel>" - a hard crash, plus
 // the subscribe-retry churn from the collision is the most likely cause of
 // the reported flickering too. Fixed the same way chat unread counts
 // already work (see useChatUnreadStore's own comment above): ONE shared

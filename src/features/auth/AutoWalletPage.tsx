@@ -15,7 +15,7 @@ export function AutoWalletPage() {
   const [step, setStep] = useState<'creating' | 'done'>('creating')
   const [address, setAddress] = useState('')
   const [error, setError] = useState('')
-  // How many times generation has failed in a row — after a couple of
+  // How many times generation has failed in a row - after a couple of
   // failures, offer the manual create/import screen as an explicit,
   // clearly-labeled CHOICE rather than something the user gets silently
   // swept into. Social accounts almost never actually need this escape
@@ -32,10 +32,10 @@ export function AutoWalletPage() {
       const isSocial = loginType === 'social'
 
       if (isSocial) {
-        // Google / email accounts — self-custodial. The wallet key is made
+        // Google / email accounts - self-custodial. The wallet key is made
         // HERE, on the device (src/lib/socialWallet.ts), never by MeshPort's
         // servers, and is protected by the user's passkey and/or encrypted
-        // Recovery QR (they must set one up before using the wallet — see
+        // Recovery QR (they must set one up before using the wallet - see
         // AppLayout's secure-wallet guard). Until then, this device keeps a
         // copy sealed with its non-extractable device key so a reload
         // doesn't lose it.
@@ -46,7 +46,7 @@ export function AutoWalletPage() {
         setBalance(0)
         setAddress(wallet.address)
       } else {
-        // create-wallet accounts: unchanged — generated locally, shown a
+        // create-wallet accounts: unchanged - generated locally, shown a
         // recovery phrase (elsewhere in the create-wallet flow, not here),
         // never sent to any server in any form.
         const wallet = await generateWallet()
@@ -62,7 +62,7 @@ export function AutoWalletPage() {
       const message = e instanceof Error ? e.message : 'Something went wrong creating your wallet.'
       console.error('[AutoWallet] Failed:', e)
       // Stay on THIS screen rather than silently redirecting to the
-      // create/import chooser — that screen is for self-custodial
+      // create/import chooser - that screen is for self-custodial
       // accounts and has nothing to do with a social-login account whose
       // wallet setup happened to fail once. The person already
       // chose Google/Email login; bouncing them to "create or import a
@@ -70,7 +70,7 @@ export function AutoWalletPage() {
       // account type) was confusing and unexplained. Retrying in place
       // covers the common case (a transient error); the manual-setup
       // link only appears, and is only ever reached, by the user's own
-      // explicit click after repeated failures — never automatically.
+      // explicit click after repeated failures - never automatically.
       setError(message)
       setFailureCount(c => c + 1)
     }

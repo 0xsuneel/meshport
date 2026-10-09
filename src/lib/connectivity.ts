@@ -8,8 +8,8 @@
 // The browser's own online flag isn't trusted on its own: on Android it often
 // says "online" after a refresh with no internet (a network is attached but
 // nothing gets through), and the "online" event fires before requests work.
-// So a tiny request (eth_chainId) through the app's own Arc RPC route — the
-// same one balances use — confirms it: at start, while offline (every few
+// So a tiny request (eth_chainId) through the app's own Arc RPC route - the
+// same one balances use - confirms it: at start, while offline (every few
 // seconds), and before announcing "back online".
 
 import { useEffect, useRef, useSyncExternalStore } from 'react'
@@ -19,7 +19,7 @@ const PROBE_URL = '/api/arc-rpc' // ARC_RPCS[0] in blockchain/chains.ts
 // "slow", not "offline". Nothing at all within this time is offline.
 const PROBE_TIMEOUT_MS = 12000
 // A probe slower than this → slow network (the app then saves data: the
-// balance goes first, extras wait — see isSlowNetwork()).
+// balance goes first, extras wait - see isSlowNetwork()).
 const SLOW_PROBE_MS = 4000
 // While slow, check again this often to notice the network getting better.
 const SLOW_RECHECK_MS = 30_000

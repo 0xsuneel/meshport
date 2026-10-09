@@ -2,20 +2,20 @@
 //
 // ── Why this exists ────────────────────────────────────────────────────────────────
 // claim-recovery-scan already detects "external deposit landed straight on
-// this wallet's address" (see its recordExternalReceive) — but it's only
+// this wallet's address" (see its recordExternalReceive) - but it's only
 // ever invoked FOR ONE WALLET, triggered from AppLayout.tsx when that
 // wallet's own browser tab is open or becomes visible again. A deposit sent
-// while the recipient never opens the app (e.g. an exchange withdrawal —
-// OKX, etc. — sent straight to the MeshPort address, with nobody chatting it
+// while the recipient never opens the app (e.g. an exchange withdrawal -
+// OKX, etc. - sent straight to the MeshPort address, with nobody chatting it
 // into the messages table) never gets a chance to be scanned for at all.
 //
 // This function does the same "plain incoming Transfer with no activity row
 // yet" detection as claim-recovery-scan's non-mint branch, but for EVERY
-// known wallet in one pass, so it can run on a schedule — genuinely
+// known wallet in one pass, so it can run on a schedule - genuinely
 // independent of any browser tab.
 //
 // Deliberately scoped to just the external-receive case (not CCTP mint/claim
-// reconciliation — that stays claim-recovery-scan's job).
+// reconciliation - that stays claim-recovery-scan's job).
 //
 // ── 2026-07-16 latency fix ─────────────────────────────────────────
 // ROOT CAUSE of the observed 2-3min delay between "balance updates" and
@@ -26,7 +26,7 @@
 // function had no such loop, so its real-world detection latency was bounded
 // by the cron *schedule itself* (up to 2 minutes), not by chain confirmation
 // time or RPC round-trip time. The Realtime layer (ActivityService.ts) was
-// never the bottleneck — it pushes a row to the UI the instant it's inserted.
+// never the bottleneck - it pushes a row to the UI the instant it's inserted.
 //
 // Fix (this revision): adopt the exact same self-looping "sweep" architecture
 // claim-worker already uses (mode: 'sweep' loops ~8s internally, cron
@@ -35,14 +35,14 @@
 // fixed lookback window from scratch every time.
 //
 // ── USDC needs a DIFFERENT detection path than EURC/cirBTC ─────────────────
-// EURC and cirBTC are genuine ERC-20 tokens — every transfer emits a Transfer
+// EURC and cirBTC are genuine ERC-20 tokens - every transfer emits a Transfer
 // event log, so eth_getLogs on their contract addresses reliably catches
 // them (log-based scan, cursor-windowed instead of fixed-window as before).
 //
 // USDC is different: per Arc's own docs, it's the chain's NATIVE gas
 // currency (18-decimal value transfers, no contract call), and the
 // "optional ERC20 interface" at 0x3600...0000 is a SEPARATE, opt-in 6-decimal
-// wrapper — plain native sends (which is how a normal wallet/exchange
+// wrapper - plain native sends (which is how a normal wallet/exchange
 // withdrawal, e.g. from OKX, actually sends funds) never touch that contract
 // and never emit a log. eth_getLogs is structurally blind to these; no
 // amount of tuning the window fixes it.
@@ -51,16 +51,16 @@
 // (blockNumber, true) per new block since the cursor, checking every tx's
 // `to` field against the known-wallet set in memory (there's no server-side
 // filter available for plain value transfers the way eth_getLogs offers for
-// event topics — this is the necessary tradeoff for catching them via RPC at
+// event topics - this is the necessary tradeoff for catching them via RPC at
 // all). Bounded concurrency + a per-pass block cap keep this cheap in the
 // steady state and safe during catch-up after downtime.
 //
 // Blockscout's indexed REST API (GET /api/v2/addresses/{address}/transactions)
-// is now ONLY used in 'reconcile' mode, as a backstop — it recovers anything
+// is now ONLY used in 'reconcile' mode, as a backstop - it recovers anything
 // the direct-RPC block scan might have missed (RPC hiccups, a missed block
 // range during a cold start, etc). It is not a dependency of the fast path.
 //
-// ── FIX D (wrapper coverage) — the native scan alone is NOT sufficient ─────
+// ── FIX D (wrapper coverage) - the native scan alone is NOT sufficient ─────
 // The paragraph above is correct that plain native sends never touch the
 // 0x3600 wrapper. What it missed is the CONVERSE: a USDC transfer routed
 // THROUGH that wrapper never appears as a native value transfer either. Such a
@@ -73,11 +73,11 @@
 //
 // Confirmed on live data: 0x8c831fb5…87c0 (block 56088892) credited a
 // registered wallet 20 USDC from an ordinary EOA. It was NOT internal-sender,
-// NOT a swap, NOT self-transfer, NOT zero-value, NOT an external recipient —
+// NOT a swap, NOT self-transfer, NOT zero-value, NOT an external recipient -
 // and it produced ZERO activity rows anywhere in the database while the native
 // cursor sat 7,764 blocks past it. The reconcile backstop misses it too: it
 // queries `?filter=to`, and `to` is the wrapper, not the wallet (verified live
-// — the transaction is only visible under the explorer's `token-transfers`
+// - the transaction is only visible under the explorer's `token-transfers`
 // endpoint, which this function never calls).
 //
 // The fix scans 0xffff…fffe, NOT the 0x3600 wrapper. Both emit a Transfer log
@@ -85,7 +85,7 @@
 //     0xffff…fffe  raw 20000000000000000000  /1e18 = 20   (18 decimals)
 //     0x3600…0000  raw           20000000    /1e6  = 20   ( 6 decimals)
 // 0xffff…fffe is the authoritative representation and a strict superset of real
-// credits — it logs wrapper-routed AND plain native movements (measured over
+// credits - it logs wrapper-routed AND plain native movements (measured over
 // 3,000 live blocks; see blockchain-indexer/chains.ts for that measurement).
 // Scanning only 0x3600 would miss every plain native transfer instead.
 //
@@ -96,26 +96,26 @@
 //
 // ── 2026-09-19 EMERGENCY DISK-I/O FIX ────────────────────────────────────────
 // Live-code audit found the sweep loop actually runs SWEEP_DURATION_MS=65s
-// at SWEEP_INTERVAL_MS=2s — up to ~32 passes per invocation, not the ~6-7 the
+// at SWEEP_INTERVAL_MS=2s - up to ~32 passes per invocation, not the ~6-7 the
 // original header comment describes (the interval was tuned down from 8s in
 // this file's own history without the header being updated to match). Every
-// one of those ~32 passes called loadWalletSet(supabase) — a fresh
-// `SELECT wallet_address FROM users` — from scratch, even though the set of
+// one of those ~32 passes called loadWalletSet(supabase) - a fresh
+// `SELECT wallet_address FROM users` - from scratch, even though the set of
 // registered wallets cannot meaningfully change within one ~65s invocation
 // window. That is 32x more `users` reads than necessary, every single
-// minute, 24/7 — a confirmed, significant contributor to the project's
+// minute, 24/7 - a confirmed, significant contributor to the project's
 // Postgres Disk I/O budget being exceeded.
 //
 // Fix: load the wallet set ONCE per invocation, before the sweep loop
 // starts, and pass it into every pass instead of having each pass reload it.
 // runSweepPass() no longer calls loadWalletSet() itself. This does not
-// change detection coverage, cursors, dedupe, or any write path — a wallet
+// change detection coverage, cursors, dedupe, or any write path - a wallet
 // that registers in the middle of an already-running invocation is picked
 // up by the very next invocation (at most ~60s later, since pg_cron
 // re-triggers every minute), and is additionally covered in the meantime by
 // claim-recovery-scan's own per-wallet scan and by chain-transfer-webhook
 // (which looks up the recipient fresh on every event, independent of this
-// cache). reconcile mode is unaffected — it still calls loadWalletSet() once
+// cache). reconcile mode is unaffected - it still calls loadWalletSet() once
 // per its own (much less frequent) invocation, exactly as before.
 import { createClient, SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
@@ -133,13 +133,13 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }
 
-// drpc.live API key — set DRPC_KEY in Supabase project secrets
+// drpc.live API key - set DRPC_KEY in Supabase project secrets
 const DRPC_KEY = Deno.env.get('DRPC_KEY') ?? ''
-// Optional explicit authenticated RPC URL override — set ARC_RPC_URL in
+// Optional explicit authenticated RPC URL override - set ARC_RPC_URL in
 // Supabase project secrets to point at a specific authenticated gateway.
 const CONFIGURED_ARC_RPC_URL = (Deno.env.get('ARC_RPC_URL') ?? '').trim()
 
-// Authenticated-only Arc endpoints — no direct public gateways
+// Authenticated-only Arc endpoints - no direct public gateways
 // (rpc.testnet.arc.io, Blockdaemon, dRPC public, QuickNode, thirdweb,
 // drpc.org). Those were exactly how this scan could end up querying
 // arc-testnet.rpc.thirdweb.com even with an authenticated RPC configured.
@@ -150,14 +150,14 @@ const ARC_RPCS = [
 const ARC_EXPLORER = 'https://testnet.arcscan.app'
 const ARC_EXPLORER_API = 'https://testnet.arcscan.app/api/v2'
 
-// Circle's own Kit/CCTP infrastructure contracts on Arc — mirrors
+// Circle's own Kit/CCTP infrastructure contracts on Arc - mirrors
 // CIRCLE_CONTRACTS in api/relay-rpc.js (kept in sync manually; these are
 // static testnet deployment addresses, not expected to change often).
 // A candidate whose fromAddr is one of these is DEFINITIONALLY not a real
-// external deposit — a swap's output leg, for instance, is a Transfer FROM
+// external deposit - a swap's output leg, for instance, is a Transfer FROM
 // the Kit Adapter Contract, not from any wallet a real person or exchange
 // controls. Unlike the amount/token/timing-based matching below (which is
-// necessarily probabilistic — it's guessing "this looks related to that
+// necessarily probabilistic - it's guessing "this looks related to that
 // recent swap"), this is a hard fact: no genuine OKX/MetaMask/faucet/
 // person-to-person transfer will ever originate from one of these
 // addresses, so these are always skipped outright, not just marked quiet.
@@ -167,12 +167,12 @@ const KNOWN_INTERNAL_CONTRACTS = new Set([
   '0x7865fafc2db2093669d92c0f33aeef291086befd',
   '0xacf1ceef35caac005e15888ddb8a3515c41b4872',
   '0xc5567a5e3370d4dbfb0540025078e283e36a363d', // Kit Bridge Contract testnet
-  '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b', // Kit Adapter Contract testnet — swaps route through this
+  '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b', // Kit Adapter Contract testnet - swaps route through this
   '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa', // CCTP V2 TokenMessenger
   '0xe737e5cebeeba77efe34d4aa090756590b1ce275', // CCTP V2 MessageTransmitter
-  // Multicall3 — BulkPay routes through this. Was missing here (this file's
+  // Multicall3 - BulkPay routes through this. Was missing here (this file's
   // own local copy had drifted from _shared/knownInternalContracts.ts, the
-  // same gap activity-consumer/decide.ts had — see that file's comment for
+  // same gap activity-consumer/decide.ts had - see that file's comment for
   // the live production evidence, tx 0xac28f48b…/0x22b268c5…). Added to keep
   // this native-USDC reconcile backstop from crediting a BulkPay self-send
   // as an external deposit the same way the primary consumer did.
@@ -181,13 +181,13 @@ const KNOWN_INTERNAL_CONTRACTS = new Set([
 
 // BUG FIX (2026-09-09): the exact same drift class as the Multicall3 comment
 // above, this time for the P2P escrow contract. A seller's release() sends a
-// native-USDC transfer straight FROM that contract TO the buyer's wallet —
+// native-USDC transfer straight FROM that contract TO the buyer's wallet -
 // this scanner, not knowing that address was internal, recorded it as a
 // plain generic "external deposit" activity row. p2pService.ts's
 // releaseTrade() ALSO writes its own, correctly-labeled 'p2p_purchase' row
 // for the exact same (tx_hash, wallet_address) pair, but recordExternalReceive/
 // saveActivity both upsert on that same (tx_hash, wallet_address) key with
-// ignoreDuplicates — so whichever row landed first won, and this scanner's
+// ignoreDuplicates - so whichever row landed first won, and this scanner's
 // tight self-loop usually won that race. Net effect: P2P buyers saw a
 // generic "Received" activity/notification instead of "P2P Amount Credited".
 //
@@ -195,7 +195,7 @@ const KNOWN_INTERNAL_CONTRACTS = new Set([
 // index.ts already read this: P2P_ESCROW_CONTRACT (+ _LEGACY, comma
 // separated, for offers still holding funds in a previously-deployed
 // contract after a redeploy) as project secrets. No hardcoded address is
-// guessed here — if the secret isn't set, this is simply a no-op, matching
+// guessed here - if the secret isn't set, this is simply a no-op, matching
 // this file's own existing KNOWN_INTERNAL_CONTRACTS being a plain, safe list
 // rather than something that fails loudly when empty.
 const P2P_ESCROW_CONTRACT = (Deno.env.get('P2P_ESCROW_CONTRACT') ?? '').trim().toLowerCase()
@@ -211,14 +211,14 @@ const TRANSFER_TOPIC0 = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55
 const MINT_FROM_TOPIC = '0x' + '0'.repeat(64)
 const NATIVE_DECIMALS = 18
 
-// Genuine ERC-20 tokens only — USDC is handled separately below via direct
+// Genuine ERC-20 tokens only - USDC is handled separately below via direct
 // block scanning, since it's Arc's native currency and plain sends never
 // touch its optional ERC-20 wrapper contract (see comment above).
 //
 // USDC is deliberately NOT added to this list. Doing so is the obvious-looking
 // fix and it is wrong twice over: the 0x3600 wrapper carries 6 decimals while
 // this scan's sibling native path uses 18, and a wrapper-routed transfer emits
-// a log on BOTH 0x3600 and 0xffff…fffe — so adding either address here would
+// a log on BOTH 0x3600 and 0xffff…fffe - so adding either address here would
 // double-count against the native-USDC source below. Native USDC gets its own
 // path (FIX D) keyed on the authoritative 18-decimal contract instead.
 const TOKENS: Array<{ symbol: string; contract: string; decimals: number }> = [
@@ -226,7 +226,7 @@ const TOKENS: Array<{ symbol: string; contract: string; decimals: number }> = [
   { symbol: 'cirBTC', contract: '0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF', decimals: 8 },
 ]
 
-// ── FIX D — authoritative native-USDC Transfer log contract ───────────────
+// ── FIX D - authoritative native-USDC Transfer log contract ───────────────
 // Emits a Transfer for EVERY native-USDC movement, wrapper-routed or plain, in
 // 18 decimals (NATIVE_DECIMALS). Same address the indexer scans, so the two
 // systems observe the same population.
@@ -237,35 +237,35 @@ const TOKENS: Array<{ symbol: string; contract: string; decimals: number }> = [
 // this whole path would appear to work while detecting nothing.
 const NATIVE_USDC_LOG_CONTRACT = '0xfffffffffffffffffffffffffffffffffffffffe'
 
-// The 6-decimal opt-in ERC-20 view of the same native USDC. Never scanned —
+// The 6-decimal opt-in ERC-20 view of the same native USDC. Never scanned -
 // named only so the exclusion is explicit and greppable rather than implied by
 // absence. See the FIX D header for the double-count measurement.
 const USDC_WRAPPER_CONTRACT = '0x3600000000000000000000000000000000000000'
 
-// ── Sweep cadence — same pattern as claim-worker ──────────────────────────
+// ── Sweep cadence - same pattern as claim-worker ──────────────────────────
 // pg_cron only needs to fire once a minute; this internal loop is the actual
 // fast path, giving ~3s effective detection cadence regardless of the cron
 // schedule. If an invocation dies early, the next cron tick just resumes
-// from the persisted cursor — nothing is lost.
-// 2026-07-19: reduced from 8s to 3s — the wallet's own balance figure
+// from the persisted cursor - nothing is lost.
+// 2026-07-19: reduced from 8s to 3s - the wallet's own balance figure
 // already updates fast via a separate, faster-cadence path (direct RPC
 // balance polling), but the notification specifically was bottlenecked by
 // this interval: a deposit landing right after a sweep tick completed had
 // to wait the full interval for the next one. 8s alone doesn't explain a
-// 30s real-world gap on its own — that also includes whatever's left of
+// 30s real-world gap on its own - that also includes whatever's left of
 // the current 50s invocation window before the tick lands, plus any cold
-// start after an idle period — but this is the one number directly in our
+// start after an idle period - but this is the one number directly in our
 // control that scales the typical case down proportionally.
 const SWEEP_DURATION_MS = 65_000
 const SWEEP_INTERVAL_MS = 2_000
 
-// First-ever run (no cursor row yet) bridges this many blocks of history —
+// First-ever run (no cursor row yet) bridges this many blocks of history -
 // same conservative default the old fixed-window approach used. After that,
 // every subsequent pass scans only the true gap since the last cursor.
 const INIT_LOOKBACK_BLOCKS = 20_000
 
 // Per-pass caps so a very stale cursor (e.g. after extended downtime) can't
-// make a single invocation run unboundedly long — it just takes a few more
+// make a single invocation run unboundedly long - it just takes a few more
 // ~8s loop iterations (or a few more cron ticks) to fully catch up.
 const MAX_NATIVE_BLOCKS_PER_PASS = 3_000
 const NATIVE_BLOCK_CONCURRENCY  = 8
@@ -273,10 +273,10 @@ const MAX_LOG_BLOCKS_PER_PASS   = 100_000
 const LOG_CHUNK_SIZE = 5_000
 const LOG_CHUNK_CONCURRENCY = 5
 
-// ── FIX D.2 — dedicated per-pass range for the authoritative native-USDC log ─
+// ── FIX D.2 - dedicated per-pass range for the authoritative native-USDC log ─
 // MAX_LOG_BLOCKS_PER_PASS (100k) is sized for EURC/cirBTC, which are SPARSE:
 // a 5,000-block chunk of those returns a handful of logs. 0xffff…fffe is not
-// sparse — it emits a Transfer for EVERY native-USDC movement on the chain,
+// sparse - it emits a Transfer for EVERY native-USDC movement on the chain,
 // which on Arc is the native gas currency.
 //
 // The binding constraint is the RPC's eth_getLogs RESULT CAP, not the block
@@ -297,7 +297,7 @@ const LOG_CHUNK_CONCURRENCY = 5
 // declined to advance, and native_usdc_logs sat frozen at 56081655 for 12.9h
 // while native_blocks, erc20_logs:EURC and erc20_logs:cirBTC all tracked head.
 //
-// 500 blocks is ~4,800 logs — roughly 4x headroom under the cap, so ordinary
+// 500 blocks is ~4,800 logs - roughly 4x headroom under the cap, so ordinary
 // traffic growth cannot silently push a window back over it. Deliberately a
 // SEPARATE constant: EURC/cirBTC work correctly at 100k and must not be slowed
 // down to fix a problem they do not have.
@@ -316,7 +316,7 @@ function getServiceRoleKey(): string {
       console.error('[deposit-scan-all] SUPABASE_SECRET_KEYS present but failed to parse:', e instanceof Error ? e.message : e)
     }
   }
-  throw new Error('No Supabase service role key found — checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS.')
+  throw new Error('No Supabase service role key found - checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS.')
 }
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
@@ -336,7 +336,7 @@ async function rpcCallSingle(url: string, method: string, params: unknown[]): Pr
   return respJson.result
 }
 
-// Races all known RPCs, returns the first-settled successful result — used
+// Races all known RPCs, returns the first-settled successful result - used
 // for single-block fetches where we want the fastest healthy endpoint rather
 // than waiting on all of them.
 async function rpcCallAny(method: string, params: unknown[]): Promise<any> {
@@ -359,7 +359,7 @@ async function getCurrentArcBlockNumber(): Promise<number> {
 }
 
 // ── Structured logging ──────────────────────────────────────
-// Plain console.error(string) is all this file had before — fine for
+// Plain console.error(string) is all this file had before - fine for
 // failures, useless for seeing *why* a healthy-looking invocation still
 // produced a delayed row. One JSON line per event, so a log query can
 // answer "what was the cursor / latest block / candidates / inserts for
@@ -399,14 +399,14 @@ async function setCursor(supabase: SupabaseClient, source: string, block: number
   if (error) console.error(`[deposit-scan-all] cursor write failed for ${source}:`, error.message)
 }
 
-// ── ERC-20 log scan (EURC / cirBTC) — cursor-windowed ─────────────────
+// ── ERC-20 log scan (EURC / cirBTC) - cursor-windowed ─────────────────
 // Unfiltered by recipient (unlike claim-recovery-scan, which filters by ONE
-// wallet's topic) — we want every incoming Transfer on the token in the
+// wallet's topic) - we want every incoming Transfer on the token in the
 // window, then match against the whole known-wallet set in memory. Far
 // cheaper than one eth_getLogs call per user.
 //
 // Returns the logs found AND the highest block we can safely advance the
-// cursor to — if any chunk failed on every RPC, we stop the safe cursor at
+// cursor to - if any chunk failed on every RPC, we stop the safe cursor at
 // the start of the earliest failed chunk so a transient RPC failure can
 // never cause a silent permanent gap; the next pass retries from there.
 async function fetchTransferLogsRange(
@@ -435,7 +435,7 @@ async function fetchTransferLogsRange(
   const allLogs: any[] = []
   let firstFailedFrom: number | null = null
   for (let i = 0; i < chunks.length; i += LOG_CHUNK_CONCURRENCY) {
-    // Stop launching new batches once we've hit a failure — later blocks may
+    // Stop launching new batches once we've hit a failure - later blocks may
     // depend on context we no longer trust being contiguous, and there's no
     // benefit to racing ahead past a known gap.
     if (firstFailedFrom !== null) break
@@ -457,9 +457,9 @@ async function fetchTransferLogsRange(
   return { logs: allLogs, safeUpTo }
 }
 
-// ── Native USDC scan — cursor-windowed direct RPC block scan (PRIMARY) ──────
+// ── Native USDC scan - cursor-windowed direct RPC block scan (PRIMARY) ──────
 // Native value transfers emit no log, so there is no server-side filter
-// available the way eth_getLogs offers for events — every tx in every block
+// available the way eth_getLogs offers for events - every tx in every block
 // since the cursor has to be pulled and checked against the known-wallet set
 // in memory. Bounded concurrency keeps this cheap; the per-pass block cap
 // keeps a single invocation from running long during catch-up (the next
@@ -514,12 +514,12 @@ async function fetchNativeDepositsRange(
   return { candidates, safeUpTo }
 }
 
-// ── FIX D — contract-mediated native-USDC scan ─────────────────────
+// ── FIX D - contract-mediated native-USDC scan ─────────────────────
 // Reuses fetchTransferLogsRange (same chunking, same safe-cursor semantics) and
 // applies acceptance rules identical to the native block scan above, so the two
 // sources can never disagree about what counts as a deposit.
 //
-// Amounts use NATIVE_DECIMALS (18), matching the native path — this contract is
+// Amounts use NATIVE_DECIMALS (18), matching the native path - this contract is
 // the 18-decimal representation, NOT the 6-decimal 0x3600 wrapper view.
 async function fetchNativeUsdcLogDeposits(
   fromBlock: number, toBlock: number, walletSet: Map<string, string>,
@@ -536,7 +536,7 @@ async function fetchNativeUsdcLogDeposits(
     // match the wallet set, silently dropping ~1 wallet in 16.
     const toAddr   = ('0x' + toTopic.slice(-40)).toLowerCase()
     const fromAddr = ('0x' + fromTopic.slice(-40)).toLowerCase()
-    if (fromTopic.toLowerCase() === MINT_FROM_TOPIC.toLowerCase()) continue // mint — claim-recovery-scan's job
+    if (fromTopic.toLowerCase() === MINT_FROM_TOPIC.toLowerCase()) continue // mint - claim-recovery-scan's job
     if (!walletSet.has(toAddr)) continue                                    // not one of ours / external recipient
     if (toAddr === fromAddr) continue                                       // self-transfer
     let amount: number
@@ -552,7 +552,7 @@ async function fetchNativeUsdcLogDeposits(
   return { candidates, safeUpTo }
 }
 
-// ── Backstop only — Blockscout's indexed REST API ──────────────────────
+// ── Backstop only - Blockscout's indexed REST API ──────────────────────
 // Used exclusively in 'reconcile' mode to recover anything the direct-RPC
 // block scan might have missed (an RPC hiccup during a pass, a cold-start
 // gap, etc). Not on the fast path, not a dependency of it.
@@ -588,7 +588,7 @@ async function fetchNativeDepositsViaExplorer(walletAddress: string): Promise<Ar
 
 // When the transfer actually happened on Arc. A deposit found late (a
 // backfill, a reconcile pass, a catch-up after downtime) must be dated by its
-// block, not by when it was found — otherwise a month-old deposit shows up in
+// block, not by when it was found - otherwise a month-old deposit shows up in
 // Activity as "today". Arc receipts carry blockTimestamp on their logs; the
 // block itself is the fallback. null → the row keeps its default (now()).
 async function txTime(txHash: string): Promise<string | null> {
@@ -625,14 +625,14 @@ async function recordExternalReceive(
       token_symbol:         tokenSymbol,
       counterparty_address: fromAddress.toLowerCase(),
       explorer_url:         `${ARC_EXPLORER}/tx/${txHash}`,
-      // 'quiet' rows use an explicit, separate receiveKind on purpose —
+      // 'quiet' rows use an explicit, separate receiveKind on purpose -
       // HomePage.tsx's fireIfReceived() only notifies for 'external_deposit'
       // (not 'external_deposit_quiet'). See recentSwapOutputsByWallet/
       // matchesRecentSwapOutput below for why a row would be quiet: still
       // fully recorded (balance/history stay correct), just not alerted on,
       // because it matches a swap's own output leg that the exact-hash
       // dedupe below didn't catch in time. `note` is kept for human display
-      // only now — classification no longer depends on its exact wording
+      // only now - classification no longer depends on its exact wording
       // (see ActivityService.ts's comment on receiveKind for the full
       // reasoning; this was the root cause of claim-recovery-scan's
       // equivalent writer silently never notifying, since it used a
@@ -642,12 +642,12 @@ async function recordExternalReceive(
   if (error) console.error('[deposit-scan-all] recordExternalReceive failed:', error.message)
 }
 
-// Grace window used by recentSwapOutputsByWallet below. Was 20s — widened
+// Grace window used by recentSwapOutputsByWallet below. Was 20s - widened
 // after that still proved too tight in practice (a duplicate notification
 // was still observed for a swap whose completion and the sweep pass that
 // caught its output leg were more than 20s apart). Safe to be generous
 // here now that matching also requires token + amount to be close (see
-// matchesRecentSwapOutput) — unlike the original wallet-only check, a
+// matchesRecentSwapOutput) - unlike the original wallet-only check, a
 // wider window doesn't reintroduce suppressing genuinely unrelated
 // deposits, since those still won't match on amount/token.
 const SWAP_GRACE_SECONDS = 45
@@ -662,16 +662,16 @@ interface RecentSwapOutput { token: string; amount: number }
 //
 // Checks, per pass, which candidate wallets have a 'swap' row from the
 // last SWAP_GRACE_SECONDS, and what that swap actually delivered
-// (metadata.tokenOut/amountOut, recorded by recordSwapActivity — the
+// (metadata.tokenOut/amountOut, recorded by recordSwapActivity - the
 // destination token and amount, not the input side). A candidate is only
 // marked 'quiet' (see recordExternalReceive) if ITS OWN token and amount
-// closely match one of those recent outputs — not just "any deposit near
+// closely match one of those recent outputs - not just "any deposit near
 // any swap on this wallet," which used to silently suppress unrelated
 // genuine external deposits (from Coinbase, another wallet, a faucet,
 // etc.) that happened to land within the same wallet's 20s window as an
 // unrelated swap. Recording them normally but without a notification
 // means a genuinely-matching concurrent leg is never lost from
-// balance/history, just silently un-alerted — a much smaller cost than
+// balance/history, just silently un-alerted - a much smaller cost than
 // the wrong-label bug this exists to close, and now scoped to cases that
 // actually look like the same event.
 async function recentSwapOutputsByWallet(supabase: SupabaseClient, walletAddrs: string[]): Promise<Map<string, RecentSwapOutput[]>> {
@@ -698,7 +698,7 @@ async function recentSwapOutputsByWallet(supabase: SupabaseClient, walletAddrs: 
   return result
 }
 
-// 1% relative tolerance (with a small absolute floor for tiny amounts) —
+// 1% relative tolerance (with a small absolute floor for tiny amounts) -
 // the swap's recorded amountOut and the chain-scanned transfer amount
 // should match almost exactly since they're the same on-chain event; this
 // is slack for floating-point/decimal rounding, not a loose fuzzy match
@@ -722,10 +722,10 @@ async function loadWalletSet(supabase: SupabaseClient): Promise<Map<string, stri
   return walletSet
 }
 
-// Batched "already recorded?" lookup — one query instead of one per hit.
+// Batched "already recorded?" lookup - one query instead of one per hit.
 //
 // Checks BOTH the `recv_`-prefixed key (this function's own dedupe key) AND
-// the plain, unprefixed tx_hash — because a swap's output-token leg (e.g.
+// the plain, unprefixed tx_hash - because a swap's output-token leg (e.g.
 // the EURC a swap sends back to this wallet) shares its exact on-chain tx
 // hash with that swap's own 'swap' activity row, which is saved under the
 // plain hash with no prefix. Checking only the `recv_` form missed that
@@ -755,11 +755,11 @@ async function filterAlreadyRecorded(
   return result
 }
 
-// ── SWEEP — the fast path, run every ~2s inside the loop below ───────────
+// ── SWEEP - the fast path, run every ~2s inside the loop below ───────────
 // EMERGENCY DISK-I/O FIX (2026-09-19): walletSet is now a REQUIRED parameter,
 // loaded ONCE by the caller before the sweep loop starts, instead of this
 // function calling loadWalletSet(supabase) itself on every single pass (up
-// to ~32 times per invocation — see the file-header comment for the full
+// to ~32 times per invocation - see the file-header comment for the full
 // reasoning). Everything else about this function is unchanged.
 async function runSweepPass(supabase: SupabaseClient, walletSet: Map<string, string>): Promise<{ native: number; tokens: number }> {
   if (walletSet.size === 0) return { native: 0, tokens: 0 }
@@ -769,7 +769,7 @@ async function runSweepPass(supabase: SupabaseClient, walletSet: Map<string, str
   // Deno.serve that calls runSweepPass() has no per-iteration guard either.
   // A single transient failure here (all Arc RPCs missing the 10s timeout on
   // the same tick) threw all the way out to the outer handler, which
-  // aborted the ENTIRE sweep invocation immediately — every remaining pass
+  // aborted the ENTIRE sweep invocation immediately - every remaining pass
   // for that minute silently never ran, with nothing logged to show it
   // happened. Fix: contain failures at the pass level, same as every other
   // RPC call in this file already does, so one bad tick costs one pass, not
@@ -787,7 +787,7 @@ async function runSweepPass(supabase: SupabaseClient, walletSet: Map<string, str
   let nativeRecorded = 0
   let tokenRecorded = 0
 
-  // ── Native USDC — direct RPC block scan, cursor-windowed ──────────────
+  // ── Native USDC - direct RPC block scan, cursor-windowed ──────────────
   try {
     const cursorFallback = Math.max(0, currentBlock - INIT_LOOKBACK_BLOCKS)
     const cursorBefore = await getCursor(supabase, 'native_blocks', cursorFallback)
@@ -826,8 +826,8 @@ async function runSweepPass(supabase: SupabaseClient, walletSet: Map<string, str
     logEvent('native_scan_failed', { error: e instanceof Error ? e.message : String(e) })
   }
 
-  // ── FIX D — native USDC via 0xffff…fffe Transfer logs ───────────────
-  // EMIT DEDUP — a wrapper transaction must produce exactly ONE receive row,
+  // ── FIX D - native USDC via 0xffff…fffe Transfer logs ───────────────
+  // EMIT DEDUP - a wrapper transaction must produce exactly ONE receive row,
   // and there are four sources that could each produce one. All four converge
   // on the same key, so all four are covered by one mechanism:
   //
@@ -840,7 +840,7 @@ async function runSweepPass(supabase: SupabaseClient, walletSet: Map<string, str
   // The durable guarantee is the activity table itself: recordExternalReceive
   // upserts on (tx_hash, wallet_address) with ignoreDuplicates, and every
   // source derives tx_hash from the SAME on-chain hash. So even two sources
-  // racing inside one pass converge on one row — the DB constraint is the
+  // racing inside one pass converge on one row - the DB constraint is the
   // arbiter, not scan ordering. filterAlreadyRecorded is the cheap pre-check
   // that avoids the redundant write and the duplicate notification; it already
   // normalizes plain hashes to the recv_ form, which is what keeps a swap's
@@ -880,7 +880,7 @@ async function runSweepPass(supabase: SupabaseClient, walletSet: Map<string, str
       }
       // STRICT `> cursorBefore`, not `>= fromBlock - 1`. When the FIRST chunk
       // fails, fetchTransferLogsRange returns safeUpTo = firstFailedFrom - 1 =
-      // fromBlock - 1 = cursorBefore — i.e. "nothing was scanned". The old
+      // fromBlock - 1 = cursorBefore - i.e. "nothing was scanned". The old
       // `>= fromBlock - 1` test accepted that as progress and rewrote the
       // cursor to the value it already held, so the source re-attempted the
       // same failing chunk forever and never surfaced as stalled (its
@@ -889,7 +889,7 @@ async function runSweepPass(supabase: SupabaseClient, walletSet: Map<string, str
       //
       // The strict form has both required properties: a failed first chunk
       // leaves the cursor untouched and logs a stall, and the cursor can only
-      // ever move to a block that was actually scanned successfully — safeUpTo
+      // ever move to a block that was actually scanned successfully - safeUpTo
       // is firstFailedFrom - 1, so a mid-range failure still advances over the
       // verified prefix and re-attempts the rest next pass, never skipping it.
       if (safeUpTo > cursorBefore) {
@@ -898,7 +898,7 @@ async function runSweepPass(supabase: SupabaseClient, walletSet: Map<string, str
       } else {
         logEvent('native_usdc_log_cursor_stalled', {
           source: 'native_usdc_logs', cursorBefore, attemptedFromBlock: fromBlock, attemptedToBlock: toBlock, safeUpTo,
-          reason: 'first chunk failed on every RPC — cursor left unchanged, no blocks were scanned successfully',
+          reason: 'first chunk failed on every RPC - cursor left unchanged, no blocks were scanned successfully',
         })
       }
     }
@@ -907,7 +907,7 @@ async function runSweepPass(supabase: SupabaseClient, walletSet: Map<string, str
     logEvent('native_usdc_log_scan_failed', { error: e instanceof Error ? e.message : String(e) })
   }
 
-  // ── EURC / cirBTC — real ERC-20s, cursor-windowed log scan ────────────
+  // ── EURC / cirBTC - real ERC-20s, cursor-windowed log scan ────────────
   for (const token of TOKENS) {
     try {
       const cursorFallback = Math.max(0, currentBlock - INIT_LOOKBACK_BLOCKS)
@@ -930,7 +930,7 @@ async function runSweepPass(supabase: SupabaseClient, walletSet: Map<string, str
           let amount: number
           try { amount = Number(BigInt(log.data)) / (10 ** token.decimals) } catch { return null }
           if (!Number.isFinite(amount) || amount <= 0) return null
-          if (fromTopic.toLowerCase() === MINT_FROM_TOPIC.toLowerCase()) return null // mint — claim-recovery-scan's job
+          if (fromTopic.toLowerCase() === MINT_FROM_TOPIC.toLowerCase()) return null // mint - claim-recovery-scan's job
           if (!walletSet.has(toAddr.toLowerCase())) return null // not one of ours
           if (toAddr.toLowerCase() === fromAddr.toLowerCase()) return null // self-transfer
           return { txHash, toAddr: walletSet.get(toAddr.toLowerCase())!, fromAddr, amount }
@@ -970,13 +970,13 @@ async function runSweepPass(supabase: SupabaseClient, walletSet: Map<string, str
   return { native: nativeRecorded, tokens: tokenRecorded }
 }
 
-// ── RECONCILE — infrequent backstop pass, Blockscout for native only ─────
+// ── RECONCILE - infrequent backstop pass, Blockscout for native only ─────
 async function runReconcilePass(supabase: SupabaseClient): Promise<{ recorded: string[] }> {
   const walletSet = await loadWalletSet(supabase)
   const recorded: string[] = []
   if (walletSet.size === 0) return { recorded }
 
-  // FIX D — reconcile also recovers wrapper-routed USDC, which the native
+  // FIX D - reconcile also recovers wrapper-routed USDC, which the native
   // explorer query is blind to. Same key, same upsert, same dedup.
   try {
     const currentBlock = await getCurrentArcBlockNumber()
@@ -998,7 +998,7 @@ async function runReconcilePass(supabase: SupabaseClient): Promise<{ recorded: s
           recorded.push(c.txHash)
         }
       }
-      // Same strict boundary as the sweep pass — see the note there. Without
+      // Same strict boundary as the sweep pass - see the note there. Without
       // it, reconcile would keep re-writing the cursor to its current value
       // and mask the stall from this side too.
       if (safeUpTo > cursorBefore) {
@@ -1060,7 +1060,7 @@ Deno.serve(async (req: Request) => {
   const preflight = handleOptions(req)
   if (preflight) return preflight
   // Cron-only (no client entry point exists). Accepts CRON_SECRET or the
-  // legacy service_role key during the no-gap key-migration cutover — see
+  // legacy service_role key during the no-gap key-migration cutover - see
   // _shared/cronAuth.ts.
   if (!isCronOrLegacyServiceCaller(req)) return json({ error: 'Forbidden' }, 403)
 
@@ -1075,7 +1075,7 @@ Deno.serve(async (req: Request) => {
       return json({ success: true, mode, recorded })
     }
 
-    // 'sweep' — self-loop internally, same pattern claim-worker already
+    // 'sweep' - self-loop internally, same pattern claim-worker already
     // uses. pg_cron only needs to fire once a minute; this loop is what
     // actually gives ~8s effective detection cadence.
     //

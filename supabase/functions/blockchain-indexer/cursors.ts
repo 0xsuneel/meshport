@@ -41,7 +41,7 @@ export async function getCursor(supabase: SupabaseClient, chainId: string): Prom
   return data as CursorRow | null
 }
 
-/** Upsert the durable cursor. Never throws — failures are logged and retried next pass. */
+/** Upsert the durable cursor. Never throws - failures are logged and retried next pass. */
 export async function setCursor(
   supabase: SupabaseClient,
   chainId: string,
@@ -65,7 +65,7 @@ export async function setCursor(
  * chain (one cron-driven invocation, and each chain is processed once per
  * pass), so there is no concurrent updater to lose a write to. If the indexer
  * is ever sharded across concurrent workers, this must become an atomic
- * `UPDATE ... SET consecutive_failures = consecutive_failures + 1` via RPC —
+ * `UPDATE ... SET consecutive_failures = consecutive_failures + 1` via RPC -
  * noted rather than pre-built, since the counter only drives alerting.
  */
 export async function markFailure(supabase: SupabaseClient, chainId: string, message: string): Promise<void> {
@@ -119,7 +119,7 @@ export async function insertEvents(
   if (events.length === 0) return
   const { error } = await supabase.from('chain_events').insert(events)
   if (error) {
-    // A 23505 (duplicate key) here is NOT an error — it means a previous pass
+    // A 23505 (duplicate key) here is NOT an error - it means a previous pass
     // already published this event, which is the idempotency contract working.
     // Log at debug level; only log a warning for genuine insert failures.
     if (error.code !== '23505') {

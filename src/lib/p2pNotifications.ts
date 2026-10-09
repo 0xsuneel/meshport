@@ -1,13 +1,13 @@
 // lib/p2pNotifications.ts
 //
 // Bridges the server-driven `notifications` table (populated by the
-// p2p_notify_trade_event trigger — see
+// p2p_notify_trade_event trigger - see
 // supabase/migrations/20260730160000_p2p_notifications_system.sql) into
 // the existing app-wide notification store (useNotificationStore) that
 // already powers the bell/badge (PageHeader.tsx), the notification center
 // (NotificationsPage in ProfileSubPages.tsx), and toasts (Toast.tsx).
 //
-// This is deliberately NOT a separate/parallel notification system — P2P
+// This is deliberately NOT a separate/parallel notification system - P2P
 // events show up in the exact same bell, list, and toast as payment/reward
 // notifications always have. The only thing new here is WHERE they come
 // from: a real Supabase table + Realtime subscription instead of an
@@ -16,7 +16,7 @@
 // triggered the action.
 //
 // Usage: call `startP2PNotifications(userId)` once per session (see
-// AppLayout.tsx) — it seeds the store with recent unread rows, subscribes
+// AppLayout.tsx) - it seeds the store with recent unread rows, subscribes
 // to new ones in real time, and returns an unsubscribe function.
 
 import { supabase } from './supabase'
@@ -57,7 +57,7 @@ function rowToAppNotification(r: NotificationRow): Omit<AppNotification, 'id' | 
 /**
  * Marks a P2P notification read BOTH locally (instant UI feedback, same as
  * every other notification type) AND on the server, so it stays read across
- * devices/reloads — unlike the purely-local notification types, this one's
+ * devices/reloads - unlike the purely-local notification types, this one's
  * source of truth is the `notifications` table itself.
  */
 export async function markP2PNotificationRead(id: string): Promise<void> {
@@ -68,7 +68,7 @@ export async function markP2PNotificationRead(id: string): Promise<void> {
       headers: { ...(await authHeaders()), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
       body: JSON.stringify({ read: true }),
     })
-  } catch { /* best-effort — local state already reflects read; next fetch will just re-sync */ }
+  } catch { /* best-effort - local state already reflects read; next fetch will just re-sync */ }
 }
 
 /** Same idea as markP2PNotificationRead, but for "Mark all read" / bulk catch-up. */
@@ -85,13 +85,13 @@ async function markManyReadOnServer(ids: string[]): Promise<void> {
 
 /**
  * Seeds the store with this user's recent notification rows (covers
- * anything that happened while they were offline/logged out — the whole
+ * anything that happened while they were offline/logged out - the whole
  * point of a server-backed feed) and opens a Realtime subscription for
  * anything new. addNotification()'s own id-based dedup (plus its permanent
  * seen-ids ledger) means calling this repeatedly, or a row arriving via
  * both the initial fetch AND a Realtime event, never double-shows anything.
  *
- * Returns an unsubscribe function — call on logout / userId change, same
+ * Returns an unsubscribe function - call on logout / userId change, same
  * contract as subscribeWithRetry's other call sites in this codebase.
  */
 export function startP2PNotifications(userId: string): () => void {
@@ -122,11 +122,11 @@ export function startP2PNotifications(userId: string): () => void {
       (payload: any) => {
         const row = payload.new as NotificationRow
         // BUG FIX (duplicate toast): addNotification already dedupes the
-        // STORE entry by id (live list + a persistent seen-ids ledger —
+        // STORE entry by id (live list + a persistent seen-ids ledger -
         // see its own comment in store/index.ts), but this toast call sat
         // right next to it, ungated, firing on every single invocation of
         // this callback. If the realtime channel ever redelivers the same
-        // INSERT (a real risk during a reconnect — see subscribeWithRetry's
+        // INSERT (a real risk during a reconnect - see subscribeWithRetry's
         // own extensive comments on channel churn under a bad connection),
         // the notification correctly stayed a single entry while the toast
         // still doubled up. Checking "is this id already known" BEFORE
@@ -137,7 +137,7 @@ export function startP2PNotifications(userId: string): () => void {
         const alreadyKnown = useNotificationStore.getState().isKnown(row.id)
         useNotificationStore.getState().addNotification(rowToAppNotification(row))
         if (alreadyKnown) return
-        // Foreground toast — the OS-level push (dispatched server-side, see
+        // Foreground toast - the OS-level push (dispatched server-side, see
         // the migration's push trigger) is what covers the app being
         // closed/backgrounded; this covers "app is open right now".
         useUIStore.getState().showToastMessage(`${row.title}: ${row.message}`, 'info')

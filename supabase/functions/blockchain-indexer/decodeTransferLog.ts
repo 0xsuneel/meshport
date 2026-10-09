@@ -3,35 +3,35 @@
 // Pure Transfer-log decoding, extracted from scanner.ts's native-transfer-log
 // and ERC-20 log branches (docs/BULKPAY_RECONCILIATION_IMPLEMENTATION.md).
 //
-// This is PARSING ONLY — it does not apply knownWallets filtering, mint
+// This is PARSING ONLY - it does not apply knownWallets filtering, mint
 // exclusion, or self-transfer exclusion. Those remain each CALLER's own
 // decision:
 //   - scanner.ts's main scan loops keep applying knownWallets/mint/self-
 //     transfer filtering exactly as before, now via this shared function
-//     for the parsing step only — behavior is unchanged, confirmed by the
+//     for the parsing step only - behavior is unchanged, confirmed by the
 //     full existing scanner.test.ts suite staying green.
 //   - bulkpayReconcile.ts (new) applies mint/self-transfer filtering but
-//     deliberately NEVER applies knownWallets filtering — that is the
+//     deliberately NEVER applies knownWallets filtering - that is the
 //     entire point of the BulkPay reconciliation path (docs/
 //     BULKPAY_INTENT_SCOPED_WATCH_DESIGN.md §4): a registered-recipient
 //     requirement would silently reproduce the exact gap this module exists
 //     to close.
 //
 // No behavior change to the existing indexer is intended or expected from
-// this extraction — every existing scanner.test.ts assertion must still
+// this extraction - every existing scanner.test.ts assertion must still
 // pass unmodified after scanner.ts is refactored to call this function.
 
 const MINT_FROM_TOPIC = '0x' + '0'.repeat(64)
 
 /**
- * keccak256("Transfer(address,address,uint256)") — the standard ERC-20/native-
+ * keccak256("Transfer(address,address,uint256)") - the standard ERC-20/native-
  * transfer-log event signature. Exported here so bulkpayReconcile.ts (which
  * needs to filter a transaction receipt's logs down to just the Transfer-
- * shaped ones before decoding) doesn't need its own copy — scanner.ts also
+ * shaped ones before decoding) doesn't need its own copy - scanner.ts also
  * has this exact constant inline (used only for eth_getLogs filter
  * construction, unrelated to decoding) and is left untouched rather than
  * refactored to import it, to keep this change minimal. A public, immutable
- * constant — safe to have in two places, same reasoning already accepted for
+ * constant - safe to have in two places, same reasoning already accepted for
  * the token contract addresses duplicated elsewhere in this codebase.
  */
 export const TRANSFER_TOPIC0 = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
@@ -47,7 +47,7 @@ export interface DecodedTransferLog {
   wallet: string
   /** The sender (`from`) address, decoded from topics[1]. */
   from: string
-  /** The raw, undecoded sender topic — needed for the exact mint check (see isMintTransfer). */
+  /** The raw, undecoded sender topic - needed for the exact mint check (see isMintTransfer). */
   fromTopic: string
   amount: number
   txHash: string
@@ -61,10 +61,10 @@ export interface DecodedTransferLog {
 /**
  * Decodes one raw eth_getLogs Transfer-topic log entry. Returns null for any
  * log this can't safely interpret (no recipient, unparseable amount, zero/
- * negative amount) — the exact same "silently skip, never throw" contract
+ * negative amount) - the exact same "silently skip, never throw" contract
  * scanner.ts's inline versions already had, just centralized.
  *
- * Deliberately does NOT check knownWallets, mint-sender, or self-transfer —
+ * Deliberately does NOT check knownWallets, mint-sender, or self-transfer -
  * see this file's header for why those stay with the caller.
  */
 export function decodeTransferLog(
@@ -99,7 +99,7 @@ export function decodeTransferLog(
   }
 }
 
-/** True if the decoded log's sender is the zero address (a mint — CCTP claim territory, never a generic transfer). */
+/** True if the decoded log's sender is the zero address (a mint - CCTP claim territory, never a generic transfer). */
 export function isMintTransfer(decoded: Pick<DecodedTransferLog, 'fromTopic'>): boolean {
   return decoded.fromTopic.toLowerCase() === MINT_FROM_TOPIC
 }

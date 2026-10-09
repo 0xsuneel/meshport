@@ -42,11 +42,11 @@ import { biometricLabel } from '@/lib/biometric'
 
 function copyText(text: string) { try { navigator.clipboard.writeText(text) } catch {} }
 
-// ── Insights bucketing — pure, real-data only ───────────────────────────────
+// ── Insights bucketing - pure, real-data only ───────────────────────────────
 // Builds the full ordered list of time buckets covering `spanDays` ending
 // "now" (so empty buckets show as zero rather than being skipped), then
 // aggregates real ActivityRecords into them. Shared by the Insights "Total
-// Volume" trend line and the Activity bar chart — one bucketing pass, two
+// Volume" trend line and the Activity bar chart - one bucketing pass, two
 // different fields (volume vs count) read off the same buckets.
 type InsightsGranularity = 'daily' | 'weekly' | 'monthly'
 interface ActivityBucket { key: string; label: string; start: number; end: number; count: number; volume: number }
@@ -86,7 +86,7 @@ function aggregateBuckets(records: ActivityRecord[], spanDays: number, granulari
   })
 }
 
-// ── My QR — Home screen card, below Assets ──────────────────────────────────
+// ── My QR - Home screen card, below Assets ──────────────────────────────────
 // Same qrcode lib + encoding choice as ReceivePage.tsx: encodes the raw
 // wallet address (not the pay link) so external wallets that scan it treat
 // it as "send to this address" rather than opening a browser link.
@@ -102,27 +102,27 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
   const { showToastMessage } = useUIStore()
   const navigate = useNavigate()
 
-  // ── Collect USDC — request a specific amount ──────────────────────────
+  // ── Collect USDC - request a specific amount ──────────────────────────
   // Tapping "Collect USDC" opens an inline amount field. Once an amount is
   // set, the QR switches from the raw wallet address to this user's pay
   // link with `?amount=` baked in (PayPage/PaySendPage already read that
   // param and prefill it), so whoever scans the code lands straight on a
-  // payment pre-filled with the amount — they never have to type it in.
+  // payment pre-filled with the amount - they never have to type it in.
   const [collecting, setCollecting] = useState(false)
   const [amountInput, setAmountInput] = useState('')
   const [activeAmount, setActiveAmount] = useState<string | null>(null)
 
   // ── QR payload ─────────────────────────────────────────────────────────
-  // No amount: the plain wallet address — already the universally-
+  // No amount: the plain wallet address - already the universally-
   // understood format every wallet's scanner (MetaMask, Rabby, Coinbase
   // Wallet, OKX, Binance, MeshPort itself) recognizes as "pay this address".
   //
   // With an amount: EIP-681 (`ethereum:<address>@<chainId>?value=<wei>`),
   // NOT a MeshPort web link. A meshport.xyz/pay/... URL only means anything
-  // to MeshPort's own app — every other wallet either can't parse it at all
+  // to MeshPort's own app - every other wallet either can't parse it at all
   // or just opens it as a plain webpage, silently losing the amount (and
   // sometimes the recipient too). EIP-681 is the actual cross-wallet
-  // standard for "pay this address this amount" — MetaMask, Rabby, Coinbase
+  // standard for "pay this address this amount" - MetaMask, Rabby, Coinbase
   // Wallet, Trust, and OKX all prefill both fields from it directly.
   // Native USDC on Arc is 18-decimal (see NATIVE_DECIMALS in arcService.ts/
   // claim-recovery-scan), so `value` is amount × 10^18, computed with
@@ -131,7 +131,7 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
   //
   // MeshPort's OWN scanner (ScannerPage.tsx) also parses this exact format
   // now, and independently resolves the recipient's username via a wallet-
-  // address lookup — so switching off the meshport.xyz URL loses nothing
+  // address lookup - so switching off the meshport.xyz URL loses nothing
   // for MeshPort-to-MeshPort scans, only gains everyone else.
   // UPDATE: most wallets don't know Arc Testnet, so a wallet QR can't fill
   // in the network there. The QR is now the pay page link: MeshPort's
@@ -153,7 +153,7 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
   })()
 
   // Auto-hide the Collect QR after 30s of inactivity if the person never
-  // taps the ✕ themselves — a requested-amount QR left on screen (or in a
+  // taps the ✕ themselves - a requested-amount QR left on screen (or in a
   // screenshot) indefinitely is easy to accidentally reuse for a different
   // amount later, so it reverts back to the plain address QR on its own.
   // Restarts whenever a fresh amount is generated.
@@ -165,13 +165,13 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
 
   // Continuous scroll-linked reveal based on how much of the QR card's
   // NATURAL (full, unscaled) height already fits in the visible gap below
-  // the Assets card — not on closeness to the bottom of the page. This
+  // the Assets card - not on closeness to the bottom of the page. This
   // means if there's already empty space below Assets at rest (before any
   // scrolling), a proportional peek of the card shows immediately, then
   // grows smoothly to full size as more of that space opens up while
   // scrolling. `card.offsetHeight` is used for the natural height because
   // offsetHeight is a layout measurement unaffected by the CSS `scale`
-  // transform we apply below — reading it doesn't create a feedback loop
+  // transform we apply below - reading it doesn't create a feedback loop
   // with our own animation. `assetsCard`'s position is likewise untouched
   // by our card's transform, since transforms never affect sibling layout.
   useEffect(() => {
@@ -240,13 +240,13 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
       canvasRef.current.toBlob(async (blob) => {
         if (!blob) { showToastMessage('Could not share QR', 'error'); return }
         const file = new File([blob], 'meshport-qr.png', { type: 'image/png' })
-        // Shareable link — same /paylink/:username?amount= format ReceivePage
+        // Shareable link - same /paylink/:username?amount= format ReceivePage
         // already builds, and the one PayPage already reads back (see
         // requestedAmount above). Previously this fell back to the raw
         // wallet address even when an amount was set, which meant sharing
         // a "Collect $20" QR to someone without MeshPort's scanner handy
         // (e.g. a chat preview, or anyone on desktop) gave them nothing
-        // but a bare address — no amount, no one-tap link. A pay link
+        // but a bare address - no amount, no one-tap link. A pay link
         // carries the amount as a real query param the recipient's own
         // browser/app resolves, not just something printed in the caption.
         const cleanUsername = (username || '').replace(/\.arc$/, '')
@@ -255,8 +255,8 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
           : `${APP_URL}/paylink/${walletAddress}`
         ) + (activeAmount ? `?amount=${encodeURIComponent(activeAmount)}` : '')
         const shareText = activeAmount
-          ? `Pay me $${activeAmount} USDC on MeshPort — ${paymentLink}`
-          : `Pay me on MeshPort — ${paymentLink}`
+          ? `Pay me $${activeAmount} USDC on MeshPort - ${paymentLink}`
+          : `Pay me on MeshPort - ${paymentLink}`
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({ files: [file], title: 'My QR', text: shareText })
         } else if (navigator.share) {
@@ -331,7 +331,7 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
         )}
       </div>
 
-      {/* Request payment — opens Receive's request form (order-numbered
+      {/* Request payment - opens Receive's request form (order-numbered
           request; its QR / link carry the order and the payer can't edit
           the amount). Replaces the old Collect USDC. */}
       <button
@@ -345,7 +345,7 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
         <span style={{ fontSize: 13, fontWeight: 600 }}>Request payment</span>
       </button>
 
-      {/* Divider + Download/Share row — same layout as the UPI-app reference */}
+      {/* Divider + Download/Share row - same layout as the UPI-app reference */}
       <div style={{ width: '100%', height: 1, background: 'var(--border)', margin: '6px 0 2px' }} />
       <div style={{ display: 'flex', width: '100%', alignItems: 'stretch' }}>
         <button
@@ -382,17 +382,17 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
 
 
 
-// ── Biometric footer row — below QR (mobile) / below Assets (desktop) ──────
+// ── Biometric footer row - below QR (mobile) / below Assets (desktop) ──────
 // Same enable flow Settings→Security already uses (see SecurityPage's
 // handleConfirmAndRegister): registering a credential needs the RAW
-// passcode to encrypt it, which the store never holds (only its hash — see
+// passcode to encrypt it, which the store never holds (only its hash - see
 // security.ts), so tapping Enable first collects it in a small confirm
 // sheet, then hands off to the shared EnableBiometricPage for the actual
 // native prompt. One flow, reused from both entry points, instead of two
 // that could drift apart.
 //
-// Shown on every device — including ones with no biometric hardware at
-// all — per spec. On an unsupported device the native prompt just can't
+// Shown on every device - including ones with no biometric hardware at
+// all - per spec. On an unsupported device the native prompt just can't
 // succeed; EnableBiometricPage already handles that case today (bounces
 // straight back to `next` once its own support check resolves false), so
 // tapping Enable there is a no-op rather than a broken screen, no extra
@@ -400,7 +400,7 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
 //
 // `biometricEnabled` is the same store flag Settings reads/writes, so
 // enabling from either place stays in sync automatically. Once enabled,
-// this row only ever shows the read-only "Enabled" pill — turning it back
+// this row only ever shows the read-only "Enabled" pill - turning it back
 // off is deliberately Settings-only, never from here.
 function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
   const navigate = useNavigate()
@@ -408,7 +408,7 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
   const biometricEnabled = useAuthStore(s => s.biometricEnabled)
   const storedPasscode = useAuthStore(s => s.passcode)
   const label = biometricLabel()
-  // Same device check EnableBiometricPage already uses for this icon —
+  // Same device check EnableBiometricPage already uses for this icon -
   // biometricLabel() returns 'Face ID' only on iPhone/iPad/iPod, so this
   // stays in sync with it rather than re-detecting the platform separately.
   const BiometricIcon = label === 'Face ID' ? ScanFace : Fingerprint
@@ -623,7 +623,7 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
 // ── Asset History Sheet ───────────────────────────────────────────────────────
 function AssetSheet({ token, history, onClose, onOpen }: { token: string; history: any[]; onClose: () => void; onOpen: (item: any) => void }) {
   const isDesktop = useMediaQuery('(min-width: 980px)')
-  // Phone: a full bottom sheet — hide the bottom navigation while it's up.
+  // Phone: a full bottom sheet - hide the bottom navigation while it's up.
   const setNavHidden = useUIStore(s => s.setNavHidden)
   useEffect(() => {
     if (isDesktop) return
@@ -656,7 +656,7 @@ function AssetSheet({ token, history, onClose, onOpen }: { token: string; histor
             // the side sent (tokenIn, so '-' and amountIn) or the side
             // received (tokenOut, so '+' and amountOut). Without this,
             // every swap row showed a neutral gray sign and always the
-            // input-side amount — wrong number entirely when viewing the
+            // input-side amount - wrong number entirely when viewing the
             // output token's sheet (e.g. opening EURC's history for a
             // USDC->EURC swap showed "10.00 EURC" instead of "+9.40 EURC").
             let sign: '+' | '-' | '↔' = activitySign(type, direction)
@@ -676,14 +676,14 @@ function AssetSheet({ token, history, onClose, onOpen }: { token: string; histor
             const formatAddr = (addr?: string) => addr ? addr.slice(0, 6) + '...' + addr.slice(-6) : ''
             const formatChain = (c?: string) => c ? c.replace(/_/g, ' ') : ''
 
-            // Title/subtitle — reuse the exact same derivation as the
+            // Title/subtitle - reuse the exact same derivation as the
             // Activity page (Paid to / Received from / Claimed from /
             // Transfer to / P2P Sell Order Cancelled, including self-
             // transfer "Self") for every type it models, so this sheet can
             // never drift from the Activity page's wording again.
             // 'deposit' isn't modeled by deriveActivityRow (a pre-existing
             // gap on the Activity page itself, not something introduced
-            // here) — kept on its prior wording below so this change
+            // here) - kept on its prior wording below so this change
             // doesn't regress a type nobody asked to change. Any other
             // genuinely unhandled type falls back the same way it already
             // did before this change.
@@ -706,7 +706,7 @@ function AssetSheet({ token, history, onClose, onOpen }: { token: string; histor
 
             // BUG FIX: cirBTC amounts are often tiny fractions (e.g.
             // 0.000067), and so can USDC/EURC ones on this testnet
-            // (chat-pay/dust amounts) — the default 2-decimal formatAmount()
+            // (chat-pay/dust amounts) - the default 2-decimal formatAmount()
             // rounds any of these straight to "0.00" (then "0" once
             // trimmed), hiding a real, nonzero amount. Apply the same
             // magnitude-based precision tiers regardless of token, not just
@@ -741,7 +741,7 @@ function AssetSheet({ token, history, onClose, onOpen }: { token: string; histor
                     {sign}{amountStr} {token}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-                    {dateStr || '—'}
+                    {dateStr || '-'}
                   </div>
                 </div>
               </button>
@@ -787,10 +787,10 @@ function AssetSheet({ token, history, onClose, onOpen }: { token: string; histor
   )
 }
 
-// ── Recent — people I sent money to recently ──────────────────────────────────
+// ── Recent - people I sent money to recently ──────────────────────────────────
 // Clicking a person goes to /send?to=walletAddress (pre-fills recipient in send page)
 // "View all" opens /recent-paid page showing full list
-// Logic lives in src/lib/recentContacts.ts — this is the canonical "Home
+// Logic lives in src/lib/recentContacts.ts - this is the canonical "Home
 // Avatar Recent" behavior that the Send page recent row and the View-all
 // Recent page both reuse, so all three stay in sync.
 function RecentRow({ navigate, compact, resultLimit = 5 }: { navigate: NavigateFunction; compact?: boolean; resultLimit?: number }) {
@@ -809,7 +809,7 @@ function RecentRow({ navigate, compact, resultLimit = 5 }: { navigate: NavigateF
   useEffect(() => {
     if (!walletAddress) return
 
-    // Backfill activity history from messages — run ONCE per wallet per session
+    // Backfill activity history from messages - run ONCE per wallet per session
     const backfillKey = `meshport_backfilled_${walletAddress.toLowerCase()}`
     if (user?.id && !user.id.startsWith('usr_') && !sessionStorage.getItem(backfillKey)) {
       sessionStorage.setItem(backfillKey, '1')
@@ -820,7 +820,7 @@ function RecentRow({ navigate, compact, resultLimit = 5 }: { navigate: NavigateF
 
     const load = async () => {
       try {
-        // resultLimit is desktop-aware (see the call site below) — desktop's
+        // resultLimit is desktop-aware (see the call site below) - desktop's
         // wider card was stretching just 5 avatars across the full row
         // width (each one gets flex:1, so fewer avatars = more empty gap
         // between them), while mobile's narrower width already fills
@@ -928,14 +928,14 @@ function AssetRow({ icon, fallbackColor, fallbackChar, name, sub, cryptoAmount, 
   icon: string; fallbackColor: string; fallbackChar: string;
   name: string; sub: string; cryptoAmount: string; usdValue: string; usdColor: string;
   onClick: () => void; border?: boolean; hidden: boolean;
-  // Desktop-only — real 24h % change from CoinGecko (see fetchPortfolio's
+  // Desktop-only - real 24h % change from CoinGecko (see fetchPortfolio's
   // change-24h fetch). Left undefined on mobile call sites, so nothing new
   // renders there. null means "fetched but unavailable" (never faked).
   changePct?: number | null;
 }) {
   const [imgOk, setImgOk] = useState(true)
   // `changePct !== undefined` is only ever true from desktop call sites (see
-  // the prop comment above), so it doubles as a compact-density flag here —
+  // the prop comment above), so it doubles as a compact-density flag here -
   // avoids a second useMediaQuery hook just for padding/icon size.
   const showChange = changePct !== undefined
   const changeUp = (changePct ?? 0) >= 0
@@ -958,7 +958,7 @@ function AssetRow({ icon, fallbackColor, fallbackChar, name, sub, cryptoAmount, 
       {showChange && (
         <div style={{ minWidth: 64, textAlign: 'right' }}>
           {changePct === null ? (
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>—</span>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>-</span>
           ) : (
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12.5, fontWeight: 600,
@@ -984,9 +984,9 @@ function AssetRow({ icon, fallbackColor, fallbackChar, name, sub, cryptoAmount, 
   )
 }
 
-// ── Sparkline — small inline SVG trend line, no charting dependency ────────────
+// ── Sparkline - small inline SVG trend line, no charting dependency ────────────
 // Fed real bucketed values only (balance trend, insights volume trend, stat
-// mini-charts) — never synthetic. A flat/empty series still renders a flat
+// mini-charts) - never synthetic. A flat/empty series still renders a flat
 // mid-line rather than nothing, so the card never looks broken.
 function Sparkline({ values, color, height = 32, fill = false }: { values: number[]; color: string; height?: number; fill?: boolean }) {
   const w = 100, h = height
@@ -1007,10 +1007,10 @@ function Sparkline({ values, color, height = 32, fill = false }: { values: numbe
   )
 }
 
-// ── Quick Actions — desktop-only card, 8 real routes + Customize→MoreSheet ─────
+// ── Quick Actions - desktop-only card, 8 real routes + Customize→MoreSheet ─────
 // Reuses the exact icon glyphs already drawn for MoreSheet's `actions` list
 // above (same shapes, same routes) rather than inventing a second icon set.
-// Module-level (not per-render) — the full pool of 10 actions a user can
+// Module-level (not per-render) - the full pool of 10 actions a user can
 // choose from when customizing the grid; QuickActionsCard only renders
 // whichever ids are currently selected (see `actionIds` prop), in that order.
 const QUICK_ACTION_POOL_ICON_COLOR = 'var(--text-primary)'
@@ -1076,9 +1076,9 @@ function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: {
   )
 }
 
-// ── Customize Quick Actions — desktop-only sheet, add/remove up to 8 ───────────
+// ── Customize Quick Actions - desktop-only sheet, add/remove up to 8 ───────────
 // Real add/remove, not a static nav list (that's MoreSheet's job, unchanged
-// and untouched by this — mobile's "More" button still opens MoreSheet
+// and untouched by this - mobile's "More" button still opens MoreSheet
 // exactly as before). Selection persists to localStorage so it survives a
 // reload; capped at MAX_QUICK_ACTIONS with an inline warning instead of a
 // silent no-op when the user tries to add a 9th.
@@ -1099,7 +1099,7 @@ function CustomizeQuickActionsSheet({ selectedIds, onToggle, onClose, warning }:
           color: 'var(--warning)', borderRadius: 10, padding: '8px 12px', fontSize: 12.5, fontWeight: 600,
           marginBottom: 14,
         }}>
-          You already have {MAX_QUICK_ACTIONS} actions — remove one to add another.
+          You already have {MAX_QUICK_ACTIONS} actions - remove one to add another.
         </div>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
@@ -1147,7 +1147,7 @@ function CustomizeQuickActionsSheet({ selectedIds, onToggle, onClose, warning }:
   )
 }
 
-// ── Insights sub-cards — desktop-only, all fed real computed numbers ───────────
+// ── Insights sub-cards - desktop-only, all fed real computed numbers ───────────
 function InsightStatCard({ label, value, changePct, sparkValues }: {
   label: string; value: string; changePct: number | null; icon?: React.ReactNode; sparkValues: number[];
 }) {
@@ -1226,7 +1226,7 @@ function PaymentIntelligenceCard({ avgPayment, largestPayment, activeHourLabel, 
   )
 }
 
-// Activity bar chart — Daily/Weekly/Monthly bucket toggle + hover tooltip.
+// Activity bar chart - Daily/Weekly/Monthly bucket toggle + hover tooltip.
 // `buckets` are precomputed by the caller (see bucketActivity/aggregateBuckets
 // below) from real fetched activity records; this component only renders.
 function ActivityChartCard({ buckets, granularity, setGranularity, totalCount, periodLabel }: {
@@ -1236,7 +1236,7 @@ function ActivityChartCard({ buckets, granularity, setGranularity, totalCount, p
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
   const max = Math.max(1, ...buckets.map(b => b.count))
   // Only label a handful of buckets (like the reference's "Aug 1 / Aug 8 /
-  // Aug 15…" spacing) — always shown, regardless of bucket count, rather
+  // Aug 15…" spacing) - always shown, regardless of bucket count, rather
   // than the old "hide entirely past 12 buckets" rule, which is what made
   // Daily-within-a-month/year read as broken (bars with no axis at all).
   const labelStep = Math.max(1, Math.ceil(buckets.length / 6))
@@ -1264,7 +1264,7 @@ function ActivityChartCard({ buckets, granularity, setGranularity, totalCount, p
       {/* overflowX:auto + minWidth:0 on every ancestor up to the grid column
           (see the column wrappers below) is what keeps a large bucket count
           (e.g. Daily within This Year = 365 bars) scrollable INSIDE this
-          card instead of forcing the whole page wider than the viewport —
+          card instead of forcing the whole page wider than the viewport -
           flex/grid items default to min-width:auto, which otherwise lets a
           wide row of un-shrinkable bars blow out every ancestor up to the
           grid track. */}
@@ -1311,10 +1311,10 @@ function ActivityChartCard({ buckets, granularity, setGranularity, totalCount, p
 // seller needs to review and release escrow). Every other P2P event (funds
 // released, cancelled, expired, dispute opened/resolved, refund completed)
 // is purely informational and already covered by the bell/toast (see
-// lib/p2pNotifications.ts) — showing those here too would turn Home into a
+// lib/p2pNotifications.ts) - showing those here too would turn Home into a
 // wall of banners for things the user doesn't need to act on right now.
 const HOME_POPUP_TYPES = new Set(['buy_order_placed', 'sell_order_placed', 'seller_confirmed', 'payment_marked_completed', 'trade_expiring_soon', 'grace_period_ending'])
-// Every P2P notification type that can exist for a trade — used only to
+// Every P2P notification type that can exist for a trade - used only to
 // find each trade's single latest event (see homePopups below); which of
 // those latest events actually renders a card is still governed by
 // HOME_POPUP_TYPES alone.
@@ -1324,17 +1324,17 @@ const P2P_NOTIFICATION_TYPES = new Set([
   'trade_expiring_soon', 'grace_period_ending',
 ])
 
-// ── Order ticker — single auto-rotating line, one order at a time ──────────
+// ── Order ticker - single auto-rotating line, one order at a time ──────────
 // Replaces the earlier stacked-cards + "+N more" modal approach entirely.
 // That version had two real problems reported live: the cards' translucent
 // glass background visually merged with whatever was behind them (no real
 // separation from the page), and the overflow modal's backdrop wasn't
-// opaque enough — the Home screen was still visible through it. Chosen
+// opaque enough - the Home screen was still visible through it. Chosen
 // instead, after walking through several alternatives: a single line that
 // cycles through every pending order automatically, always exactly one
 // line tall regardless of how many orders exist (no capping-at-N, no
 // overflow button, no modal to get the backdrop wrong on). Sits inline in
-// the page's own flow rather than a fixed/portalled overlay — nothing to
+// the page's own flow rather than a fixed/portalled overlay - nothing to
 // cover, so nothing can show through it by construction.
 const TICKER_ROTATE_MS = 3200
 function OrderTicker({ popups, onOpenOrder, onDismissOrder, onViewAll }: {
@@ -1358,7 +1358,7 @@ function OrderTicker({ popups, onOpenOrder, onDismissOrder, onViewAll }: {
   const isReminder = current.type === 'trade_expiring_soon' || current.type === 'grace_period_ending'
   const isWarning = isReminder || current.type === 'payment_marked_completed'
   const accent = isWarning ? 'var(--warning)' : 'var(--success)'
-  // Dots become unwieldy past ~8 — a compact "1/12" counter reads better
+  // Dots become unwieldy past ~8 - a compact "1/12" counter reads better
   // than a row of 12 tiny dots at this width.
   const showDots = popups.length <= 8
 
@@ -1421,7 +1421,7 @@ function OrderTicker({ popups, onOpenOrder, onDismissOrder, onViewAll }: {
           <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
       </div>
-      {/* Ticker only ever shows one at a time — this is how the rest stay
+      {/* Ticker only ever shows one at a time - this is how the rest stay
           reachable without waiting out the rotation. Only shown when
           there's more than one, since "view all 1" is nothing extra. */}
       {popups.length > 1 && (
@@ -1439,10 +1439,10 @@ function OrderTicker({ popups, onOpenOrder, onDismissOrder, onViewAll }: {
   )
 }
 
-// ── "View all" scrollable list — every pending order, not just the one the
+// ── "View all" scrollable list - every pending order, not just the one the
 // ticker currently happens to be showing. Portalled with a genuinely
 // opaque + blurred backdrop (this exact spot had a bug before: a
-// translucent backdrop let the Home screen show through it — fixed here
+// translucent backdrop let the Home screen show through it - fixed here
 // by using a near-opaque scrim, not a light tint).
 function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
   popups: Array<{ id: string; title: string; body: string; type: string; tradeId?: string }>
@@ -1455,7 +1455,7 @@ function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 9998,
-        // Was 0.88 opacity + 14px blur — nearly opaque, so the Home screen
+        // Was 0.88 opacity + 14px blur - nearly opaque, so the Home screen
         // behind it read as flat black rather than a genuine frosted-glass
         // backdrop. Much lower opacity so Home's own content actually shows
         // through (softened/blurred, not hidden), lighter blur per explicit
@@ -1491,10 +1491,10 @@ function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
                 role="button"
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8,
-                  // Was var(--bg) — nearly the same dark shade as the modal's
+                  // Was var(--bg) - nearly the same dark shade as the modal's
                   // own backdrop behind it, so rows had almost no visible
                   // separation from the surrounding blank space. Lighter,
-                  // blurred glass surface instead — same visual language as
+                  // blurred glass surface instead - same visual language as
                   // the ticker itself and GlassPopCard elsewhere in the app.
                   background: 'color-mix(in srgb, var(--text-primary) 6%, var(--surface))',
                   border: '1px solid var(--border)', borderRadius: 12,
@@ -1538,7 +1538,7 @@ function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
   )
 }
 
-// ── Multichain Hub hero card — second slide of the mobile hero carousel ────
+// ── Multichain Hub hero card - second slide of the mobile hero carousel ────
 // Mirrors the Balance hero card's sizing exactly (same parent gives both
 // cards the same width, height:'100%' + the flex row's default align-items:
 // stretch matches this card's height to the Balance card's height too) so
@@ -1546,18 +1546,18 @@ function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
 // cards. Available To Transfer reads the same Arc/USDC `balance`
 // MultichainPage's Transfer card uses; Available To Claim reads the same
 // `unifiedBalance` (readExternalBalances scan) the small Multichain Hub row
-// further down this page already shows — no new data fetching, both
+// further down this page already shows - no new data fetching, both
 // numbers are already live on this page.
 //
 // BUG FIX: the action labels ("Transfer from Arc to Across Chains") were
 // wrapping into 3-4 lines on a narrow column instead of the intended 2,
 // which made this card's natural content height taller than the Balance
-// card's — and since the carousel row stretches both slides to the taller
+// card's - and since the carousel row stretches both slides to the taller
 // one, that left a visible dead-space gap under the (shorter) Balance
 // card. Fixed two ways: every size in this card was shrunk to a much more
 // compact scale that comfortably fits the same footprint as the Balance
 // card, AND each action line now has `whiteSpace:'nowrap'` with an
-// ellipsis fallback — so a line can never silently wrap to a 3rd line and
+// ellipsis fallback - so a line can never silently wrap to a 3rd line and
 // blow the card's height out again, even on an unusually narrow screen.
 // Card outline: all four edges straight; only the corners curve, with a
 // smooth (iOS-style) 20px corner. Drawn as a path in the box's own pixel
@@ -1581,7 +1581,7 @@ const FALLBACK_CARD_PATH = cardPath(100, 100, 6)
 // drop-shadow`) is kept on a SEPARATE element from the glass sheen
 // (which carries `clip-path`) and from the text content (no clip-path
 // at all). Putting clip-path and filter on the SAME element broke in
-// Chrome — it miscalculates the filter's bounding box against a path
+// Chrome - it miscalculates the filter's bounding box against a path
 // that has negative/out-of-box coordinates (which is what makes the
 // edges bow outward) and tears a visible gap right at the corners.
 // That was cutting into the "Available Balance" label and leaving a
@@ -1620,7 +1620,7 @@ function BowedShapeCard({
           after a reload or bfcache restore. */}
       <svg viewBox={size ? `0 0 ${size.w} ${size.h}` : '0 0 100 100'} preserveAspectRatio="none"
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block', overflow: 'visible' }}>
-        {/* Flat fill: the shape alone gives the card its depth — no shading, no shadow. */}
+        {/* Flat fill: the shape alone gives the card its depth - no shading, no shadow. */}
         <path d={path || fallbackPath} fill={background} />
       </svg>
       <div style={{ position: 'relative', zIndex: 1, padding: '16px 26px 16px', boxSizing: 'border-box',
@@ -1650,10 +1650,10 @@ function MultichainHubCard({
   // on the first tap). onClick stays as a fallback for mouse/keyboard, de-duplicated.
   const hubTapStart = useRef<{ x: number; y: number } | null>(null)
   const hubTapFired = useRef(false)
-  // Auto-shrink each stat figure independently by its own whole-digit count —
+  // Auto-shrink each stat figure independently by its own whole-digit count -
   // same tiering approach as the Balance hero card's amountFontSize, just
   // starting from this card's own 21px base (scaled down 20% from the
-  // previous 26px per explicit request — see the 20%-across-the-board note
+  // previous 26px per explicit request - see the 20%-across-the-board note
   // below) and stepping down a tier earlier (5 digits already), since each
   // figure only has half the card's width to live in (two side-by-side
   // columns) rather than the full card.
@@ -1673,18 +1673,18 @@ function MultichainHubCard({
   }
   const transferFontSize = statFontSize(arcAvailable)
   const claimFontSize = statFontSize(claimAvailable)
-  // Safety net kept regardless of card size — a line can never silently
+  // Safety net kept regardless of card size - a line can never silently
   // wrap into a 3rd/4th line and inflate the card's height; it just
   // truncates with "…" if it doesn't fit.
   const ellipsisLine: CSSProperties = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
   // Every size below (padding, fonts, icons, gaps) is exactly 20% smaller
-  // than the previous pass — the outer card's own footprint is NOT
+  // than the previous pass - the outer card's own footprint is NOT
   // touched (it's still governed entirely by the parent slide's width +
-  // heroCardHeight, unchanged) — only what's INSIDE it got smaller, so
+  // heroCardHeight, unchanged) - only what's INSIDE it got smaller, so
   // it fits within the same fixed height without clipping the actions row.
   return (
     <BowedShapeCard background="var(--brand)" fill>
-      {/* Header — label + eye toggle on the left, circular accent badge
+      {/* Header - label + eye toggle on the left, circular accent badge
           on the right (replaces the old centered title + translucent
           globe badge, per the approved reference layout). */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
@@ -1718,7 +1718,7 @@ function MultichainHubCard({
         </span>
       </div>
 
-      {/* Stat row — Available To Transfer / Available To Bring, sitting
+      {/* Stat row - Available To Transfer / Available To Bring, sitting
           directly on the card (no separate white pill), each figure
           still shrinking independently via statFontSize() above. */}
       <div style={{ display: 'flex', gap: 10 }}>
@@ -1740,7 +1740,7 @@ function MultichainHubCard({
         </div>
       </div>
 
-      {/* Bottom row — single action, right-aligned like "View
+      {/* Bottom row - single action, right-aligned like "View
           Transactions" on the Balance card's bottom row. */}
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         {/* Invisible touch area: padding makes the tap target ~44px tall,
@@ -1764,31 +1764,31 @@ function MultichainHubCard({
   )
 }
 
-// ── Available Balance hero card — extracted so it can be rendered in
+// ── Available Balance hero card - extracted so it can be rendered in
 // whichever of the carousel's 3 slots (left ghost / center / right ghost)
 // currently needs it, without duplicating this JSX three times inline. See
 // the hero carousel render below for how the 3 slots work. `cardRef` is
-// optional — only the instance used for height measurement passes one.
-// ── Animated balance text — isolates the count-up animation's re-renders ───
+// optional - only the instance used for height measurement passes one.
+// ── Animated balance text - isolates the count-up animation's re-renders ───
 // The count-up animation used to live as state directly on HomePage itself
 // (`useState` + a Framer `animate(...)` calling `setDisplayedBalance` on
 // EVERY animation frame). Since that state lived on the top-level HomePage
 // component, every single frame of that ~0.6s animation re-rendered the
-// ENTIRE HomePage tree — including all THREE hero-carousel card instances
+// ENTIRE HomePage tree - including all THREE hero-carousel card instances
 // (center + both real-content ghosts), each redoing its digit-count font
 // math and ellipsis calculations. If that animation happened to fire while
 // the user was mid-swipe (e.g. from a routine balance-polling tick), you'd
 // get React's per-frame re-render fighting Framer's per-frame drag update
-// on the same frame budget — a very plausible source of "flicker" that's
+// on the same frame budget - a very plausible source of "flicker" that's
 // really render-thrashing, not a paint/CSS bug (which is what every
 // previous fix targeted). Moving this state into its OWN small component
-// means each `setDisplayed` call only re-renders THIS tiny subtree — not
-// HomePage, not the hero carousel three levels away — regardless of how
+// means each `setDisplayed` call only re-renders THIS tiny subtree - not
+// HomePage, not the hero carousel three levels away - regardless of how
 // many times this component is mounted (all 3 hero slots can each run
 // their own independent copy of this animation safely).
 // Coming back to Home: start from the number shown last time, and let the
 // first moments' recalculation (prices / balances arriving) settle without
-// counting up — the count-up used to replay on every return. Only a real
+// counting up - the count-up used to replay on every return. Only a real
 // change while Home is open counts up.
 let lastShownBalance: number | null = null
 const SETTLE_MS = 1500
@@ -1824,9 +1824,9 @@ function AvailableBalanceCard({
 }) {
   return (
     <BowedShapeCard background="var(--brand)" cardRef={cardRef}>
-      {/* Header — label + eye toggle on the left, circular accent badge
+      {/* Header - label + eye toggle on the left, circular accent badge
           (wallet glyph) on the right, per the approved reference
-          layout — replaces the old centered title. */}
+          layout - replaces the old centered title. */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 500, letterSpacing: '0.2px', color: 'rgba(255,255,255,0.85)' }}>
           Available Balance
@@ -1861,11 +1861,11 @@ function AvailableBalanceCard({
       <AnimatedBalanceText target={portfolioTotal}>
         {(displayedBalance) => {
           // Auto-shrink the balance figure so large amounts (6+ digits)
-          // stay inside the card — normal balances (up to 5 digits
+          // stay inside the card - normal balances (up to 5 digits
           // before the decimal) keep the original size untouched.
           // fmt() adds thousand-separator commas (e.g. "1,420") for the
           // asset-history table elsewhere in this file, where that reads
-          // naturally — but this hero figure is meant to show the plain
+          // naturally - but this hero figure is meant to show the plain
           // number, so strip the commas back out here specifically rather
           // than changing fmt() itself and affecting every other caller.
           const formattedBalance = fmt(displayedBalance).replace(/,/g, '')
@@ -1875,7 +1875,7 @@ function AvailableBalanceCard({
           const subFontSize = Math.round(amountFontSize * 0.6)
           // BUG FIX: fmt() already trims a whole-number balance down to
           // "1,420" (no decimal point at all, see trimTrailingZeros in
-          // lib/utils.ts) — but this split-into-two-spans layout always
+          // lib/utils.ts) - but this split-into-two-spans layout always
           // rendered a literal "." before the decimal-part span regardless
           // of whether one actually existed. React renders {undefined} as
           // nothing, so that hardcoded "." was the ONLY thing left behind:
@@ -1907,7 +1907,7 @@ function AvailableBalanceCard({
         }}
       </AnimatedBalanceText>
 
-      {/* Bottom row — address (with copy) on the left, View
+      {/* Bottom row - address (with copy) on the left, View
           Transactions on the right, replacing the old centered
           address row + separate white pill. */}
       {/* Both sides stay on one line on narrow phones (320–360px): the
@@ -1931,22 +1931,22 @@ function AvailableBalanceCard({
   )
 }
 
-// ── Mobile Hero Carousel — Balance card / Multichain Hub card, swipeable ───
+// ── Mobile Hero Carousel - Balance card / Multichain Hub card, swipeable ───
 // BUG FIX (swipe required twice + visible flicker): this carousel's state
 // (heroCardIndex, heroRowX, the drag handlers) used to live directly on
-// HomePage itself. Every single swipe calls revealHeroSide(), which — for
-// good reason (see that function's own comment) — wraps its index flip in
+// HomePage itself. Every single swipe calls revealHeroSide(), which - for
+// good reason (see that function's own comment) - wraps its index flip in
 // flushSync() to force an IMMEDIATE, synchronous re-render. flushSync
-// doesn't just re-render the two small cards here — it forced React to
+// doesn't just re-render the two small cards here - it forced React to
 // synchronously re-render the ENTIRE HomePage tree (Assets list, Recent
 // Activity, the Insights column's charts, every search/notification bit
 // of state) in the middle of the touch-release event handler, every time.
 // That is a large, expensive render to force synchronously at exactly the
-// moment a smooth spring animation needs to start — a dropped frame right
+// moment a smooth spring animation needs to start - a dropped frame right
 // there reads as "the swipe did nothing" (so the next instinct is to swipe
 // again), and the delayed render finally landing a beat later is the
-// flicker. Moving this whole carousel — state, refs, drag handlers, and
-// the two cards — into its own small component means flushSync's forced
+// flicker. Moving this whole carousel - state, refs, drag handlers, and
+// the two cards - into its own small component means flushSync's forced
 // render only ever touches this tiny subtree, never HomePage's, regardless
 // of how large the rest of the page's state graph is. Same category of
 // isolation fix as AnimatedBalanceText above, applied to the other place
@@ -1968,21 +1968,21 @@ function MobileHeroCarousel({
   claimLoading: boolean
   scanChain: string | null
 }) {
-  // ── Hero carousel — Balance card / Multichain Hub card ─────────────────
-  // The peek edges are REAL card content, not a decorative hint — the
+  // ── Hero carousel - Balance card / Multichain Hub card ─────────────────
+  // The peek edges are REAL card content, not a decorative hint - the
   // viewport (heroCarouselRef, overflow:hidden) contains ONE flex row of 5
-  // children laid out contiguously — [leftGhost][gap][center][gap]
-  // [rightGhost] — and dragging the row's x directly is what makes the
+  // children laid out contiguously - [leftGhost][gap][center][gap]
+  // [rightGhost] - and dragging the row's x directly is what makes the
   // ghost slivers grow/shrink live under your finger. Left/right ghost
   // always show "the other" card (only 2 cards total), so whichever
   // direction you drag, the correctly-sized real card content is right
-  // there to be pulled into center — nothing pops in from off-screen.
+  // there to be pulled into center - nothing pops in from off-screen.
   // `CARD_W` is each slot's width, `HERO_REST_X` is the row's resting
   // translateX that centers the `center` slot with exactly PEEK px of each
   // ghost visible on either side (see the geometry comment at the render).
   // Dragging past ~15% of CARD_W animates the row the REST of the way to
   // the next full-reveal position, then relabels which card is "center"
-  // and resets the row's x back to HERO_REST_X in the same frame — the
+  // and resets the row's x back to HERO_REST_X in the same frame - the
   // just-arrived-at position and the fresh rest position are, by
   // construction, pixel-identical (the "infinite 2-item loop" trick), so
   // nothing visibly jumps.
@@ -1998,7 +1998,7 @@ function MobileHeroCarousel({
   }, [])
   // PEEK = width of each ghost's visible sliver at rest; PEEK_GAP = blank
   // space between that sliver and the centered card, so the two never
-  // touch. These cost the card nothing — the outer wrapper (see the
+  // touch. These cost the card nothing - the outer wrapper (see the
   // render) adds this same amount of EXTRA width on top of the page's
   // normal 89.39% card width instead of subtracting it.
   const PEEK = 5
@@ -2007,7 +2007,7 @@ function MobileHeroCarousel({
   const HERO_REST_X = PEEK - CARD_W
   const heroRowX = useMotionValue(HERO_REST_X)
   // Tracks whether the user currently has a finger on the row, or a
-  // reveal/snap-back animation is actively playing — guards the effect
+  // reveal/snap-back animation is actively playing - guards the effect
   // below so an unrelated background re-render (e.g. a balance-polling
   // tick, which recomputes HERO_REST_X fresh every render) can't snap the
   // row's position out from under an active gesture or animation.
@@ -2019,8 +2019,8 @@ function MobileHeroCarousel({
   }, [HERO_REST_X])
   // Both cards render at this EXACT same fixed height, measured off
   // whichever instance of the Balance card is currently in the DOM (it's
-  // always present somewhere — as `center` when heroCardIndex is 0, or as
-  // both ghosts when heroCardIndex is 1 — and every slot shares the same
+  // always present somewhere - as `center` when heroCardIndex is 0, or as
+  // both ghosts when heroCardIndex is 1 - and every slot shares the same
   // CARD_W width, so its rendered height is the same regardless of which
   // slot it's in).
   const balanceCardRef = useRef<HTMLDivElement>(null)
@@ -2038,28 +2038,28 @@ function MobileHeroCarousel({
   }, [heroCardIndex, heroCardWidth])
   // Animates the row all the way to a full reveal of one ghost, THEN
   // relabels which card is "center" and resets x to the fresh rest
-  // position — both in the same instant. NOTE: this does NOT guard
-  // against being called while heroGestureActive is already true —
+  // position - both in the same instant. NOTE: this does NOT guard
+  // against being called while heroGestureActive is already true -
   // onDragEnd always calls this AFTER onDragStart has already set that
   // flag, so guarding here would make it silently never fire after a real
   // drag. Callers that aren't a drag release (peek taps, dot buttons)
   // check the flag themselves before calling this.
   // BUG FIX (sustained ~250-300ms missing edge, confirmed via frame-by-frame
-  // video analysis — not a paint/GPU glitch, a real structural gap): the
+  // video analysis - not a paint/GPU glitch, a real structural gap): the
   // index used to flip only in `onComplete`, at the very END of the settle
   // animation. But for the ENTIRE animation before that, the row's 3 DOM
-  // slots were still labeled with the OLD (pre-flip) assignment — and under
+  // slots were still labeled with the OLD (pre-flip) assignment - and under
   // the old labels, the content destined to become "the far-side ghost"
   // after the flip doesn't exist at that position yet (it's still busy
   // being the thing sliding INTO center). So there is genuinely nothing
-  // assigned to that edge for the whole tail of the animation — not a
-  // rendering delay, an actual absence — until the flip finally happens and
+  // assigned to that edge for the whole tail of the animation - not a
+  // rendering delay, an actual absence - until the flip finally happens and
   // relabels it. Fixed by flipping the index IMMEDIATELY (the moment a
   // swipe or tap decides its outcome), then re-basing the row's `x` by
   // exactly one reveal-offset so the CURRENT on-screen position is
   // unchanged under the new labeling (this is the same "infinite 2-item
   // loop" pixel-identity trick as before, just applied at the START of the
-  // settle instead of the end) — every frame of the settle animation now
+  // settle instead of the end) - every frame of the settle animation now
   // renders with the CORRECT final labels from the very first frame, so
   // there's never a gap where an edge has nothing assigned to it.
   const revealHeroSide = (side: 'left' | 'right') => {
@@ -2071,7 +2071,7 @@ function MobileHeroCarousel({
     const currentX = heroRowX.get()
     // `setHeroCardIndex` (React state, re-renders which card is in which
     // slot) and `heroRowX.set(...)` (a Framer Motion value, applied outside
-    // React's render cycle) have no ordering guarantee otherwise — React 18
+    // React's render cycle) have no ordering guarantee otherwise - React 18
     // can defer the actual DOM commit, so for one frame the position could
     // update before the DOM reflects the new card assignment. flushSync
     // forces the index flip to commit immediately, so both land in the
@@ -2097,10 +2097,10 @@ function MobileHeroCarousel({
 
   return (
     <div style={{ width: `calc(95% + ${2 * (PEEK + PEEK_GAP)}px)`, margin: '0 auto' }}>
-      {/* ── HERO ROW — the outer wrapper is `89.39% + 2×(PEEK+PEEK_GAP)`
+      {/* ── HERO ROW - the outer wrapper is `89.39% + 2×(PEEK+PEEK_GAP)`
            wide (89.39% = the page's normal 95% card width × 0.97 × 0.97,
            two explicit 3%-narrower requests), PLUS extra room on top
-           specifically to fit the peeks — so the center card itself ends
+           specifically to fit the peeks - so the center card itself ends
            up exactly the page's normal card width, not narrower still
            from the peek math on top of that. The viewport here is 100%
            of that (already-widened) wrapper, overflow:hidden, and the
@@ -2110,11 +2110,11 @@ function MobileHeroCarousel({
            [rightGhost: CARD_W] contiguously; translating the row by
            HERO_REST_X puts center's left edge at exactly PEEK px from
            the viewport's left edge (and its right edge at PEEK px from
-           the viewport's right edge, by symmetry) — leaving exactly PEEK
+           the viewport's right edge, by symmetry) - leaving exactly PEEK
            px of each ghost visible and a PEEK_GAP-wide blank strip
            between each ghost and center. Both ghosts always render "the
            other" card (only 2 cards exist), so whichever way you drag,
-           real content — not a placeholder — is what grows into view. ── */}
+           real content - not a placeholder - is what grows into view. ── */}
       <div ref={heroCarouselRef} style={{ width: '100%', overflow: 'hidden', position: 'relative' }}>
         <motion.div
           drag="x"
@@ -2128,16 +2128,16 @@ function MobileHeroCarousel({
             // rounded corners + overflow:hidden clipping on an element
             // being transformed every frame is a known mobile-Chrome
             // repaint glitch. `z: 0` (a Framer Motion style prop, not raw
-            // CSS) rather than a manual `transform: translateZ(0)` —
+            // CSS) rather than a manual `transform: translateZ(0)` -
             // Framer computes the actual `transform` CSS property itself
             // from x/y/z, so setting `z` through it (instead of fighting
             // it with a raw transform) is what actually promotes this to
-            // its own layer. NOTE: this GPU hint stays on the ROW only —
+            // its own layer. NOTE: this GPU hint stays on the ROW only -
             // a previous attempt to ALSO give the individual slot divs
             // their own static `transform` caused a worse bug (one edge
             // going completely missing after a swipe, a known Chrome
             // repaint-invalidation issue when a child has a static
-            // transform inside a parent whose transform is animated) —
+            // transform inside a parent whose transform is animated) -
             // do not add per-slot transforms again.
             z: 0,
             willChange: 'transform',
@@ -2151,20 +2151,20 @@ function MobileHeroCarousel({
             else snapHeroBack()
           }}
         >
-          {/* ── LEFT GHOST — shows "the other" card, only its rightmost
+          {/* ── LEFT GHOST - shows "the other" card, only its rightmost
                PEEK px actually visible (clipped by the viewport). Tap to
                pull it fully into center (same as dragging it there).
                BUG FIX (blink right as a swipe settles): this used to
                conditionally render EITHER <MultichainHubCard/> OR
-               <AvailableBalanceCard/> based on heroCardIndex — a
+               <AvailableBalanceCard/> based on heroCardIndex - a
                different COMPONENT TYPE at the same JSX position forces
                React to fully unmount one and mount the other the instant
                the index flips. That's a genuine DOM tear-down/rebuild at
                all 3 slots simultaneously on every single swipe, not just
-               a style update — very plausibly the "blink" right as the
+               a style update - very plausibly the "blink" right as the
                card takes its new position. Fixed by keeping BOTH card
                types permanently mounted in every slot and only toggling
-               which one is visible via plain CSS `display` — the JSX
+               which one is visible via plain CSS `display` - the JSX
                position of each component type is now fixed, so a flip
                never unmounts or remounts anything, just hides/shows. ── */}
           <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('left') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, display: 'grid', gridTemplateColumns: '100%', gridTemplateRows: heroCardHeight ? `${heroCardHeight}px` : undefined, cursor: 'pointer' }}>
@@ -2183,7 +2183,7 @@ function MobileHeroCarousel({
             </div>
           </div>
           <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
-          {/* ── CENTER — the fully visible, currently-active card. Same
+          {/* ── CENTER - the fully visible, currently-active card. Same
                both-types-always-mounted fix as the ghosts above. ────── */}
           <div style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, display: 'grid', gridTemplateColumns: '100%', gridTemplateRows: heroCardHeight ? `${heroCardHeight}px` : undefined }}>
             <div style={{ gridArea: '1 / 1', alignSelf: 'center', minWidth: 0, visibility: heroCardIndex === 0 ? 'visible' : 'hidden' }}>
@@ -2201,7 +2201,7 @@ function MobileHeroCarousel({
             </div>
           </div>
           <div style={{ width: PEEK_GAP, flexShrink: 0 }} />
-          {/* ── RIGHT GHOST — mirror of the left ghost. ──────────────── */}
+          {/* ── RIGHT GHOST - mirror of the left ghost. ──────────────── */}
           <div onClick={() => { if (!heroGestureActive.current) revealHeroSide('right') }} style={{ width: CARD_W, height: heroCardHeight ?? undefined, flexShrink: 0, display: 'grid', gridTemplateColumns: '100%', gridTemplateRows: heroCardHeight ? `${heroCardHeight}px` : undefined, cursor: 'pointer' }}>
             <div style={{ gridArea: '1 / 1', alignSelf: 'stretch', minWidth: 0, minHeight: 0, visibility: heroCardIndex === 0 ? 'visible' : 'hidden' }}>
               <MultichainHubCard
@@ -2219,7 +2219,7 @@ function MobileHeroCarousel({
         </motion.div>
       </div>
 
-      {/* ── Dot indicators — tap either to jump slides. ─────────────────── */}
+      {/* ── Dot indicators - tap either to jump slides. ─────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
         {[0, 1].map(i => (
           <button key={i} aria-label={i === 0 ? 'Show balance card' : 'Show multichain hub card'}
@@ -2296,7 +2296,7 @@ function FeatureBanner({ height, onOpen }: { height: number; onOpen: (path: stri
       <div aria-hidden style={{ position: 'absolute', right: -28, top: -34, width: 120, height: 120, borderRadius: '50%', border: '14px solid rgba(255,255,255,0.07)' }} />
       <div aria-hidden style={{ position: 'absolute', right: 44, bottom: -46, width: 70, height: 70, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
 
-      {/* Slides in only when the banner changes — not when Home first opens. */}
+      {/* Slides in only when the banner changes - not when Home first opens. */}
       <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, animation: bannerMoved.current ? 'mpBannerIn 0.35s ease' : undefined }}>
         <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <BannerIcon kind={b.icon} />
@@ -2319,7 +2319,7 @@ function FeatureBanner({ height, onOpen }: { height: number; onOpen: (path: stri
 }
 
 // Last EURC/cirBTC amounts per wallet, for instant first paint (USDC's lives
-// in the wallet store). Testnet balances only — nothing sensitive.
+// in the wallet store). Testnet balances only - nothing sensitive.
 type AssetSlot = { eurc: number; cirbtc: number }
 const assetSlotKey = (addr: string | null) => addr ? `meshport_assets_${addr.toLowerCase()}` : null
 function loadAssetSlot(addr: string | null): AssetSlot {
@@ -2349,12 +2349,12 @@ export function HomePage() {
   const { showToastMessage } = useUIStore()
   const [handleCopied, setHandleCopied] = useState(false)
 
-  // Newest-first, capped at 3, and DEDUPED PER TRADE — "new order placed"
+  // Newest-first, capped at 3, and DEDUPED PER TRADE - "new order placed"
   // and "payment marked sent" are two stages of the same underlying order,
   // not two separate things, so once the newer one arrives for a trade the
   // older one for that same trade is superseded and should stop showing,
   // not stack up alongside it. Recomputes automatically as notifications
-  // arrive via Realtime (this is what makes the swap feel instant — no
+  // arrive via Realtime (this is what makes the swap feel instant - no
   // polling, just reacting to the same live `notifications` array the
   // bell/toast already use) or get dismissed/marked read.
   //
@@ -2362,7 +2362,7 @@ export function HomePage() {
   // notifications only, so the "latest per trade" comparison could never
   // see a same-trade notification of a non-popup type. If the user kept a
   // trade's own page open and finished it there (seller releasing escrow
-  // fires 'funds_released' — informational, not a popup type on its own),
+  // fires 'funds_released' - informational, not a popup type on its own),
   // that later event was invisible to this comparison and the older
   // 'payment_marked_completed' card stayed stuck on Home showing a stage
   // the trade had already moved past, with no way for it to update or
@@ -2374,15 +2374,15 @@ export function HomePage() {
   // showing exactly as before; one whose latest event is funds_released,
   // cancelled, expired, disputed, or refunded has moved past the stage
   // this card was for, so the card now auto-hides instead of going stale.
-  // Terminal trade statuses — once a trade reaches one of these there's
+  // Terminal trade statuses - once a trade reaches one of these there's
   // nothing left to act on, so any Home card still referencing it should
   // disappear regardless of what the notification stream says.
   const P2P_TERMINAL_STATUSES = useMemo(() => new Set(['released', 'completed', 'cancelled', 'expired']), [])
 
-  // ── Ongoing P2P trades count — drives the red dot/badge indicators ─────
+  // ── Ongoing P2P trades count - drives the red dot/badge indicators ─────
   // BUG FIX (2026-09-22): this used to be its own independent fetch+
   // subscribe effect, duplicated in two other components too (P2PPage,
-  // DesktopSidebar) — see useP2PTradesCountStore's own comment in
+  // DesktopSidebar) - see useP2PTradesCountStore's own comment in
   // store/index.ts for the crash this caused on desktop (a Realtime
   // channel name collision, since subscribeToMyTrades's channel names are
   // fixed per userId, not unique per caller). Now just reads the shared
@@ -2392,13 +2392,13 @@ export function HomePage() {
 
   // ── Live trade-status check for Home popup cards ───────────────────────
   // BUG FIX: the notification-based dedup above only hides a card once a
-  // LATER notification for that trade arrives — but the person who takes
+  // LATER notification for that trade arrives - but the person who takes
   // the completing action (e.g. the seller releasing escrow) never gets a
   // notification about their own action; only the counterparty does
   // ('funds_released' is written for the buyer, not the seller). So from
   // the seller's own notification list, 'payment_marked_completed' is
   // still the latest event for that trade even seconds after they've
-  // already released it — the card had no way to know. Fixed by directly
+  // already released it - the card had no way to know. Fixed by directly
   // tracking each referenced trade's real status (one-off fetch on load +
   // live via Realtime, so this also self-corrects if the trade completes
   // in another tab/device while this one sits open) and hiding a card the
@@ -2419,7 +2419,7 @@ export function HomePage() {
     })
     return () => { cancelled = true }
     // Deliberately keyed on the ids themselves (via the memo above), not on
-    // `notifications` directly — refetching every time any unrelated
+    // `notifications` directly - refetching every time any unrelated
     // notification changes would be wasteful; this only needs to run again
     // when the SET of trades being tracked actually changes.
   }, [p2pNotificationTradeIds.join(',')])
@@ -2441,7 +2441,7 @@ export function HomePage() {
 
   const allP2PPopups = useMemo(() => {
     const latestPerTrade = new Map<string, typeof notifications[number]>()
-    const untracked: typeof notifications = [] // no tradeId to key on — shouldn't happen for these types, but shown as-is rather than silently dropped
+    const untracked: typeof notifications = [] // no tradeId to key on - shouldn't happen for these types, but shown as-is rather than silently dropped
     for (const n of notifications) {
       if (!P2P_NOTIFICATION_TYPES.has(n.type as string)) continue
       if (n.tradeId && P2P_TERMINAL_STATUSES.has(tradeStatusById[n.tradeId])) continue
@@ -2454,7 +2454,7 @@ export function HomePage() {
     const tracked = [...latestPerTrade.values()].filter(n => !n.isRead && HOME_POPUP_TYPES.has(n.type as string))
     return [...tracked, ...untracked].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
   }, [notifications, tradeStatusById, P2P_TERMINAL_STATUSES])
-  // Ticker cycles through allP2PPopups directly and shows one at a time —
+  // Ticker cycles through allP2PPopups directly and shows one at a time -
   // showAllOrders opens the full scrollable list on demand (the "View all"
   // link inside OrderTicker), since the ticker alone can't show more than
   // one without waiting out the rotation.
@@ -2487,14 +2487,14 @@ export function HomePage() {
   const unifiedLoadingRef = useRef(true)
   // The chain the first scan is checking right now (its logo sits in the spinner).
   const scanChain = useScanningChain(walletAddress, unifiedLoading)
-  // Desktop Assets table's real 24h % change column — fetched alongside the
+  // Desktop Assets table's real 24h % change column - fetched alongside the
   // BTC price below. `null` per-token means "fetched, unavailable from any
-  // source" (renders a "—", never a fabricated number); starts `undefined`
-  // (not fetched yet) so mobile — which never triggers this fetch — simply
+  // source" (renders a "-", never a fabricated number); starts `undefined`
+  // (not fetched yet) so mobile - which never triggers this fetch - simply
   // never sets it, and AssetRow's `changePct` prop stays unpassed there.
   const [assetChange24h, setAssetChange24h] = useState<{ USDC: number | null; EURC: number | null; cirBTC: number | null }>({ USDC: null, EURC: null, cirBTC: null })
 
-  // Refreshes whichever balance actually changed — previously every
+  // Refreshes whichever balance actually changed - previously every
   // payment-received handler unconditionally called getUSDCBalance()
   // regardless of what token was actually involved, so an EURC or cirBTC
   // payment would show up correctly in Activity but the displayed wallet
@@ -2505,16 +2505,16 @@ export function HomePage() {
   // This is called from every realtime activity/message handler below,
   // including the general activity subscription that now fires for
   // EXTERNAL deposits too (deposit-scan-all's recordExternalReceive is a
-  // plain `activity` insert — no different from any other). A single
+  // plain `activity` insert - no different from any other). A single
   // deposit-scan-all sweep pass can record several rows in quick succession
   // (e.g. two deposits landing close together, or a burst on reconnect), and
-  // Realtime delivers each as its own event — without coalescing, that's one
+  // Realtime delivers each as its own event - without coalescing, that's one
   // RPC balance call per row instead of one per burst. Calls are batched by
   // token symbol behind a short timer instead of firing immediately: any
   // calls arriving within BALANCE_REFRESH_DEBOUNCE_MS of the first one join
   // the same pending batch, and exactly one balance fetch per distinct token
   // fires when the timer elapses. The scheduled 30s/60s poll in the
-  // useEffect below this keeps working as the fallback — this only adds an
+  // useEffect below this keeps working as the fallback - this only adds an
   // immediate, coalesced refresh on top of it. Both paths now share the
   // same cache/dedup coordinator (BlockchainManager), so if the two land
   // close together they collapse into a single Arc RPC call rather than
@@ -2526,13 +2526,13 @@ export function HomePage() {
   const refreshBalanceForToken = (token?: string | null) => {
     const t = (token || 'USDC').toUpperCase()
     pendingRefreshTokensRef.current.add(t)
-    if (refreshDebounceTimerRef.current) return // a flush is already scheduled — just joined its batch
+    if (refreshDebounceTimerRef.current) return // a flush is already scheduled - just joined its batch
     refreshDebounceTimerRef.current = setTimeout(() => {
       const tokens = [...pendingRefreshTokensRef.current]
       pendingRefreshTokensRef.current.clear()
       refreshDebounceTimerRef.current = null
       // Routed through BlockchainManager instead of calling arcService's
-      // getters directly — if the scheduled poll (see "Live balance polling"
+      // getters directly - if the scheduled poll (see "Live balance polling"
       // effect below) already fetched this exact token within the last few
       // seconds, this reuses that value instead of firing a second Arc RPC
       // call for the same data. Same coordination the previous
@@ -2581,25 +2581,25 @@ export function HomePage() {
 
   // ── Home header search: People + Services ──────────────────────────────────
   // Two different matching rules, merged:
-  //  - Saved contacts: partial match (e.g. "sub" finds "Suvarna") — you
+  //  - Saved contacts: partial match (e.g. "sub" finds "Suvarna") - you
   //    already know them, so a few letters is enough.
   //  - Anyone NOT already a saved contact: only ever surfaces once the full
-  //    "username.arc" handle is typed (via searchUsersDb) — typing a few
+  //    "username.arc" handle is typed (via searchUsersDb) - typing a few
   //    letters of a stranger's name should never reveal them.
   const [searchOpen, setSearchOpen] = useState(false)
   // Desktop already gets a search box, notification bell and profile
-  // button in DesktopHeader (persistent app-wide chrome) — Home's own
+  // button in DesktopHeader (persistent app-wide chrome) - Home's own
   // identity/search/bell header block below would just duplicate them,
   // so it's skipped on desktop entirely. DesktopHeader now owns its own
   // live search dropdown directly (see DesktopHeader.tsx) rather than
-  // routing here — this block's `?search=1` hook-in stays only as a
+  // routing here - this block's `?search=1` hook-in stays only as a
   // harmless legacy entry point (nothing links to it anymore) and as
   // mobile's own search trigger below, which sets `searchOpen` directly.
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchParams, setSearchParams] = useSearchParams()
   useEffect(() => {
-    // Deliberately watches `searchParams` (not mount-only `[]`) — clicking
+    // Deliberately watches `searchParams` (not mount-only `[]`) - clicking
     // DesktopHeader's search button while already on Home navigates to the
     // same route with just the query string changed, which doesn't remount
     // this component. A mount-only effect would only ever catch the very
@@ -2620,7 +2620,7 @@ export function HomePage() {
   const isMerchantSearch = useMerchant().isMerchant
   const searchServices = filterServices(searchQuery, isMerchantSearch)
 
-  // Fetch known people once, lazily, the first time search is opened —
+  // Fetch known people once, lazily, the first time search is opened -
   // merges explicit saved contacts with people from recent send/receive
   // activity (same source Recent already uses), since nothing in the app
   // previously ever wrote to the contacts table, making it effectively
@@ -2713,7 +2713,7 @@ export function HomePage() {
       if (error || !convId) return
       // Warm the chat header cache with what's already on hand right here
       // (this exact user object is what's rendering the search result row
-      // being tapped) — keyed by the real conversation id, matching
+      // being tapped) - keyed by the real conversation id, matching
       // exactly what ChatConversationPage looks up for a non-"new_" route.
       // Without this, the conversation screen has nothing cached to show
       // on this specific entry point and the avatar/name still pop in
@@ -2745,33 +2745,33 @@ export function HomePage() {
   const portfolioTotal = balance + eurcBalance * 1.08 + cirBtcBalance * btcPrice
 
   // Animated count-up for the balance display now lives in its own small
-  // `AnimatedBalanceText` component (see above), not as state here — see
+  // `AnimatedBalanceText` component (see above), not as state here - see
   // that component's comment for why: this used to be `useState` directly
   // on HomePage, so every frame of the count-up re-rendered the entire
   // HomePage tree (all 3 hero-carousel card instances included), which is
-  // a very plausible source of "flicker" that's really render-thrashing —
+  // a very plausible source of "flicker" that's really render-thrashing -
   // React's per-frame re-render fighting Framer's per-frame drag update on
   // the same frame budget if the animation happened to fire mid-swipe.
 
   const [assetSheet,   setAssetSheet]   = useState<'USDC'|'EURC'|'cirBTC'|null>(null)
-  // Desktop's Recent Activity panel — tapping a row used to navigate away to
+  // Desktop's Recent Activity panel - tapping a row used to navigate away to
   // /activity entirely (same as "View all"), so there was no way to see a
   // single transaction's detail without leaving Home. Reuses ActivityPage's
   // own DetailSheet popup instead, same as tapping a row on the Activity
-  // page itself does — "View all" still correctly navigates to /activity.
+  // page itself does - "View all" still correctly navigates to /activity.
   const [selectedActivity, setSelectedActivity] = useState<ActivityRecord | null>(null)
   // Home's real scroll container (below) is its own overflowY:'auto' div,
-  // not the window — MyQrCard's scroll-linked reveal needs this ref to
+  // not the window - MyQrCard's scroll-linked reveal needs this ref to
   // measure element positions against the actual scrolling element.
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  // Assets card ref — the QR reveal is driven off THIS crossing a
+  // Assets card ref - the QR reveal is driven off THIS crossing a
   // reference point (rather than the QR card's own position), so it
   // starts unfolding as soon as Assets begins scrolling past its resting
   // spot, well before the QR card itself is anywhere near the viewport.
   const assetsCardRef = useRef<HTMLDivElement>(null)
   // The profile header is `position: sticky` INSIDE the scroll container,
   // so the container's own top edge sits at the header's TOP, not its
-  // visible bottom — using the container's top as the crossing point
+  // visible bottom - using the container's top as the crossing point
   // meant Assets had to scroll fully underneath the entire header height
   // before the QR reveal even started, leaving too little scroll room
   // afterward to ever finish. This ref lets us use the header's actual
@@ -2817,10 +2817,10 @@ export function HomePage() {
     })
   }
 
-  // ── Faucet — opens Circle's public faucet (faucet.circle.com) rather than
+  // ── Faucet - opens Circle's public faucet (faucet.circle.com) rather than
   // calling their /v1/faucet/drips API directly. That API endpoint's limit
   // ("one request per 24 hours per token, per testnet") is scoped to the
-  // whole Circle developer account/API key, not per wallet — so with many
+  // whole Circle developer account/API key, not per wallet - so with many
   // MeshPort users sharing one server-side key, only a single claim total
   // would succeed per day app-wide. The public faucet's limit (20 USDC /
   // 2h) is scoped per wallet address instead, which actually scales across
@@ -2829,7 +2829,7 @@ export function HomePage() {
   const handleFaucet = () => {
     if (walletAddress) {
       copyText(walletAddress)
-      showToastMessage('Address copied — paste it on the faucet page', 'success')
+      showToastMessage('Address copied - paste it on the faucet page', 'success')
     }
     window.open('https://faucet.circle.com/', '_blank', 'noopener,noreferrer')
   }
@@ -2849,7 +2849,7 @@ export function HomePage() {
             // If this sender was previously removed, only re-allow them if this
             // payment happened after the removal (a live INSERT always is, but
             // route through the same timestamp-checked helper as the catch-up
-            // scan below for consistency) — AND actually save them as a contact
+            // scan below for consistency) - AND actually save them as a contact
             // (clearing the removed flag alone only let them back into Recent;
             // it never made them a real saved contact, which is the "show
             // everywhere" gap).
@@ -2860,20 +2860,20 @@ export function HomePage() {
             const { data: sender } = await supabase.from('users')
               .select('username,display_name,wallet_address').eq('id', msg.sender_id).maybeSingle()
             // BUG FIX (real column name): the `messages` row has NO `tx_hash`
-            // column — chatService.ts/ChatPage.tsx write and read this as
+            // column - chatService.ts/ChatPage.tsx write and read this as
             // `payment_tx_hash`. Every reference below used to say
             // `msg.tx_hash`, which is always `undefined` on the actual
             // Postgres row/realtime payload, so:
             //   1. The Activity.receive() call just below silently NEVER ran
-            //      (dead code gated on an always-false condition) — so this
+            //      (dead code gated on an always-false condition) - so this
             //      handler never tagged the deposit row `receiveKind:
             //      'p2p_payment'`. That tag is what tells HomePage's own
             //      chain-scan branch (fireIfReceived, further below) to skip
-            //      notifying for it — see Activity.receive's own doc comment
+            //      notifying for it - see Activity.receive's own doc comment
             //      on receiveKind. Without it, the row stayed classified
             //      `external_deposit` (set by the server-side deposit
             //      pipeline that also sees this same on-chain transfer),
-            //      which IS supposed to notify — so it did, every time.
+            //      which IS supposed to notify - so it did, every time.
             //   2. The notification id fell back to `payment_recv_msg_<msg.id>`
             //      unconditionally instead of the tx-hash-keyed
             //      `ext_recv_tx_<hash>` scheme, so it could never dedupe
@@ -2882,8 +2882,8 @@ export function HomePage() {
             //      the exact same transfer immediately.
             // Together, that's two independent notifications for one
             // MeshPort-to-MeshPort payment. A genuine external-wallet deposit
-            // has no payment_sent message at all — only the watcher path ever
-            // runs for it — which is why external deposits already showed
+            // has no payment_sent message at all - only the watcher path ever
+            // runs for it - which is why external deposits already showed
             // correctly as a single notification. Using the real column name
             // fixes both: the activity row gets correctly tagged so the
             // chain-scan path suppresses itself, AND the id here matches the
@@ -2892,11 +2892,11 @@ export function HomePage() {
             if (txHash) {
               const { Activity } = await import('@/lib/ActivityService')
               // Activity.receive() already prepends 'recv_' to txHash itself
-              // — pass the RAW hash here. Passing an already-prefixed hash
+              // - pass the RAW hash here. Passing an already-prefixed hash
               // produced 'recv_recv_<hash>' rows that never matched
               // deposit-scan-all's own 'recv_<hash>' dedupe key, so its
               // independent chain sweep would record a second, address-only
-              // 'External deposit' row for the same payment — the source of
+              // 'External deposit' row for the same payment - the source of
               // both the duplicate Activity entries and the address-instead-
               // of-username notification for payments from other MeshPort users.
               Activity.receive({ walletAddress, txHash: txHash.toLowerCase(),
@@ -2922,11 +2922,11 @@ export function HomePage() {
   // The realtime subscription above only fires live, the instant a payment_sent
   // message is inserted. If this recipient's app wasn't open at that moment
   // (closed tab, locked phone, etc.) that INSERT event is gone forever and the
-  // bell never lights up — even though the payment itself landed fine. This
+  // bell never lights up - even though the payment itself landed fine. This
   // looks back over recent payment_sent messages addressed to this user and
   // fires any notifications that were missed. Uses the same deterministic id
   // (`payment_recv_msg_<message id>`) as the live handler, so the notification
-  // store's id-based dedupe makes re-running this on every mount safe — no
+  // store's id-based dedupe makes re-running this on every mount safe - no
   // duplicates, no re-notifying for one already shown.
   useEffect(() => {
     if (!walletAddress || !user?.id) return
@@ -2934,7 +2934,7 @@ export function HomePage() {
     const SUPA_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
     if (!SUPA_URL || !SUPA_KEY) return
 
-    // Many small queries one after another — on a very slow network it waits
+    // Many small queries one after another - on a very slow network it waits
     // so the balance comes first.
     let stopped = false
     const run = async () => {
@@ -2943,7 +2943,7 @@ export function HomePage() {
         const { authHeaders } = await import('@/lib/chatService')
         const headers = await authHeaders()
 
-        // See migration 20260719090000_notifications_cleared_watermark.sql —
+        // See migration 20260719090000_notifications_cleared_watermark.sql -
         // without this, a browser whose local storage got wiped would
         // re-discover every payment_sent message within the limit=20
         // window below (regardless of age) and re-notify for all of them,
@@ -2973,20 +2973,20 @@ export function HomePage() {
           // recent payment happened AFTER they were removed. `msgs` is already
           // ordered newest-first. Without this check, this scan ran on every
           // Home mount and unconditionally undid "Remove contact" for anyone
-          // who had EVER paid you — which is nearly everyone you'd remove.
+          // who had EVER paid you - which is nearly everyone you'd remove.
           unblockIfNewerActivity(walletAddress, otherId, msgs[0]?.created_at)
           if (!getRemovedContacts(walletAddress).has(otherId) && user?.id) {
             import('@/lib/supabase').then(({ upsertContactDb }) => upsertContactDb(user.id!, otherId))
           }
           msgs.forEach((msg: any) => {
             if (!msg.payment_amount) return
-            // BUG FIX (real column name): see the live-handler effect above —
+            // BUG FIX (real column name): see the live-handler effect above -
             // the row has no `tx_hash` column, only `payment_tx_hash`.
             const txHash: string | undefined = msg.payment_tx_hash || undefined
             if (txHash) {
               import('@/lib/ActivityService').then(({ Activity }) => {
                 // See the live-handler effect above for why this must be
-                // the raw hash — Activity.receive() prepends 'recv_' itself.
+                // the raw hash - Activity.receive() prepends 'recv_' itself.
                 Activity.receive({
                   walletAddress, txHash: txHash.toLowerCase(),
                   amount: msg.payment_amount, tokenSymbol: msg.token_symbol || 'USDC',
@@ -3015,16 +3015,16 @@ export function HomePage() {
 
   // ── Incoming bulk-payout notifications ──────────────────────────────────────
   // Bulk payouts don't send a chat message, so recipients don't get the listener
-  // above — this reacts to the receiver-side activity row BulkPayoutPage writes
+  // above - this reacts to the receiver-side activity row BulkPayoutPage writes
   // directly (Activity.bulkReceived), instead of duplicating that insert here.
   //
   // Two paths, both needed:
-  //  1) Realtime — fires while this tab is open and subscribed, the instant the
+  //  1) Realtime - fires while this tab is open and subscribed, the instant the
   //     row is inserted.
-  //  2) Catch-up — on mount, look back over recent 'bulk' activity rows for this
+  //  2) Catch-up - on mount, look back over recent 'bulk' activity rows for this
   //     wallet. Realtime is a live-only stream: if the recipient wasn't online
   //     (app closed / phone locked) at the exact moment the sender ran the bulk
-  //     payout, that INSERT event is gone forever and step 1 never fires — the
+  //     payout, that INSERT event is gone forever and step 1 never fires - the
   //     money still arrives, but the bell never lights up. This backfills those
   //     missed notifications. Both paths use the same deterministic notification
   //     id (`bulk_recv_<activity row id>`), so the notification store's existing
@@ -3033,30 +3033,30 @@ export function HomePage() {
   useEffect(() => {
     if (!walletAddress) return
     // Final check right before notifying a 'receive' row as an external
-    // deposit — independent of, and in addition to, deposit-scan-all's own
+    // deposit - independent of, and in addition to, deposit-scan-all's own
     // server-side dedup (which races against the swap's own activity write
     // and can still lose that race depending on deploy/timing). By the
-    // moment this actually runs — after the live subscription's round trip,
-    // or after a full page load for the catch-up scan — much more time has
+    // moment this actually runs - after the live subscription's round trip,
+    // or after a full page load for the catch-up scan - much more time has
     // passed than any server-side race window, so a genuine swap's own
     // 'swap' row is overwhelmingly likely to already exist by now even if
     // the earlier server-side check missed it. Re-queries live rather than
     // trusting anything decided earlier, so this can't be defeated by
     // deployment lag on the server-side fixes.
-    // Circle's own Kit/CCTP infrastructure contracts on Arc — mirrors
+    // Circle's own Kit/CCTP infrastructure contracts on Arc - mirrors
     // KNOWN_INTERNAL_CONTRACTS in supabase/functions/deposit-scan-all and
     // CIRCLE_CONTRACTS in api/relay-rpc.js (kept in sync manually). A
     // 'receive' row whose counterpartyAddress is one of these is
-    // DEFINITIONALLY not a real external payment — e.g. a swap's output
+    // DEFINITIONALLY not a real external payment - e.g. a swap's output
     // leg is a Transfer FROM the Kit Adapter Contract, never from a wallet
     // a real person or exchange controls. This is a hard fact, not a
-    // timing-dependent guess like isNearRecentSwap below — checked first,
+    // timing-dependent guess like isNearRecentSwap below - checked first,
     // and unlike that check, needs no amount/token matching at all.
-    // BUG FIX: was missing Multicall3 (BulkPay's routing contract) — see the
+    // BUG FIX: was missing Multicall3 (BulkPay's routing contract) - see the
     // matching, more detailed comment in onchainReceivedActivity.ts's own
     // copy of this exact list for the full explanation. Kept in sync with
     // that file and every server-side copy.
-    // BUG FIX #2: was also missing the P2P escrow contract — a seller
+    // BUG FIX #2: was also missing the P2P escrow contract - a seller
     // withdrawing their own escrow (release/refund/offer cancellation)
     // sends USDC FROM that contract back to their own wallet, which
     // otherwise showed up here as a normal external "payment received"
@@ -3069,10 +3069,10 @@ export function HomePage() {
       '0x7865fafc2db2093669d92c0f33aeef291086befd',
       '0xacf1ceef35caac005e15888ddb8a3515c41b4872',
       '0xc5567a5e3370d4dbfb0540025078e283e36a363d', // Kit Bridge Contract testnet
-      '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b', // Kit Adapter Contract testnet — swaps route through this
+      '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b', // Kit Adapter Contract testnet - swaps route through this
       '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa', // CCTP V2 TokenMessenger
       '0xe737e5cebeeba77efe34d4aa090756590b1ce275', // CCTP V2 MessageTransmitter
-      '0xca11bde05977b3631167028862be2a173976ca11', // Multicall3 — BulkPay routes through this
+      '0xca11bde05977b3631167028862be2a173976ca11', // Multicall3 - BulkPay routes through this
       ...(P2P_ESCROW_CONTRACT_ADDRESS ? [P2P_ESCROW_CONTRACT_ADDRESS] : []),
     ])
     const isKnownInternalContract = (addr: string | undefined | null): boolean =>
@@ -3095,7 +3095,7 @@ export function HomePage() {
           if (!outToken || !Number.isFinite(outAmount)) return false
           return outToken === token && Math.abs(outAmount - amount) <= Math.max(0.01, amount * 0.01)
         })
-      } catch { return false } // fail open — never let this check itself block a real notification
+      } catch { return false } // fail open - never let this check itself block a real notification
     }
 
     const fireIfReceived = async (record: any) => {
@@ -3113,13 +3113,13 @@ export function HomePage() {
       // deposit-scan-all's recordExternalReceive(), claim-recovery-scan's
       // equivalent branch, and the canonical deposit-activity-consumer all
       // write a plain `activity` row of type 'receive'. In-app username
-      // payments are deliberately NOT handled here — those are notified via
+      // payments are deliberately NOT handled here - those are notified via
       // the separate `messages`-table subscription further up this file
       // (or fired directly at write time, e.g. PaySendPage.tsx/rewards.ts), so
       // notifying them again here would double-notify one payment.
       //
       // Classification now uses the explicit metadata.receiveKind every
-      // current writer sets (see ActivityService.ts's own comment on it) —
+      // current writer sets (see ActivityService.ts's own comment on it) -
       // NOT a free-form note string. That string-matching WAS the bug: this
       // used to require meta.note === 'External deposit' exactly, and
       // claim-recovery-scan's own writer used a slightly different string
@@ -3130,7 +3130,7 @@ export function HomePage() {
       // other the way two independently-typed free-text strings could.
       //
       // The `meta.note === 'External deposit'` fallback below exists ONLY
-      // for rows written before this fix shipped (no receiveKind at all) —
+      // for rows written before this fix shipped (no receiveKind at all) -
       // it is legacy-compat, not the primary mechanism, and can be deleted
       // once no unclassified 'receive' rows are expected to still surface.
       if (record.activityType === 'receive') {
@@ -3143,7 +3143,7 @@ export function HomePage() {
         if (walletAddress && await isNearRecentSwap(walletAddress, record.tokenSymbol, record.amount)) return
 
         // This row came from the chain-scan path (deposit-scan-all /
-        // claim-recovery-scan), which only ever sees a raw address — it has
+        // claim-recovery-scan), which only ever sees a raw address - it has
         // no chat message to resolve a username from directly, unlike the
         // two paths above. But the sender might still be a registered
         // MeshPort user who happened to send straight from their wallet
@@ -3157,7 +3157,7 @@ export function HomePage() {
               .select('id,username').eq('wallet_address', record.counterpartyAddress.toLowerCase()).maybeSingle()
             fromUsername = data?.username || undefined
             // A resolved username means the sender IS a registered MeshPort
-            // user — auto-add them as a contact, same as the chat-message
+            // user - auto-add them as a contact, same as the chat-message
             // path already does for in-app payments. This path (chain-scan
             // detected, no chat message) never had this wired at all, which
             // is why a real MeshPort-to-MeshPort payment sent straight from
@@ -3171,7 +3171,7 @@ export function HomePage() {
 
         // Tx-hash-keyed id (was record.id) so this delayed server-row path and
         // the instant client watcher (lib/arcDepositWatcher.ts) fire the SAME
-        // notification id for one deposit — whichever lands first wins, the
+        // notification id for one deposit - whichever lands first wins, the
         // other is deduped by the notification store's seen-ids ledger.
         // Falls back to record.id for a legacy row with no tx hash.
         const notifId = `ext_recv_tx_${record.txHash || record.id}`
@@ -3200,40 +3200,40 @@ export function HomePage() {
       // Live updates while the app is open. Fires for every new activity
       // insert on this wallet; fireIfReceived() itself decides which rows
       // warrant a notification (bulk-received, or an external-deposit
-      // 'receive' row — see its definition above). refreshBalanceForToken()
+      // 'receive' row - see its definition above). refreshBalanceForToken()
       // runs for every row regardless, so the balance refresh rides the
       // same event as the activity row appearing, and the two feel
       // simultaneous to the user. refreshBalanceForToken is debounced (see
       // its definition above) so a burst of several rows arriving close
-      // together — e.g. one deposit-scan-all sweep pass recording multiple
-      // deposits — collapses into a single balance fetch per token instead
+      // together - e.g. one deposit-scan-all sweep pass recording multiple
+      // deposits - collapses into a single balance fetch per token instead
       // of one per row.
-      // Serializes fireIfReceived calls — a burst of activity rows landing
+      // Serializes fireIfReceived calls - a burst of activity rows landing
       // close together (several deposits in the same deposit-scan-all
       // sweep pass, or several rapid payments) used to call the async
       // fireIfReceived concurrently, once per row, with no ordering
       // guarantee between them. Each call does its own awaited Supabase
       // work (username lookup, contact upsert, recent-swap check) before
-      // reaching the notification-store dedup check — overlapping those
+      // reaching the notification-store dedup check - overlapping those
       // async calls is exactly the kind of race that can cause some
       // notifications in a burst to go missing while others show up fine.
       // Chaining onto the same promise forces one call to fully finish
       // (including its addNotification) before the next one starts.
       let fireQueue = Promise.resolve()
-      // Extra guard, in front of the notification store's own id dedup —
+      // Extra guard, in front of the notification store's own id dedup -
       // three independent paths can each discover the very same activity
       // row and hand it to onNew: the live realtime INSERT event, this
       // subscription's own internal reconnect catch-up (see catchUp()'s
-      // onReconnect in ActivityService.ts — common on a weak mobile signal,
+      // onReconnect in ActivityService.ts - common on a weak mobile signal,
       // which flaps the WebSocket), and HomePage's separate catch-up IIFE
       // just below, which runs unawaited on every mount. All three
       // eventually route through addNotification with the same
-      // deterministic `ext_recv_<id>`, which should dedupe on its own — but
+      // deterministic `ext_recv_<id>`, which should dedupe on its own - but
       // that check only fires once each call actually reaches it, after its
       // own awaited work (username lookup, isNearRecentSwap). Two of these
       // paths overlapping for the same fresh row, on a spotty connection
       // right after a reconnect, is exactly the kind of narrow window where
-      // that intended protection wasn't enough — reproduced as one $1.00
+      // that intended protection wasn't enough - reproduced as one $1.00
       // external deposit notifying twice, "just now" both times. Tracking
       // processed row ids here, before any async work even starts, closes
       // that window regardless of which of the three paths delivers first.
@@ -3250,14 +3250,14 @@ export function HomePage() {
         queuedFireIfReceived(record)
         refreshBalanceForToken((record as any).tokenSymbol)
       })
-      // Catch up on anything received while we weren't listening — bulk
+      // Catch up on anything received while we weren't listening - bulk
       // payouts and external-address deposits (deposit-scan-all /
       // claim-recovery-scan) both land here since neither sends a chat
       // message that the messages-table subscription elsewhere would catch.
       // Respects notifications_cleared_at (see the migration
       // 20260719090000_notifications_cleared_watermark.sql) so a browser
       // whose local storage got wiped doesn't resurrect everything the
-      // user already cleared before — that boundary is checked
+      // user already cleared before - that boundary is checked
       // server-side now, not just via the local seen-ids ledger.
       ;(async () => {
         let since: string | undefined
@@ -3282,13 +3282,13 @@ export function HomePage() {
   // ── Instant balance on a real-time external deposit ───────────────────────
   // The session-wide Arc log watcher (lib/arcDepositWatcher.ts, started in
   // AppLayout) dispatches 'meshport:arc-deposit' the moment a Transfer to this
-  // wallet is seen on-chain — seconds, not the 2-4 min the server
+  // wallet is seen on-chain - seconds, not the 2-4 min the server
   // chain_events -> activity-consumer pipeline takes. Refresh the balance for
   // exactly that token right away, so the number moves with the notification
   // instead of waiting for the next 30s poll or the Supabase row. The
   // notification itself is fired by the watcher (deduped against
   // fireIfReceived's now-tx-hash-keyed id), and the Activity list is handled
-  // by useActivity's own buffer merge — this effect is purely the balance.
+  // by useActivity's own buffer merge - this effect is purely the balance.
   useEffect(() => {
     if (!walletAddress) return
     const onArcDeposit = (e: Event) => {
@@ -3308,10 +3308,10 @@ export function HomePage() {
         await restorePrivateKey().catch(() => {})
       }
       // A mnemonic_hint backfill for older accounts used to live here,
-      // writing the raw mnemonic to Supabase in PLAINTEXT — a critical
+      // writing the raw mnemonic to Supabase in PLAINTEXT - a critical
       // security issue, fixed and then removed entirely along with the
       // whole server-side backup design. MeshPort no longer stores private
-      // keys or recovery phrases server-side at all, in any form — see
+      // keys or recovery phrases server-side at all, in any form - see
       // restoreWallet.ts for the current, local-only recovery paths.
     }
     run()
@@ -3340,10 +3340,10 @@ export function HomePage() {
   //   - This poll and the debounced realtime refresh above were hitting
   //     EURC/cirBTC through two totally separate, uncached code paths
   //     (arcService's getEURCBalance/getCirBtcBalance vs. an inline
-  //     fetchToken() here using the same contracts) — now both funnel
+  //     fetchToken() here using the same contracts) - now both funnel
   //     through one cached/deduped path.
   //   - On mount, fetchBalance() and fetchPortfolio() used to fire
-  //     together (3 concurrent Arc RPC calls in the same tick — the most
+  //     together (3 concurrent Arc RPC calls in the same tick - the most
   //     likely trigger for the 429s). They now run sequentially with a
   //     short stagger. The 60s portfolio interval also starts 15s offset
   //     from the 30s balance interval so the two never land on the same
@@ -3359,12 +3359,12 @@ export function HomePage() {
       const started = Date.now()
       try {
         // Throws when the read fails (offline): the last known balance stays
-        // on screen instead of being replaced — and saved — as $0.
+        // on screen instead of being replaced - and saved - as $0.
         const bal = await readArcBalanceOrThrow(address, 'USDC')
         noteRequestTime(Date.now() - started)
         if (!cancelled) {
           // A genuine increase means new funds landed since the last
-          // check — dispatching the same event useActivity.ts's on-chain
+          // check - dispatching the same event useActivity.ts's on-chain
           // received layer already listens for directly links "balance
           // went up" to "Activity list refreshes right now", rather than
           // leaving these as two independently-timed polls that could
@@ -3383,7 +3383,7 @@ export function HomePage() {
 
     const fetchPortfolio = async () => {
       const fetchBtcPrice = async (): Promise<number> => {
-        // Try multiple sources in order — CoinGecko often rate-limits free tier
+        // Try multiple sources in order - CoinGecko often rate-limits free tier
         const sources = [
           async () => {
             const r = await fetch(
@@ -3396,7 +3396,7 @@ export function HomePage() {
             return p as number
           },
           async () => {
-            // Binance public API — no auth needed
+            // Binance public API - no auth needed
             const r = await fetch(
               'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT',
               { signal: AbortSignal.timeout(5000) }
@@ -3407,7 +3407,7 @@ export function HomePage() {
             return p
           },
           async () => {
-            // CoinCap — reliable fallback
+            // CoinCap - reliable fallback
             const r = await fetch(
               'https://api.coincap.io/v2/assets/bitcoin',
               { signal: AbortSignal.timeout(5000) }
@@ -3423,11 +3423,11 @@ export function HomePage() {
         }
         return 0
       }
-      // Desktop-only — the Assets table's real "Change (24h)" column. One
+      // Desktop-only - the Assets table's real "Change (24h)" column. One
       // batched CoinGecko call for all three tokens' real 24h % change; no
       // Binance/CoinCap fallback for the % itself (neither exposes it as
       // simply), so a failure here just leaves assetChange24h as null per
-      // token and AssetRow renders "—" rather than a guessed number.
+      // token and AssetRow renders "-" rather than a guessed number.
       const fetchChange24h = async () => {
         if (!isDesktop) return
         try {
@@ -3443,20 +3443,20 @@ export function HomePage() {
             EURC: typeof data?.['euro-coin']?.usd_24h_change === 'number' ? data['euro-coin'].usd_24h_change : null,
             cirBTC: typeof data?.bitcoin?.usd_24h_change === 'number' ? data.bitcoin.usd_24h_change : null,
           })
-        } catch { /* leave as null — no fabricated change % */ }
+        } catch { /* leave as null - no fabricated change % */ }
       }
 
       // BUG FIX (2026-09-03): the actual on-chain EURC/cirBTC balance reads
       // used to be bundled into the SAME Promise.all as fetchBtcPrice() and
-      // fetchChange24h() below — both external CoinGecko/Binance/CoinCap
+      // fetchChange24h() below - both external CoinGecko/Binance/CoinCap
       // calls, each with up to a 5s timeout and (fetchBtcPrice) up to THREE
       // sequential fallback attempts if the first source is slow or
       // rate-limited (CoinGecko's free tier "often rate-limits", per that
-      // function's own comment) — worst case, up to ~15s. Since it was one
+      // function's own comment) - worst case, up to ~15s. Since it was one
       // Promise.all, setEurcBalance/setCirBtcBalance couldn't fire until
       // ALL FOUR calls settled, so a slow/rate-limited price lookup for
       // purely cosmetic data (USD-equivalent estimate, 24h % change badge)
-      // directly delayed the REAL balance numbers from appearing — while
+      // directly delayed the REAL balance numbers from appearing - while
       // USDC's balance, fetched separately by fetchBalance() with no price
       // calls attached at all, showed up fast. This is the direct cause of
       // "EURC and cirBTC balance loads late while USDC loads fine": the
@@ -3476,7 +3476,7 @@ export function HomePage() {
       })
 
       // Slow network: prices are extra requests to other sites (each a new
-      // connection) — use the last price instead and leave the pipe to balances.
+      // connection) - use the last price instead and leave the pipe to balances.
       const priceEnrichmentPromise = (isSlowNetwork() ? Promise.all([0, null]) : Promise.all([
         fetchBtcPrice(),
         fetchChange24h(),
@@ -3494,7 +3494,7 @@ export function HomePage() {
 
       // Still awaited together here so the CALLER (the mount sequence
       // below) knows when this whole pass is fully done for polling-
-      // interval purposes — but by this point both setEurcBalance/
+      // interval purposes - but by this point both setEurcBalance/
       // setCirBtcBalance already fired independently, as soon as their own
       // fast on-chain reads resolved, not gated on the slow branch.
       await Promise.all([balancesPromise, priceEnrichmentPromise])
@@ -3506,7 +3506,7 @@ export function HomePage() {
 
     ;(async () => {
       // EURC/cirBTC start a moment after USDC instead of waiting for USDC's
-      // read to finish — a slow USDC read (429 backoff, retries) used to hold
+      // read to finish - a slow USDC read (429 backoff, retries) used to hold
       // them back. The short stagger still keeps the three off the same tick.
       const usdc = fetchBalance()
       // Slow network: USDC goes alone first, the other tokens after it.
@@ -3514,11 +3514,11 @@ export function HomePage() {
       else await new Promise(r => setTimeout(r, 150))
       if (cancelled) return
       const portfolio = fetchPortfolio()
-      // The balance poll starts once USDC is read — not held back by the
+      // The balance poll starts once USDC is read - not held back by the
       // other tokens and prices.
       await usdc
       if (cancelled) return
-      // PHASE 6 — balance poll lengthened 30s -> 90s, NOT removed.
+      // PHASE 6 - balance poll lengthened 30s -> 90s, NOT removed.
       // deposit_detected now invalidates the wallet's Arc scope via
       // SyncCoordinator, so a real credit lands on the event. This tick remains
       // the fallback for a throttled/backgrounded tab, a dropped Realtime
@@ -3554,26 +3554,26 @@ export function HomePage() {
   // as it already does on the Hub and Claim page.
   //
   // RPC-USAGE FIX (2026-09-21): this used to ALSO re-run the full 21-chain
-  // scan on every single 'visibilitychange' — meaning simply switching tabs
+  // scan on every single 'visibilitychange' - meaning simply switching tabs
   // away and back (or the OS bringing the app to foreground) cost a full
   // scan across every external chain's RPC, with zero signal anything had
   // actually changed. That trigger is removed entirely below.
   //
   // TIGHTENED FURTHER: a reactive claim/transfer completion now refreshes
   // ONLY the one chain that actually changed (readExternalChainBalance),
-  // not the full scan — chainBalancesRef holds the last-known per-chain
+  // not the full scan - chainBalancesRef holds the last-known per-chain
   // breakdown (from readExternalBalances, which already computes this same
   // breakdown internally; see externalBalanceReader.ts) so a single-chain
   // update can patch just that one entry and re-sum in memory, no extra
   // RPC calls to the other ~20 chains. The periodic interval still does a
   // full scan as a backstop (lengthened 60s → 5min) for the one case
-  // Realtime can't see — someone sending USDC directly on an external
+  // Realtime can't see - someone sending USDC directly on an external
   // chain outside MeshPort's own claim/transfer flow entirely.
   const settingsMap = useSettingsStore((s) => s.settings)
   const settingsLoaded = useSettingsStore((s) => s.loaded)
   const chainBalancesRef = useRef<Record<string, number>>({})
   // Merchants: the hero's "Available To Bring" counts Unified Balance
-  // (Ledger) chains only — CCTP-only chain balances are left out.
+  // (Ledger) chains only - CCTP-only chain balances are left out.
   const { isMerchant } = useMerchant()
   const isMerchantRef = useRef(isMerchant)
   isMerchantRef.current = isMerchant
@@ -3588,7 +3588,7 @@ export function HomePage() {
     if (!walletAddress) return
     let cancelled = false
     // Guards against the interval and a reactive Realtime trigger firing
-    // at nearly the same moment — without this, that overlap runs two
+    // at nearly the same moment - without this, that overlap runs two
     // full 21-chain scans concurrently (up to 42 simultaneous requests
     // across the external RPCs). Skips the second trigger instead; the
     // next tick or the next reactive event picks it up.
@@ -3596,7 +3596,7 @@ export function HomePage() {
     let cancelWaitScan = () => {}
     const fullScan = () => {
       if (inFlight) return
-      // ~21 chains read over public RPCs — on a very slow network this waits
+      // ~21 chains read over public RPCs - on a very slow network this waits
       // until the network is better (the last figure stays on screen).
       if (isSlowNetwork()) {
         if (unifiedLoadingRef.current) { unifiedLoadingRef.current = false; setUnifiedLoading(false) }
@@ -3616,7 +3616,7 @@ export function HomePage() {
         if (unifiedLoadingRef.current && !cancelled) { unifiedLoadingRef.current = false; setUnifiedLoading(false) }
       })
     }
-    // Targeted single-chain refresh — patches one entry in the known
+    // Targeted single-chain refresh - patches one entry in the known
     // breakdown and re-sums in memory, instead of re-scanning everything.
     const applyOne = (chainId: string, balance: number) => {
       if (cancelled) return
@@ -3687,14 +3687,14 @@ export function HomePage() {
         const usdcNonSwap = records.filter(r => usdcTypes.has(r.activityType) && (r.tokenSymbol || 'USDC') === 'USDC')
         // Swaps are fetched separately (fetchActivity's default type filter
         // doesn't cover 'swap' the way the non-swap types above do) and
-        // merged in — a USDC->EURC swap moves USDC too, so it belongs in
+        // merged in - a USDC->EURC swap moves USDC too, so it belongs in
         // USDC's history same as EURC's. AssetSheet itself figures out
         // which side (in/out) applies to the token being viewed.
         const swapRecords = await fetchActivity(walletAddress, { activityType: 'swap', limit: 100 })
         const usdcSwaps = swapRecords.filter(r => r.metadata?.tokenIn === 'USDC' || r.metadata?.tokenOut === 'USDC')
         setAssetHistory([...usdcNonSwap, ...usdcSwaps].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()))
       } else {
-        // Was swap-only before — a direct receive of EURC/cirBTC (not via
+        // Was swap-only before - a direct receive of EURC/cirBTC (not via
         // a swap) never showed up here at all, which is exactly why
         // cirBTC's history could appear completely empty for a wallet
         // that had only ever received it directly. Now matches USDC's own
@@ -3748,10 +3748,10 @@ export function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDesktop, walletAddress, insightsPeriod])
 
-  // Balance card's mini trend — always the trailing 7 days regardless of the
+  // Balance card's mini trend - always the trailing 7 days regardless of the
   // Insights period selector (the fetch above always covers >= 14 days, so a
   // 7-day slice is always fully present). Cumulative running NET (received −
-  // sent) per day — a relative trend line, not a fabricated historical
+  // sent) per day - a relative trend line, not a fabricated historical
   // balance series this app has no snapshot data for.
   const balanceTrend = useMemo(() => {
     const shells = makeBuckets(7, 'daily', new Date())
@@ -3779,7 +3779,7 @@ export function HomePage() {
     return { net, pct: portfolioTotal > 0 ? (net / portfolioTotal) * 100 : 0 }
   }, [homeRecentActivity, portfolioTotal])
 
-  // Insights card — every figure below is computed straight from the fetched
+  // Insights card - every figure below is computed straight from the fetched
   // ActivityRecords for the selected period (`current`) vs. the immediately
   // preceding equal-length window (`prior`), no fabricated inputs.
   const insightsData = useMemo(() => {
@@ -3809,7 +3809,7 @@ export function HomePage() {
     const priorActiveContacts = distinctContacts(prior)
     const totalVolume = current.reduce((s, r) => s + r.amount, 0)
 
-    // Most active contact — most transactions with a single counterparty this period
+    // Most active contact - most transactions with a single counterparty this period
     const contactCounts = new Map<string, { count: number; label: string }>()
     current.forEach(r => {
       if ((r.activityType !== 'send' && r.activityType !== 'receive' && r.activityType !== 'bulk') || !r.counterpartyAddress) return
@@ -3834,10 +3834,10 @@ export function HomePage() {
     const hourCounts = new Array(24).fill(0)
     current.forEach(r => hourCounts[new Date(r.createdAt).getHours()]++)
     const topHour = hourCounts.every(c => c === 0) ? null : hourCounts.indexOf(Math.max(...hourCounts))
-    const activeHourLabel = topHour === null ? '—' : new Date(2000, 0, 1, topHour).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    const activeHourLabel = topHour === null ? '-' : new Date(2000, 0, 1, topHour).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
     const frequencyPerDay = current.length / days
 
-    // Multichain Usage — bridge/claim/deposit rows grouped by source chain
+    // Multichain Usage - bridge/claim/deposit rows grouped by source chain
     const multiRecords = current.filter(r => r.activityType === 'bridge' || r.activityType === 'claim' || r.activityType === 'deposit')
     const chainCounts = new Map<string, number>()
     multiRecords.forEach(r => {
@@ -3863,7 +3863,7 @@ export function HomePage() {
   }, [homeRecentActivity, insightsPeriod])
 
   // Year is bucketed monthly instead of daily purely for chart legibility
-  // (365 daily bars vs. 12 monthly ones) — same real per-record data either way.
+  // (365 daily bars vs. 12 monthly ones) - same real per-record data either way.
   const insightsBucketGranularity: InsightsGranularity = insightsPeriod === 'year' ? 'monthly' : 'daily'
   const volumeTrendBuckets = useMemo(
     () => aggregateBuckets(insightsData.current, PERIOD_DAYS[insightsPeriod], insightsBucketGranularity, new Date()),
@@ -3892,7 +3892,7 @@ export function HomePage() {
     [insightsData.current, insightsPeriod, activityGranularity],
   )
 
-  // BUG FIX: same as ActivityPage.tsx's formatAmt — the "n < 0.01" fallback
+  // BUG FIX: same as ActivityPage.tsx's formatAmt - the "n < 0.01" fallback
   // below only went to 4 decimals for non-BTC tokens, which rounds a
   // USDC/EURC amount like 0.000004 to "0.0000" (then "0" after trimming).
   // The fine-precision tiers now apply regardless of symbol.
@@ -3912,13 +3912,13 @@ export function HomePage() {
       flex: 1, overflowY: 'auto', background: 'var(--bg)',
       // Desktop: sized to exactly fill the viewport at 100% browser zoom (see
       // the compact card sizing throughout this column) so nothing scrolls
-      // under normal conditions — but overflowY stays 'auto', never 'hidden',
+      // under normal conditions - but overflowY stays 'auto', never 'hidden',
       // so content remains fully reachable by scrolling if the user zooms
       // their browser in past 100% (accessibility), rather than being clipped.
       display: isDesktop ? 'flex' : undefined, flexDirection: isDesktop ? 'column' : undefined,
     }}>
 
-      {/* ── HEADER — floating card, no border ─────────────────────────────── */}
+      {/* ── HEADER - floating card, no border ─────────────────────────────── */}
       {/* Desktop: DesktopHeader already covers profile/search/notifications
           app-wide, so this block only mounts there while actively searching
           (opened via DesktopHeader's search box, see isDesktop above). */}
@@ -3988,7 +3988,7 @@ export function HomePage() {
                     border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </button>
-                {/* Bell — notifications */}
+                {/* Bell - notifications */}
                 <button onClick={() => navigate('/notifications')}
                   style={{ position: 'relative', width: 38, height: 38, borderRadius: '50%',
                     background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)',
@@ -4007,7 +4007,7 @@ export function HomePage() {
           )}
         </div>
 
-        {/* Search results — grouped People / Services */}
+        {/* Search results - grouped People / Services */}
         {searchOpen && searchQuery.trim() && (
           <div style={{ background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--brand) 25%, transparent)', borderRadius: 18, marginTop: 8, padding: '4px 10px 10px', maxHeight: '60vh', overflowY: 'auto' }}>
             {searching && searchPeople.length === 0 && (
@@ -4051,7 +4051,7 @@ export function HomePage() {
               <p style={{ color: 'var(--text-secondary)', fontSize: 12, textAlign: 'center', padding: '16px 0' }}>
                 {searchQuery.trim().toLowerCase().endsWith('.arc')
                   ? `No results for "${searchQuery.trim()}"`
-                  : 'No saved contact matches — enter the full username.arc to find someone new'}
+                  : 'No saved contact matches - enter the full username.arc to find someone new'}
               </p>
             )}
           </div>
@@ -4064,10 +4064,10 @@ export function HomePage() {
         flex: isDesktop ? 1 : undefined, minHeight: isDesktop ? 0 : undefined,
       }}>
 
-        {/* ── P2P ORDER TICKER — new order received / payment marked as paid ──
+        {/* ── P2P ORDER TICKER - new order received / payment marked as paid ──
             Single auto-rotating line, sits inline in the page's own flow
             (not a fixed/portalled overlay like the old stacked-card
-            version) — see OrderTicker's own comment for why. */}
+            version) - see OrderTicker's own comment for why. */}
         <OrderTicker
           popups={allP2PPopups}
           onOpenOrder={(n) => { clearTradePopupsFor(n); navigate(n.tradeId ? `/p2p/trade/${n.tradeId}` : '/p2p/my-trades') }}
@@ -4087,33 +4087,33 @@ export function HomePage() {
           />
         )}
 
-        {/* Desktop: 3 columns — Balance/Multichain Hub/Recent/Assets far left;
+        {/* Desktop: 3 columns - Balance/Multichain Hub/Recent/Assets far left;
             Quick Actions/Recent Activity in the middle; Insights on the
             right. Mobile keeps its original flat stacking order below
-            (flex-col) — only the lg:col/row-start placement below reorders
+            (flex-col) - only the lg:col/row-start placement below reorders
             things visually at desktop width; DOM order is untouched. */}
         <div className="flex flex-col gap-[18px] lg:grid lg:grid-cols-1 xl:grid-cols-[2.7fr_1.15fr] lg:gap-4 lg:items-start lg:flex-1 lg:min-h-0 lg:min-w-0">
-        {/* ── COLUMNS 1+2 WRAPPER — column 2 (Quick Actions/Recent Activity)
+        {/* ── COLUMNS 1+2 WRAPPER - column 2 (Quick Actions/Recent Activity)
              needs to match column 1's bottom edge, NOT the grid row's full
-             height (which is set by whichever column is tallest — column 3
-             here — items-stretch on the outer grid matched column 2 to
+             height (which is set by whichever column is tallest - column 3
+             here - items-stretch on the outer grid matched column 2 to
              THAT instead of column 1, leaving a large gap under it). This
              wrapper groups columns 1+2 into their own nested flex row
              (items-stretch scoped to just these two, independent of
-             column 3), sized to the taller of the two — which is always
+             column 3), sized to the taller of the two - which is always
              column 1 in practice. `contents` makes this wrapper invisible
              to mobile's layout (its children render exactly as if they
              were direct children of the flex-col stack above, unchanged)
-             — it only becomes a real flex row at `lg:`. */}
+             - it only becomes a real flex row at `lg:`. */}
         <div className="contents lg:flex lg:col-start-1 lg:row-start-1 lg:items-stretch lg:gap-4 lg:min-w-0">
-        {/* ── LEFT COLUMN — Balance / Multichain Hub / Pay&Receive / Recent /
+        {/* ── LEFT COLUMN - Balance / Multichain Hub / Pay&Receive / Recent /
              Assets, all in ONE grid cell (col-start-1, row-start-1) stacked
              internally via flexbox. Keeping every left-column piece in a
              single cell (rather than each on its own row-start) means this
-             column's height is never forced to match the right column's —
+             column's height is never forced to match the right column's -
              see the right column's own comment below for why that matters. */}
         <div className="flex flex-col gap-[18px] lg:gap-3 lg:flex-[1.7] lg:min-w-0">
-        {/* ── BALANCE — shows all tokens total, eye toggles visibility ────────
+        {/* ── BALANCE - shows all tokens total, eye toggles visibility ────────
              Desktop gets a bordered card with the address chip moved to the
              top-right and two real additions below the number: today's net
              change (computed from homeRecentActivity, not fabricated) and a
@@ -4201,7 +4201,7 @@ export function HomePage() {
           />
         )}
 
-        {/* ── QUICK ACTIONS — all 4, above the Multichain Hub card ──────────── */}
+        {/* ── QUICK ACTIONS - all 4, above the Multichain Hub card ──────────── */}
         {/* Mobile only. Desktop is unaffected: it never rendered this row
             (its own Quick Actions card lives in column 2). */}
         {!isDesktop && (
@@ -4237,11 +4237,11 @@ export function HomePage() {
         </div>
         )}
 
-        {/* ── FEATURE BANNERS — promo carousel for what MeshPort can do ─────── */}
+        {/* ── FEATURE BANNERS - promo carousel for what MeshPort can do ─────── */}
         {/* Same width/radius as the old Multichain Hub row, 10% taller. */}
         <FeatureBanner height={isDesktop ? 64 : 75} onOpen={path => navigate(path)} />
 
-        {/* ── RECENT — people I sent money to ──────────────────────────────── */}
+        {/* ── RECENT - people I sent money to ──────────────────────────────── */}
         {/* Desktop: bordered card, same language as the Multichain Hub card
             above it. Mobile: Recent and News side by side (RecentNewsRow). */}
         {isDesktop ? (
@@ -4255,7 +4255,7 @@ export function HomePage() {
           <RecentNewsRow navigate={navigate} />
         )}
 
-        {/* ── ASSETS — all 3 tokens ────────────────────────────────────────── */}
+        {/* ── ASSETS - all 3 tokens ────────────────────────────────────────── */}
         <div ref={assetsCardRef}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isDesktop ? 6 : 12 }}>
             <span style={{ fontSize: 16, fontWeight: 700 }}>Assets</span>
@@ -4317,22 +4317,22 @@ export function HomePage() {
           </div>
         </div>
 
-        {/* ── Biometric row — desktop: right below Assets card. ────────────── */}
+        {/* ── Biometric row - desktop: right below Assets card. ────────────── */}
         {isDesktop && <BiometricFooterRow isDesktop />}
 
-        {/* ── MY QR — below Assets card. Mobile only. ─────────────────────── */}
+        {/* ── MY QR - below Assets card. Mobile only. ─────────────────────── */}
         {!isDesktop && <MyQrCard walletAddress={walletAddress} username={username} scrollContainerRef={scrollContainerRef} assetsCardRef={assetsCardRef} />}
-        {/* ── Biometric row — mobile: right below the QR card. ─────────────── */}
+        {/* ── Biometric row - mobile: right below the QR card. ─────────────── */}
         {!isDesktop && <BiometricFooterRow isDesktop={false} />}
         </div>
-        {/* ── COLUMN 2 — Quick Actions + Recent Activity. Desktop only, a
+        {/* ── COLUMN 2 - Quick Actions + Recent Activity. Desktop only, a
              flex item inside the columns-1+2 wrapper above (stretches to
              column 1's height via that wrapper's items-stretch, not the
              grid row's). */}
         <div className="hidden lg:flex lg:flex-1 lg:min-w-0" style={{ flexDirection: 'column', gap: 12 }}>
           <QuickActionsCard navigate={navigate} actionIds={quickActionIds} onCustomize={() => { setQuickActionsLimitWarning(false); setShowCustomizeActions(true) }} hasOngoingP2P={ongoingTradesCount > 0} />
 
-          {/* Recent activity — flex:1 so its bottom edge always lands on
+          {/* Recent activity - flex:1 so its bottom edge always lands on
               column 1/3's bottom edge (the grid row's real height, via
               items-stretch above) instead of wherever its own N rows of
               content happen to end. Internally scrollable so extra items
@@ -4382,17 +4382,17 @@ export function HomePage() {
           </div>
         </div>
         </div>
-        {/* ── COLUMN 3 — Insights. Desktop only, ONE grid cell (col-start-2 of
-             the 2-track grid — columns 1+2 above are combined into ONE
+        {/* ── COLUMN 3 - Insights. Desktop only, ONE grid cell (col-start-2 of
+             the 2-track grid - columns 1+2 above are combined into ONE
              track via the nested flex wrapper, so this is the grid's
-             second and last real track), internal flexbox stacking — CSS
+             second and last real track), internal flexbox stacking - CSS
              Grid sizes a row-track to the TALLEST cell sharing that row
              across ALL columns, so giving each card its own row-start here
              would stretch the shorter column-1/column-2 rows to match this
              much taller column, reopening the gap bug already fixed once
              this session. Every number below comes from insightsData
              (useMemo above, computed from real fetched ActivityRecords for
-             the selected period vs. the prior equal-length period) — none
+             the selected period vs. the prior equal-length period) - none
              of it is fabricated. */}
         <div className="hidden lg:flex lg:col-start-1 lg:row-start-2 xl:col-start-2 xl:row-start-1 lg:min-w-0" style={{ flexDirection: 'column', gap: 10 }}>
           <div style={{
@@ -4431,7 +4431,7 @@ export function HomePage() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 9.5, color: 'var(--text-secondary)' }}>Most Active Contact</div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {insightsData.mostActiveContact ? insightsData.mostActiveContact.label : '—'}
+                  {insightsData.mostActiveContact ? insightsData.mostActiveContact.label : '-'}
                 </div>
               </div>
               <div style={{ flex: 1 }}>

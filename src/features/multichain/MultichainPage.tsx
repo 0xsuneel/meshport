@@ -33,7 +33,7 @@ import { UbProgressTracker, type UbTrackerProgress } from '@/components/multicha
 import { TrackDetails, type TrackDetailRow } from '@/components/multichain/TrackDetails'
 import { useCctpProgress, fetchCctpProgress } from '@/lib/cctpTracker'
 
-// Below half a cent a balance shows as "0" — treat it as empty (no "$0 on
+// Below half a cent a balance shows as "0" - treat it as empty (no "$0 on
 // 1 chain", no highlighted "0 USDC" row).
 const DUST_USDC = 0.005
 const CHAIN_LABELS: Record<string, string> = {
@@ -54,7 +54,7 @@ type FlowFocus = 'none' | 'processing' | 'result'
 interface ActivityItem {
   id: string
   type: 'claim' | 'transfer'
-  // Marks a UB fund-recovery row specifically (see recoveryItems below) —
+  // Marks a UB fund-recovery row specifically (see recoveryItems below) -
   // these are mapped onto the 'claim' type for icon/color/+amount reuse,
   // but are NOT a real row in the `claims` table and need their own title
   // ("this was a refund of a failed transfer", not "money arrived via a
@@ -67,11 +67,11 @@ interface ActivityItem {
   // parked in Unified Balance waiting for auto-finish / Recover.
   ubIntentId?: string
   ubHeld?: boolean
-  // UB claim made by an approved merchant — a customer payment.
+  // UB claim made by an approved merchant - a customer payment.
   merchant?: boolean
   // Merchant Claim All (or the old auto-convert): one Ledger → Arc transfer covering several chains.
   autoConvert?: boolean
-  // Merchant: a payment received on another chain (Hub only — not in the
+  // Merchant: a payment received on another chain (Hub only - not in the
   // main Activity page until it reaches Arc as "Ledger payment received").
   chainReceipt?: 'received' | 'converting' | 'converted'
   /** A chain receipt that is the merchant's own Transfer Funds from Arc. */
@@ -101,7 +101,7 @@ interface ActivityItem {
   sourceTxHash?: string
   destinationTxHash?: string
   // The wallet address the transfer was actually sent to, on the
-  // destination chain. Only populated going forward — Activity.bridge()
+  // destination chain. Only populated going forward - Activity.bridge()
   // never recorded this before, so older rows won't have it.
   destinationAddress?: string
   error?: string
@@ -207,7 +207,7 @@ function HubUbTracker({ item }: { item: ActivityItem }) {
   return <UbProgressTracker progress={progress} chainLabel={item.chainLabel || item.chain} />
 }
 
-// Track Progress screen for a UB claim opened from Hub Activity — same
+// Track Progress screen for a UB claim opened from Hub Activity - same
 // layout and buttons as the CCTP Track Progress screen, with the claim's
 // details tucked behind "View details".
 function HubUbTrackView({ item, onBack, onViewInHub, onHome }: {
@@ -286,7 +286,7 @@ function HubCctpTrackView({ item, onBack, onHome, onDone }: {
   useEffect(() => { if (done) onDone(item.id, p?.mintTxHash) }, [done]) // eslint-disable-line react-hooks/exhaustive-deps
   const progress: UbTrackerProgress = !p ? { stage: 'burning' }
     : p.stage === 'error' ? { stage: 'error', msg: p.msg } : { stage: p.stage }
-  // Before Circle answers the status is unknown — keep the steps neutral.
+  // Before Circle answers the status is unknown - keep the steps neutral.
   const loading = !p
   const when = new Date(item.timestamp)
   const src = item.sourceTxHash
@@ -348,7 +348,7 @@ function HubCctpTrackView({ item, onBack, onHome, onDone }: {
 // One logo per distinct chain for the scanning animation.
 const SCAN_LOGOS = [...new Set(Object.values(CHAIN_LOGO_FILE))].map(f => ({ src: `/logos/chains/${f}.svg`, alt: f }))
 
-// ── Hero card — ticket style. Left: Available To Transfer (on Arc).
+// ── Hero card - ticket style. Left: Available To Transfer (on Arc).
 // Right: Available To Bring (USDC on other chains, with their logos).
 function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null, balanceHidden, onToggleHidden, chains, bringLabel = 'Available To Bring' }: {
   arcAvailable: number; claimAvailable: number; scanning: boolean; scanChain?: string | null; balanceHidden: boolean; onToggleHidden: () => void; bringLabel?: string
@@ -378,7 +378,7 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
 
   return (
     <div style={{ position: 'relative', background: 'var(--brand)', borderRadius: 18, display: 'flex', color: '#fff', overflow: 'hidden' }}>
-      {/* Left — Available To Transfer (Arc) */}
+      {/* Left - Available To Transfer (Arc) */}
       <div style={{ flex: 1, minWidth: 0, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span style={label}>Available To Transfer</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 22 }}>
@@ -408,7 +408,7 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
       {/* Perforation */}
       <div style={{ width: 0, margin: '14px 0', borderLeft: '2px dashed rgba(255,255,255,0.35)' }} />
 
-      {/* Right — Available To Bring (other chains) */}
+      {/* Right - Available To Bring (other chains) */}
       <div style={{ flex: 1, minWidth: 0, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end', textAlign: 'right' }}>
         <span style={label}>{bringLabel}</span>
         <div style={{ display: 'flex', alignItems: 'center', height: 22 }}>
@@ -449,14 +449,14 @@ export function MultichainPage() {
   const { balance: arcBalance } = useWalletStore()
   const { showToastMessage } = useUIStore()
   const [rowCopied, setRowCopied] = useState<string | null>(null)
-  // Admin Panel → Chains toggles — a chain disabled by admin is excluded
+  // Admin Panel → Chains toggles - a chain disabled by admin is excluded
   // from balance scanning entirely, so it never contributes to "Available
   // to claim" here. Live subscription: re-enabling a chain picks it back up
   // on the next scan without needing a reload.
   const settingsMap = useSettingsStore((s) => s.settings)
   const settingsLoaded = useSettingsStore((s) => s.loaded)
   const loadSettings = useSettingsStore((s) => s.load)
-  // See the identical fix + comment in MultichainClaimPage.tsx — without
+  // See the identical fix + comment in MultichainClaimPage.tsx - without
   // this, the Hub's own "Available to claim" figure on the Claim Funds card
   // could include disabled chains' balances indefinitely if this page is
   // the first one opened in a session.
@@ -484,7 +484,7 @@ export function MultichainPage() {
   })
   const [showRecovery, setShowRecovery]   = useState(false)
   // Tab requests arriving while already on the Hub (e.g. the inline transfer
-  // form's "Open Recover") — location.state changes without a remount.
+  // form's "Open Recover") - location.state changes without a remount.
   useEffect(() => {
     const t = (location.state as any)?.tab
     if (t === 'transfer' || t === 'bring' || t === 'activity' || t === 'recovery') {
@@ -492,7 +492,7 @@ export function MultichainPage() {
       if (t === 'recovery') setShowRecovery(true)
     }
   }, [location.key])
-  // Inline forms under the tabs (Arc Bridge style — no page change, no pop-up).
+  // Inline forms under the tabs (Arc Bridge style - no page change, no pop-up).
   const [claimChain, setClaimChain] = useState<string | null>(() => initialQuery.get('chain'))
   // A claim being followed in Track Progress, shown inline under Bring Funds.
   // ?claim= in the URL (mirrored by the claim form) lets a refresh resume it.
@@ -508,7 +508,7 @@ export function MultichainPage() {
   // Device/browser back while a claim form or Track Progress is open inline
   // closes it (back to the Bring Funds list) instead of leaving the Hub.
   // A Unified Balance claim followed from Hub Activity (no `claims` row, so
-  // it gets its own Track Progress view — same layout as CCTP's).
+  // it gets its own Track Progress view - same layout as CCTP's).
   const [trackUb, setTrackUb] = useState<ActivityItem | null>(null)
   // A pending CCTP transfer/claim opened from Activity, tracked live from Circle.
   const [trackCctp, setTrackCctp] = useState<ActivityItem | null>(null)
@@ -544,11 +544,11 @@ export function MultichainPage() {
   const [dbActivity, setDbActivity]       = useState<ActivityItem[]>([])
   const [loadingActivity, setLoadingActivity] = useState(true)
   const [selectedItem, setSelectedItem]   = useState<ActivityItem | null>(null)
-  // Server-owned claims (Supabase `claims` table) — this is the ONLY source
+  // Server-owned claims (Supabase `claims` table) - this is the ONLY source
   // of truth for claim state. Populated + kept live via Realtime.
   const [serverClaims, setServerClaims]   = useState<ServerClaim[]>([])
 
-  // Subscribe to this wallet's claim rows — updates arrive even if the claim
+  // Subscribe to this wallet's claim rows - updates arrive even if the claim
   // was submitted from a different tab/device, and keep flowing regardless
   // of whether the claim page that started it is still mounted.
   useEffect(() => {
@@ -567,20 +567,20 @@ export function MultichainPage() {
 
   // Scan external wallet balances.
   // Re-runs whenever the server-owned claim list changes (e.g. right after a
-  // burn is submitted) — not just once on mount — so "Available to claim"
+  // burn is submitted) - not just once on mount - so "Available to claim"
   // doesn't keep showing funds that are already mid-bridge. The live RPC
   // balance itself already reflects only what's actually left on each chain
   // (burning removes just the claimed amount), so no chain is ever zeroed
-  // out wholesale here — that would incorrectly hide any remaining balance
+  // out wholesale here - that would incorrectly hide any remaining balance
   // on a chain that still has funds left after a partial claim.
   // RPC-USAGE FIX (2026-09-21): this used to ALSO re-run the full scan on
-  // every 'visibilitychange' and every 60s — same issue already found and
+  // every 'visibilitychange' and every 60s - same issue already found and
   // fixed on HomePage.tsx (see that file's own comment for the full
   // writeup, including the real Alchemy 429 incident this pattern caused
   // previously). Removed the visibilitychange trigger entirely; replaced
   // blind polling with a Realtime subscription on claims/activity for this
   // wallet, so a refresh fires reactively exactly when a claim or transfer
-  // actually completes — patching ONLY the one chain that changed
+  // actually completes - patching ONLY the one chain that changed
   // (readExternalChainBalance) via chainBalancesMapRef, not a full rescan.
   // The periodic interval is kept only as a backstop (60s -> 5min) for the
   // one case Realtime can't see: funds arriving on an external chain
@@ -592,9 +592,9 @@ export function MultichainPage() {
     // Re-entrancy guard, mirroring HomePage's `inFlight` exactly. The
     // interval and a reactive Realtime trigger can fire within the same
     // tick; without this, both start their own promise chain and both call
-    // setState. The RPC layer was already protected — cache.dedupe() shares
+    // setState. The RPC layer was already protected - cache.dedupe() shares
     // one in-flight request per `external:<wallet>:<settings>` key, so this
-    // never caused duplicate network traffic — but the duplicated chains
+    // never caused duplicate network traffic - but the duplicated chains
     // and setChainBalances/setTotalExternal churn were real and pointless.
     let inFlight = false
     const applyChainMap = (map: Record<string, number>) => {
@@ -620,7 +620,7 @@ export function MultichainPage() {
       }).catch(() => { /* readExternalBalances resolves 0 per failed chain; nothing to surface */ })
         .finally(() => { inFlight = false })
     }
-    // Targeted single-chain refresh — patches one entry in the known
+    // Targeted single-chain refresh - patches one entry in the known
     // per-chain map and re-derives chainBalances/totalExternal from it,
     // instead of re-scanning every chain.
     const applyOne = (chainId: string, balance: number) => {
@@ -664,7 +664,7 @@ export function MultichainPage() {
   }, [walletAddress, processingClaims.map(c => `${c.id}:${c.status}`).join(','), settingsMap, settingsLoaded, scanNonce])
 
   const reloadActivityRef = useRef<(() => void) | null>(null)
-  // Load completed activity from DB — shared across all devices via Supabase
+  // Load completed activity from DB - shared across all devices via Supabase
   useEffect(() => {
     if (!walletAddress) { setLoadingActivity(false); return }
 
@@ -676,16 +676,16 @@ export function MultichainPage() {
       const mySeq = ++seq
       const current = () => !disposed && mySeq === seq
       try {
-        // Transfers-out still come from the `activity` table — multichain
+        // Transfers-out still come from the `activity` table - multichain
         // sends don't have a server-tracked state machine of their own.
         const bridges = await fetchActivity(walletAddress, { activityType: 'bridge', limit: 200, includePendingBridge: true })
 
         // Claims: `serverClaims` (the `claims` table, kept live via
         // subscribeToWalletClaims) is the ONLY source of truth for claim
-        // state — build Activity rows straight from it instead of from a
+        // state - build Activity rows straight from it instead of from a
         // separately-written `activity` row. Previously backgroundBridge.ts
         // wrote its own `activity` row on burn AND submitClaim() wrote a
-        // `claims` row for that same burn — so every claim rendered as two
+        // `claims` row for that same burn - so every claim rendered as two
         // near-identical cards (one here, one in the old "Processing
         // Claims" section). Sourcing from one table fixes that for good,
         // and since `claims` rows persist indefinitely, this also gives
@@ -695,7 +695,7 @@ export function MultichainPage() {
             ?? c.sourceChain.replace('_Sepolia', '').replace('_Testnet', '').replace('_Fuji', '').replace(/_/g, ' ').trim()
           // Show the real, verified arrived amount once known (parsed
           // directly from the on-chain Transfer log at completion) rather
-          // than always showing the originally-claimed figure — a real
+          // than always showing the originally-claimed figure - a real
           // CCTP/relay fee (confirmed in practice: ~2.5%) means these can
           // genuinely differ, and showing "claimed" as if it were "arrived"
           // was misleading. Falls back to the claimed amount before
@@ -722,16 +722,16 @@ export function MultichainPage() {
           }
         })
 
-        // fetchActivity('bridge') intentionally also returns 'claim' rows —
-        // see ActivityService.ts's `activity_type=in.(bridge,claim)` — for
+        // fetchActivity('bridge') intentionally also returns 'claim' rows -
+        // see ActivityService.ts's `activity_type=in.(bridge,claim)` - for
         // the global Activity page's "Multichain" tab, which groups both
         // together. But claim items here are already built directly from
         // `serverClaims` above, so including 'claim' rows from this fetch
         // too rendered every claim TWICE: once correctly ("Claim from X",
         // +amount) and once mislabeled by the transfer template ("Transfer
         // to Arc", -amount, since it assumes an outgoing send). Filter them
-        // out — only genuine 'bridge' rows belong in this list.
-        // Unified Balance claims (direct or recovered) — written to `activity`
+        // out - only genuine 'bridge' rows belong in this list.
+        // Unified Balance claims (direct or recovered) - written to `activity`
         // by lib/ubClaim.ts since UB has no `claims` row.
         const ubClaimItems: ActivityItem[] = bridges
           .filter((item: any) => item.activityType === 'claim' && item.metadata?.route === 'ub')
@@ -762,7 +762,7 @@ export function MultichainPage() {
           .map((item: any) => ({
           id:         item.id ?? item.txHash ?? Math.random().toString(),
           type:       'transfer',
-          // Real row status — pending transfers stay trackable, failed ones show as failed.
+          // Real row status - pending transfers stay trackable, failed ones show as failed.
           status:     item.status === 'failed' ? 'failed' : item.status === 'pending' ? 'pending' : 'success',
           amount:     item.amount ?? 0,
           chain:      item.metadata?.destinationChain || item.destinationChain || item.metadata?.toChain || item.toChain || item.metadata?.sourceChain || item.sourceChain || '',
@@ -780,7 +780,7 @@ export function MultichainPage() {
         }))
 
         // UB fund-recovery rows (activity_type: 'withdraw', see
-        // lib/ubFundRecovery.ts) — a byproduct of a failed multichain
+        // lib/ubFundRecovery.ts) - a byproduct of a failed multichain
         // transfer, so they belong here in the Multichain Hub view, not
         // dropped silently now that fetchActivity('bridge') also returns
         // them (see ActivityService.ts). Mapped onto the SAME shape as a
@@ -821,7 +821,7 @@ export function MultichainPage() {
     // Load immediately
     loadActivity()
 
-    // Also refresh Arc balance from chain directly — works on any device
+    // Also refresh Arc balance from chain directly - works on any device
     const refreshBalance = async () => {
       try {
         const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
@@ -831,7 +831,7 @@ export function MultichainPage() {
     }
     refreshBalance()
 
-    // Refresh every 30s — picks up claims from other devices automatically
+    // Refresh every 30s - picks up claims from other devices automatically
     const interval = setInterval(() => {
       loadActivity()
       refreshBalance()
@@ -900,7 +900,7 @@ export function MultichainPage() {
   const cardS = { background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)' }
   const isUbChain = (id: string) => UB_CLAIM_CHAINS.has(id === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : id)
   // Only chains Bring Funds can actually move: the gasless router (CCTP) or
-  // Unified Balance. Merchants: CCTP chains only — MeshPort's relayer pays
+  // Unified Balance. Merchants: CCTP chains only - MeshPort's relayer pays
   // the gas, same as anyone's CCTP claim.
   const bringRows = isMerchant
     ? allChainRows.filter(c => isGaslessBridgeAvailable(c.id))
@@ -985,14 +985,14 @@ export function MultichainPage() {
                       setHubTab(item.type === 'claim' ? 'bring' : 'transfer')
                       window.scrollTo?.({ top: 0, behavior: 'smooth' })
                     } else if (isPending && item.route === 'ub') {
-                      // UB claims have no `claims` row — open their own
+                      // UB claims have no `claims` row - open their own
                       // Track Progress (same screen layout as CCTP's).
                       setClaimChain(null)
                       setTrackUb(item)
                       setHubTab('bring')
                       window.scrollTo?.({ top: 0, behavior: 'smooth' })
                     } else if (isPending && item.type === 'claim' && !item.isRecovery) {
-                      // Deep-link straight into Track Progress for THIS claim —
+                      // Deep-link straight into Track Progress for THIS claim -
                       // previously this always sent every pending tap to the
                       // generic Claim Funds landing page with no reference to
                       // which claim was tapped, so there was no way to reach
@@ -1001,7 +1001,7 @@ export function MultichainPage() {
                       // The claim id is passed BOTH as router state and as a
                       // `?claim=` query param. Router state alone doesn't
                       // reliably survive a hard refresh in every environment
-                      // this app runs in — the query param does, since it's
+                      // this app runs in - the query param does, since it's
                       // part of the URL itself, which is what lets a refresh
                       // on the tracking screen resume correctly instead of
                       // falling back to the scan/select ("assets") screen.
@@ -1021,7 +1021,7 @@ export function MultichainPage() {
                     borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' : 'none',
                     cursor: 'pointer',
                   }}>
-                  {/* Icon — status-based, static (no animation). Processing
+                  {/* Icon - status-based, static (no animation). Processing
                       Claims is the only place with a live spinner; Activity
                       just reflects current state at a glance. */}
                   <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
@@ -1067,7 +1067,7 @@ export function MultichainPage() {
                     <div style={{ fontSize: 14, fontWeight: 700,
                       color: isFailed ? 'var(--danger)' : item.ownReceipt || item.ownClaim ? 'var(--text-secondary)' : isClaim ? 'var(--success)' : 'var(--danger)' }}>
                       {/* Own transfer arriving on another chain: the same money as the
-                          "Transfer to …" row (already −), so no sign — not new income. */}
+                          "Transfer to …" row (already −), so no sign - not new income. */}
                       {isFailed || item.ownReceipt || item.ownClaim
                         ? `$${formatAmount(item.amount)}`
                         : isClaim
@@ -1114,7 +1114,7 @@ export function MultichainPage() {
           const { walletAddress } = useAuthStore.getState()
           if (walletAddress) {
             copyToClipboard(walletAddress).then(ok => {
-              showToastMessage(ok ? 'Address copied — paste it on the faucet page' : 'Could not copy address', ok ? 'success' : 'error')
+              showToastMessage(ok ? 'Address copied - paste it on the faucet page' : 'Could not copy address', ok ? 'success' : 'error')
             })
           }
           window.open('https://faucet.circle.com/', '_blank', 'noopener,noreferrer')
@@ -1133,7 +1133,7 @@ export function MultichainPage() {
 
       <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-        {/* Hero — ticket card: Available To Transfer (left) | Available To Bring (right) */}
+        {/* Hero - ticket card: Available To Transfer (left) | Available To Bring (right) */}
         {/* Glides up together with the Transfer / Bring form when the amount
             keypad opens, so the whole screen moves as one (useKeypadLift). */}
         <motion.div animate={{ y: -hubKeypadLift }} initial={false} transition={KEYPAD_SPRING}
@@ -1210,7 +1210,7 @@ export function MultichainPage() {
         )}
 
         {/* Phone: the chosen chain's Bring flow opens as a full page that
-            slides in from the right over the chain list — form, processing,
+            slides in from the right over the chain list - form, processing,
             Track Progress and success all happen inside it. */}
         {!isDesktop && (
           <HubPage open={hubTab === 'bring' && !trackCctp && !trackUb && !trackClaim && !!claimChain}
@@ -1257,7 +1257,7 @@ export function MultichainPage() {
               </button>
             </div>
 
-            {/* Chain list — every chain, balance on the right; empty ones dimmed */}
+            {/* Chain list - every chain, balance on the right; empty ones dimmed */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
               {/* Visible scan: the full scanner while nothing is listed yet,
                   a slim strip above the list while it refreshes. */}
@@ -1322,9 +1322,9 @@ export function MultichainPage() {
             <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Recover stuck funds</div>
             <p style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--text-secondary)', margin: '6px 0 16px' }}>
               {showRecovery
-                ? 'Anything that didn’t finish is listed below — choose how to finish each one.'
+                ? 'Anything that didn’t finish is listed below - choose how to finish each one.'
                 : failedCount > 0
-                ? `${failedCount} move${failedCount === 1 ? '' : 's'} didn't finish. Burned USDC can still be minted — check each one and finish it.`
+                ? `${failedCount} move${failedCount === 1 ? '' : 's'} didn't finish. Burned USDC can still be minted - check each one and finish it.`
                 : "If a transfer or claim doesn't arrive, you can finish it here."}
             </p>
             {!showRecovery && (
@@ -1339,7 +1339,7 @@ export function MultichainPage() {
           </div>
         )}
 
-        {/* Recovery results render right here, below the card — no page change */}
+        {/* Recovery results render right here, below the card - no page change */}
         {hubTab === 'recovery' && showRecovery && <RecoveryPanel />}
 
         {hubTab === 'activity' && !isDesktop && renderActivity(false)}
@@ -1359,7 +1359,7 @@ export function MultichainPage() {
         const isRecoveredClaim = isClaimItem && !!it.sourceTxHash && it.sourceTxHash === it.destinationTxHash
         const sourceHref      = isRecoveredClaim ? null : isClaimItem ? externalExplorerUrl(it.sourceTxHash) : arcExplorerTxUrl(it.sourceTxHash)
         const destinationHref = isClaimItem ? arcExplorerTxUrl(it.destinationTxHash) : externalExplorerUrl(it.destinationTxHash)
-        const chainName = it.chainLabel || it.chain || '—'
+        const chainName = it.chainLabel || it.chain || '-'
         const feeWasDeducted = isClaimItem && it.claimedAmount != null && it.arrivedAmount != null
           && Math.abs(it.claimedAmount - it.arrivedAmount) > 0.000001
         const status = it.status === 'success' ? 'success' : it.status === 'failed' ? 'failed' : 'pending'
@@ -1420,7 +1420,7 @@ export function MultichainPage() {
   if (!isDesktop) return page
 
   // ── Desktop: Hub (left) + Multichain Activity (right), each scrolling on
-  // its own — same 65/35 layout as Swap and Pay.
+  // its own - same 65/35 layout as Swap and Pay.
   return (
     <div style={{ display: 'flex', flex: 1, height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box', background: 'var(--bg)' }}>
       <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{page}</div>

@@ -1,16 +1,16 @@
 // supabase/functions/transfer-worker/index.ts
 //
 // Backend worker for outbound Multichain Transfer (Arc -> destination
-// chain) — the reverse direction of Multichain Claim (destination chain ->
+// chain) - the reverse direction of Multichain Claim (destination chain ->
 // Arc, handled by claim-worker). Mirrors claim-worker's architecture:
 // continuous pg_cron sweep, FOR UPDATE SKIP LOCKED row locking, passive
 // on-chain detection of the mint. Kept deliberately simpler than
-// claim-worker in one respect — see the note above findMintByAmount below
+// claim-worker in one respect - see the note above findMintByAmount below
 // for why this doesn't attempt claim-worker's exact nonce-based match.
 //
 // Root cause this exists to fix: there was no backend for this direction
 // at all before this. A burn on Arc got written to `activity` as a
-// 'pending' bridge row and then NOTHING ever checked it again — confirmed
+// 'pending' bridge row and then NOTHING ever checked it again - confirmed
 // live via rows over a month old with updated_at == created_at. The CCTP
 // burn itself was never the problem; nothing was left watching for the
 // mint once the browser tab that submitted it moved on.
@@ -32,7 +32,7 @@ function json(body: unknown, status = 200): Response {
 }
 
 // ── Per-destination-chain RPC + USDC contract registry ───────────────────
-// Ported verbatim from src/blockchain/chains.ts's EXTERNAL_CHAINS — that
+// Ported verbatim from src/blockchain/chains.ts's EXTERNAL_CHAINS - that
 // file's own comments describe it as "verified against Circle's own SDK
 // source / developers.circle.com," already battle-tested for balance
 // scanning across every one of these chains. Reused here rather than
@@ -62,7 +62,7 @@ const DEST_CHAINS: Record<string, { rpcs: string[]; usdc: string }> = {
 }
 
 const CIRCLE_IRIS_API = 'https://iris-api-sandbox.circle.com'
-const ARC_DOMAIN = 26 // Arc's own CCTP domain — it's the SOURCE for this direction
+const ARC_DOMAIN = 26 // Arc's own CCTP domain - it's the SOURCE for this direction
 
 async function rpcCall(urls: string[], method: string, params: unknown[]): Promise<any> {
   let lastErr: unknown = null
@@ -92,11 +92,11 @@ const TRANSFER_TOPIC0 = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55
 const MINT_FROM_TOPIC = '0x' + '0'.repeat(64)
 // Same Kit forwarder addresses claim-worker already had to add (as
 // KIT_FORWARD_SOURCES) after discovering live that Circle's Fast Transfer
-// relay doesn't always mint directly from address(0) — some mints route
+// relay doesn't always mint directly from address(0) - some mints route
 // through one of these forwarding contracts instead. That fix only ever
 // landed on the Arc (claim) side; this direction had the same narrow
 // address(0)-only filter the whole time, meaning any forwarded mint on a
-// destination chain was invisible to this worker's scan from day one —
+// destination chain was invisible to this worker's scan from day one -
 // not found-but-wrong-amount, just never in the result set at all.
 const KIT_FORWARD_TOPICS = [
   MINT_FROM_TOPIC,
@@ -114,7 +114,7 @@ async function getBlockTimestamp(rpcs: string[], blockNumber: number): Promise<n
 }
 
 // Binary search for the block whose timestamp is closest to (at or just
-// before) targetUnixSeconds — used by backfill mode so a one-off historical
+// before) targetUnixSeconds - used by backfill mode so a one-off historical
 // scan can position itself accurately without assuming any chain's block
 // time (several of these chains are L2s with very different block
 // intervals than Ethereum Sepolia's ~12s).
@@ -161,18 +161,18 @@ async function fetchLogsBounded(rpcs: string[], filterBase: Record<string, unkno
 type MintCandidate = { transactionHash: string; blockNumber: number; amount: number }
 type MintLookupResult = { matches: MintCandidate[]; candidateCount: number; candidateAmounts: string[] }
 
-// Amount-fuzzy match only — NOT claim-worker's exact nonce-based match.
+// Amount-fuzzy match only - NOT claim-worker's exact nonce-based match.
 // claim-worker can do exact matching because it only ever watches ONE
 // chain (Arc) and has a verified MessageTransmitter address for it. This
 // worker watches up to 20 different destination chains, and getting even
 // one of 20 different testnets' MessageTransmitterV2 addresses wrong from
 // an unverified source would be worse than not attempting exact matching
-// at all — a wrong contract address doesn't fail loudly, it just silently
+// at all - a wrong contract address doesn't fail loudly, it just silently
 // never matches anything. Amount-fuzzy matching (same tolerance band
 // claim-worker's own fallback already uses safely in production) plus the
 // same collision-safe write pattern (partial unique index on
 // destination_tx_hash + skip-if-already-used) gets the actual bug fixed
-// — stuck-forever transfers — without introducing a new class of risk. If
+// - stuck-forever transfers - without introducing a new class of risk. If
 // per-chain MessageTransmitter addresses are ever verified against each
 // chain's own docs, exact nonce matching can be added as a preferred first
 // pass the same way claim-worker's confirmArrival tries nonce before amount.
@@ -227,7 +227,7 @@ const SUPABASE_SERVICE_KEY = getServiceRoleKey()
 const SWEEP_DURATION_MS    = 50_000
 const SWEEP_INTERVAL_MS    = 8_000
 const STALE_LOCK_MS        = 6_000
-const TRANSFER_TIMEOUT_MS  = 6 * 60 * 60 * 1000 // was 60min — confirmed live via Circle's own API that testnet attestation alone can take 4+ hours (checked directly: messages[].status stayed "pending_confirmations" that long for a real transfer). Safe to extend now that completion is authoritative (Circle's forwardState), not dependent on a scan finding the right block in time.
+const TRANSFER_TIMEOUT_MS  = 6 * 60 * 60 * 1000 // was 60min - confirmed live via Circle's own API that testnet attestation alone can take 4+ hours (checked directly: messages[].status stayed "pending_confirmations" that long for a real transfer). Safe to extend now that completion is authoritative (Circle's forwardState), not dependent on a scan finding the right block in time.
 
 type Transfer = {
   id: string
@@ -282,7 +282,7 @@ async function advanceTransfer(supabase: SupabaseClient, t: Transfer) {
     // ── 2026-09-20 authoritative detection via Circle's own forward-tracking ──
     // MAJOR FIX: this used to only read messages[0].status/message from this
     // response (to store message_hash) and otherwise rely entirely on
-    // amount-fuzzy on-chain log scanning to find the mint — the same
+    // amount-fuzzy on-chain log scanning to find the mint - the same
     // heuristic used everywhere else in this codebase for exactly this
     // reason (no verified per-chain MessageTransmitter address to match
     // exactly). But Circle's OWN v2/messages response already contains the
@@ -294,11 +294,11 @@ async function advanceTransfer(supabase: SupabaseClient, t: Transfer) {
     // `forwardTxHash` for the destination deposit." Confirmed live against
     // three transfers this worker had wrongly marked 'failed': all three
     // had forwardState:"COMPLETE" with a real destinationMintTxHash Circle
-    // had recorded — the funds had genuinely arrived; amount-fuzzy scanning
+    // had recorded - the funds had genuinely arrived; amount-fuzzy scanning
     // just never found the right block/candidate among same-amount
     // collisions. destinationMintTxHash is authoritative and exact, same
     // guarantee claim-worker's nonce-based match has for the reverse
-    // direction — no more guessing needed when Circle already knows.
+    // direction - no more guessing needed when Circle already knows.
     let circleMsg: any = null
     try {
       const url = `${CIRCLE_IRIS_API}/v2/messages/${ARC_DOMAIN}?transactionHash=${latest.tx_hash}`
@@ -315,7 +315,7 @@ async function advanceTransfer(supabase: SupabaseClient, t: Transfer) {
     if (circleMsg?.forwardState === 'COMPLETE' && circleMsg?.destinationMintTxHash) {
       const mintHash = circleMsg.destinationMintTxHash as string
       const body = circleMsg?.decodedMessage?.decodedMessageBody
-      // Real arrived amount straight from Circle's own decoded message —
+      // Real arrived amount straight from Circle's own decoded message -
       // amount minus the fee actually charged, both already in raw USDC
       // units (6 decimals) in this response. No RPC call needed to derive
       // it, unlike the amount-fuzzy path which has to read it off-chain.
@@ -336,26 +336,26 @@ async function advanceTransfer(supabase: SupabaseClient, t: Transfer) {
           await persistErrorBestEffort(supabase, t.id, `update failed: ${error.message}`)
           return
         }
-        // Race with something else writing the same hash — fine, fall
+        // Race with something else writing the same hash - fine, fall
         // through to the diagnostic path below rather than treat it as new.
       }
-      // else: this exact mint is already claimed by a different row — an
+      // else: this exact mint is already claimed by a different row - an
       // actual data problem (two transfers can't share one mint), not
       // something to silently retry. Falls through to persistErrorBestEffort
       // below with a clear diagnostic instead of the generic amount-fuzzy one.
       if (alreadyUsed) {
-        await persistErrorBestEffort(supabase, t.id, `Circle reports mint ${mintHash} but it's already recorded on a different transfer (${alreadyUsed.id}) — needs manual review`)
+        await persistErrorBestEffort(supabase, t.id, `Circle reports mint ${mintHash} but it's already recorded on a different transfer (${alreadyUsed.id}) - needs manual review`)
         return
       }
     } else if (circleMsg?.forwardState === 'FAILED') {
       // Per Arc's docs: "Relayer reported a permanent failure; manual mint
-      // may be required." This is Circle telling us directly it gave up —
+      // may be required." This is Circle telling us directly it gave up -
       // no reason to keep polling for 60 minutes when the source already
       // says it's terminal.
-      await markFailed(supabase, latest, 'Circle\'s relayer reported a permanent forwarding failure for this transfer — the burn succeeded but the mint did not complete automatically. May need a manual mint.')
+      await markFailed(supabase, latest, 'Circle\'s relayer reported a permanent forwarding failure for this transfer - the burn succeeded but the mint did not complete automatically. May need a manual mint.')
       return
     }
-    // forwardState PENDING/null/absent: keep going — fall through to the
+    // forwardState PENDING/null/absent: keep going - fall through to the
     // amount-fuzzy scan below as a backstop (in case forwardState is ever
     // unavailable for a given message) and normal timeout handling.
 
@@ -394,7 +394,7 @@ async function advanceTransfer(supabase: SupabaseClient, t: Transfer) {
 
     if (claimed) return
 
-    // Only apply the timeout AFTER a real attempt found nothing — never
+    // Only apply the timeout AFTER a real attempt found nothing - never
     // before. A transfer whose first-ever check happens well after
     // TRANSFER_TIMEOUT_MS has already elapsed (exactly what happened to
     // every pre-existing stuck transfer the moment this worker was first
@@ -444,7 +444,7 @@ async function processPass(supabase: SupabaseClient, transferId?: string): Promi
 Deno.serve(async (req: Request) => {
   const preflight = handleOptions(req)
   if (preflight) return preflight
-  // Scheduled job only — the pg_cron caller's secret, never a user session.
+  // Scheduled job only - the pg_cron caller's secret, never a user session.
   if (!isCronOrLegacyServiceCaller(req)) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } })
   if (req.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405)
 
@@ -478,7 +478,7 @@ Deno.serve(async (req: Request) => {
 
   // One-off historical scan for a single transfer, positioned around its
   // OWN burn time via binary search rather than "now minus a fixed window"
-  // — the normal sweep's recent-window scan can never find a mint that
+  // - the normal sweep's recent-window scan can never find a mint that
   // happened shortly after an old burn, since by the time the worker looks
   // again, that block range has scrolled out of the recent window entirely.
   if (mode === 'backfill' && body?.transferId) {
@@ -488,7 +488,7 @@ Deno.serve(async (req: Request) => {
     const chain = DEST_CHAINS[t.destination_chain]
     if (!chain) return json({ success: false, error: `unsupported destination chain: ${t.destination_chain}` }, 400)
 
-    // Same authoritative check advanceTransfer now does first — Circle's
+    // Same authoritative check advanceTransfer now does first - Circle's
     // own forwardState/destinationMintTxHash beats guessing from on-chain
     // logs. Try it before falling back to the scan below.
     if (t.status !== 'completed') {
@@ -517,7 +517,7 @@ Deno.serve(async (req: Request) => {
     const fromBlock = await findBlockByTimestamp(chain.rpcs, targetStart)
     const currentBlock = await getCurrentBlockNumber(chain.rpcs)
     // Scan a generous window after the burn (or up to "now" for a burn
-    // recent enough that the whole gap is smaller) — CCTP mints normally
+    // recent enough that the whole gap is smaller) - CCTP mints normally
     // land within minutes to a couple hours of the burn, not days.
     const toBlock = Math.min(currentBlock, fromBlock + 600_000)
 

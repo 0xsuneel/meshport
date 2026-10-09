@@ -1,29 +1,29 @@
 // lib/onchainReceivedActivity.ts
 //
 // Direct, client-side blockchain source of truth for RECENT incoming
-// transfers to the connected wallet — native USDC value transfers and
+// transfers to the connected wallet - native USDC value transfers and
 // ERC-20 (EURC/cirBTC) transfers alike. Built specifically to close the
 // gap where a deposit sent straight to a wallet address (not through
 // MeshPort's own send flow) previously only became visible once
-// deposit-scan-all's background sweep discovered it, which — while now
-// fast (a few seconds, see that function's own fix history) — is still a
+// deposit-scan-all's background sweep discovered it, which - while now
+// fast (a few seconds, see that function's own fix history) - is still a
 // server-mediated hop, not a direct read of the chain itself.
 //
 // ── Why the Blockscout explorer API, not raw eth_getLogs from the browser ──
 // Native transfers don't emit logs at all (see deposit-scan-all's own
-// comment on this — USDC here is native value, `eth_getLogs` is
+// comment on this - USDC here is native value, `eth_getLogs` is
 // structurally blind to it), so a real client-side equivalent needs either
 // block-by-block scanning (expensive to do repeatedly from a browser, and
 // with no way to paginate backward efficiently) or an already-indexed
-// source. ArcScan (Blockscout) indexes exactly this — the SAME endpoint
+// source. ArcScan (Blockscout) indexes exactly this - the SAME endpoint
 // deposit-scan-all's own reconcile pass already uses successfully
-// server-side (`/addresses/{address}/transactions?filter=to`) — reused
+// server-side (`/addresses/{address}/transactions?filter=to`) - reused
 // directly here rather than reinventing indexing client-side.
 //
 // ── An honest, unverifiable-from-here assumption ────────────────────────────
 // Whether this specific Blockscout instance sends CORS headers permitting
 // browser-based requests (as opposed to only server-to-server ones, which
-// is all deposit-scan-all itself needed) has NOT been verified — this
+// is all deposit-scan-all itself needed) has NOT been verified - this
 // sandboxed environment has no network path to arcscan.app to test it.
 // Every call here is wrapped so a CORS/network failure degrades silently:
 // the existing Supabase-backed feed (still populated by deposit-scan-all
@@ -35,7 +35,7 @@ import { P2P_ESCROW_CONTRACT_ADDRESS } from './p2pEscrowContract'
 import { ARC_EXPLORER } from './chainExplorers'
 const ARC_EXPLORER_API = `${ARC_EXPLORER}/api/v2`
 
-// Same known-internal-contracts list as deposit-scan-all's own — a
+// Same known-internal-contracts list as deposit-scan-all's own - a
 // transfer FROM one of these is definitionally a swap/bridge output leg,
 // not a genuine external deposit, and should not double up with what the
 // Supabase feed already shows for that same underlying activity via its
@@ -43,14 +43,14 @@ const ARC_EXPLORER_API = `${ARC_EXPLORER}/api/v2`
 //
 // Exported so lib/arcDepositWatcher.ts (the real-time eth_subscribe(logs)
 // layer) applies the exact same swap/bridge-output exclusion this REST
-// fallback does — one source of truth client-side, mirroring the server's
+// fallback does - one source of truth client-side, mirroring the server's
 // decide.ts / deposit-scan-all KNOWN_INTERNAL_CONTRACTS.
 //
 // BUG FIX (BulkPay recipients got a second, misclassified "Received from
 // <Multicall3 address>" notification + activity row alongside their correct
 // "Received via bulk payout" one): this list was missing Multicall3
 // (0xcA11bde05977b3631167028862be2A173976CA11), the contract
-// BulkPayoutPage.tsx routes every payout through — each recipient's
+// BulkPayoutPage.tsx routes every payout through - each recipient's
 // individual transfer is forwarded BY Multicall3, so its Transfer/native
 // value-transfer log legitimately shows `from = Multicall3`, not the actual
 // sender. Every OTHER copy of this exact list in the codebase (server-side
@@ -58,7 +58,7 @@ const ARC_EXPLORER_API = `${ARC_EXPLORER}/api/v2`
 // ledger-interpret/classifiers.ts, server/ledger/classifiers.ts,
 // blockchain-indexer/compare.ts, and the canonical
 // supabase/functions/_shared/knownInternalContracts.ts) already excludes
-// Multicall3 — these two client-side copies (this one, and HomePage.tsx's
+// Multicall3 - these two client-side copies (this one, and HomePage.tsx's
 // own local copy in fireIfReceived) were the only ones still missing it, so
 // this real-time watcher kept treating every BulkPay leg as a genuine
 // external deposit from an unrecognized address.
@@ -71,11 +71,11 @@ export const KNOWN_INTERNAL_CONTRACTS = new Set([
   '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b',
   '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa',
   '0xe737e5cebeeba77efe34d4aa090756590b1ce275',
-  '0xca11bde05977b3631167028862be2a173976ca11', // Multicall3 — BulkPay routes through this
+  '0xca11bde05977b3631167028862be2a173976ca11', // Multicall3 - BulkPay routes through this
 ])
 
-// BUG FIX: a seller withdrawing their own P2P escrow — after a release,
-// refund, or offer cancellation — sends USDC FROM the escrow contract back
+// BUG FIX: a seller withdrawing their own P2P escrow - after a release,
+// refund, or offer cancellation - sends USDC FROM the escrow contract back
 // to their own wallet. Without the contract's address in this set, that
 // legitimate internal movement was indistinguishable from a genuine
 // external deposit, so cancelling an offer produced a normal "USDC
@@ -98,7 +98,7 @@ export interface OnchainReceivedTx {
   tokenSymbol: string
   amount: number
   status: 'pending' | 'confirmed'
-  timestamp: string // ISO — real block/submission time from the explorer, not "now"
+  timestamp: string // ISO - real block/submission time from the explorer, not "now"
 }
 
 function isFromKnownInternalContract(fromAddr: string | undefined | null): boolean {
@@ -108,7 +108,7 @@ function isFromKnownInternalContract(fromAddr: string | undefined | null): boole
 /**
  * Fetches the most recent native-value transfers TO this wallet directly
  * from the explorer. Limited to a bounded recent window (not full paginated
- * history) — this is the "did something just arrive" layer, not a
+ * history) - this is the "did something just arrive" layer, not a
  * replacement for deep history browsing.
  */
 async function fetchRecentNativeReceived(walletAddress: string): Promise<OnchainReceivedTx[]> {
@@ -136,7 +136,7 @@ async function fetchRecentNativeReceived(walletAddress: string): Promise<Onchain
     // Blockscout marks a tx's own execution result via `status` ('ok' /
     // 'error' / null-ish while still pending); `block_number` present at
     // all is the more reliable "has this actually landed in a block yet"
-    // signal — a still-pending tx simply won't have one.
+    // signal - a still-pending tx simply won't have one.
     const isConfirmed = item?.block_number != null && (item?.status == null || item.status === 'ok')
     if (item?.status === 'error') continue // a reverted tx never actually transferred anything
 
@@ -147,7 +147,7 @@ async function fetchRecentNativeReceived(walletAddress: string): Promise<Onchain
   return out
 }
 
-/** Same idea, for ERC-20 (EURC/cirBTC) transfers — a separate Blockscout endpoint from native transactions. */
+/** Same idea, for ERC-20 (EURC/cirBTC) transfers - a separate Blockscout endpoint from native transactions. */
 async function fetchRecentTokenReceived(walletAddress: string): Promise<OnchainReceivedTx[]> {
   const url = `${ARC_EXPLORER_API}/addresses/${walletAddress}/token-transfers?filter=to`
   const res = await fetch(url, { signal: AbortSignal.timeout(12_000) })
@@ -168,7 +168,7 @@ async function fetchRecentTokenReceived(walletAddress: string): Promise<OnchainR
     if (isFromKnownInternalContract(fromAddr)) continue
 
     const known = KNOWN_TOKENS[contractAddr]
-    if (!known) continue // not a genuine EURC/cirBTC contract — never trust the token label alone, same reasoning as elsewhere in this app
+    if (!known) continue // not a genuine EURC/cirBTC contract - never trust the token label alone, same reasoning as elsewhere in this app
 
     let amount: number
     try { amount = Number(BigInt(rawValue)) / (10 ** known.decimals) } catch { continue }
@@ -176,7 +176,7 @@ async function fetchRecentTokenReceived(walletAddress: string): Promise<OnchainR
 
     const timestamp = item?.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString()
     // Token-transfer entries in Blockscout are only ever indexed once the
-    // transfer's log is actually mined — there's no "pending" state to
+    // transfer's log is actually mined - there's no "pending" state to
     // represent for this endpoint specifically (unlike top-level native
     // transactions, which can appear before confirmation).
     out.push({ txHash: txHash.toLowerCase(), fromAddress: fromAddr.toLowerCase(), tokenSymbol: known.symbol, amount, status: 'confirmed', timestamp })
@@ -187,7 +187,7 @@ async function fetchRecentTokenReceived(walletAddress: string): Promise<OnchainR
 /**
  * Combined, deduped, most-recent-first list of real incoming transfers to
  * this wallet, read directly from the chain (via the explorer's index).
- * Fails silently to an empty array on any error — see file header for why
+ * Fails silently to an empty array on any error - see file header for why
  * that's the correct behavior here, not a bug to "fix" by surfacing it.
  */
 export async function fetchRecentOnchainReceived(walletAddress: string): Promise<OnchainReceivedTx[]> {

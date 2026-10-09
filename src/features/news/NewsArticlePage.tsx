@@ -5,7 +5,7 @@ import { copyToClipboard } from '@/lib/utils'
 import { fetchNewsItem, newsHost, NEWS_SOURCE_LABEL, type NewsItem } from '@/lib/news'
 import { NewsCover, newsMeta } from './NewsPage'
 
-// /news/:id — the short article: cover, headline, summary and the opening
+// /news/:id - the short article: cover, headline, summary and the opening
 // paragraphs. "Read full article" opens the original page on arc.io /
 // circle.com / status.arc.io. MeshPort posts are shown in full here (they're
 // ours), so they only get a button when the post links somewhere.

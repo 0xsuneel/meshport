@@ -1,10 +1,10 @@
 /**
- * blockchain/events.ts — the typed event model for BlockchainIndexer
+ * blockchain/events.ts - the typed event model for BlockchainIndexer
  *
  * Phase 3. Shared vocabulary between the indexer (which publishes) and the
  * Phase 4 consumer (which subscribes). Declared here in the frontend so that
  * when the edge function's TypeScript is compiled with the same types, both
- * sides cannot drift — the event_type CHECK constraint in the migration is
+ * sides cannot drift - the event_type CHECK constraint in the migration is
  * the server-side backstop to that same agreement.
  *
  * ── Design rule: the indexer has no business logic ─────────────────────────
@@ -13,10 +13,10 @@
  * "funds arrived at address X on chain Y". Deciding which cache keys to
  * invalidate is the Phase 4 consumer's job.
  *
- * TESTNET ONLY — same chain ids, tokens and semantics as the rest of the app.
+ * TESTNET ONLY - same chain ids, tokens and semantics as the rest of the app.
  */
 
-/** The fixed event vocabulary — must match the migration's CHECK constraint. */
+/** The fixed event vocabulary - must match the migration's CHECK constraint. */
 export type ChainEventType =
   | 'deposit_detected'
   | 'transfer_detected'
@@ -85,7 +85,7 @@ export interface BridgeCompletedMeta {
   amount: number
 }
 
-/** Convenience constructors — keep the indexer code free of object literals. */
+/** Convenience constructors - keep the indexer code free of object literals. */
 export const makeDepositEvent = (
   chain: string, wallet: string, tx: string | null, block: number | null,
   recipient: string, sender: string, amount: number, asset = 'USDC',

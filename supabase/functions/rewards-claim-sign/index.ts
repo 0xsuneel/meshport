@@ -10,13 +10,13 @@
 // claimId, signature) on-chain call.
 //
 // Signer (C-3): a Circle developer-controlled wallet when
-// REWARDS_SIGNER_WALLET_ID is set — the key lives in Circle, never in an env
+// REWARDS_SIGNER_WALLET_ID is set - the key lives in Circle, never in an env
 // var. Otherwise the legacy REWARDS_SIGNER_PRIVATE_KEY, kept only until the
 // Circle wallet is set up and registered as pointsSigner on the contract.
 //
-// Returns: { signature: string }  — 0x-prefixed hex, 65 bytes (EIP-191 v=27/28)
+// Returns: { signature: string }  - 0x-prefixed hex, 65 bytes (EIP-191 v=27/28)
 //
-// Security: the private key NEVER leaves this function — not in logs, not in
+// Security: the private key NEVER leaves this function - not in logs, not in
 // responses, not in errors. Same discipline as RELAY_PRIVATE_KEY in relay-deposit.js.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
@@ -39,7 +39,7 @@ function getServiceRoleKey(): string {
   }
 
   throw new Error(
-    'No Supabase service role key found — checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS. ' +
+    'No Supabase service role key found - checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS. ' +
     'Set one of these as a project secret.',
   )
 }
@@ -47,7 +47,7 @@ function getServiceRoleKey(): string {
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = getServiceRoleKey()
 
-// ── Signing key — NEVER logged, NEVER returned ────────────────────────────────
+// ── Signing key - NEVER logged, NEVER returned ────────────────────────────────
 // Must match the address set as pointsSigner on the deployed MeshPortRewards
 // contract. Set as a Supabase project secret: REWARDS_SIGNER_PRIVATE_KEY.
 const REWARDS_SIGNER_PRIVATE_KEY = Deno.env.get('REWARDS_SIGNER_PRIVATE_KEY') ?? ''
@@ -85,7 +85,7 @@ async function entitySecretCiphertext(): Promise<string> {
   return btoa(String.fromCharCode(...enc))
 }
 
-// EIP-191 personal_sign over the raw 32-byte digest — the same bytes viem's
+// EIP-191 personal_sign over the raw 32-byte digest - the same bytes viem's
 // signMessage({ message: { raw } }) signs and the contract recovers.
 async function signWithCircle(digest: `0x${string}`): Promise<`0x${string}`> {
   const res = await fetch(`${CIRCLE_API}/developer/sign/message`, {
@@ -108,15 +108,15 @@ async function signWithCircle(digest: `0x${string}`): Promise<`0x${string}`> {
   return sig as `0x${string}`
 }
 
-// ── Contract address — read from env, NEVER hardcoded ────────────────────────
+// ── Contract address - read from env, NEVER hardcoded ────────────────────────
 // Must match VITE_REWARDS_CONTRACT in the app's env.
 const REWARDS_CONTRACT = (Deno.env.get('VITE_REWARDS_CONTRACT') ?? '').trim().toLowerCase()
 
-// Arc Testnet chain ID (5042002) — fixed for signing; this matches the value
+// Arc Testnet chain ID (5042002) - fixed for signing; this matches the value
 // hardcoded in MeshPortRewards's digest construction (block.chainid on Arc Testnet).
 const ARC_TESTNET_CHAIN_ID = 5042002n
 
-// Claim bounds — must mirror MIN_CLAIM_POINTS / MAX_CLAIM_POINTS in rewards.ts
+// Claim bounds - must mirror MIN_CLAIM_POINTS / MAX_CLAIM_POINTS in rewards.ts
 const MIN_CLAIM_POINTS = 100
 const MAX_CLAIM_POINTS = 1000
 
@@ -170,7 +170,7 @@ Deno.serve(async (req: Request) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-  // ── Who is claiming — from the session, never from the request body ───────
+  // ── Who is claiming - from the session, never from the request body ───────
   // (The old version trusted body.userId + body.walletAddress: anyone could
   // sign vouchers against another user's points, paid to their own wallet.)
   const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
@@ -191,14 +191,14 @@ Deno.serve(async (req: Request) => {
       return json({ success: false, error: 'This claim id belongs to another claim' }, 409)
     }
   } else {
-    // Daily cap (the contract allows 1000 points per wallet per UTC day) —
+    // Daily cap (the contract allows 1000 points per wallet per UTC day) -
     // checked before reserving so a capped claim never burns points.
     const dayStart = new Date(); dayStart.setUTCHours(0, 0, 0, 0)
     const { data: today } = await supabase.from('point_transactions')
       .select('points').eq('user_id', userId).eq('reason', 'claim_reserved').gte('created_at', dayStart.toISOString())
     const usedToday = (today ?? []).reduce((n: number, r: any) => n + Math.abs(Number(r.points) || 0), 0)
     if (usedToday + points > MAX_CLAIM_POINTS) {
-      return json({ success: false, error: `Daily limit reached — ${Math.max(0, MAX_CLAIM_POINTS - usedToday)} points left today` }, 400)
+      return json({ success: false, error: `Daily limit reached - ${Math.max(0, MAX_CLAIM_POINTS - usedToday)} points left today` }, 400)
     }
 
     // Reserve the points atomically (compare-and-swap on the balance), then
@@ -212,20 +212,20 @@ Deno.serve(async (req: Request) => {
       .update({ total_points: available - points, updated_at: new Date().toISOString() })
       .eq('user_id', userId).eq('total_points', available).select('user_id')
     if (!swapped || swapped.length !== 1) {
-      return json({ success: false, error: 'Your points changed — please try again' }, 409)
+      return json({ success: false, error: 'Your points changed - please try again' }, 409)
     }
     const { error: resErr } = await supabase.from('point_transactions').insert({
       user_id: userId, wallet_address: walletAddress, points: -points, reason: 'claim_reserved', tx_hash: claimId,
     })
     if (resErr) {
-      // Put the points back — no voucher without a reservation record.
+      // Put the points back - no voucher without a reservation record.
       await supabase.from('user_points').update({ total_points: available }).eq('user_id', userId).eq('total_points', available - points)
       console.error('[rewards-claim-sign] reservation insert failed:', resErr.message)
-      return json({ success: false, error: 'Could not reserve points — try again' }, 500)
+      return json({ success: false, error: 'Could not reserve points - try again' }, 500)
     }
   }
 
-  // ── Build digest — must match MeshPortRewards.claimRewards exactly ────────
+  // ── Build digest - must match MeshPortRewards.claimRewards exactly ────────
   // Solidity: keccak256(abi.encode(address(this), block.chainid, msg.sender, points, claimId))
   // Then wrapped with toEthSignedMessageHash (standard Ethereum signed message prefix).
   const { keccak256, encodeAbiParameters, parseAbiParameters, recoverMessageAddress } = await import('npm:viem@2')
@@ -241,7 +241,7 @@ Deno.serve(async (req: Request) => {
     ),
   )
 
-  // Sign with the Ethereum signed message prefix — this is what
+  // Sign with the Ethereum signed message prefix - this is what
   // MessageHashUtils.toEthSignedMessageHash() + ECDSA.recover() on the
   // Solidity side expects. viem's signMessage({ message: { raw: digest } })
   // applies the \x19Ethereum Signed Message:\n32 prefix before signing,
@@ -261,7 +261,7 @@ Deno.serve(async (req: Request) => {
     // Points stay reserved under this claimId; retrying with the same claimId
     // re-issues the voucher without deducting twice.
     console.error('[rewards-claim-sign] signing failed:', e instanceof Error ? e.message : e)
-    return json({ success: false, error: 'Signing failed — please try again' }, 502)
+    return json({ success: false, error: 'Signing failed - please try again' }, 502)
   }
 
   if (REWARDS_SIGNER_ADDRESS) {

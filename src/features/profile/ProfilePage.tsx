@@ -24,7 +24,7 @@ export function ProfilePage() {
   const logout = useAuthStore(s => s.logout)
   const { showToastMessage } = useUIStore()
   // Same theme store DesktopHeader's own toggle and Appearance settings
-  // already use — this button flips light/dark directly, "System" stays
+  // already use - this button flips light/dark directly, "System" stays
   // only pickable from Appearance.
   const mode = useThemeStore(s => s.mode)
   const setMode = useThemeStore(s => s.setMode)
@@ -49,7 +49,7 @@ export function ProfilePage() {
     setTimeout(() => setCopied(false), 1500)
   }
 
-  // Payment link — same real, working pattern as ReceivePage.tsx
+  // Payment link - same real, working pattern as ReceivePage.tsx
   const APP_URL = 'https://meshport.xyz'
   const cleanUsername = (displayUsername || '').replace(/\.arc$/, '')
   const paymentLink = cleanUsername
@@ -63,11 +63,11 @@ export function ProfilePage() {
       text: cleanUsername ? `Send USDC to ${cleanUsername}.arc on MeshPort ⚡` : 'Send me USDC on MeshPort',
       url: paymentLink,
     }
-    // navigator.share() support/behavior genuinely varies across browsers —
+    // navigator.share() support/behavior genuinely varies across browsers -
     // some don't implement it at all (most desktop browsers other than
     // Safari/Edge), some implement it but reject shareData shapes they
     // don't like via canShare(), and previously any rejection for ANY
-    // reason was silently swallowed with an empty catch — so the button
+    // reason was silently swallowed with an empty catch - so the button
     // would just appear to do nothing, with zero indication of why or
     // what to do instead. Every path below now either succeeds visibly or
     // falls back to copy-with-confirmation, never a silent no-op.
@@ -77,24 +77,24 @@ export function ProfilePage() {
     if (canUseNativeShare) {
       try {
         await navigator.share(shareData)
-        return // user completed the native share sheet — nothing more to do
+        return // user completed the native share sheet - nothing more to do
       } catch (err: any) {
-        // AbortError means the user closed the share sheet themselves —
+        // AbortError means the user closed the share sheet themselves -
         // that's a deliberate cancel, not a failure, so don't show an
         // error or fall back to copying on top of it.
         if (err?.name === 'AbortError') return
-        // Any other rejection (permissions, browser quirk, etc.) — fall
+        // Any other rejection (permissions, browser quirk, etc.) - fall
         // through to the clipboard fallback below instead of stopping here.
       }
     }
 
     const copied = await copyToClipboard(paymentLink)
-    showToastMessage(copied ? 'Payment link copied to clipboard' : 'Could not copy link — try again', copied ? 'success' : 'error')
+    showToastMessage(copied ? 'Payment link copied to clipboard' : 'Could not copy link - try again', copied ? 'success' : 'error')
   }
 
   const handleLogout = () => { logout(); navigate('/auth', { replace: true }) }
 
-  // Held in variables — not returned directly — so mobile (single stacked
+  // Held in variables - not returned directly - so mobile (single stacked
   // column, unchanged order/output) and desktop (left column: profile +
   // wallet, right column: support) never duplicate this JSX.
   const userCardSection = (
@@ -162,14 +162,14 @@ export function ProfilePage() {
         onClick={() => navigate('/merchant')} />
 
       {/*
-        Backup menu items — rules by wallet type:
+        Backup menu items - rules by wallet type:
         'create'         → Seed Phrase Backup  +  Private Key Backup
         'import-seed'    → Seed Phrase Backup  +  Private Key Backup
         'import-privkey' → Private Key Backup only (no seed exists)
       */}
       {isWallet && (
         <>
-          {/* Seed Phrase Backup — only for wallets that have a seed (create or import-seed) */}
+          {/* Seed Phrase Backup - only for wallets that have a seed (create or import-seed) */}
           {(walletSource === 'create' || walletSource === 'import-seed' || walletSource === null) && (
             <MenuItem
               icon={<Upload className="w-5 h-5" />}
@@ -179,7 +179,7 @@ export function ProfilePage() {
             />
           )}
 
-          {/* Private Key Backup — shown for ALL self-custody wallet types */}
+          {/* Private Key Backup - shown for ALL self-custody wallet types */}
           {walletSource === 'import-privkey' ? (
             /* Private-key-imported wallet: goes straight to the private-key-only backup page */
             <MenuItem
@@ -243,7 +243,7 @@ export function ProfilePage() {
           )}
           <h1 className="text-xl font-bold text-text-primary">Profile</h1>
         </div>
-        {/* Small light/dark toggle, top-right — mobile only. Desktop already
+        {/* Small light/dark toggle, top-right - mobile only. Desktop already
             has the same toggle in DesktopHeader, so it isn't repeated here. */}
         {!isDesktop && (
           <button
@@ -282,7 +282,7 @@ export function ProfilePage() {
       {isDesktop ? (
         // Left column: profile card + Wallet section (settings cards already
         // built above). Right column: Support. Same full-bleed (no maxWidth
-        // cap), gap/padding treatment as Swap's 2-column layout — no root-
+        // cap), gap/padding treatment as Swap's 2-column layout - no root-
         // level overflow-hidden either (same clipping bug fixed on Swap/
         // Pay/Multichain Claim/Bulk Pay), each column scrolls on its own.
         <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>

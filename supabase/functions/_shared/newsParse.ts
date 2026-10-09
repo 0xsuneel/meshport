@@ -36,7 +36,7 @@ export interface StatusEntry {
 
 const ENTITIES: Record<string, string> = {
   amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rsquo: '’', lsquo: '‘',
-  rdquo: '”', ldquo: '“', ndash: '–', mdash: '—', hellip: '…', rarr: '→',
+  rdquo: '”', ldquo: '“', ndash: '–', mdash: '-', hellip: '…', rarr: '→',
 }
 
 export function decodeEntities(s: string): string {

@@ -1,8 +1,8 @@
 // lib/currencyRegistry.ts
 //
-// Centralized Currency Registry — the single source of truth for currency
+// Centralized Currency Registry - the single source of truth for currency
 // data across the P2P module. Every screen reads from CURRENCY_REGISTRY (or
-// the helper functions below) rather than keeping its own copy — the
+// the helper functions below) rather than keeping its own copy - the
 // previous version had CURRENCIES defined once in p2pService.ts, which was
 // fine as long as nothing else needed currency data; this exists as its own
 // module now specifically so it's unambiguous where the one source of truth
@@ -10,10 +10,10 @@
 // need the exact same currency list).
 
 export interface CurrencyEntry {
-  code: string       // ISO 4217-style code (some, like nothing here, are genuinely non-ISO — all 21 are real codes)
+  code: string       // ISO 4217-style code (some, like nothing here, are genuinely non-ISO - all 21 are real codes)
   symbol: string
   name: string
-  flag: string        // emoji flag — representative country, not a claim of exclusivity (EUR/CHF etc. span multiple countries)
+  flag: string        // emoji flag - representative country, not a claim of exclusivity (EUR/CHF etc. span multiple countries)
   decimals: number     // standard minor-unit decimals for this currency (JPY/IDR use 0, most use 2)
 }
 

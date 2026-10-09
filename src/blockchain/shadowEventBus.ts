@@ -1,5 +1,5 @@
 /**
- * shadowEventBus.ts — Phase 4 shadow-mode event observation.
+ * shadowEventBus.ts - Phase 4 shadow-mode event observation.
  *
  * Subscribes to Supabase Realtime INSERTs on `chain_events` and reports what
  * BlockchainIndexer publishes, WITHOUT acting on any of it.
@@ -13,7 +13,7 @@
  * single flag and know what the latency will be BEFORE depending on it.
  *
  * The one thing it does measure that the server cannot: END-TO-END publication
- * latency as the CLIENT experiences it — chain_events.created_at (server insert
+ * latency as the CLIENT experiences it - chain_events.created_at (server insert
  * time) to Realtime delivery in the browser. That number is the whole basis for
  * "can event-driven refresh replace polling", and it is unobservable from a
  * server-side comparison because the network hop to the client is the part in
@@ -30,14 +30,14 @@ export { mapChainEventRow, latencyStats }
 /**
  * PHASE 6 kill switch.
  *
- * `true`  — chain events invalidate caches (event-driven refresh active).
- * `false` — observer mode: the coordinator logs exactly what it WOULD
+ * `true`  - chain events invalidate caches (event-driven refresh active).
+ * `false` - observer mode: the coordinator logs exactly what it WOULD
  *           invalidate and applies nothing, so polling alone carries the app.
  *
  * ── Rollback reality, stated precisely ─────────────────────────────────────
  * This is a COMPILE-TIME constant, so the dead branch is tree-shaken from the
  * production bundle (verified: 'WOULD refresh' does not appear in dist/).
- * Flipping it therefore requires a frontend rebuild + redeploy — it is NOT a
+ * Flipping it therefore requires a frontend rebuild + redeploy - it is NOT a
  * runtime toggle. No edge-function redeploy is involved either way.
  *
  * The INSTANT fallback, needing no deploy at all, is that Phase 6 deliberately
@@ -54,7 +54,7 @@ export const SYNC_COORDINATOR_ENABLED = true
  * arrives" (BlockchainManager.ts:191).
  */
 export const syncCoordinator = createSyncCoordinator({
-  // refreshScope takes only the scope — the trigger is carried for telemetry
+  // refreshScope takes only the scope - the trigger is carried for telemetry
   // and logged here rather than passed, so BlockchainManager's signature is
   // left exactly as Phase 2 defined it.
   applyScope: (scope, trigger) => {
@@ -75,7 +75,7 @@ class ShadowEventBus {
   private walletFilter: string | null = null
 
   /**
-   * Begin observing. Safe to call repeatedly — re-subscribes only if the
+   * Begin observing. Safe to call repeatedly - re-subscribes only if the
    * wallet actually changed, so a re-render does not churn the channel.
    */
   start(walletAddress?: string | null): void {
@@ -96,7 +96,7 @@ class ShadowEventBus {
         { event: 'INSERT', schema: 'public', table: 'chain_events', ...(filter ? { filter } : {}) },
         (payload: { new: Record<string, unknown> }) => this.ingest(payload.new),
       )
-      // ── PHASE 6 ORDERING FIX — activity INSERT ──────────────────────────
+      // ── PHASE 6 ORDERING FIX - activity INSERT ──────────────────────────
       // The chain_events subscription above is necessary but fires ~53s TOO
       // EARLY for history: after the Phase 5 cutover, activity-consumer writes
       // the activity row well after the indexer publishes the chain_event, so a
@@ -127,7 +127,7 @@ class ShadowEventBus {
   }
 
   /**
-   * PHASE 6 ORDERING FIX — hand an `activity` INSERT to the coordinator.
+   * PHASE 6 ORDERING FIX - hand an `activity` INSERT to the coordinator.
    *
    * Kept deliberately thin: all filtering (receive-only, completed-only, asset
    * granularity) lives in SyncCoordinator.scopesForActivityRow so it is pure and
@@ -152,7 +152,7 @@ class ShadowEventBus {
     this.observed.push(e)
     if (this.observed.length > MAX_RETAINED) this.observed.shift()
 
-    // Latency observation is retained from Phase 4 — it is still the only
+    // Latency observation is retained from Phase 4 - it is still the only
     // measurement of client-perceived delivery latency, and Phase 6's decision
     // to shorten polling rests on it.
     console.info(
@@ -160,7 +160,7 @@ class ShadowEventBus {
       `status=${e.status} latency=${e.deliveryLatencyMs}ms`,
     )
 
-    // PHASE 6 — hand the event to the coordinator, which decides which cache
+    // PHASE 6 - hand the event to the coordinator, which decides which cache
     // keys it touches. Wrapped so a coordinator fault can never break the
     // Realtime stream or the latency observation above: polling remains the
     // fallback for anything this misses.
@@ -173,28 +173,28 @@ class ShadowEventBus {
     // ── /investigate (2026-09-05): instant-history nudge ──────────────────
     // syncCoordinator.handle() above invalidates the {kind:'history'} cache
     // prefix, but nothing in BlockchainManager's cache ever WRITES or READS
-    // under that prefix (grep-verified — `history:` only ever appears as an
-    // invalidatePrefix() argument) — so for history specifically, that call
+    // under that prefix (grep-verified - `history:` only ever appears as an
+    // invalidatePrefix() argument) - so for history specifically, that call
     // is a no-op. The actual "did a deposit just arrive" signal history
     // relies on is: (1) Realtime INSERT on `activity` (only fires once
-    // activity-consumer's cron has actually written the row — bounded by the
+    // activity-consumer's cron has actually written the row - bounded by the
     // indexer's 2-minute scan cadence, decide.ts's own 30s settle delay, and
     // the consumer's 1-minute sweep interval, i.e. up to a few minutes for a
     // brand new external deposit), or (2) useActivity.ts's direct-from-
     // explorer layer (onchainReceivedActivity.ts), which bypasses that whole
     // pipeline but only re-checks on mount, every 60s, on tab-focus, or on
-    // this exact 'meshport:onchain-activity' event — which until now only
+    // this exact 'meshport:onchain-activity' event - which until now only
     // HomePage's own 90s balance poll ever dispatched, and only when that
     // poll's own tick happened to land after the deposit. A deposit_detected/
     // transfer_detected chain_event is the indexer's earliest possible signal
-    // that something landed for this wallet — reusing it to fire the SAME
+    // that something landed for this wallet - reusing it to fire the SAME
     // event balance-poll already dispatches means the fast explorer-backed
     // history layer gets checked within one Realtime round-trip of the
     // indexer noticing the deposit, instead of waiting for whichever of the
     // 60s/90s timers happens to tick next. Deliberately not gated on
     // e.status: a 'pending' native-transfer row is still real signal that
     // something worth checking just happened, and fetchRecentOnchainReceived
-    // determines confirmed/pending itself from the explorer directly — an
+    // determines confirmed/pending itself from the explorer directly - an
     // early, empty check here just means the next natural poll catches it,
     // same as before this change existed.
     if (

@@ -1,4 +1,4 @@
-// /paylink/r/:code (old links: /pay/r/:code) — a customer pays a merchant's payment request.
+// /paylink/r/:code (old links: /pay/r/:code) - a customer pays a merchant's payment request.
 //
 // Pay with MeshPort → normal Pay/Send on Arc (direct transfer), amount and
 // order number fixed. Opened in a wallet app (its scanner opens the QR's link
@@ -57,7 +57,7 @@ export function MerchantPayPage() {
   // screen (order number attached, amount fixed). Paid / closed orders, your
   // own request, or ?stay=1 (coming back from paying) show this page instead.
   const [params] = useSearchParams()
-  // Merchant QR: ?chain=<network> — a wallet pays there (default Arc).
+  // Merchant QR: ?chain=<network> - a wallet pays there (default Arc).
   const wantChain = params.get('chain')
   const payChain = (wantChain && view?.chains?.find(c => c.id === wantChain)) || ARC_PAY_CHAIN
   // A QR made for one network (Sepolia, Base…) is paid on that network only:
@@ -135,7 +135,7 @@ export function MerchantPayPage() {
           <div className="bg-surface border border-border rounded-3xl p-6 flex flex-col items-center gap-2 text-center">
             <Clock className="w-12 h-12 text-warning" />
             <p className="text-base font-bold text-text-primary">Payment sent</p>
-            <p className="text-sm text-text-secondary">Your ${formatAmount(view.received)} USDC reached {view.merchantName}. It’s being moved to their main balance — nothing more to do.</p>
+            <p className="text-sm text-text-secondary">Your ${formatAmount(view.received)} USDC reached {view.merchantName}. It’s being moved to their main balance - nothing more to do.</p>
           </div>
         )}
         {(view.status === 'expired' || view.status === 'cancelled') && (

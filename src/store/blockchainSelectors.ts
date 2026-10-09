@@ -1,10 +1,10 @@
 /**
- * store/blockchainSelectors.ts — the read-only surface pages consume
+ * store/blockchainSelectors.ts - the read-only surface pages consume
  *
  * Phase 1 of docs/BLOCKCHAIN_ARCHITECTURE_PROPOSAL.md (§8, §17).
  *
  * Pages import ONLY from this file. They never import BlockchainManager,
- * ProviderManager, arcService, or a provider — that one-way rule (§8's
+ * ProviderManager, arcService, or a provider - that one-way rule (§8's
  * "UI → Store", never "UI → RPC") is what makes deduplication possible: with a
  * single chokepoint for fetching, simultaneous readers collapse into one request.
  *
@@ -23,12 +23,12 @@ import type {
 } from '@/blockchain/types'
 import { ARC_CHAIN_ID, balanceKey, normalizeAddress } from '@/blockchain/types'
 
-// ─── Stable fallbacks — not an inline `?? []` ───────────────────────────────
+// ─── Stable fallbacks - not an inline `?? []` ───────────────────────────────
 // These MUST be module-level singletons. zustand reads through React 18's
 // useSyncExternalStoreWithSelector, which compares each selector result with
 // Object.is. A selector returning a fresh `[]` or `{}` literal produces a new
 // reference every time it runs, so the comparison always reports "changed" and
-// the component re-renders on every unrelated store write — and React may warn
+// the component re-renders on every unrelated store write - and React may warn
 // that the snapshot isn't cached. Returning the same instance makes the empty
 // case genuinely stable.
 //
@@ -47,7 +47,7 @@ export function useBalance(wallet: string | null, chain: ChainId, asset: AssetSy
     wallet ? (s.balances[balanceKey(wallet, chain, asset)] ?? EMPTY_ENTRY) : EMPTY_ENTRY)
 }
 
-/** Arc balance for one asset — the common case (USDC / EURC / cirBTC). */
+/** Arc balance for one asset - the common case (USDC / EURC / cirBTC). */
 export function useArcBalance(wallet: string | null, asset: AssetSymbol = 'USDC'): BalanceEntry {
   return useBalance(wallet, ARC_CHAIN_ID, asset)
 }
@@ -62,7 +62,7 @@ export function useArcBalanceAmount(wallet: string | null, asset: AssetSymbol = 
  * Arc portfolio total in USD.
  *
  * EURC is converted at the rate the store holds; when no rate has been fetched
- * the entry is absent and its contribution is 0 — deliberately NOT a hardcoded
+ * the entry is absent and its contribution is 0 - deliberately NOT a hardcoded
  * 1.08 fallback like the current HomePage line. Showing a total built from a
  * stale constant is worse than showing one that's briefly missing a component,
  * because the user cannot tell the difference. cirBTC behaves the same way.
@@ -79,13 +79,13 @@ export function useArcPortfolioUsd(wallet: string | null): number {
 
 /** External-chain claimable balances (the 21-chain scan result). */
 export function useClaimable(wallet: string | null): ChainBalance[] {
-  // Returns the stored array by reference — it's replaced wholesale by
+  // Returns the stored array by reference - it's replaced wholesale by
   // setClaimable, so identity changes exactly when the data does.
   return useBlockchainStore(s =>
     wallet ? (s.claimable[normalizeAddress(wallet)]?.chains ?? EMPTY_CHAINS) : EMPTY_CHAINS)
 }
 
-/** True while a claimable scan is running — drives the Hub's skeleton state. */
+/** True while a claimable scan is running - drives the Hub's skeleton state. */
 export function useClaimableScanning(wallet: string | null): boolean {
   return useBlockchainStore(s =>
     wallet ? (s.claimable[normalizeAddress(wallet)]?.scanning ?? false) : false)
@@ -124,7 +124,7 @@ export function claimableAgeMs(updatedAt: number): number {
 }
 
 /**
- * Transactions submitted and still being watched — survives navigation.
+ * Transactions submitted and still being watched - survives navigation.
  *
  * `filter` builds a new array each run, so this uses zustand's shallow
  * comparator: the result is only treated as changed when the pending set
@@ -142,7 +142,7 @@ export function usePendingTxs(wallet: string | null): PendingTx[] {
   )
 }
 
-/** Count only — cheaper than subscribing to the array when that's all you need. */
+/** Count only - cheaper than subscribing to the array when that's all you need. */
 export function usePendingCount(wallet: string | null): number {
   return useBlockchainStore(s => {
     if (!wallet) return 0
@@ -168,7 +168,7 @@ export function usePriceChange24h(asset: AssetSymbol): number | null {
 
 /**
  * True once this wallet has at least one successfully-read balance.
- * Lets the UI distinguish "loaded, genuinely zero" from "not loaded yet" —
+ * Lets the UI distinguish "loaded, genuinely zero" from "not loaded yet" -
  * a distinction the current single-number store cannot express, which is why
  * pages show $0.00 before the first fetch resolves.
  */

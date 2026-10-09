@@ -100,7 +100,7 @@ Deno.test('idempotent: running the recovery scan twice against the same real dat
   assertEquals(first, second)
 })
 
-Deno.test('H. N=100 recipients does not change this mechanism — it is keyed on the outer transaction (wallet, nonce) alone', async () => {
+Deno.test('H. N=100 recipients does not change this mechanism - it is keyed on the outer transaction (wallet, nonce) alone', async () => {
   const fetcher = makeFetcher({
     100: { number: '0x64', transactions: [{ hash: '0xBigBatchTx', from: PAYER, to: MULTICALL3, nonce: '0x2a' }] },
   })
@@ -147,7 +147,7 @@ Deno.test('sweep: a replaced candidate marks the attempt REPLACED, not submitted
   assertEquals(replaced.length, 1)
 })
 
-Deno.test('sweep: a replaced candidate also transitions the parent intent to FAILED — the original BulkPay payment genuinely never happened', async () => {
+Deno.test('sweep: a replaced candidate also transitions the parent intent to FAILED - the original BulkPay payment genuinely never happened', async () => {
   const fetcher = makeFetcher({
     100: { number: '0x64', transactions: [{ hash: '0xReplacementTx', from: PAYER, to: '0xSomeOtherContract', nonce: '0x2a' }] },
   })
@@ -156,7 +156,7 @@ Deno.test('sweep: a replaced candidate also transitions the parent intent to FAI
   assertEquals(intentsFailed, ['intent-xyz'])
 })
 
-Deno.test('sweep: not_found leaves the attempt untouched — no write of any kind', async () => {
+Deno.test('sweep: not_found leaves the attempt untouched - no write of any kind', async () => {
   const fetcher = makeFetcher({ 100: { number: '0x64', transactions: [] } })
   const { repo, submitted, replaced } = makeUpdateRepo()
   const results = await sweepUnresolvedAttempts([attempt()], fetcher, repo, 5)

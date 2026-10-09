@@ -9,7 +9,7 @@ export function cn(...inputs: ClassValue[]) {
 export function formatAmount(amount: number | null | undefined, decimals = 2): string {
   const n = amount == null || isNaN(Number(amount)) ? 0 : Number(amount)
   // minimumFractionDigits: 0 (not `decimals`) so a whole number renders as
-  // "1", not "1.00", and a value like 1.5 renders as "1.5", not "1.50" —
+  // "1", not "1.00", and a value like 1.5 renders as "1.5", not "1.50" -
   // Intl's toLocaleString already drops any trailing zeros beyond what the
   // number actually needs once the minimum no longer forces them. `decimals`
   // still caps the maximum precision shown, so this is purely trimming
@@ -103,7 +103,7 @@ export function getInitials(name: string): string {
 
 // Cycles through the 4 exact avatar colors from the design spec
 // (src/index.css --avatar-1..4, theme-aware) instead of an arbitrary
-// Tailwind gradient palette — keeps every avatar in the app on-brand.
+// Tailwind gradient palette - keeps every avatar in the app on-brand.
 export function getAvatarColor(username: string): string {
   const colors = ['bg-avatar-1', 'bg-avatar-2', 'bg-avatar-3', 'bg-avatar-4']
   const index = username.charCodeAt(0) % colors.length
@@ -136,15 +136,15 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 // Same as copyToClipboard, but for genuinely sensitive values only (seed
-// phrase / private key) — schedules an automatic clipboard clear after a
+// phrase / private key) - schedules an automatic clipboard clear after a
 // short delay. Security-audit finding: every "Copy" button on the seed
 // phrase and private key screens copied the raw secret to the OS clipboard
-// with nothing ever clearing it afterward, so it sat there indefinitely —
+// with nothing ever clearing it afterward, so it sat there indefinitely -
 // readable by any other app with clipboard access (clipboard managers,
 // keyboards with clipboard history, etc.) until the user happened to copy
 // something else over it. Every wallet's non-secret copy actions (address,
 // tx hash, payment link, username) are UNCHANGED and still use plain
-// copyToClipboard — only the four seed/private-key copy sites use this.
+// copyToClipboard - only the four seed/private-key copy sites use this.
 //
 // Verifies the clipboard still holds exactly what was copied before
 // clearing it, so this can't clobber something the user deliberately
@@ -159,7 +159,7 @@ export async function copySensitiveToClipboard(text: string, clearAfterMs = 45_0
       if (current === text) await navigator.clipboard.writeText('')
     } catch {
       // Clipboard read permission denied, or execCommand fallback was used
-      // (which has no read equivalent) — nothing more we can do here
+      // (which has no read equivalent) - nothing more we can do here
       // without risking clobbering something unrelated the user copied.
     }
   }, clearAfterMs)
@@ -169,28 +169,28 @@ export async function copySensitiveToClipboard(text: string, clearAfterMs = 45_0
 /**
  * Runs `fn` over `items` in small batches instead of all at once, awaiting
  * each batch before starting the next (with a short pause between them).
- * Preserves input order in the returned array — result[i] always
+ * Preserves input order in the returned array - result[i] always
  * corresponds to items[i], same as a plain Promise.all(items.map(fn)) would.
  *
  * Built specifically to fix a confirmed, real rate-limit source: several
  * places in this app (HomePage's scanExternalBalances, MultichainPage's
  * scanBalances, MultichainClaimPage's claimable-balance scan) each fire one
- * eth_call per supported chain — around 21 of them — via a single
+ * eth_call per supported chain - around 21 of them - via a single
  * Promise.all, meaning all 21 requests hit their respective RPC endpoints
  * in the same instant. That happens on each page's own 60s interval AND
  * every time the tab regains focus, so a user bouncing between Home → Hub →
  * Claim within a short window can trigger several of these 21-way bursts in
  * quick succession. Several of those chains' free-tier RPC providers
  * (Alchemy, publicnode, etc.) enforce per-second request limits, not just
- * total volume — a burst of 21 simultaneous calls is exactly the shape of
+ * total volume - a burst of 21 simultaneous calls is exactly the shape of
  * traffic that trips those limits, which lines up with the repeated
  * "All RPCs failed" / 429 / 503 errors seen across many different chains
  * throughout this project, independent of any one chain's RPC list itself
  * being wrong. Batching spreads the same 21 requests over roughly 1.5-2
- * seconds instead of one instant — a trivial cost for a background balance
+ * seconds instead of one instant - a trivial cost for a background balance
  * refresh, and it meaningfully reduces how often any single provider sees
  * a same-instant burst from just this one scan (still not a *complete* fix
- * if many users' scans happen to land in the same second — this is a
+ * if many users' scans happen to land in the same second - this is a
  * surgical, not systemic, fix).
  */
 export async function staggeredMap<T, R>(

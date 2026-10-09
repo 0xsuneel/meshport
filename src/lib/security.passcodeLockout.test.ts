@@ -10,7 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-/** In-memory localStorage — same stub pattern as security.mnemonicEncryption.test.ts. */
+/** In-memory localStorage - same stub pattern as security.mnemonicEncryption.test.ts. */
 function installLocalStorage() {
   const store = new Map<string, string>()
   vi.stubGlobal('localStorage', {
@@ -41,7 +41,7 @@ describe('passcode brute-force lockout', () => {
     expect(getPasscodeLockoutRemainingMs()).toBeGreaterThan(0)
 
     // Proof the attack is actually closed: even the CORRECT passcode is
-    // rejected while locked out — a brute-force script gets no signal
+    // rejected while locked out - a brute-force script gets no signal
     // distinguishing "wrong" from "right but locked", and can't just keep
     // guessing through the lockout.
     expect(await verifyPasscode('654321', hash)).toBe(false)
@@ -52,7 +52,7 @@ describe('passcode brute-force lockout', () => {
     expect(await verifyPasscode('111222', hash)).toBe(true)
     expect(getPasscodeLockoutRemainingMs()).toBe(0)
 
-    // A couple of wrong guesses, then the correct one — should still work
+    // A couple of wrong guesses, then the correct one - should still work
     // (below the 5-attempt threshold) and reset the counter.
     expect(await verifyPasscode('000000', hash)).toBe(false)
     expect(await verifyPasscode('999999', hash)).toBe(false)
@@ -67,10 +67,10 @@ describe('passcode brute-force lockout', () => {
     const firstLockoutMs = getPasscodeLockoutRemainingMs()
     expect(firstLockoutMs).toBeGreaterThan(0)
 
-    // Simulate the lockout having expired, then trip a SECOND lockout —
+    // Simulate the lockout having expired, then trip a SECOND lockout -
     // its duration must be longer than the first, not the same fixed value.
     ;(localStorage as any).setItem('meshport_passcode_lockout', JSON.stringify({ failCount: 6, lockedUntil: 0 }))
-    await verifyPasscode('999999', hash) // 7th failure — past the threshold again
+    await verifyPasscode('999999', hash) // 7th failure - past the threshold again
     const secondLockoutMs = getPasscodeLockoutRemainingMs()
     expect(secondLockoutMs).toBeGreaterThan(firstLockoutMs)
   })

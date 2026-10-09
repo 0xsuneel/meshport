@@ -1,25 +1,25 @@
 // src/features/chat/ChatPage.linkify.test.tsx
 //
-// Regression tests for linkifyText — chat message bubbles used to render
+// Regression tests for linkifyText - chat message bubbles used to render
 // raw text content directly with no URL detection at all: a pasted link
 // was inert plain text (not underlined, not tappable), and worse, the whole
 // message bubble has a long-press handler wired to onTouchStart with
 // userSelect: 'none', so tapping what looked like a link either did
-// nothing or triggered the bubble's Forward/Delete context menu instead —
+// nothing or triggered the bubble's Forward/Delete context menu instead -
 // reported as a shared link "going outside the conversation" rather than
 // opening it. Fixed by detecting URLs and wrapping each one in a real,
 // tappable <a> with propagation stopped so it can't also trigger the
 // bubble's long-press handling.
 //
 // This checks the returned React element STRUCTURE directly (plain
-// createElement objects — no rendering needed), matching this repo's
+// createElement objects - no rendering needed), matching this repo's
 // Node-only, no-jsdom test setup (see vitest.config.ts's own comment).
 
 import { describe, it, expect, vi } from 'vitest'
 import { isValidElement } from 'react'
 
 // ChatPage.tsx imports @/lib/supabase directly, which constructs a real
-// Supabase client at module load and throws without env vars — same issue
+// Supabase client at module load and throws without env vars - same issue
 // hit by ActivityPage.test.ts and chatService.markRead.test.ts. linkifyText
 // itself touches none of this; the mock just lets the module import succeed.
 vi.mock('@/lib/supabase', () => ({

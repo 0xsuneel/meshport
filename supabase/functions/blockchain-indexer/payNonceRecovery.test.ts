@@ -67,7 +67,7 @@ Deno.test('sweep: a replaced candidate marks REPLACED and transitions the intent
   assertEquals(intentsFailed, ['intent-xyz'])
 })
 
-Deno.test('sweep: not_found leaves the attempt completely untouched — structurally cannot rebroadcast', async () => {
+Deno.test('sweep: not_found leaves the attempt completely untouched - structurally cannot rebroadcast', async () => {
   const fetcher = makeFetcher({ 100: { number: '0x64', transactions: [] } })
   const { repo, submitted, replaced, intentsFailed } = makeUpdateRepo()
   const results = await sweepUnresolvedAttempts([attempt()], fetcher, repo, 5)
@@ -87,7 +87,7 @@ Deno.test('DROPPED-equivalent: repeated not_found across multiple sweeps stays i
   assertEquals(replaced.length, 0)
 })
 
-Deno.test('ERC20 Pay: expectedTo is the token contract, not the recipient — a tx to the recipient directly is REPLACED', async () => {
+Deno.test('ERC20 Pay: expectedTo is the token contract, not the recipient - a tx to the recipient directly is REPLACED', async () => {
   const EURC_CONTRACT = '0x89b50855aa3be2f677cd6303cec089b5f319d72a'
   const fetcher = makeFetcher({
     100: { number: '0x64', transactions: [{ hash: '0xNativeLookingTx', from: SENDER, to: RECIPIENT, nonce: '0x2a' }] },

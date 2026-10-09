@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { ArrowUpRight, ArrowDownLeft, Repeat, Users, TrendingUp } from 'lucide-react'
 
-// Purely presentational recreations of MeshPort's own real UI — same brand
+// Purely presentational recreations of MeshPort's own real UI - same brand
 // tokens, same card language (rounded-20px, soft shadow, flat brand fills,
 // no glow) as the actual app, not a generic stock dashboard illustration.
 // Static, deterministic figures for layout only (not fetched data).
@@ -131,7 +131,7 @@ export function DesktopDashboardMockup() {
         </CardShell>
       </motion.div>
 
-      {/* Floating accent chip — swap confirmation, offset top-right */}
+      {/* Floating accent chip - swap confirmation, offset top-right */}
       <motion.div
         initial={{ opacity: 0, x: 12, y: -8 }}
         animate={{ opacity: 1, x: 0, y: [0, -6, 0] }}

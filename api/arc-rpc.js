@@ -1,13 +1,13 @@
 /**
- * /api/arc-rpc — Arc Testnet JSON-RPC proxy
+ * /api/arc-rpc - Arc Testnet JSON-RPC proxy
  *
  * This is the SINGLE entry point every frontend Arc RPC call goes through
  * (Home balance polling, Swap, Multichain Transfer, Multichain Claim,
- * Rewards — all via src/lib/arc.ts's arcTransport()/arcRpcJson(), which
+ * Rewards - all via src/lib/arc.ts's arcTransport()/arcRpcJson(), which
  * only ever call this route). It tries an authenticated Arc endpoint first
  * (DRPC_KEY and/or ARC_RPC_URL, both plain server-side env vars, never
  * exposed to the client) for its higher rate limits, then fails over to
- * Circle's own official public Arc Testnet RPC endpoints — see ARC_RPCS
+ * Circle's own official public Arc Testnet RPC endpoints - see ARC_RPCS
  * below and https://docs.arc.io/arc/references/connect-to-arc. The browser
  * only ever sees this same-origin route either way.
  *
@@ -15,21 +15,21 @@
  * failure count, average latency, and last success time are tracked
  * in-memory, and each request races the endpoints in order of a live
  * health score (success rate first, latency as a secondary penalty) with
- * a small stagger — so the actually-healthiest endpoint is preferred, not
+ * a small stagger - so the actually-healthiest endpoint is preferred, not
  * just whichever happened to answer most recently. An endpoint that fails
  * is quarantined with exponential backoff and automatically becomes
  * eligible again once the window passes (no separate recovery step). Every
  * outcome is logged with its current health stats. If every endpoint
  * fails, the existing JSON-RPC-shaped 502 error response is returned
- * (handler below) — same as before, callers never see an unhandled
+ * (handler below) - same as before, callers never see an unhandled
  * exception.
  */
 
-// drpc.live API key — set DRPC_KEY in Vercel environment variables (never
-// VITE_-prefixed — this must stay server-side only).
+// drpc.live API key - set DRPC_KEY in Vercel environment variables (never
+// VITE_-prefixed - this must stay server-side only).
 const DRPC_KEY = process.env.DRPC_KEY ?? ''
 
-// Optional explicit authenticated RPC URL override — set ARC_RPC_URL (NOT
+// Optional explicit authenticated RPC URL override - set ARC_RPC_URL (NOT
 // VITE_ARC_RPC_URL) in Vercel if you want to point at a specific
 // authenticated gateway instead of/in addition to DRPC_KEY. This must never
 // be a VITE_-prefixed variable: Vite inlines every VITE_* var into the
@@ -38,29 +38,29 @@ const DRPC_KEY = process.env.DRPC_KEY ?? ''
 // server-side.
 const CONFIGURED_ARC_RPC_URL = (process.env.ARC_RPC_URL || '').trim()
 
-// Alchemy — Arc's own partnered node provider (see
+// Alchemy - Arc's own partnered node provider (see
 // https://docs.arc.io/arc/references/rpc-endpoints, "Node providers"). Unlike
 // Blockdaemon/dRPC/QuickNode below, Alchemy has no free keyless public
-// endpoint for Arc — set ALCHEMY_ARC_KEY in Vercel (get one at
+// endpoint for Arc - set ALCHEMY_ARC_KEY in Vercel (get one at
 // https://dashboard.alchemy.com/chains/arc) to use it. URL format confirmed
 // directly from Alchemy's own Arc Testnet page (alchemy.com/rpc/arc-testnet).
 const ALCHEMY_ARC_KEY = (process.env.ALCHEMY_ARC_KEY || '').trim()
 
 // Authenticated endpoint(s) tried first (higher rate limits when configured),
-// then Circle's own official public Arc Testnet RPC endpoints as fallback —
+// then Circle's own official public Arc Testnet RPC endpoints as fallback -
 // see https://docs.arc.io/arc/references/rpc-endpoints ("RPC endpoints").
 // These are free, keyless, and Circle-operated specifically for this use
 // case, so they're a legitimate fallback (not a random third-party gateway)
 // for when the authenticated endpoint above is empty, down, or rate-limited.
 // Previously this list had ONLY the authenticated DRPC_KEY entry, which made
-// it a single point of failure — any rate limit on that one key took down
+// it a single point of failure - any rate limit on that one key took down
 // every Arc-facing feature (Home balance polling, Swap, Multichain Transfer/
 // Claim, Rewards) at once, with nothing to fail over to.
 // Only *.arc.io endpoints: Arc retired the legacy *.arc.network Testnet
 // RPC URLs after October 15, 2026 (Arc v0.8.1 announcement / status.arc.io).
 const ARC_RPCS = [
   ...(CONFIGURED_ARC_RPC_URL ? [CONFIGURED_ARC_RPC_URL] : []),
-  ...(DRPC_KEY ? [`https://lb.drpc.live/arc-testnet/${DRPC_KEY}`] : []), // dRPC authenticated — tried first
+  ...(DRPC_KEY ? [`https://lb.drpc.live/arc-testnet/${DRPC_KEY}`] : []), // dRPC authenticated - tried first
   ...(ALCHEMY_ARC_KEY ? [`https://arc-testnet.g.alchemy.com/v2/${ALCHEMY_ARC_KEY}`] : []),
   // Current official domain (docs.arc.io, as of this writing)
   'https://rpc.testnet.arc.io',             // Circle primary
@@ -70,15 +70,15 @@ const ARC_RPCS = [
 ]
 
 // RELIABILITY FIX: every known Arc testnet RPC provider (Alchemy,
-// Blockdaemon, dRPC, QuickNode) is already represented above — there is no
+// Blockdaemon, dRPC, QuickNode) is already represented above - there is no
 // 5th/6th distinct official provider to add (confirmed against Circle's own
 // docs.arc.io/arc/references/rpc-endpoints). What actually varies is that
 // the KEYLESS public endpoints (everything below the authenticated block)
 // are shared by every app hitting Arc testnet, and get rate-limited (HTTP
-// 429) hard under load — visible directly in this function's own logs.
+// 429) hard under load - visible directly in this function's own logs.
 // The authenticated endpoints (DRPC_KEY, ALCHEMY_ARC_KEY, an explicit
 // ARC_RPC_URL override) are paid/private capacity, not shared with the
-// public internet's traffic, so they should be preferred structurally —
+// public internet's traffic, so they should be preferred structurally -
 // not just when orderEndpoints()'s learned health score happens to already
 // favor them, which only kicks in AFTER they've accumulated a good track
 // record on a warm Lambda instance (cold starts get no such head start).
@@ -88,14 +88,14 @@ const AUTHENTICATED_RPCS = new Set([
   ...(ALCHEMY_ARC_KEY ? [`https://arc-testnet.g.alchemy.com/v2/${ALCHEMY_ARC_KEY}`] : []),
 ])
 function isAuthenticated(url) { return AUTHENTICATED_RPCS.has(url) }
-// Log / error label for an endpoint — host only. Authenticated URLs carry
+// Log / error label for an endpoint - host only. Authenticated URLs carry
 // the provider API key in their path, which must never reach logs or clients.
 function label(url) { try { return new URL(url).host } catch { return 'rpc' } }
 
 // ─── Per-endpoint health stats (in-memory, per warm Lambda instance) ───────
 // Tracks, for each upstream in ARC_RPCS: how many calls succeeded/failed,
 // the running average latency of successful calls, and when it last
-// succeeded. Resets on cold start — fine, worst case we just relearn the
+// succeeded. Resets on cold start - fine, worst case we just relearn the
 // health picture over the next few requests.
 function newStats() {
   return {
@@ -115,7 +115,7 @@ function getStats(url) {
 }
 
 const STAGGER_MS = 150
-// TUNED: Arc finalizes deterministically in ~780ms per Circle's own docs —
+// TUNED: Arc finalizes deterministically in ~780ms per Circle's own docs -
 // a genuinely healthy node has no reason to take anywhere near 8s to
 // answer a simple eth_call/estimateGas/sendRawTransaction. Cut to 5s so a
 // struggling endpoint gets abandoned (and the next-ranked one gets its
@@ -123,7 +123,7 @@ const STAGGER_MS = 150
 // on a single doomed attempt.
 const RPC_TIMEOUT_MS = 5000
 // Quarantine backs off exponentially with repeated failures (10s, 20s,
-// 40s, ... capped at 2min) and is lifted the instant a request succeeds —
+// 40s, ... capped at 2min) and is lifted the instant a request succeeds -
 // this is the "automatic recovery" path: once the window passes, the
 // endpoint is simply eligible again on the next request, no separate
 // recovery step needed. A single blip only costs it 10s, a genuinely dead
@@ -137,17 +137,17 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)) }
 // THE BUG THIS FIXES: every upstream in ARC_RPCS replays the exact same
 // chain state, so a JSON-RPC error that comes from actually EXECUTING the
 // call (eth_estimateGas / eth_call hitting a Solidity `require(...)`) is
-// not a fluke of one node — it is the correct, authoritative answer, and
+// not a fluke of one node - it is the correct, authoritative answer, and
 // every other endpoint will return the byte-identical message. The old
 // code below treated ANY `json.error` (a mis-signed tx, a rate-limit body
 // shaped like JSON-RPC, AND a genuine `execution reverted: ...`) the same
 // way: throw, quarantine that endpoint, let another one take a turn. For a
-// real revert that "another turn" is pointless — it fails the exact same
-// way on all 10 endpoints — so every attempt in the race throws, Promise.any
+// real revert that "another turn" is pointless - it fails the exact same
+// way on all 10 endpoints - so every attempt in the race throws, Promise.any
 // rejects, and the handler below returns a generic 502 "Bad Gateway".
 //
 // That 502 is actively misleading: nothing was down. It also produces a
-// second-order bug client-side — p2pEscrowContract.ts's own
+// second-order bug client-side - p2pEscrowContract.ts's own
 // isTransientRpcError() sees "502"/"bad gateway" in the message and
 // retries the doomed call 2 more times (1s, 2s) before finally giving up,
 // throwing away the actual revert reason ("account must already be a
@@ -159,7 +159,7 @@ function sleep(ms) { return new Promise((r) => setTimeout(r, ms)) }
 // a revert path at all.
 //
 // Fix: recognize a revert-shaped JSON-RPC error as a legitimate, authoritative
-// answer — record the endpoint as successful (it answered correctly) and
+// answer - record the endpoint as successful (it answered correctly) and
 // resolve with that JSON-RPC body immediately, exactly like a real node
 // would. Genuinely ambiguous/transient-looking errors (rate limits, range
 // limits, malformed bodies) still fall through to the old
@@ -168,7 +168,7 @@ function isDeterministicRevertError(errorObj) {
   const msg = String(errorObj?.message ?? '').toLowerCase()
   // eth_estimateGas/eth_call surface a revert this way across every EVM
   // JSON-RPC implementation (Alchemy, dRPC, Blockdaemon, QuickNode, geth,
-  // etc.) — it's the one error shape that's actually chain-state, not
+  // etc.) - it's the one error shape that's actually chain-state, not
   // node-state, so racing/failing over other endpoints can never change it.
   return msg.includes('execution reverted') || msg.includes('always failing transaction')
 }
@@ -177,7 +177,7 @@ function isDeterministicRevertError(errorObj) {
 // different heights (docs.arc.io/arc/references/rpc-endpoints). A request
 // for a block at/near the head can come back as -32014 ("block not yet
 // imported") from a backend that is just a beat behind. That is a transient,
-// node-timing answer — NOT an unhealthy endpoint — so it must not quarantine
+// node-timing answer - NOT an unhealthy endpoint - so it must not quarantine
 // the endpoint, and the whole call is worth retrying after a short backoff.
 function isHeadLagError(errorObj) {
   return Number(errorObj?.code) === -32014
@@ -225,14 +225,14 @@ function avgLatencyMs(s) {
 //
 // RELIABILITY FIX: authenticated endpoints get a fixed head-start bonus on
 // top of their learned score. Without this, a cold Lambda instance (no
-// accumulated stats yet — see successRate()'s "no data = 1.0" default)
+// accumulated stats yet - see successRate()'s "no data = 1.0" default)
 // ranks a paid Alchemy/dRPC key EXACTLY the same as a free public endpoint
 // that's currently being hammered by every other app on Arc testnet, so
 // the race is a coin flip on the very requests where it matters most (right
 // after a cold start or a burst of public-endpoint 429s). The bonus is
 // smaller than a full reliability tier (0.15, vs. the 0-1 range of rate
 // itself) so a genuinely struggling authenticated endpoint can still be
-// correctly outranked by a public one with a proven track record — this
+// correctly outranked by a public one with a proven track record - this
 // is a thumb on the scale, not an override.
 function healthScore(url) {
   const s = getStats(url)
@@ -243,7 +243,7 @@ function healthScore(url) {
 }
 
 // Healthiest-first: rank every non-quarantined endpoint by live health
-// score, quarantined ones excluded — unless EVERY endpoint is quarantined,
+// score, quarantined ones excluded - unless EVERY endpoint is quarantined,
 // in which case fail open and try them all anyway (ranked the same way)
 // rather than erroring out on a stale quarantine.
 function orderEndpoints() {
@@ -254,39 +254,39 @@ function orderEndpoints() {
 
 async function raceOnce(body) {
   if (ARC_RPCS.length === 0) {
-    throw new Error('No authenticated Arc RPC configured — set ARC_RPC_URL or DRPC_KEY')
+    throw new Error('No authenticated Arc RPC configured - set ARC_RPC_URL or DRPC_KEY')
   }
 
   // PERF: this used to try each endpoint SEQUENTIALLY with a 10s timeout
-  // per hop — if the first (authenticated) endpoint was merely slow, not
+  // per hop - if the first (authenticated) endpoint was merely slow, not
   // even down, every call through this proxy paid the full 10s before it
   // even started the next one. Since this is the single entry point every
   // Arc-facing feature goes through (see file header), that tax applied to
   // balance polling, nonce fetches, and every RPC call inside Multichain
-  // Transfer — not just the rare case where an endpoint is fully dead.
+  // Transfer - not just the rare case where an endpoint is fully dead.
   //
   // Racing every configured endpoint at once and taking whichever answers
   // first fixes both the common case and the rare one: happy path is as
   // fast as the single fastest endpoint (never slower than a healthy
   // primary was before), and a degraded/dead primary just loses the race
   // instead of blocking anything. This mirrors the ethers
-  // FallbackProvider(quorum: 1) pattern already used in swap-proxy.js —
+  // FallbackProvider(quorum: 1) pattern already used in swap-proxy.js -
   // applied by hand here since this function forwards
   // raw JSON-RPC bodies rather than using ethers Provider objects.
   //
   // Safe for every method here, including eth_sendRawTransaction: sending
   // the same signed tx to multiple nodes at once is a standard broadcast
-  // pattern (the network dedupes it) — it's not a double-send risk the way
+  // pattern (the network dedupes it) - it's not a double-send risk the way
   // re-signing or re-calling bridge() would be.
   //
   // On top of the pure race, each attempt is staggered by its rank
   // (STAGGER_MS apart) instead of firing simultaneously, and ranked by
   // live health score (see orderEndpoints/healthScore above) rather than
-  // just "last one that worked" — an endpoint with a bad success rate or
+  // just "last one that worked" - an endpoint with a bad success rate or
   // creeping latency gradually sinks in priority even if its most recent
   // call happened to succeed. A healthy top-ranked endpoint still wins in
   // ~1 round trip; a slow/unstable one just loses the race a beat sooner
-  // than lower-ranked ones start — without reintroducing the full
+  // than lower-ranked ones start - without reintroducing the full
   // sequential-timeout tax the comment above describes fixing.
   // PERF/RELIABILITY FIX (live evidence, 2026-09-16): racing the FULL
   // ARC_RPCS list (up to 10 endpoints) on every single call was the actual
@@ -322,10 +322,10 @@ async function raceOnce(body) {
       const json = await r.json()
       const latencyMs = Date.now() - startedAt
       // A JSON-RPC-shaped error is USUALLY treated the same as a transport
-      // failure for a single request — another endpoint may still answer
+      // failure for a single request - another endpoint may still answer
       // correctly (a mis-shaped body, a rate-limit response dressed up as
       // JSON-RPC, etc). The one exception is a genuine on-chain revert
-      // (see isDeterministicRevertError's own comment above) — that IS the
+      // (see isDeterministicRevertError's own comment above) - that IS the
       // correct answer, identical on every endpoint, so it's recorded as a
       // success and returned immediately rather than raced/failed-over.
       // Batch (array) bodies are returned as-is either way; per-item errors
@@ -333,19 +333,19 @@ async function raceOnce(body) {
       if (!Array.isArray(json) && json?.error) {
         if (isDeterministicRevertError(json.error)) {
           recordSuccess(url, latencyMs)
-          console.log(`[arc-rpc] ${label(url)} returned an on-chain revert (${latencyMs}ms) — authoritative, not a failure: ${json.error.message}`)
+          console.log(`[arc-rpc] ${label(url)} returned an on-chain revert (${latencyMs}ms) - authoritative, not a failure: ${json.error.message}`)
           return json
         }
         if (isHeadLagError(json.error)) {
-          // Endpoint answered correctly, just a block behind — don't count it as a failure.
-          console.log(`[arc-rpc] ${label(url)} is a block behind the head (-32014, ${latencyMs}ms) — not quarantining`)
+          // Endpoint answered correctly, just a block behind - don't count it as a failure.
+          console.log(`[arc-rpc] ${label(url)} is a block behind the head (-32014, ${latencyMs}ms) - not quarantining`)
           throw Object.assign(new Error(json.error.message || 'block not yet imported'), { headLag: true })
         }
         throw new Error(json.error.message || 'RPC error')
       }
       recordSuccess(url, latencyMs)
       // "No receipt yet" from a node that's a beat behind shouldn't win the
-      // race over another node that already has the receipt — hold it back;
+      // race over another node that already has the receipt - hold it back;
       // it's only returned if every endpoint says null.
       if (!Array.isArray(json) && body?.method === 'eth_getTransactionReceipt' && json?.result == null) {
         throw Object.assign(new Error('receipt not found yet'), { nullResult: json })
@@ -362,7 +362,7 @@ async function raceOnce(body) {
   })())
 
   // A held-back null receipt is returned at most NULL_GRACE_MS after it
-  // arrived, unless another endpoint produces the real receipt first — so
+  // arrived, unless another endpoint produces the real receipt first - so
   // a slow node can't stretch every "not mined yet" poll.
   const NULL_GRACE_MS = 200
   let onNull
@@ -374,7 +374,7 @@ async function raceOnce(body) {
   try {
     return await Promise.race([Promise.any(attempts), nullFallback])
   } catch (aggErr) {
-    // Promise.any rejects with an AggregateError when every attempt fails —
+    // Promise.any rejects with an AggregateError when every attempt fails -
     // surface the first underlying error rather than the wrapper so
     // callers/logs see an actual RPC error message.
     const errs = (aggErr && aggErr.errors) || []
@@ -443,13 +443,13 @@ module.exports = async function handler(req, res) {
     return res.status(200).json(result)
   } catch (e) {
     console.error('[arc-rpc] failed:', e?.message)
-    // Generic message only — upstream details stay in the server log.
+    // Generic message only - upstream details stay in the server log.
     return res.status(502).json({ error: 'Arc RPC upstream unavailable' })
   }
 }
 
 // Exposed so other server-side functions in this deployment (e.g.
 // swap-proxy.js) can call the same health-scored, quarantine-aware racing
-// logic directly — a same-process function call, not an extra HTTP hop —
+// logic directly - a same-process function call, not an extra HTTP hop -
 // instead of maintaining their own separate, simpler RPC failover.
 module.exports.forward = forward

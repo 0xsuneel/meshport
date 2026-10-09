@@ -45,7 +45,7 @@ interface SuccessReceiptProps {
   checkContent?: ReactNode
   /** Overrides for the scrolling root, e.g. flex sizing inside a sheet. */
   style?: CSSProperties
-  /** Header state — history can open failed or still-processing records. */
+  /** Header state - history can open failed or still-processing records. */
   status?: 'success' | 'pending' | 'failed'
   /** Confetti on reveal. On for a live payment, off when reopening history. */
   celebrate?: boolean
@@ -60,7 +60,7 @@ interface SuccessReceiptProps {
   actions?: Array<{ label: string; onClick: () => void; primary?: boolean }>
 }
 
-/** Size of the header's white check circle — the traveling checkmark's target. */
+/** Size of the header's white check circle - the traveling checkmark's target. */
 export const RECEIPT_CHECK = 76
 
 const shortHash = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`
@@ -73,7 +73,7 @@ const HEADER_BG = {
 const HEADER_ICON_COLOR = { success: 'var(--success)', pending: 'var(--warning)', failed: 'var(--danger)' } as const
 const CONFETTI = ['var(--success)', '#F5B82E', 'var(--avatar-3)', 'var(--avatar-4)', '#FFFFFF']
 
-// Nearest ancestor (or the element itself) that actually scrolls — the
+// Nearest ancestor (or the element itself) that actually scrolls - the
 // receipt is its own scroller on Pay/Claim, but sits inside the page's
 // scroller on Swap/Transfer and inside the sheet on Chat Pay.
 function scrollParent(el: HTMLElement | null): HTMLElement {
@@ -140,7 +140,7 @@ export function SuccessReceipt({
 }: SuccessReceiptProps) {
   // Takes over from the success flash, which switches the page's blurs off
   // while it's up. Holding them off here too means the hand-off doesn't turn
-  // them back on for a frame (Android repaints the blurred header — a flash).
+  // them back on for a frame (Android repaints the blurred header - a flash).
   usePopupOpen()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -189,7 +189,7 @@ export function SuccessReceipt({
   return (
     <div ref={rootRef} style={hasActions ? {
       // With pinned actions: the card scrolls in its own region and the
-      // button bar sits below it, outside the scroll — so the bar can never
+      // button bar sits below it, outside the scroll - so the bar can never
       // cover any of the details text.
       height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', boxSizing: 'border-box', overflow: 'hidden',
       ...style,

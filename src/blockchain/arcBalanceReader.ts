@@ -1,5 +1,5 @@
 /**
- * blockchain/arcBalanceReader.ts — Arc balance reads for BlockchainManager
+ * blockchain/arcBalanceReader.ts - Arc balance reads for BlockchainManager
  *
  * Phase 2 / 2.5. Encapsulates HOW a single Arc asset balance is read, behind
  * the manager.
@@ -11,7 +11,7 @@
  *   - They go through arcRpcJson(), which handles HTTP 429 by backing off IN
  *     PLACE (300ms, then 600ms) and retrying the SAME endpoint twice before
  *     failing over. That behaviour exists because Arc's proxied endpoint was
- *     genuinely hitting burst rate limits in production — see the comment on
+ *     genuinely hitting burst rate limits in production - see the comment on
  *     arcRpcJson in src/lib/arc.ts.
  *   - They own the decimal conventions (native 18dp USDC via eth_getBalance;
  *     6dp EURC and 8dp cirBTC via eth_call balanceOf).
@@ -19,20 +19,20 @@
  *
  * An earlier draft of this file reimplemented the reads through
  * ProviderManager.rpcCall(). That was wrong: rpcCall races endpoints with a
- * stagger and has no 429-specific in-place backoff, so against ARC_RPCS —
- * which is a single same-origin proxy entry — it would have turned a
+ * stagger and has no 429-specific in-place backoff, so against ARC_RPCS -
+ * which is a single same-origin proxy entry - it would have turned a
  * recoverable burst limit into a failed read. Caught while wiring the pages up
  * in Phase 2.5, which is exactly what the integration phase is for.
  *
  * What this layer adds on top of the legacy readers is ONLY:
  *   - an address-scoped cache key (so a wallet switch can never serve another
- *     wallet's balance — the balanceCache.ts:42 bug, fixed structurally)
+ *     wallet's balance - the balanceCache.ts:42 bug, fixed structurally)
  *   - in-flight sharing, so simultaneous callers collapse into one request
  *
  * Routing Arc reads through ProviderManager is deferred until the proxy path
  * grows equivalent 429 handling (Phase 6).
  *
- * TESTNET ONLY — same Arc Testnet tokens and endpoint as the legacy readers.
+ * TESTNET ONLY - same Arc Testnet tokens and endpoint as the legacy readers.
  */
 import { readUSDCBalanceOrThrow, readEURCBalanceOrThrow, readCirBtcBalanceOrThrow } from '@/lib/arcService'
 import { ARC_CHAIN_ID } from './chains'
@@ -45,12 +45,12 @@ export type ArcAsset = 'USDC' | 'EURC' | 'CIRBTC'
 
 /**
  * The legacy readers' throwing forms (same arcRpcJson path, same decimals).
- * Keep this mapping — swapping any entry for a hand-rolled RPC call
+ * Keep this mapping - swapping any entry for a hand-rolled RPC call
  * reintroduces the 429 problem described above.
  *
  * They throw on failure rather than returning 0: a 0 from a failed read used
  * to be cached for up to two minutes and saved as the wallet's balance, so
- * after a moment offline Home showed $0 — and kept showing it after the
+ * after a moment offline Home showed $0 - and kept showing it after the
  * connection came back. Failures are now never cached; readArcBalance()
  * below still turns them into 0 for callers that want that contract.
  */
@@ -77,7 +77,7 @@ export function fetchArcBalanceRaw(addr: string, asset: ArcAsset): Promise<numbe
  * TTL + in-flight-deduped single-asset Arc read.
  *
  * TTL defaults match the legacy balanceCache coordinator (4s) so migrated
- * pages keep identical liveness — a longer TTL would make balances visibly
+ * pages keep identical liveness - a longer TTL would make balances visibly
  * slower to update, which Phase 2.5 must not do.
  */
 export function getArcBalance(wallet: string, asset: ArcAsset, opts?: CacheOptions): Promise<number> {
@@ -89,7 +89,7 @@ export function getArcBalance(wallet: string, asset: ArcAsset, opts?: CacheOptio
   })
 }
 
-/** Non-network peek — last known value for instant UI paint. */
+/** Non-network peek - last known value for instant UI paint. */
 export function peekArcBalance(wallet: string, asset: ArcAsset): number | null {
   const hit = peek<number>(balanceKey(normalizeAddress(wallet), ARC_CHAIN_ID, asset))
   return hit ? hit.value : null

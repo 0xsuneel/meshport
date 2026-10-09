@@ -1,33 +1,33 @@
-// swap-proxy.js — CommonJS Vercel serverless function
+// swap-proxy.js - CommonJS Vercel serverless function
 //
 // SECURITY FIX (transaction audit, 2026-09-17): this used to receive the
 // user's raw private key in the request body and build a Circle AppKit
 // adapter/signer from it SERVER-SIDE, so kit.swap()/kit.estimateSwap()
-// could run here — meaning the private key was transmitted over the
+// could run here - meaning the private key was transmitted over the
 // network to this Vercel function on every swap (and even a fire-and-
 // forget page-mount warm-up call), breaking the "private key never leaves
 // the device" boundary every other feature (Pay, ChatPay, Multichain
 // Claim/Transfer) already respects.
 //
 // Swap now signs and estimates entirely client-side (see
-// src/lib/swapService.ts) — the same AppKit + createEthersAdapterFromPrivateKey
+// src/lib/swapService.ts) - the same AppKit + createEthersAdapterFromPrivateKey
 // pattern Multichain Claim/Transfer already run in the browser. This
 // function's only remaining job is the post-swap bookkeeping write, which
 // needs the SUPABASE SERVICE_ROLE key (that must never reach the client)
-// but only ever takes a txHash + amounts — never a private key.
+// but only ever takes a txHash + amounts - never a private key.
 const SUPABASE_URL = (
   process.env.SUPABASE_URL ||
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
   ''
 ).trim()
-if (!SUPABASE_URL) console.warn('[swap-proxy] SUPABASE_URL is not set — session verification will fail')
+if (!SUPABASE_URL) console.warn('[swap-proxy] SUPABASE_URL is not set - session verification will fail')
 const SUPABASE_SERVICE_KEY = (
   process.env.SUPABASE_SERVICE_KEY ||
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   ''
 ).trim()
 
-// ── Access control (fixes /cso finding #5 — recordCompletion had NO caller
+// ── Access control (fixes /cso finding #5 - recordCompletion had NO caller
 // check at all: anyone could POST an arbitrary walletAddress + fabricated
 // txHash/amounts and it would write a fake "completed swap" into that
 // wallet's activity feed via the service-role key, or inject a fake
@@ -53,12 +53,12 @@ async function verifyOwnsAddress(req, walletAddress) {
 //
 // WHY THIS EXISTS: deposit-scan-all (supabase/functions/deposit-scan-all)
 // scans Arc directly for incoming transfers and already knows to skip a
-// transfer if a 'swap' row for that same tx_hash already exists — a swap's
+// transfer if a 'swap' row for that same tx_hash already exists - a swap's
 // output-token leg is otherwise indistinguishable on-chain from someone
 // else sending you that token. But that dedupe check only works if the
 // 'swap' row exists BY THE TIME deposit-scan-all's sweep runs. Writing it
 // here, synchronously as part of this same request (which the client
-// awaits — see swapService.ts's recordCompletion), closes that window down
+// awaits - see swapService.ts's recordCompletion), closes that window down
 // to milliseconds instead of a full network round-trip. The client's own
 // Activity.swap() call still fires afterward as a fallback (harmless
 // no-op via the same on_conflict=ignore-duplicates upsert) in case this
@@ -85,7 +85,7 @@ async function recordSwapActivity(walletAddress, txHash, amountIn, amountOut, to
         explorer_url:   `https://testnet.arcscan.app/tx/${txHash}`,
         metadata:       { tokenIn, tokenOut, amountIn, amountOut },
         // Best-effort traceability back to the canonical intent, when the
-        // client sent one — never required, on_conflict=ignore means an
+        // client sent one - never required, on_conflict=ignore means an
         // older client that never sent intentId still writes a valid row.
         ...(intentId ? { transaction_intent_id: intentId } : {}),
       }),
@@ -96,7 +96,7 @@ async function recordSwapActivity(walletAddress, txHash, amountIn, amountOut, to
 }
 
 // Persists the real tx_hash onto transaction_attempts SYNCHRONOUSLY, in
-// this same server-side request — rather than depending solely on the
+// this same server-side request - rather than depending solely on the
 // client's own separate, fire-and-forget markSwapAttemptSubmitted call
 // (src/lib/swapIntentService.ts), which can be lost to a tab close, a
 // crash, or a network failure between the swap landing and that follow-up
@@ -107,14 +107,14 @@ async function recordSwapActivity(walletAddress, txHash, amountIn, amountOut, to
 // Best-effort by design, same as recordSwapActivity: never throws, never
 // blocks or fails the response for an already-broadcast, already-real
 // swap. The client's own call still fires afterward as a second,
-// redundant write — harmless, because both go through the identical
+// redundant write - harmless, because both go through the identical
 // idempotent guard below (`status=eq.CREATED&tx_hash=is.null`), so
 // whichever lands first wins and the second is simply a no-op.
 async function markAttemptSubmittedServerSide(attemptId, txHash, walletAddress) {
   if (!SUPABASE_SERVICE_KEY || !attemptId || !txHash) return
   try {
     // wallet_address=eq. scopes this to an attempt the verified caller
-    // actually owns — closes the "guess someone else's attemptId" injection.
+    // actually owns - closes the "guess someone else's attemptId" injection.
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/transaction_attempts?id=eq.${encodeURIComponent(attemptId)}&status=eq.CREATED&tx_hash=is.null&wallet_address=eq.${encodeURIComponent(walletAddress.toLowerCase())}`,
       {
@@ -145,7 +145,7 @@ async function markAttemptSubmittedServerSide(attemptId, txHash, walletAddress) 
 // browser's SDK calls to https://api.circle.com/v1/stablecoinKits/* are
 // routed here (see swapService.ts) and forwarded with KIT_KEY added. The
 // request only carries public swap details (tokens, amount, wallet
-// address) — the private key never leaves the device; the SDK still signs
+// address) - the private key never leaves the device; the SDK still signs
 // the returned transaction locally.
 const KIT_KEY = (process.env.KIT_KEY || '').trim()
 const SVC_ORIGIN = 'https://api.circle.com'
@@ -220,12 +220,12 @@ module.exports = async function handler(req, res) {
   try {
     const { action, walletAddress, txHash, amountIn, amountOut, tokenIn, tokenOut, intentId, attemptId } = req.body || {}
 
-    // The only action this function handles now — see the file header for
+    // The only action this function handles now - see the file header for
     // why 'estimate'/'swap' were removed. A request for either of those
     // (an old cached client, a stale service worker) gets a clear error
     // instead of silently doing nothing.
     if (action !== 'recordCompletion') {
-      return res.status(400).json({ error: `Unknown or removed action: ${action}. Swap now executes client-side — see src/lib/swapService.ts.` })
+      return res.status(400).json({ error: `Unknown or removed action: ${action}. Swap now executes client-side - see src/lib/swapService.ts.` })
     }
     if (!walletAddress || !txHash) {
       return res.status(400).json({ error: 'Missing required fields: walletAddress, txHash' })

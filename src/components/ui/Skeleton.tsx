@@ -4,7 +4,7 @@ interface SkeletonProps {
   className?: string
 }
 
-/** Single shimmer block — compose into row/card skeletons per screen. */
+/** Single shimmer block - compose into row/card skeletons per screen. */
 export function Skeleton({ className }: SkeletonProps) {
   return (
     <div
@@ -17,7 +17,7 @@ export function Skeleton({ className }: SkeletonProps) {
 }
 
 /** Common "list of rows with an avatar + two lines" skeleton, e.g. contacts,
- * activity, chat list — used instead of every screen building its own. */
+ * activity, chat list - used instead of every screen building its own. */
 export function SkeletonRows({ count = 6, className }: { count?: number; className?: string }) {
   return (
     <div className={cn('flex flex-col gap-1 px-5 py-2', className)} aria-busy="true" aria-label="Loading">
@@ -39,7 +39,7 @@ export function SkeletonCard({ className }: SkeletonProps) {
   return <Skeleton className={cn('h-32 w-full rounded-3xl', className)} />
 }
 
-/** Rounded list cards (icon, two lines, amount) — Activity, P2P lists. */
+/** Rounded list cards (icon, two lines, amount) - Activity, P2P lists. */
 export function SkeletonCards({ count = 5, className }: { count?: number; className?: string }) {
   return (
     <div className={cn('flex flex-col gap-3', className)} aria-busy="true" aria-label="Loading">
@@ -58,7 +58,7 @@ export function SkeletonCards({ count = 5, className }: { count?: number; classN
   )
 }
 
-/** Chat thread placeholder — a few bubbles on alternating sides. */
+/** Chat thread placeholder - a few bubbles on alternating sides. */
 export function SkeletonChat() {
   const rows: Array<[boolean, string]> = [[false, 'w-3/5'], [false, 'w-2/5'], [true, 'w-1/2'], [false, 'w-2/3'], [true, 'w-2/5'], [true, 'w-3/5']]
   return (

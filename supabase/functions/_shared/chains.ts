@@ -3,20 +3,20 @@
 // but only what's needed for READ-ONLY verification (no signing happens here).
 
 // Every chain here previously had 2 RPC endpoints EXCEPT HyperEVM, Sei,
-// Sonic, Unichain, and World Chain — each had exactly one, no fallback.
+// Sonic, Unichain, and World Chain - each had exactly one, no fallback.
 // Confirmed root cause of claims from those chains getting permanently
 // stuck at 'Bridging' whenever that single endpoint had any transient
 // issue. All five now have a second, verified public endpoint.
-// CCTP_DOMAINS below previously only had 11 of the 21 supported chains —
+// CCTP_DOMAINS below previously only had 11 of the 21 supported chains -
 // this file had drifted out of sync with claim-worker/index.ts's inlined
 // copy of it, which already got the missing 10 chains added in an earlier
 // pass. Not currently live-impacting (claim-submit, the only importer of
-// this file, only uses getArcNativeBalance below, not these maps) — synced
+// this file, only uses getArcNativeBalance below, not these maps) - synced
 // anyway so this file stays trustworthy as the documented canonical source
 // if anything imports CHAIN_RPCS/CCTP_DOMAINS from here in the future.
-// drpc.live API key — set DRPC_KEY in Supabase project secrets
+// drpc.live API key - set DRPC_KEY in Supabase project secrets
 const DRPC_KEY = Deno.env.get('DRPC_KEY') ?? ''
-// Optional explicit authenticated RPC URL override — set ARC_RPC_URL in
+// Optional explicit authenticated RPC URL override - set ARC_RPC_URL in
 // Supabase project secrets to point at a specific authenticated gateway.
 const CONFIGURED_ARC_RPC_URL = (Deno.env.get('ARC_RPC_URL') ?? '').trim()
 
@@ -69,7 +69,7 @@ export const CCTP_DOMAINS: Record<string, number> = {
   Pharos_Testnet:      31,
 }
 
-// Authenticated-only Arc endpoints — no direct public gateways
+// Authenticated-only Arc endpoints - no direct public gateways
 // (rpc.testnet.arc.io, Blockdaemon, dRPC public, QuickNode, thirdweb,
 // drpc.org). Those were exactly how claim verification could end up
 // querying arc-testnet.rpc.thirdweb.com even with an authenticated RPC
@@ -82,21 +82,21 @@ export const ARC_RPCS = [
 export const CIRCLE_IRIS_API = 'https://iris-api-sandbox.circle.com'
 
 // Arc testnet MessageTransmitter contract address. This is the CCTP contract
-// that emits `MessageReceived` when a mint is actually delivered — this is
+// that emits `MessageReceived` when a mint is actually delivered - this is
 // the ONLY authoritative on-chain signal that a claim has settled.
 // TODO(ops): fill in the real deployed address for Arc testnet and remove
 // the placeholder guard in findCctpReceiveLog() below. Until this is set,
 // event-based detection is skipped and the worker falls back to balance
-// heuristics with a loud warning — do not ship to a real-money environment
+// heuristics with a loud warning - do not ship to a real-money environment
 // with this still unset.
 export const ARC_MESSAGE_TRANSMITTER =
   Deno.env.get('ARC_MESSAGE_TRANSMITTER_ADDRESS') ?? ''
 
 // CCTP v2 changed this event's shape from v1 (nonce: uint64 → bytes32,
-// added finalityThresholdExecuted before messageBody) — a different event
+// added finalityThresholdExecuted before messageBody) - a different event
 // shape means a completely different topic0 hash, even though the event
 // name and emitting contract are the same. The v1 hash below was verified
-// against Circle's public MessageTransmitter.sol source and is correct —
+// against Circle's public MessageTransmitter.sol source and is correct -
 // for v1. Confirmed via production logs that at least one real mint's
 // MessageReceived log came from exactly the right contract address but
 // didn't match this v1-only topic, meaning it was actually emitted via v2.
@@ -104,7 +104,7 @@ export const ARC_MESSAGE_TRANSMITTER =
 // query, silently falling through to claim-recovery-scan's slower backfill
 // instead of being detected on the fast path here.
 // keccak256("MessageReceived(address,uint32,uint64,bytes32,bytes)")
-// (Circle's evm-cctp-contracts MessageTransmitter.sol — verified against the
+// (Circle's evm-cctp-contracts MessageTransmitter.sol - verified against the
 // public source, not guessed.)
 const MESSAGE_RECEIVED_TOPIC0_V1 =
   '0x58200b4c34ae05ee816d710053fff3fb75af4395915d3d2a771b24aa10e3cc5d'
@@ -124,7 +124,7 @@ export async function rpcCall(urls: string[], method: string, params: unknown[])
         signal: AbortSignal.timeout(8000),
       })
       // Non-2xx (429 rate-limit, 5xx, etc.) doesn't always come back as
-      // JSON-RPC-shaped JSON with an `.error` field — fail over on it too.
+      // JSON-RPC-shaped JSON with an `.error` field - fail over on it too.
       if (!res.ok) { lastErr = new Error(`RPC ${res.status} from ${url}`); continue }
       const json = await res.json()
       if (json.error) { lastErr = json.error; continue }
@@ -173,7 +173,7 @@ export async function getArcNativeBalance(address: string): Promise<number> {
   // will silently mask funds that have already arrived on the other nodes.
   //
   // Balance is monotonically non-decreasing while a mint is pending, so it's
-  // always safe to take the MAX across whichever endpoints respond — a
+  // always safe to take the MAX across whichever endpoints respond - a
   // stale node can only under-report, never over-report.
   const results = await Promise.allSettled(
     ARC_RPCS.map(url => rpcCallSingle(url, 'eth_getBalance', [address, 'latest']))
@@ -202,7 +202,7 @@ export async function getArcNativeBalance(address: string): Promise<number> {
 
 // ── CCTP message decoding + authoritative on-chain arrival detection ───────
 //
-// `message_hash` (poorly named — it's historical) actually stores the RAW
+// `message_hash` (poorly named - it's historical) actually stores the RAW
 // CCTP message bytes returned by Circle's IRIS API (`msg.message`), not a
 // hash. CCTP v1 message layout (all offsets in bytes):
 //
@@ -217,7 +217,7 @@ export async function getArcNativeBalance(address: string): Promise<number> {
 //
 // This lets us recover the nonce and decode it against Arc's MessageTransmitter
 // `MessageReceived(address indexed caller, uint32 sourceDomain, uint64 indexed nonce, bytes32 sender, bytes messageBody)`
-// event — the actual, authoritative "funds were delivered" signal — instead
+// event - the actual, authoritative "funds were delivered" signal - instead
 // of inferring arrival from wallet balance deltas.
 export function decodeCctpMessageNonce(messageHex: string): { nonce: bigint; sourceDomain: number } | null {
   try {
@@ -238,11 +238,11 @@ export type CctpReceiveLog = {
 
 // ── Bounded, range-limit-aware log fetching ─────────────────────────────────
 // Both findCctpReceiveLog and findIncomingMintByAmount previously queried
-// `fromBlock: '0x0', toBlock: 'latest'` — an UNBOUNDED full-chain-history
+// `fromBlock: '0x0', toBlock: 'latest'` - an UNBOUNDED full-chain-history
 // range. Public RPC providers commonly reject this outright (confirmed
 // directly: Arc's RPC returned {"code":-32614,"message":"eth_getLogs is
 // limited to ..."} on every single attempt, which is the actual reason
-// claims were getting permanently stuck in 'settling' — not a logic bug in
+// claims were getting permanently stuck in 'settling' - not a logic bug in
 // the matching itself, but every query for it failing before it could even
 // run). A claim's relevant events only ever happen within a very recent
 // window (minutes, not the chain's entire history), so there's no reason to
@@ -265,7 +265,7 @@ async function getCurrentArcBlockNumber(): Promise<number> {
   return Math.max(...values) // same "stale node under-reports" reasoning as getArcNativeBalance
 }
 
-// Local mirror of claim-worker's serializeError — chains.ts is shared and
+// Local mirror of claim-worker's serializeError - chains.ts is shared and
 // shouldn't depend on claim-worker's internals, but needs the same
 // "don't collapse plain objects into '[object Object]'" safety here too,
 // specifically to read the RPC provider's own error message text below.
@@ -295,7 +295,7 @@ async function fetchLogsBounded(filterBase: Record<string, unknown>): Promise<an
     if (logs.length > 0) return logs
 
     const anySucceeded = results.some(r => r.status === 'fulfilled')
-    if (anySucceeded) return [] // genuinely no matching logs in range yet — normal "not arrived" state
+    if (anySucceeded) return [] // genuinely no matching logs in range yet - normal "not arrived" state
 
     const firstError = results.find((r): r is PromiseRejectedResult => r.status === 'rejected')
     throw firstError?.reason ?? new Error('fetchLogsBounded: all Arc RPC endpoints failed')
@@ -317,13 +317,13 @@ async function fetchLogsBounded(filterBase: Record<string, unknown>): Promise<an
 }
 
 // Look for the MessageReceived log matching this nonce on Arc. Returns null
-// (not an error) if not found yet — that's the normal "still pending" state.
+// (not an error) if not found yet - that's the normal "still pending" state.
 // Throws only on genuine RPC failure across all endpoints, same contract as
 // getArcNativeBalance, so callers can distinguish "not arrived yet" from
 // "couldn't check right now".
 export async function findCctpReceiveLog(nonce: bigint): Promise<CctpReceiveLog | null> {
   if (!ARC_MESSAGE_TRANSMITTER) {
-    // Not configured — caller must fall back to a secondary signal.
+    // Not configured - caller must fall back to a secondary signal.
     return null
   }
 
@@ -345,13 +345,13 @@ export async function findCctpReceiveLog(nonce: bigint): Promise<CctpReceiveLog 
 }
 
 // Arc's native currency IS USDC, but it's also exposed as a fixed-address
-// ERC-20-style contract for indexer/explorer/wallet compatibility — this is
+// ERC-20-style contract for indexer/explorer/wallet compatibility - this is
 // the same address src/lib/arcService.ts already uses client-side to read
 // USDC balance via ERC-20 calls. Transfer logs (including mints) are emitted
 // from this specific address, NOT from an arbitrary/unknown contract.
 export const ARC_USDC_CONTRACT = '0x3600000000000000000000000000000000000000'
 
-// keccak256("Transfer(address,address,uint256)") — the standard ERC-20
+// keccak256("Transfer(address,address,uint256)") - the standard ERC-20
 // transfer event topic. Arc's native currency IS USDC (see
 // getArcNativeBalance above), but Arc still emits this standard log on
 // mint/transfer for indexer/explorer compatibility (confirmed directly
@@ -370,20 +370,20 @@ export type MintTransferLog = {
 // Look for a specific incoming mint Transfer matching this exact recipient +
 // amount. This replaces the old balance-delta heuristic
 // (`currentBalance >= before + expected`), which had a real correctness gap:
-// any OTHER activity on the same wallet during the settling window —
+// any OTHER activity on the same wallet during the settling window -
 // someone else sending the user funds, the user doing a swap or send, or a
-// second concurrent claim — would shift the balance and could cause a false
+// second concurrent claim - would shift the balance and could cause a false
 // "arrived" (premature complete) or false negative (balance never crosses
 // the threshold, e.g. after a swap/spend, leaving the claim stuck forever).
 // Matching a specific Transfer event by recipient+amount is immune to any of
 // that, the same way findCctpReceiveLog() is immune to it for the primary
-// path — this only ever matches an event that this exact claim's mint,
+// path - this only ever matches an event that this exact claim's mint,
 // specifically, could have produced.
 //
 // amountUsdc: the claimed amount, in human units (e.g. 5 for $5 USDC).
 // decimals: USDC is 6-decimal as an ERC-20 value in the Transfer log, even
 // though the *native* balance representation used elsewhere in this file is
-// 18-decimal wei-style — these are two different encodings of the same
+// 18-decimal wei-style - these are two different encodings of the same
 // token and must not be confused.
 export async function findIncomingMintByAmount(
   recipient: string,

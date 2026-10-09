@@ -61,11 +61,11 @@ export function ContactsPage() {
   const [payStep, setPayStep] = useState<'closed' | 'form' | 'confirm' | 'processing' | 'success'>('closed')
   // Synchronous double-submit guard (payStep only flips after async work).
   const payInFlightRef = useRef(false)
-  // Broadcast but not confirmed within the send's wait — "submitted", not success.
+  // Broadcast but not confirmed within the send's wait - "submitted", not success.
   const [payPending, setPayPending] = useState(false)
   // One idempotency key per payment: stable across retries of the same
   // recipient+amount within one pay sheet (so pay-intent replays instead of
-  // a second send), reset whenever a new pay sheet opens — same model as
+  // a second send), reset whenever a new pay sheet opens - same model as
   // ChatPage's chatPayIdempotencyKeyRef.
   const payIdemRef = useRef<{ signature: string; key: string } | null>(null)
   // Full-screen success moment shown for the first beat of 'success'.
@@ -90,7 +90,7 @@ export function ContactsPage() {
     return user.id
   }, [user?.id])
 
-  // ── Load contacts — only once per session, not on every re-render ─────────
+  // ── Load contacts - only once per session, not on every re-render ─────────
   const userId = user?.id ?? null
   const loadedForRef = { current: '' }  // track which userId we loaded for
   useEffect(() => {
@@ -100,7 +100,7 @@ export function ContactsPage() {
     setLoading(contacts.length === 0)
     fetchContactsDb(userId).then(rows => {
       // Self-transfer: always include your own profile in the Contacts list,
-      // synthetic (never written to user_contacts) — same reasoning as the
+      // synthetic (never written to user_contacts) - same reasoning as the
       // pinned entry in PaySendPage's recipient picker. Sorts normally into the
       // A–Z grouping below; the "(You)" tag at render time is what makes it
       // identifiable, not special placement.
@@ -122,7 +122,7 @@ export function ContactsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId])  // only re-run when user actually changes
 
-  // ── Search to add — exact .arc match only ──────────────────────────────────
+  // ── Search to add - exact .arc match only ──────────────────────────────────
   useEffect(() => {
     const q = addQuery.trim()
     if (!q) { setAddResults([]); return }
@@ -130,7 +130,7 @@ export function ContactsPage() {
     if (!q.toLowerCase().endsWith('.arc')) { setAddResults([]); return }
     setAddLoading(true)
     const timer = setTimeout(() => {
-      // No excludeUserId — self-transfer is permitted, and finding your own
+      // No excludeUserId - self-transfer is permitted, and finding your own
       // username here is expected (you're already shown as a pinned "(You)"
       // contact regardless, this just lets the same search box find you too
       // rather than silently returning nothing for your own handle).
@@ -166,7 +166,7 @@ export function ContactsPage() {
     const { id: convId, error } = await getOrCreateConversation(uid, c.id)
     if (error || !convId) { showToastMessage('Could not open chat', 'error'); return }
     // Warm the chat header cache with this contact's already-known data
-    // (avatar/name/username) before navigating — same reasoning as the
+    // (avatar/name/username) before navigating - same reasoning as the
     // equivalent fix in HomePage.tsx's openChatWithUser. Without this,
     // opening a chat from Contacts (rather than the Chats list itself) had
     // nothing cached yet and the header still visibly popped in late.
@@ -188,11 +188,11 @@ export function ContactsPage() {
     setContacts(prev => prev.filter(x => x.id !== c.id))
     setConfirmRemove(null)
     setSelected(null)
-    // Remove from Supabase contacts table — column names must be owner_id
+    // Remove from Supabase contacts table - column names must be owner_id
     // (matching every read/write elsewhere in supabase.ts). This was
     // previously querying user_id, a column that doesn't match what's
     // actually written, meaning the real DB row was very likely never
-    // deleted — only the client-side blocklist made removal look like it
+    // deleted - only the client-side blocklist made removal look like it
     // worked, on this device only.
     try {
       const { supabase } = await import('@/lib/supabase')
@@ -200,7 +200,7 @@ export function ContactsPage() {
         .delete()
         .or(`and(owner_id.eq.${uid},contact_id.eq.${c.id}),and(owner_id.eq.${c.id},contact_id.eq.${uid})`)
     } catch (e) { console.warn('[Contacts] Remove contact DB:', e) }
-    // Also hide their existing chat conversation, if one exists — removing
+    // Also hide their existing chat conversation, if one exists - removing
     // a contact should mean they disappear from Chats too, not just from
     // Contacts/Recent. It automatically reappears the moment they message
     // or pay again, via the existing unhideChat-on-new-message logic.
@@ -259,7 +259,7 @@ export function ContactsPage() {
     }
 
     // SECURITY FIX: the "Enter passcode to confirm" keypad was never
-    // actually checked — with the key already in memory, any 6 digits sent
+    // actually checked - with the key already in memory, any 6 digits sent
     // the payment. Verify it exactly like Pay/ChatPay do.
     if (storedPasscode) {
       if (!payPassEntry || payPassEntry.length < 6) { setPayError('Enter your 6-digit passcode to confirm.'); return }
@@ -307,7 +307,7 @@ export function ContactsPage() {
             import('@/lib/ActivityService').then(({ updateActivityStatus }) => {
               updateActivityStatus(`send_${result.txHash.toLowerCase()}`, result.senderAddress, 'failed')
             }).catch(() => {})
-            showToastMessage('Payment failed to confirm on-chain — please check Activity', 'error')
+            showToastMessage('Payment failed to confirm on-chain - please check Activity', 'error')
           })
         }).catch(() => {})
       }
@@ -326,7 +326,7 @@ export function ContactsPage() {
       }
 
       const recipientClean = (c.username || '').replace(/\.arc$/, '')
-          // Transaction on-chain — ArcScan is source of truth
+          // Transaction on-chain - ArcScan is source of truth
 
       // Award points (best effort)
       try {
@@ -646,7 +646,7 @@ export function ContactsPage() {
                   </div>
                   <div>
                     <div style={{background:'var(--surface)', borderRadius:'1.5rem', border:'1px solid var(--border)', padding:'16px'}}>
-                      {/* Amount display — tap to expand keypad. Mobile only;
+                      {/* Amount display - tap to expand keypad. Mobile only;
                           desktop's live amount input is the always-open
                           AmountKeypad card right below instead. */}
                       {!isDesktop && (
@@ -655,7 +655,7 @@ export function ContactsPage() {
                             <span style={{fontSize:44, fontWeight:700, lineHeight:1, color: payAmount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 20%, transparent)'}}>$</span>
                             <span style={{fontSize: payAmount && payAmount.length > 5 ? 36 : 44, fontWeight:700, color:'var(--text-primary)', fontFamily:'monospace', lineHeight:1}}>{payAmount || '0'}</span>
                           </div>
-                          <p style={{fontSize:13, color:'var(--text-muted)', marginTop:4}}>USDC · Balance: {formatAmount(balance)} — {showAmountPad ? 'typing...' : 'tap to enter'}</p>
+                          <p style={{fontSize:13, color:'var(--text-muted)', marginTop:4}}>USDC · Balance: {formatAmount(balance)} - {showAmountPad ? 'typing...' : 'tap to enter'}</p>
                         </div>
                       )}
 

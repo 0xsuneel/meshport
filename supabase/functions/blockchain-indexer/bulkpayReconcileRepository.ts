@@ -1,6 +1,6 @@
 // supabase/functions/blockchain-indexer/bulkpayReconcileRepository.ts
 //
-// The ONLY DB/RPC boundary for BulkPay reconciliation — dependency-injected,
+// The ONLY DB/RPC boundary for BulkPay reconciliation - dependency-injected,
 // matching the exact discipline already used in server/ledger/repository.ts.
 // No implementation lives here; index.ts supplies a real one (Supabase +
 // Arc RPC) when wiring this into the existing indexer function.

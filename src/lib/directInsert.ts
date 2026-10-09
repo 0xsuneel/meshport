@@ -1,5 +1,5 @@
 /**
- * directInsert.ts — Bulletproof message insert
+ * directInsert.ts - Bulletproof message insert
  * 
  * Uses ONLY raw fetch() with hardcoded Supabase URL and service-adjacent approach.
  * No supabase-js client, no auth sessions, no env var issues.

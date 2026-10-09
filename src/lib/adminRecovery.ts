@@ -4,7 +4,7 @@
 // goes through the cctp-recovery Edge Function, which checks the caller is in
 // admin_users and logs every action to admin_recovery_log.
 //
-// Every call takes a row id and nothing else — no address, chain or amount
+// Every call takes a row id and nothing else - no address, chain or amount
 // is ever sent, so an admin cannot change where funds go.
 
 import { supabase } from './supabase'
@@ -45,7 +45,7 @@ export function adminListStuck(): Promise<{ items: StuckItem[] }> {
 export function adminInspect(kind: 'claim' | 'transfer', id: string): Promise<AdminActionResult> {
   return call({ action: 'inspect', kind, id })
 }
-// Mints go through MeshPort's relayer (/api/bridge-relay) — see relayMint.
+// Mints go through MeshPort's relayer (/api/bridge-relay) - see relayMint.
 export async function adminFinishClaim(id: string): Promise<AdminActionResult> {
   const { relayMint } = await import('./cctpRecovery')
   return relayMint('claim', id) as Promise<AdminActionResult>

@@ -66,24 +66,24 @@ const KNOWN_INTERNAL_EXTRA = [P2P_ESCROW_CONTRACT, ...P2P_ESCROW_CONTRACTS_LEGAC
 // ── Multichain Claim completion via this same live webhook ──────────────────
 // USDC's event monitor has been live since 2026-08-30 (see
 // docs/CHAIN_TRANSFER_WEBHOOK_SETUP.md) and already receives every Transfer
-// on Arc's USDC contract, mints included — the `isMint` branch below was
+// on Arc's USDC contract, mints included - the `isMint` branch below was
 // simply discarding that data instead of using it, deferring entirely to
 // claim-worker/claim-recovery-scan's own RPC-based polling. Diagnosed this
 // session: that polling's configured RPC provider was silently missing real,
 // confirmed mints (eth_getLogs returning empty while a fresh public endpoint
-// and Arc's own explorer both showed the transfer) — claim-worker kept
+// and Arc's own explorer both showed the transfer) - claim-worker kept
 // retrying against the same blind provider for the full 40-minute settling
 // window before giving up. This webhook is not subject to that bug at all:
 // Circle's own indexer is the one watching the chain, not this app's RPC
 // config, so it sees the mint the moment it confirms regardless of whatever
 // state that provider is in.
 //
-// Match by wallet_address + fee-tolerant amount band — the exact same
+// Match by wallet_address + fee-tolerant amount band - the exact same
 // heuristic claim-worker's own findIncomingMintByAmount fallback already
 // uses (claim-worker/index.ts), not a new/riskier one: CCTP/relay fees only
 // ever reduce the minted amount versus what was claimed, so a real match is
 // always in [70% of claimed, claimed + 0.1% rounding slack]. Deliberately
-// also matches recently-`failed` claims (not just active ones) — this is
+// also matches recently-`failed` claims (not just active ones) - this is
 // exactly the scenario from this session's diagnosis: a claim that already
 // timed out and shows "Failed" in Activity, even though the money arrived
 // (just too late for claim-worker's own blind polling to see it in time).
@@ -117,7 +117,7 @@ const APP_BASE_URL = (() => {
 })()
 const PUSH_INTERNAL_SECRET = (Deno.env.get('PUSH_INTERNAL_SECRET') || '').trim()
 
-// Same server-side push claim-worker's own notifyClaimComplete sends —
+// Same server-side push claim-worker's own notifyClaimComplete sends -
 // duplicated rather than shared across function boundaries (this repo's
 // existing pattern: claim-recovery-scan already keeps its own independent
 // copy of RPC/log helpers rather than importing claim-worker's). Best-effort
@@ -130,7 +130,7 @@ async function notifyClaimComplete(
     const { data: user } = await supabase
       .from('users').select('id').eq('wallet_address', walletAddress.toLowerCase()).maybeSingle()
     if (!user?.id) return
-    // A merchant's claim moves Ledger money to Arc — same wording as the Hub.
+    // A merchant's claim moves Ledger money to Arc - same wording as the Hub.
     const { data: m } = await supabase.from('merchant_applications').select('status')
       .eq('wallet_address', walletAddress.toLowerCase()).eq('status', 'approved').limit(1)
     const merchant = (m?.length ?? 0) > 0
@@ -153,7 +153,7 @@ async function notifyClaimComplete(
 }
 
 // Returns the completed claim's id, or null if no matching claim was found
-// (a plain external USDC mint unrelated to any tracked claim — always
+// (a plain external USDC mint unrelated to any tracked claim - always
 // possible, always safe to leave to the existing scan-based backstops).
 async function tryCompleteClaimFromMint(
   supabase: SupabaseClient, toAddress: string, mintTxHash: string, mintedAmount: number,
@@ -170,12 +170,12 @@ async function tryCompleteClaimFromMint(
 
     // ── 2026-09-20 ambiguous-match guard ────────────────────────────────
     // This matches by wallet+amount only, same as claim-worker's own
-    // fallback — but unlike claim-worker (fixed this session to try each
+    // fallback - but unlike claim-worker (fixed this session to try each
     // claim's own CCTP nonce first, and to safely fall through on a
     // write collision), this webhook fires once per mint event with no
     // retry loop and no nonce correlation available here. If TWO claims
     // for the same wallet qualify for the same mint (same amount, both
-    // in flight — exactly the scenario that caused claim-worker's stuck-
+    // in flight - exactly the scenario that caused claim-worker's stuck-
     // in-settling bug), picking one is a guess: it can silently assign
     // the wrong claim's completion to this mint. The DB's unique
     // constraint on destination_tx_hash prevents actual data corruption,
@@ -186,7 +186,7 @@ async function tryCompleteClaimFromMint(
     const mintedRaw = BigInt(Math.round(mintedAmount * 1e6))
     for (const c of candidates) {
       const claimedRaw    = BigInt(Math.round(Number(c.amount) * 1e6))
-      const roundingSlack = claimedRaw / 1000n         // 0.1% — rounding only
+      const roundingSlack = claimedRaw / 1000n         // 0.1% - rounding only
       const feeFloor       = (claimedRaw * 70n) / 100n // up to 30% fee, generous margin
       if (mintedRaw < feeFloor || mintedRaw > claimedRaw + roundingSlack) continue
       qualifying.push(c)
@@ -195,12 +195,12 @@ async function tryCompleteClaimFromMint(
     if (qualifying.length > 1) {
       console.warn(
         `[chain-transfer-webhook] ambiguous mint match for ${toAddress}: ${qualifying.length} candidate claims ` +
-        `qualify for mint ${mintTxHash} (amount ${mintedAmount}) — [${qualifying.map(c => c.id).join(', ')}]. ` +
+        `qualify for mint ${mintTxHash} (amount ${mintedAmount}) - [${qualifying.map(c => c.id).join(', ')}]. ` +
         `Declining to guess; leaving for claim-worker's nonce-based match.`
       )
       return null
     }
-    // Exactly one qualifying candidate — safe to complete (mirrors the
+    // Exactly one qualifying candidate - safe to complete (mirrors the
     // original single-candidate behavior, just without the multi-
     // candidate "pick one" guess).
     const best = qualifying[0]
@@ -208,7 +208,7 @@ async function tryCompleteClaimFromMint(
     // Idempotency + race guard: only write if this claim isn't ALREADY
     // completed (by claim-worker's own polling, or a duplicate webhook
     // delivery). No rows affected here just means someone else already
-    // finished it with equally-correct data — a harmless no-op.
+    // finished it with equally-correct data - a harmless no-op.
     const { data: updated, error: updErr } = await supabase
       .from('claims')
       .update({
@@ -225,11 +225,11 @@ async function tryCompleteClaimFromMint(
     if (updErr) {
       // A duplicate-key hit here (code 23505 on destination_tx_hash) means
       // claim-worker's own polling already assigned this exact mint tx to
-      // a different claim between our SELECT and this UPDATE — not a
+      // a different claim between our SELECT and this UPDATE - not a
       // failure, just a lost race to a source that's equally authoritative.
       // Nothing to correct: whichever writer won has the same, correct data.
       if ((updErr as { code?: string }).code === '23505') {
-        console.warn(`[chain-transfer-webhook] lost race to claim-worker for mint ${mintTxHash} on claim ${best.id} — already completed elsewhere`)
+        console.warn(`[chain-transfer-webhook] lost race to claim-worker for mint ${mintTxHash} on claim ${best.id} - already completed elsewhere`)
       } else {
         console.error('[chain-transfer-webhook] claim completion update failed:', updErr.message)
       }
@@ -240,7 +240,7 @@ async function tryCompleteClaimFromMint(
     const base = CHAIN_EXPLORER[updated.source_chain] ?? ARC_EXPLORER
     const burnTxHash = (updated.tx_hash || '').toLowerCase()
     if (burnTxHash) {
-      // No ignoreDuplicates here (unlike recordExternalReceive below) —
+      // No ignoreDuplicates here (unlike recordExternalReceive below) -
       // deliberately OVERWRITES an existing row, since the common case this
       // exists for is a stale 'failed' Activity row that needs correcting,
       // not just a fresh insert.
@@ -373,7 +373,7 @@ async function recordExternalReceive(
 async function notifyExternalReceive(
   supabase: SupabaseClient, userId: string, txHash: string, amount: number, fromAddress: string, tokenSymbol: string,
 ): Promise<boolean> {
-  if (!PUSH_INTERNAL_SECRET) { console.warn('[chain-transfer-webhook] PUSH_INTERNAL_SECRET not set — no receive push'); return false }
+  if (!PUSH_INTERNAL_SECRET) { console.warn('[chain-transfer-webhook] PUSH_INTERNAL_SECRET not set - no receive push'); return false }
   try {
     const sender = await findUserByWallet(supabase, fromAddress)
     const from = sender?.username
@@ -460,7 +460,7 @@ async function processTransfer(supabase: SupabaseClient, t: TransferIn): Promise
   const { symbol, isMint, fromAddress, toAddress, amount, txHash } = t
   if (isMint) {
     // A mint (from address(0)) is a CCTP claim or similar system mint, not a
-    // generic external deposit — see tryCompleteClaimFromMint's own comment
+    // generic external deposit - see tryCompleteClaimFromMint's own comment
     // for why matching by wallet+amount here is safe and already-precedented
     // in this codebase. Only USDC claims are tracked.
     if (symbol === 'USDC') {
@@ -484,7 +484,7 @@ async function processTransfer(supabase: SupabaseClient, t: TransferIn): Promise
       return { ignored: 'tx_hash correlates to a tracked Pay/BulkPay/Swap attempt' }
     }
     if (await recordedRow(supabase, toAddress, `recv_${txHash.toLowerCase()}`)) {
-      // Already recorded by a scanner — the catch-up sweep notifies it
+      // Already recorded by a scanner - the catch-up sweep notifies it
       // (exactly once, via its claim).
       lastSweepAt = 0
       await sweepUnnotifiedReceives(supabase)
@@ -493,12 +493,12 @@ async function processTransfer(supabase: SupabaseClient, t: TransferIn): Promise
 
     const inserted = await recordExternalReceive(supabase, toAddress, user.id, txHash, amount, fromAddress, symbol)
     if (!inserted) return { ignored: 'already recorded by a concurrent writer' }
-    // Phone notification the moment the deposit is seen — works with the
+    // Phone notification the moment the deposit is seen - works with the
     // app closed. Tag matches the app's in-app mirror (payment-<hash>), so
     // the phone keeps one entry.
     const pushed = await notifyExternalReceive(supabase, user.id, txHash, amount, fromAddress, symbol)
     if (!pushed) {
-      // Not delivered — clear the flag so the catch-up sweep retries it.
+      // Not delivered - clear the flag so the catch-up sweep retries it.
       await supabase.from('activity')
         .update({ metadata: { recovered: false, note: 'External deposit', source: 'chain-transfer-webhook', receiveKind: 'external_deposit' } })
         .eq('tx_hash', `recv_${txHash.toLowerCase()}`).eq('wallet_address', toAddress.toLowerCase())
@@ -514,7 +514,7 @@ async function processTransfer(supabase: SupabaseClient, t: TransferIn): Promise
 
 // ── Arc log watcher ──────────────────────────────────────────────────────────
 // Asks Arc's RPC for Transfer logs whose recipient (topic 2) is a MeshPort
-// wallet — the node filters, so only MeshPort transfers come back. Native
+// wallet - the node filters, so only MeshPort transfers come back. Native
 // USDC is included: Arc emits a Transfer log for every native USDC movement
 // from the system address below (18 decimals), whether it was a plain value
 // send or went through the 0x3600… ERC-20 interface. This replaces Circle's
@@ -664,7 +664,7 @@ Deno.serve(async (req: Request) => {
   const keyId     = req.headers.get('x-circle-key-id') ?? ''
 
   // Catch-up sweep, driven by the chain-transfer-webhook-sweep cron job
-  // (every minute, service-role bearer — same pattern as the other cron
+  // (every minute, service-role bearer - same pattern as the other cron
   // jobs). It used to piggyback on every Circle request, but this function
   // cold-starts on nearly every call, so the per-instance 10s throttle never
   // held and the sweep query ran on every one of ~490k calls/day.
@@ -698,7 +698,7 @@ Deno.serve(async (req: Request) => {
   // Verifying first meant fetching Circle's public key on nearly every call
   // (cold start = empty key cache), ~0.8s each and a rate-limit risk for the
   // deposits that matter. Every branch below that runs before verification
-  // only returns "ignored" — nothing is written or sent until the signature
+  // only returns "ignored" - nothing is written or sent until the signature
   // checks out, so an unsigned or forged body can at most get itself ignored.
   let payload: CircleEventLogNotification
   try {

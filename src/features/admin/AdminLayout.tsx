@@ -62,7 +62,7 @@ export function AdminLayout() {
           .admin-content { margin-left: 260px; }
           .admin-main { max-width: 1280px; padding: 28px 32px 40px; }
           /* Sidebar is already always open at this width (see
-             AdminSidebar.tsx's own 1024px rule) — the hamburger that opens
+             AdminSidebar.tsx's own 1024px rule) - the hamburger that opens
              it on mobile would just be a redundant, decorative button here. */
           .admin-hamburger { display: none; }
         }

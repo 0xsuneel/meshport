@@ -1,4 +1,4 @@
-// The opening splash (index.html #splash) — lets the lock screen wait until
+// The opening splash (index.html #splash) - lets the lock screen wait until
 // it has gone before opening the fingerprint / Face ID prompt.
 let done = typeof document === 'undefined' || !document.getElementById('splash')
 const waiters = new Set<() => void>()

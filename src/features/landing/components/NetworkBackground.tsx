@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react'
 
 /**
- * Subtle animated network-node background for the hero — a lightweight
+ * Subtle animated network-node background for the hero - a lightweight
  * 2D canvas (no WebGL/Three.js needed for ~40 dots), not the
  * glow/bloom/pulsing-particle treatment common on crypto sites. Nodes drift
  * slowly and connect only within a proximity radius, at low opacity, in a
- * single muted brand tone — reads as "network," not "fireworks." Respects
+ * single muted brand tone - reads as "network," not "fireworks." Respects
  * prefers-reduced-motion by rendering one static frame instead of animating.
  */
 export function NetworkBackground({ className }: { className?: string }) {

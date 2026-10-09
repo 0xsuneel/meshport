@@ -6,7 +6,7 @@
 //
 // "Back" isn't only the browser's back button (POP): many screens return with
 // their own button (navigate('/p2p'), navigate('/')), which is a PUSH to the
-// router — so going UP the hierarchy (to a parent path or to a tab root from
+// router - so going UP the hierarchy (to a parent path or to a tab root from
 // deeper) also counts as back, the way it reads to the user.
 import { useLocation, useNavigationType } from 'react-router-dom'
 

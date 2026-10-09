@@ -1,9 +1,9 @@
 // features/p2p/P2PPage.tsx
 //
-// P2P Marketplace — TESTNET DEMO. See lib/p2pService.ts for the full
+// P2P Marketplace - TESTNET DEMO. See lib/p2pService.ts for the full
 // explanation of what's real (testnet USDC transfers) vs simulated (every
 // fiat/payment step). Every screen in this file surfaces that distinction
-// clearly — the DemoBadge/DemoBanner components below, not just a one-time
+// clearly - the DemoBadge/DemoBanner components below, not just a one-time
 // disclaimer buried somewhere.
 
 import { PopupOpen } from '@/hooks/usePopupOpen'
@@ -49,12 +49,12 @@ export const COLORS = {
   text: 'var(--text-primary)', muted: 'var(--text-secondary)', border: 'var(--border)',
 }
 
-// The OFFER itself never expires — only an individual TRADE born from it
+// The OFFER itself never expires - only an individual TRADE born from it
 // does, if the counterparty never marks payment sent / the seller never
 // confirms in time. This picker sets how long that payment window is for
 // every trade against this offer; it's stored on the offer
 // (tradeWindowMinutes) and copied onto each trade's own expires_at at
-// createTrade() time. Matches TRADE_WINDOW_MINUTES's old hardcoded 15 —
+// createTrade() time. Matches TRADE_WINDOW_MINUTES's old hardcoded 15 -
 // now the seller/buy-offer-creator picks it instead of it being fixed.
 const TRADE_WINDOW_OPTIONS: { label: string; minutes: number }[] = [
   { label: '15 min', minutes: 15 },
@@ -67,7 +67,7 @@ const TRADE_WINDOW_OPTIONS: { label: string; minutes: number }[] = [
 ]
 
 // ── Shared bits ──────────────────────────────────────────────────────────────
-// Replaces the old "TESTNET DEMO" text pill in the header — same warning
+// Replaces the old "TESTNET DEMO" text pill in the header - same warning
 // icon, but just the icon (native title attribute carries the full
 // disclaimer as a hover tooltip) instead of a wide always-on label, so it
 // doesn't compete with the page title for space.
@@ -125,7 +125,7 @@ export function Header({ title, onBack, right, hideDemoIconOnMobile }: { title: 
 // My Trades, History, a notification popup or straight after taking an
 // offer): return to whichever screen opened it. React Router numbers its
 // history entries (state.idx), so idx 0 means this page was opened directly
-// (a deep link, a refresh, a new tab) — navigate(-1) would then do nothing or
+// (a deep link, a refresh, a new tab) - navigate(-1) would then do nothing or
 // leave the app, so go to the page's parent instead.
 export function useP2PBack(fallback: string) {
   const navigate = useNavigate()
@@ -150,14 +150,14 @@ export function statusMeta(status: string): { label: string; color: string } {
 }
 
 /**
- * Passcode confirmation sheet — gates every P2P action that moves USDC
+ * Passcode confirmation sheet - gates every P2P action that moves USDC
  * on-chain (deposit to escrow on offer creation, withdraw-remaining on
  * offer cancel, release-to-buyer on trade release). Same bottom-sheet +
  * PinKeypad pattern as Swap/Multichain Send/Claim (see SwapPage.tsx /
- * MultichainClaimPage.tsx) — copied here rather than re-derived so the
+ * MultichainClaimPage.tsx) - copied here rather than re-derived so the
  * feel (dot progress, biometric key, shake-on-error) matches exactly.
  * When the user has no passcode set (storedPasscode is falsy), falls back
- * to a plain "Confirm" button — same fallback those other screens use —
+ * to a plain "Confirm" button - same fallback those other screens use -
  * so the sheet still acts as an explicit are-you-sure step either way.
  */
 function PasscodeSheet({
@@ -174,7 +174,7 @@ function PasscodeSheet({
   onClose: () => void
 }) {
   const isDesktop = useMediaQuery('(min-width: 980px)')
-  // Keypad/confirm-button only — the title+subtitle text block above it is
+  // Keypad/confirm-button only - the title+subtitle text block above it is
   // handled separately per branch below (mobile's inline heading vs. the
   // desktop dialog's own title/subLabel props), so this part alone is
   // what's shared/reused between the two.
@@ -222,7 +222,7 @@ function PasscodeSheet({
   return (
     <>
       <PopupOpen />
-      {/* Plain dim — no backdrop blur (Android re-blurs it every frame of the fade). */}
+      {/* Plain dim - no backdrop blur (Android re-blurs it every frame of the fade). */}
       <motion.div key="pass-backdrop"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.24 } }}
         transition={SHEET_BACKDROP.transition}
@@ -247,7 +247,7 @@ const myOffersCache = new Map<string, { offers: P2POffer[]; remaining: Map<strin
 const myTradesCache = new Map<string, P2PTrade[]>()
 let lastHubKey = ''
 
-// ── P2P Hub — Buy/Sell tabs, browse offers ──────────────────────────────────
+// ── P2P Hub - Buy/Sell tabs, browse offers ──────────────────────────────────
 export function P2PHubPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
@@ -265,7 +265,7 @@ export function P2PHubPage() {
   const [search, setSearch] = useState('')
 
   // ── Desktop-only: P2P History (right column) ─────────────────────────────
-  // Real data — reuses fetchMyTrades, the same source both P2PMyTradesPage
+  // Real data - reuses fetchMyTrades, the same source both P2PMyTradesPage
   // and HistoryPage.tsx already fetch from (see HistoryPage.tsx's own
   // header comment). Skipped entirely on mobile; re-fetched whenever the
   // hub's own offer list reloads (`load`, defined below) so a trade that
@@ -281,7 +281,7 @@ export function P2PHubPage() {
     return () => { cancelled = true }
   }, [isDesktop, user?.id])
 
-  // Live updates for the desktop History panel — a payment marked sent,
+  // Live updates for the desktop History panel - a payment marked sent,
   // release, or dispute on any of this user's trades should show up here
   // instantly and survive a tab switch, not just at the next full reload.
   useEffect(() => {
@@ -295,10 +295,10 @@ export function P2PHubPage() {
     return () => { if (debounceTimer) clearTimeout(debounceTimer); unsubscribe() }
   }, [isDesktop, user?.id])
 
-  // ── Ongoing trades count — "My Trades" badge ────────────────────────────
+  // ── Ongoing trades count - "My Trades" badge ────────────────────────────
   // BUG FIX (2026-09-22): this used to be its own independent fetch+
   // subscribe effect, duplicated in two other components too (HomePage,
-  // DesktopSidebar) — see useP2PTradesCountStore's own comment in
+  // DesktopSidebar) - see useP2PTradesCountStore's own comment in
   // store/index.ts for the crash this caused on desktop (a Realtime
   // channel name collision, since subscribeToMyTrades's channel names are
   // fixed per userId, not unique per caller). Now just reads the shared
@@ -306,11 +306,11 @@ export function P2PHubPage() {
   // subscribes.
   const myTradesCount = useP2PTradesCountStore(s => s.ongoingCount)
 
-  // Auto-expiry sweep — runs once on mount, same "check on read" shape as
+  // Auto-expiry sweep - runs once on mount, same "check on read" shape as
   // the rest of this codebase's lighter-weight scheduled work (see
   // expireStaleOffers's own doc comment in p2pService.ts). Also sweeps
   // this user's own expired trades here (not just on a trade's own detail
-  // page — see that page's own comment) since a seller is far more likely
+  // page - see that page's own comment) since a seller is far more likely
   // to open the marketplace hub after a trade goes stale than to revisit
   // the specific trade they're waiting on. This is what makes an
   // abandoned trade's escrow come back "automatically" in practice: no
@@ -329,7 +329,7 @@ export function P2PHubPage() {
     if (cached) { setOffers(cached.offers); setRemaining(cached.remaining); setLoading(false) }
     else { setOffers([]); setLoading(true) }
     // Browsing "Buy USDC" shows offers from SELLERS (people offering to
-    // sell), and vice versa — the tab is what the viewer wants to do, the
+    // sell), and vice versa - the tab is what the viewer wants to do, the
     // fetched offer type is the counterparty's side.
     const offerTypeToFetch: OfferType = tab === 'buy' ? 'sell' : 'buy'
     const rows = await fetchOffers({
@@ -354,12 +354,12 @@ export function P2PHubPage() {
 
   // ── Live updates for the marketplace list ────────────────────────────────
   // BUG FIX: this list used to be a one-shot fetch with nothing keeping it
-  // current — a new offer, a cancellation, or someone else's offer
+  // current - a new offer, a cancellation, or someone else's offer
   // depleting never showed up until the next full reload, and switching
   // away to another tab and back never refreshed it either. p2p_offers is
   // already in the realtime publication (see subscribeToAllOffers's own
   // use in P2PAdminPage.tsx) and subscribeWithRetry already resyncs on tab
-  // visibility/network regain on its own — this just needed to actually be
+  // visibility/network regain on its own - this just needed to actually be
   // wired up here too. Debounced since a single admin action or a burst of
   // trades can fire several change events in quick succession; one
   // re-fetch covers all of them instead of one per event.
@@ -378,10 +378,10 @@ export function P2PHubPage() {
 
   // Held in a variable (not returned directly) so the exact same JSX renders
   // either as the whole page (mobile) or as the left column of the desktop
-  // 2-column layout below — never duplicated.
+  // 2-column layout below - never duplicated.
   const flow = (
     <div style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: 90 }}>
-      {/* Desktop: no header history icon and no demo banner — the right
+      {/* Desktop: no header history icon and no demo banner - the right
           column's own P2P History panel already covers history, and a
           "View History" button sits next to Create Offer below instead
           (see the bottom actions row). The disclaimer text fills the gap
@@ -480,7 +480,7 @@ export function P2PHubPage() {
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '50px 20px', background: COLORS.surface, borderRadius: 18, border: `1px dashed ${COLORS.border}` }}>
             <p style={{ color: COLORS.muted, fontSize: 13, margin: 0 }}>No {tab === 'buy' ? 'sell' : 'buy'} offers match right now.</p>
-            <p style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>Be the first — create one below.</p>
+            <p style={{ color: COLORS.muted, fontSize: 12, marginTop: 6 }}>Be the first - create one below.</p>
           </div>
         ) : filtered.map(offer => (
           <div key={offer.id} onClick={() => navigate(`/p2p/offer/${offer.id}`, { state: { offerType: offer.offerType } })}
@@ -523,8 +523,8 @@ export function P2PHubPage() {
 
       {/* Bottom actions. Mobile: fixed bar pinned to the viewport bottom
           (unchanged). Desktop: position:fixed here centers across the FULL
-          viewport width via margin:auto — ignoring the sidebar offset and
-          the 65/35 column split — so it visually lands away from column 1
+          viewport width via margin:auto - ignoring the sidebar offset and
+          the 65/35 column split - so it visually lands away from column 1
           (looks like it belongs to column 2). Rendered in-flow instead,
           at the bottom of this same column, so it actually stays inside
           column 1 as intended. */}
@@ -634,9 +634,9 @@ export function P2PCreateOfferPage() {
   const [offerType, setOfferType] = useState<OfferType>('sell')
   const [currency, setCurrency] = useState('USD')
   const [price, setPrice] = useState('')
-  // Total amount the seller wants to sell overall — what actually gets
+  // Total amount the seller wants to sell overall - what actually gets
   // deposited to escrow. Only meaningful for sell offers (a buy offer's
-  // creator doesn't escrow anything at creation time — see createOffer's
+  // creator doesn't escrow anything at creation time - see createOffer's
   // own comment on this), so it just mirrors maxAmount for buy offers,
   // matching this app's previous one-number behavior there since nothing
   // actually changes for buy offers.
@@ -670,7 +670,7 @@ export function P2PCreateOfferPage() {
           paymentMethods: methods, countryRegion: country, terms: terms || undefined,
           tradeWindowMinutes,
         })
-        return { success: !!offer, message: offer ? `Your ${offerType} offer is now live in the marketplace.` : (error || 'Could not create offer — try again') }
+        return { success: !!offer, message: offer ? `Your ${offerType} offer is now live in the marketplace.` : (error || 'Could not create offer - try again') }
       },
       { successTitle: 'Offer Created', errorTitle: 'Could Not Create Offer' },
     )
@@ -678,7 +678,7 @@ export function P2PCreateOfferPage() {
   }
 
   // Navigating away immediately on success would unmount this page (and
-  // the flip card with it) before the person ever sees it — wait for them
+  // the flip card with it) before the person ever sees it - wait for them
   // to dismiss the result card first, same as every other action here.
   // Navigates only once the card has finished closing (onExited), so it
   // doesn't ride off with the page.
@@ -688,7 +688,7 @@ export function P2PCreateOfferPage() {
     dismissFlip()
   }
 
-  // Entry point for the "Create Offer" button — opens the passcode sheet
+  // Entry point for the "Create Offer" button - opens the passcode sheet
   // rather than executing immediately. A SELL offer moves USDC into the
   // escrow contract right here (depositForOffer, see createOffer() in
   // p2pService.ts); a BUY offer doesn't move funds yet, but is gated the
@@ -703,13 +703,13 @@ export function P2PCreateOfferPage() {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
-      // Verifying the passcode only proves it's correct — it does NOT by
+      // Verifying the passcode only proves it's correct - it does NOT by
       // itself put the private key back in memory. privateKey is
       // deliberately never persisted (see store/index.ts's partialize),
       // so after any fresh page load it's null until explicitly restored.
       // Without this call, a correct passcode entry here was previously
       // followed by a release/accept/cancel that still failed with
-      // "Couldn't access your wallet on this device" — the exact bug this
+      // "Couldn't access your wallet on this device" - the exact bug this
       // fixes. Passing the just-verified passcode lets restorePrivateKey
       // decrypt this device's locally-stored encrypted key immediately,
       // no extra prompt needed.
@@ -741,7 +741,7 @@ export function P2PCreateOfferPage() {
         <div>
           <div style={labelStyle}>Currency</div>
           <select value={currency} onChange={e => setCurrency(e.target.value)} style={inputStyle}>
-            {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.name} — {c.code} ({c.symbol})</option>)}
+            {CURRENCIES.map(c => <option key={c.code} value={c.code}>{c.name} - {c.code} ({c.symbol})</option>)}
           </select>
         </div>
 
@@ -856,7 +856,7 @@ export function P2PCreateOfferPage() {
   )
 }
 
-// ── Offer Detail — accept an offer (creates a trade) ────────────────────────
+// ── Offer Detail - accept an offer (creates a trade) ────────────────────────
 export function P2POfferDetailPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const { offerId } = useParams<{ offerId: string }>()
@@ -909,7 +909,7 @@ export function P2POfferDetailPage() {
       async () => {
         const { trade, error } = await createTrade({ offer, acceptingUserId: user.id, acceptingWallet: walletAddress, amountUsdc: amt })
         if (trade) tradeRef.current = trade
-        return { success: !!trade, message: trade ? (trade.status === 'awaiting_seller_confirmation' ? "Waiting for the seller to confirm on-chain — you'll be notified." : "You can pay as soon as you're ready.") : (error || 'Could not start trade — try again') }
+        return { success: !!trade, message: trade ? (trade.status === 'awaiting_seller_confirmation' ? "Waiting for the seller to confirm on-chain - you'll be notified." : "You can pay as soon as you're ready.") : (error || 'Could not start trade - try again') }
       },
       { successTitle: 'Trade Started', errorTitle: 'Could Not Start Trade' },
     )
@@ -917,7 +917,7 @@ export function P2POfferDetailPage() {
   }
 
   // Navigating away immediately on success would unmount this page (and
-  // the flip card with it) before the person ever sees it — wait for them
+  // the flip card with it) before the person ever sees it - wait for them
   // to dismiss the result card first, same as Create Offer.
   const afterAcceptFlip = useRef<(() => void) | null>(null)
   const handleDismissAcceptFlip = () => {
@@ -926,7 +926,7 @@ export function P2POfferDetailPage() {
     dismissFlip()
   }
 
-  // Validates and opens the passcode sheet — accepting a BUY offer deposits
+  // Validates and opens the passcode sheet - accepting a BUY offer deposits
   // USDC into escrow right here (createTrade -> depositForTrade, see
   // p2pService.ts / p2pProviders.ts), so it's gated the same way offer
   // create/cancel and trade release are.
@@ -947,13 +947,13 @@ export function P2POfferDetailPage() {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
-      // Verifying the passcode only proves it's correct — it does NOT by
+      // Verifying the passcode only proves it's correct - it does NOT by
       // itself put the private key back in memory. privateKey is
       // deliberately never persisted (see store/index.ts's partialize),
       // so after any fresh page load it's null until explicitly restored.
       // Without this call, a correct passcode entry here was previously
       // followed by a release/accept/cancel that still failed with
-      // "Couldn't access your wallet on this device" — the exact bug this
+      // "Couldn't access your wallet on this device" - the exact bug this
       // fixes. Passing the just-verified passcode lets restorePrivateKey
       // decrypt this device's locally-stored encrypted key immediately,
       // no extra prompt needed.
@@ -1047,7 +1047,7 @@ export function P2POfferDetailPage() {
 
         {isOwnOffer ? (
           <div style={{ background: 'color-mix(in srgb, var(--text-secondary) 8%, transparent)', border: `1px dashed ${COLORS.border}`, borderRadius: 14, padding: 16, textAlign: 'center' }}>
-            <p style={{ fontSize: 13, color: COLORS.muted, margin: 0 }}>This is your own offer — you can't accept it yourself.</p>
+            <p style={{ fontSize: 13, color: COLORS.muted, margin: 0 }}>This is your own offer - you can't accept it yourself.</p>
           </div>
         ) : (
           <>
@@ -1091,7 +1091,7 @@ export function P2POfferDetailPage() {
   )
 }
 
-// ── Trade Detail — status flow, timer, chat ─────────────────────────────────
+// ── Trade Detail - status flow, timer, chat ─────────────────────────────────
 export function P2PTradePage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const { tradeId } = useParams<{ tradeId: string }>()
@@ -1116,20 +1116,20 @@ export function P2PTradePage() {
   const [showDispute, setShowDispute] = useState(false)
   const [disputeReason, setDisputeReason] = useState('')
   const [disputeSubmitting, setDisputeSubmitting] = useState(false)
-  // What the passcode sheet, once confirmed, should actually execute —
+  // What the passcode sheet, once confirmed, should actually execute -
   // 'release' moves escrowed USDC to the buyer, 'cancel' can refund a
   // buy-offer trade's deposit back to the seller (see refund() in
-  // p2pProviders.ts) — both are on-chain-moving actions, so both are
+  // p2pProviders.ts) - both are on-chain-moving actions, so both are
   // gated the same way as offer create/cancel above.
   const [pendingAction, setPendingAction] = useState<'release' | 'cancel' | 'confirm' | null>(null)
   const [passEntry, setPassEntry] = useState('')
   const [passError, setPassError] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
-  // ── Payment proof attachment — buyer/seller can attach a receipt
+  // ── Payment proof attachment - buyer/seller can attach a receipt
   // screenshot to the trade chat. Previously there was no way to attach
   // anything here at all (trade messages were text-only); this reuses the
   // same Supabase Storage 'attachments' bucket and `[IMAGE](url)` content
-  // convention the 1:1 chat already uses, so no schema change is needed —
+  // convention the 1:1 chat already uses, so no schema change is needed -
   // p2p_trade_messages.content just carries the marker string.
   const proofFileInputRef = useRef<HTMLInputElement>(null)
   const [proofFile, setProofFile] = useState<{ file: File; previewUrl: string } | null>(null)
@@ -1145,9 +1145,9 @@ export function P2PTradePage() {
   }, [tradeId])
 
   // Fraud protection: auto-cancel this trade if its 15-minute window has
-  // already passed — same check-on-read shape as the Hub's offer-expiry
+  // already passed - same check-on-read shape as the Hub's offer-expiry
   // sweep. Scoped to just this user's trades (autoCancelExpiredTrades
-  // checks all of them), which is fine — cheap at this feature's scale,
+  // checks all of them), which is fine - cheap at this feature's scale,
   // and guarantees this specific trade gets corrected the moment its own
   // detail page is opened, not just whenever some other screen happens to run it.
   useEffect(() => {
@@ -1158,7 +1158,7 @@ export function P2PTradePage() {
   // claimed the trade ('payment_sent' -> 'released') but never finished moving
   // funds, because the tab closed or the connection dropped between the claim
   // and its compensation. releaseTrade can't fix what it never gets to run, so
-  // this repairs it after the fact — reading the escrow contract's own
+  // this repairs it after the fact - reading the escrow contract's own
   // tradeReleased flag rather than guessing, and changing nothing when the
   // on-chain state can't be established. Never sends a transaction.
   useEffect(() => {
@@ -1171,14 +1171,14 @@ export function P2PTradePage() {
   }, [])
 
   // Rating prompt, buyer-covering fix: previously the ONLY way this sheet
-  // ever appeared was inline inside doRelease() below — which only the
+  // ever appeared was inline inside doRelease() below - which only the
   // trade's SELLER can ever run (the Release button itself is rendered
   // `!isBuyer`-only). That meant a buyer was never once prompted to rate
   // their seller, in either offer-type scenario, and a seller who
   // dismissed the one-shot prompt (or whose page reloaded before it
   // fired) had no second chance either. This effect is the general,
   // role-agnostic fix: any time THIS trade is 'completed' and the
-  // currently-viewing party hasn't rated it yet, offer the prompt —
+  // currently-viewing party hasn't rated it yet, offer the prompt -
   // covers the buyer opening a trade someone else released, either party
   // reopening one later, and dispute-resolved completions where neither
   // side ever clicked Release at all. hasRatedTrade() is checked first so
@@ -1205,7 +1205,7 @@ export function P2PTradePage() {
   const isBuyer = trade.buyerId === user.id
   // Once the trade's own selected window passes, a 'waiting_for_buyer'
   // trade still isn't truly expired for another GRACE_PERIOD_MINUTES (see
-  // isTradeExpired's own comment in p2pService.ts) — the countdown should
+  // isTradeExpired's own comment in p2pService.ts) - the countdown should
   // keep running through that window instead of freezing at 0:00 while
   // the buyer can still tap "I've Paid".
   const windowEndMs = new Date(trade.expiresAt).getTime()
@@ -1225,7 +1225,7 @@ export function P2PTradePage() {
     setFailedIds(f => { if (!f[id]) return f; const n = { ...f }; delete n[id]; return n })
     const saved = await sendTradeMessage(trade.id, user.id, text, false)
     if (!saved) { setFailedIds(f => ({ ...f, [id]: true })); return }
-    // The live update may already have added the saved copy — keep one.
+    // The live update may already have added the saved copy - keep one.
     setMessages(prev => prev.some(m => m.id === saved.id) ? prev.filter(m => m.id !== id) : prev.map(m => m.id === id ? saved : m))
   }
   const resizeComposer = () => {
@@ -1250,7 +1250,7 @@ export function P2PTradePage() {
     if (!file) return
     if (!file.type.startsWith('image/')) { showToastMessage('Payment proof must be an image', 'error'); return }
     const maxSize = 10 * 1024 * 1024
-    if (file.size > maxSize) { showToastMessage('Image is too large — max 10MB', 'error'); return }
+    if (file.size > maxSize) { showToastMessage('Image is too large - max 10MB', 'error'); return }
     if (proofFile) URL.revokeObjectURL(proofFile.previewUrl)
     setProofFile({ file, previewUrl: URL.createObjectURL(file) })
   }
@@ -1267,20 +1267,20 @@ export function P2PTradePage() {
       const ext = staged.file.name.split('.').pop() || 'jpg'
       const fileName = `p2p/${trade.id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
       const { error: uploadErr } = await supabase.storage.from('attachments').upload(fileName, staged.file, { cacheControl: '3600', upsert: false })
-      if (uploadErr) { showToastMessage('Upload failed — please try again', 'error'); return }
+      if (uploadErr) { showToastMessage('Upload failed - please try again', 'error'); return }
       const { data: urlData } = supabase.storage.from('attachments').getPublicUrl(fileName)
       await sendTradeMessage(trade.id, user.id, `[IMAGE](${urlData.publicUrl})`, false)
       URL.revokeObjectURL(staged.previewUrl)
       setProofFile(null)
     } catch (e: any) {
-      showToastMessage('Upload failed — please try again', 'error')
+      showToastMessage('Upload failed - please try again', 'error')
     } finally {
       setUploadingProof(false)
     }
   }
 
   const handleMarkPaid = async () => {
-    // Fake payment-processing animation (2-3s) — see fiatProvider in
+    // Fake payment-processing animation (2-3s) - see fiatProvider in
     // p2pProviders.ts for why this delay exists: it's the one place in the
     // whole module deliberately slow, so the demo reads as "a payment rail
     // is doing something" rather than an instantly, obviously fake flip.
@@ -1296,13 +1296,13 @@ export function P2PTradePage() {
     else showToastMessage(result.message, 'error')
   }
 
-  // SECURITY/CORRECTNESS FIX: both handlers used to have no try/catch —
+  // SECURITY/CORRECTNESS FIX: both handlers used to have no try/catch -
   // any unexpected throw from releaseTrade()/cancelTrade() (network
   // errors, etc.) would skip setActing(false) and the toast entirely,
   // leaving the button stuck on its "in progress" label forever with zero
   // visible feedback. releaseTrade() itself is now hardened not to throw
   // for the specific case that caused this in production, but this
-  // try/catch/finally is a deliberate second layer — no future bug
+  // try/catch/finally is a deliberate second layer - no future bug
   // anywhere in this call chain should be able to hide silently again.
   const doRelease = async () => {
     setActing(true)
@@ -1311,7 +1311,7 @@ export function P2PTradePage() {
     setActing(false)
   }
 
-  // Seller-side confirmation for a sell-offer trade — signs registerTrade
+  // Seller-side confirmation for a sell-offer trade - signs registerTrade
   // with THIS device's key, which only works when this device belongs to
   // the offer's actual seller (the only signer the contract accepts). See
   // confirmSellTradeOnChain's own comment in p2pService.ts for why this
@@ -1329,7 +1329,7 @@ export function P2PTradePage() {
     setActing(false)
   }
 
-  // Entry points for the Release/Cancel buttons — open the passcode sheet
+  // Entry points for the Release/Cancel buttons - open the passcode sheet
   // instead of executing right away.
   const handleRelease = () => { setPassEntry(''); setPassError(''); setPendingAction('release') }
   const handleCancel  = () => { setPassEntry(''); setPassError(''); setPendingAction('cancel') }
@@ -1340,13 +1340,13 @@ export function P2PTradePage() {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
-      // Verifying the passcode only proves it's correct — it does NOT by
+      // Verifying the passcode only proves it's correct - it does NOT by
       // itself put the private key back in memory. privateKey is
       // deliberately never persisted (see store/index.ts's partialize),
       // so after any fresh page load it's null until explicitly restored.
       // Without this call, a correct passcode entry here was previously
       // followed by a release/accept/cancel that still failed with
-      // "Couldn't access your wallet on this device" — the exact bug this
+      // "Couldn't access your wallet on this device" - the exact bug this
       // fixes. Passing the just-verified passcode lets restorePrivateKey
       // decrypt this device's locally-stored encrypted key immediately,
       // no extra prompt needed.
@@ -1379,7 +1379,7 @@ export function P2PTradePage() {
     showToastMessage('Thanks for rating your trade partner', 'success')
   }
 
-  // Timeline — a real audit trail of this trade's actual state changes,
+  // Timeline - a real audit trail of this trade's actual state changes,
   // not just the current status. Only ever shows steps that genuinely
   // happened, in the order the timestamps say they happened.
   const timelineSteps: Array<{ label: string; at: string }> = [
@@ -1424,7 +1424,7 @@ export function P2PTradePage() {
 
         {/* Actions */}
         {/* Sell-offer trades need the SELLER to sign registerTrade with their
-            own device/key — see confirmSellTradeOnChain's comment in
+            own device/key - see confirmSellTradeOnChain's comment in
             p2pService.ts. Only rendered for the seller; the buyer sees a
             waiting notice instead, right below. */}
         {trade.status === 'awaiting_seller_confirmation' && !expired && !isBuyer && trade.disputeStatus !== 'open' && (
@@ -1451,7 +1451,7 @@ export function P2PTradePage() {
           <button onClick={handleCancel} style={{ width: '100%', padding: '11px 0', borderRadius: 14, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Cancel Trade</button>
         )}
         {/* Once the counterparty has fulfilled their obligation, cancelling
-            is off the table — release/pay or dispute are the only ways
+            is off the table - release/pay or dispute are the only ways
             forward. Dispute stays available the whole time the trade is
             active, not just once cancel disappears. */}
         {(trade.status === 'waiting_for_buyer' || trade.status === 'payment_sent') && trade.disputeStatus !== 'open' && (
@@ -1467,7 +1467,7 @@ export function P2PTradePage() {
         {trade.status === 'completed' && trade.txHash && (
           <a href={arcExplorerTxUrl(trade.txHash)} target="_blank" rel="noopener noreferrer"
             style={{ display: 'flex', alignItems: 'center', gap: 6, color: COLORS.success, fontSize: 12.5, marginBottom: 10, textDecoration: 'none' }}>
-            <CheckCircle2 size={14} /> USDC transferred on Arc Testnet — View on Explorer ↗
+            <CheckCircle2 size={14} /> USDC transferred on Arc Testnet - View on Explorer ↗
           </a>
         )}
 
@@ -1485,14 +1485,14 @@ export function P2PTradePage() {
         )}
       </div>
 
-      {/* Fake payment-processing overlay — see handleMarkPaid's comment */}
+      {/* Fake payment-processing overlay - see handleMarkPaid's comment */}
       <AnimatePresence>
         {processingPayment && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
             <MeshLoader size={44} color="#5DE0C0" label="Processing" />
             <p style={{ fontSize: 14.5, fontWeight: 600, color: '#fff' }}>Processing demo payment…</p>
-            <p style={{ fontSize: 11.5, color: COLORS.muted, textAlign: 'center', maxWidth: 260 }}>Simulating a real payment rail — no real money is moving.</p>
+            <p style={{ fontSize: 11.5, color: COLORS.muted, textAlign: 'center', maxWidth: 260 }}>Simulating a real payment rail - no real money is moving.</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1501,7 +1501,7 @@ export function P2PTradePage() {
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {messages.map(m => m.isSystem && m.senderId === 'admin' ? (
           // Admin speaking directly to both parties (e.g. asking for proof
-          // of payment) — a real message from a real person, so it gets a
+          // of payment) - a real message from a real person, so it gets a
           // labeled bubble like Buyer/Seller do, not the generic gray
           // system-log pill below (which would read as an automated line,
           // easy to miss or misread as impersonal).
@@ -1581,7 +1581,7 @@ export function P2PTradePage() {
           const disputeContent = (
             <>
               <p style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>Open a dispute</p>
-              <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 16 }}>Tell us what went wrong — an admin will review the chat and step in.</p>
+              <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 16 }}>Tell us what went wrong - an admin will review the chat and step in.</p>
               <textarea value={disputeReason} onChange={e => setDisputeReason(e.target.value)} placeholder="e.g. Payment was marked sent but I never received it"
                 rows={4} style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12, fontSize: 13.5, marginBottom: 16, boxSizing: 'border-box', fontFamily: 'inherit', resize: 'none' }} />
               <button onClick={handleOpenDispute} disabled={disputeSubmitting} style={{ width: '100%', padding: '14px 0', borderRadius: 14, border: 'none', background: COLORS.warning, color: '#1A1A1A', fontSize: 14, fontWeight: 700, marginBottom: 10, opacity: disputeSubmitting ? 0.6 : 1 }}>
@@ -1604,7 +1604,7 @@ export function P2PTradePage() {
           const ratingContent = (
             <>
               <p style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, marginBottom: 4 }}>Rate your trade partner</p>
-              <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 18 }}>Demo reputation — helps other traders on this testnet marketplace.</p>
+              <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 18 }}>Demo reputation - helps other traders on this testnet marketplace.</p>
               <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 20 }}>
                 {[1, 2, 3, 4, 5].map(n => (
                   <button key={n} onClick={() => setRatingValue(n)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
@@ -1662,7 +1662,7 @@ export function P2PMyOffersPage() {
   const [passEntry, setPassEntry] = useState('')
   const [passError, setPassError] = useState('')
 
-  // ── Delete offer (zero-balance offers only — no contract call) ───────────
+  // ── Delete offer (zero-balance offers only - no contract call) ───────────
   const [deleting, setDeleting] = useState(false)
   const [offerToDelete, setOfferToDelete] = useState<P2POffer | null>(null)
 
@@ -1688,7 +1688,7 @@ export function P2PMyOffersPage() {
     if (!myOffersCache.has(user.id)) setLoading(true)
     // Sweep this seller's own expired trades BEFORE fetching offers, so a
     // trade whose buyer never paid is already unlocked and its escrow
-    // already reclaimed by the time this list renders — the seller sees
+    // already reclaimed by the time this list renders - the seller sees
     // "available again" here, not a stale lock they'd have to refresh
     // away. This is the seller's own device, so releaseAbandonedSellReservation
     // resolves it completely on-chain, no admin step needed.
@@ -1704,7 +1704,7 @@ export function P2PMyOffersPage() {
 
   useEffect(() => { load() }, [load])
 
-  // Live updates — same reasoning as the marketplace list in P2PPage:
+  // Live updates - same reasoning as the marketplace list in P2PPage:
   // this user's own offers (status flipping to completed/cancelled, escrow
   // top-ups, a new trade consuming part of the remaining amount) should
   // reflect instantly and survive a tab switch, not just whatever was true
@@ -1718,7 +1718,7 @@ export function P2PMyOffersPage() {
     return () => { if (debounceTimer) clearTimeout(debounceTimer); unsubscribe() }
   }, [load])
 
-  // Actual cancellation — for a sell offer this withdraws whatever's still
+  // Actual cancellation - for a sell offer this withdraws whatever's still
   // in escrow back to the wallet, so it's gated behind the passcode sheet
   // below rather than firing straight off the button tap.
   const doCancel = async (offer: P2POffer) => {
@@ -1741,13 +1741,13 @@ export function P2PMyOffersPage() {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
-      // Verifying the passcode only proves it's correct — it does NOT by
+      // Verifying the passcode only proves it's correct - it does NOT by
       // itself put the private key back in memory. privateKey is
       // deliberately never persisted (see store/index.ts's partialize),
       // so after any fresh page load it's null until explicitly restored.
       // Without this call, a correct passcode entry here was previously
       // followed by a release/accept/cancel that still failed with
-      // "Couldn't access your wallet on this device" — the exact bug this
+      // "Couldn't access your wallet on this device" - the exact bug this
       // fixes. Passing the just-verified passcode lets restorePrivateKey
       // decrypt this device's locally-stored encrypted key immediately,
       // no extra prompt needed.
@@ -1764,7 +1764,7 @@ export function P2PMyOffersPage() {
   }
 
   // Delete never touches the wallet/contract (there's nothing left to
-  // withdraw), so this skips the passcode sheet entirely — the only thing
+  // withdraw), so this skips the passcode sheet entirely - the only thing
   // it needs from the user is a plain "are you sure", handled by the
   // confirm sheet below.
   const requestDelete = (offer: P2POffer) => setOfferToDelete(offer)
@@ -1835,7 +1835,7 @@ export function P2PMyOffersPage() {
   }
 
   // Top-up moves real funds on-chain (escrowProvider.depositForOffer), so
-  // — unlike the price/payment-method edit above — this path also needs
+  // - unlike the price/payment-method edit above - this path also needs
   // restorePrivateKey(), exactly like Release/Cancel/Accept, since the
   // deposit transaction has to actually sign with the wallet.
   const handleTopUpPasscodeConfirm = async () => {
@@ -1876,9 +1876,9 @@ export function P2PMyOffersPage() {
             <button onClick={() => navigate('/p2p/create')} style={{ marginTop: 10, padding: '10px 20px', borderRadius: 12, border: '1px solid color-mix(in srgb, black 12%, transparent)', background: COLORS.primary, color: '#fff', fontSize: 13, fontWeight: 700 }}>Create your first offer</button>
           </div>
         ) : offers.map(o => {
-          // Any offer that can still be acted on at all — either genuinely
+          // Any offer that can still be acted on at all - either genuinely
           // active, or depleted-but-not-yet-removed ('completed', which is
-          // what a fully-sold offer looks like the instant it happens —
+          // what a fully-sold offer looks like the instant it happens -
           // see retireOfferIfDepleted). 'cancelled'/'deleted' offers are
           // terminal and get no action row.
           const isActionable = o.status === 'active' || o.status === 'completed'
@@ -1909,11 +1909,11 @@ export function P2PMyOffersPage() {
                   </button>
                 )}
                 {hasFunds ? (
-                  // Still holds escrow — Cancel goes through the passcode
+                  // Still holds escrow - Cancel goes through the passcode
                   // sheet and actually calls the contract to return it.
                   <button onClick={() => requestCancel(o)} disabled={cancelling} style={{ flex: 1, padding: '9px 0', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 12, fontWeight: 600, opacity: cancelling ? 0.6 : 1 }}>Cancel</button>
                 ) : (
-                  // Nothing left in escrow — Delete just removes the
+                  // Nothing left in escrow - Delete just removes the
                   // listing, no wallet/passcode needed, no contract call.
                   <button onClick={() => requestDelete(o)} disabled={deleting} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '9px 0', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.error, fontSize: 12, fontWeight: 600, opacity: deleting ? 0.6 : 1 }}>
                     <Trash2 size={12} /> Delete
@@ -2074,7 +2074,7 @@ export function P2PMyOffersPage() {
       )}
       </AnimatePresence>
 
-      {/* Delete never moves funds or signs anything — a plain confirm is
+      {/* Delete never moves funds or signs anything - a plain confirm is
           enough, no passcode/wallet unlock needed like Cancel/Top Up. */}
       <AnimatePresence>
       {offerToDelete && (
@@ -2088,7 +2088,7 @@ export function P2PMyOffersPage() {
               <p style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, margin: 0 }}>Delete Offer</p>
             </div>
             <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 18 }}>
-              This offer has no USDC left in escrow, so there's nothing to withdraw — deleting it just removes the listing and disconnects it from the escrow contract for good. This can't be undone.
+              This offer has no USDC left in escrow, so there's nothing to withdraw - deleting it just removes the listing and disconnects it from the escrow contract for good. This can't be undone.
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setOfferToDelete(null)} style={{ flex: 1, padding: '11px 0', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 13 }}>Cancel</button>
@@ -2119,7 +2119,7 @@ export function P2PMyTradesPage() {
     fetchMyTrades(user.id).then(rows => { myTradesCache.set(user.id!, rows); setTrades(rows); setLoading(false) })
   }, [user?.id])
 
-  // Live updates — same reasoning as P2PPage's desktop History panel: a
+  // Live updates - same reasoning as P2PPage's desktop History panel: a
   // payment marked sent, release, dispute, or a brand-new trade should show
   // up here instantly and survive a tab switch, not just at the next full
   // page load.

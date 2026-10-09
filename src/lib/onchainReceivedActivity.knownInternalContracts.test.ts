@@ -7,7 +7,7 @@
 // same transfer.
 //
 // Root cause: BulkPayoutPage.tsx routes every payout through the Multicall3
-// contract (0xcA11bde05977b3631167028862be2A173976CA11) — each recipient's
+// contract (0xcA11bde05977b3631167028862be2A173976CA11) - each recipient's
 // individual transfer is forwarded BY Multicall3, so its Transfer/native
 // value-transfer log legitimately shows `from = Multicall3`, not the real
 // sender. Every server-side copy of the "known internal contract senders"
@@ -15,8 +15,8 @@
 // ledger-interpret/classifiers.ts, server/ledger/classifiers.ts,
 // blockchain-indexer/compare.ts, and the canonical
 // supabase/functions/_shared/knownInternalContracts.ts) already excludes
-// Multicall3. This file's client-side copy — used by both itself and, via
-// re-export, lib/arcDepositWatcher.ts's real-time on-chain log watcher — was
+// Multicall3. This file's client-side copy - used by both itself and, via
+// re-export, lib/arcDepositWatcher.ts's real-time on-chain log watcher - was
 // the one copy still missing it, so the live, in-browser watcher kept
 // treating every BulkPay leg as a genuine, unrecognized external deposit.
 
@@ -52,15 +52,15 @@ describe('onchainReceivedActivity KNOWN_INTERNAL_CONTRACTS', () => {
 // Regression guard for a related bug: cancelling a P2P offer and
 // withdrawing escrow back to the seller's own wallet produced a normal
 // "USDC received from 0x2a31...7976" notification, indistinguishable from
-// a genuine external payment — because the P2P escrow contract's address
+// a genuine external payment - because the P2P escrow contract's address
 // was never in this exclusion list at all (unlike Multicall3 above, this
 // wasn't a missing entry in an otherwise-complete list; the address is
 // only known at runtime, from VITE_P2P_ESCROW_CONTRACT, so it has to be
 // added dynamically rather than hardcoded). Uses vi.stubEnv + a fresh
 // module import specifically because CONTRACT_ADDRESS is read once at
-// module-load time in p2pEscrowContract.ts — stubbing the env var after
+// module-load time in p2pEscrowContract.ts - stubbing the env var after
 // this file's top-level import already ran would have no effect.
-describe('onchainReceivedActivity KNOWN_INTERNAL_CONTRACTS — P2P escrow address', () => {
+describe('onchainReceivedActivity KNOWN_INTERNAL_CONTRACTS - P2P escrow address', () => {
   it('includes the configured P2P escrow contract address, lowercased', async () => {
     vi.resetModules()
     vi.stubEnv('VITE_P2P_ESCROW_CONTRACT', '0x2A316Db06E4C481a5986BF2608277DdD3B787976')

@@ -1,5 +1,5 @@
 /**
- * mockData.ts — All fake/demo/placeholder data has been removed.
+ * mockData.ts - All fake/demo/placeholder data has been removed.
  * MeshPort shows only real user data. Empty states are shown when no data exists.
  */
 

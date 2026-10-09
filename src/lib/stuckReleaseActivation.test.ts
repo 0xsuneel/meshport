@@ -2,8 +2,8 @@
  * Activation-boundary and capability tests for the stuck-release reconciler.
  *
  * WHY AN ACTIVATION BOUNDARY EXISTS
- * When this was written two trades had already been stuck for weeks — 568baca0
- * holding 5 USDC of real escrow, fb0de45a never funded — and both were under
+ * When this was written two trades had already been stuck for weeks - 568baca0
+ * holding 5 USDC of real escrow, fb0de45a never funded - and both were under
  * human review. A reconciler that swept "everything currently stuck" on its
  * first run would have restored one and cancelled the other before anyone
  * approved it. So eligibility is gated on an explicit activation timestamp that
@@ -43,7 +43,7 @@ const gate = (over: Partial<Parameters<typeof isEligibleForReconcile>[0]> = {}) 
 
 // ── Fail-closed default ─────────────────────────────────────────────────────
 
-describe('activation cutoff parsing — fails closed', () => {
+describe('activation cutoff parsing - fails closed', () => {
   it('treats missing / blank / garbage as DORMANT (null)', () => {
     for (const raw of [undefined, null, '', '   ', 'not-a-date', 'yesterday']) {
       expect(parseActivationCutoff(raw as any), String(raw)).toBeNull()
@@ -65,7 +65,7 @@ describe('activation cutoff parsing — fails closed', () => {
 
 // ── The two historical trades must be ignored ───────────────────────────────
 
-describe('activation boundary — the two real stuck trades are NOT processed', () => {
+describe('activation boundary - the two real stuck trades are NOT processed', () => {
   it('568baca0 (Aug 7, 5 USDC real escrow) is ignored by the timestamp gate', () => {
     const r = gate({ tradeId: T_568, createdAtIso: CREATED_568 })
     expect(r.eligible).toBe(false)
@@ -88,7 +88,7 @@ describe('activation boundary — the two real stuck trades are NOT processed', 
     }
   })
 
-  it('without the skip list a wrong cutoff WOULD expose them — so both guards matter', () => {
+  it('without the skip list a wrong cutoff WOULD expose them - so both guards matter', () => {
     const badCutoff = Date.parse('2026-01-01T00:00:00.000Z')
     expect(gate({ tradeId: T_568, createdAtIso: CREATED_568, cutoffMs: badCutoff }).eligible).toBe(true)
   })
@@ -96,7 +96,7 @@ describe('activation boundary — the two real stuck trades are NOT processed', 
 
 // ── New trades after activation are still reconciled ────────────────────────
 
-describe('activation boundary — new trades ARE processed', () => {
+describe('activation boundary - new trades ARE processed', () => {
   it('a trade created after activation and past the grace window is eligible', () => {
     const r = gate({ createdAtIso: '2026-08-22T13:00:00.000Z' })
     expect(r.eligible).toBe(true)
@@ -118,7 +118,7 @@ describe('activation boundary — new trades ARE processed', () => {
 
 // ── Exact boundary semantics ────────────────────────────────────────────────
 
-describe('activation boundary — exact cutoff instant', () => {
+describe('activation boundary - exact cutoff instant', () => {
   const cutoffMs = Date.parse(ACTIVATION)
 
   it('a trade created EXACTLY at the cutoff is treated as historical (not eligible)', () => {
@@ -181,11 +181,11 @@ describe('verdicts for the scenarios required before activation', () => {
 
 // ── Capability assertions against the edge function's own source ────────────
 
-describe('p2p-release-reconcile — structurally cannot move funds', () => {
+describe('p2p-release-reconcile - structurally cannot move funds', () => {
   const src = readFileSync(
     resolve(process.cwd(), 'supabase/functions/p2p-release-reconcile/index.ts'), 'utf8')
 
-  it('performs ONLY read-only eth_call — no transaction-sending RPC methods', () => {
+  it('performs ONLY read-only eth_call - no transaction-sending RPC methods', () => {
     expect(src).toContain("'eth_call'")
     for (const forbidden of [
       'eth_sendTransaction', 'eth_sendRawTransaction', 'eth_signTransaction',
@@ -249,7 +249,7 @@ describe('p2p-release-reconcile — structurally cannot move funds', () => {
     expect(src).toContain('P2P_ESCROW_CONTRACTS_LEGACY')
     // Structurally: the current (V2-shaped) contract and every legacy
     // (pre-hardening-shaped) contract are each probed with their OWN
-    // correct selector/key scheme — not merged into one array checked
+    // correct selector/key scheme - not merged into one array checked
     // with one shared selector, which is what the old ALL_ESCROWS
     // variable name this test used to look for actually did, and which
     // silently broke the moment a V2 contract (with a genuinely different
@@ -265,7 +265,7 @@ describe('p2p-release-reconcile — structurally cannot move funds', () => {
     expect(src).toMatch(/anyAnswered \? total : null/)
   })
 
-  it('reads credentials only from the environment — none embedded', () => {
+  it('reads credentials only from the environment - none embedded', () => {
     expect(src).toContain("Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')")
     // No JWT-looking literal and no long hex secret pasted into source.
     expect(src).not.toMatch(/eyJ[A-Za-z0-9_-]{20,}/)

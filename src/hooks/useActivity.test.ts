@@ -1,24 +1,24 @@
 /**
- * Regression tests for mergeOnchainIntoRecords — the merge behind useActivity's
+ * Regression tests for mergeOnchainIntoRecords - the merge behind useActivity's
  * direct on-chain received layer (see the hook's own file header for why that
  * layer exists at all).
  *
  * Two bugs are pinned here.
  *
- *   FIX 1 — rows with no tx_hash were dropped.
+ *   FIX 1 - rows with no tx_hash were dropped.
  *     The merge keys existing records by lowercased txHash, and its return
  *     value REPLACES the whole record list. Any row whose txHash was falsy
  *     therefore never entered the map and vanished from state on every poll,
- *     visibility change and onchain-activity event — reappearing only when the
+ *     visibility change and onchain-activity event - reappearing only when the
  *     next full load() refetched it. Real wallets carry plenty of these:
  *     p2p_sell_order and p2p_refund rows have no on-chain hash of their own.
  *
- *   FIX 2 — output followed Map INSERTION order, not chronological order.
+ *   FIX 2 - output followed Map INSERTION order, not chronological order.
  *     A newly merged on-chain deposit was appended last however recent it was,
  *     so ActivityPage's TODAY/YESTERDAY/THIS WEEK grouping rendered a
  *     just-arrived deposit underneath older entries, or in the wrong day group.
  *
- * Scope: the merge's own semantics — which records survive, what dedupes, what
+ * Scope: the merge's own semantics - which records survive, what dedupes, what
  * order comes back. The hook's wiring (polling interval, visibilitychange, the
  * meshport:onchain-activity listener) is deliberately not under test here.
  */
@@ -28,7 +28,7 @@ import { describe, it, expect, vi } from 'vitest'
 // useActivity imports ActivityService, which constructs a real Supabase client
 // at module load, and onchainReceivedActivity, which talks to the explorer.
 // Both are stubbed so these stay pure-logic tests with no network, no env vars
-// and no client — the merge under test reaches neither of them.
+// and no client - the merge under test reaches neither of them.
 vi.mock('@/lib/ActivityService', () => ({
   fetchActivity:       vi.fn(),
   subscribeToActivity: vi.fn(() => () => {}),
@@ -87,9 +87,9 @@ function isNewestFirst(records: ActivityRecord[]): boolean {
   return true
 }
 
-// ── FIX 1 — rows without a txHash survive ────────────────────────────────────
+// ── FIX 1 - rows without a txHash survive ────────────────────────────────────
 
-describe('mergeOnchainIntoRecords — FIX 1: rows without a txHash survive', () => {
+describe('mergeOnchainIntoRecords - FIX 1: rows without a txHash survive', () => {
   it('keeps a row whose txHash is null', () => {
     // tx_hash IS NULL in Postgres, reaching state via a path that passes the
     // raw value through rather than ActivityService's null -> undefined mapping.
@@ -139,7 +139,7 @@ describe('mergeOnchainIntoRecords — FIX 1: rows without a txHash survive', () 
     expect(result).toHaveLength(2)
   })
 
-  it('keeps ALL null-txHash rows, not just one — each keyed by its own id', () => {
+  it('keeps ALL null-txHash rows, not just one - each keyed by its own id', () => {
     // Mirrors the shape of the wallet that surfaced this: 45 hashless rows
     // (28 p2p_sell_order + 17 p2p_refund) alongside hash-bearing history.
     const sellOrders = Array.from({ length: 28 }, (_, i) =>
@@ -169,7 +169,7 @@ describe('mergeOnchainIntoRecords — FIX 1: rows without a txHash survive', () 
     for (const r of prev) expect(ids(result)).toContain(r.id)
   })
 
-  it('is idempotent across repeated merges — the old bug erased rows on every poll', () => {
+  it('is idempotent across repeated merges - the old bug erased rows on every poll', () => {
     // The regression's actual signature: state shrank each time the poll fired.
     const prev = [
       row({ id: 'hashless-a', createdAt: '2026-08-19T08:00:00.000Z', txHash: null as unknown as string }),
@@ -223,7 +223,7 @@ describe('mergeOnchainIntoRecords — FIX 1: rows without a txHash survive', () 
 
 // ── Hash-keyed dedup: unchanged by FIX 1 ─────────────────────────────────────
 
-describe('mergeOnchainIntoRecords — existing txHash rows still dedupe case-insensitively', () => {
+describe('mergeOnchainIntoRecords - existing txHash rows still dedupe case-insensitively', () => {
   it('dedupes when the stored hash is upper-case and the chain returns lower-case', () => {
     const stored = row({
       id:        'supabase-row',
@@ -237,7 +237,7 @@ describe('mergeOnchainIntoRecords — existing txHash rows still dedupe case-ins
     ])
 
     expect(result).toHaveLength(1)
-    // The Supabase row wins — it carries the richer metadata.
+    // The Supabase row wins - it carries the richer metadata.
     expect(result[0].id).toBe('supabase-row')
     expect(result[0].metadata.senderUsername).toBe('alice')
   })
@@ -267,7 +267,7 @@ describe('mergeOnchainIntoRecords — existing txHash rows still dedupe case-ins
   })
 
   it('still promotes a pending record to completed once the chain confirms', () => {
-    // Pre-existing behaviour — pinned so the lifted-out merge keeps it.
+    // Pre-existing behaviour - pinned so the lifted-out merge keeps it.
     const pending = row({
       id:        'pending-row',
       createdAt: '2026-08-20T10:00:00.000Z',
@@ -297,9 +297,9 @@ describe('mergeOnchainIntoRecords — existing txHash rows still dedupe case-ins
   })
 })
 
-// ── FIX 2 — chronological ordering ───────────────────────────────────────────
+// ── FIX 2 - chronological ordering ───────────────────────────────────────────
 
-describe('mergeOnchainIntoRecords — FIX 2: newest-first ordering', () => {
+describe('mergeOnchainIntoRecords - FIX 2: newest-first ordering', () => {
   it('places a newly merged on-chain deposit first when it is the newest', () => {
     const prev = [
       row({ id: 'older-1', createdAt: '2026-08-19T10:00:00.000Z', txHash: '0x111' }),
@@ -311,7 +311,7 @@ describe('mergeOnchainIntoRecords — FIX 2: newest-first ordering', () => {
       tx({ txHash: '0xnewest', timestamp: '2026-08-20T10:00:00.000Z' }),
     ])
 
-    // Before the fix this landed at index 3 — last — because Map.values()
+    // Before the fix this landed at index 3 - last - because Map.values()
     // yields insertion order and existing records are inserted first.
     expect(result[0].id).toBe('onchain_0xnewest')
     expect(isNewestFirst(result)).toBe(true)
@@ -419,7 +419,7 @@ describe('mergeOnchainIntoRecords — FIX 2: newest-first ordering', () => {
 
 // ── Token coverage ───────────────────────────────────────────────────────────
 
-describe('mergeOnchainIntoRecords — token coverage', () => {
+describe('mergeOnchainIntoRecords - token coverage', () => {
   it('merges a USDC receive', () => {
     const result = mergeOnchainIntoRecords(WALLET, [], [
       tx({ txHash: '0xusdc1', tokenSymbol: 'USDC', amount: 25.5, timestamp: '2026-08-20T10:00:00.000Z' }),
@@ -520,14 +520,14 @@ describe('mergeOnchainIntoRecords — token coverage', () => {
   })
 })
 
-// ── FIX 3 — bulk self-pay: sent + received legs share type AND hash ─────────
+// ── FIX 3 - bulk self-pay: sent + received legs share type AND hash ─────────
 
-describe('mergeOnchainIntoRecords — FIX 3: bulk self-payout legs both survive', () => {
+describe('mergeOnchainIntoRecords - FIX 3: bulk self-payout legs both survive', () => {
   it('keeps both the sent and received leg of a self-included bulk payout', () => {
     // Real shape: Activity.bulk() writes one 'bulk' row (direction: 'sent')
     // and Activity.bulkReceived() writes another 'bulk' row (direction:
     // 'received') on the SAME wallet when you're one of your own batch's
-    // recipients — both under the same stripped on-chain hash. Before FIX
+    // recipients - both under the same stripped on-chain hash. Before FIX
     // 3, the second of these silently overwrote the first in the merge map.
     const sent = row({
       id:        'bulk-sent',
@@ -552,7 +552,7 @@ describe('mergeOnchainIntoRecords — FIX 3: bulk self-payout legs both survive'
 
   it('still dedupes two ordinary receive rows sharing a hash (no direction set)', () => {
     // Sanity check: FIX 3 must not weaken the existing hash-dedup for
-    // types/rows that never set metadata.direction — a 'receive' row here
+    // types/rows that never set metadata.direction - a 'receive' row here
     // and a synthetic onchain 'receive' for the same hash should still
     // collapse to one, exactly as every test above this point expects.
     const stored = row({ id: 'r1', createdAt: '2026-08-20T10:00:00.000Z', txHash: '0xabc' })
@@ -570,7 +570,7 @@ describe('mergeOnchainIntoRecords — FIX 3: bulk self-payout legs both survive'
     const result1 = mergeOnchainIntoRecords(WALLET, [a, b], [])
     const result2 = mergeOnchainIntoRecords(WALLET, [b, a], [])
 
-    // Same order regardless of input order — a pure function of the
+    // Same order regardless of input order - a pure function of the
     // records themselves, not of array arrival order.
     expect(ids(result1)).toEqual(ids(result2))
   })

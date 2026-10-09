@@ -73,10 +73,10 @@
   <div class="section">
     <div class="section-title">Fetch Stats</div>
     <div class="stat-row">
-      <div class="stat"><div class="stat-val" id="s-txns">—</div><div class="stat-lbl">Raw /transactions</div></div>
-      <div class="stat"><div class="stat-val" id="s-emitter">—</div><div class="stat-lbl">Raw /token-transfers (EMITTER)</div></div>
-      <div class="stat"><div class="stat-val" id="s-usdc">—</div><div class="stat-lbl">Raw /token-transfers (USDC)</div></div>
-      <div class="stat"><div class="stat-val" id="s-total">—</div><div class="stat-lbl">Unique tx hashes</div></div>
+      <div class="stat"><div class="stat-val" id="s-txns">-</div><div class="stat-lbl">Raw /transactions</div></div>
+      <div class="stat"><div class="stat-val" id="s-emitter">-</div><div class="stat-lbl">Raw /token-transfers (EMITTER)</div></div>
+      <div class="stat"><div class="stat-val" id="s-usdc">-</div><div class="stat-lbl">Raw /token-transfers (USDC)</div></div>
+      <div class="stat"><div class="stat-val" id="s-total">-</div><div class="stat-lbl">Unique tx hashes</div></div>
     </div>
   </div>
 
@@ -110,7 +110,7 @@
 
 <script>
 const ARCSCAN    = 'https://testnet.arcscan.app/api/v2'
-// Blockscout Pro API key — required for browser requests (HTTP 422 without it)
+// Blockscout Pro API key - required for browser requests (HTTP 422 without it)
 const API_KEY    = 'proapi_c3PkKyqwB1Yh4zdfB1VZ526jc0g8gbbVxSPmyGxSBiT8PjcD7MudL2CUca3bH3YTu_ejReQ6'
 const EMITTER    = '0xfffffffffffffffffffffffffffffffffffffffe'
 const USDC_ADDR  = '0x3600000000000000000000000000000000000000'
@@ -171,7 +171,7 @@ async function runAudit() {
   document.getElementById('logBox').innerHTML = ''
   logs.length = 0
 
-  // Blockscout v2 requires EIP-55 checksummed address in URL path — use original casing
+  // Blockscout v2 requires EIP-55 checksummed address in URL path - use original casing
   const base = `${ARCSCAN}/addresses/${walletRaw}`
   log(`Wallet: ${walletRaw}`)
   log('Fetching 3 ArcScan endpoints in parallel...')
@@ -187,10 +187,10 @@ async function runAudit() {
       log('Trying without /api/v2 prefix...', 'info')
       const alt = await fetch(`https://testnet.arcscan.app/api?module=account&action=txlist&address=${walletRaw}&page=1&offset=10`, { signal: AbortSignal.timeout(8000) })
       const altBody = await alt.text()
-      log(`Etherscan-compat API: HTTP ${alt.status} — ${altBody.slice(0,200)}`, alt.ok ? 'good' : 'warn')
+      log(`Etherscan-compat API: HTTP ${alt.status} - ${altBody.slice(0,200)}`, alt.ok ? 'good' : 'warn')
     } else {
       let parsed; try { parsed = JSON.parse(checkBody) } catch {}
-      log(`Pre-flight OK — tx_count: ${parsed?.transaction_count ?? 'n/a'}, token_transfers: ${parsed?.token_transfers_count ?? 'n/a'}`, 'good')
+      log(`Pre-flight OK - tx_count: ${parsed?.transaction_count ?? 'n/a'}, token_transfers: ${parsed?.token_transfers_count ?? 'n/a'}`, 'good')
     }
   } catch(e) { log(`Pre-flight error: ${e.message}`, 'warn') }
 
@@ -200,7 +200,7 @@ async function runAudit() {
     arcFetch(`${base}/token-transfers?token=${USDC_ADDR}&page=1&limit=100`),
   ])
 
-  log(`Raw counts — txns: ${txItems?.length ?? 'err'}, emitter: ${emitterItems?.length ?? 'err'}, usdc: ${usdcItems?.length ?? 'err'}`)
+  log(`Raw counts - txns: ${txItems?.length ?? 'err'}, emitter: ${emitterItems?.length ?? 'err'}, usdc: ${usdcItems?.length ?? 'err'}`)
   document.getElementById('s-txns').textContent    = txItems?.length    ?? 'err'
   document.getElementById('s-emitter').textContent = emitterItems?.length ?? 'err'
   document.getElementById('s-usdc').textContent    = usdcItems?.length  ?? 'err'
@@ -293,9 +293,9 @@ async function runAudit() {
     if (isEmitter) mcIndicator = '<span class="badge badge-known">NATIVE USDC EMITTER</span>'
     else if (isUsdc) mcIndicator = '<span class="badge badge-known">USDC CONTRACT</span>'
     else if (isRewards) mcIndicator = '<span class="badge badge-rewards">REWARDS CONTRACT</span>'
-    else if (isKnownMultichain) mcIndicator = `<span class="badge badge-known">✅ REGISTERED — ${MULTICHAIN_LABELS[addr] || 'multichain'}</span>`
+    else if (isKnownMultichain) mcIndicator = `<span class="badge badge-known">✅ REGISTERED - ${MULTICHAIN_LABELS[addr] || 'multichain'}</span>`
     else if (hasMultichainActivity) mcIndicator = '<span class="badge badge-new">⚠️ NOT REGISTERED</span>'
-    else mcIndicator = '—'
+    else mcIndicator = '-'
 
     const shortAddr = addr.slice(0,10) + '...' + addr.slice(-6)
     const shortHash = info.sampleHash.slice(0,12) + '...'
@@ -341,7 +341,7 @@ async function runAudit() {
     for (const { addr, info } of unregistered) {
       html += `<div class="alert-addr">
         <strong>${addr}</strong>
-        &nbsp;—&nbsp; ${info.count} tx(s), roles: ${[...info.roles].join(', ')}
+        &nbsp;-&nbsp; ${info.count} tx(s), roles: ${[...info.roles].join(', ')}
         &nbsp;<a href="https://testnet.arcscan.app/address/${addr}" target="_blank" style="color:#93c5fd;font-size:10px">[explorer →]</a>
       </div>`
     }
@@ -349,7 +349,7 @@ async function runAudit() {
       <div style="color:#94a3b8;margin-bottom:6px">Add to activityService.ts:</div>
       <code style="color:#c084fc">const MULTICHAIN_ADDRESSES = new Set([<br>
       &nbsp;&nbsp;'0x0077777d7eba4688bdef3e311b846f25870a19b9', // Circle UB Gateway<br>
-      ${unregistered.map(u => `&nbsp;&nbsp;'${u.addr}', // ← DISCOVERED — verify on explorer`).join('<br>\n  ')}<br>
+      ${unregistered.map(u => `&nbsp;&nbsp;'${u.addr}', // ← DISCOVERED - verify on explorer`).join('<br>\n  ')}<br>
       ])</code>
     </div></div>`
     alertEl.innerHTML = html

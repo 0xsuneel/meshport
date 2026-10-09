@@ -5,27 +5,27 @@
  * A Unified Balance (Circle Gateway) transfer has two legs: deposit (Arc
  * wallet → Unified Balance) then spend (Unified Balance → destination
  * chain). If spend fails and can't be resumed, the deposited USDC is stuck
- * in Unified Balance with no forward path — MeshPort previously only
+ * in Unified Balance with no forward path - MeshPort previously only
  * offered "Retry anyway (may double-send)", with no way to actually get the
  * money back. Circle's SDK provides a trustless escape hatch for exactly
  * this: initiateRemoveFund() starts a 7-day (EVM) withdrawal timelock back
  * to the SAME account/chain used at deposit time, and removeFund() completes
  * it once that window passes. Since every deposit in this app uses
  * `from: { adapter, chain: 'Arc_Testnet' }` (see MultichainTransferPage.tsx),
- * a completed removal lands right back in the user's Arc wallet balance —
+ * a completed removal lands right back in the user's Arc wallet balance -
  * exactly where the money started.
  *
  * ── Design ───────────────────────────────────────────────────────────────
  * - initiateUBRecovery(): called once, immediately, the moment a UB spend
  *   is confirmed to have failed with no resumable path. Starts the 7-day
- *   clock right away rather than waiting for the user to notice or ask —
+ *   clock right away rather than waiting for the user to notice or ask -
  *   the sooner it's initiated, the sooner it's recoverable. Safe to call
  *   even if spend secretly DID succeed despite the error (a real
- *   possibility on a bad connection — see MultichainTransferPage.tsx's
+ *   possibility on a bad connection - see MultichainTransferPage.tsx's
  *   mintMayHaveSucceeded): Circle's own ledger is the source of truth for
  *   what's actually sitting in Unified Balance, so if spend already drained
  *   it, there's nothing left to initiate a removal for; per Circle's docs
- *   this is a routine "nothing to withdraw" outcome, not a crash — it's not
+ *   this is a routine "nothing to withdraw" outcome, not a crash - it's not
  *   a silent no-op some other part of this app depends on.
  * - checkAndCompleteUBRecoveries(): called on every app open / tab
  *   refocus (see AppLayout.tsx), same trigger pattern as
@@ -34,11 +34,11 @@
  *   "automatic" true from the user's side: they never have to remember to
  *   come back and claim anything, it just happens quietly the next time
  *   they have the app open with their wallet unlocked (removeFund is a
- *   signed transaction from the original depositing address — no backend
+ *   signed transaction from the original depositing address - no backend
  *   here ever holds that key, so it can only run client-side).
  *
  * Tracked via the shared `activity` table (activity_type: 'withdraw') rather
- * than a new table — keeps this visible in the user's own Activity history
+ * than a new table - keeps this visible in the user's own Activity history
  * for free, and reuses the existing dedupe/upsert conventions the rest of
  * ActivityService.ts already relies on.
  */
@@ -67,7 +67,7 @@ async function loadSdk() {
   return _sdkModules
 }
 
-// Only Arc_Testnet is ever needed here — both initiateRemoveFund and
+// Only Arc_Testnet is ever needed here - both initiateRemoveFund and
 // removeFund operate against the same chain the original deposit used, and
 // every deposit in this app is from Arc. Simpler than MultichainTransferPage.tsx's
 // getProvider (which also has to handle arbitrary destination chains).
@@ -77,7 +77,7 @@ async function getArcProvider() {
   const { JsonRpcProvider, FallbackProvider } = await loadSdk()
   const { ARC_RPCS, ARC_NETWORK } = await import('@/lib/arc')
   // Relative paths (e.g. '/api/arc-rpc') are safe to hand ethers as-is
-  // when running in a browser — fetch resolves them against the current
+  // when running in a browser - fetch resolves them against the current
   // origin automatically. The old `window.location.origin` join silently
   // produced a broken URL in SSR/test environments where window is undefined
   // (it fell back to the unjoined relative path, which ethers then tried to
@@ -97,7 +97,7 @@ async function getArcProvider() {
 
 // ── On-chain withdrawal state (Circle Gateway wallet on Arc) ──────────────
 // The 7-day wait is enforced ON-CHAIN in blocks (withdrawalDelay), not in
-// wall-clock days — the saved eligible_at is only an estimate, and Arc's
+// wall-clock days - the saved eligible_at is only an estimate, and Arc's
 // block pace makes the real unlock land hours later. Starting a new
 // withdrawal also moves the unlock block for everything being withdrawn.
 // So readiness is read from the contract itself.
@@ -150,7 +150,7 @@ async function getKitAndAdapter(privateKey: string, chain: string = ARC_CHAIN_KE
 
 /**
  * Initiates a fund recovery for `amount` USDC sitting in this wallet's
- * Unified Balance — called immediately after a UB spend() is confirmed to
+ * Unified Balance - called immediately after a UB spend() is confirmed to
  * have failed with no resumable path. Fire-and-forget from the caller's
  * perspective: failures here are logged, not thrown, since this runs
  * inside an already-failed transfer's error handling and shouldn't produce
@@ -160,7 +160,7 @@ export async function initiateUBRecovery(params: {
   walletAddress: string
   privateKey: string
   amount: string // human-readable decimal string, matching the deposited amount
-  destinationChainLabel: string // for context in Activity — what the transfer was originally headed to
+  destinationChainLabel: string // for context in Activity - what the transfer was originally headed to
   chain?: string                // chain the Unified Balance sits on (default Arc)
   replaceRowId?: string         // a stuck-transfer row this withdrawal takes over
   throwOnError?: boolean
@@ -191,7 +191,7 @@ export async function initiateUBRecovery(params: {
       note: `Trustless withdrawal (7 days) back to your wallet on ${chain.replace(/_/g, ' ')}`,
     }
     if (params.replaceRowId) {
-      // The stuck transfer becomes this withdrawal — one row, no duplicate.
+      // The stuck transfer becomes this withdrawal - one row, no duplicate.
       const { data: row } = await supabase.from('activity').select('metadata').eq('id', params.replaceRowId).maybeSingle()
       await supabase.from('activity').update({
         destination_chain: chain,
@@ -225,14 +225,14 @@ export async function initiateUBRecovery(params: {
 /**
  * Checks this wallet's pending UB recoveries and completes any whose 7-day
  * window has passed, crediting the funds back into the Arc wallet balance.
- * Call on every app open / tab refocus — see AppLayout.tsx. Safe to call
+ * Call on every app open / tab refocus - see AppLayout.tsx. Safe to call
  * often: nothing happens if there's nothing pending or nothing eligible yet.
  */
 export type UbCompleteResult = { completed: number; notReadyEtaMs?: number; error?: string }
 
 // One run at a time: the app runs this by itself on open/refocus, and the
 // Recover button runs it too. Two overlapping runs used to both send
-// removeFund — the first paid out, the second failed with "No pending
+// removeFund - the first paid out, the second failed with "No pending
 // withdrawal" and left the card stuck. Overlapping callers now share a run.
 let inFlight: Promise<UbCompleteResult> | null = null
 export function checkAndCompleteUBRecoveries(params: { walletAddress: string; privateKey: string }): Promise<UbCompleteResult> {
@@ -255,7 +255,7 @@ async function runUbCompletion(params: { walletAddress: string; privateKey: stri
       .eq('activity_type', 'withdraw')
       .eq('status', 'pending')
       .contains('metadata', { ub_recovery: true })
-    if (error) { console.error('[ubFundRecovery] pending lookup failed:', error.message); return { completed: 0, error: 'Could not load your withdrawals — try again.' } }
+    if (error) { console.error('[ubFundRecovery] pending lookup failed:', error.message); return { completed: 0, error: 'Could not load your withdrawals - try again.' } }
 
     const rows = pending ?? []
     const arcRows = rows.filter(isArcRow)
@@ -304,7 +304,7 @@ async function runUbCompletion(params: { walletAddress: string; privateKey: stri
           await notify(total, arcRows[0].id)
         } catch (e) {
           // It may still have gone through (e.g. the confirmation timed out,
-          // or another device finished it) — ask the chain before erroring.
+          // or another device finished it) - ask the chain before erroring.
           const after = await getUbWithdrawalStatus(walletAddress)
           if (after && after.withdrawing <= 0) {
             for (const row of arcRows) await markDone(row, Number(row.amount), '', { reconciled_from_chain: true })
@@ -335,7 +335,7 @@ async function runUbCompletion(params: { walletAddress: string; privateKey: stri
     }
   } catch (e) {
     console.error('[ubFundRecovery] checkAndCompleteUBRecoveries failed:', e instanceof Error ? e.message : e)
-    out.error = 'Something went wrong — try again.'
+    out.error = 'Something went wrong - try again.'
   }
   return out
 }
@@ -343,7 +343,7 @@ async function runUbCompletion(params: { walletAddress: string; privateKey: stri
 /**
  * No signing needed: if the Gateway shows nothing left in this wallet's Arc
  * withdrawal, any Arc withdrawal still "pending" here was already paid out
- * (on another device, or a run whose confirmation got lost) — mark it done.
+ * (on another device, or a run whose confirmation got lost) - mark it done.
  * Returns how many records were caught up.
  */
 export async function reconcileUbWithdrawals(walletAddress: string, status?: UbWithdrawalStatus | null): Promise<number> {
@@ -412,7 +412,7 @@ export async function recordUbStuckTransfer(p: {
         destination_label: p.destinationLabel,
         destination_address: p.destinationAddress,
         deposit_tx: p.depositTx ?? null,
-        note: 'Unified Balance transfer did not reach its destination — waiting for the user to choose',
+        note: 'Unified Balance transfer did not reach its destination - waiting for the user to choose',
       },
     }, { onConflict: 'tx_hash,wallet_address', ignoreDuplicates: true })
     if (error) throw error
@@ -449,7 +449,7 @@ const APP_CHAIN: Record<string, string> = { Polygon_Amoy_Testnet: 'Polygon_Sepol
 
 /**
  * Finishes a stuck UB transfer the way the user chose. The destination is
- * always the one stored on the row — never a value from the UI.
+ * always the one stored on the row - never a value from the UI.
  * `available` = the Arc Unified Balance currently confirmed (caps the spend).
  */
 export async function resolveUbStuckTransfer(p: {
@@ -458,7 +458,7 @@ export async function resolveUbStuckTransfer(p: {
   const { item, mode } = p
   const { kit, adapter } = await getKitAndAdapter(p.privateKey)
   // Re-read the balance here rather than trusting the screen's copy, which
-  // can be stale — e.g. read while Circle still held a failed delivery.
+  // can be stale - e.g. read while Circle still held a failed delivery.
   const { getUnifiedBalances } = await import('@/lib/ubClaim')
   const fresh = (await getUnifiedBalances(kit, p.walletAddress))
     .filter(r => r.chain === ARC_CHAIN_KEY).reduce((s, r) => s + r.confirmed, 0)
@@ -487,7 +487,7 @@ export async function resolveUbStuckTransfer(p: {
     // Shows as "Recovered via UB" (withdraw + ub_recovery) in Activity and the Hub.
     await supabase.from('activity').update({
       status: 'completed', amount: out.received, usd_value: out.received, destination_chain: ARC_CHAIN_KEY,
-      // The Arc mint — where the deposit scanners look, so it isn't also
+      // The Arc mint - where the deposit scanners look, so it isn't also
       // recorded as a separate "Received from 0x0000…".
       ...(out.txHash && /^0x[0-9a-fA-F]{64}$/.test(out.txHash) ? { destination_tx_hash: out.txHash.toLowerCase() } : {}),
       metadata: { ...metadata, ub_recovery: true },

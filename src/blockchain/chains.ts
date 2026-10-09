@@ -1,5 +1,5 @@
 /**
- * blockchain/chains.ts — single client-side chain & token registry
+ * blockchain/chains.ts - single client-side chain & token registry
  *
  * ── Purpose (Phase 0 of docs/BLOCKCHAIN_ARCHITECTURE_PROPOSAL.md) ───────────
  * Before this file, the same chain/RPC/token facts were spelled out in five
@@ -13,7 +13,7 @@
  * Every value below is Arc Testnet / Circle Testnet. Nothing here points at
  * mainnet, and nothing in this migration changes that. NETWORK_MODE exists so
  * a future mainnet cutover is a *configuration* change (add a sibling
- * registry, flip this constant) rather than another architectural pass —
+ * registry, flip this constant) rather than another architectural pass -
  * that's the whole reason the data is centralized rather than inlined at 40+
  * call sites.
  *
@@ -21,7 +21,7 @@
  * api/arc-rpc.js (Vercel serverless, its own 10-upstream list) and
  * supabase/functions/_shared/chains.ts (Deno edge runtime) run in different
  * runtimes and cannot import from src/. The Supabase functions additionally
- * inline their shared code on purpose — see the header of
+ * inline their shared code on purpose - see the header of
  * supabase/functions/claim-worker/index.ts for why (the dashboard's
  * single-file editor silently ignores separate shared files). Unifying those
  * is Phase 6 work, via a generated mirror, not a plain import.
@@ -52,7 +52,7 @@ export const ARC = {
   faucetUrl:   'https://faucet.circle.com',
 } as const
 
-// ─── Arc RPC list — single frontend entry point ──────────────────────────────
+// ─── Arc RPC list - single frontend entry point ──────────────────────────────
 // The browser talks to exactly ONE Arc endpoint: our same-origin serverless
 // proxy '/api/arc-rpc' (api/arc-rpc.js). The proxy forwards to the
 // authenticated dRPC endpoint using DRPC_KEY, which lives server-side only
@@ -60,10 +60,10 @@ export const ARC = {
 //
 // IMPORTANT: this deliberately does NOT read any VITE_-prefixed env var for
 // the RPC URL. Vite inlines every VITE_* variable into the client bundle at
-// build time — anyone can read it straight out of the shipped JS. An
+// build time - anyone can read it straight out of the shipped JS. An
 // authenticated URL (e.g. one with a key embedded in the path) put into a
 // VITE_ variable is NOT a secret, it's public. If Arc ever issues a
-// public-safe endpoint (no embedded credential — e.g. IP-allowlisted or
+// public-safe endpoint (no embedded credential - e.g. IP-allowlisted or
 // CORS-restricted), that could be added here explicitly, but no such
 // variable is wired in today, by design.
 export const ARC_RPCS: string[] = ['/api/arc-rpc']
@@ -73,20 +73,20 @@ export const ARC_RPCS: string[] = ['/api/arc-rpc']
 // FallbackProvider constructor. Without it, ethers calls eth_chainId to
 // auto-detect the network on every provider construction, and if that one
 // call ever fails (e.g. a transient RPC hiccup or rate limit), ethers v6
-// schedules an internal retry every ~1s FOREVER — even for a provider we
+// schedules an internal retry every ~1s FOREVER - even for a provider we
 // keep in a module-level cache. That silent retry loop is itself a stream
 // of eth_chainId requests hitting /api/arc-rpc → drpc.live, which can be
 // enough on its own to exhaust a rate-limited API key and produce
 // "request limit reached" (-32011) errors on real calls (swap/bridge).
 // Since Arc Testnet's chain ID is fixed and known, there's nothing to
-// detect — pinning it skips that call (and its retry loop) entirely.
+// detect - pinning it skips that call (and its retry loop) entirely.
 export const ARC_NETWORK = { chainId: ARC.chainId, name: 'arc-testnet' } as const
 
 // ─── Arc token registry ─────────────────────────────────────────────────────
 // USDC is Arc's NATIVE gas currency: plain sends are 18-decimal value
 // transfers (eth_getBalance), and the contract below is a SEPARATE, opt-in
 // 6-decimal ERC-20 wrapper that plain sends never touch. That split is load-
-// bearing for deposit detection — see supabase/functions/deposit-scan-all.
+// bearing for deposit detection - see supabase/functions/deposit-scan-all.
 // EURC and cirBTC are genuine ERC-20s and emit Transfer logs normally.
 export const ARC_TOKENS = {
   USDC: {
@@ -112,13 +112,13 @@ export const ARC_TOKENS = {
 
 export type ArcTokenSymbol = keyof typeof ARC_TOKENS
 
-/** viem chain config for Arc. nativeCurrency.decimals MUST be 18 — gas is
+/** viem chain config for Arc. nativeCurrency.decimals MUST be 18 - gas is
  *  denominated in 18-decimal USDC wei (Arc docs). The ERC-20 interface uses
  *  6 decimals for transfers, but chain config reflects the native form.
  *
  *  ── Fixes a latent bug in the original code ────────────────────────────────
  *  This object previously lived in arcService.ts, which imported ARC_RPCS from
- *  arc.ts while arc.ts re-exported from arcService.ts — a circular import. At
+ *  arc.ts while arc.ts re-exported from arcService.ts - a circular import. At
  *  module-init time arcService evaluated before arc.ts had finished, so
  *  `rpcUrls.default.http` was assigned `undefined` rather than the RPC list,
  *  despite the source clearly intending `http: ARC_RPCS`. Verified by running
@@ -126,7 +126,7 @@ export type ArcTokenSymbol = keyof typeof ARC_TOKENS
  *
  *  It was dormant, not dangerous: every consumer (arcService's sendUSDC/sendEURC,
  *  p2pEscrowContract's sendContractTx) passes this only as viem's `chain:`
- *  argument, which uses it for chain id and signing metadata — never for
+ *  argument, which uses it for chain id and signing metadata - never for
  *  transport. The actual endpoint always came from arcTransport(). So no call
  *  ever depended on the missing value.
  *
@@ -150,8 +150,8 @@ export const ARC_CHAIN_INLINE = {
 // Why it went: readChainUSDCBalance iterates the RPC list and `continue`s on any
 // non-OK response, so when the shared Alchemy account hit its rate limit every
 // external chain returned HTTP 429 and then silently fell through to the next
-// endpoint. Verified on live data — Ethereum Sepolia 37.348659, Base Sepolia
-// 4.885553, Arbitrum Sepolia 24.797225, Unichain Sepolia 10.002332 USDC — all
+// endpoint. Verified on live data - Ethereum Sepolia 37.348659, Base Sepolia
+// 4.885553, Arbitrum Sepolia 24.797225, Unichain Sepolia 10.002332 USDC - all
 // served correctly by the keyless public RPCs with Alchemy contributing nothing.
 // So it was never load-bearing here: it cost one guaranteed failure plus up to
 // 6s of timeout budget per chain per scan, produced the console 429/CORS noise,
@@ -161,7 +161,7 @@ export const ARC_CHAIN_INLINE = {
 // Server-side Alchemy is UNAFFECTED and still required: api/arc-rpc.js,
 // api/swap-proxy.js and api/relay-rpc.js read process.env ALCHEMY_ARC_KEY /
 // ALCHEMY_KEY, which are never exposed to the browser. Keyless *.g.alchemy.com
-// /public endpoints (World Chain, EDGE) also stay — no key, not quota-billed.
+// /public endpoints (World Chain, EDGE) also stay - no key, not quota-billed.
 //
 // If Alchemy is reintroduced later it must go through a server proxy, never a
 // VITE_-prefixed variable.
@@ -177,22 +177,22 @@ export function resolveRpcList(rpcs: readonly string[]): string[] {
   return rpcs.filter(Boolean)
 }
 
-// ─── External chains — balance-scan registry ────────────────────────────────
-// Keyed by MeshPort's own internal chain id (NOT the Circle SDK's chain.name —
+// ─── External chains - balance-scan registry ────────────────────────────────
+// Keyed by MeshPort's own internal chain id (NOT the Circle SDK's chain.name -
 // that's SDK_CHAIN_RPCS below). Consumed by externalChainBalances.ts to read
 // each chain's USDC balance for the connected wallet.
 //
 // This list was itself the result of consolidating three drifted copies (Home,
 // Hub and Claim each had their own); the per-chain RPC fallbacks here are the
 // battle-tested set from the Claim page. Verified against Circle's own SDK
-// source / developers.circle.com — do not reorder or prune casually.
+// source / developers.circle.com - do not reorder or prune casually.
 export interface ExternalChainConfig {
   rpcs:     string[]
   usdc:     string
   decimals: number
   /**
    * Numeric EVM chain id, where it has been VERIFIED against the network's own
-   * documentation. Optional on purpose — see the block comment below.
+   * documentation. Optional on purpose - see the block comment below.
    */
   chainId?: number
 }
@@ -204,13 +204,13 @@ export interface ExternalChainConfig {
 //
 // Six chains in this registry have NO entry there: Sonic, World Chain, Linea,
 // Ink, Monad and Edge. relay-gas.ts documents the reasoning for Edge
-// explicitly — its id could not be confirmed from an authoritative source, so
+// explicitly - its id could not be confirmed from an authoritative source, so
 // it was left out rather than guessed. That same standard is applied here: the
 // field is simply absent for those six.
 //
 // Consumers must therefore treat chainId as optional. ProviderManager pins the
 // network when it is present (which skips ethers' eth_chainId auto-detect and
-// its ~1s-forever retry loop — see ARC_NETWORK above) and falls back to
+// its ~1s-forever retry loop - see ARC_NETWORK above) and falls back to
 // auto-detection when it is not. Auto-detection is exactly what the Multichain
 // pages already do for every external chain today, so the absent case is no
 // worse than current behavior, and the present case is strictly better.
@@ -262,7 +262,7 @@ export const EXTERNAL_CHAINS: Record<string, ExternalChainConfig> = {
     // These two registries disagreed about HyperEVM. SDK_CHAIN_RPCS dropped
     // rpc.hyperliquid-testnet.xyz on 2026-07-18 after it showed two distinct
     // failure modes across two observations (a TLS cert mismatch, then a
-    // connection reset) — see the note there. This list was never updated to
+    // connection reset) - see the note there. This list was never updated to
     // match, so it still tried that endpoint first on every balance scan,
     // paying a guaranteed-failing round trip (and console noise) before
     // falling through to the endpoint that actually answers. With three pages
@@ -272,7 +272,7 @@ export const EXTERNAL_CHAINS: Record<string, ExternalChainConfig> = {
     // different failure consequences: in SDK_CHAIN_RPCS a bad endpoint can
     // stall a transfer, so dropping it there was right. Here the fallback is
     // sequential and read-only, and losing the last candidate would make a
-    // chain silently report $0 — which reads as "no funds" rather than "could
+    // chain silently report $0 - which reads as "no funds" rather than "could
     // not check", the more dangerous outcome for a balance. Keeping it as a
     // backup preserves that safety net while removing the wasted first
     // attempt. Drop it entirely only if it proves to still be dead.
@@ -290,7 +290,7 @@ export const EXTERNAL_CHAINS: Record<string, ExternalChainConfig> = {
     // chainId verified against this chain's own RPC (eth_chainId), 2026-10-03.
     chainId:  14601,
     // Second endpoint copied verbatim from api/relay-rpc.js's own
-    // CHAIN_DEFS.Sonic_Testnet (already trusted + in production there) — NOT
+    // CHAIN_DEFS.Sonic_Testnet (already trusted + in production there) - NOT
     // a web-search guess. Needed because rpc.testnet.soniclabs.com returns a
     // sustained 503 during outages and this registry previously had no
     // fallback, so Sonic silently reported $0 and logged a console error on
@@ -379,8 +379,8 @@ export const EXTERNAL_CHAINS: Record<string, ExternalChainConfig> = {
   },
 }
 
-// ─── External chains — Circle SDK provider registry ─────────────────────────
-// Keyed by the Circle SDK's `chain.name` (NOT our internal chain ids above) —
+// ─── External chains - Circle SDK provider registry ─────────────────────────
+// Keyed by the Circle SDK's `chain.name` (NOT our internal chain ids above) -
 // several entries appear twice because the SDK's actual runtime value doesn't
 // always match its own documented/expected name (see the Ink/Morph/Edge notes
 // below); both spellings are kept in sync intentionally, not by accident.
@@ -390,7 +390,7 @@ export const EXTERNAL_CHAINS: Record<string, ExternalChainConfig> = {
 // disagree for some chains. The clearest case is HyperEVM: this list carries
 // only Chainlink's endpoint, because rpc.hyperliquid-testnet.xyz showed two
 // distinct failure modes in production (a TLS cert mismatch, then a connection
-// reset) and was dropped on 2026-07-18 — while EXTERNAL_CHAINS above still
+// reset) and was dropped on 2026-07-18 - while EXTERNAL_CHAINS above still
 // lists it first. Unifying them here would silently change which endpoint the
 // balance scan hits, so the divergence is preserved verbatim and flagged
 // instead. Reconciling it is a deliberate follow-up decision, not a
@@ -401,7 +401,7 @@ export const SDK_CHAIN_RPCS: Record<string, string[]> = {
   'Arbitrum Sepolia':    ['https://arbitrum-sepolia-rpc.publicnode.com','https://sepolia-rollup.arbitrum.io/rpc','https://arbitrum-sepolia.drpc.org'].filter(Boolean) as string[],
   'OP Sepolia':          ['https://optimism-sepolia-rpc.publicnode.com','https://sepolia.optimism.io'].filter(Boolean) as string[],
   'Optimism Sepolia':    ['https://optimism-sepolia-rpc.publicnode.com','https://sepolia.optimism.io'].filter(Boolean) as string[],
-  // 2026-07-18: removed rpc-amoy.polygon.technology — Polygon's own forum
+  // 2026-07-18: removed rpc-amoy.polygon.technology - Polygon's own forum
   // (forum.polygon.technology) confirmed this public endpoint was deprecated
   // and stopped responding as of 2026-07-17. Not a transient outage; ethers'
   // FallbackProvider was still functionally recovering via the publicnode.com
@@ -412,7 +412,7 @@ export const SDK_CHAIN_RPCS: Record<string, string[]> = {
   'Polygon PoS Amoy':    ['https://polygon-amoy-bor-rpc.publicnode.com'].filter(Boolean) as string[],
   'Polygon Amoy':        ['https://polygon-amoy-bor-rpc.publicnode.com'].filter(Boolean) as string[],
   'Avalanche Fuji':      ['https://api.avax-test.network/ext/bc/C/rpc','https://avalanche-fuji-c-chain-rpc.publicnode.com'],
-  // 2026-07-18: dropped rpc.hyperliquid-testnet.xyz entirely — after
+  // 2026-07-18: dropped rpc.hyperliquid-testnet.xyz entirely - after
   // reordering it behind Chainlink's endpoint, it showed TWO separate kinds of
   // failure across two observations (a TLS cert mismatch, then a connection
   // reset). That's not "occasionally flaky", that's this specific endpoint
@@ -427,12 +427,12 @@ export const SDK_CHAIN_RPCS: Record<string, string[]> = {
   'Linea Sepolia':       ['https://rpc.sepolia.linea.build'],
   'Ink Testnet':         ['https://rpc-gel-sepolia.inkonchain.com', 'https://rpc-qnd-sepolia.inkonchain.com'],
   // Circle's SDK actually returns "Ink Sepolia" as chain.name (confirmed
-  // directly from @circle-fin/bridge-kit source) — 'Ink Testnet' above was
+  // directly from @circle-fin/bridge-kit source) - 'Ink Testnet' above was
   // never being matched at runtime, silently disabling fallback for it.
   'Ink Sepolia':         ['https://rpc-gel-sepolia.inkonchain.com', 'https://rpc-qnd-sepolia.inkonchain.com'],
   'Monad Testnet':       ['https://testnet-rpc.monad.xyz', 'https://monad-testnet.drpc.org', 'https://10143.rpc.thirdweb.com'],
   'Morph Testnet':       ['https://rpc-hoodi.morphl2.io'],
-  // Circle's SDK actually returns "Morph Hoodi" as chain.name — same silent
+  // Circle's SDK actually returns "Morph Hoodi" as chain.name - same silent
   // lookup-miss issue as Ink above.
   'Morph Hoodi':         ['https://rpc-hoodi.morphl2.io'],
   'Pharos Testnet':      ['https://atlantic.dplabs-internal.com'],
@@ -443,7 +443,7 @@ export const SDK_CHAIN_RPCS: Record<string, string[]> = {
   'Codex Testnet':       ['https://rpc.codex-stg.xyz'],
   'EDGE Testnet':        ['https://edge-testnet.g.alchemy.com/public'],
   // Circle's SDK actually returns "Edge Testnet" (not all-caps EDGE) as
-  // chain.name — same silent lookup-miss issue as Ink/Morph above.
+  // chain.name - same silent lookup-miss issue as Ink/Morph above.
   'Edge Testnet':        ['https://edge-testnet.g.alchemy.com/public'],
   'Injective Testnet':   ['https://k8s.testnet.json-rpc.injective.network'],
 }
@@ -451,10 +451,10 @@ export const SDK_CHAIN_RPCS: Record<string, string[]> = {
 // ─── Circle Forwarding Service support ──────────────────────────────────────
 // Source: https://developers.circle.com/cctp/concepts/supported-chains-and-domains
 // ("Forwarding Service" column). Keep in sync with Circle's docs as they roll
-// out more destinations — check that table before adding here, don't assume a
+// out more destinations - check that table before adding here, don't assume a
 // new chain has forwarder support just because CCTP supports it at all.
 //
-// Still NOT supported per that table: Injective, Morph, Pharos — these fall
+// Still NOT supported per that table: Injective, Morph, Pharos - these fall
 // back to claim-worker's own polling to finish the mint after burn+attestation.
 export const FORWARDER_SUPPORTED_SDK_CHAINS = new Set<string>([
   'Arbitrum_Sepolia', 'Avalanche_Fuji', 'Base_Sepolia', 'Ethereum_Sepolia',
@@ -504,7 +504,7 @@ export function noteForwarderMintFailed(sdk: string, now = Date.now()): void {
     if (typeof localStorage === 'undefined') return
     const next = { ...learnedForwarderFailures(now), [sdk]: now + FORWARDER_FAILURE_MEMORY_MS }
     localStorage.setItem(FORWARDER_FAILURE_KEY, JSON.stringify(next))
-  } catch { /* storage unavailable — the transfer itself is unaffected */ }
+  } catch { /* storage unavailable - the transfer itself is unaffected */ }
 }
 
 /** Circle's forwarder is known (listed above) or recently seen (this device) to fail its mint on `sdk`. */

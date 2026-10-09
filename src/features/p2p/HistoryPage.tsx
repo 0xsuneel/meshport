@@ -1,9 +1,9 @@
 // features/p2p/HistoryPage.tsx
 //
-// P2P transaction history — every trade the current user has ever been a
+// P2P transaction history - every trade the current user has ever been a
 // party to (buyer or seller), with filtering, search, and blockchain
 // confirmation details for released/completed trades. Reuses fetchMyTrades
-// (same data source as P2PMyTradesPage) rather than a separate query — this
+// (same data source as P2PMyTradesPage) rather than a separate query - this
 // page is the same underlying trades, presented as a full searchable ledger
 // instead of a simple active-trades list.
 
@@ -29,18 +29,18 @@ type CategoryTab = 'all' | 'buy' | 'sell' | 'completed' | 'cancelled' | 'dispute
 
 // The DB's TradeStatus enum has no 'disputed'/'refunded' values of its own
 // (dispute is a separate column; a "refund" is just a cancelled buy-offer
-// trade whose escrow was actually returned — see the notification trigger's
+// trade whose escrow was actually returned - see the notification trigger's
 // own comment on this same distinction).
 //
-// IMPORTANT — Buy/Sell and Completed/Cancelled/Disputed/Refunded are TWO
+// IMPORTANT - Buy/Sell and Completed/Cancelled/Disputed/Refunded are TWO
 // SEPARATE DIMENSIONS, not one bucket per trade: a trade is simultaneously
-// "a Buy" (your role) AND "Completed" (its status) — it's never just one
+// "a Buy" (your role) AND "Completed" (its status) - it's never just one
 // or the other. The previous version tried to force every trade into a
 // single category (checking status first, falling through to buy/sell only
 // if nothing else matched), so a completed trade could NEVER match 'buy' or
-// 'sell' — it always stopped at 'completed' first. Since every trade here
+// 'sell' - it always stopped at 'completed' first. Since every trade here
 // finishes as completed/cancelled/etc., the Buy and Sell tabs matched
-// nothing at all. Fixed by giving each tab its own independent predicate —
+// nothing at all. Fixed by giving each tab its own independent predicate -
 // tapping "Buy" checks only "was I the buyer", regardless of status.
 function matchesCategory(t: P2PTrade, myUserId: string | undefined, category: CategoryTab): boolean {
   switch (category) {
@@ -56,7 +56,7 @@ function matchesCategory(t: P2PTrade, myUserId: string | undefined, category: Ca
 }
 
 // Unlike matchesCategory above, the little status PILL on each card can
-// only ever show one label — so this one stays priority-ordered (dispute
+// only ever show one label - so this one stays priority-ordered (dispute
 // beats refund beats plain cancel beats completed) purely for display, and
 // is never used for filtering.
 function badgeMeta(t: P2PTrade): { label: string; color: string } {
@@ -117,12 +117,12 @@ function TradeReceipt({ t, isBuyer, label, counterparty, counterpartyWallet, onO
 }
 
 function fmtDate(iso?: string): string {
-  if (!iso) return '—'
+  if (!iso) return '-'
   return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 }
 
 function shortHash(h?: string): string {
-  if (!h) return '—'
+  if (!h) return '-'
   return h.length > 14 ? `${h.slice(0, 8)}...${h.slice(-6)}` : h
 }
 
@@ -168,7 +168,7 @@ export function P2PHistoryPage() {
     if (q) {
       rows = rows.filter(t => {
         const cp = counterparties.get(t.buyerId === user?.id ? t.sellerId : t.buyerId)
-        // Every field null-guarded with `?? ''` — a single missing wallet/
+        // Every field null-guarded with `?? ''` - a single missing wallet/
         // username on any one trade used to throw here (`.toLowerCase()` on
         // undefined), which silently blanked the ENTIRE list the instant
         // you typed anything, even though the unfiltered list rendered

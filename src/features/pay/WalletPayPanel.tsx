@@ -1,4 +1,4 @@
-// "Pay from your wallet" — for someone who scanned a MeshPort QR with their
+// "Pay from your wallet" - for someone who scanned a MeshPort QR with their
 // wallet app (MetaMask, OKX, Trust, Coinbase…): the wallet opens this page in
 // its own browser, we add Arc Testnet to the wallet if it's missing, and the
 // wallet shows the send with address, amount and network filled in.
@@ -142,7 +142,7 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
       ) : (
         <>
           <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-            Open this page in your wallet app to pay — it fills in the network, address and amount:
+            Open this page in your wallet app to pay - it fills in the network, address and amount:
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {walletAppLinks(pageUrl).map(l => (

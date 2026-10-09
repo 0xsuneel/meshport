@@ -6,10 +6,10 @@ function buzz(pattern: number | number[]) {
   try { navigator.vibrate?.(pattern) } catch { /* not supported */ }
 }
 
-/** A light tick — long-press, swipe-to-reply threshold. */
+/** A light tick - long-press, swipe-to-reply threshold. */
 export function hapticTap() { buzz(12) }
 
-/** Wrong PIN / failed action — two short knocks. */
+/** Wrong PIN / failed action - two short knocks. */
 export function hapticError() { buzz([35, 45, 35]) }
 
 let ctx: AudioContext | null = null
@@ -26,9 +26,9 @@ function audio(): AudioContext | null {
 }
 
 /**
- * "MeshPort chime" — the payment-success sound: three soft plucked notes
+ * "MeshPort chime" - the payment-success sound: three soft plucked notes
  * rising quickly (G5 → B5 → E6) and landing on a warm ring. Made on the fly
- * (no audio file to download), dry — no echo — through a gentle compressor.
+ * (no audio file to download), dry - no echo - through a gentle compressor.
  */
 function pluck(ac: AudioContext, dst: AudioNode, freq: number, at: number, ring: number, bright: number) {
   const t = ac.currentTime + at
@@ -70,7 +70,7 @@ function ding() {
     pluck(ac, out, 784, 0, 0.35, 0.35)
     pluck(ac, out, 988, 0.085, 0.35, 0.35)
     pluck(ac, out, 1318.5, 0.17, 1.1, 0.45)
-  } catch { /* audio blocked — stay silent */ }
+  } catch { /* audio blocked - stay silent */ }
 }
 
 let lastSuccess = 0

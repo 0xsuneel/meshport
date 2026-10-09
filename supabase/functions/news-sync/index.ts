@@ -1,11 +1,11 @@
 // supabase/functions/news-sync/index.ts
 //
 // Fills public.news_items (Home "News" box + News page) from:
-//   arc.io/blog, circle.com/blog  — new articles only (cover, summary, the
+//   arc.io/blog, circle.com/blog  - new articles only (cover, summary, the
 //                                    opening paragraphs, publish date)
-//   status.arc.io/history.rss     — network notices, refreshed every run
+//   status.arc.io/history.rss     - network notices, refreshed every run
 //                                    because their status changes
-//   developer updates (circle_dev) — Circle's CCTP and Gateway release
+//   developer updates (circle_dev) - Circle's CCTP and Gateway release
 //                                    notes, and the App Kit / Bridge Kit
 //                                    changelogs shipped on npm
 // MeshPort's own posts are written by admins, never here.

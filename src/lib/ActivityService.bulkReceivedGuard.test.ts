@@ -1,6 +1,6 @@
 // src/lib/ActivityService.bulkReceivedGuard.test.ts
 //
-// Regression tests for the P0 BulkPay Activity safety mitigation — see
+// Regression tests for the P0 BulkPay Activity safety mitigation - see
 // docs/BULKPAY_ACTIVITY_SAFETY_FIX.md for the full race description and
 // fix rationale. These tests mock `fetch` and `./chatService` so they run
 // with no network/database dependency, matching this repo's existing
@@ -15,7 +15,7 @@ vi.mock('./chatService', () => ({
 
 // ActivityService.ts imports the `supabase` client at module load time purely
 // as a side effect of an unrelated import chain (it is not actually used by
-// hasAnyActivityForTx/bulkReceived, which both go through raw fetch()) — but
+// hasAnyActivityForTx/bulkReceived, which both go through raw fetch()) - but
 // `createClient()` throws immediately if VITE_SUPABASE_URL is unset, which it
 // is in this test environment. Mocked out so importing ActivityService.ts
 // doesn't require real Supabase env vars just to test these two functions.
@@ -53,7 +53,7 @@ function mockFetch(existingRows: Array<{ id: string }> = []) {
 
 /**
  * The `activity` upsert POSTs that THIS test's Activity.bulkReceived() calls
- * made — matched on the write's own shape (bulkrecv_<hash> + activity_type
+ * made - matched on the write's own shape (bulkrecv_<hash> + activity_type
  * 'bulk' + metadata.direction 'received'), not just "any POST".
  *
  * `fetch` is a process global and vitest runs files in parallel workers; under
@@ -95,7 +95,7 @@ describe('hasAnyActivityForTx', () => {
     expect(url).toContain(encodeURIComponent(TX_HASH.toLowerCase()))
     expect(url).toContain(encodeURIComponent(`recv_${TX_HASH.toLowerCase()}`))
     // Both forms must appear inside a single tx_hash=in.(...) filter, not two
-    // separate requests — this is the "one request, not a poll" property.
+    // separate requests - this is the "one request, not a poll" property.
     expect(url).toMatch(/tx_hash=in\.\(/)
   })
 
@@ -120,7 +120,7 @@ describe('hasAnyActivityForTx', () => {
   })
 })
 
-describe('Activity.bulkReceived — the P0 guard', () => {
+describe('Activity.bulkReceived - the P0 guard', () => {
   it('1. normal BulkPay recipient: no existing row -> writes normally', async () => {
     const { calls } = mockFetch([])
     const result = await Activity.bulkReceived({
@@ -146,7 +146,7 @@ describe('Activity.bulkReceived — the P0 guard', () => {
 
   it('3. recovery receive already exists (recv_<hash>): bulkReceived is skipped', async () => {
     // Simulates claim-recovery-scan / deposit-scan-all having already
-    // credited this recipient a plain 'receive' row before this call ran —
+    // credited this recipient a plain 'receive' row before this call ran -
     // the exact race traced in docs/ACTIVITY_WRITER_AUDIT.md §2.
     const { calls } = mockFetch([{ id: 'recv-row-from-recovery-worker' }])
     const result = await Activity.bulkReceived({ walletAddress: WALLET, txHash: TX_HASH, amount: 10, fromAddress: '0xPayer' })
@@ -166,15 +166,15 @@ describe('Activity.bulkReceived — the P0 guard', () => {
     // a full fix: if two callers both check before either has written, both
     // will see "no row yet" and both will attempt to write. What this test
     // verifies is that the write itself still goes through saveActivity's
-    // existing onConflict/ignoreDuplicates path — the real backstop for this
-    // specific residual window — rather than a bare unprotected insert.
+    // existing onConflict/ignoreDuplicates path - the real backstop for this
+    // specific residual window - rather than a bare unprotected insert.
     const { calls } = mockFetch([]) // both concurrent checks see "nothing yet"
     await Promise.all([
       Activity.bulkReceived({ walletAddress: WALLET, txHash: TX_HASH, amount: 10, fromAddress: '0xPayer' }),
       Activity.bulkReceived({ walletAddress: WALLET, txHash: TX_HASH, amount: 10, fromAddress: '0xPayer' }),
     ])
     const posts = ownBulkReceivedPosts(calls)
-    // Both proceeded to write (the honestly-disclosed residual race) —
+    // Both proceeded to write (the honestly-disclosed residual race) -
     // but every write URL must carry on_conflict=tx_hash,wallet_address,
     // which is what makes a real duplicate impossible at the database layer
     // even when this application-level guard alone could not prevent it.
@@ -185,13 +185,13 @@ describe('Activity.bulkReceived — the P0 guard', () => {
   })
 
   it('6. multiple recipients in the same Multicall3 tx: independent checks, no cross-recipient interference', async () => {
-    const { calls } = mockFetch([]) // fresh for both — neither wallet has any existing row
+    const { calls } = mockFetch([]) // fresh for both - neither wallet has any existing row
     await Promise.all([
       Activity.bulkReceived({ walletAddress: WALLET,   txHash: TX_HASH, amount: 10, fromAddress: '0xPayer' }),
       Activity.bulkReceived({ walletAddress: WALLET_2, txHash: TX_HASH, amount: 20, fromAddress: '0xPayer' }),
     ])
     const gets = calls.filter(c => c.method === 'GET')
-    // Each recipient's existence check is scoped to THEIR OWN wallet_address —
+    // Each recipient's existence check is scoped to THEIR OWN wallet_address -
     // confirmed by checking each GET targeted a different wallet.
     expect(gets.some(c => c.url.includes(encodeURIComponent(WALLET.toLowerCase())))).toBe(true)
     expect(gets.some(c => c.url.includes(encodeURIComponent(WALLET_2.toLowerCase())))).toBe(true)
@@ -210,12 +210,12 @@ describe('Activity.bulkReceived — the P0 guard', () => {
     // If the same wallet appears twice in one BulkPay batch (two separate
     // line items, same bulkTxHash), the existing saveActivity upsert
     // (onConflict: tx_hash, wallet_address) ALREADY collapses the second
-    // write into a no-op even without this guard — bulkReceived carries no
+    // write into a no-op even without this guard - bulkReceived carries no
     // log_index, so there was never a way to distinguish two line items to
     // the same wallet under the current Activity-layer identity model. This
     // guard does not introduce that limitation; it just arrives at the same
     // outcome earlier (skip vs. DB-level ignore). Documented explicitly in
-    // docs/BULKPAY_ACTIVITY_SAFETY_FIX.md's Limitations section — true
+    // docs/BULKPAY_ACTIVITY_SAFETY_FIX.md's Limitations section - true
     // per-line-item fidelity requires the log_index-aware Ledger migration.
     const first = mockFetch([])
     await Activity.bulkReceived({ walletAddress: WALLET, txHash: TX_HASH, amount: 10, fromAddress: '0xPayer' })
@@ -223,7 +223,7 @@ describe('Activity.bulkReceived — the P0 guard', () => {
 
     const second = mockFetch([{ id: 'row-from-first-line-item' }])
     const result = await Activity.bulkReceived({ walletAddress: WALLET, txHash: TX_HASH, amount: 5, fromAddress: '0xPayer' })
-    // Skipped, not a crash, not a corrupted second row — the honest,
+    // Skipped, not a crash, not a corrupted second row - the honest,
     // pre-existing, documented behavior.
     expect(result).toBe(true)
     expect(ownBulkReceivedPosts(second.calls)).toHaveLength(0)

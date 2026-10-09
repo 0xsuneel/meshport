@@ -55,7 +55,7 @@ interface Estimate {
   stopLimit:       { amount: string; token: string }
   fees: Array<{ token: string; amount: string; type: string }>
   /** Real network/gas cost for this swap, from Circle's SDK (same field
-   * MultichainTransferPage's bridge estimate reads) — not always present, so
+   * MultichainTransferPage's bridge estimate reads) - not always present, so
    * consumers should still have a fallback. */
   gasFee: number
 }
@@ -75,7 +75,7 @@ interface SwapRecord {
 
 // History is now stored in Supabase activity table (no localStorage)
 // SwapPage shows recent history loaded from ActivityService
-function addToHistory(_r: SwapRecord, _w: string | null) { /* noop — Supabase handles this */ }
+function addToHistory(_r: SwapRecord, _w: string | null) { /* noop - Supabase handles this */ }
 function loadHistory(_w: string | null): SwapRecord[] { return [] }
 function saveHistory(_h: SwapRecord[], _w: string | null) { /* noop */ }
 
@@ -222,7 +222,7 @@ function SwapHistoryItem({ r, onOpen, isFirst }: { r: SwapRecord; onOpen: () => 
 
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: isFailed ? 'var(--danger)' : 'var(--success)' }}>
-          {isFailed ? '—' : `+${fmtOut} ${r.tokenOut}`}
+          {isFailed ? '-' : `+${fmtOut} ${r.tokenOut}`}
         </div>
       </div>
     </div>
@@ -234,11 +234,11 @@ function HistoryDetail({ r, onClose }: { r: SwapRecord; onClose: () => void }) {
   const tOut = SWAP_TOKENS.find(t => t.id === r.tokenOut) ?? SWAP_TOKENS[1]
   const amtIn  = parseFloat(r.amountIn  || '0')
   const amtOut = parseFloat(r.amountOut || '0')
-  const rate   = amtOut > 0 && amtIn > 0 ? trimTrailingZeros((amtOut / amtIn).toFixed(4)) : '—'
+  const rate   = amtOut > 0 && amtIn > 0 ? trimTrailingZeros((amtOut / amtIn).toFixed(4)) : '-'
   // Tapping a Swap history card reopens the same receipt a live swap ends on.
   const ok = r.status === 'success'
   const fmtIn  = `${trimTrailingZeros(amtIn.toFixed(swapTokenDecimals(tIn.id)))} ${tIn.id}`
-  const fmtOut = amtOut > 0 ? `${trimTrailingZeros(amtOut.toFixed(swapTokenDecimals(tOut.id)))} ${tOut.id}` : `— ${tOut.id}`
+  const fmtOut = amtOut > 0 ? `${trimTrailingZeros(amtOut.toFixed(swapTokenDecimals(tOut.id)))} ${tOut.id}` : `- ${tOut.id}`
   return (
     <ReceiptPopup
       onClose={onClose}
@@ -419,7 +419,7 @@ export function SwapPage() {
   useEffect(() => {
     if (!settingsLoaded) return
     const enabled = SWAP_TOKENS.filter(t => isCoinEnabled(settingsMap, t.id))
-    if (enabled.length < 2) return // not enough coins to swap — page itself stays gated by FeatureGate
+    if (enabled.length < 2) return // not enough coins to swap - page itself stays gated by FeatureGate
     if (!enabled.find(t => t.id === tokenIn.id))  setTokenIn(enabled[0])
     if (!enabled.find(t => t.id === tokenOut.id)) setTokenOut(enabled.find(t => t.id !== tokenIn.id) ?? enabled[1])
   }, [settingsLoaded, settingsMap])
@@ -433,7 +433,7 @@ export function SwapPage() {
   const [liveQuoteLoading, setLiveQuoteLoading] = useState(false)
   // Set when the quote is re-checked immediately before executing the swap
   // (see handleConfirm) and the fee/output turns out to have moved since
-  // this screen was first shown — surfaced as a banner instead of silently
+  // this screen was first shown - surfaced as a banner instead of silently
   // executing against the stale numbers.
   const [quoteChangedNotice, setQuoteChangedNotice] = useState('')
   const [step,         setStep]         = useState<Step>('idle')
@@ -465,7 +465,7 @@ export function SwapPage() {
   // ─── Resume an in-flight swap after a refresh ────────────────────────────
   // If the page reloads while a swap was still "swapping"/finishing up, don't
   // drop back to the empty form with zero record it might already be
-  // on-chain — that's exactly the situation most likely to make someone
+  // on-chain - that's exactly the situation most likely to make someone
   // submit it again by accident. Restore enough state to render the
   // swapping/success screen and check the real activity table (the actual
   // source of truth, not this marker) for what happened.
@@ -496,10 +496,10 @@ export function SwapPage() {
         return
       }
       if (attempts >= 8) {
-        // Couldn't confirm either way within a reasonable window — don't
+        // Couldn't confirm either way within a reasonable window - don't
         // spin forever, and don't silently drop the marker either. Point
         // at Activity, the real source of truth, instead of guessing.
-        setError('Still confirming — check Activity for the latest status.')
+        setError('Still confirming - check Activity for the latest status.')
         return
       }
       setTimeout(poll, 1500)
@@ -508,7 +508,7 @@ export function SwapPage() {
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  // Estimated native-gas cost (in USDC, Arc's native gas token) — used only
+  // Estimated native-gas cost (in USDC, Arc's native gas token) - used only
   // to hold back gas when the Max button is tapped and tokenIn is USDC, so
   // the swap tx doesn't fail for lack of gas. Same estimate Send uses.
   const [estimatedFee, setEstimatedFee] = useState(0.001)
@@ -519,7 +519,7 @@ export function SwapPage() {
   // api/swap-proxy for a throwaway dummy estimate, purely to warm a Vercel
   // container + its require()'d SDK modules before the user typed anything.
   // Swap now signs/estimates entirely client-side (see swapService.ts's own
-  // header comment) — there's no more server container to warm, and warming
+  // header comment) - there's no more server container to warm, and warming
   // never needs a private key at all. warmSwapSdk() just pre-imports the same
   // heavy SDK modules so the browser's module cache is already populated by
   // the time the user's real first estimate runs.
@@ -528,7 +528,7 @@ export function SwapPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ─── Success screen — same full-screen flash → hero-card takeover
+  // ─── Success screen - same full-screen flash → hero-card takeover
   // PaySendPage uses for a completed payment, reused here for a completed
   // swap so the two feel identical. Two phases: 'flash' (whole screen
   // flashes brand color with a big checkmark + "Swapped Successfully"),
@@ -538,7 +538,7 @@ export function SwapPage() {
   const [hashCopied, setHashCopied] = useState(false)
   const { showToastMessage } = useUIStore()
   // Whether THIS swap's passcode came from a biometric check vs typed
-  // manually — drives which icon (checkmark vs fingerprint/Face ID) shows
+  // manually - drives which icon (checkmark vs fingerprint/Face ID) shows
   // on the flash->hero success animation. Set from PinKeypad's onComplete
   // second argument, same as PaySendPage.
   const [paidViaBiometric, setPaidViaBiometric] = useState(false)
@@ -548,7 +548,7 @@ export function SwapPage() {
     return () => clearTimeout(t)
   }, [step])
 
-  // Gates FlashAuthIcon's own bio->check swap — flips true only once the
+  // Gates FlashAuthIcon's own bio->check swap - flips true only once the
   // white circle below has actually finished its spring entrance
   // (onAnimationComplete), not on a guessed timer. Reset alongside
   // successPhase so a second swap in the same session gets a fresh flash
@@ -574,13 +574,13 @@ export function SwapPage() {
   const [travelRect, setTravelRect] = useState<{ from: DOMRect; to: DOMRect } | null>(null)
   const [travelDone, setTravelDone] = useState(false)
   // Desktop's flash overlay used to portal straight to `document.body` with
-  // `position:fixed; inset:0` — meaning it flashed the ENTIRE screen,
+  // `position:fixed; inset:0` - meaning it flashed the ENTIRE screen,
   // covering the Recent History column too, not just the flow column the
   // rest of this page's desktop layout confines itself to. It was ported
   // to `document.body` in the first place because PageTransition's
   // motion.div (wraps every route) leaves a stray transform on itself,
   // which makes it the containing block for any `position:fixed`
-  // descendant — so a naive non-portalled fixed overlay rendered sized/
+  // descendant - so a naive non-portalled fixed overlay rendered sized/
   // positioned to that transformed ancestor instead of the viewport. The
   // portal still needs to happen for that reason, but on desktop the
   // overlay's rect is now pinned to this ref (the same flow-column
@@ -595,7 +595,7 @@ export function SwapPage() {
     }
   })
 
-  // Separate, dependency-gated effect — NOT folded into the unconditional
+  // Separate, dependency-gated effect - NOT folded into the unconditional
   // one above. That one has no dep array on purpose (it needs to keep
   // re-measuring flashCheckRef every render while flash is up), but
   // getBoundingClientRect() always returns a brand-new DOMRect object, so
@@ -687,13 +687,13 @@ export function SwapPage() {
   // private key to api/swap-proxy so a Vercel serverless function could
   // sign there. Estimate/swap now run entirely client-side via
   // swapService.ts (same AppKit + createEthersAdapterFromPrivateKey pattern
-  // Multichain Claim/Transfer already run in the browser) — the key never
+  // Multichain Claim/Transfer already run in the browser) - the key never
   // leaves this device. Signature/return shape unchanged so every call site
   // below (handleReview, the live-quote effects, handleConfirm) needed no
   // changes at all.
   const callProxy = useCallback(async (action: 'estimate' | 'swap', extraParams?: Record<string, any>): Promise<any> => {
     // Read fresh from the store rather than the closed-over `privateKey`
-    // value — this callback's identity (and therefore its closure) only
+    // value - this callback's identity (and therefore its closure) only
     // updates on the NEXT render after the store changes, but handleReview's
     // on-demand restore-then-continue (see its own comment) can populate the
     // store and then call this SAME already-captured callProxy within the
@@ -702,19 +702,19 @@ export function SwapPage() {
     // null it closed over.
     const activePrivateKey = useAuthStore.getState().privateKey
     if (!activePrivateKey) {
-      throw Object.assign(new Error('Wallet unavailable — unlock your wallet and try again.'), { isUncertain: false })
+      throw Object.assign(new Error('Wallet unavailable - unlock your wallet and try again.'), { isUncertain: false })
     }
 
     const tokenInId   = extraParams?.tokenIn  ?? tokenIn.id
     const tokenOutId  = extraParams?.tokenOut ?? tokenOut.id
     const amountInStr = extraParams?.amountIn ?? parseFloat(amountIn).toFixed(6)
 
-    // Same timeout protection the old fetch-based version had — if the SDK
+    // Same timeout protection the old fetch-based version had - if the SDK
     // call stalls (e.g. waiting on a tx that never confirms), this stops the
     // UI from sitting on "Swapping…" forever with no way out. A swap gets
     // more time than an estimate since it's doing real on-chain work. This
     // doesn't cancel the underlying SDK call (no cancellation hook exists
-    // for it), only stops waiting on it — same real-world effect the old
+    // for it), only stops waiting on it - same real-world effect the old
     // AbortController-based timeout had, since aborting that fetch never
     // guaranteed the server-side operation itself stopped either.
     const timeoutMs = action === 'swap' ? 60000 : 20000
@@ -722,7 +722,7 @@ export function SwapPage() {
       p,
       new Promise<T>((_, reject) => setTimeout(() => reject(Object.assign(
         new Error(action === 'swap'
-          ? "This is taking longer than expected — it may have already gone through. Check your balance or Activity before retrying."
+          ? "This is taking longer than expected - it may have already gone through. Check your balance or Activity before retrying."
           : 'Request timed out.'),
         { isUncertain: action === 'swap' }
       )), timeoutMs)),
@@ -744,8 +744,8 @@ export function SwapPage() {
     }))
   }, [tokenIn, tokenOut, amountIn, slippage, walletAddress])
 
-  // ── Live quote — fetches once the amount keypad closes ─────────────────
-  // Triggered by the keypad closing (Done button or tapping the backdrop —
+  // ── Live quote - fetches once the amount keypad closes ─────────────────
+  // Triggered by the keypad closing (Done button or tapping the backdrop -
   // both just flip showAmountPad to false), not by every keystroke, so
   // typing "1", "0", "0" doesn't fire three requests. Only runs while the
   // form is still 'idle' (i.e. before Swap is tapped); Review's own polling
@@ -773,7 +773,7 @@ export function SwapPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amountIn, tokenIn, tokenOut, slippage])
 
-  // Shared fetch body — extracted so both the mobile "keypad just closed"
+  // Shared fetch body - extracted so both the mobile "keypad just closed"
   // trigger below AND the desktop debounced-typing trigger (there's no
   // keypad-close event on desktop anymore, see the effect after this one)
   // can call the exact same quote logic instead of duplicating it.
@@ -783,7 +783,7 @@ export function SwapPage() {
     // Wallet not loaded into the store yet (e.g. this effect firing on
     // initial mount, before useAuthStore hydrates privateKey/walletAddress).
     // callProxy would otherwise send a request with an empty privateKey and
-    // the server would correctly 400 with "Missing required fields" — wait
+    // the server would correctly 400 with "Missing required fields" - wait
     // silently instead of surfacing that as a user-facing error; the caller
     // (the debounced-typing effect / keypad-close effect) re-fires this once
     // amountIn/tokenIn/tokenOut change again, and separately whenever
@@ -795,13 +795,13 @@ export function SwapPage() {
       const est = await callProxy('estimate', {
         tokenIn: tokenIn.id, tokenOut: tokenOut.id, amountIn: amt.toFixed(6),
       })
-      if (liveQuoteReqId.current !== myReqId) return // amount/token changed since this fired — drop it
+      if (liveQuoteReqId.current !== myReqId) return // amount/token changed since this fired - drop it
       const gasFee = (est.gasFees ?? []).reduce((s: number, f: any) => s + (parseFloat(f.amount) || 0), 0)
       const freshTotalFees = (est.fees ?? []).reduce((s: number, f: any) => s + (parseFloat(f.amount) || 0), 0)
       totalFeesRef.current = freshTotalFees
       setEstimate({ estimatedOutput: est.estimatedOutput, stopLimit: est.stopLimit, fees: est.fees ?? [], gasFee })
     } catch (e: any) {
-      if (liveQuoteReqId.current !== myReqId) return // amount/token changed since this fired — drop it
+      if (liveQuoteReqId.current !== myReqId) return // amount/token changed since this fired - drop it
       // Used to be silent here on the theory that "Swap" hasn't been
       // tapped yet, so nothing needed to show. But callProxy already
       // console.errors this failure (see below) regardless of whether
@@ -824,12 +824,12 @@ export function SwapPage() {
 
     // Switching the token pair (e.g. EURC -> cirBTC) with an amount already
     // typed and the keypad already closed used to sit silently on the
-    // cleared 0.00 from the effect above until Swap was tapped — nothing
+    // cleared 0.00 from the effect above until Swap was tapped - nothing
     // re-triggered a fetch, because the only trigger was a keypad
     // open->close transition, and the keypad never moved. Tracking the
     // previous pair and firing when it changes WHILE the keypad is closed
     // covers that case too. Deliberately gated on `!showAmountPad`, not
-    // just "pair changed" — amountIn changes on every keystroke while the
+    // just "pair changed" - amountIn changes on every keystroke while the
     // keypad is open, and this must not fire mid-typing.
     const pairChanged = prevTokenPairRef.current.in !== tokenIn.id || prevTokenPairRef.current.out !== tokenOut.id
     prevTokenPairRef.current = { in: tokenIn.id, out: tokenOut.id }
@@ -842,7 +842,7 @@ export function SwapPage() {
 
   // Retry the quote once the wallet finishes loading. Covers the case where
   // the person typed an amount (or the keypad-close/debounce effects fired)
-  // while privateKey/walletAddress were still empty — those calls were
+  // while privateKey/walletAddress were still empty - those calls were
   // skipped by runLiveQuote's own guard above, so nothing would otherwise
   // ever re-fetch once the wallet becomes ready.
   const hadWalletRef = useRef(false)
@@ -881,7 +881,7 @@ export function SwapPage() {
   // ── Fetch (and keep fresh) the quote while Review ('confirming') is open ──
   // This is the ONLY place the swap quote/fee is calculated. It fires once
   // on arrival at Review, then polls quietly in the background for as long
-  // as Review stays open — before the passcode sheet — so a moved rate shows
+  // as Review stays open - before the passcode sheet - so a moved rate shows
   // up automatically. Never re-fetched once the passcode has been entered
   // (see handleConfirm).
   useEffect(() => {
@@ -910,7 +910,7 @@ export function SwapPage() {
         totalFeesRef.current = freshTotalFees
         setEstimate({ estimatedOutput: est.estimatedOutput, stopLimit: est.stopLimit, fees: est.fees ?? [], gasFee })
       } catch {
-        // Silent refresh failures don't disturb what's already on screen —
+        // Silent refresh failures don't disturb what's already on screen -
         // the person can still confirm against the last good quote.
       }
     }
@@ -920,23 +920,23 @@ export function SwapPage() {
   }, [step, amountIn, tokenIn, tokenOut, slippage, callProxy])
 
   // ── Fetch the quote once, transitioning the form into Review on success ──
-  // The only trigger for the very first quote fetch — tapping Swap. Nothing
+  // The only trigger for the very first quote fetch - tapping Swap. Nothing
   // fetches before this.
   const handleReview = async () => {
     const amt = parseFloat(amountIn)
     if (!amt || amt <= 0 || tokenIn.id === tokenOut.id) return
     // BUG FIX (2026-09-03): this used to give up the INSTANT privateKey
-    // happened to be null, with zero attempt to actually restore it first —
+    // happened to be null, with zero attempt to actually restore it first -
     // so "wallet is still loading" showed even in the completely ordinary
     // case where restoration just hadn't finished yet (e.g. this is the
     // first thing tapped right after a fresh page load) or was one call
     // away from succeeding (a mnemonic-based wallet, or a passcode already
-    // stashed this session — see restoreWallet.ts). One on-demand attempt
+    // stashed this session - see restoreWallet.ts). One on-demand attempt
     // here covers both: it's fast and local for create/import-seed wallets
-    // (no network at all — instant), and for social-auto/import-privkey it
+    // (no network at all - instant), and for social-auto/import-privkey it
     // reuses whatever the app has already been trying in the background.
     // Only genuinely falls through to the error message below if this
-    // attempt ALSO fails — at which point "still loading" is honest rather
+    // attempt ALSO fails - at which point "still loading" is honest rather
     // than a message that would never resolve on its own if the real issue
     // is that the wallet needs the passcode re-entered (see
     // WalletRecoveryBanner, which now offers exactly that inline).
@@ -945,13 +945,13 @@ export function SwapPage() {
       await restorePrivateKey().catch(() => {})
       const fresh = useAuthStore.getState()
       if (!fresh.privateKey || !fresh.walletAddress) {
-        setError('Your wallet needs to be unlocked — check the banner at the top of the app, or try again in a moment.')
+        setError('Your wallet needs to be unlocked - check the banner at the top of the app, or try again in a moment.')
         setStep('idle')
         return
       }
     }
     // A live quote (fetched while typing, see the debounced effect above)
-    // may already be sitting there for these exact inputs — if so, skip
+    // may already be sitting there for these exact inputs - if so, skip
     // straight to Review instead of firing a redundant duplicate fetch.
     // Review's own polling effect refreshes it again shortly after anyway.
     if (estimate && !liveQuoteLoading) { setError(''); setStep('confirming'); return }
@@ -973,7 +973,7 @@ export function SwapPage() {
   }
 
   // Real on-chain progress for the checklist (see SwapProgress in
-  // swapService.ts) — replaces the old fixed "approve after 5s" timer.
+  // swapService.ts) - replaces the old fixed "approve after 5s" timer.
   const [swapProgress, setSwapProgress] = useState<SwapProgressState>(INITIAL_SWAP_PROGRESS)
   const onSwapProgress = useCallback((p: SwapProgress) => setSwapProgress(prev => applySwapProgress(prev, p)), [])
 
@@ -987,7 +987,7 @@ export function SwapPage() {
     // Previously these were strictly serial: intent creation (a Supabase Edge
     // Function round-trip, ~300–800ms) had to fully complete BEFORE the swap
     // proxy call was even started. The swap proxy itself has its own non-trivial
-    // cold-start cost — there's no reason to wait for one to finish before
+    // cold-start cost - there's no reason to wait for one to finish before
     // beginning the other. Running both concurrently with Promise.all shaves
     // the intent-creation round-trip entirely off the critical path on warm
     // containers. The attempt ID only needs to be ready by the time the proxy
@@ -996,7 +996,7 @@ export function SwapPage() {
     //
     // Safety invariant preserved: if intent creation fails we still cancel the
     // swap by checking the result before marking success/doing any bookkeeping.
-    // The proxy may have already broadcast by then — same "uncertain" outcome
+    // The proxy may have already broadcast by then - same "uncertain" outcome
     // handling as any other mid-flight failure applies.
     const decimalsInVal = tokenIn.decimals
     const amountInAtomic = BigInt(Math.round(amt * Math.pow(10, decimalsInVal))).toString()
@@ -1030,11 +1030,11 @@ export function SwapPage() {
       })
     )
 
-    // Start swap proxy call immediately in parallel — attemptId/intentId are
+    // Start swap proxy call immediately in parallel - attemptId/intentId are
     // passed as undefined for now; updated server-side via the parallel intent
     // result (see markAttemptSubmittedServerSide in swap-proxy.js which handles
     // the id write independently). The proxy's own server-side attempt marking
-    // uses the attemptId forwarded in the request body — we pass it once both
+    // uses the attemptId forwarded in the request body - we pass it once both
     // promises resolve below.
     const swapProxyPromise = callProxy('swap', {
       tokenIn: tokenIn.id, tokenOut: tokenOut.id, amountIn: parseFloat(amountIn).toFixed(6),
@@ -1045,13 +1045,13 @@ export function SwapPage() {
     let intentId: string | null = null
 
     try {
-      // Wait for both in parallel — the slower of the two determines wall-clock
+      // Wait for both in parallel - the slower of the two determines wall-clock
       // time, but in practice the swap proxy takes longer (it does real on-chain
       // work), so intent creation finishes well before the swap completes.
       const [intentResult, result] = await Promise.all([intentPromise, swapProxyPromise])
 
       if (!intentResult.success || !intentResult.attemptId) {
-        // Intent creation failed — but the swap may have already broadcast.
+        // Intent creation failed - but the swap may have already broadcast.
         // Treat this the same as an uncertain failure: log, but don't mark
         // the swap as definitively failed if we have a txHash.
         console.warn('[Swap] intent creation failed (swap may have already broadcast):', intentResult.error)
@@ -1064,7 +1064,7 @@ export function SwapPage() {
       setTxHash(hash); setAmountOut(aOut)
 
       // Persist enough to resume this exact screen if the page gets
-      // refreshed while still "swapping"/finishing up below — without
+      // refreshed while still "swapping"/finishing up below - without
       // this, a refresh mid-swap drops back to the empty form with no
       // record a swap might already be on-chain, which is exactly the
       // situation most likely to make someone submit it again by
@@ -1076,7 +1076,7 @@ export function SwapPage() {
         })
       }
 
-      // Persist the real tx_hash server-side IMMEDIATELY — fire-and-forget.
+      // Persist the real tx_hash server-side IMMEDIATELY - fire-and-forget.
       // The swap-proxy already calls markAttemptSubmittedServerSide server-
       // side, but that path only runs if the proxy's own request body carried
       // the attemptId. Since the parallel approach above may have had intent
@@ -1100,30 +1100,30 @@ export function SwapPage() {
       }
       // BUG FIX (2026-09-03): this used to be unguarded, unlike every other
       // post-swap step below it (notifications, the Activity write, balance
-      // refresh, points — all already wrapped in their own try/catch as
+      // refresh, points - all already wrapped in their own try/catch as
       // best-effort). If it threw for any reason (a full/blocked
       // localStorage, e.g. Safari private browsing or a mobile WebView
       // storage quota, or a serialization edge case), the exception
-      // propagated straight to this function's OUTER catch below — AFTER
+      // propagated straight to this function's OUTER catch below - AFTER
       // the swap had already broadcast successfully and `hash` was already
       // a real, confirmed transaction hash. That outer catch doesn't know
       // the difference between "never broadcast" and "broadcast fine, a
-      // local bookkeeping write failed afterward" — it set step='failed'
+      // local bookkeeping write failed afterward" - it set step='failed'
       // and (since this isn't an `isUncertain` SDK/RPC error) wrote a false
       // 'failed' Activity row on top of a swap that had already succeeded
       // and moved the user's funds. This is the exact mechanism behind
       // reports of a successful swap being shown as failed. Local-history
       // bookkeeping failing is never a reason to call the swap itself a
-      // failure — it's best-effort, same as everything else here.
+      // failure - it's best-effort, same as everything else here.
       //
       // SECOND BUG FIX, same block (2026-09-03): `setHistory(loadHistory(...))`
       // used to run right after this. addToHistory/loadHistory are both
       // deliberate no-op stubs now (see their own comment a few hundred
-      // lines up — history moved to the Supabase-backed fetch further up
-      // this file) — loadHistory() unconditionally returns []. Calling
+      // lines up - history moved to the Supabase-backed fetch further up
+      // this file) - loadHistory() unconditionally returns []. Calling
       // setHistory([]) immediately after every single swap wiped the
       // in-memory history list to empty the instant a swap completed, on
-      // both mobile and desktop (same component, same state) — this is the
+      // both mobile and desktop (same component, same state) - this is the
       // literal cause of "recent history disappears" right after swapping.
       // The Supabase-backed mount effect would eventually repopulate it on
       // a future remount, but not on this same render, and not for the
@@ -1137,14 +1137,14 @@ export function SwapPage() {
         console.warn('[Swap] addToHistory failed (non-fatal, swap already succeeded):', e)
       }
 
-      // In-app notification — guaranteed to show in the Notifications page
+      // In-app notification - guaranteed to show in the Notifications page
       // regardless of OS push permission/subscription state.
       import('@/lib/notifications').then(({ notifySwapComplete }) => {
         notifySwapComplete({ amountOut: parseFloat(aOut) || 0, tokenOut: tokenOut.id })
       }).catch(() => {})
 
       // The phone-shade notification comes from the in-app one above
-      // (store → lib/systemNotify.ts) — a server self-push too would stack a
+      // (store → lib/systemNotify.ts) - a server self-push too would stack a
       // second entry on this device.
 
       // Save to centralized activity table
@@ -1162,16 +1162,16 @@ export function SwapPage() {
         }).catch(() => {})
       }
 
-      // Proactive safety net — normally the write above lands within a
+      // Proactive safety net - normally the write above lands within a
       // second or two and this is a harmless no-op (the scan finds the row
       // already there and skips it). But if that direct write silently
       // fails after its own retries (e.g. a network blip right as the app
       // is backgrounded), the swap previously had no way to show up in
       // Activity/Notifications until the next time this tab happened to
-      // remount or regain focus — which, on mobile, can be minutes or never
+      // remount or regain focus - which, on mobile, can be minutes or never
       // for that session. Nudging the same reconciliation scan AppLayout
       // already runs on mount/focus lets it self-heal within seconds
-      // instead. Safe to call this often — it's idempotent and this exact
+      // instead. Safe to call this often - it's idempotent and this exact
       // race is what the scan's own poll-with-delay guard exists to handle
       // (see claim-recovery-scan/index.ts).
       if (walletAddress) {
@@ -1186,7 +1186,7 @@ export function SwapPage() {
         ).catch(() => {})
       }
 
-      // PERF FIX: fire-and-forget — rewards points are a nice-to-have on top
+      // PERF FIX: fire-and-forget - rewards points are a nice-to-have on top
       // of an already-confirmed swap; awaiting this server round trip before
       // showing success only added latency with no correctness benefit.
       // Internal try/catch still swallows all errors, so this can never
@@ -1204,7 +1204,7 @@ export function SwapPage() {
           })()
         }
       }
-      // PERF FIX: fire-and-forget — same reasoning as above. The success
+      // PERF FIX: fire-and-forget - same reasoning as above. The success
       // screen already knows the swap's real output amount from the swap
       // result itself; re-fetching the on-chain balance display is a
       // background refresh, not a precondition for "done".
@@ -1246,9 +1246,9 @@ export function SwapPage() {
       const msg = e?.shortMessage ?? e?.message ?? 'Swap failed'
       const uncertain = !!e?.isUncertain
       // Uncertain outcomes (a confirmation-check/RPC failure after the
-      // transaction may have already broadcast — see swap-proxy.js's
+      // transaction may have already broadcast - see swap-proxy.js's
       // extractError) skip writing a 'failed' record entirely. Asserting
-      // failure here would be actively wrong if the swap actually landed —
+      // failure here would be actively wrong if the swap actually landed -
       // the server already made a best-effort defensive recording of the
       // real 'swap' row if it could find a txHash in the error, and
       // deposit-scan-all will pick up the real outcome regardless. Writing
@@ -1260,7 +1260,7 @@ export function SwapPage() {
           amountIn, amountOut: '0', txHash: '', timestamp: Date.now(), status: 'failed',
         }
         addToHistory(failedRec, walletAddress)
-        // Same fix as the success path above — loadHistory() is a no-op
+        // Same fix as the success path above - loadHistory() is a no-op
         // stub that always returns [], so this used to wipe history to
         // empty on every genuine failure too, not just on success.
         setHistory(prev => [failedRec, ...prev])
@@ -1291,7 +1291,7 @@ export function SwapPage() {
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
     }
     // Gas on Arc is always paid in native USDC, no matter which token is
-    // being swapped — a EURC/cirBTC→USDC swap still needs leftover native
+    // being swapped - a EURC/cirBTC→USDC swap still needs leftover native
     // USDC to pay for it. `gasShortfall` (component scope, shared with the
     // Max button and the warning banner on the review screen) already
     // covers this using the real SDK gas figure when available, or the
@@ -1305,7 +1305,7 @@ export function SwapPage() {
     }
 
     // Fees/quote are never (re-)calculated at this point. The quote was
-    // already fetched — and kept fresh via polling — while the user was on
+    // already fetched - and kept fresh via polling - while the user was on
     // Review (see the Review-step effect above); whatever is in `estimate`
     // right now is what they saw and confirmed against. We execute against
     // that quote rather than firing another SDK call from the passcode
@@ -1322,7 +1322,7 @@ export function SwapPage() {
   const isActive  = ['idle','estimating'].includes(step)
 
   // Gas on Arc is always paid in native USDC, no matter which token is
-  // being swapped — a EURC/cirBTC → USDC swap still needs leftover native
+  // being swapped - a EURC/cirBTC → USDC swap still needs leftover native
   // USDC to pay for it. Prefer the real SDK gas figure (estimate.gasFee)
   // once an estimate has loaded; fall back to a scaled transfer-fee guess
   // before that. Shared by the Max button, the pre-flight confirm check,
@@ -1340,7 +1340,7 @@ export function SwapPage() {
   // ever populate it). That's no longer true: the live-quote effects above
   // now reliably fetch a background quote as soon as a valid amount/pair is
   // set, on both mobile and desktop (see the debounce fix). So this can now
-  // also require that live quote to have actually landed before enabling —
+  // also require that live quote to have actually landed before enabling -
   // matching Multichain Claim's Confirm Amount gating -- instead of letting
   // someone tap Swap against a rate that hasn't shown up yet.
   // Which screen the swap is on, for the page-style push between them.
@@ -1359,9 +1359,9 @@ export function SwapPage() {
 
   // Held in a variable (not returned directly) so the exact same JSX renders
   // either as the whole page (mobile) or as the left column of the desktop
-  // 2-column layout below — never duplicated.
+  // 2-column layout below - never duplicated.
   const flow = (
-    // Desktop: no `overflow-hidden`/inner `overflow-y-auto` split here — this
+    // Desktop: no `overflow-hidden`/inner `overflow-y-auto` split here - this
     // whole flow already sits inside a single scrolling column (the desktop
     // 2-column wrapper below), so the mobile sticky-header-over-clipped-body
     // trick would just clip tall content (Review/Progress/Done screens) with
@@ -1369,7 +1369,7 @@ export function SwapPage() {
     // unchanged (its ancestor chain provides the bounded height it needs).
     <div className={isDesktop ? "flex flex-col" : "flex-1 flex flex-col overflow-hidden"} style={{ background:'var(--bg)' }}>
 
-      {/* Header — on desktop, the Done step swaps this for a compact
+      {/* Header - on desktop, the Done step swaps this for a compact
           centered "Success" header (same padding/size as
           MultichainClaimPage's own done-step header) instead of the full
           Swap/settings header, so its height matches DesktopHistoryPanel's
@@ -1398,7 +1398,7 @@ export function SwapPage() {
         </div>
       )}
 
-      {/* Scrollable content (desktop: plain — the ancestor column scrolls) */}
+      {/* Scrollable content (desktop: plain - the ancestor column scrolls) */}
       <div className={isDesktop ? undefined : "flex-1 overflow-y-auto"}>
       {/* Swap form ⇄ Review push like pages (Review, swapping and the
           success flash are one screen). */}
@@ -1466,7 +1466,7 @@ export function SwapPage() {
                   <p className="text-xs text-text-secondary">{tokenIn.sub}</p>
                 </div>
               </button>
-              {/* Mobile only — desktop's live amount input is the always-
+              {/* Mobile only - desktop's live amount input is the always-
                   open AmountKeypad card right below instead of a tap-to-
                   reveal display. */}
               {!isDesktop && (
@@ -1482,7 +1482,7 @@ export function SwapPage() {
             </div>
             {isDesktop ? (
               // Reference design: the amount lives directly inside "You pay"
-              // as a plain bordered box with an overlaid Max pill — not
+              // as a plain bordered box with an overlaid Max pill - not
               // AmountKeypad's own elevated/shadowed card (that chrome is
               // right for pages with no box of their own, but Swap already
               // has one here, so stacking AmountKeypad's card inside it
@@ -1495,7 +1495,7 @@ export function SwapPage() {
                   padding: '18px 20px', minHeight: 84, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
                 }}>
                   {/* $ pinned to a fixed left inset, not inline before the
-                      input — keeps the digits truly centered in the box no
+                      input - keeps the digits truly centered in the box no
                       matter how many are typed (matches Pay's amount box). */}
                   <span style={{ position: 'absolute', left: 20, fontSize: 34, fontWeight: 700, color: amountIn ? 'var(--text-primary)' : 'var(--text-muted)', pointerEvents: 'none' }}>$</span>
                   <input
@@ -1521,7 +1521,7 @@ export function SwapPage() {
                     onClick={() => {
                       // Same fee-safe Max ceiling AmountKeypad's Max button
                       // uses (see feeReserve comment on the mobile branch
-                      // below) — USDC pays Arc's native gas out of this same
+                      // below) - USDC pays Arc's native gas out of this same
                       // balance, so Max holds back gasNeeded for it.
                       const decimals = swapTokenDecimals(tokenIn.id)
                       const maxSendable = Math.max(0, inBalance - (tokenIn.id === 'USDC' ? gasNeeded : 0))
@@ -1550,7 +1550,7 @@ export function SwapPage() {
                 onClose={() => setShowAmountPad(false)}
                 onDone={() => setShowAmountPad(false)}
                 // Arc's native gas token is USDC, so a USDC→X swap pays gas
-                // out of the same balance being swapped — hold back enough
+                // out of the same balance being swapped - hold back enough
                 // to cover it so the swap tx doesn't fail for lack of gas.
                 // Other tokenIn options aren't the native gas token, so Max
                 // fills in the full balance. Same `gasNeeded` figure the
@@ -1615,7 +1615,7 @@ export function SwapPage() {
         </div>
         )}
 
-        {/* Rate card — separate from the pay/receive card, matching reference */}
+        {/* Rate card - separate from the pay/receive card, matching reference */}
         {isActive && estimate && (
           <div className="rounded-2xl px-4 py-3.5 flex items-center justify-between"
             style={{ background:'var(--surface)', border:'1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
@@ -1649,7 +1649,7 @@ export function SwapPage() {
           </div>
         )}
 
-        {/* Pre-flight balance/gas warning — same figures canReview checks,
+        {/* Pre-flight balance/gas warning - same figures canReview checks,
             surfaced here so a disabled Swap button isn't a mystery. Uses
             only the static gas-reserve fallback (gasNeeded), since no live
             quote is fetched until Swap is actually tapped. */}
@@ -1667,7 +1667,7 @@ export function SwapPage() {
           ) : null
         )}
 
-        {/* Confirm sheet — also hosts the progress checklist once the passcode is
+        {/* Confirm sheet - also hosts the progress checklist once the passcode is
             entered, so "Review Swap" stays the one screen from confirm through
             completion instead of jumping to a separate swapping screen. */}
         {/* No AnimatePresence here: this has no exit animation, and being
@@ -1683,7 +1683,7 @@ export function SwapPage() {
               {step === 'confirming' ? 'Review Swap' : 'Swapping…'}
             </p>
 
-            {/* Quote-changed notice — shown briefly when the background poll
+            {/* Quote-changed notice - shown briefly when the background poll
                 that keeps this screen's quote fresh (while Review is open,
                 before the passcode sheet) detects the fee/rate moved. The
                 numbers above already reflect the new quote; this is just a
@@ -1736,7 +1736,7 @@ export function SwapPage() {
                 /* Glass summary */
                 <div className="rounded-2xl mt-4 px-4 py-3" style={{ background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
                   {[
-                    ['Rate', `1 ${tokenIn.id} ≈ ${estimate ? trimTrailingZeros((parseFloat(estimate.estimatedOutput.amount)/parseFloat(amountIn)).toFixed(tokenOut.id === 'cirBTC' ? 8 : 4)) : '—'} ${tokenOut.id}`],
+                    ['Rate', `1 ${tokenIn.id} ≈ ${estimate ? trimTrailingZeros((parseFloat(estimate.estimatedOutput.amount)/parseFloat(amountIn)).toFixed(tokenOut.id === 'cirBTC' ? 8 : 4)) : '-'} ${tokenOut.id}`],
                     ['Slippage', `${slippage/100}%`],
                     ['Fee', `~$${formatAmount(totalFees)}`],
                   ].map(([l, v]) => (
@@ -1753,7 +1753,7 @@ export function SwapPage() {
 
             {step === 'confirming' && gasShortfall > 0 && (
               // Same shortfall the Max button and the passcode-time check
-              // use — surfaced here too, before the passcode sheet even
+              // use - surfaced here too, before the passcode sheet even
               // opens, since a EURC/cirBTC→USDC swap still needs native
               // USDC left for gas and that's easy to miss if you're only
               // watching the EURC/cirBTC balance.
@@ -1783,7 +1783,7 @@ export function SwapPage() {
                 </button>
               </div>
             ) : (
-              /* Progress checklist — shown in place of the buttons once the
+              /* Progress checklist - shown in place of the buttons once the
                  passcode has been confirmed and the swap is executing */
               <>
                 <p className="text-xs font-semibold px-1" style={{ color:'var(--text-secondary)', letterSpacing:'0.06em', textTransform:'uppercase', position: 'relative' }}>Progress</p>
@@ -1793,7 +1793,7 @@ export function SwapPage() {
           </motion.div>
         )}
 
-        {/* ─── Full-screen success takeover — identical mechanic to
+        {/* ─── Full-screen success takeover - identical mechanic to
             PaySendPage's completed-payment screen: the whole screen flashes
             brand color with a big checkmark + "Swapped Successfully",
             holds briefly, then that panel shrinks away while the
@@ -1891,7 +1891,7 @@ export function SwapPage() {
 
         {/* ── Swap History ──────────────────────────────────────────────── */}
         {/* Desktop shows this in the always-visible right column instead
-            (see the 2-column split below) — !isDesktop here just prevents
+            (see the 2-column split below) - !isDesktop here just prevents
             it from ALSO rendering inline in the left column there. Mobile
             behavior (isActive-gated) is completely unchanged. */}
         {isActive && !isDesktop && (
@@ -1936,11 +1936,11 @@ export function SwapPage() {
       </ScreenPush>
       </div>
 
-      {/* Passcode sheet/dialog — opens on Swap tap, same page, no navigation */}
+      {/* Passcode sheet/dialog - opens on Swap tap, same page, no navigation */}
       <AnimatePresence>
       {showPasscodeSheet && (() => {
         const closeSheet = () => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }
-        // Keypad/confirm content only — title + amount summary (and the
+        // Keypad/confirm content only - title + amount summary (and the
         // error message, which replaces the subtitle on mobile but needs
         // its own line on desktop since desktop's subLabel is fixed to the
         // swap summary) are handled by each branch's own chrome below.
@@ -2037,15 +2037,15 @@ export function SwapPage() {
 
   // ── Desktop: flow (left) + Swap History (right), independently scrollable ──
   // Reuses the exact same `history` state/fetch and `SwapHistoryItem` row
-  // component the mobile inline list already uses — just always visible
+  // component the mobile inline list already uses - just always visible
   // here (not gated to the idle/estimating step) and opens the same
   // `HistoryDetail` modal (rendered above, inside `flow`) on tap.
   return (
-    // Fills the full available content width (no maxWidth cap — the row
+    // Fills the full available content width (no maxWidth cap - the row
     // stretches edge to edge minus the outer padding) at a fixed 65/35
     // grow split, per explicit sizing direction. Bottom padding trimmed
-    // so the row — and DesktopHistoryPanel's own height:100% column
-    // inside it — reaches down close to the viewport's bottom edge
+    // so the row - and DesktopHistoryPanel's own height:100% column
+    // inside it - reaches down close to the viewport's bottom edge
     // instead of leaving a gap under it.
     <div style={{ display: 'flex', height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
       <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto' }} ref={desktopColumnRef}>{flow}</div>

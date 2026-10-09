@@ -1,4 +1,4 @@
-// Feature Guide content — shared by the in-app guide (/feature-guide), the
+// Feature Guide content - shared by the in-app guide (/feature-guide), the
 // public guide (/guide) and the landing page's guide section. Screens live in
 // public/guide/<image>.jpg.
 
@@ -27,7 +27,7 @@ export const SECTIONS: Section[] = [
         summary: 'Open MeshPort with Google, a one-time email code, or a wallet you already have.',
         steps: [
           'Tick the box to accept the Terms and Privacy Policy.',
-          'Choose Continue with Google or Continue with Email OTP — no password needed.',
+          'Choose Continue with Google or Continue with Email OTP - no password needed.',
           'Prefer a classic wallet? Create New Wallet gives you 12 secret words; Import Existing Wallet uses yours.',
           'Pick a .arc username and set a 6-digit passcode. That’s it.',
         ],
@@ -37,7 +37,7 @@ export const SECTIONS: Section[] = [
         summary: 'Every wallet is self-custodial. The key is made on your phone and never sent to MeshPort.',
         steps: [
           'With Google or email, add a passkey (Face ID, fingerprint or device PIN) when asked.',
-          'Save your Recovery QR and remember its password — it brings your wallet back on a new phone.',
+          'Save your Recovery QR and remember its password - it brings your wallet back on a new phone.',
           'On a new device, sign in, then unlock with your passkey or scan the Recovery QR.',
           'MeshPort never stores your private key, recovery password or secret words.',
         ],
@@ -68,7 +68,7 @@ export const SECTIONS: Section[] = [
       },
       {
         id: 'receive', title: 'Receive', image: 'receive', path: '/receive',
-        summary: 'Your QR code, username and payment link — everything someone needs to pay you.',
+        summary: 'Your QR code, username and payment link - everything someone needs to pay you.',
         steps: [
           'Show your QR for someone to scan, or tap Share QR / Download QR.',
           'Request payment adds an amount to the QR and link.',
@@ -81,7 +81,7 @@ export const SECTIONS: Section[] = [
         summary: 'Pay anyone by pointing your camera at their MeshPort, wallet or shop QR.',
         steps: [
           'Tap the round scan button in the middle of the bottom bar.',
-          'Point your camera at the QR — or upload a photo of one, or enter details by hand.',
+          'Point your camera at the QR - or upload a photo of one, or enter details by hand.',
           'Check who you’re paying and the amount, then confirm.',
         ],
       },
@@ -91,7 +91,7 @@ export const SECTIONS: Section[] = [
         steps: [
           'Create one from Receive (with or without an amount) and share it in any chat.',
           'The preview card shows your name and the amount, e.g. “Pay $10”.',
-          'The person taps Pay — even if they don’t have MeshPort yet.',
+          'The person taps Pay - even if they don’t have MeshPort yet.',
         ],
       },
       {
@@ -99,7 +99,7 @@ export const SECTIONS: Section[] = [
         summary: 'Exchange USDC, EURC and cirBTC inside the app.',
         steps: [
           'Choose what you pay and what you receive.',
-          'Type an amount — you see what you’ll receive and the live rate (e.g. 1 USDC ≈ 0.99 EURC) before you confirm.',
+          'Type an amount - you see what you’ll receive and the live rate (e.g. 1 USDC ≈ 0.99 EURC) before you confirm.',
           'Tap Swap USDC → EURC. Your recent swaps are listed below with their status.',
         ],
       },
@@ -131,10 +131,10 @@ export const SECTIONS: Section[] = [
         summary: 'Message friends and send money in the same conversation. Chats are end-to-end encrypted.',
         steps: [
           'Open Chats and pick a conversation, or tap the pencil to start a new one.',
-          'Type a message, or tap Pay at the top to send money — it shows in the chat as a payment card marked “Confirmed on Arc”.',
+          'Type a message, or tap Pay at the top to send money - it shows in the chat as a payment card marked “Confirmed on Arc”.',
           'Tap the paperclip for Camera, Gallery, Document, File or Pay.',
           'Ticks show your message was delivered and read.',
-          'Only you and the other person can read the chat — not even MeshPort.',
+          'Only you and the other person can read the chat - not even MeshPort.',
         ],
       },
     ],
@@ -143,11 +143,11 @@ export const SECTIONS: Section[] = [
     heading: 'Multichain',
     features: [
       {
-        id: 'hub', title: 'Multichain Hub — Transfer', image: 'multichain', path: '/multichain',
+        id: 'hub', title: 'Multichain Hub - Transfer', image: 'multichain', path: '/multichain',
         summary: 'Send USDC from your MeshPort balance to a wallet on another blockchain.',
         steps: [
           'The ticket shows what you can transfer (on Arc) and bring (on other chains).',
-          'Pick a destination chain and route — Unified Balance or CCTP.',
+          'Pick a destination chain and route - Unified Balance or CCTP.',
           'Enter the recipient address (or Use my address) and amount, then confirm.',
           'Track every step in the Activity tab.',
         ],
@@ -156,7 +156,7 @@ export const SECTIONS: Section[] = [
         id: 'bring', title: 'Bring funds', image: 'bring', path: '/multichain?tab=bring',
         summary: 'Move USDC sitting on other chains into your MeshPort balance.',
         steps: [
-          'Open the Bring tab — MeshPort checks about 20 chains for you.',
+          'Open the Bring tab - MeshPort checks about 20 chains for you.',
           'Each chain with money shows its balance.',
           'Select a chain and bring the funds to Arc in one step.',
         ],
@@ -167,7 +167,7 @@ export const SECTIONS: Section[] = [
         steps: [
           'Open the Recover tab in the Multichain Hub.',
           'Anything stuck is listed with what happened.',
-          'Tap to finish it — or see “Nothing stuck” when all is well.',
+          'Tap to finish it - or see “Nothing stuck” when all is well.',
         ],
       },
     ],
@@ -181,7 +181,7 @@ export const SECTIONS: Section[] = [
         steps: [
           'Add recipients one by one, or upload a CSV of usernames and amounts.',
           'Add an optional purpose (e.g. “March salaries”).',
-          'Review the total and confirm once — everyone is paid together.',
+          'Review the total and confirm once - everyone is paid together.',
         ],
       },
       {
@@ -190,7 +190,7 @@ export const SECTIONS: Section[] = [
         steps: [
           'Every payment earns points, up to a daily limit (see How to Earn).',
           'Once you have enough, choose how many points to claim.',
-          'Tap Claim — the USDC lands in your balance.',
+          'Tap Claim - the USDC lands in your balance.',
         ],
       },
       {
@@ -198,7 +198,7 @@ export const SECTIONS: Section[] = [
         summary: 'Buy and sell USDC with other people, protected by escrow.',
         steps: [
           'Browse offers in Buy USDC or Sell USDC, and filter by payment method.',
-          'Open an offer to start a trade — the USDC is held in escrow.',
+          'Open an offer to start a trade - the USDC is held in escrow.',
           'Funds are released only when both sides confirm. Create your own offer any time.',
         ],
       },
@@ -238,7 +238,7 @@ export const SECTIONS: Section[] = [
         id: 'security', title: 'Security', image: 'security', path: '/security',
         summary: 'Passkeys, Recovery QR, passcode and fingerprint unlock.',
         steps: [
-          'Wallet shows your address — tap the copy icon to copy it.',
+          'Wallet shows your address - tap the copy icon to copy it.',
           'Recovery shows your passkeys (with the device each was added on) and when your Recovery QR was saved. Manage adds a passkey or makes a new QR.',
           'App lock turns fingerprint login and Passcode Lock on or off, and changes your 6-digit passcode.',
           'Lock Now locks the app straight away.',
@@ -249,13 +249,13 @@ export const SECTIONS: Section[] = [
         summary: 'For created or imported wallets: view your secret words or private key.',
         steps: [
           'Enter your passcode to reveal them.',
-          'Write them down on paper — never screenshot or share them.',
+          'Write them down on paper - never screenshot or share them.',
         ],
       },
       {
         id: 'appearance', title: 'Appearance', image: 'appearance', path: '/appearance',
         summary: 'Light, dark, or follow your device.',
-        steps: ['Pick System, Light or Dark — it changes instantly.'],
+        steps: ['Pick System, Light or Dark - it changes instantly.'],
       },
       {
         id: 'help', title: 'Help & support', image: 'help', path: '/help-support',

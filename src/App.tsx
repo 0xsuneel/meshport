@@ -14,14 +14,14 @@ import { OfflineBanner } from './components/ui/OfflineBanner'
 
 // ── Lazy-loaded pages ────────────────────────────────────────────────────────
 // Every page below used to be a static top-level import, meaning the entire
-// app — Home, Chat, Multichain, the whole Admin panel, everything — was
+// app - Home, Chat, Multichain, the whole Admin panel, everything - was
 // bundled together into one chunk that had to be downloaded and parsed
 // before ANY route could render. That's especially costly for pages meant to
-// be opened cold by strangers from an external link — like a payment link
-// (/pay/:username) — where someone was paying the full cost of the entire
+// be opened cold by strangers from an external link - like a payment link
+// (/pay/:username) - where someone was paying the full cost of the entire
 // app just to see a small landing page. Wrapping each page in lazyRetry()
 // gives every route its own small chunk, so visiting one route no longer
-// forces a download of all the others — and auto-recovers (one reload) if a
+// forces a download of all the others - and auto-recovers (one reload) if a
 // route's chunk went stale because a new version was deployed while someone
 // already had the app open, instead of showing a broken error screen.
 const HomePage             = lazyRetry(() => import('./features/home/HomePage').then(m => ({ default: m.HomePage })), 'HomePage')
@@ -74,7 +74,7 @@ const SecureWalletPage      = lazyRetry(() => import('./features/auth/SecureWall
 const RecoverWalletPage     = lazyRetry(() => import('./features/auth/SecureWalletPage').then(m => ({ default: m.RecoverWalletPage })), 'RecoverWalletPage')
 const LandingPage           = lazyRetry(() => import('./features/landing/LandingPage').then(m => ({ default: m.LandingPage })), 'LandingPage')
 // PayPage is the one route that most benefits from being kept as light as
-// possible — it's the page a brand-new visitor (no session, nothing cached)
+// possible - it's the page a brand-new visitor (no session, nothing cached)
 // lands on cold from an external payment link, so it's imported eagerly
 // rather than lazily: for THIS specific route, avoiding an extra
 // lazy-chunk network round-trip on top of the initial page load matters
@@ -91,8 +91,8 @@ function LegacyMultichainRedirect({ tab }: { tab: 'transfer' | 'bring' }) {
 }
 // Paths renamed: the in-app Pay screen moved /pay-send → /pay, and public
 // payment links moved /pay/<username> → /paylink/<username> (merchant
-// /pay/r/<code> → /paylink/r/<code>). Old links — already shared, sitting in
-// chat history or printed as QR codes — land on the new path, keeping their
+// /pay/r/<code> → /paylink/r/<code>). Old links - already shared, sitting in
+// chat history or printed as QR codes - land on the new path, keeping their
 // ?to= / ?amount= query and any navigation state.
 function RenamedPathRedirect({ from, to }: { from: string; to: string }) {
   const location = useLocation()
@@ -128,7 +128,7 @@ const queryClient = new QueryClient({
 })
 
 /**
- * AuthGuard — strict onboarding gate.
+ * AuthGuard - strict onboarding gate.
  * Source of truth: Supabase users table (by wallet_address).
  * If wallet has a profile in Supabase, restore it and skip claim screen.
  */
@@ -148,9 +148,9 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const [checked, setChecked] = useState(() => !!useAuthStore.getState().username)
 
   // Check Supabase for existing profile by wallet address
-  // This is the permanent identity lookup — runs once when wallet is available
+  // This is the permanent identity lookup - runs once when wallet is available
   useEffect(() => {
-    // If no walletAddress, mark as checked immediately — nothing to look up
+    // If no walletAddress, mark as checked immediately - nothing to look up
     if (!walletAddress) { setChecked(true); return }
     if (checked) return  // only skip if already fetched this session
     setChecking(true)
@@ -158,7 +158,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
       getUserByWalletAddress(walletAddress).then(profile => {
         if (profile) {
           if (profile.username) setUsername(profile.username)
-          // Always update user with fresh DB data — avatar, displayName etc
+          // Always update user with fresh DB data - avatar, displayName etc
           const current = useAuthStore.getState().user
           if (current) {
             useAuthStore.getState().setUser({
@@ -169,7 +169,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
               walletAddress: profile.wallet_address || current.walletAddress,
               // Cache-buster ensures browser loads fresh image, not cached old one
               avatar: profile.avatar_url
-                ? profile.avatar_url.split('?')[0]  // no cache-buster — stable URL
+                ? profile.avatar_url.split('?')[0]  // no cache-buster - stable URL
                 : null,
             })
           }
@@ -198,13 +198,13 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * RootGate — element for path '/'. A signed-out visitor landing on the bare
+ * RootGate - element for path '/'. A signed-out visitor landing on the bare
  * domain (meshport.xyz, no /landing needed) sees the public marketing page
  * directly at that URL instead of being bounced to /auth like every other
- * protected route. Only applies at the exact root path — visiting any other
+ * protected route. Only applies at the exact root path - visiting any other
  * app URL (e.g. /activity) while signed out still redirects to /auth via
  * AuthGuard below, unchanged. Once authenticated, '/' falls through to the
- * normal AppLayout/AuthGuard tree (children render HomePage via Outlet) —
+ * normal AppLayout/AuthGuard tree (children render HomePage via Outlet) -
  * same as before this existed.
  */
 function RootGate() {
@@ -220,7 +220,7 @@ function RootGate() {
  * RULE: Once the user reaches home (/), pressing Back must NEVER return them
  * to any auth/onboarding page. We enforce this two ways:
  *
- * 1. Every guard that redirects uses `replace` — so auth pages are never
+ * 1. Every guard that redirects uses `replace` - so auth pages are never
  *    pushed onto the browser history stack.
  *
  * 2. Each guard checks the FULL onboarding state and skips the user forward
@@ -258,7 +258,7 @@ function isFullyOnboarded(s: ReturnType<typeof useAuthStore.getState>) {
 }
 
 // ── Auth Route Guards ─────────────────────────────────────────────────────────
-// All guards use useAuthStore.getState() — one-time read, NO subscription.
+// All guards use useAuthStore.getState() - one-time read, NO subscription.
 // This prevents re-renders when store changes mid-flow (e.g. setWallet() during
 // CreateWalletPage would re-trigger a reactive guard and interrupt the flow).
 
@@ -275,7 +275,7 @@ function RequireNoPasscode({ children }: { children: React.ReactNode }) {
   const s = useAuthStore.getState()
   // Returning email users land on /auth/passcode?returning=1 to set a new passcode.
   // They are fully onboarded (passcode + wallet + username all set from previous session)
-  // so we MUST check for returning=1 BEFORE any redirect — otherwise the guard
+  // so we MUST check for returning=1 BEFORE any redirect - otherwise the guard
   // sends them straight to / without letting them set a new passcode.
   const isReturning = typeof window !== 'undefined'
     && new URLSearchParams(window.location.search).get('returning') === '1'
@@ -310,7 +310,7 @@ function RequireSocialWallet({ children }: { children: React.ReactNode }) {
   const s = useAuthStore.getState()
   if (!s.isAuthenticated || !s.walletAddress) return <Navigate to="/auth" replace />
   if (s.loginType !== 'social' || s.walletSource !== 'social-auto') return <Navigate to="/" replace />
-  // A locked app must be unlocked first — these pages can export the key
+  // A locked app must be unlocked first - these pages can export the key
   // (Recovery QR) or bind a new passkey to it.
   if (s.isLocked) return <Navigate to="/auth/lock" replace />
   return <>{children}</>
@@ -351,9 +351,9 @@ const router = createBrowserRouter([
   { path: '/auth/import-wallet',  element: <AuthShell><ImportWalletPage /></AuthShell> },
   { path: '/auth/claim-username', element: <AuthShell><RequireNoUsername><ClaimUsernamePage /></RequireNoUsername></AuthShell> },
 
-  // ── Public payment page — no auth required ─────────────────────────────────
-  // Also phone-width on desktop — this is the page a payment-receive link opens to.
-  // Merchant payment request (QR / link) — public, no sign-in needed.
+  // ── Public payment page - no auth required ─────────────────────────────────
+  // Also phone-width on desktop - this is the page a payment-receive link opens to.
+  // Merchant payment request (QR / link) - public, no sign-in needed.
   { path: '/paylink/r/:code', element: <AuthShell><MerchantPayPage /></AuthShell> },
   { path: '/paylink/:username', element: <AuthShell><PayPage /></AuthShell> },
   // Old public link paths → /paylink/… (see RenamedPathRedirect).
@@ -361,17 +361,17 @@ const router = createBrowserRouter([
   { path: '/pay/:username', element: <RenamedPathRedirect from="/pay" to="/paylink" /> },
 
   // Landing page lives at the bare root ('/', see RootGate below) for a
-  // signed-out visitor — no separate /landing path needed or kept.
+  // signed-out visitor - no separate /landing path needed or kept.
 
-  // ── Public legal page — no auth required, so it can be linked from the
+  // ── Public legal page - no auth required, so it can be linked from the
   //    registration screen before someone has an account ────────────────────
   { path: '/legal',   element: <AuthShell><TermsPrivacyPage /></AuthShell> },
-  // Same page, direct links — Google's OAuth consent screen verification
+  // Same page, direct links - Google's OAuth consent screen verification
   // wants a distinct URL for each document, not one combined page with
   // tabs. TermsPrivacyPage reads the path itself to land on the right tab.
   { path: '/terms',   element: <AuthShell><TermsPrivacyPage /></AuthShell> },
   { path: '/privacy', element: <AuthShell><TermsPrivacyPage /></AuthShell> },
-  // Public Feature Guide — linked from the landing page, no account needed.
+  // Public Feature Guide - linked from the landing page, no account needed.
   { path: '/guide',   element: <div className="fixed inset-0 flex flex-col bg-bg"><FeatureGuidePage isPublic /></div> },
 
   // ── Admin Control Panel ──────────────────────────────────────────────────────
@@ -399,7 +399,7 @@ const router = createBrowserRouter([
     ],
   },
 
-  // ── Protected app routes — ALL inside AppLayout so BottomNav always renders ──
+  // ── Protected app routes - ALL inside AppLayout so BottomNav always renders ──
   {
     path: '/',
     element: <MaintenanceGate><RootGate /></MaintenanceGate>,
@@ -407,7 +407,7 @@ const router = createBrowserRouter([
       { index: true,                        element: <HomePage /> },
       { path: 'scanner',                    element: <FeatureGate feature="qr_payments_enabled"><ScannerPage /></FeatureGate> },
       {
-        // Pathless layout wrapper — paths/params/navigation for these two
+        // Pathless layout wrapper - paths/params/navigation for these two
         // routes are unchanged, this only adds the desktop list+conversation
         // split view (mobile: renders exactly what was here before).
         element: <ChatDesktopSplit list={<FeatureGate feature="chat_enabled"><ChatListPage /></FeatureGate>} />,
@@ -428,17 +428,17 @@ const router = createBrowserRouter([
       { path: 'bulk-payout',                element: <FeatureGate feature="bulk_payments_enabled"><BulkPayoutPage /></FeatureGate> },
       { path: 'multichain',                 element: <MultichainPage /> },
       { path: 'multichain-recovery',        element: <MultichainRecoveryPage /> },
-      // Old standalone Transfer / Claim pages are gone — both live inside the
+      // Old standalone Transfer / Claim pages are gone - both live inside the
       // Multichain Hub now. Old links (notifications, bookmarks) land on the
       // matching Hub tab, keeping ?claim= / ?chain= / ?scannedAddress=.
       { path: 'multichain-transfer',        element: <LegacyMultichainRedirect tab="transfer" /> },
       { path: 'multichain-claim',           element: <LegacyMultichainRedirect tab="bring" /> },
-      // Only the "start something new" surfaces are gated — browsing offers,
+      // Only the "start something new" surfaces are gated - browsing offers,
       // creating one, or accepting one. Deliberately NOT gating
       // trade/:tradeId, my-trades, my-offers, or history: someone with money
       // already in an active trade needs to be able to keep managing it
       // (mark paid, chat, cancel, view status) even while P2P is disabled
-      // for new activity — especially now that notifications and the Home
+      // for new activity - especially now that notifications and the Home
       // popups deep-link straight to /p2p/trade/:tradeId, which would
       // otherwise strand people the moment they tap one during a disable.
       { path: 'p2p',                        element: <FeatureGate feature="p2p_enabled"><P2PHubPage /></FeatureGate> },
@@ -469,7 +469,7 @@ const router = createBrowserRouter([
 
 // Fades out and removes index.html's splash once the first real page is on
 // screen. It sits inside the same Suspense boundary as the router, so it only
-// mounts after the first page's code has loaded — the splash used to go away
+// mounts after the first page's code has loaded - the splash used to go away
 // as soon as the store hydrated, leaving a blank loading screen (looked like
 // an empty Home) while the lock screen's code was still downloading.
 // It also waits for the page to actually draw something: the first route is
@@ -515,7 +515,7 @@ function SplashRemover() {
 
 export default function App() {
   // Auto-restore the private key on app load / reload.
-  // privateKey is never persisted (security), but mnemonic is — so we can
+  // privateKey is never persisted (security), but mnemonic is - so we can
   // re-derive the key silently whenever the wallet is present.
   // NOTE: Auth store persist is async (createJSONStorage wraps localStorage in Promises),
   // so walletAddress/mnemonic may be null on the first render. We subscribe to the
@@ -546,24 +546,24 @@ export default function App() {
   // ── Auto-lock when actually offline, revisit through the normal unlock ────
   // screen ─────────────────────────────────────────────────────────────────
   // Previously this only cleared the import-privkey session cache (see
-  // lib/security.ts) and left the app sitting wherever it was — coming back
+  // lib/security.ts) and left the app sitting wherever it was - coming back
   // online then quietly failed to auto-restore in the background and only
   // surfaced WalletRecoveryBanner's own separate little passcode prompt,
   // which is a second, different-looking "enter your passcode" UI from the
   // one everyone already knows (PasscodeLockPage).
   //
   // Now: going offline locks the whole app instantly, the same isLocked
-  // flag (persisted — see lock() in store/index.ts) used everywhere else
+  // flag (persisted - see lock() in store/index.ts) used everywhere else
   // the app locks. Revisiting after that lands on /auth/lock like any
   // other lock, and PasscodeLockPage's existing handleUnlock() already does
   // exactly what was asked for: the instant the entered passcode verifies,
   // it calls both unlock() AND restorePrivateKey(val) with that SAME
-  // passcode (see its last two lines) — one entry, one screen, both the
+  // passcode (see its last two lines) - one entry, one screen, both the
   // app-unlock and the wallet restore. No separate banner/prompt needed.
   useEffect(() => {
     const onOffline = () => {
       const { walletAddress, isAuthenticated, passcodeLockEnabled, lock } = useAuthStore.getState()
-      // Every wallet type caches its key for this tab — drop it for all of them.
+      // Every wallet type caches its key for this tab - drop it for all of them.
       import('@/lib/security').then(({ clearSessionPrivateKey }) => clearSessionPrivateKey(walletAddress)).catch(() => {})
       if (isAuthenticated && passcodeLockEnabled) {
         lock()
@@ -575,21 +575,21 @@ export default function App() {
 
 
   // ── Auto-lock instantly when the browser was actually closed ─────────────
-  // The old 15-minute inactivity timer is gone — the app no longer locks
+  // The old 15-minute inactivity timer is gone - the app no longer locks
   // just because someone stepped away with the tab open. Instead, this
   // locks instantly the moment a genuinely NEW browser session starts,
   // using a sessionStorage flag as the signal:
   //   - sessionStorage is per-tab and is wiped by the browser the instant
-  //     that tab/window is actually closed — it does NOT survive a real
+  //     that tab/window is actually closed - it does NOT survive a real
   //     close, so its absence on the next mount means "the browser was
   //     closed since we were last here."
   //   - sessionStorage DOES survive: a manual refresh (F5 / Cmd+R), and
-  //     every window.location.reload() the app itself performs — the
+  //     every window.location.reload() the app itself performs - the
   //     stale-deployment-chunk retry in lib/lazyRetry.ts and the
   //     background-suspension recovery reload below both reload the SAME
   //     tab, so the flag is still there and no lock is triggered.
   // Net effect: refreshing or an app update never locks the wallet, but
-  // closing the browser (or tab) and reopening it does, immediately —
+  // closing the browser (or tab) and reopening it does, immediately -
   // no need to wait out a timer first. `isLocked` is persisted, so once
   // locked, editing the URL can't bypass /auth/lock, and unlocking there
   // always works the normal way regardless of whether an update/reload
@@ -599,21 +599,21 @@ export default function App() {
   // of painting Home first.
 
   // ── Recover from long background suspension ────────────────────────────
-  // Mobile browsers/PWAs aggressively suspend backgrounded tabs — timers
+  // Mobile browsers/PWAs aggressively suspend backgrounded tabs - timers
   // freeze and, critically, the Supabase Realtime WebSocket connection can
   // get silently killed by the OS without ever firing a 'close' event the
   // app could react to. The result: coming back to the app after a while
-  // away can leave it looking "stuck" — no new messages/balance updates
+  // away can leave it looking "stuck" - no new messages/balance updates
   // arrive, because the app has no idea its realtime connection is dead.
   // If we've been hidden for a while, the safest fix is just a fresh reload
   // (a full page load re-establishes every connection cleanly) rather than
   // trying to detect and selectively repair whichever specific subscription
   // silently died. Short backgrounds (switching apps briefly) don't trigger
-  // this — only genuinely long ones, where staleness is likely.
+  // this - only genuinely long ones, where staleness is likely.
   useEffect(() => {
     let hiddenAt: number | null = null
     const STALE_AFTER_MS = 2 * 60 * 1000 // 2 minutes
-    const AUTO_LOCK_AFTER_MS = 15 * 60 * 1000 // 15 minutes hidden — same value in main.tsx
+    const AUTO_LOCK_AFTER_MS = 15 * 60 * 1000 // 15 minutes hidden - same value in main.tsx
     const HIDDEN_AT_KEY = 'meshport:hidden-at'
 
     const onVisibilityChange = () => {
@@ -662,7 +662,7 @@ export default function App() {
   useOnReconnect(() => { void useSettingsStore.getState().load() })
 
   // ── Admin-disabled Biometric Login is enforced globally, not just on the
-  // Security settings page — if an admin flips this off while a user already
+  // Security settings page - if an admin flips this off while a user already
   // has it turned on, it's forced off for that user immediately (live, via
   // the realtime settings subscription above), and the user has no way to
   // turn it back on until an admin re-enables it (SecurityPage disables the
@@ -697,7 +697,7 @@ export default function App() {
   }, [useAuthStore(s => s.user?.id)])
 
   // ── Push notifications: on by default for every account ───────────────────
-  // Notifications should never require a manual "enable" step from the user —
+  // Notifications should never require a manual "enable" step from the user -
   // every account gets them turned on automatically the moment it's created,
   // imported, or logged into. This subscribes (or re-saves the subscription
   // server-side if one already exists) any time we have a signed-in user.
@@ -722,7 +722,7 @@ export default function App() {
   // flash of wrong page (login screen on refresh while logged in, or vice versa).
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => {
-    // Zustand persist with localStorage is synchronous — rehydration happens
+    // Zustand persist with localStorage is synchronous - rehydration happens
     // before first render but useLayoutEffect fires after. Using a small
     // microtask delay ensures store is populated before we render routes.
     const t = setTimeout(() => setHydrated(true), 0)
@@ -730,7 +730,7 @@ export default function App() {
   }, [])
 
   // index.html's inline splash (animated logo) is still visible underneath
-  // during this gap, so nothing needs to render here — avoids a double loader.
+  // during this gap, so nothing needs to render here - avoids a double loader.
   if (!hydrated) return null
 
   return (

@@ -2,13 +2,13 @@
 //
 // Many notifications are created only inside the app (an external deposit
 // seen by the Arc watcher, rewards, swaps, claim arrivals…) and never had a
-// system notification — on Android `new Notification()` doesn't work at all,
+// system notification - on Android `new Notification()` doesn't work at all,
 // it has to go through the service worker. The tag matches the one the
 // server push for the same event uses, so the shade keeps ONE entry per
 // event (the OS replaces same-tag notifications instead of stacking them).
 import type { AppNotification } from '@/store'
 
-const FRESH_MS = 3 * 60_000 // catch-up scans / seed fetches add old items — never re-alert those
+const FRESH_MS = 3 * 60_000 // catch-up scans / seed fetches add old items - never re-alert those
 
 function tagFor(n: Pick<AppNotification, 'id' | 'source'>): string {
   const id = n.id

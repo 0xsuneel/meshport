@@ -31,9 +31,9 @@ export function MerchantApplyPage() {
     try {
       await applyForMerchant({ businessName, businessType, contact, description })
       setReapply(false)
-      showToastMessage('Application sent — we’ll let you know once it’s reviewed', 'success')
+      showToastMessage('Application sent - we’ll let you know once it’s reviewed', 'success')
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Could not submit — try again', 'error')
+      showToastMessage(e instanceof Error ? e.message : 'Could not submit - try again', 'error')
     }
     setSubmitting(false)
   }
@@ -86,11 +86,11 @@ export function MerchantApplyPage() {
                 </div>
               </div>
               <div>
-                <p className="text-xs font-semibold text-text-secondary mb-2">Contact (email or phone) — optional</p>
+                <p className="text-xs font-semibold text-text-secondary mb-2">Contact (email or phone) - optional</p>
                 <input value={contact} onChange={e => setContact(e.target.value)} maxLength={120} placeholder="How can we reach you?" className={input} />
               </div>
               <div>
-                <p className="text-xs font-semibold text-text-secondary mb-2">What do you sell? — optional</p>
+                <p className="text-xs font-semibold text-text-secondary mb-2">What do you sell? - optional</p>
                 <textarea value={description} onChange={e => setDescription(e.target.value)} maxLength={500} rows={3}
                   placeholder="A short description of your business" className={`${input} resize-none`} />
               </div>

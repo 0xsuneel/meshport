@@ -1,7 +1,7 @@
 import { lazy, type ComponentType } from 'react'
 import { isOnline, onReconnect } from './connectivity'
 
-// ── lazyRetry — resilient wrapper around React.lazy ─────────────────────────
+// ── lazyRetry - resilient wrapper around React.lazy ─────────────────────────
 //
 // Every route is lazy-loaded from a content-hashed chunk (e.g.
 // "HomePage-C0ytuU54.js"). After a new deploy the old chunk files are gone.
@@ -89,7 +89,7 @@ export function lazyRetry<T extends ComponentType<any>>(
         try { return await importFn() } catch (again) { err = again }
       }
       if (isChunkLoadError(err) && await recoverFromStaleBuild()) {
-        // Never resolves — the reload replaces this page.
+        // Never resolves - the reload replaces this page.
         return new Promise<{ default: T }>(() => {})
       }
       throw err

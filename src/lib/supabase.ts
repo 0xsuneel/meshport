@@ -5,11 +5,11 @@ const SUPABASE_URL  = (import.meta.env.VITE_SUPABASE_URL  as string) || ''
 const SUPABASE_ANON = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
 
 if (!SUPABASE_URL || !SUPABASE_ANON) {
-  console.error('[Supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY — the app will still boot, but every Supabase-backed feature (auth, activity, chat, P2P, notifications, etc.) will fail until these are set.')
+  console.error('[Supabase] Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY - the app will still boot, but every Supabase-backed feature (auth, activity, chat, P2P, notifications, etc.) will fail until these are set.')
 }
 
 // BUG FIX: createClient() throws synchronously ("supabaseUrl is required.")
-// when handed an empty string, and this module is imported — transitively —
+// when handed an empty string, and this module is imported - transitively -
 // by nearly the entire app. That throw during module evaluation crashed the
 // WHOLE React module graph before a single component could render, leaving
 // a permanently blank screen with no visible error (a module-load failure
@@ -42,19 +42,19 @@ let _anonSignInDone = false
 let _anonSignInPromise: Promise<void> | null = null
 
 // Neither supabase.auth.getSession() nor .signInAnonymously() below had any
-// timeout — a slow/unresponsive auth endpoint could leave this await
+// timeout - a slow/unresponsive auth endpoint could leave this await
 // pending indefinitely. That's exactly what made Create Wallet's "Confirm &
 // Create Wallet" and Import Wallet's confirm step appear to hang with no
 // error: both directly `await ensureAnonSession()` before finishing (see
 // AuthPages.tsx), while the Google/Email auto-wallet path never calls this
 // at all, which is why only create/import got stuck. This call is
 // documented as best-effort (every caller already treats failure as
-// non-fatal) — it should never be able to block the caller forever.
+// non-fatal) - it should never be able to block the caller forever.
 const ANON_SESSION_TIMEOUT_MS = 6000
 
 export async function ensureAnonSession(): Promise<void> {
   if (_anonSignInDone) return
-  // Deduplicate concurrent calls — only run one sign-in at a time
+  // Deduplicate concurrent calls - only run one sign-in at a time
   if (_anonSignInPromise) return _anonSignInPromise
   _anonSignInPromise = (async () => {
     try {
@@ -66,11 +66,11 @@ export async function ensureAnonSession(): Promise<void> {
           const { data, error } = await supabase.auth.signInAnonymously()
           if (error) {
             // B-4 FIX: log at warn level so a broken Supabase config is visible
-            // in telemetry. Previously this was a silent empty catch — every
+            // in telemetry. Previously this was a silent empty catch - every
             // subsequent Supabase write would fail silently or be rejected by RLS
             // while the app appeared healthy. Enable anonymous sign-ins at:
             // Auth → Settings → Anonymous sign-ins
-            console.warn('[Supabase] Anonymous sign-in failed — subsequent writes will fail until resolved:', error.message)
+            console.warn('[Supabase] Anonymous sign-in failed - subsequent writes will fail until resolved:', error.message)
           } else if (data?.session) {
             _anonSignInDone = true
           }
@@ -89,7 +89,7 @@ export async function ensureAnonSession(): Promise<void> {
 // ── Link this device's Supabase session to the MeshPort account ─────────────
 // Every access rule (chats, messages, merchant data, own profile edits)
 // trusts users.auth_uid = the session id. The app can no longer write that
-// column itself — anyone could have pointed any account at their own session.
+// column itself - anyone could have pointed any account at their own session.
 // Instead the wallet signs a short message naming the account and this
 // session, and the `bind-session` server function checks the signature
 // against the account's wallet address before linking.
@@ -122,7 +122,7 @@ export function syncAuthUidToProfile(userId: string, privateKey?: string | null)
       }
       return true
     } catch {
-      return false // best-effort — never block app load
+      return false // best-effort - never block app load
     } finally {
       _bindInflight = null
     }
@@ -133,7 +133,7 @@ export function syncAuthUidToProfile(userId: string, privateKey?: string | null)
 
 /**
  * Headers for server routes that only need to prove "this request comes from
- * a real signed-in session bound to a specific wallet" (bridge-relay) —
+ * a real signed-in session bound to a specific wallet" (bridge-relay) -
  * no chat-specific auth_uid sync needed, unlike
  * chatApiHeaders() below.
  */
@@ -264,7 +264,7 @@ export interface DbContact {
   contact_user?: DbUser
 }
 
-// ─── USER SEARCH — single function used everywhere ───────────────────────────
+// ─── USER SEARCH - single function used everywhere ───────────────────────────
 /**
  * Search users by username, display name, OR wallet address.
  * Works for ALL user types: email, create-wallet, import-wallet.
@@ -290,7 +290,7 @@ export async function searchUsersDb(
     return results
   }
 
-  // Exact username lookup — requires full ".arc" suffix.
+  // Exact username lookup - requires full ".arc" suffix.
   // Only "sunil.arc" returns a result. "sunil", "sunil.ar", "sun" → [].
   // Strip leading @ then require .arc ending.
   const withArc = raw.toLowerCase().replace(/^@/, '')
@@ -313,10 +313,10 @@ export async function searchUsersDb(
   return results
 }
 
-// ─── LIVE PARTIAL SEARCH — used by Send flow's "as you type" results ─────────
+// ─── LIVE PARTIAL SEARCH - used by Send flow's "as you type" results ─────────
 /**
  * Partial / prefix search by username or display name. Unlike searchUsersDb,
- * this does NOT require a full ".arc" suffix — "rah" matches "rahul", "rakesh", etc.
+ * this does NOT require a full ".arc" suffix - "rah" matches "rahul", "rakesh", etc.
  * Used for the Send Payment recipient search-as-you-type list.
  */
 export async function searchUsersPartialDb(
@@ -327,7 +327,7 @@ export async function searchUsersPartialDb(
   const raw = query.trim()
   if (!raw) return []
 
-  // Wallet address — exact lookup
+  // Wallet address - exact lookup
   if (/^0x[0-9a-fA-F]{6,}$/.test(raw)) {
     const { data, error } = await supabase
       .from('users')
@@ -364,7 +364,7 @@ export async function upsertUserProfile(params: {
 }): Promise<{ error: string | null }> {
 
   // loginType is included only when the caller actually knows it, via a
-  // conditional spread — omitting the key on upsert leaves any existing
+  // conditional spread - omitting the key on upsert leaves any existing
   // value alone rather than overwriting it with null. See
   // supabase/migrations/20260722100000_*.sql for why this column exists:
   // it tells a Google / email account apart from a create / import one
@@ -438,7 +438,7 @@ export async function updateUserProfile(params: {
       return { error: error.message }
     }
 
-    // Row not found — upsert it
+    // Row not found - upsert it
     const { error: upsertErr } = await supabase.from('users').upsert({
       id: params.id,
       wallet_address: addr,
@@ -465,13 +465,13 @@ export async function getAvatarByWallet(walletAddress: string): Promise<string |
 }
 
 // Security-audit note: every users-table select below is an explicit column
-// list — id, username, display_name, email, wallet_address, avatar_url,
-// created_at — matching DbUser exactly, rather than select('*'). This is
+// list - id, username, display_name, email, wallet_address, avatar_url,
+// created_at - matching DbUser exactly, rather than select('*'). This is
 // deliberate, not stylistic: the users table also holds encrypted_wallet_key
 // and wallet_auth_share (legacy server-side wallet columns, no longer
 // used), which the app never needs client-side and which have a
 // column-level REVOKE from anon/authenticated. A select('*') here would need those
-// two columns too and fail outright post-REVOKE — keep every users query
+// two columns too and fail outright post-REVOKE - keep every users query
 // on an explicit allowlist, not '*', so this stays true.
 export async function fetchUserProfile(userId: string): Promise<DbUser | null> {
   const { data, error } = await supabase
@@ -496,7 +496,7 @@ export async function fetchUserByEmail(email: string): Promise<DbUser | null> {
  * Resolved ONLY through the account this session is bound to (users.auth_uid,
  * set server-side): Google and email logins reach the same account when
  * Supabase has linked them to the same auth user. An account that merely
- * has the same-looking email is never taken over — that's 'conflict', and
+ * has the same-looking email is never taken over - that's 'conflict', and
  * the user signs in with the method that account already uses.
  */
 export async function resolveAccountForSession(authUid: string, email: string | null | undefined): Promise<
@@ -542,7 +542,7 @@ export async function isUsernameTakenDb(username: string): Promise<boolean> {
   return !!data
 }
 
-// saveWalletToCloud() used to live here — removed along with the two
+// saveWalletToCloud() used to live here - removed along with the two
 // server-side backup columns it wrote to (encrypted_private_key,
 // mnemonic_hint). MeshPort no longer stores private keys or recovery
 // phrases server-side, in any form. See restoreWallet.ts for the
@@ -565,7 +565,7 @@ export async function addContactDb(
 }
 
 /**
- * Save someone as a contact if they aren't already one — safe to call on
+ * Save someone as a contact if they aren't already one - safe to call on
  * every successful payment (send or receive-then-reply). Checks for an
  * existing row first, so this never creates duplicates no matter how many
  * times you pay the same person.
@@ -579,7 +579,7 @@ export async function upsertContactDb(ownerId: string, contactId: string): Promi
       .eq('owner_id', ownerId)
       .eq('contact_id', contactId)
       .maybeSingle()
-    if (existing) return // already a saved contact — nothing to do
+    if (existing) return // already a saved contact - nothing to do
 
     const { error } = await supabase
       .from('contacts')
@@ -599,7 +599,7 @@ export async function fetchContactsDb(ownerId: string): Promise<DbUser[]> {
 
 /**
  * Same as fetchContactsDb, but a failed request throws instead of returning
- * an empty list — so callers holding a cached list can keep it rather than
+ * an empty list - so callers holding a cached list can keep it rather than
  * mistaking a network error for "no contacts".
  */
 export async function fetchContactsDbStrict(ownerId: string): Promise<DbUser[]> {
@@ -638,7 +638,7 @@ export async function getOrCreateConversation(
   myId: string,
   otherId: string
 ): Promise<{ id: string; error: string | null }> {
-  // READ — works fine with sb_publishable_ key (SELECTs don't need auth)
+  // READ - works fine with sb_publishable_ key (SELECTs don't need auth)
   const { data: existing } = await supabase
     .from('conversations')
     .select('id')
@@ -647,7 +647,7 @@ export async function getOrCreateConversation(
 
   if (existing?.id) return { id: existing.id, error: null }
 
-  // INSERT — use server API (service key) as primary
+  // INSERT - use server API (service key) as primary
   try {
     const res = await fetch('/api/chat?action=create', {
       method: 'POST',
@@ -675,7 +675,7 @@ export async function getOrCreateConversation(
 // Without this, navigating between pages that each independently need "who
 // have I talked to" data re-runs the full batched query from scratch on
 // every single page visit, even seconds after another page just fetched the
-// identical result — which is what made Pay on Arc's contacts list and the
+// identical result - which is what made Pay on Arc's contacts list and the
 // Chats contacts sheet both feel slow to open. Realtime subscriptions (in
 // ChatListPage) handle true live-freshness already, so a short TTL here is
 // safe: it only avoids *redundant* re-fetching on quick page hops, it
@@ -700,7 +700,7 @@ export async function fetchConversations(myId: string): Promise<DbConversation[]
   // ── Batched enrichment ──────────────────────────────────────────────────
   // Previously this ran 3 separate queries PER conversation (other-user
   // lookup, unread count, last-messages window) inside a Promise.all over
-  // all conversations — so with N conversations that's 3×N round trips
+  // all conversations - so with N conversations that's 3×N round trips
   // fanning out simultaneously, which is what made the Chats list slow to
   // open (browsers also cap concurrent connections per host, so most of
   // those requests queue behind each other rather than truly running in
@@ -718,7 +718,7 @@ export async function fetchConversations(myId: string): Promise<DbConversation[]
       .in('conversation_id', convIds).eq('is_read', false),
     // Fetches a shared window across all conversations (not just 1 each) so
     // the preview can still skip past a "Delete for everyone"'d message and
-    // fall back to the last real message underneath it, same as before —
+    // fall back to the last real message underneath it, same as before -
     // just batched instead of one query per conversation.
     supabase.from('messages').select('conversation_id, sender_id, type, content, created_at')
       .in('conversation_id', convIds)
@@ -729,28 +729,28 @@ export async function fetchConversations(myId: string): Promise<DbConversation[]
   const usersById = new Map((usersRes.data || []).map((u: any) => [u.id, u]))
 
   // Unread count only counts messages sent BY the other participant that I
-  // haven't read — filter client-side since the batched query above can't
+  // haven't read - filter client-side since the batched query above can't
   // express a per-row "sender must equal that row's other participant"
   // condition in a single request.
   //
   // BUG FIX (2026-09-03): a self-conversation (paying/messaging your own
-  // username — participant_a === participant_b === myId) has otherId ===
-  // myId, so EVERY message in it — including the payment_received leg,
+  // username - participant_a === participant_b === myId) has otherId ===
+  // myId, so EVERY message in it - including the payment_received leg,
   // whose sender_id is deliberately rewritten to the recipient's id by
-  // /api/send-message.ts (see the comment on trueSender below) — passes
+  // /api/send-message.ts (see the comment on trueSender below) - passes
   // `row.sender_id === otherId` and gets counted as unread. Worse,
   // markMessagesRead's own query (`sender_id=neq.${myId}`) matches ZERO
   // rows in a self-chat for the exact same reason, so these messages can
-  // NEVER be marked read — the count only ever grows, one more unread
+  // NEVER be marked read - the count only ever grows, one more unread
   // message per self-payment, forever. This is the real cause of a
   // self-chat showing a large, permanently-climbing unread badge (e.g.
   // "29") even though there is no one else who could have sent something
-  // still unread. A self-chat is forced to 0 unread here — there is no
+  // still unread. A self-chat is forced to 0 unread here - there is no
   // "other party" a self-chat's badge could meaningfully represent.
   const unreadByConv = new Map<string, number>()
   for (const row of unreadRes.data || []) {
     const otherId = otherIdByConv.get(row.conversation_id)
-    if (otherId === myId) continue // self-chat — never counts as unread, see above
+    if (otherId === myId) continue // self-chat - never counts as unread, see above
     if (row.sender_id !== otherId) continue
     unreadByConv.set(row.conversation_id, (unreadByConv.get(row.conversation_id) || 0) + 1)
   }
@@ -793,7 +793,7 @@ export async function fetchConversations(myId: string): Promise<DbConversation[]
     }
   })
 
-  // Re-sort using the fresh, live-queried timestamps above — the initial SQL
+  // Re-sort using the fresh, live-queried timestamps above - the initial SQL
   // ORDER BY used conv.last_message_at, which can be stale for the same race
   // reason, so it isn't trustworthy for final ordering.
   enriched.sort((a: any, b: any) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime())
@@ -803,7 +803,7 @@ export async function fetchConversations(myId: string): Promise<DbConversation[]
 
 /** Call after any action that changes conversation membership/messages in a
  * way the next fetchConversations call must see immediately (e.g. right
- * after sending the very first message in a brand-new conversation) —
+ * after sending the very first message in a brand-new conversation) -
  * clears the short-lived cache above so the next call does a real fetch
  * instead of returning a stale pre-existing snapshot. */
 export function invalidateConversationsCache() {
@@ -891,7 +891,7 @@ export async function sendMessage(params: {
 }
 
 export async function markMessagesRead(conversationId: string, myId: string): Promise<void> {
-  // Use an authenticated session token — using the anon key as the
+  // Use an authenticated session token - using the anon key as the
   // Authorization bearer on a PATCH allows any unauthenticated caller to
   // mark any user's messages as read (or inject messages if RLS allows
   // anon writes). The session JWT scopes the write to the signed-in user.
@@ -902,10 +902,10 @@ export async function markMessagesRead(conversationId: string, myId: string): Pr
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.access_token) token = session.access_token
-    } catch { /* fall through — use anon key as last resort */ }
+    } catch { /* fall through - use anon key as last resort */ }
 
     // Same self-chat fix as chatService.ts's markRead (the function actually
-    // in use) — `sender_id=neq.${myId}` matches zero rows in a self-chat
+    // in use) - `sender_id=neq.${myId}` matches zero rows in a self-chat
     // (participant_a === participant_b === myId), since every message's
     // sender_id, including the recipient-rewritten payment_received leg,
     // equals myId there too. Kept in sync so this dead-but-still-exported
@@ -936,13 +936,13 @@ export async function markMessagesRead(conversationId: string, myId: string): Pr
       }
     )
   } catch {
-    // Non-critical — just fall through if it fails
+    // Non-critical - just fall through if it fails
   }
 }
 
 // ─── Lookup profile by wallet address ─────────────────────────────────────────
 /** The single source of truth for wallet ownership.
- *  Checks Supabase by wallet_address — works for ALL user types. */
+ *  Checks Supabase by wallet_address - works for ALL user types. */
 export async function getUserByWalletAddress(walletAddress: string): Promise<DbUser | null> {
   const addr = walletAddress.toLowerCase()
   const { data, error } = await supabase
@@ -954,10 +954,10 @@ export async function getUserByWalletAddress(walletAddress: string): Promise<DbU
   return data as DbUser | null
 }
 
-/** Batch lookup — fetch multiple users by wallet address in one query */
+/** Batch lookup - fetch multiple users by wallet address in one query */
 export async function getUsersByWalletAddresses(addresses: string[]): Promise<Map<string, DbUser>> {
   if (!addresses.length) return new Map()
-  // Use supabase REST with ilike per-address — batch via or() filter
+  // Use supabase REST with ilike per-address - batch via or() filter
   const addrs = addresses.map(a => a.toLowerCase())
   // Build OR filter: wallet_address.ilike.0x1a2b,wallet_address.ilike.0x3c4d
   const orFilter = addrs.map(a => `wallet_address.ilike.${a}`).join(',')
@@ -1012,7 +1012,7 @@ export async function fetchUserClaims(userId: string): Promise<DbRewardClaim[]> 
   return (data || []) as DbRewardClaim[]
 }
 
-/** Claim a reward — returns error string or null on success */
+/** Claim a reward - returns error string or null on success */
 export async function claimReward(params: {
   userId: string
   walletAddress: string
@@ -1038,7 +1038,7 @@ export async function claimReward(params: {
       .from('reward_claims').select('id')
       .eq('user_id', params.userId).eq('reward_id', params.rewardId)
       .gte('claimed_at', today + 'T00:00:00Z').maybeSingle()
-    if (todayClaim) return { error: 'Already claimed today — come back tomorrow', claim: null }
+    if (todayClaim) return { error: 'Already claimed today - come back tomorrow', claim: null }
   }
 
   // 3. Create claim record
@@ -1060,10 +1060,10 @@ export async function claimReward(params: {
   return { error: null, claim: claim as DbRewardClaim }
 }
 
-// ─── TRANSACTIONS — source of truth for Activity page ─────────────────────────
+// ─── TRANSACTIONS - source of truth for Activity page ─────────────────────────
 // Written immediately after every successful on-chain send.
 // Read by activityService to populate the Activity page.
-// No dependency on ArcScan indexing — appears instantly after payment.
+// No dependency on ArcScan indexing - appears instantly after payment.
 
 export interface DbTransaction {
   id:               string
@@ -1105,7 +1105,7 @@ export async function saveTransaction(params: {
   if (error) console.error('[saveTransaction] error:', error.code, error.message)
 }
 
-// ─── TRANSACTION NOTES — source/note metadata keyed by txHash ──────────────
+// ─── TRANSACTION NOTES - source/note metadata keyed by txHash ──────────────
 // Lightweight table: tx_hash (PK), sender_address, receiver_address, source, note
 // Queried by activityService to enrich RPC records with context.
 
@@ -1148,7 +1148,7 @@ export async function fetchTransactionNotes(
     .order('created_at', { ascending: false })
     .limit(500)
   if (error) {
-    // Table may not exist yet — fail silently, notes are optional
+    // Table may not exist yet - fail silently, notes are optional
     if (!error.message?.includes('does not exist')) {
     }
     return new Map()
@@ -1178,9 +1178,9 @@ export async function fetchTransactions(walletAddress: string, limit = 100): Pro
   return (data ?? []) as DbTransaction[]
 }
 
-// ─── MULTICHAIN TRANSACTIONS — IndexedDB-backed, no Supabase table needed ─────
+// ─── MULTICHAIN TRANSACTIONS - IndexedDB-backed, no Supabase table needed ─────
 // Previously backed by the `multichain_transactions` Supabase table.
-// Replaced with multichainStore.ts (IndexedDB) — same exported signatures,
+// Replaced with multichainStore.ts (IndexedDB) - same exported signatures,
 // zero callers need to change. The Supabase table can be dropped from the
 // project's DB schema once this ships.
 //
@@ -1200,7 +1200,7 @@ export {
   fetchSwapRecords,
 } from './multichainStore'
 
-// ── Support tickets — Help & Support ────────────────────────────────────────
+// ── Support tickets - Help & Support ────────────────────────────────────────
 export interface SupportTicket {
   id:          string
   subject:     string

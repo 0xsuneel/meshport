@@ -1,5 +1,5 @@
 // Small spinner with the logo of the chain being checked right now inside
-// it — shown next to "Available To Bring" while the all-chains scan runs.
+// it - shown next to "Available To Bring" while the all-chains scan runs.
 import { useEffect, useState } from 'react'
 import { EXTERNAL_SCAN_PROGRESS_EVENT, currentScanningChain } from '@/blockchain/BlockchainManager'
 import { chainLogoSrc } from '@/lib/chainLogos'

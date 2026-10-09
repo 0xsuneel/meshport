@@ -3,7 +3,7 @@
 // the sender with the plaintext of what it just encrypted.
 import { isEncryptedPayload } from '@/lib/chatCrypto'
 
-// Decrypted text by ciphertext — shared so search, the delete dialog and a
+// Decrypted text by ciphertext - shared so search, the delete dialog and a
 // bubble re-mounting (optimistic → saved copy) never show ciphertext or flash.
 export const _plainByContent = new Map<string, string>()
 /** decryptText's placeholders: "🔒 … unable to decrypt…" and "⏳ Waiting for this message…". */

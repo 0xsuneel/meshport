@@ -1,5 +1,5 @@
 /**
- * blockchain/BlockchainManager.ts — the single entry point for chain reads
+ * blockchain/BlockchainManager.ts - the single entry point for chain reads
  *
  * Phase 2 of docs/BLOCKCHAIN_ARCHITECTURE_PROPOSAL.md (§5, §11, §20).
  *
@@ -19,22 +19,22 @@
  * migrated individually. This layer is additive.
  *
  * ── How duplicate RPC requests are eliminated ───────────────────────────────
- *  1. In-flight sharing (cache.dedupe) — the first caller starts the request
+ *  1. In-flight sharing (cache.dedupe) - the first caller starts the request
  *     and registers its promise; every caller arriving before it settles
  *     awaits that same promise. Home + Hub + Claim mounting together produce
  *     ONE request, not three.
- *  2. TTL + stale-while-revalidate (cache.swr) — a value read within the TTL
+ *  2. TTL + stale-while-revalidate (cache.swr) - a value read within the TTL
  *     costs no network call; a slightly older one is returned instantly while
  *     a single background refresh runs. This collapses the three independent
  *     60s timers that exist today.
- *  3. Scoped keys — every key is `wallet:chain:asset`, so nothing is ever
+ *  3. Scoped keys - every key is `wallet:chain:asset`, so nothing is ever
  *     shared across wallets (the balanceCache.ts wallet-switch bug) and
  *     invalidation can target one asset, one chain, or one wallet.
- *  4. Smart-refresh targeting (refreshScope) — computes exactly which keys a
+ *  4. Smart-refresh targeting (refreshScope) - computes exactly which keys a
  *     change touches. "Arc updated" drops Arc keys only; no full rescan.
  *
  * ── Phase 2 scope ───────────────────────────────────────────────────────────
- * Reads only. No indexer, no event bus, no polling removal, no write path —
+ * Reads only. No indexer, no event bus, no polling removal, no write path -
  * those are Phases 3-5. Nothing here is wired into a page yet.
  *
  * TESTNET ONLY: every read resolves through src/blockchain/chains.ts, which
@@ -78,12 +78,12 @@ export function readArcBalance(
   return getArcBalance(wallet, asset, opts).catch(() => 0)
 }
 
-/** Same read, but a failure rejects instead of resolving to 0 — for screens that must keep the last known balance (offline). */
+/** Same read, but a failure rejects instead of resolving to 0 - for screens that must keep the last known balance (offline). */
 export function readArcBalanceOrThrow(wallet: string, asset: ArcAsset, opts?: CacheOptions): Promise<number> {
   return getArcBalance(wallet, asset, opts)
 }
 
-/** Last known value with no network call — for instant first paint. */
+/** Last known value with no network call - for instant first paint. */
 export function peekBalance(wallet: string, asset: ArcAsset): number | null {
   return peekArcBalance(wallet, asset)
 }
@@ -101,7 +101,7 @@ export function peekBalance(wallet: string, asset: ArcAsset): number | null {
  * Deliberately NOT using viem multicall: it requires a deployed Multicall3 and
  * `chain.contracts.multicall3` configured, which is not verified for Arc (open
  * question #3 in the proposal). Attempting it would throw
- * ChainDoesNotSupportContract. Batching is revisited once that is confirmed —
+ * ChainDoesNotSupportContract. Batching is revisited once that is confirmed -
  * dedup + TTL already remove the bulk of duplicate traffic without the risk.
  */
 export async function readArcBalances(
@@ -137,7 +137,7 @@ export function readExternalBalances(
   return externalBalanceReader(wallet, settings, settingsLoaded)
 }
 
-/** Summed external balance — Home's "unified balance" figure. */
+/** Summed external balance - Home's "unified balance" figure. */
 export function readExternalTotal(
   wallet: string,
   settings: SettingsMap,
@@ -160,7 +160,7 @@ export const EXTERNAL_BALANCE_EVENT = 'meshport:external-balance'
  * Call right after this app moved USDC on an external chain (bridge burn,
  * Gateway deposit). Re-reads that chain now and once more a few seconds
  * later (an RPC can lag the confirming block), updates the cache and tells
- * every open page — no waiting for the claim to finish or the next scan.
+ * every open page - no waiting for the claim to finish or the next scan.
  */
 export function notifyExternalBalanceChanged(chain: string, wallet: string): void {
   const read = () => readExternalChainBalance(chain as ChainId, wallet).then(balance => {
@@ -199,7 +199,7 @@ export async function readTransactionReceipt(
       return await getClient(chain).getTransactionReceipt({ hash: hash as `0x${string}` })
     } catch {
       // viem throws when a receipt does not exist yet. That is a normal state
-      // while a transaction is pending, not a failure — surface it as null so
+      // while a transaction is pending, not a failure - surface it as null so
       // a caller polling for confirmation doesn't have to catch on every tick.
       return null
     }
@@ -209,7 +209,7 @@ export async function readTransactionReceipt(
 // ─── Smart chain refresh ────────────────────────────────────────────────────
 
 /**
- * Invalidate exactly the keys a change touches — never everything.
+ * Invalidate exactly the keys a change touches - never everything.
  *
  * Cache keys are `wallet:chain:asset`, so prefix invalidation gives precise
  * scoping for free: one asset, one chain, or one wallet. This is the
@@ -218,7 +218,7 @@ export async function readTransactionReceipt(
  * means the next read goes to the network).
  *
  * `all` is reserved for launch / login / wallet-import / explicit manual
- * refresh — it is the only scope that clears a whole wallet.
+ * refresh - it is the only scope that clears a whole wallet.
  */
 export function refreshScope(scope: RefreshScope): void {
   const addr = normalizeAddress(scope.wallet)
@@ -238,7 +238,7 @@ export function refreshScope(scope: RefreshScope): void {
         for (const c of scope.chains) invalidatePrefix(`${addr}:${c}:`)
       }
       // The aggregate scan is keyed `external:<wallet>:<settings-signature>`,
-      // so it needs its own prefix — a per-chain drop above would leave the
+      // so it needs its own prefix - a per-chain drop above would leave the
       // combined result cached and the Hub would keep showing stale totals.
       invalidatePrefix(`external:${addr}:`)
       break
@@ -254,12 +254,12 @@ export function refreshScope(scope: RefreshScope): void {
       break
     default: {
       // An unrecognized scope kind previously fell through this switch and
-      // invalidated NOTHING, while still returning normally — so the caller
+      // invalidated NOTHING, while still returning normally - so the caller
       // believed a refresh had happened and the UI kept serving stale
       // balances with no error surfacing anywhere. TypeScript catches this
       // for src/ callers via the exhaustive union, but not for JS callers,
       // not for anything outside tsconfig's `include` (scripts/), and not
-      // for a future RefreshScope variant added without a case here — which
+      // for a future RefreshScope variant added without a case here - which
       // is precisely the mistake this guard is here to make loud. Phase 4
       // drives every refresh through this function, so a silent no-op here
       // would surface as "balances randomly don't update".
@@ -270,7 +270,7 @@ export function refreshScope(scope: RefreshScope): void {
   }
 }
 
-/** Everything for one wallet — used on logout / wallet switch. */
+/** Everything for one wallet - used on logout / wallet switch. */
 export function clearWallet(wallet: string): void {
   refreshScope({ kind: 'all', wallet })
 }

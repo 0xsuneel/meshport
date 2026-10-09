@@ -16,7 +16,7 @@ interface CategoryTogglePageProps {
 export function CategoryTogglePage({ sections }: CategoryTogglePageProps) {
   const { settings, loaded, load, refresh } = useSettingsStore()
   const [pending, setPending] = useState<Record<string, boolean>>({})
-  // Per-chain reason text for the `chains_claim` category — shown in the
+  // Per-chain reason text for the `chains_claim` category - shown in the
   // Multichain Claim page (see disabledClaimChains in MultichainClaimPage)
   // in place of a balance whenever that chain is switched off here. Kept as
   // its own local draft (keyed by feature) so typing doesn't fight the
@@ -41,7 +41,7 @@ export function CategoryTogglePage({ sections }: CategoryTogglePageProps) {
 
   const saveReason = async (row: AppSetting) => {
     const next = reasonDraft[row.feature]
-    // Nothing typed, or unchanged from what's already saved — skip the
+    // Nothing typed, or unchanged from what's already saved - skip the
     // round-trip entirely (also avoids overwriting a real value with '' if
     // this row's draft was never actually touched).
     if (next === undefined || next === (row.value ?? '')) return
@@ -71,7 +71,7 @@ export function CategoryTogglePage({ sections }: CategoryTogglePageProps) {
                 {section.title}
               </h2>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, padding: '14px 16px', background: 'var(--surface)', border: '1px dashed var(--border)', borderRadius: 20 }}>
-                No settings found for "{section.category}" — this section's rows haven't been seeded in app_settings yet. Run the matching SQL migration in Supabase, then reload.
+                No settings found for "{section.category}" - this section's rows haven't been seeded in app_settings yet. Run the matching SQL migration in Supabase, then reload.
               </p>
             </div>
           )
@@ -113,14 +113,14 @@ export function CategoryTogglePage({ sections }: CategoryTogglePageProps) {
                   {section.category === 'chains_claim' && !row.enabled && (
                     <div style={{ margin: '6px 4px 0', padding: '10px 12px', background: 'var(--surface)', border: '1px dashed var(--border)', borderRadius: 14 }}>
                       <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                        Reason shown to users (optional — defaults to "Upgrading — coming soon")
+                        Reason shown to users (optional - defaults to "Upgrading - coming soon")
                       </label>
                       <input
                         type="text"
                         value={reasonFor(row)}
                         onChange={(e) => setReasonDraft((d) => ({ ...d, [row.feature]: e.target.value }))}
                         onBlur={() => saveReason(row)}
-                        placeholder="e.g. Bridge upgrading — back Thursday"
+                        placeholder="e.g. Bridge upgrading - back Thursday"
                         style={{
                           width: '100%', marginTop: 6, background: 'var(--bg)', border: '1px solid var(--border)',
                           borderRadius: 10, padding: '8px 10px', color: 'var(--text-primary)', fontSize: 13, fontFamily: 'inherit',

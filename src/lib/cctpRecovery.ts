@@ -5,9 +5,9 @@
 //         claim or transfer against Circle's attestation API and the
 //         destination chain's usedNonces. The missing mint (receiveMessage)
 //         is then submitted by MeshPort's relayer (/api/bridge-relay), so
-//         nobody needs gas — except a transfer whose message is locked to the
+//         nobody needs gas - except a transfer whose message is locked to the
 //         user's own wallet, which only that wallet can mint.
-//   UB:   reuses lib/ubFundRecovery.ts (initiateRemoveFund / removeFund) —
+//   UB:   reuses lib/ubFundRecovery.ts (initiateRemoveFund / removeFund) -
 //         that logic is unchanged; this file only lists its pending rows.
 
 import { createPublicClient, createWalletClient, http, type Hex } from 'viem'
@@ -17,7 +17,7 @@ import { describeFunctionsError } from './describeFunctionsError'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 import { ARC_CHAIN_KEY } from './chainExplorers'
 
-/** A recovery step already running for a row — started by the user or by MeshPort. */
+/** A recovery step already running for a row - started by the user or by MeshPort. */
 export type RecoveryAction = { kind: 'relay' | 'reattest'; at: string; by: 'user' | 'meshport' }
 
 export type RecoveryItem = {
@@ -79,7 +79,7 @@ export async function relayMint(kind: 'claim' | 'transfer', id: string): Promise
   const ready = kind === 'claim' ? d.state === 'ready_relay' : d.state === 'ready_self_mint'
   if (!ready || !d.message || !d.attestation || !d.messageTransmitter) throw new Error(d.detail || `Not ready to mint (${d.state})`)
   if ((d.destinationCaller ?? OPEN_CALLER).toLowerCase() !== OPEN_CALLER) {
-    throw new Error('This mint is locked to the wallet itself — finish it with "Mint with my wallet".')
+    throw new Error('This mint is locked to the wallet itself - finish it with "Mint with my wallet".')
   }
   const { encodeFunctionData } = await import('viem')
   const { authApiHeaders } = await import('./supabase')
@@ -141,7 +141,7 @@ export async function finishCctpMintViaRelayer(p: {
   const out = await r.json().catch(() => null) as { txHash?: string; error?: string; pending?: boolean } | null
   if (r.ok && out?.txHash) return { mintTxHash: out.txHash }
   // The relayer simulates first, so a refusal usually means it was already
-  // minted (e.g. Circle's forwarder got there after all) — check Iris again.
+  // minted (e.g. Circle's forwarder got there after all) - check Iris again.
   const again = await fetchIrisMessage(p.sourceChain, p.burnTxHash)
   if ((again?.forwardState ?? '').toUpperCase() === 'COMPLETE' && again?.forwardTxHash) return { mintTxHash: again.forwardTxHash }
   throw new Error(out?.error || 'Relayer could not finish this mint')
@@ -207,7 +207,7 @@ export async function selfMintTransfer(id: string, privateKey: string): Promise<
   return { mintTxHash: hash }
 }
 
-/** Claim into Arc that never minted — MeshPort's relayer mints it on Arc (no Arc USDC needed). */
+/** Claim into Arc that never minted - MeshPort's relayer mints it on Arc (no Arc USDC needed). */
 export async function selfMintClaim(id: string, _privateKey?: string): Promise<{ mintTxHash: string }> {
   const out = await relayMint('claim', id)
   return { mintTxHash: out.destinationMintTxHash ?? '' }

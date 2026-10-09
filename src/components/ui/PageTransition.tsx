@@ -6,7 +6,7 @@ import { useNavDirection } from '@/hooks/useNavDirection'
 
 interface PageTransitionProps {
   children: ReactNode
-  /** Usually the route pathname — a new key = a new page. */
+  /** Usually the route pathname - a new key = a new page. */
   locationKey: string
 }
 
@@ -18,7 +18,7 @@ interface PageTransitionProps {
 // Tabs:  an instant switch.     First load / reload: no animation at all.
 //
 // The old page is shown as a frozen PICTURE (a DOM copy, taken just before
-// React swaps the pages) — never a second live copy — so no page logic,
+// React swaps the pages) - never a second live copy - so no page logic,
 // subscription or effect ever runs twice. Everything moves with the
 // browser's own animation engine (Web Animations on transform/opacity), on
 // the compositor, and the first frame is set before paint: no flicker.
@@ -48,7 +48,7 @@ function takeSnapshot(page: HTMLElement, key: string): Snapshot {
     const o = orig[i], c = copy[i]
     if (o.scrollTop || o.scrollLeft) scrolls.push([i, o.scrollTop, o.scrollLeft])
     if (o instanceof HTMLCanvasElement && c instanceof HTMLCanvasElement) {
-      try { c.getContext('2d')?.drawImage(o, 0, 0) } catch { /* tainted — leave blank */ }
+      try { c.getContext('2d')?.drawImage(o, 0, 0) } catch { /* tainted - leave blank */ }
     } else if ((o instanceof HTMLInputElement || o instanceof HTMLTextAreaElement) && (c instanceof HTMLInputElement || c instanceof HTMLTextAreaElement)) {
       c.value = o.value
     }

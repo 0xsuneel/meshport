@@ -1,10 +1,10 @@
 /**
- * Regression tests for lib/arcDepositWatcher.ts — the real-time Arc
+ * Regression tests for lib/arcDepositWatcher.ts - the real-time Arc
  * eth_subscribe(logs) deposit layer that closes the "balance updates before
  * the incoming transfer appears in Activity History" gap.
  *
  * Two halves:
- *   1. The pure decode/classify/shape helpers — exhaustively, since the
+ *   1. The pure decode/classify/shape helpers - exhaustively, since the
  *      decimal handling (native USDC 18, EURC 6, cirBTC 8) and the
  *      swap/bridge/self/mint exclusions are where a real deposit would be
  *      dropped or a spurious one surfaced.
@@ -36,7 +36,7 @@ import {
 const WALLET  = '0x1111111111111111111111111111111111111111'
 const SENDER  = '0x2222222222222222222222222222222222222222'
 const ZERO    = '0x0000000000000000000000000000000000000000'
-// Kit Adapter — a swap output leg's `from` (in KNOWN_INTERNAL_CONTRACTS).
+// Kit Adapter - a swap output leg's `from` (in KNOWN_INTERNAL_CONTRACTS).
 const KIT_ADAPTER = '0xbbd70b01a1cabc96d5b7b129ae1aaabdf50dd40b'
 
 const USDC_STREAM   = WATCHED_STREAMS.find(s => s.tokenSymbol === 'USDC')!   as WatchedStream
@@ -90,7 +90,7 @@ describe('topicToAddress / paddedAddressTopic', () => {
   })
 })
 
-describe('decodeDepositLog — decimals per token', () => {
+describe('decodeDepositLog - decimals per token', () => {
   it('native USDC uses 18 decimals', () => {
     // 20.5 USDC = 20.5 * 1e18
     const d = decodeDepositLog(transferLog({ value: 20_500_000_000_000_000_000n }), USDC_STREAM)
@@ -118,7 +118,7 @@ describe('decodeDepositLog — decimals per token', () => {
   })
 })
 
-describe('decodeDepositLog — malformed / non-Transfer input returns null (never throws)', () => {
+describe('decodeDepositLog - malformed / non-Transfer input returns null (never throws)', () => {
   it('null / non-object', () => {
     expect(decodeDepositLog(null, USDC_STREAM)).toBeNull()
     expect(decodeDepositLog(undefined, USDC_STREAM)).toBeNull()
@@ -142,7 +142,7 @@ describe('decodeDepositLog — malformed / non-Transfer input returns null (neve
   })
 })
 
-describe('classifyDeposit — mirrors the server decide.ts acceptance rules', () => {
+describe('classifyDeposit - mirrors the server decide.ts acceptance rules', () => {
   const decoded = (over: Partial<ReturnType<typeof decodeDepositLog>> = {}) => ({
     txHash: '0xhash', logIndex: 0, blockNumber: 100,
     from: SENDER.toLowerCase(), to: WALLET.toLowerCase(),
@@ -198,7 +198,7 @@ describe('decodedToOnchainTx / logDedupeKey', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Watcher — fake WebSocket + fake JSON-RPC proxy
+// Watcher - fake WebSocket + fake JSON-RPC proxy
 // ─────────────────────────────────────────────────────────────────────────────
 
 class FakeWebSocket {
@@ -320,7 +320,7 @@ function emitTransfer(ws: FakeWebSocket, stream: WatchedStream, log: ReturnType<
   ws.message({ jsonrpc: '2.0', method: 'eth_subscription', params: { subscription: subId, result: log } })
 }
 
-describe('createArcDepositWatcher — live subscription', () => {
+describe('createArcDepositWatcher - live subscription', () => {
   it('subscribes to all three streams with the wallet-scoped Transfer filter', async () => {
     const s = setup()
     await online(s)
@@ -424,7 +424,7 @@ describe('createArcDepositWatcher — live subscription', () => {
   })
 })
 
-describe('createArcDepositWatcher — reconnect & catch-up', () => {
+describe('createArcDepositWatcher - reconnect & catch-up', () => {
   it('a brand-new session pins the cursor to head and does NOT backfill history', async () => {
     const getLogs = vi.fn(() => [transferLog({ value: 1n, txHash: '0xold' })])
     const s = setup({ head: 5000, getLogs })
@@ -525,10 +525,10 @@ describe('createArcDepositWatcher — reconnect & catch-up', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Background / tab-switch resilience — heartbeat + wake
+// Background / tab-switch resilience - heartbeat + wake
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('createArcDepositWatcher — heartbeat & wake', () => {
+describe('createArcDepositWatcher - heartbeat & wake', () => {
   it('registers a 30s heartbeat interval on start and clears it on stop', async () => {
     const s = setup()
     await online(s)
@@ -670,7 +670,7 @@ describe('recent-deposit buffer + session singleton', () => {
     // makes it disappear, and it only reappears a couple minutes later once
     // the server-side Supabase row lands. The in-memory buffer alone can't
     // survive a hard reload (this test simulates one by wiping ONLY the
-    // in-memory maps via clearRecentArcDeposits() with no wallet arg — a
+    // in-memory maps via clearRecentArcDeposits() with no wallet arg - a
     // real reload also destroys the singleton controller itself, but the
     // module-level buffer is the piece this fix targets); a real
     // `window.localStorage` stub proves the fix persists across that wipe.
@@ -731,7 +731,7 @@ describe('recent-deposit buffer + session singleton', () => {
       emitTransfer(ws, EURC_STREAM, transferLog({ value: 5_000_000n, txHash: '0xlogout1' }))
       await flush()
 
-      arcDepositWatcher.stop() // real logout / wallet switch — clears in-memory AND persisted
+      arcDepositWatcher.stop() // real logout / wallet switch - clears in-memory AND persisted
       hydrateRecentDeposits(WALLET)
       expect(getRecentArcDeposits().map(t => t.txHash)).not.toContain('0xlogout1')
     })
@@ -742,13 +742,13 @@ describe('recent-deposit buffer + session singleton', () => {
     arcDepositWatcher.start(WALLET, d1.deps as any)
     await flush()
     const n1 = d1.sockets.length
-    arcDepositWatcher.start(WALLET, d1.deps as any) // same wallet — no restart
+    arcDepositWatcher.start(WALLET, d1.deps as any) // same wallet - no restart
     expect(d1.sockets.length).toBe(n1)
 
     const d2 = makeDeps()
     arcDepositWatcher.start('0x9999999999999999999999999999999999999999', d2.deps as any)
     await flush()
-    expect(d2.sockets.length).toBeGreaterThan(0)   // different wallet — new socket
+    expect(d2.sockets.length).toBeGreaterThan(0)   // different wallet - new socket
     arcDepositWatcher.stop()
   })
 })

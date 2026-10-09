@@ -1,5 +1,5 @@
 /**
- * SyncCoordinator.ts — Phase 6 event-driven refresh.
+ * SyncCoordinator.ts - Phase 6 event-driven refresh.
  *
  * Turns an observed `chain_events` row into the EXACT set of cache
  * invalidations it implies, and nothing more.
@@ -8,7 +8,7 @@
  * Same rule as shadowEventMap.ts: the mapping half is pure, so it is testable
  * under plain node/tsx without Vite's `import.meta.env` shim or Supabase
  * credentials. The impure half (actually calling refreshScope) is injected by
- * the caller — see `createSyncCoordinator`. That split is what lets
+ * the caller - see `createSyncCoordinator`. That split is what lets
  * scripts/verify-sync-coordinator.ts assert the whole decision table without a
  * browser, a network, or a database.
  *
@@ -20,12 +20,12 @@
  *
  * ── Why 'all' is never emitted for a chain event ────────────────────────────
  * BlockchainManager.refreshScope's contract reserves `{kind:'all'}` for
- * launch / login / wallet-import / explicit manual refresh — it is the only
+ * launch / login / wallet-import / explicit manual refresh - it is the only
  * scope that clears an entire wallet. A chain event is by definition narrow
  * (one wallet, one chain, usually one asset), so emitting 'all' would throw
  * away every other chain's cached balance on every deposit and reintroduce the
  * 21-chain rescan storm Phase 2 removed. If a future event type genuinely
- * needs a wallet-wide drop, add it deliberately — do not widen this default.
+ * needs a wallet-wide drop, add it deliberately - do not widen this default.
  *
  * ── Why the coalescing window exists ────────────────────────────────────────
  * deposit-scan-all's sweep can record several activity rows within a couple of
@@ -56,7 +56,7 @@ export const COALESCE_WINDOW_MS = 250
  *
  * The sub-5-minute no-op is the point of the rule, not an optimisation
  * detail. Before Phase 6 every tab focus re-triggered work, so flicking
- * between tabs produced a 21-chain scan storm — the exact behaviour §19's
+ * between tabs produced a 21-chain scan storm - the exact behaviour §19's
  * "Full 21-chain scans occur only on: login, wallet import, manual refresh…
  * Never on a timer" exists to forbid. Event-driven refresh has already kept
  * the caches warm while the tab was hidden, so a short absence needs nothing.
@@ -69,7 +69,7 @@ export const COALESCE_WINDOW_MS = 250
 export const RESUME_MIN_MS = 5 * 60_000
 export const RESUME_EXTERNAL_MS = 10 * 60_000
 
-/** Which trigger to attribute a refresh to, per event type — for telemetry. */
+/** Which trigger to attribute a refresh to, per event type - for telemetry. */
 export function triggerFor(eventType: string): RefreshTrigger {
   switch (eventType) {
     case 'deposit_detected':       return 'deposit-detected'
@@ -85,12 +85,12 @@ export function triggerFor(eventType: string): RefreshTrigger {
  * falling back to a wide refresh: a vocabulary the client does not recognise
  * must not be able to trigger a wallet-wide cache drop. The event_type CHECK
  * constraint in the Phase 3 migration is the server-side backstop, so an
- * unknown value here means client/server drift — which should degrade to
+ * unknown value here means client/server drift - which should degrade to
  * "polling still covers it", not to a stampede.
  */
 export function scopesFor(event: ShadowEvent): RefreshScope[] {
   const wallet = (event.walletAddress ?? '').toLowerCase()
-  if (!wallet) return []            // unattributable event — nothing to scope
+  if (!wallet) return []            // unattributable event - nothing to scope
 
   const chain = event.chainId || ARC
 
@@ -108,7 +108,7 @@ export function scopesFor(event: ShadowEvent): RefreshScope[] {
 
     /**
      * ERC-20 credit (EURC / cirBTC). Here the asset IS known, so scope to the
-     * single asset key rather than the whole chain — this is the case the
+     * single asset key rather than the whole chain - this is the case the
      * `asset` scope exists for.
      */
     case 'transfer_detected': {
@@ -133,7 +133,7 @@ export function scopesFor(event: ShadowEvent): RefreshScope[] {
       ]
 
     /**
-     * A failure changes what history should show but not any balance — no
+     * A failure changes what history should show but not any balance - no
      * value moved. Deliberately NOT a balance invalidation.
      */
     case 'transaction_failed':
@@ -155,7 +155,7 @@ export function scopesFor(event: ShadowEvent): RefreshScope[] {
 }
 
 /**
- * Scopes to refresh when a new `activity` row is INSERTed — the Phase 6
+ * Scopes to refresh when a new `activity` row is INSERTed - the Phase 6
  * ordering fix.
  *
  * ── Why this exists (production evidence, 2026-08-18) ──────────────────────
@@ -217,7 +217,7 @@ function firstAsset(event: ShadowEvent): string | null {
 }
 
 /**
- * Scopes to refresh when the app comes back to the foreground — proposal §19.
+ * Scopes to refresh when the app comes back to the foreground - proposal §19.
  *
  * Pure and total, so the whole policy is assertable without a browser. Returns
  * [] for a short absence, which the caller must treat as "do nothing" rather
@@ -309,7 +309,7 @@ export interface SyncCoordinator {
   /** Feed one observed chain_event. Safe to call from the Realtime handler. */
   handle: (event: ShadowEvent) => void
   /**
-   * Feed one observed `activity` INSERT — the Phase 6 ordering fix.
+   * Feed one observed `activity` INSERT - the Phase 6 ordering fix.
    *
    * Routed through the SAME pending queue and 250ms coalescing as chain_events,
    * so a deposit that produces both events cannot cause two independent refresh
@@ -319,7 +319,7 @@ export interface SyncCoordinator {
    */
   handleActivityRow: (row: Record<string, unknown>) => void
   /**
-   * App returned to the foreground after `hiddenMs` away — proposal §19.
+   * App returned to the foreground after `hiddenMs` away - proposal §19.
    * Applies immediately (no coalescing): a resume is a single discrete moment,
    * not a burst, and the user is looking at the screen right now.
    */
@@ -336,7 +336,7 @@ export interface SyncCoordinator {
 /**
  * Wire events to invalidations, with coalescing and a kill switch.
  *
- * `enabled: false` makes this a pure observer — it still logs exactly what it
+ * `enabled: false` makes this a pure observer - it still logs exactly what it
  * WOULD invalidate, which is how Phase 6 can be verified in production before
  * anything depends on it. That is the fallback path referenced in the runbook:
  * flip it off and polling alone carries the app again, with no redeploy.
@@ -357,7 +357,7 @@ export function createSyncCoordinator(deps: SyncCoordinatorDeps): SyncCoordinato
 
   /**
    * Activity row ids already acted on, so a Realtime REPLAY of the same row
-   * cannot trigger a second refresh. Bounded FIFO — an unbounded set in a
+   * cannot trigger a second refresh. Bounded FIFO - an unbounded set in a
    * long-lived tab is a slow leak, and only recent ids can plausibly be
    * redelivered.
    */
@@ -381,7 +381,7 @@ export function createSyncCoordinator(deps: SyncCoordinatorDeps): SyncCoordinato
           deps.applyScope(s, trigger)
           applied++
         } catch (e) {
-          // A failed invalidation must never break the event stream — the
+          // A failed invalidation must never break the event stream - the
           // next poll still covers it.
           log(`[sync] applyScope threw for ${scopeKey(s)}: ${e instanceof Error ? e.message : String(e)}`)
         }
@@ -396,7 +396,7 @@ export function createSyncCoordinator(deps: SyncCoordinatorDeps): SyncCoordinato
       received++
       const scopes = scopesFor(event)
       if (scopes.length === 0) {
-        log(`[sync] no scope for event_type='${event.eventType}' — ignored (polling still covers it)`)
+        log(`[sync] no scope for event_type='${event.eventType}' - ignored (polling still covers it)`)
         return
       }
       pending.push(...scopes)
@@ -405,7 +405,7 @@ export function createSyncCoordinator(deps: SyncCoordinatorDeps): SyncCoordinato
     },
 
     /**
-     * PHASE 6 ORDERING FIX — an `activity` row now exists that history can render.
+     * PHASE 6 ORDERING FIX - an `activity` row now exists that history can render.
      *
      * Queued through the same coalescing path as chain_events so a burst of rows
      * from one consumer pass (the observed case: EURC + cirBTC inserted in the
@@ -421,7 +421,7 @@ export function createSyncCoordinator(deps: SyncCoordinatorDeps): SyncCoordinato
       if (id) {
         if (seenActivitySet.has(id)) {
           activityReplaysIgnored++
-          log(`[sync] activity row ${id} already handled — replay ignored`)
+          log(`[sync] activity row ${id} already handled - replay ignored`)
           return
         }
         seenActivitySet.add(id)
@@ -434,7 +434,7 @@ export function createSyncCoordinator(deps: SyncCoordinatorDeps): SyncCoordinato
 
       const scopes = scopesForActivityRow(row)
       if (scopes.length === 0) {
-        log(`[sync] activity row type='${String(row?.activity_type ?? '')}' not a server-authored receive — ignored`)
+        log(`[sync] activity row type='${String(row?.activity_type ?? '')}' not a server-authored receive - ignored`)
         return
       }
       pending.push(...scopes)
@@ -447,7 +447,7 @@ export function createSyncCoordinator(deps: SyncCoordinatorDeps): SyncCoordinato
     handleResume(hiddenMs: number, wallet: string) {
       const scopes = scopesForResume(hiddenMs, wallet)
       if (scopes.length === 0) {
-        log(`[sync] resume after ${Math.round(hiddenMs / 1000)}s — nothing to refresh (§19)`)
+        log(`[sync] resume after ${Math.round(hiddenMs / 1000)}s - nothing to refresh (§19)`)
         return
       }
       // Applied directly rather than queued: a resume is one discrete moment,
@@ -465,7 +465,7 @@ export function createSyncCoordinator(deps: SyncCoordinatorDeps): SyncCoordinato
           log(`[sync] WOULD refresh ${scopeKey(s)} (trigger=resume, observer mode)`)
         }
       }
-      log(`[sync] resume after ${Math.round(hiddenMs / 1000)}s — refreshed ${scopes.map(scopeKey).join(', ')}`)
+      log(`[sync] resume after ${Math.round(hiddenMs / 1000)}s - refreshed ${scopes.map(scopeKey).join(', ')}`)
     },
 
     flush,

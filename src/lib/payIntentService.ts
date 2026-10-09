@@ -14,7 +14,7 @@ export interface CreatePayIntentResult {
   /**
    * RESILIENCE FIX (2026-09-17): present only on an idempotent-replay
    * response where this exact payment (same wallet + idempotencyKey) was
-   * already broadcast on a PREVIOUS attempt — e.g. the network dropped the
+   * already broadcast on a PREVIOUS attempt - e.g. the network dropped the
    * response before the client saw it, and the user retried. When this is
    * set, arcService.ts must treat the payment as already sent and return
    * success using THIS hash rather than signing/broadcasting again, which
@@ -39,7 +39,7 @@ export async function createPayIntent(params: {
   try {
     await ensureAnonSession()
     const { data, error } = await invokeLinked('pay-intent', params as Record<string, unknown>)
-    // BUG FIX: see describeFunctionsError.ts — error.message here used to
+    // BUG FIX: see describeFunctionsError.ts - error.message here used to
     // always be the SDK's generic "Edge Function returned a non-2xx status
     // code", hiding the real validation reason pay-intent's own response
     // body carried (same class of bug traced live from a Swap failure).
@@ -48,10 +48,10 @@ export async function createPayIntent(params: {
     // RESILIENCE FIX (2026-09-17): an idempotent_replay response carries
     // nonce and/or txHash (see logic.ts's own comment on that outcome
     // variant) instead of always meaning "this key was already used, fail."
-    // A present tx_hash means the original attempt actually broadcast —
+    // A present tx_hash means the original attempt actually broadcast -
     // surface it as existingTxHash so the caller can resume by returning
     // success directly. A present nonce with no tx_hash means the
-    // reservation exists but never broadcast — safe to hand back the SAME
+    // reservation exists but never broadcast - safe to hand back the SAME
     // nonce so the caller continues the original attempt instead of
     // erroring or (worse) creating a second reservation.
     return { success: true, intentId: data.intentId, attemptId: data.attemptId, nonce: data.nonce, existingTxHash: data.txHash ?? undefined }

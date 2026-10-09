@@ -8,7 +8,7 @@ import { DragControls, type PanInfo } from 'framer-motion'
 //
 // Only a pull that starts on the sheet's top strip (grabber / title row,
 // top ~72px) moves the sheet, and only while the content under the finger is
-// scrolled to its top — so lists, inputs and buttons inside the sheet work
+// scrolled to its top - so lists, inputs and buttons inside the sheet work
 // exactly as before. A short, quick flick or a pull past ~90px closes it
 // through the sheet's own close handler (the same one its backdrop uses);
 // anything less springs back.

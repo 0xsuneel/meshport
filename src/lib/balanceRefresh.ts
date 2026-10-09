@@ -3,7 +3,7 @@
 // from the chain replaces it.
 //
 //   1. `spent` given (a USDC payment): the balance drops by it immediately.
-//   2. The cached reads are dropped and USDC is read from the chain — again
+//   2. The cached reads are dropped and USDC is read from the chain - again
 //      a few times over ~15s while it still shows the pre-transaction value
 //      (an RPC node can answer from a block before the transaction landed),
 //      so a stale first answer no longer sticks until the next 90s poll.
@@ -42,7 +42,7 @@ export function refreshBalancesAfterTx(address: string | null | undefined, opts:
       // Still the old figure: keep the instant (spent) one while retrying;
       // after the last try the chain's answer wins whatever it is.
       if (changed || !opts.spent || attempt >= RETRY_GAPS_MS.length) useWalletStore.getState().setBalance(bal)
-      if (changed) return // the chain has it — done
+      if (changed) return // the chain has it - done
     } catch { /* keep what's shown; try again */ }
     if (attempt < RETRY_GAPS_MS.length) setTimeout(read, RETRY_GAPS_MS[attempt++])
   }

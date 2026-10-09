@@ -108,7 +108,7 @@ export function AdminLoginPage() {
         </form>
 
         <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--text-secondary)', marginTop: 20 }}>
-          Restricted area — MeshPort owner access only.
+          Restricted area - MeshPort owner access only.
         </p>
       </div>
     </div>

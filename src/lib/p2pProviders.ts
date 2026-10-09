@@ -3,31 +3,31 @@
 // Every provider interface the P2P module depends on, all in one place, so
 // it's unambiguous exactly what a real integration would need to implement
 // later. No UI component in features/p2p/ should ever contain payment,
-// escrow, FX, or fiat-processing logic directly — it calls one of these
+// escrow, FX, or fiat-processing logic directly - it calls one of these
 // providers and renders the result. That's the actual mechanism behind
 // "swap the provider, not the UI": every provider here is a plain object
 // implementing an interface, exported as a single swappable const at the
 // bottom of its section. Changing providers later means changing one line
-// per section in this file — nothing in features/p2p/ needs to know.
+// per section in this file - nothing in features/p2p/ needs to know.
 
 import type { P2PTrade } from './p2pService'
 
 // ── ExchangeRateProvider ─────────────────────────────────────────────────────
-// Suggests a fair market price when a user is creating an offer — never
+// Suggests a fair market price when a user is creating an offer - never
 // used to silently override what a user actually typed. This is advisory
 // data for the Create Offer screen's "suggested price" hint, not something
 // that controls trade execution.
 export interface ExchangeRateProvider {
-  /** USDC is treated as 1:1 USD for rate-conversion purposes — same assumption every real USDC-based product makes. */
+  /** USDC is treated as 1:1 USD for rate-conversion purposes - same assumption every real USDC-based product makes. */
   getRate(currencyCode: string): Promise<number>
   getRates(currencyCodes: string[]): Promise<Record<string, number>>
 }
 
-// Static, illustrative-only rates — NOT live market data, and never
+// Static, illustrative-only rates - NOT live market data, and never
 // presented as such anywhere in the UI (every screen using this labels the
 // suggestion "Demo rate" or similar). Real integration later: implement
 // this interface against a real FX API (exchangerate.host, Open Exchange
-// Rates, etc.) and swap MOCK_EXCHANGE_RATE_PROVIDER below for it — nothing
+// Rates, etc.) and swap MOCK_EXCHANGE_RATE_PROVIDER below for it - nothing
 // else in this codebase changes.
 const MOCK_RATES: Record<string, number> = {
   USD: 1, EUR: 0.92, GBP: 0.79, INR: 83.2, PKR: 278.5, AED: 3.67, SAR: 3.75,
@@ -38,7 +38,7 @@ const MOCK_RATES: Record<string, number> = {
 const MOCK_EXCHANGE_RATE_PROVIDER: ExchangeRateProvider = {
   async getRate(currencyCode) {
     // Tiny artificial delay so a "fetching rate…" state in the UI is
-    // exercised the same way it would be against a real network call —
+    // exercised the same way it would be against a real network call -
     // catches a component that forgot to handle the loading state, rather
     // than that bug only surfacing once a real, slower API is wired in.
     await new Promise(r => setTimeout(r, 150))
@@ -56,8 +56,8 @@ export const exchangeRateProvider: ExchangeRateProvider = MOCK_EXCHANGE_RATE_PRO
 
 // ── EscrowProvider ───────────────────────────────────────────────────────────
 // Distinct from PaymentProvider below on purpose: PaymentProvider is about
-// the FIAT side (did the buyer pay — always fake here, no real fiat exists
-// to check). EscrowProvider is about the USDC side — holding it during a
+// the FIAT side (did the buyer pay - always fake here, no real fiat exists
+// to check). EscrowProvider is about the USDC side - holding it during a
 // trade and releasing it to the buyer once the seller confirms. Splitting
 // these matters because a real integration would very plausibly replace
 // them independently: a real FX/payment API is one project, an actual
@@ -67,35 +67,35 @@ export const exchangeRateProvider: ExchangeRateProvider = MOCK_EXCHANGE_RATE_PRO
 // ── Update: now backed by a real deployed contract (contracts/P2PEscrow.sol) ──
 // Every completed trade is escrow-backed now, not just sell-offer ones:
 //
-//   SELL offers  — escrow deposited ONCE at offer creation (depositForOffer),
+//   SELL offers  - escrow deposited ONCE at offer creation (depositForOffer),
 //                  keyed by the offer's own id. One running balance a trade
 //                  draws a partial amount from; cancelling a single trade
 //                  correctly leaves that capacity for the next trade against
 //                  the same offer (refund() is a genuine no-op here).
 //
-//   BUY offers   — the offer's CREATOR wants to receive USDC; they hold none
+//   BUY offers   - the offer's CREATOR wants to receive USDC; they hold none
 //                  to escrow up front. Whoever ACCEPTS a buy offer becomes
-//                  the seller for that specific trade, and THEY deposit —
+//                  the seller for that specific trade, and THEY deposit -
 //                  at trade-acceptance time (depositForTrade), keyed by the
 //                  TRADE's own id, since a different seller accepts the same
 //                  buy offer each time. Cancelling here genuinely does need
-//                  to move funds — refund() actually withdraws the deposit
+//                  to move funds - refund() actually withdraws the deposit
 //                  back to whichever seller made it, since there's no
 //                  "next trade" sharing this specific escrow bucket.
 //
-// Same deployed contract handles both — release()/refund() below check
+// Same deployed contract handles both - release()/refund() below check
 // trade.offerType to decide which bucket key and which behavior applies.
 export interface EscrowProvider {
   /**
    * Seller deposits USDC for their SELL offer, up front. Called from
-   * createOffer() in p2pService.ts BEFORE the offer row is ever inserted —
+   * createOffer() in p2pService.ts BEFORE the offer row is ever inserted -
    * if this fails, no offer gets created at all.
    */
   depositForOffer(offerId: string, amountUsdc: number): Promise<{ success: boolean; txHash?: string; message: string }>
   /**
    * The seller-for-this-trade deposits USDC for a BUY offer's trade, at
    * acceptance time. Called from createTrade() in p2pService.ts BEFORE the
-   * trade row is ever inserted — if this fails, no trade gets created,
+   * trade row is ever inserted - if this fails, no trade gets created,
    * exactly the same "cannot exist without a successful deposit" guarantee
    * sell offers already have, just at a different point in the flow.
    */
@@ -103,11 +103,11 @@ export interface EscrowProvider {
   /**
    * Called when a trade starts. Funds are already locked by this point
    * either way (offer-deposit for sell, trade-deposit for buy, both
-   * already done before the trade row exists) — genuinely nothing further
+   * already done before the trade row exists) - genuinely nothing further
    * to do here for either case.
    */
   lockFunds(trade: P2PTrade): Promise<{ success: boolean; message: string }>
-  /** Called when the seller releases. Routes to the correct escrow bucket based on trade.offerType — see file header. */
+  /** Called when the seller releases. Routes to the correct escrow bucket based on trade.offerType - see file header. */
   release(trade: P2PTrade): Promise<{ success: boolean; txHash?: string; message: string }>
   /**
    * Called when a single TRADE is cancelled/expires. For a SELL-offer
@@ -129,7 +129,7 @@ const RealContractEscrowProvider: EscrowProvider = {
       const txHash = await depositToEscrow(privateKey, offerId, amountUsdc)
       return { success: true, txHash, message: 'Escrow deposit confirmed on-chain.' }
     } catch (e: any) {
-      return { success: false, message: e?.message ?? 'Escrow deposit failed — please try again.' }
+      return { success: false, message: e?.message ?? 'Escrow deposit failed - please try again.' }
     }
   },
   async depositForTrade(tradeId, amountUsdc) {
@@ -141,11 +141,11 @@ const RealContractEscrowProvider: EscrowProvider = {
       const txHash = await depositForTrade(privateKey, tradeId, amountUsdc)
       return { success: true, txHash, message: 'Escrow deposit confirmed on-chain.' }
     } catch (e: any) {
-      return { success: false, message: e?.message ?? 'Escrow deposit failed — please try again.' }
+      return { success: false, message: e?.message ?? 'Escrow deposit failed - please try again.' }
     }
   },
   /**
-   * Registers the trade's buyer/amount on-chain, authoritatively — see
+   * Registers the trade's buyer/amount on-chain, authoritatively - see
    * P2PMeshportEscrowV2.sol's own header on why release() no longer trusts
    * caller-supplied buyer/amount. Must succeed before release() can ever
    * be called for this trade; if it fails, createTrade() in p2pService.ts
@@ -167,7 +167,7 @@ const RealContractEscrowProvider: EscrowProvider = {
       await registerTradeOnChain(privateKey, trade.offerId, trade.id, trade.buyerWallet, trade.amountUsdc)
       return { success: true, message: 'Trade registered on-chain.' }
     } catch (e: any) {
-      return { success: false, message: e?.message ?? 'Could not register this trade on-chain — please try again.' }
+      return { success: false, message: e?.message ?? 'Could not register this trade on-chain - please try again.' }
     }
   },
   async release(trade) {
@@ -184,26 +184,26 @@ const RealContractEscrowProvider: EscrowProvider = {
       const txHash = await releaseFromEscrow(privateKey, trade.id)
       return { success: true, txHash, message: 'USDC released from escrow to buyer.' }
     } catch (e: any) {
-      return { success: false, message: e?.message ?? 'Release failed — please try again.' }
+      return { success: false, message: e?.message ?? 'Release failed - please try again.' }
     }
   },
   async refund(trade) {
     if (trade.offerType !== 'buy') {
-      // Sell-offer trade — correctly a no-op, see interface doc comment.
-      return { success: true, message: 'Trade cancelled — funds remain in escrow for the next trade against this offer.' }
+      // Sell-offer trade - correctly a no-op, see interface doc comment.
+      return { success: true, message: 'Trade cancelled - funds remain in escrow for the next trade against this offer.' }
     }
-    // Buy-offer trade — the seller-for-this-trade's deposit genuinely needs
+    // Buy-offer trade - the seller-for-this-trade's deposit genuinely needs
     // to move back to them; nothing else will ever draw from this specific
     // trade-keyed bucket.
     try {
       const { useAuthStore } = await import('../store')
       const { privateKey } = useAuthStore.getState()
       // Whoever is cancelling might be the buyer OR the seller (both sides
-      // can cancel — see P2PPage.tsx's handleCancel) — but only the actual
+      // can cancel - see P2PPage.tsx's handleCancel) - but only the actual
       // depositor's wallet can call withdrawRemaining on their own bucket
       // (the contract checks msg.sender == seller || admin). If the buyer
       // is the one cancelling, THIS DEVICE's key won't be the depositor's,
-      // so the call would revert — that's correct/expected; a from-a-
+      // so the call would revert - that's correct/expected; a from-a-
       // different-account refund attempt should fail here, not silently
       // succeed. The seller (or an admin) refunding is the actual path
       // this needs to work reliably.
@@ -212,31 +212,31 @@ const RealContractEscrowProvider: EscrowProvider = {
       const txHash = await refundTradeKeyedEscrow(privateKey, trade.id)
       return { success: true, txHash, message: 'Escrowed USDC refunded to the seller.' }
     } catch (e: any) {
-      // Genuinely non-fatal from the caller's point of view — cancelTrade()
+      // Genuinely non-fatal from the caller's point of view - cancelTrade()
       // in p2pService.ts still marks the trade cancelled either way; a
       // refund that can't complete right now (e.g. this device belongs to
       // the buyer, not the depositing seller) just means the seller
       // reclaims it later some other way, not that cancellation itself
       // should fail.
-      return { success: false, message: e?.message ?? 'Refund could not be processed automatically — the seller may need to reclaim escrowed funds separately.' }
+      return { success: false, message: e?.message ?? 'Refund could not be processed automatically - the seller may need to reclaim escrowed funds separately.' }
     }
   },
 }
 
-// Fallback used only if VITE_P2P_ESCROW_CONTRACT isn't configured — the
+// Fallback used only if VITE_P2P_ESCROW_CONTRACT isn't configured - the
 // previous honor-system behavior, kept as a working fallback rather than
 // breaking the app outright if the contract hasn't been deployed yet, but
 // EVERY message here says so explicitly. Nothing silently pretends to be
 // real escrow when it isn't.
 const HonorSystemFallbackEscrowProvider: EscrowProvider = {
   async depositForOffer(_offerId, _amountUsdc) {
-    return { success: true, message: 'Escrow contract not configured — offer created without an on-chain deposit (honor system).' }
+    return { success: true, message: 'Escrow contract not configured - offer created without an on-chain deposit (honor system).' }
   },
   async depositForTrade(_tradeId, _amountUsdc) {
-    return { success: true, message: 'Escrow contract not configured — trade created without an on-chain deposit (honor system).' }
+    return { success: true, message: 'Escrow contract not configured - trade created without an on-chain deposit (honor system).' }
   },
   async lockFunds(_trade) {
-    return { success: true, message: 'Funds reserved (no escrow contract configured — not actually locked on-chain).' }
+    return { success: true, message: 'Funds reserved (no escrow contract configured - not actually locked on-chain).' }
   },
   async release(trade) {
     try {
@@ -253,27 +253,27 @@ const HonorSystemFallbackEscrowProvider: EscrowProvider = {
       let failures = 0
       try { failures = Number(localStorage.getItem(failKey) || '0') || 0 } catch { /* storage unavailable */ }
       const result = await sendUSDC({ privateKey, to: trade.buyerWallet, amount: trade.amountUsdc, idempotencyKey: `p2p-release-${trade.id}-${failures}` })
-      // A reverted send moved nothing — never report it as released.
+      // A reverted send moved nothing - never report it as released.
       if (result.state === 'failed') {
         try { localStorage.setItem(failKey, String(failures + 1)) } catch { /* storage unavailable */ }
-        return { success: false, txHash: result.txHash, message: 'The release payment was rejected on-chain — no USDC was sent. Please try again.' }
+        return { success: false, txHash: result.txHash, message: 'The release payment was rejected on-chain - no USDC was sent. Please try again.' }
       }
       return { success: true, txHash: result.txHash, message: result.state === 'pending'
-        ? 'USDC sent directly to buyer — still confirming on Arc (no escrow contract configured).'
+        ? 'USDC sent directly to buyer - still confirming on Arc (no escrow contract configured).'
         : 'USDC sent directly to buyer (no escrow contract configured).' }
     } catch (e: any) {
-      return { success: false, message: e?.message ?? 'Release failed — please try again.' }
+      return { success: false, message: e?.message ?? 'Release failed - please try again.' }
     }
   },
   async refund(_trade) {
-    return { success: true, message: 'Trade cancelled — no escrow contract configured, nothing was held.' }
+    return { success: true, message: 'Trade cancelled - no escrow contract configured, nothing was held.' }
   },
 }
 
 // ─────────────────────────────────────────────────────────────────────────
 // isEscrowPaused() safely returns false if no contract is configured (see
 // its own doc comment in p2pEscrowContract.ts), so this guard is always
-// safe to call — it's a genuine no-op in honor-system mode, and a real
+// safe to call - it's a genuine no-op in honor-system mode, and a real
 // on-chain check when a contract is deployed.
 //
 // THE BUG THIS FIXES: every deposit/release/refund call used to go
@@ -281,10 +281,10 @@ const HonorSystemFallbackEscrowProvider: EscrowProvider = {
 // no pause check anywhere in between. For the real contract, pausing still
 // "worked" in the sense that the on-chain transaction itself would revert
 // (deposit/release/withdrawRemaining are all `whenNotPaused` in
-// contracts/P2PEscrow.sol) — but only AFTER a signed transaction was sent,
+// contracts/P2PEscrow.sol) - but only AFTER a signed transaction was sent,
 // producing a raw contract-revert error rather than a clean message, and
 // only for the real-contract path. In honor-system mode (no contract
-// deployed), "Emergency Pause Escrow" did *nothing at all* — the honor
+// deployed), "Emergency Pause Escrow" did *nothing at all* - the honor
 // system doesn't touch the chain, so it never had any way to know it was
 // supposed to stop. This guard fixes both: same clean, immediate rejection
 // message either way, and honor-system mode now actually respects the
@@ -309,7 +309,7 @@ export const escrowProvider: EscrowProvider = {
     return (isEscrowContractDeployed() ? RealContractEscrowProvider : HonorSystemFallbackEscrowProvider).depositForTrade(tradeId, amountUsdc)
   },
   async lockFunds(trade) {
-    // Not gated — this is only ever a DB-level "reserved" message in both
+    // Not gated - this is only ever a DB-level "reserved" message in both
     // providers, never a real fund movement, so there's nothing for a
     // pause to actually protect against here.
     const { isEscrowContractDeployed } = await import('./p2pEscrowContract')
@@ -321,7 +321,7 @@ export const escrowProvider: EscrowProvider = {
     return (isEscrowContractDeployed() ? RealContractEscrowProvider : HonorSystemFallbackEscrowProvider).release(trade)
   },
   async refund(trade) {
-    // Matches contracts/P2PEscrow.sol exactly — withdrawRemaining is also
+    // Matches contracts/P2PEscrow.sol exactly - withdrawRemaining is also
     // `whenNotPaused` on-chain, so refunds are blocked during a pause too,
     // not just deposits/releases.
     const blocked = await assertNotPaused(); if (blocked) return blocked
@@ -331,14 +331,14 @@ export const escrowProvider: EscrowProvider = {
 }
 
 // ── PaymentProvider ──────────────────────────────────────────────────────────
-// The FIAT confirmation side specifically — "did the buyer actually pay."
+// The FIAT confirmation side specifically - "did the buyer actually pay."
 export interface PaymentProvider {
   confirmPayment(trade: P2PTrade): Promise<{ success: boolean; message: string }>
 }
 
 const DemoPaymentProvider: PaymentProvider = {
   async confirmPayment(_trade) {
-    // No real payment gateway exists to call here — intentionally the
+    // No real payment gateway exists to call here - intentionally the
     // entire implementation for the demo. A real provider would call out
     // to whatever confirms actual fiat receipt (a bank webhook, a payment
     // processor's API) before returning success.
@@ -352,7 +352,7 @@ export const paymentProvider: PaymentProvider = DemoPaymentProvider
 // Separate from PaymentProvider on purpose: PaymentProvider answers "did
 // this specific trade's payment happen" (a yes/no per trade). FiatProvider
 // is the lower-level thing a real PaymentProvider implementation would
-// itself be built on — actually moving money via a specific rail (a bank
+// itself be built on - actually moving money via a specific rail (a bank
 // transfer API, a card processor, a specific regional payment method).
 // Kept as its own interface so a real integration has an obvious seam:
 // implement FiatProvider for each real payment method Merchant Mode
@@ -367,7 +367,7 @@ const DemoFiatProvider: FiatProvider = {
   name: 'Demo Fiat Rail',
   async processPayment({ amount, currency, method }) {
     // Deliberately slow enough to be visibly a "processing" state in the
-    // UI (see the processing animation on the trade screen) — this is the
+    // UI (see the processing animation on the trade screen) - this is the
     // one place in the whole module that intentionally takes a few
     // seconds, specifically to make the demo experience read as "a real
     // payment rail is doing something" rather than an instant, obviously

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, startTransition } from 'react'
 
-// Kept byte-identical to buildProfileUpdateMessage in api/profile.ts — if
+// Kept byte-identical to buildProfileUpdateMessage in api/profile.ts - if
 // you edit one, edit both, or profile saves will start failing signature
 // verification.
 function buildProfileUpdateMessage(
@@ -59,12 +59,12 @@ export function SecurityPage() {
   const secured = !isSocialWallet || (!!userId && knownSecured(userId))
   // Admin Panel → Features → Security. When an admin turns this off, App.tsx
   // (global effect) forces biometricEnabled to false for every session
-  // immediately — this local gate additionally locks the toggle itself so
+  // immediately - this local gate additionally locks the toggle itself so
   // the user can't turn it back on until an admin re-enables it.
   const biometricAdminEnabled = useFeatureEnabled('biometric_login_enabled', true)
   const label = biometricLabel()
 
-  // Enabling needs the RAW passcode to encrypt for storage — the store only
+  // Enabling needs the RAW passcode to encrypt for storage - the store only
   // ever holds the hash (by design, see security.ts). Disabling doesn't
   // need this at all, so only the enable path shows this sheet.
   const [confirmSheet, setConfirmSheet] = useState(false)
@@ -74,7 +74,7 @@ export function SecurityPage() {
 
   const handleToggle = async () => {
     if (biometricEnabled) {
-      // Disabling — no passcode needed, just clear the stored credential.
+      // Disabling - no passcode needed, just clear the stored credential.
       if (walletAddress) removeBiometric(walletAddress)
       setBiometricEnabled(false)
       showToastMessage(`${label} disabled`)
@@ -97,12 +97,12 @@ export function SecurityPage() {
     }
     // Close the sheet and hand off to the same Enable/Skip screen used at
     // signup, rather than firing the native OS prompt directly from here.
-    // Two reasons: (1) consistency — one single place in the app that
+    // Two reasons: (1) consistency - one single place in the app that
     // actually asks "enable biometric?", not two separately-built flows
     // that could drift apart; (2) this call used to fire the native
     // credential prompt in the same tick as the passcode sheet's last
     // keystroke completing, which is very likely what was actually causing
-    // the reported flicker — a full route transition guarantees a clean,
+    // the reported flicker - a full route transition guarantees a clean,
     // already-settled screen exists before any native modal ever appears.
     setConfirmSheet(false)
     handBiometricPasscode(confirmPass); navigate('/auth/enable-biometric', { state: { next: location.pathname } })
@@ -140,7 +140,7 @@ export function SecurityPage() {
           <SecSectionLabel>App lock</SecSectionLabel>
           <Card className="divide-y divide-border">
             <ToggleItem icon={<Fingerprint className="w-5 h-5 text-accent-text" />} label={`${label} Login`}
-              description={biometricAdminEnabled ? "Optional — uses passcode as fallback" : "Disabled by admin"}
+              description={biometricAdminEnabled ? "Optional - uses passcode as fallback" : "Disabled by admin"}
               enabled={biometricAdminEnabled && biometricEnabled}
               disabled={!biometricAdminEnabled}
               onToggle={handleToggle} />
@@ -197,7 +197,7 @@ export function SecurityPage() {
   )
 }
 
-// ─── Appearance — System / Light / Dark theme picker ───────────────────────────
+// ─── Appearance - System / Light / Dark theme picker ───────────────────────────
 const APPEARANCE_OPTIONS: { mode: ThemeMode; label: string; description: string; icon: React.ReactNode }[] = [
   { mode: 'system', label: 'System', description: 'Match your device setting', icon: <Monitor className="w-5 h-5" /> },
   { mode: 'light',  label: 'Light',  description: 'Always use the light theme', icon: <Sun className="w-5 h-5" /> },
@@ -206,7 +206,7 @@ const APPEARANCE_OPTIONS: { mode: ThemeMode; label: string; description: string;
 
 // Fixed (non-CSS-var) palette swatches so the desktop preview panel can show
 // what light/dark actually look like regardless of the page's own current
-// theme — pulled straight from the light/dark blocks in index.css.
+// theme - pulled straight from the light/dark blocks in index.css.
 const PREVIEW_PALETTE: Record<'light' | 'dark', { bg: string; surface: string; border: string; text: string; textSecondary: string; brand: string }> = {
   light: { bg: '#F5F6F8', surface: '#FFFFFF', border: '#D8DBE0', text: '#1A1A1A', textSecondary: '#666B73', brand: '#0F5C57' },
   dark:  { bg: '#0B0E11', surface: '#181A20', border: '#2B3139', text: '#EAECEF', textSecondary: '#9CA3AE', brand: '#12665F' },
@@ -214,7 +214,7 @@ const PREVIEW_PALETTE: Record<'light' | 'dark', { bg: string; surface: string; b
 
 // Desktop-only: a live mock of the app chrome so picking a theme shows what
 // it actually looks like instead of leaving the page mostly empty next to
-// the options card. Purely decorative — no interactivity.
+// the options card. Purely decorative - no interactivity.
 function AppearancePreview({ mode }: { mode: ThemeMode }) {
   const resolved = resolveTheme(mode)
   const p = PREVIEW_PALETTE[resolved]
@@ -222,7 +222,7 @@ function AppearancePreview({ mode }: { mode: ThemeMode }) {
     <div className="rounded-3xl border border-border bg-card p-5">
       <p className="text-sm font-semibold text-text-primary mb-1">Preview</p>
       <p className="text-xs text-text-secondary mb-4">
-        {mode === 'system' ? `Following your device — currently ${resolved}.` : `How MeshPort looks in ${resolved} mode.`}
+        {mode === 'system' ? `Following your device - currently ${resolved}.` : `How MeshPort looks in ${resolved} mode.`}
       </p>
       <div className="rounded-2xl overflow-hidden border" style={{ borderColor: p.border, background: p.bg }}>
         {/* Mock header */}
@@ -333,7 +333,7 @@ export function ChangePasscodePage() {
 
   const handleChange = async () => {
     setError('')
-    // If no passcode set — treat as setting one fresh (no old passcode needed)
+    // If no passcode set - treat as setting one fresh (no old passcode needed)
     if (storedPasscode) {
       if (oldPass.length < 6) { setError('Enter your current passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
@@ -349,27 +349,27 @@ export function ChangePasscodePage() {
       const hashed = await hashPasscode(newPass)
 
       // Keep every local secret that's derived from the passcode in sync
-      // with the NEW passcode — otherwise a self-custodial wallet's
+      // with the NEW passcode - otherwise a self-custodial wallet's
       // locally-encrypted private key, and any registered biometric
       // unlock, would silently stay tied to the OLD passcode and start
       // failing with "wrong passcode" the next time they're used (biometric
-      // unlock, or signing a transaction). Never a separate/new passcode —
+      // unlock, or signing a transaction). Never a separate/new passcode -
       // both are just re-encrypted copies of this same new value.
       const { walletAddress, privateKey, walletSource, biometricEnabled } = useAuthStore.getState()
       if (walletAddress && privateKey && walletSource !== 'social-auto') {
-        // create / import-seed / import-privkey wallets only — social-auto
+        // create / import-seed / import-privkey wallets only - social-auto
         // wallets have no local encrypted key (server-side vault instead).
         const reEncrypted = await encryptPrivateKey(privateKey, newPass)
         storeEncryptedKey(walletAddress, reEncrypted)
       }
       // SECURITY FIX: same passcode-rotation problem the private key already
-      // solved above, now closed for the mnemonic too — otherwise the
+      // solved above, now closed for the mnemonic too - otherwise the
       // locally-encrypted recovery phrase would silently stay decryptable
       // only under the OLD passcode, and BackupRecoveryPhrasePage's reveal
       // flow (which authenticates with the CURRENT passcode) would start
       // failing to decrypt it. Deliberately decrypts-then-re-encrypts from
       // STORAGE with the just-verified `oldPass` (not from in-memory
-      // `mnemonic` state, the way the private key does above) — the
+      // `mnemonic` state, the way the private key does above) - the
       // mnemonic is no longer guaranteed to be sitting in memory the way
       // privateKey is (see store/index.ts's persist `migrate`), so this is
       // the one path that reliably has it regardless of what triggered this
@@ -392,7 +392,7 @@ export function ChangePasscodePage() {
       }
 
       setPasscode(hashed)
-      // Show success immediately — local passcode (and its dependents) are already updated
+      // Show success immediately - local passcode (and its dependents) are already updated
       showToastMessage('Passcode updated successfully', 'success')
       navigate(-1)
       // The passcode (even hashed) never leaves this device: a 6-digit PIN's
@@ -417,7 +417,7 @@ export function ChangePasscodePage() {
       <div className="px-4 space-y-3">
         <div className="p-4 bg-brand/10 border border-brand/30 rounded-2xl">
           <p className="text-sm text-text-secondary">
-            Works across all wallet types — generated, imported seed phrase, imported private key, and social login.
+            Works across all wallet types - generated, imported seed phrase, imported private key, and social login.
           </p>
         </div>
 
@@ -443,7 +443,7 @@ export function ChangePasscodePage() {
                 ))}
               </div>
               <PinKeypad
-                autoBiometric={false} // choosing a new passcode — not a check of the current one
+                autoBiometric={false} // choosing a new passcode - not a check of the current one
                 value={activeField === 'old' ? oldPass : activeField === 'new' ? newPass : confirmPass}
                 onChange={v => {
                   setError('')
@@ -472,12 +472,12 @@ export function ChangePasscodePage() {
   )
 }
 
-// ─── Backup — routes based on loginType and walletSource ───────────────────────
+// ─── Backup - routes based on loginType and walletSource ───────────────────────
 // Route map:
 //   social login             → Secure Your Wallet (passkeys + Recovery QR)
 //   create (generated seed)  → BackupRecoveryPhrasePage  (Seed + Private Key tabs)
 //   import-seed              → BackupRecoveryPhrasePage  (Seed + Private Key tabs)
-//   import-privkey           → BackupPrivateKeyOnlyPage  (Private Key only — no seed)
+//   import-privkey           → BackupPrivateKeyOnlyPage  (Private Key only - no seed)
 export function BackupPage() {
   const loginType = useAuthStore(s => s.loginType)
   const walletSource = useAuthStore(s => s.walletSource)
@@ -561,7 +561,7 @@ function BackupPrivateKeyOnlyPage() {
       </div>
       <div className="px-4 space-y-4">
         <div className="p-3 bg-warning/10 border border-warning/30 rounded-2xl">
-          <p className="text-sm text-warning">⚠️ Never share your private key. Anyone with it controls your wallet. Avoid taking a screenshot — write it down instead.</p>
+          <p className="text-sm text-warning">⚠️ Never share your private key. Anyone with it controls your wallet. Avoid taking a screenshot - write it down instead.</p>
         </div>
 
         <Card className="p-5 space-y-4">
@@ -630,7 +630,7 @@ function BackupRecoveryPhrasePage() {
   // SECURITY FIX: mnemonic is no longer persisted in plain text (see
   // store/index.ts's persist `migrate` / security.ts's encryptMnemonic), so
   // it's typically NOT in the store's in-memory `mnemonic` field after a
-  // reload — this holds the value once handleReveal decrypts it on demand,
+  // reload - this holds the value once handleReveal decrypts it on demand,
   // exactly mirroring decryptedKey's existing role for the private key.
   const [decryptedMnemonic, setDecryptedMnemonic] = useState<string | null>(null)
   // Both 'create' and 'import-seed' wallets expose both Seed + Private Key tabs.
@@ -652,7 +652,7 @@ function BackupRecoveryPhrasePage() {
         correct = await verifyPasscode(passcode, storedPasscode)
       }
       if (correct) {
-        // Retrieve the private key — try in-memory first, then derive from mnemonic, then restore
+        // Retrieve the private key - try in-memory first, then derive from mnemonic, then restore
         let key = inMemoryKey
         if (!key && mnemonic) {
           try {
@@ -672,13 +672,13 @@ function BackupRecoveryPhrasePage() {
             clearRawPasscode()
           }
         }
-        // Retrieve the mnemonic the same way — try in-memory first (only
+        // Retrieve the mnemonic the same way - try in-memory first (only
         // ever populated within the same session that created/imported the
         // wallet, see restoreWallet.ts), then decrypt from local storage
         // using the passcode just verified above. Best-effort: a private-
         // key-only import (walletSource 'import-privkey') has no mnemonic
         // at all, so getEncryptedMnemonic correctly returns null there and
-        // this silently no-ops — the UI already hides the Seed tab for that
+        // this silently no-ops - the UI already hides the Seed tab for that
         // wallet type (showPrivateKeyTab / the router-level guard mentioned
         // above).
         let revealedMnemonic = mnemonic
@@ -740,7 +740,7 @@ function BackupRecoveryPhrasePage() {
           </Card>
         )}
         <div className="p-3 bg-warning/10 border border-warning/30 rounded-2xl">
-          <p className="text-sm text-warning">⚠️ Never share your recovery phrase or private key. Anyone with them controls your wallet. Avoid taking a screenshot — write it down instead.</p>
+          <p className="text-sm text-warning">⚠️ Never share your recovery phrase or private key. Anyone with them controls your wallet. Avoid taking a screenshot - write it down instead.</p>
         </div>
 
         {!revealed ? (
@@ -758,7 +758,7 @@ function BackupRecoveryPhrasePage() {
           </Card>
         ) : (
           <>
-            {/* Tab selector — Seed Phrase / Private Key (hidden for seed-imported wallets) */}
+            {/* Tab selector - Seed Phrase / Private Key (hidden for seed-imported wallets) */}
             {showPrivateKeyTab && (
               <div className="flex bg-surface rounded-2xl p-1 border border-border">
                 <button onClick={() => setActiveTab('seed')}
@@ -805,7 +805,7 @@ function BackupRecoveryPhrasePage() {
               </Card>
             )}
 
-            {/* Private Key section — hidden for seed-imported wallets */}
+            {/* Private Key section - hidden for seed-imported wallets */}
             {showPrivateKeyTab && activeTab === 'key' && (
               <Card className="p-5 space-y-4">
                 <div className="flex items-center justify-between">
@@ -851,7 +851,7 @@ function BackupRecoveryPhrasePage() {
 }
 
 // Resize + compress an image client-side before upload. Keeps the longest
-// edge at maxDim px and re-encodes as JPEG at the given quality — this keeps
+// edge at maxDim px and re-encodes as JPEG at the given quality - this keeps
 // avatar uploads small and fast regardless of how large the original photo is.
 async function compressImage(file: File, maxDim = 512, quality = 0.85): Promise<File> {
   const objectUrl = URL.createObjectURL(file)
@@ -880,7 +880,7 @@ async function compressImage(file: File, maxDim = 512, quality = 0.85): Promise<
     const baseName = file.name.replace(/\.[^.]+$/, '')
     return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' })
   } catch {
-    return file // any decode error — just upload the original
+    return file // any decode error - just upload the original
   } finally {
     URL.revokeObjectURL(objectUrl)
   }
@@ -935,7 +935,7 @@ export function EditProfilePage() {
     try {
       const { walletAddress: wa, privateKey } = useAuthStore.getState()
       if (!wa || !privateKey) {
-        showToastMessage('Wallet not unlocked — please unlock your wallet and try again', 'error')
+        showToastMessage('Wallet not unlocked - please unlock your wallet and try again', 'error')
         return
       }
 
@@ -1056,7 +1056,7 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
   const [, setNowTick] = useState(0)
   useEffect(() => { const t = setInterval(() => setNowTick(x => x + 1), 60_000); return () => clearInterval(t) }, [])
 
-  // P2P notifications (server-driven — see lib/p2pNotifications.ts) need
+  // P2P notifications (server-driven - see lib/p2pNotifications.ts) need
   // their `read` state synced back to Supabase, not just flipped locally,
   // since that table (not localStorage) is their real source of truth
   // across devices. Other notification types stay purely local, as before.
@@ -1101,7 +1101,7 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
       bg: 'bg-accent/20 text-accent-text',
       dot: 'bg-accent',
     },
-    // ── P2P marketplace — server-driven, see lib/p2pNotifications.ts ────────
+    // ── P2P marketplace - server-driven, see lib/p2pNotifications.ts ────────
     buy_order_placed: { icon: <ShoppingCart className="w-4 h-4" />, bg: 'bg-success/20 text-success', dot: 'bg-success' },
     sell_order_placed: { icon: <Tag className="w-4 h-4" />, bg: 'bg-brand/20 text-brand-text', dot: 'bg-brand' },
     payment_marked_completed: { icon: <CheckCircle className="w-4 h-4" />, bg: 'bg-warning/20 text-warning', dot: 'bg-warning' },

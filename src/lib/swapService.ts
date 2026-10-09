@@ -1,23 +1,23 @@
 /**
- * swapService.ts — client-side Swap execution engine.
+ * swapService.ts - client-side Swap execution engine.
  *
  * SECURITY FIX (private-key exposure, transaction audit 2026-09-17):
  * kit.swap()/kit.estimateSwap() used to run server-side, in
- * api/swap-proxy.js — which meant the raw self-custodial private key was
+ * api/swap-proxy.js - which meant the raw self-custodial private key was
  * POSTed over the network to a Vercel serverless function on every swap
  * (and even on a fire-and-forget page-mount warm-up call), just so that
  * function could build a signer from it. That broke the private-key-
  * never-leaves-the-device boundary every other feature already respects.
  * Multichain Claim/Transfer already run this exact AppKit +
  * createEthersAdapterFromPrivateKey pattern entirely in the browser (see
- * MultichainClaimPage.tsx's buildAdapter/loadSdk) — Swap moving here too
+ * MultichainClaimPage.tsx's buildAdapter/loadSdk) - Swap moving here too
  * is not a new capability, just closing the one feature that hadn't been
  * migrated. The key never leaves this device now: signing happens
  * locally, exactly like Pay/ChatPay/Claim/Transfer already do.
  *
  * api/swap-proxy.js still exists, but ONLY for the post-swap bookkeeping
  * write (action='recordCompletion') that used to happen server-side as
- * part of the same request — that needs the SERVICE_ROLE key (which must
+ * part of the same request - that needs the SERVICE_ROLE key (which must
  * never reach the client), but only ever takes a txHash + amounts, never
  * a private key.
  */
@@ -40,7 +40,7 @@ const TOKEN_CONTRACTS: Record<string, { address: string; decimals: number }> = {
 }
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 
-// ── Cached SDK modules/kit instance — avoids re-importing/re-constructing
+// ── Cached SDK modules/kit instance - avoids re-importing/re-constructing
 // on every estimate/swap call within the same page session.
 let _sdkModules: any = null
 async function getSdkModules() {
@@ -68,7 +68,7 @@ function getKit(AppKit: any) {
 
 // Circle's swap service (api.circle.com/v1/stablecoinKits/*) needs the kit
 // key, but the SDK never sends a key from a browser (server-only secret), so
-// every quote came back "Invalid or missing API key" — shown to users as "no
+// every quote came back "Invalid or missing API key" - shown to users as "no
 // liquidity". The SDK's calls to that service are sent through
 // /api/swap-proxy instead, which adds the key server-side. Only public swap
 // details travel (tokens, amount, wallet address); signing stays on-device.
@@ -107,7 +107,7 @@ const APPROVE_SELECTOR = '0x095ea7b3'
 let _onSwapProgress: ((p: SwapProgress) => void) | null = null
 let _confirmedHashes = new Set<string>()
 // Set once a swap transaction (not an approve) has actually been broadcast in
-// the current executeSwapLocal — a retry must never send a second swap then.
+// the current executeSwapLocal - a retry must never send a second swap then.
 let _swapBroadcast = false
 
 function reportSwapProgress(reqs: any[], results: any[], Transaction: any) {
@@ -124,15 +124,15 @@ function reportSwapProgress(reqs: any[], results: any[], Transaction: any) {
         _confirmedHashes.add(res.result.transactionHash)
         emit({ kind: 'confirmed', hash: res.result.transactionHash, success: res.result.status === '0x1' })
       }
-    } catch { /* progress is display-only — never affects the swap itself */ }
+    } catch { /* progress is display-only - never affects the swap itself */ }
   }
 }
 
 // Arc RPC provider that forwards through the SAME same-origin, health-
-// scored /api/arc-rpc proxy every other Arc-facing feature already uses —
+// scored /api/arc-rpc proxy every other Arc-facing feature already uses -
 // never a raw third-party RPC URL from the browser, and never the
 // in-process forward() swap-proxy.js used server-side (there's no
-// same-process call available from the browser — this is the real network
+// same-process call available from the browser - this is the real network
 // hop equivalent of it).
 function buildArcForwardProvider(JsonRpcProvider: any, Transaction: any) {
   class ArcForwardProvider extends JsonRpcProvider {
@@ -162,7 +162,7 @@ function buildArcForwardProvider(JsonRpcProvider: any, Transaction: any) {
   return new ArcForwardProvider()
 }
 
-// Adapter cache, keyed by a short, non-reversible tail of the private key —
+// Adapter cache, keyed by a short, non-reversible tail of the private key -
 // same pattern MultichainClaimPage.tsx's buildAdapter/_providerCache
 // already uses. Avoids rebuilding the adapter on every call for the same
 // wallet within this session.
@@ -179,7 +179,7 @@ async function getAdapter(privateKey: string) {
   return adapter
 }
 
-// ── Error classification — ported verbatim from api/swap-proxy.js's own
+// ── Error classification - ported verbatim from api/swap-proxy.js's own
 // extractError (see that file's history for the full reasoning behind each
 // branch). One difference: the "Invalid KIT_KEY" server-config message
 // doesn't make sense shown to an end user now that this runs client-side,
@@ -199,7 +199,7 @@ function extractError(err: any, sdkMods: any): { raw: string; userMessage: strin
     if (isKitError(err) && (err.recoverability === 'RESUMABLE' || isRpcError(err) || isNetworkError(err))) {
       return {
         raw,
-        userMessage: "We couldn't confirm this swap finished — it may have already gone through. Check your balance or Activity before retrying to avoid a double swap.",
+        userMessage: "We couldn't confirm this swap finished - it may have already gone through. Check your balance or Activity before retrying to avoid a double swap.",
         isLiquidity: false, isUncertain: true,
       }
     }
@@ -209,12 +209,12 @@ function extractError(err: any, sdkMods: any): { raw: string; userMessage: strin
 
   // Checked first: a rejected service key must never read as "no liquidity".
   if (lower.includes('api key') || lower.includes('not signed in') || lower.includes('swap service')) {
-    return { raw, userMessage: 'Swap is temporarily unavailable — please try again shortly.', isLiquidity: false, isUncertain: false }
+    return { raw, userMessage: 'Swap is temporarily unavailable - please try again shortly.', isLiquidity: false, isUncertain: false }
   }
   if (lower.includes('no route') || lower.includes('route or resource not found') ||
       lower.includes('unsupported_route') || lower.includes('input_unsupported_route') ||
       lower.includes('no route available') || lower.includes('route not found')) {
-    return { raw, userMessage: 'No swap route available. Arc Testnet pool liquidity is temporarily low — try a smaller amount or wait a few minutes.', isLiquidity: true, isUncertain: false }
+    return { raw, userMessage: 'No swap route available. Arc Testnet pool liquidity is temporarily low - try a smaller amount or wait a few minutes.', isLiquidity: true, isUncertain: false }
   }
   if (lower.includes('slippage') || lower.includes('price impact') || lower.includes('stop limit') || lower.includes('stoplimit')) {
     return { raw, userMessage: 'Price moved too much during swap. Try increasing slippage tolerance or use a smaller amount.', isLiquidity: false, isUncertain: false }
@@ -226,13 +226,13 @@ function extractError(err: any, sdkMods: any): { raw: string; userMessage: strin
     return { raw, userMessage: 'Token approval failed. Please try again.', isLiquidity: false, isUncertain: false }
   }
   if ((lower.includes('kit') && lower.includes('key')) || lower.includes('unauthorized') || lower.includes('forbidden')) {
-    return { raw, userMessage: 'Swap is temporarily unavailable — please try again shortly.', isLiquidity: false, isUncertain: false }
+    return { raw, userMessage: 'Swap is temporarily unavailable - please try again shortly.', isLiquidity: false, isUncertain: false }
   }
   if (lower.includes('rpc endpoint') || lower.includes('rpc error') || lower.includes('network') ||
       lower.includes('timeout') || lower.includes('econnreset') || lower.includes('fetch')) {
     return {
       raw,
-      userMessage: "We couldn't confirm this swap finished — it may have already gone through. Check your balance or Activity before retrying to avoid a double swap.",
+      userMessage: "We couldn't confirm this swap finished - it may have already gone through. Check your balance or Activity before retrying to avoid a double swap.",
       isLiquidity: false, isUncertain: true,
     }
   }
@@ -245,7 +245,7 @@ function extractPossibleTxHash(err: any): string | null {
 
 // Did the expected output token actually land in this wallet in roughly the
 // last minute? Ported from api/swap-proxy.js's own verifySwapLanded, but
-// simplified to a single call through arcRpcJson (src/lib/arc.ts) — that
+// simplified to a single call through arcRpcJson (src/lib/arc.ts) - that
 // already goes through the same health-scored /api/arc-rpc proxy the
 // server-side version had to race multiple raw RPC URLs for by hand.
 async function verifySwapLanded(walletAddress: string, tokenOutSymbol: string): Promise<{ txHash: string; amount: number } | null> {
@@ -272,11 +272,11 @@ async function verifySwapLanded(walletAddress: string, tokenOutSymbol: string): 
   }
 }
 
-// Post-swap bookkeeping — same two writes api/swap-proxy.js's
+// Post-swap bookkeeping - same two writes api/swap-proxy.js's
 // recordSwapActivity/markAttemptSubmittedServerSide used to do server-side
 // as part of the signing request. Split out into its own tiny endpoint
 // (action='recordCompletion') that takes a txHash + amounts, never a
-// private key — the SERVICE_ROLE key it needs stays server-only, same as
+// private key - the SERVICE_ROLE key it needs stays server-only, same as
 // before, just no longer bundled into the same request as the signing.
 // Awaited (not fire-and-forget) by callers so the same "close the race with
 // deposit-scan-all's independent sweep" property is preserved.
@@ -327,7 +327,7 @@ type ExecuteSwapParams = {
   walletAddress: string
   tokenIn: string; tokenOut: string; amountIn: string; slippageBps: number
   attemptId?: string | null; intentId?: string | null
-  /** Real on-chain progress for the checklist — see SwapProgress above. */
+  /** Real on-chain progress for the checklist - see SwapProgress above. */
   onProgress?: (p: SwapProgress) => void
 }
 
@@ -348,7 +348,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
   const adapter = await getAdapter(params.privateKey)
 
   const parsedAmt = parseFloat(params.amountIn)
-  // Same formatting api/swap-proxy.js used — toFixed(8) then trim trailing
+  // Same formatting api/swap-proxy.js used - toFixed(8) then trim trailing
   // zeros handles all three tokens (USDC/EURC/cirBTC) correctly, including
   // cirBTC amounts too small for toFixed(2) to represent without rounding
   // to zero.
@@ -379,7 +379,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
 
     const possibleHash = extractPossibleTxHash(e1)
     if (possibleHash) {
-      console.warn('[Swap] swap threw but a txHash was present — recording activity defensively:', possibleHash)
+      console.warn('[Swap] swap threw but a txHash was present - recording activity defensively:', possibleHash)
       await finish(possibleHash, 0)
     } else if (isUncertain) {
       const landed = await verifySwapLanded(params.walletAddress, params.tokenOut)
@@ -397,7 +397,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
   }
 }
 
-// Warms the SDK module cache (dynamic imports only — no key, no network
+// Warms the SDK module cache (dynamic imports only - no key, no network
 // call) so the user's first real estimate hits a warm module cache instead
 // of paying for the parse-the-full-module-graph cost on that first call.
 // Replaces the old page-mount warm-up, which used to POST a real private

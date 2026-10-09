@@ -33,7 +33,7 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 
-/** Chat text for a request / bill — the chat renders it as a live card. */
+/** Chat text for a request / bill - the chat renders it as a live card. */
 function chatMessageFor(i: MerchantIntent): string {
   if (i.kind === 'invoice') {
     const lines = (i.items ?? []).map(x => `${x.name} × ${x.qty}`).join(', ')
@@ -88,7 +88,7 @@ export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains
   }, [])
   useEffect(() => { void load() }, [load])
   useEffect(() => walletAddress ? subscribeMerchantPayments(walletAddress, () => { void load() }) : undefined, [walletAddress, load])
-  // Direct deposits are matched by the server every minute — refresh too.
+  // Direct deposits are matched by the server every minute - refresh too.
   useEffect(() => { const t = setInterval(() => { void load() }, 60_000); return () => clearInterval(t) }, [load])
 
   const navigate = useNavigate()
@@ -119,7 +119,7 @@ export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains
 export type Customer = { key: string; name: string; total: number; count: number; last: string; search: string }
 
 /**
- * Direct payments on other chains (chain receipts that aren't an order's —
+ * Direct payments on other chains (chain receipts that aren't an order's -
  * those are in `payments` already) as payment entries, so Received, the
  * customer list and each customer's history all include them. A mint
  * (faucet / CCTP) has no paying wallet: its entry has no `from`.
@@ -209,7 +209,7 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Summary — one compact row */}
+      {/* Summary - one compact row */}
       <div style={{ ...card, display: 'flex', alignItems: 'stretch' }}>
         {stat('Received', `$${formatAmount(received)}`, `${paymentCount} payment${paymentCount === 1 ? '' : 's'}`)}
         {divider}
@@ -307,7 +307,7 @@ const fmtWhen = (iso: string) => {
 }
 
 /**
- * Claim All: every chain's USDC to the Arc balance in one go — the merchant
+ * Claim All: every chain's USDC to the Arc balance in one go - the merchant
  * taps it (nothing moves by itself). Offered once every 6 hours; one chain
  * can still be claimed any time from the list below. See merchantClaimAll.
  */
@@ -349,7 +349,7 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
         await restorePrivateKey(passcode, { silent: true }).catch(() => false)
         key = useAuthStore.getState().privateKey
       }
-      if (!key) throw new Error('Wallet unavailable — unlock MeshPort and try again')
+      if (!key) throw new Error('Wallet unavailable - unlock MeshPort and try again')
       const { merchantClaimAll } = await import('@/lib/ubClaim')
       const r = await merchantClaimAll({
         walletAddress, privateKey: key,
@@ -359,8 +359,8 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
       const moved = r.cctp
       if (moved > 0) setLast(Date.now())
       setResult(moved > 0
-        ? `$${formatAmount(moved)} USDC is on its way to Arc.${r.failed.length ? ` ${r.failed.length} chain${r.failed.length === 1 ? '' : 's'} didn't go through — see above.` : ''}`
-        : 'Nothing was claimed — see the messages above.')
+        ? `$${formatAmount(moved)} USDC is on its way to Arc.${r.failed.length ? ` ${r.failed.length} chain${r.failed.length === 1 ? '' : 's'} didn't go through - see above.` : ''}`
+        : 'Nothing was claimed - see the messages above.')
       onClaimed?.()
     } catch (e) {
       showToastMessage(e instanceof Error ? e.message : 'Claim All failed', 'error')
@@ -400,7 +400,7 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
       <div>
         <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Claim All</div>
         <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, lineHeight: 1.4 }}>
-          {`Moves USDC from every chain to your Arc balance through CCTP — no gas needed, MeshPort pays it. ${waitText}; you can still claim one chain at a time below.`}
+          {`Moves USDC from every chain to your Arc balance through CCTP - no gas needed, MeshPort pays it. ${waitText}; you can still claim one chain at a time below.`}
         </div>
       </div>
       {!scanning && due.length > 0 && (
@@ -473,9 +473,9 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
   const [busy, setBusy] = useState(false)
 
   const walletAddress = useAuthStore(s => s.walletAddress)
-  // MeshPort QR: Arc — EIP-681 (address + amount due + Arc) for any wallet,
+  // MeshPort QR: Arc - EIP-681 (address + amount due + Arc) for any wallet,
   // plus the order's pay link for MeshPort's scanner (order, amount fixed).
-  // Merchant QR: one of the other networks — ONLY address + amount + network.
+  // Merchant QR: one of the other networks - ONLY address + amount + network.
   // A wallet payment is linked to this order by the deposit watcher.
   const [qrMode, setQrMode] = useState<'link' | 'wallet'>('link')
   const [qrChain, setQrChain] = useState(MERCHANT_QR_EXTERNAL[0].id)
@@ -573,7 +573,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
     setBusy(true)
     try {
       const v = await submitPayment(code, vChain, vHash.trim(), { merchantVerify: true })
-      showToastMessage(v.pending ? 'Not confirmed on-chain yet — try again shortly' : 'Payment checked', v.pending ? 'info' : 'success')
+      showToastMessage(v.pending ? 'Not confirmed on-chain yet - try again shortly' : 'Payment checked', v.pending ? 'info' : 'success')
       setVerifyOpen(false); setVHash(''); onChanged()
     } catch (e) {
       showToastMessage(e instanceof Error ? e.message : 'Could not verify', 'error')
@@ -625,7 +625,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
             {intent.completedByMerchant && intent.received > 0 && intent.received < intent.amount ? ` · $${formatAmount(intent.received)} received` : ''}
           </div>
           {over > 0.000001 && (
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning)', marginTop: 2 }}>Overpaid by ${formatAmount(over)} USDC — you may want to refund it</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning)', marginTop: 2 }}>Overpaid by ${formatAmount(over)} USDC - you may want to refund it</div>
           )}
           {intent.completedNote && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Note: {intent.completedNote}</div>}
         </div>
@@ -648,7 +648,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
             {qrMode === 'wallet' && walletAddress && dueNow > 0
               ? <WalletPaymentDetails chainId={qrChain} to={walletAddress} amount={dueNow} />
               : <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', maxWidth: 320, lineHeight: 1.45 }}>
-                  Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) — the amount and order are fixed; wallets get Arc, the address and the amount filled in.
+                  Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) - the amount and order are fixed; wallets get Arc, the address and the amount filled in.
                 </div>}
           </div>
           <div style={{ ...card, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -710,7 +710,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
               Use this when the order was settled another way (cash, a payment you checked yourself…). The customer can't pay it any more.
               {intent && intent.received > 0 && intent.received < intent.amount ? ` $${formatAmount(intent.received)} of $${formatAmount(intent.amount)} was received.` : ''}
             </div>
-            <input value={completeNote} onChange={e => setCompleteNote(e.target.value)} maxLength={140} placeholder="Note (optional) — e.g. Paid in cash" style={input} />
+            <input value={completeNote} onChange={e => setCompleteNote(e.target.value)} maxLength={140} placeholder="Note (optional) - e.g. Paid in cash" style={input} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => { setCompleteOpen(false); setCompleteNote('') }} disabled={busy} style={{ ...btnGhost, flex: 1 }}>Back</button>
               <button onClick={complete} disabled={busy} style={{ ...btnPrimary, flex: 2, opacity: busy ? 0.6 : 1 }}>{busy ? 'Saving…' : 'Mark as completed'}</button>

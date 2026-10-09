@@ -1,8 +1,8 @@
 /**
- * server/ledger/classifiers.ts — pure classification logic (Pay + Swap only).
+ * server/ledger/classifiers.ts - pure classification logic (Pay + Swap only).
  *
  * No I/O. Every function is a pure function of its inputs, so it is unit-
- * testable without a database — the same discipline already used for
+ * testable without a database - the same discipline already used for
  * server/transactionStateMachine/transitions.ts and
  * blockchain-indexer/compare.ts. DB reads (correlating a chain_event's
  * tx_hash against transaction_attempts/transaction_intents) happen in
@@ -34,7 +34,7 @@ const KNOWN_INTERNAL_CONTRACTS_FALLBACK = new Set([
 ])
 // This module intentionally carries its own copy of the known-internal-
 // contract list rather than importing supabase/functions/_shared/
-// knownInternalContracts.ts across the Deno/Node boundary — an earlier
+// knownInternalContracts.ts across the Deno/Node boundary - an earlier
 // attempt at that cross-directory import failed the server/ TypeScript
 // project (`TS5097: An import path can only end with a '.ts' extension when
 // 'allowImportingTsExtensions' is enabled`), and enabling that compiler flag
@@ -64,7 +64,7 @@ export function buildEventKey(
 
 /**
  * Converts a human-decimal number (chain_events stores `metadata.amount` as
- * a plain JS number, e.g. `5` for 5 USDC — confirmed against scanner.ts's
+ * a plain JS number, e.g. `5` for 5 USDC - confirmed against scanner.ts's
  * `metadata: { recipient, sender, amount }` shape) to an atomic-integer
  * string, WITHOUT floating-point multiplication. `value * 10 ** decimals`
  * is exactly the canonical-value risk the amount model (Phase 1) exists to
@@ -96,14 +96,14 @@ function amountOf(chainEvent: ChainEventInput): number | null {
 //   NATIVE: is_native = true  AND token_address = NULL
 //   ERC20:  is_native = false AND token_address IS NOT NULL
 // Never derived from token symbol, decimals, or "token_address happens to be
-// missing" alone — see the doc for the real EURC transaction that exposed
+// missing" alone - see the doc for the real EURC transaction that exposed
 // this exact bug when the naive `tokenAddress == null` rule was used.
 //
 // The reliable, always-present signal is `event_type`, confirmed directly
 // against scanner.ts: 'deposit_detected' is emitted ONLY by the two native-
 // scan branches (native top-level scan, native-transfer-log scan);
 // 'transfer_detected' is emitted ONLY by the ERC-20 token loop (iterating
-// chain.tokens — EURC/cirBTC on Arc). This is structural, not a heuristic —
+// chain.tokens - EURC/cirBTC on Arc). This is structural, not a heuristic -
 // unlike token_address, which has a real historical gap for chain_events
 // rows that predate the Phase 3 scanner's contract_address population fix.
 const KNOWN_TOKEN_ADDRESSES_BY_SYMBOL: Readonly<Record<string, string>> = {
@@ -116,55 +116,55 @@ interface TokenIdentity { isNative: boolean; tokenAddress: string | null }
 /**
  * Resolves the native/ERC20 identity for a chain_event, upholding the
  * invariant above in every case. Returns `null` when the identity cannot
- * be safely established — the caller must defer (`not_applicable`), never
+ * be safely established - the caller must defer (`not_applicable`), never
  * guess or emit a draft that would violate the invariant.
  */
 function resolveTokenIdentity(chainEvent: ChainEventInput): TokenIdentity | null {
   if (chainEvent.event_type === 'deposit_detected') {
-    // Native path, by construction. token_address is always null here —
+    // Native path, by construction. token_address is always null here -
     // there is no contract, no log, for a native top-level/native-log
     // transfer (see docs/PHASE_3_INDEXER_AUDIT.md §6/§7).
     return { isNative: true, tokenAddress: null }
   }
   if (chainEvent.event_type === 'transfer_detected') {
-    // ERC-20 path, by construction — NEVER native, regardless of whether
+    // ERC-20 path, by construction - NEVER native, regardless of whether
     // token_address happens to be populated on this particular row. This is
     // the exact fix for the EURC bug: the OLD code inferred native from
     // `token_address == null` alone, which is also true for historical
-    // transfer_detected rows that simply predate the Phase 3 fix — event_type
+    // transfer_detected rows that simply predate the Phase 3 fix - event_type
     // alone already proves this is an ERC-20 event either way.
     if (chainEvent.token_address) {
       return { isNative: false, tokenAddress: chainEvent.token_address }
     }
     // token_address missing (historical row). Resolve from the same fixed,
     // public contract addresses already used throughout this codebase
-    // (chains.ts, compare.ts, knownInternalContracts.ts) — not a guess, a
+    // (chains.ts, compare.ts, knownInternalContracts.ts) - not a guess, a
     // lookup of a known constant, gated on the symbol actually matching one
     // we recognize.
     const known = chainEvent.token_symbol ? KNOWN_TOKEN_ADDRESSES_BY_SYMBOL[chainEvent.token_symbol] : undefined
     if (known) {
       return { isNative: false, tokenAddress: known }
     }
-    // Symbol also unrecognized — cannot safely establish the invariant.
+    // Symbol also unrecognized - cannot safely establish the invariant.
     // Per "do not guess native", defer rather than emit an ambiguous draft.
     return null
   }
-  // Unrecognized event_type — same reasoning, defer.
+  // Unrecognized event_type - same reasoning, defer.
   return null
 }
 
 
 /**
- * The ordinary Pay case (also covers native transfers — see
+ * The ordinary Pay case (also covers native transfers - see
  * docs/LEDGER_CORE_IMPLEMENTATION.md "Native Pay"). ONE confirmed
  * chain_event, whose metadata already carries both `sender` and
  * `recipient`/`to`, produces TWO ledger_events: a DEBIT for the sender's
  * wallet and a CREDIT for the recipient's wallet (the chain_event's own
  * `wallet_address`). Both share chain_id/tx_hash/log_index and differ only
- * on wallet_address — exactly the case the raw-movement identity constraint
+ * on wallet_address - exactly the case the raw-movement identity constraint
  * is designed to permit.
  *
- * `correlatedIntent`, if supplied, must have `feature === 'pay'` — anything
+ * `correlatedIntent`, if supplied, must have `feature === 'pay'` - anything
  * else (including omitted, meaning no correlation was found) still produces
  * the plain DEBIT/CREDIT pair, since an ordinary Pay/external transfer needs
  * no intent to be classified correctly (unlike Swap). Passing a
@@ -179,7 +179,7 @@ export function classifyPayTransfer(
     return { outcome: 'unresolved', reason: `chain_event status is '${chainEvent.status}', not 'confirmed'` }
   }
   if (correlatedIntent && correlatedIntent.feature !== 'pay') {
-    return { outcome: 'not_applicable', reason: `correlated intent has feature='${correlatedIntent.feature}', not 'pay' — use the matching classifier instead` }
+    return { outcome: 'not_applicable', reason: `correlated intent has feature='${correlatedIntent.feature}', not 'pay' - use the matching classifier instead` }
   }
 
   const recipient = (chainEvent.wallet_address ?? '').trim().toLowerCase()
@@ -188,25 +188,25 @@ export function classifyPayTransfer(
   const amount = amountOf(chainEvent)
 
   if (!recipient || !txHash) return { outcome: 'not_applicable', reason: 'missing wallet_address or tx_hash' }
-  if (!sender) return { outcome: 'not_applicable', reason: 'chain_event metadata has no sender/from — cannot derive the debit leg' }
-  if (sender === recipient) return { outcome: 'not_applicable', reason: 'self-transfer — not a real payment' }
+  if (!sender) return { outcome: 'not_applicable', reason: 'chain_event metadata has no sender/from - cannot derive the debit leg' }
+  if (sender === recipient) return { outcome: 'not_applicable', reason: 'self-transfer - not a real payment' }
   if (amount === null) return { outcome: 'not_applicable', reason: 'chain_event metadata has no numeric amount' }
 
   // Priority 4 (known-internal-contract classification): a Pay-shaped
   // Transfer whose sender is a known internal contract is not an ordinary
-  // Pay at all — almost certainly a swap output or similar, which this
+  // Pay at all - almost certainly a swap output or similar, which this
   // classifier must not silently absorb as a plain CREDIT. Deferred, not
-  // guessed — matches classifySwapCredit's own reasoning for the identical
+  // guessed - matches classifySwapCredit's own reasoning for the identical
   // sender set.
   if (!correlatedIntent && isKnownInternalContract(sender)) {
-    return { outcome: 'not_applicable', reason: `sender ${sender} is a known internal contract — not an ordinary Pay transfer, deferred rather than guessed` }
+    return { outcome: 'not_applicable', reason: `sender ${sender} is a known internal contract - not an ordinary Pay transfer, deferred rather than guessed` }
   }
 
   const decimals = chainEvent.decimals ?? 6
   const amountAtomic = toAmountAtomic(amount, decimals)
   const identity = resolveTokenIdentity(chainEvent)
   if (!identity) {
-    return { outcome: 'not_applicable', reason: `token identity could not be safely established for event_type='${chainEvent.event_type}' with no usable token_address/token_symbol — not guessing native vs ERC20` }
+    return { outcome: 'not_applicable', reason: `token identity could not be safely established for event_type='${chainEvent.event_type}' with no usable token_address/token_symbol - not guessing native vs ERC20` }
   }
   const { isNative, tokenAddress } = identity
 
@@ -250,18 +250,18 @@ export function classifyPayTransfer(
 }
 
 /**
- * SWAP_DEBIT — can ONLY be derived from a CONFIRMED transaction_attempt and
+ * SWAP_DEBIT - can ONLY be derived from a CONFIRMED transaction_attempt and
  * its transaction_intent (feature='swap'), never from a chain_event. See
  * types.ts's header comment for why: the swap router is never a monitored
  * wallet, so no chain_event ever captures the input leg. Returns
- * `not_applicable` for any non-swap feature or non-CONFIRMED attempt — this
+ * `not_applicable` for any non-swap feature or non-CONFIRMED attempt - this
  * module never guesses.
  */
 export function classifySwapDebit(intent: IntentContext, attempt: AttemptContext): ClassificationOutcome {
   if (attempt.intent_id !== intent.id) return { outcome: 'not_applicable', reason: 'attempt/intent pair mismatch' }
   if (intent.feature !== 'swap') return { outcome: 'not_applicable', reason: `feature='${intent.feature}', not 'swap'` }
   if (attempt.status !== 'CONFIRMED') {
-    return { outcome: 'unresolved', reason: `attempt status is '${attempt.status}', not 'CONFIRMED' — the confirmation rule forbids a ledger event here` }
+    return { outcome: 'unresolved', reason: `attempt status is '${attempt.status}', not 'CONFIRMED' - the confirmation rule forbids a ledger event here` }
   }
   if (!attempt.tx_hash) return { outcome: 'not_applicable', reason: 'CONFIRMED attempt has no tx_hash' }
 
@@ -279,7 +279,7 @@ export function classifySwapDebit(intent: IntentContext, attempt: AttemptContext
     is_native: intent.is_native,
     tx_hash: attempt.tx_hash,
     block_number: attempt.block_number,
-    log_index: null, // no log — this leg is not derived from a log at all, see types.ts
+    log_index: null, // no log - this leg is not derived from a log at all, see types.ts
     event_key: buildEventKey(attempt.chain_id, attempt.tx_hash, null, intent.wallet_address, 'SWAP_DEBIT'),
     metadata: {},
   }
@@ -287,14 +287,14 @@ export function classifySwapDebit(intent: IntentContext, attempt: AttemptContext
 }
 
 /**
- * SWAP_CREDIT — the swap's output leg, derived from a confirmed chain_event
+ * SWAP_CREDIT - the swap's output leg, derived from a confirmed chain_event
  * correlated (by tx_hash + chain_id) to a swap-feature transaction_intent.
  * `correlated` must be supplied by the caller (interpreter.ts), found via a
- * repository lookup — this function does no DB access itself.
+ * repository lookup - this function does no DB access itself.
  *
  * If NOT correlated but the sender is a known internal contract (the exact
- * signature of a swap output — e.g. the Kit Adapter router from the traced
- * EURC case), this returns `not_applicable`, NOT `classified` — see the
+ * signature of a swap output - e.g. the Kit Adapter router from the traced
+ * EURC case), this returns `not_applicable`, NOT `classified` - see the
  * inline comment for why guessing here would be unsafe.
  */
 export function classifySwapCredit(
@@ -320,7 +320,7 @@ export function classifySwapCredit(
     const decimals = chainEvent.decimals ?? correlated.intent.decimals
     const identity = resolveTokenIdentity(chainEvent)
     if (!identity) {
-      return { outcome: 'not_applicable', reason: `token identity could not be safely established for event_type='${chainEvent.event_type}' with no usable token_address/token_symbol — not guessing native vs ERC20` }
+      return { outcome: 'not_applicable', reason: `token identity could not be safely established for event_type='${chainEvent.event_type}' with no usable token_address/token_symbol - not guessing native vs ERC20` }
     }
     const draft: LedgerEventDraft = {
       transaction_intent_id: correlated.intent.id,
@@ -346,52 +346,52 @@ export function classifySwapCredit(
   // Uncorrelated known-internal-contract sender: strongly suggestive of a
   // swap output, but NOT classified as SWAP_CREDIT here. A SWAP_CREDIT with
   // no transaction_intent_id could never be paired with a SWAP_DEBIT (which,
-  // per classifySwapDebit above, can ONLY come from a correlated intent) —
+  // per classifySwapDebit above, can ONLY come from a correlated intent) -
   // an unpaired SWAP_CREDIT would be a row the future Activity-grouping
   // design could never correctly group with its debit leg. Deferred, not
-  // guessed — and NOT classified as generic CREDIT either, satisfying "do
+  // guessed - and NOT classified as generic CREDIT either, satisfying "do
   // not classify a swap output as generic RECEIVE" without fabricating an
   // incomplete SWAP_CREDIT.
   if (sender && isKnownInternalContract(sender)) {
-    return { outcome: 'not_applicable', reason: `sender ${sender} is a known internal contract with no correlated transaction_intent — deferred` }
+    return { outcome: 'not_applicable', reason: `sender ${sender} is a known internal contract with no correlated transaction_intent - deferred` }
   }
 
-  return { outcome: 'not_applicable', reason: 'no correlated swap intent and sender is not a known internal contract — not this classifier\'s concern (see classifyPayTransfer)' }
+  return { outcome: 'not_applicable', reason: 'no correlated swap intent and sender is not a known internal contract - not this classifier\'s concern (see classifyPayTransfer)' }
 }
 
 /**
- * BulkPay's DEBIT+CREDIT pair — docs/BULKPAY_LEDGER_CLASSIFICATION_AUDIT.md,
+ * BulkPay's DEBIT+CREDIT pair - docs/BULKPAY_LEDGER_CLASSIFICATION_AUDIT.md,
  * docs/BULKPAY_TRANSACTION_INTENT_IMPLEMENTATION_CHECKLIST.md §8.
  *
  * Structurally closer to classifyPayTransfer's shape (one function, one
  * chain_event in, a DEBIT+CREDIT pair out) than to classifySwapDebit/
- * classifySwapCredit's split shape — proven necessary, not assumed: each
+ * classifySwapCredit's split shape - proven necessary, not assumed: each
  * recipient's DEBIT needs THAT recipient's own log_index/amount to keep the
  * multi-log identity model intact, and that data only exists on the
  * recipient's own chain_event, not on the attempt alone (unlike Swap, whose
- * single SWAP_DEBIT genuinely has no chain_event of its own — see types.ts's
+ * single SWAP_DEBIT genuinely has no chain_event of its own - see types.ts's
  * header comment for that distinction).
  *
  * The one, critical difference from classifyPayTransfer: the DEBIT wallet
  * comes from `correlated.intent.wallet_address` (the real payer, recorded
  * server-side when the intent was created), NEVER from
- * `chainEvent.metadata.sender` — for a real BulkPay chain_event, that field
+ * `chainEvent.metadata.sender` - for a real BulkPay chain_event, that field
  * is Multicall3's own contract address, not the payer. Confirmed directly
  * against the real transaction 0xb179c4f0…'s chain_events row
  * (metadata.sender = 0xca11bde0…) in the prior audit session. Sourcing the
  * DEBIT from metadata.sender here would misattribute every DEBIT to
- * Multicall3 — a financial correctness bug, not a style choice.
+ * Multicall3 - a financial correctness bug, not a style choice.
  *
- * `correlated` is required (never optional) — this function must only ever
+ * `correlated` is required (never optional) - this function must only ever
  * be called once a real transaction_intent (feature='bulkpay') and its
  * transaction_attempt have already been found via the caller's own
  * findAttemptByTxHash/getIntent lookups (interpreter.ts). There is no
- * "uncorrelated Multicall3 sender" fallback path here at all — that case is
+ * "uncorrelated Multicall3 sender" fallback path here at all - that case is
  * classifyPayTransfer's existing, unchanged known-internal-contract
  * exclusion (still fires whenever no bulkpay correlation exists), not
  * anything this function decides. This is the exact security invariant:
  * Multicall3 sender + matching chain_id + matching tx_hash + a real,
- * verified transaction_attempt + transaction_intent.feature='bulkpay' — all
+ * verified transaction_attempt + transaction_intent.feature='bulkpay' - all
  * five, structurally required by this function only ever being reachable
  * once the caller has already established all five.
  */
@@ -412,15 +412,15 @@ export function classifyBulkPayCredit(
   const amount = amountOf(chainEvent)
 
   if (!recipient || !txHash) return { outcome: 'not_applicable', reason: 'missing wallet_address or tx_hash' }
-  if (!payer) return { outcome: 'not_applicable', reason: 'correlated intent has no wallet_address — cannot derive the debit leg' }
+  if (!payer) return { outcome: 'not_applicable', reason: 'correlated intent has no wallet_address - cannot derive the debit leg' }
   if (amount === null) return { outcome: 'not_applicable', reason: 'chain_event metadata has no numeric amount' }
-  // A payer paying themselves via BulkPay is not a real economic transfer —
+  // A payer paying themselves via BulkPay is not a real economic transfer -
   // same reasoning as classifyPayTransfer's own self-transfer exclusion.
-  if (payer === recipient) return { outcome: 'not_applicable', reason: 'self-transfer — payer wallet matches recipient wallet' }
+  if (payer === recipient) return { outcome: 'not_applicable', reason: 'self-transfer - payer wallet matches recipient wallet' }
 
   const identity = resolveTokenIdentity(chainEvent)
   if (!identity) {
-    return { outcome: 'not_applicable', reason: `token identity could not be safely established for event_type='${chainEvent.event_type}' with no usable token_address/token_symbol — not guessing native vs ERC20` }
+    return { outcome: 'not_applicable', reason: `token identity could not be safely established for event_type='${chainEvent.event_type}' with no usable token_address/token_symbol - not guessing native vs ERC20` }
   }
   const decimals = chainEvent.decimals ?? correlated.intent.decimals
   const amountAtomic = toAmountAtomic(amount, decimals)

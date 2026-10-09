@@ -13,7 +13,7 @@ describe('merchant QR (EIP-681)', () => {
 })
 
 describe('MeshPort request QR', () => {
-  it('only address + amount + network — no link', async () => {
+  it('only address + amount + network - no link', async () => {
     const { meshportRequestQr, arcAddressUri } = await import('./merchantQr')
     const qr = meshportRequestQr('Arc_Testnet', '0xa58fd2ffb361329abf573a555bf0835a75d95294', 12.5)
     expect(qr).toBe('ethereum:0xa58fd2ffb361329AbF573a555BF0835A75d95294@5042002?value=12500000000000000000')

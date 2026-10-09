@@ -41,7 +41,7 @@ function NumPad({ onPress, onBiometric, showBiometric, biometricTrying, Biometri
         if (k === 'biometric') {
           if (!showBiometric || !BiometricIcon) return <div key={i} style={{ height: 56 }} />
           return (
-            // Plain button, not motion.button — same reasoning as
+            // Plain button, not motion.button - same reasoning as
             // PinKeypad's biometric key: WebKit is notably stricter than
             // Chromium about a WebAuthn call happening inside a genuine,
             // immediate user gesture, so the OS prompt trigger itself is
@@ -89,7 +89,7 @@ export function PasscodeSetupPage() {
   const next      = searchParams.get('next')
   const returning = searchParams.get('returning') === '1'
 
-  // All mutable state lives in refs — no stale closure possible
+  // All mutable state lives in refs - no stale closure possible
   const stepRef    = useRef<'create' | 'confirm'>('create')
   const firstRef   = useRef('')
   const secondRef  = useRef('')
@@ -117,7 +117,7 @@ export function PasscodeSetupPage() {
   returningRef.current = returning
   loginTypeRef.current = loginType
 
-  // Single stable press handler — reads from refs only
+  // Single stable press handler - reads from refs only
   const pressRef = useRef(async (key: string) => {
     // Clear error
     if (errorRef.current) {
@@ -176,7 +176,7 @@ export function PasscodeSetupPage() {
           return
         }
 
-        // Match — save
+        // Match - save
         hashingRef.current = true
         setHashing(true)
         const hashed = await hashPasscode(firstRef.current)
@@ -190,22 +190,22 @@ export function PasscodeSetupPage() {
         if (returningRef.current) {
           try { sessionStorage.removeItem('mp_returning_signin') } catch { /* none */ }
           // This flow fires when the account exists but THIS browser has no
-          // local passcode yet (a fresh device, or storage was cleared) —
+          // local passcode yet (a fresh device, or storage was cleared) -
           // see App.tsx's comment on the returning=1 route.
           //
           // Bug fix: this used to `await restorePrivateKey(...)` BEFORE
-          // deciding where to navigate — for a social-auto (Google/Email)
+          // deciding where to navigate - for a social-auto (Google/Email)
           // account, that's a real server round-trip that can take several
           // seconds, during which the screen just sat there with the
           // confirm dots already filled and nothing else happening. That's
           // exactly what read as the keypad "stuck." Navigate immediately
-          // and let the restore happen in the background — same pattern
+          // and let the restore happen in the background - same pattern
           // already used in PasscodeLockPage's handleUnlock.
           //
-          // No biometric offer here — relogin goes straight into the app.
+          // No biometric offer here - relogin goes straight into the app.
           // Biometric can still be turned on any time from Settings.
           // Google / email accounts: the wallet opens only with the
-          // passkey or Recovery QR on a new sign-in — go straight there.
+          // passkey or Recovery QR on a new sign-in - go straight there.
           const st = useAuthStore.getState()
           if (st.loginType === 'social' && st.walletSource === 'social-auto' && !st.privateKey) {
             navigateRef.current('/auth/recover-wallet', { replace: true })
@@ -214,9 +214,9 @@ export function PasscodeSetupPage() {
           navigateRef.current('/', { replace: true })
           import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(firstRef.current)).catch(() => {})
         } else {
-          // New signup (create/import/social) — go straight to the next
+          // New signup (create/import/social) - go straight to the next
           // step (create-wallet / import-wallet / auto-wallet / wallet-
-          // setup). No biometric offer during registration either — it
+          // setup). No biometric offer during registration either - it
           // stays available afterward from Settings, same as relogin above.
           const next =
             nextRef.current === 'create' ? '/auth/create-wallet'
@@ -270,7 +270,7 @@ export function PasscodeSetupPage() {
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
             </svg>
           </div>
-          {/* The title just changes — any fade between "Set" and "Confirm"
+          {/* The title just changes - any fade between "Set" and "Confirm"
               reads as a flicker on a phone. */}
           <div>
             <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">{title}</h2>
@@ -284,7 +284,7 @@ export function PasscodeSetupPage() {
 
         {/* Fixed-height status line: an error or "Securing…" appearing never
             pushes the keypad down, and the keypad stays mounted (just
-            disabled) while the passcode is saved — swapping it out for text
+            disabled) while the passcode is saved - swapping it out for text
             made the whole screen jump right before moving on. */}
         <div className="h-6 mb-2 flex items-center justify-center">
           <AnimatePresence mode="popLayout" initial={false}>
@@ -314,12 +314,12 @@ export function PasscodeSetupPage() {
 export function PasscodeLockPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  // Where to send the user once they unlock — e.g. a shared payment link
+  // Where to send the user once they unlock - e.g. a shared payment link
   // (/pay/someone?amount=5) that hit AuthGuard's `if (isLocked)` check
   // (App.tsx) and got bounced here first. AuthGuard passes the page they
   // were actually trying to reach as `state.from`; without reading it back
-  // here, every locked-wallet deep link — payment links, pay-send with a
-  // prefilled recipient, a shared QR — always dumped the user on Home after
+  // here, every locked-wallet deep link - payment links, pay-send with a
+  // prefilled recipient, a shared QR - always dumped the user on Home after
   // unlocking, silently discarding wherever they were headed. Falls back to
   // '/' for the ordinary case (opening the app itself while locked, or any
   // other route that didn't arrive with a `from`).
@@ -343,11 +343,11 @@ export function PasscodeLockPage() {
   const label = biometricLabel()
   const BiometricIcon = label === 'Face ID' ? ScanFace : Fingerprint
 
-  // Live capability check, not just "was a credential registered once" —
+  // Live capability check, not just "was a credential registered once" -
   // EnableBiometricPage (Settings' enable flow) already does this before
   // showing its button; this lock screen never did, so it could show a
   // biometric key that was guaranteed to fail with no visible error
-  // (verifyBiometricAndGetPasscode's failure path is intentionally silent —
+  // (verifyBiometricAndGetPasscode's failure path is intentionally silent -
   // see its own comment) on a device/context where the platform check isn't
   // actually usable right now, e.g. iOS Safari's installed/home-screen PWA
   // context vs. a regular Safari tab, or a desktop machine with no Windows
@@ -370,13 +370,13 @@ export function PasscodeLockPage() {
     if (passcode) {
       // No `val === passcode` fallback here on purpose: verifyPasscode()
       // already has its own last-resort plaintext comparison for legacy
-      // stored passcodes, and — unlike this call site — it's gated by the
+      // stored passcodes, and - unlike this call site - it's gated by the
       // brute-force lockout (see security.ts). A duplicate check here would
       // bypass that lockout entirely for legacy plaintext-format accounts.
       try { correct = await verifyPasscode(val, passcode) } catch {}
     }
     if (correct) {
-      // Unlock and navigate the instant the passcode is confirmed — don't
+      // Unlock and navigate the instant the passcode is confirmed - don't
       // make the user sit on this screen waiting for the wallet key to
       // fully restore first. That restore can be a genuine network round
       // trip (social-auto accounts fetch it from the server), which turned
@@ -384,34 +384,34 @@ export function PasscodeLockPage() {
       // instead of an instant unlock. Kicked off here in the background
       // instead: the rest of the app already copes with the key not being
       // immediately available (see getKey() in the Multichain pages, and
-      // the wallet-recovery banner, which now self-clears — see setWallet
-      // in store/index.ts — the moment this actually resolves).
+      // the wallet-recovery banner, which now self-clears - see setWallet
+      // in store/index.ts - the moment this actually resolves).
       setChecking(false)
       unlock()
       useUIStore.getState().setWalletRecoveryNeeded(false)
       // Offer biometric setup whenever it isn't already enrolled for this
-      // wallet and hasn't been declined recently — see
+      // wallet and hasn't been declined recently - see
       // wasBiometricOfferSkippedRecently below for the 24h cooldown after
       // Skip (or a cancelled OS prompt), and hasBiometricRegistered (via
       // canUseBiometric) for why this stops for good once actually
       // enabled. That pair already prevents repeat-nagging on its own, so
       // this no longer also gates on privateKey being null.
       //
-      // BUG FIX — it used to also require `!privateKey`, meant to detect a
+      // BUG FIX - it used to also require `!privateKey`, meant to detect a
       // genuine fresh login (key actually cleared, e.g. by logout()) vs a
       // routine re-lock (offline / browser closed) where the key stays in
       // memory. That worked by accident for import-privkey/social-auto,
       // whose restores need a passcode or a network round trip and so are
-      // still in flight when this runs — but for create/import-seed
+      // still in flight when this runs - but for create/import-seed
       // wallets, App.tsx's mount-time restore derives the key from the
       // mnemonic synchronously, no network, and reliably finishes BEFORE
       // the user is even done typing their unlock passcode. `privateKey`
       // was therefore already populated here on every seed-phrase unlock,
       // permanently and silently skipping the offer for that wallet type
-      // only — never for import-privkey or social-auto, which is exactly
+      // only - never for import-privkey or social-auto, which is exactly
       // the asymmetry reported.
       const skippedRecently = walletAddress ? wasBiometricOfferSkippedRecently(walletAddress) : false
-      // Only offer it where the device can actually do it — otherwise that
+      // Only offer it where the device can actually do it - otherwise that
       // page showed blank while it checked, then bounced on.
       if (!canUseBiometric && !skippedRecently && liveSupported === true) {
         handBiometricPasscode(val); navigate('/auth/enable-biometric', { replace: true, state: { next: returnTo } })
@@ -420,7 +420,7 @@ export function PasscodeLockPage() {
       }
       import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(val)).catch(() => {})
         // Then move any older, weaker (100k-iteration) encryption to the
-        // current scheme — runs after the restore so unlocking stays instant.
+        // current scheme - runs after the restore so unlocking stays instant.
         .then(() => import('@/lib/security'))
         .then(async ({ upgradeLegacyEncryption }) => {
           const newHash = await upgradeLegacyEncryption(walletAddress, val, passcode)
@@ -444,11 +444,11 @@ export function PasscodeLockPage() {
     const pc = await verifyBiometricAndGetPasscode(walletAddress, storedPasscodeHash ?? undefined)
     setBiometricTrying(false)
     // A cancelled/failed biometric check just falls back to the normal
-    // passcode entry already on screen — no error shown, since cancelling
+    // passcode entry already on screen - no error shown, since cancelling
     // is an entirely normal choice here, not a mistake.
     if (pc) {
       // Fixed (/cso follow-up): a real OS-verified Face ID/fingerprint
-      // success recovers the true passcode via a device-bound credential —
+      // success recovers the true passcode via a device-bound credential -
       // it isn't a guess, so it must not be blocked by the brute-force
       // lockout on the manual-entry path below. Without this, a user
       // locked out from a few mistyped passcodes would find biometric
@@ -546,7 +546,7 @@ export function PasscodeLockPage() {
                   <motion.p key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                     className="text-danger text-sm text-center">
                     {lockoutMs > 0
-                      ? `Too many attempts — try again in ${Math.ceil(lockoutMs / 1000)}s`
+                      ? `Too many attempts - try again in ${Math.ceil(lockoutMs / 1000)}s`
                       : `Incorrect passcode${attempts > 1 ? ` · ${attempts} attempts` : ''}`}
                   </motion.p>
                 ) : checking ? (

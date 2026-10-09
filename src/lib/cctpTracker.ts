@@ -1,7 +1,7 @@
 // src/lib/cctpTracker.ts
 //
 // Progress of a CCTP move (Transfer: Arc → chain, Bring Funds: chain → Arc),
-// read straight from Circle's attestation service (Iris) — not from a
+// read straight from Circle's attestation service (Iris) - not from a
 // database row a server worker has to keep up to date. Given the chain the
 // USDC was burned on and the burn transaction hash, Iris reports:
 //   • no record yet            → the burn is still being picked up
@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from 'react'
 
 // Use the production Iris API for mainnet flows; fall back to sandbox when the
 // app is explicitly configured for testnet. VITE_IRIS_ENV='sandbox' opts in to
-// the sandbox URL — the default is the production endpoint so production CCTP
+// the sandbox URL - the default is the production endpoint so production CCTP
 // mints are never invisible.
 const IRIS_ENV = (import.meta.env.VITE_IRIS_ENV as string | undefined) || 'production'
 const IRIS = IRIS_ENV === 'sandbox'
@@ -56,14 +56,14 @@ export interface IrisMessage {
   forwardTxHash?: string | null
 }
 
-/** Maps an Iris record (or none yet) to a progress stage. Pure — unit tested. */
+/** Maps an Iris record (or none yet) to a progress stage. Pure - unit tested. */
 export function progressFromIris(msg: IrisMessage | null | undefined, knownMintTx?: string): CctpProgress {
   if (knownMintTx) return { stage: 'done', mintTxHash: knownMintTx }
   if (!msg) return { stage: 'burning' }
   const forward = (msg.forwardState ?? '').toUpperCase()
   if (forward === 'COMPLETE' && msg.forwardTxHash) return { stage: 'done', mintTxHash: msg.forwardTxHash }
   if (forward === 'FAILED') {
-    return { stage: 'error', msg: 'Circle couldn’t deliver this transfer automatically. Your USDC is safe — finish it from Multichain Hub → Recover.' }
+    return { stage: 'error', msg: 'Circle couldn’t deliver this transfer automatically. Your USDC is safe - finish it from Multichain Hub → Recover.' }
   }
   const attested = msg.status === 'complete' && !!msg.attestation && msg.attestation !== 'PENDING'
   if (attested) return { stage: 'minting' }
@@ -76,7 +76,7 @@ export async function fetchIrisMessage(srcChain: string, burnTxHash: string): Pr
   const domain = CCTP_DOMAINS[srcChain]
   if (domain === undefined || !/^0x[0-9a-fA-F]{64}$/.test(burnTxHash)) return null
   // Testnet burns are only known to Circle's sandbox Iris and mainnet burns
-  // only to production — try the configured one, then the other, so a
+  // only to production - try the configured one, then the other, so a
   // mis-set VITE_IRIS_ENV can't hide a burn that's ready to finish.
   const other = IRIS.includes('sandbox') ? 'https://iris-api.circle.com' : 'https://iris-api-sandbox.circle.com'
   for (const base of [IRIS, other]) {

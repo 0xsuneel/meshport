@@ -1,5 +1,5 @@
 /**
- * TransactionComplete — Unified success/fail screen used by:
+ * TransactionComplete - Unified success/fail screen used by:
  *   - PaySendPage (Pay on Arc)
  *   - SwapPage
  *   - MultichainTransferPage (Transfer)
@@ -59,7 +59,7 @@ export function TransactionComplete({
   const statusColor = status === 'success' ? 'var(--success)' : 'var(--danger)'
   const StatusIcon = status === 'success' ? CheckCircle : XCircle
 
-  // Sequential reveal — icon springs in first, then each block fades up in
+  // Sequential reveal - icon springs in first, then each block fades up in
   // turn, CTA buttons last. Respects prefers-reduced-motion via the global
   // CSS override in index.css (collapses every duration to ~0).
   const container = {
@@ -106,13 +106,13 @@ export function TransactionComplete({
         <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.3px' }}>{title}</h2>
         {/* BUG FIX: a raw error message can be one long, space-free string
             (e.g. "0xaa3e079c0000...", a hex revert payload) that has no
-            natural word boundaries — without wordBreak this overflowed
+            natural word boundaries - without wordBreak this overflowed
             straight past the edge of its box on both mobile and desktop
             instead of wrapping onto multiple lines. */}
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 6, wordBreak: 'break-word', overflowWrap: 'break-word' }}>{subtitle}</p>
       </motion.div>
 
-      {/* ── Steps (optional — multichain bridging) ── */}
+      {/* ── Steps (optional - multichain bridging) ── */}
       {steps && steps.length > 0 && (
         <motion.div variants={item} style={{
           width: '100%', background: 'var(--surface)',
@@ -205,7 +205,7 @@ export function TransactionComplete({
         </motion.a>
       )}
 
-      {/* ── Buttons — CTA appears last ── */}
+      {/* ── Buttons - CTA appears last ── */}
       <motion.div variants={item} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10, marginTop: txHash ? 0 : 8 }}>
         <motion.button
           onClick={handlePrimary}

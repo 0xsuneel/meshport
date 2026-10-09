@@ -1,10 +1,10 @@
 // Google / email wallets (self-custodial): set up a passkey and/or an
 // encrypted Recovery QR, and unlock / recover the wallet on another device.
 //
-//   /auth/secure-wallet   — "Secure Your Wallet": required until the account
+//   /auth/secure-wallet   - "Secure Your Wallet": required until the account
 //                            has a passkey or a Recovery QR (AppLayout guard);
 //                            also opened from Security to manage them.
-//   /auth/recover-wallet  — "Unlock your wallet": passkey, or scan / upload
+//   /auth/recover-wallet  - "Unlock your wallet": passkey, or scan / upload
 //                            the Recovery QR + password. Decrypts on the device
 //                            and checks it's this account's wallet.
 //
@@ -56,7 +56,7 @@ export function SecureWalletPage() {
   useEffect(() => { refresh() }, [userId])
 
   // Needs the unlocked wallet (it's what gets locked to the passkey / QR).
-  // Redirected while rendering (see below), not after the first paint —
+  // Redirected while rendering (see below), not after the first paint -
   // that showed this page for a few frames first.
   const needsUnlock = !!walletAddress && !privateKey
 
@@ -101,7 +101,7 @@ export function SecureWalletPage() {
           </div>
           <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary mb-2">Secure Your Wallet</h2>
           <p className="text-text-secondary text-[14px] leading-[1.5] max-w-xs mx-auto">
-            Your wallet lives on your device — MeshPort can't open it. Set up at least one way to get it back on a new phone.
+            Your wallet lives on your device - MeshPort can't open it. Set up at least one way to get it back on a new phone.
           </p>
         </div>
 
@@ -186,7 +186,7 @@ function RecoveryQrCreator({ onBack, onDone }: { onBack: () => void; onDone: () 
   const confirmSaved = async () => {
     if (!userId) return
     const { markRecoveryQrCreated } = await import('@/lib/socialWallet')
-    if (!(await markRecoveryQrCreated(userId))) { showToastMessage("Couldn't save — check your connection", 'error'); return }
+    if (!(await markRecoveryQrCreated(userId))) { showToastMessage("Couldn't save - check your connection", 'error'); return }
     setImageUrl(null)
     showToastMessage('Recovery QR backed up', 'success')
     onDone()
@@ -220,7 +220,7 @@ function RecoveryQrCreator({ onBack, onDone }: { onBack: () => void; onDone: () 
             </label>
             {pw2 && pw !== pw2 && <p className="text-[12px] text-danger -mt-3">Passwords don't match</p>}
             <p className="text-[12px] text-text-secondary leading-snug">
-              Use at least 12 characters — a few random words works well. This is not your 6-digit app passcode.
+              Use at least 12 characters - a few random words works well. This is not your 6-digit app passcode.
             </p>
             <PrimaryButton onClick={create} disabled={working || !pw || !!weak || pw !== pw2}>
               {working ? 'Encrypting…' : 'Create Recovery QR'}
@@ -263,7 +263,7 @@ async function renderRecoveryImage(payload: string, label: string, address: stri
   ctx.font = '20px system-ui, sans-serif'
   ctx.fillText([label, shortAddr(address)].filter(Boolean).join(' · '), out.width / 2, qr.height + 66)
   ctx.fillStyle = '#666666'; ctx.font = '17px system-ui, sans-serif'
-  ctx.fillText('Encrypted — opens only with your recovery password', out.width / 2, qr.height + 96)
+  ctx.fillText('Encrypted - opens only with your recovery password', out.width / 2, qr.height + 96)
   return out.toDataURL('image/png')
 }
 
@@ -376,7 +376,7 @@ export function RecoverWalletPage() {
           </div>
         ) : (
           // Shown once it's known whether this account has a passkey, all at
-          // once — the passkey button popping in later pushed the rest down.
+          // once - the passkey button popping in later pushed the rest down.
           <div className="space-y-3" style={{ minHeight: 200, opacity: hasPasskey === null ? 0 : 1, transition: 'opacity 0.15s' }}>
             {hasPasskey !== null && (
               <>
@@ -453,7 +453,7 @@ function QrScanner({ onResult, onCancel }: { onResult: (text: string) => void; o
         }
         tick()
       } catch {
-        setErr("Couldn't open the camera — allow camera access, or upload the QR image instead")
+        setErr("Couldn't open the camera - allow camera access, or upload the QR image instead")
       }
     })()
     return () => { stopped = true; cancelAnimationFrame(raf); stream?.getTracks().forEach(t => t.stop()) }
@@ -479,7 +479,7 @@ function QrScanner({ onResult, onCancel }: { onResult: (text: string) => void; o
 /**
  * Linked login methods, passkeys, Recovery QR status and the wallet address.
  * Shown on the Security page for Google / email accounts. No private key or
- * export option — by design.
+ * export option - by design.
  */
 export function WalletSecuritySection() {
   const navigate = useNavigate()

@@ -17,7 +17,7 @@ export function GuideSection() {
         <p className="text-[12.5px] font-bold uppercase tracking-[0.08em] text-brand-text">Feature guide</p>
         <h2 className="mt-3 text-[30px] font-extrabold tracking-tight text-text-primary sm:text-[38px]">See every screen before you start.</h2>
         <p className="mt-4 text-[15.5px] leading-relaxed text-text-secondary">
-          {FEATURES.length} features, each with the real screen and simple steps — from your first sign-in to bulk payouts.
+          {FEATURES.length} features, each with the real screen and simple steps - from your first sign-in to bulk payouts.
         </p>
       </Reveal>
 

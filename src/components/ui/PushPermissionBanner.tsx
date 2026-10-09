@@ -3,7 +3,7 @@ import { Bell, X } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import { enablePushNotifications, getNotificationPermission, isPushSupported } from '@/lib/pushNotifications'
 
-// "Turn on notifications" — shown when this device isn't set up to receive
+// "Turn on notifications" - shown when this device isn't set up to receive
 // push. Chrome on Android ignores a permission request that doesn't come
 // from a tap, so the automatic attempt on app start never succeeds on a
 // fresh install; this gives the user the tap. It also re-subscribes from
@@ -25,7 +25,7 @@ export function PushPermissionBanner() {
     if (snoozed) return
     if (perm === 'denied') { setDenied(true); setShow(true); return }
     if (perm !== 'granted') { setShow(true); return }
-    // Granted — give the automatic setup (App.tsx) a moment, then make sure
+    // Granted - give the automatic setup (App.tsx) a moment, then make sure
     // this device really ended up with a subscription.
     const t = setTimeout(() => {
       navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(sub => {

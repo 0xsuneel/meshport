@@ -1,13 +1,13 @@
-// VAPID public key — safe to expose client-side (this is the whole point of
+// VAPID public key - safe to expose client-side (this is the whole point of
 // the public/private VAPID key pair). Must match VAPID_PUBLIC_KEY on the server.
 const VAPID_PUBLIC_KEY = 'BGX7gXwCvsz7vw_FZHCiZVrSIHLye0Pem6gPEKnU6Mj7PfYYGFDltfiE3eYLjiS6M6LfPW-CyWg-sFUspWfohIM'
 
 /**
- * Push a notification to the CURRENT device's own account — /api/push?action=send
+ * Push a notification to the CURRENT device's own account - /api/push?action=send
  * requires the caller to prove (via their own Supabase session token) that
  * they're pushing to themselves, so this attaches it. ensureAnonSession()
  * covers wallet-only accounts, which never do email/OTP login but still get
- * a real session via anonymous sign-in — see src/lib/supabase.ts.
+ * a real session via anonymous sign-in - see src/lib/supabase.ts.
  * Best-effort: failures here should never block the payment/swap/reward
  * flow that triggered the notification, so this only logs and swallows.
  */
@@ -18,7 +18,7 @@ export async function sendPushToSelf(userId: string, payload: { title: string; b
     await ensureAnonSession()
     const { data: { session } } = await supabase.auth.getSession()
     const accessToken = session?.access_token
-    if (!accessToken) return // no session yet — nothing to authorize the push with
+    if (!accessToken) return // no session yet - nothing to authorize the push with
     await fetch('/api/push?action=send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
@@ -48,7 +48,7 @@ export function getNotificationPermission(): NotificationPermission | 'unsupport
 /**
  * Requests notification permission (if not already decided) and subscribes
  * this device to Web Push, saving the subscription against `userId`.
- * Safe to call repeatedly — no-ops if already subscribed or unsupported.
+ * Safe to call repeatedly - no-ops if already subscribed or unsupported.
  */
 export const PUSH_OK_KEY = 'mp_push_ok'
 
@@ -64,7 +64,7 @@ export async function enablePushNotifications(userId: string, opts: { fresh?: bo
     }
 
     const registration = await navigator.serviceWorker.ready
-    // The endpoint this device last saved — if it changes below, the server
+    // The endpoint this device last saved - if it changes below, the server
     // deletes that old row so the device doesn't pile up one row per renewal.
     let previousEndpoint: string | undefined
     try { previousEndpoint = localStorage.getItem(PUSH_OK_KEY) || undefined } catch { /* ignore */ }
@@ -103,7 +103,7 @@ export async function enablePushNotifications(userId: string, opts: { fresh?: bo
 
 /**
  * Unsubscribes THIS device from Web Push entirely and removes its
- * subscription row server-side — see api/push.ts's handleUnsubscribe for
+ * subscription row server-side - see api/push.ts's handleUnsubscribe for
  * the full reasoning. Called from logout() so a shared/borrowed device
  * doesn't keep silently receiving push notifications meant for whoever
  * was previously logged in. Safe to call even if never subscribed (no-op)
@@ -118,7 +118,7 @@ export async function disablePushNotifications(): Promise<void> {
     const endpoint = subscription.endpoint
     // The subscription's own auth secret proves this device owns the row.
     const auth = subscription.toJSON().keys?.auth
-    // Unsubscribe the browser's own Push API registration FIRST — this is
+    // Unsubscribe the browser's own Push API registration FIRST - this is
     // what actually stops delivery, independent of whether the server-side
     // delete below succeeds. Removing the DB row alone would leave the
     // browser still technically subscribed (just to nothing), which is a
