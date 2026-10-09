@@ -77,14 +77,12 @@ swap quota.
 confirm Vercel env vars have access-controlled visibility. Long-term: move swap
 signing to a Circle developer-controlled wallet so the key never lives in env.
 
-#### C-3: Move rewards signer off raw private key — code done, setup pending
+#### C-3: Rewards signer - DECIDED: our own key, not Circle
 **File:** `supabase/functions/rewards-claim-sign/`  
-**Status:** The function signs through a Circle developer-controlled wallet
-(`POST /v1/w3s/developer/sign/message`) whenever `REWARDS_SIGNER_WALLET_ID` is
-set, and falls back to `REWARDS_SIGNER_PRIVATE_KEY` until then.  
-**Remaining setup:** `scripts/create-rewards-signer-wallet.mjs` → set the
-Supabase secrets it prints → register the address with
-`contracts/set-points-signer.cjs` → delete `REWARDS_SIGNER_PRIVATE_KEY`.
+**Decision (owner):** reward vouchers are signed with MeshPort's own key
+(`REWARDS_SIGNER_PRIVATE_KEY` Supabase secret). The Circle
+developer-controlled signer was removed on request - do not re-add it.
+Keep the key only as a Supabase secret (never `VITE_`-prefixed, never logged).
 
 ---
 
@@ -186,7 +184,8 @@ if (import.meta.env.DEV && !import.meta.env.VITE_SUPABASE_URL) {
    record a server-side intent BEFORE building or sending the transaction.
 
 7. **No private keys in env vars:** use Circle developer-controlled wallets for
-   any server-side signing (bridge relayer, rewards signer).
+   server-side signing (bridge relayer). Exception decided by the owner: the
+   rewards signer keeps its own key (`REWARDS_SIGNER_PRIVATE_KEY`), see C-3.
 
 8. **`ALLOWED_ORIGIN` must be set in production Vercel env vars** for all API
    routes (`api/chat.ts`, `api/bridge-relay.ts`, `api/arc-rpc.js`).
@@ -212,14 +211,12 @@ BRIDGE_RELAYER_PRIVATE_KEY=    # TEMPORARY — migrate to CIRCLE_ENTITY_SECRET +
 BRIDGE_ROUTERS=                # JSON: {"Base_Sepolia":"0x…"}
 VITE_P2P_ESCROW_CONTRACT=
 
-# Circle developer-controlled wallets (for C-1/C-3 migration)
+# Circle developer-controlled wallets (for the C-1 migration)
 CIRCLE_API_KEY=
 CIRCLE_ENTITY_SECRET=          # 64 hex chars, registered in Circle Console
 
-# Rewards signer (Supabase secrets for rewards-claim-sign)
-REWARDS_SIGNER_WALLET_ID=      # Circle wallet id — preferred
-REWARDS_SIGNER_ADDRESS=        # its address; optional sanity check
-REWARDS_SIGNER_PRIVATE_KEY=    # LEGACY — delete once the Circle signer is live
+# Rewards signer (Supabase secret for rewards-claim-sign) - our own key
+REWARDS_SIGNER_PRIVATE_KEY=
 
 # Circle App Kit swap
 KIT_KEY=                       # keep server-side only — never VITE_-prefixed
