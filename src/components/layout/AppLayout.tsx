@@ -91,7 +91,23 @@ export function AppLayout() {
     syncAuthUidToProfile(userId, bindKey)
     const onVisible = () => { if (document.visibilityState === 'visible') syncAuthUidToProfile(userId, bindKey) }
     document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
+    // The login session can be replaced while the app is open (a failed token
+    // refresh on a weak network signs in afresh with a new id). Every access
+    // rule checks that id against the account, so until it's linked again the
+    // screens load empty - link it right away instead of on the next reopen.
+    let lastSessionId: string | null | undefined
+    let sub: { unsubscribe: () => void } | undefined
+    void import('@/lib/supabase').then(({ supabase }) => {
+      const { data } = supabase.auth.onAuthStateChange((event, session) => {
+        const id = session?.user?.id ?? null
+        if (id && id !== lastSessionId && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION')) {
+          if (lastSessionId !== undefined) syncAuthUidToProfile(userId, bindKey)
+        }
+        lastSessionId = id
+      })
+      sub = data?.subscription
+    }).catch(() => {})
+    return () => { document.removeEventListener('visibilitychange', onVisible); sub?.unsubscribe() }
   }, [userId, bindKey])
 
   // ── Phase 4 shadow observation - DELIBERATELY INERT ────────────────────────
