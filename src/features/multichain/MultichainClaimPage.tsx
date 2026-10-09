@@ -600,7 +600,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     // scroll area beside the sidebar), not the whole window.
     const target = isDesktop
       ? desktopColumnRef.current
-      : (flowRootRef.current?.closest('[data-flow-scroller]') as HTMLElement | null) ?? flowRootRef.current
+      : (flowRootRef.current?.closest('[data-hub-page], [data-flow-scroller]') as HTMLElement | null) ?? flowRootRef.current
     if (target) setFlashColumnRect(target.getBoundingClientRect())
   }, [successPhase, isDesktop, isDesktopMq])
 
