@@ -37,6 +37,7 @@ import { deriveActivityRow, DetailSheet } from '@/features/activity/ActivityPage
 import { SearchField } from '@/components/ui/SearchField'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
+import { ActionIcon } from '@/components/ui/ActionIcon'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { biometricLabel } from '@/lib/biometric'
 
@@ -515,66 +516,51 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
 function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; navigate: (p: string) => void; hasOngoingP2P?: boolean }) {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const hub = useHubLabel()
-  const actions = [
-    {
-      label: 'Pay', path: '/pay',
-      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M7 17L17 7M17 7H9M17 7V15" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
-    },
-    {
-      label: 'Receive', path: '/receive',
-      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M17 7L7 17M7 17H15M7 17V9" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
-    },
-    {
-      label: 'Swap', path: '/swap',
-      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 7h13M4 7l3-3M4 7l3 3" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M20 17H7M20 17l-3 3M20 17l-3-3" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
-    },
-    {
-      label: 'Bulk Pay', path: '/bulk-payout',
-      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="13" rx="2" stroke="#fff" strokeWidth="1.7"/><path d="M3 10h18M7 14h2M11 14h2" stroke="#fff" strokeWidth="1.4" strokeLinecap="round"/></svg>,
-    },
-    {
-      label: 'Rewards', path: '/rewards',
-      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.5H20l-4.5 3.5 1.7 5.5L12 13 6.8 16.5l1.7-5.5L4 7.5h5.6L12 2z" stroke="#fff" strokeWidth="1.7" strokeLinejoin="round"/></svg>,
-    },
-    {
-      label: 'P2P', path: '/p2p',
-      icon: <Users size={22} color="#fff" strokeWidth={1.8} />,
-    },
-    {
-      label: 'Multichain Hub', path: '/multichain',
-      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#fff" strokeWidth="1.7"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.7 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.7-3.8-9s1.3-6.5 3.8-9z" stroke="#fff" strokeWidth="1.5"/></svg>,
-    },
-    {
-      label: 'Insights', path: '/insights',
-      icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 19h16M4 15l4-4 4 2 4-6" stroke="#fff" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg>,
-    },
+  // Two groups, four across (Money, then Explore).
+  const groups: { title: string; actions: { label: string; path: string; icon: React.ReactNode }[] }[] = [
+    { title: 'Money', actions: [
+      { label: 'Pay',      path: '/pay',         icon: <ActionIcon name="pay" size={27} /> },
+      { label: 'Receive',  path: '/receive',     icon: <ActionIcon name="receive" size={27} /> },
+      { label: 'Swap',     path: '/swap',        icon: <ActionIcon name="swap" size={27} /> },
+      { label: 'Bulk Pay', path: '/bulk-payout', icon: <ActionIcon name="bulk" size={27} /> },
+    ] },
+    { title: 'Explore', actions: [
+      { label: 'Multichain Hub', path: '/multichain', icon: <ActionIcon name="hub" size={27} /> },
+      { label: 'P2P',            path: '/p2p',        icon: <ActionIcon name="p2p" size={27} /> },
+      { label: 'Rewards',        path: '/rewards',    icon: <ActionIcon name="rewards" size={27} /> },
+      { label: 'Insights',       path: '/insights',   icon: <ActionIcon name="insights" size={27} /> },
+    ] },
   ]
   const content = (
     <>
-      <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)', marginBottom: 20 }}>Actions</div>
-      {/* 3-column grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0 }}>
-        {actions.map(a => (
-          <div key={a.label}
-            onClick={() => { if (a.path === '/scanner') prewarmCamera(); onClose(); navigate(a.path) }}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '14px 4px', cursor: 'pointer' }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--brand)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
-              {a.icon}
-              {a.label === 'P2P' && hasOngoingP2P && (
+      <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.3px', color: 'var(--text-primary)', marginBottom: 14 }}>Actions</div>
+      {groups.map(g => (
+        <div key={g.title} style={{ marginBottom: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', margin: '0 2px 2px' }}>{g.title}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0 }}>
+            {g.actions.map(a => (
+              <div key={a.label}
+                onClick={() => { if (a.path === '/scanner') prewarmCamera(); onClose(); navigate(a.path) }}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '14px 4px', cursor: 'pointer' }}>
+                <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--brand)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
+                  {a.icon}
+                  {a.label === 'P2P' && hasOngoingP2P && (
+                    <span style={{
+                      position: 'absolute', top: 2, right: 2, width: 12, height: 12, borderRadius: '50%',
+                      background: '#EF4444', border: '2px solid var(--bg)',
+                    }} />
+                  )}
+                </div>
                 <span style={{
-                  position: 'absolute', top: 2, right: 2, width: 12, height: 12, borderRadius: '50%',
-                  background: '#EF4444', border: '2px solid var(--bg)',
-                }} />
-              )}
-            </div>
-            <span style={{
-              fontSize: hub(a.label).length > 10 ? 10.5 : 12, color: 'var(--text-primary)', fontWeight: 400, textAlign: 'center',
-              lineHeight: 1.25, width: '100%', wordBreak: 'break-word',
-            }}>{hub(a.label)}</span>
+                  fontSize: hub(a.label).length > 10 ? 10.5 : 12, color: 'var(--text-primary)', fontWeight: 400, textAlign: 'center',
+                  lineHeight: 1.25, width: '100%', wordBreak: 'break-word',
+                }}>{hub(a.label)}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
       <button onClick={onClose} style={{
         width: '100%', padding: 14, borderRadius: 14, fontSize: 15, fontWeight: 500,
         background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', color: 'var(--text-primary)',
@@ -1008,8 +994,7 @@ function Sparkline({ values, color, height = 32, fill = false }: { values: numbe
 }
 
 // ── Quick Actions - desktop-only card, 8 real routes + Customize→MoreSheet ─────
-// Reuses the exact icon glyphs already drawn for MoreSheet's `actions` list
-// above (same shapes, same routes) rather than inventing a second icon set.
+// Same icon set as MoreSheet (components/ui/ActionIcon); Scan QR keeps its own.
 // Module-level (not per-render) - the full pool of 10 actions a user can
 // choose from when customizing the grid; QuickActionsCard only renders
 // whichever ids are currently selected (see `actionIds` prop), in that order.
@@ -1017,15 +1002,15 @@ const QUICK_ACTION_POOL_ICON_COLOR = 'var(--text-primary)'
 const QUICK_ACTION_POOL: { id: string; label: string; path: string; icon: React.ReactNode }[] = (() => {
   const c = QUICK_ACTION_POOL_ICON_COLOR
   return [
-    { id: 'pay', label: 'Pay', path: '/pay', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M7 17L17 7M17 7H9M17 7V15" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-    { id: 'receive', label: 'Receive', path: '/receive', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M17 7L7 17M7 17H15M7 17V9" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-    { id: 'swap', label: 'Swap', path: '/swap', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 7h13M4 7l3-3M4 7l3 3" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/><path d="M20 17H7M20 17l-3 3M20 17l-3-3" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-    { id: 'bulk-pay', label: 'Bulk Pay', path: '/bulk-payout', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="6" width="18" height="13" rx="2" stroke={c} strokeWidth="1.7"/><path d="M3 10h18M7 14h2M11 14h2" stroke={c} strokeWidth="1.4" strokeLinecap="round"/></svg> },
-    { id: 'multichain-hub', label: 'Multichain Hub', path: '/multichain', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={c} strokeWidth="1.7"/><path d="M3 12h18M12 3c2.5 2.5 3.8 5.7 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.7-3.8-9s1.3-6.5 3.8-9z" stroke={c} strokeWidth="1.5"/></svg> },
+    { id: 'pay', label: 'Pay', path: '/pay', icon: <ActionIcon name="pay" size={17} color={c} /> },
+    { id: 'receive', label: 'Receive', path: '/receive', icon: <ActionIcon name="receive" size={17} color={c} /> },
+    { id: 'swap', label: 'Swap', path: '/swap', icon: <ActionIcon name="swap" size={17} color={c} /> },
+    { id: 'bulk-pay', label: 'Bulk Pay', path: '/bulk-payout', icon: <ActionIcon name="bulk" size={17} color={c} /> },
+    { id: 'multichain-hub', label: 'Multichain Hub', path: '/multichain', icon: <ActionIcon name="hub" size={17} color={c} /> },
     { id: 'scan-qr', label: 'Scan QR', path: '/scanner', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1.2" stroke={c} strokeWidth="1.7"/><rect x="14" y="3" width="7" height="7" rx="1.2" stroke={c} strokeWidth="1.7"/><rect x="3" y="14" width="7" height="7" rx="1.2" stroke={c} strokeWidth="1.7"/><path d="M14 14h3v3h-3zM19 14h2M14 19h2M19 19h2" stroke={c} strokeWidth="1.5" strokeLinecap="round"/></svg> },
-    { id: 'claim-rewards', label: 'Claim Rewards', path: '/rewards', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 5.5H20l-4.5 3.5 1.7 5.5L12 13 6.8 16.5l1.7-5.5L4 7.5h5.6L12 2z" stroke={c} strokeWidth="1.7" strokeLinejoin="round"/></svg> },
-    { id: 'p2p', label: 'P2P', path: '/p2p', icon: <Users size={16} color={c} strokeWidth={1.8} /> },
-    { id: 'insights', label: 'Insights', path: '/insights', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 19h16M4 15l4-4 4 2 4-6" stroke={c} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+    { id: 'claim-rewards', label: 'Claim Rewards', path: '/rewards', icon: <ActionIcon name="rewards" size={17} color={c} /> },
+    { id: 'p2p', label: 'P2P', path: '/p2p', icon: <ActionIcon name="p2p" size={17} color={c} /> },
+    { id: 'insights', label: 'Insights', path: '/insights', icon: <ActionIcon name="insights" size={17} color={c} /> },
   ]
 })()
 const DEFAULT_QUICK_ACTION_IDS = ['pay', 'receive', 'swap', 'bulk-pay', 'multichain-hub', 'p2p', 'scan-qr', 'claim-rewards']
@@ -4229,10 +4214,10 @@ export function HomePage() {
         {!isDesktop && (
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '95%', margin: '0 auto' }}>
           {[
-            { label: 'Pay',     path: '/pay',    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M12 5l-6 6M12 5l6 6" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-            { label: 'Receive', path: '/receive', icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M12 19l-6-6M12 19l6-6" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-            { label: 'Swap',    path: '/swap',    icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 7h13M4 7l3-3M4 7l3 3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M20 17H7M20 17l-3 3M20 17l-3-3" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg> },
-            { label: 'More',    path: null,       icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="6.5" height="6.5" rx="1.2" fill="#fff"/><rect x="14.5" y="3" width="6.5" height="6.5" rx="1.2" fill="#fff"/><rect x="3" y="14.5" width="6.5" height="6.5" rx="1.2" fill="#fff"/><rect x="14.5" y="14.5" width="6.5" height="6.5" rx="1.2" fill="#fff"/></svg> },
+            { label: 'Pay',     path: '/pay',     icon: <ActionIcon name="pay" size={27} /> },
+            { label: 'Receive', path: '/receive', icon: <ActionIcon name="receive" size={27} /> },
+            { label: 'Swap',    path: '/swap',    icon: <ActionIcon name="swap" size={27} /> },
+            { label: 'More',    path: null,       icon: <ActionIcon name="more" size={27} /> },
           ].map(a => (
             <div key={a.label}
               onClick={() => a.path ? navigate(a.path) : setShowMore(true)}
