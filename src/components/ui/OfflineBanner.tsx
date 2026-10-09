@@ -59,7 +59,7 @@ export function OfflineBanner() {
               <path d="M5 12.5l4.5 4.5L19 7.5" />
             </svg>
           )}
-          {state === 'offline' ? 'No internet connection' : state === 'slow' ? 'Slow connection · balance first' : 'Back online'}
+          {state === 'offline' ? 'No internet connection' : state === 'slow' ? 'Slow connection' : 'Back online'}
         </motion.div>
       )}
     </AnimatePresence>
