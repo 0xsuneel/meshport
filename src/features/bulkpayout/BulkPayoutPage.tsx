@@ -743,8 +743,10 @@ export function BulkPayoutPage() {
               </div>
             )}
 
-            {/* Search dropdown */}
-            {rowResults.length > 0 && (
+            {/* Search dropdown - hidden while the amount pad is open: it
+                covered the amount being typed. It comes back on Done, so
+                typing the amount first and then tapping a name still works. */}
+            {rowResults.length > 0 && !showBulkAmountPad && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border rounded-2xl z-20 divide-y divide-border shadow-xl">
                 {rowResults.map(u => (
                   <button key={u.id} onClick={() => {
@@ -775,7 +777,7 @@ export function BulkPayoutPage() {
             )}
 
             {/* Wallet address entered - checking / MeshPort match / external wallet */}
-            {isValidAddress(rowUsername.trim()) && rowResults.length === 0 && (
+            {isValidAddress(rowUsername.trim()) && rowResults.length === 0 && !showBulkAmountPad && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border rounded-2xl z-20 shadow-xl">
                 {addressChecking ? (
                   <div className="flex items-center gap-3 px-4 py-3">
