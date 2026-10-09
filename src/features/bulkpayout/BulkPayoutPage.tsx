@@ -12,7 +12,7 @@ import { ScreenPush } from '@/components/ui/ScreenPush'
 import { PopupOpen } from '@/hooks/usePopupOpen'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
-import {createPublicClient, createWalletClient, parseGwei, encodeFunctionData} from 'viem'
+import {createPublicClient, encodeFunctionData} from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
@@ -24,7 +24,6 @@ import { saveResumableOperation, getResumableOperation, clearResumableOperation 
 import { hasAnyActivityForTx } from '@/lib/ActivityService'
 import { searchUsersDb, resolveUsernameDb, getUserByWalletAddress, type DbUser } from '@/lib/supabase'
 import { isValidAddress } from '@/lib/arcService'
-import { arcTestnet as ARC_CHAIN } from '@/lib/chain'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
@@ -363,11 +362,9 @@ export function BulkPayoutPage() {
     setProcessingStatus('Connecting to Arc Testnet...')
     try {
       const account = privateKeyToAccount(activePrivateKey as `0x${string}`)
-      // Arc docs: walletClient WITHOUT chain - chain is passed inline to sendTransaction
-      // pollingInterval: the receipt wait below would otherwise re-check only
-      // every 4s (viem's default), though Arc finalizes in under a second.
+      // Used for gas estimation; signing is local and sending goes through
+      // the server (relaySend below).
       const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 250 })
-      const walletClient = createWalletClient({ account, chain: ARC_CHAIN, transport: arcTransport() })
 
       setProcessingStatus('Checking balance...')
       // Arc docs: use eth_getBalance (18-decimal native USDC wei), not ERC-20 balanceOf
@@ -473,58 +470,28 @@ export function BulkPayoutPage() {
         // viem/typescript combination) spuriously demands an EIP-4844 `kzg`
         // field for this plain EIP-1559 transaction. Runtime behavior is
         // unaffected - this is purely a type-level viem overload issue.
-        const txHash = await walletClient.sendTransaction({
-          to:    MULTICALL3_ADDRESS,
-          data,
-          value: totalValue,
-          gas:   (gasEst * 130n) / 100n,
-          maxFeePerGas:         parseGwei('25'),
-          maxPriorityFeePerGas: parseGwei('1'),
-          chain: ARC_CHAIN,
-          nonce,
-        } as unknown as Parameters<typeof walletClient.sendTransaction>[0])
-
-        // FIX (docs/BULKPAY_TRANSACTION_INTENT_IMPLEMENTATION.md Phase 3):
-        // bulkTxHash is now assigned IMMEDIATELY here, before the receipt
-        // wait below - not after it succeeds. sendTransaction returning is
-        // proof a real transaction was broadcast; if the receipt wait times
-        // out or throws, the outer catch block (which only has access to
-        // the OUTER `bulkTxHash`, not this inner `const txHash`, since the
-        // latter is block-scoped to this try) now still has the real hash
-        // to work with, instead of losing it entirely.
-        bulkTxHash = txHash
-
-        // Persist enough to resume this screen if the page gets refreshed
-        // while still confirming - without this, a refresh here drops back
-        // to the empty setup screen with no record the batch might have
-        // already gone out, the exact situation most likely to make
-        // someone re-run the whole payout by accident. Cleared once this
-        // reaches 'results' below (success or failure either way).
-        saveResumableOperation('bulkpay', txHash, {
-          totalAmount, recipientCount: resolved.length, walletAddress: account.address,
-        })
-
-        // Persist the real tx_hash server-side, ALSO immediately, ALSO
-        // before the receipt wait - this is what makes the attempt
-        // recoverable even if THIS process is killed a moment from now
-        // (tab close, network loss), which the local bulkTxHash variable
-        // alone cannot help with. Deliberately fire-and-forget from this
-        // flow's own perspective: markBulkPayAttemptSubmitted never throws
-        // (it catches its own errors and returns {success:false}), and its
-        // own failure must never block or fail the user's already-broadcast,
-        // already-real payment - the attempt simply stays server-side
-        // unconfirmed for this one call's worth of tx_hash persistence,
-        // recoverable later by the existing UNKNOWN/nonce-recovery
-        // machinery (docs/BULKPAY_BROADCAST_RESPONSE_LOSS_AUDIT.md) exactly
-        // as if this call had never been attempted at all.
-        void markBulkPayAttemptSubmitted(attemptId, txHash).catch(() => { /* best-effort, see comment above */ })
-
-        setProcessingStatus('Confirming bulk payout transaction...')
-        // Same fast receipt check Pay uses (direct eth_getTransactionReceipt
-        // every 200ms) instead of viem's multi-call wait. The receipt status
-        // is still verified; outcomes map exactly as before.
-        const { waitForConfirmation } = await import('@/lib/arcService')
-        const conf = await waitForConfirmation(txHash, 60_000)
+        // Signed here, sent to every Arc node and confirmed by the server in
+        // ONE request (relaySend in arcService.ts) - the phone no longer
+        // does chainId + send + receipt polling itself. As soon as the batch
+        // is out: bulkTxHash is set, the screen is made resumable, and the
+        // real tx_hash is persisted server-side (fire-and-forget,
+        // markBulkPayAttemptSubmitted never throws) - all BEFORE the
+        // receipt is known, exactly as before (docs/BULKPAY_BROADCAST_RESPONSE_LOSS_AUDIT.md).
+        const { relaySend, waitForConfirmation } = await import('@/lib/arcService')
+        const onSent = (txHash: `0x${string}`) => {
+          if (bulkTxHash) return
+          bulkTxHash = txHash
+          saveResumableOperation('bulkpay', txHash, {
+            totalAmount, recipientCount: resolved.length, walletAddress: account.address,
+          })
+          void markBulkPayAttemptSubmitted(attemptId, txHash).catch(() => { /* best-effort */ })
+          setProcessingStatus('Confirming bulk payout transaction...')
+        }
+        const sent = await relaySend(account, { to: MULTICALL3_ADDRESS as `0x${string}`, data, value: totalValue, gas: (gasEst * 130n) / 100n, nonce }, onSent)
+        // A batch the network may still be mining gets the old full wait
+        // before it's reported (never "failed" while it can still land).
+        const conf = sent.state === 'pending' ? await waitForConfirmation(sent.txHash, 45_000) : sent
+        if (!bulkTxHash && conf.state !== 'pending') onSent(sent.txHash)
         if (conf.state === 'failed') throw new Error('Multicall3 transaction reverted')
         if (conf.state === 'pending') throw new Error('Not confirmed yet - it may still complete. Check Activity before retrying.')
 

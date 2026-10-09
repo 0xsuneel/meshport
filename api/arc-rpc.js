@@ -437,29 +437,41 @@ function rejectReason(body) {
 // 'pending' is NOT failure (SUBMITTED_UNKNOWN): it may still confirm.
 const SEND_METHOD = 'meshport_sendRawTransactionAndWait'
 const SEND_WAIT_MAX_MS = 8000
-const RECEIPT_POLL_MS = 300
+const RECEIPT_POLL_MS = 200 // Arc blocks are ~0.5s
 const ALREADY_SENT = /already known|known transaction|already imported|nonce too low|replacement transaction underpriced/i
 
 async function broadcastToAll(raw) {
   const body = { jsonrpc: '2.0', id: 1, method: 'eth_sendRawTransaction', params: [raw] }
-  const results = await Promise.allSettled(ARC_RPCS.map(async (url) => {
-    const r = await fetch(url, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body), signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
-    })
-    const json = await r.json().catch(() => null)
-    if (!json) throw new Error('http ' + r.status)
-    return json
-  }))
-  let accepted = false, maybeSent = false, rejection = null
-  for (const r of results) {
-    if (r.status !== 'fulfilled') continue
-    const j = r.value
-    if (j.result) accepted = true
-    else if (j.error && ALREADY_SENT.test(String(j.error.message || ''))) maybeSent = true
-    else if (j.error && !rejection) rejection = j.error
-  }
-  return { accepted, maybeSent, rejection, anyAnswer: results.some(r => r.status === 'fulfilled') }
+  // Returns as soon as ONE node accepts it (the others keep going in the
+  // background) - waiting for every node meant one slow or dead node added up
+  // to RPC_TIMEOUT_MS to every payment. A rejection is only final once every
+  // node has answered or failed.
+  return new Promise((resolve) => {
+    let pending = ARC_RPCS.length, maybeSent = false, rejection = null, anyAnswer = false, done = false
+    const finish = (out) => { if (!done) { done = true; resolve(out) } }
+    const settle = () => {
+      if (--pending === 0) finish({ accepted: false, maybeSent, rejection, anyAnswer })
+    }
+    if (pending === 0) return finish({ accepted: false, maybeSent: false, rejection: null, anyAnswer: false })
+    for (const url of ARC_RPCS) {
+      fetch(url, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
+      })
+        .then(r => r.json().catch(() => null))
+        .then(j => {
+          if (j) anyAnswer = true
+          if (j && j.result) return finish({ accepted: true, maybeSent: true, rejection: null, anyAnswer: true })
+          if (j && j.error && ALREADY_SENT.test(String(j.error.message || ''))) {
+            maybeSent = true
+            return finish({ accepted: false, maybeSent: true, rejection: null, anyAnswer: true })
+          }
+          if (j && j.error && !rejection) rejection = j.error
+        })
+        .catch(() => { /* this node failed; others may still accept */ })
+        .finally(settle)
+    }
+  })
 }
 
 async function receiptOf(hash) {
