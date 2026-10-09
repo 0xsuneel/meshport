@@ -35,6 +35,22 @@
       try {
         if (!document.documentElement.classList.contains('mp-refresh')) {
           document.documentElement.classList.add('mp-opening');
+          // The phone centres its launch-screen logo on the whole screen
+          // (status bar included); this page starts below the status bar.
+          // Lift the logo by half the missing height so it sits exactly where
+          // the launch screen's logo was (otherwise it jumps down at the
+          // hand-over). With 3-button navigation the bar at the bottom is
+          // missing too, so only the part above it is counted.
+          var setLift = function () {
+            var missing = Math.max(0, (screen.height || 0) - window.innerHeight);
+            if (!window.innerHeight) return;
+            var lift = missing > 60 ? Math.max(0, missing - 48) / 2 : missing / 2;
+            document.documentElement.style.setProperty('--mp-splash-lift', Math.min(lift, 40) + 'px');
+          };
+          setLift();
+          // The viewport size may not be final this early: measure again
+          // before the first frame is drawn.
+          requestAnimationFrame(setLift);
           var tc = document.createElement('meta');
           tc.name = 'theme-color'; tc.content = '#0F5C57'; tc.id = 'mp-splash-theme';
           document.head.insertBefore(tc, document.head.firstChild);
