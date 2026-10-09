@@ -266,8 +266,10 @@ export async function createOffer(p: {
   offerExpiresInHours?: number
   tradeWindowMinutes?: number
 }): Promise<{ offer: P2POffer | null; error?: string }> {
-  if (await isUserBanned(p.userId)) return { offer: null, error: 'Your account is restricted from the P2P marketplace.' }
-  if (!(await isP2PEnabled())) return { offer: null, error: 'P2P trading is currently disabled by an admin.' }
+  // Both checks at once (createTrade already does this).
+  const [banned, enabled] = await Promise.all([isUserBanned(p.userId), isP2PEnabled()])
+  if (banned) return { offer: null, error: 'Your account is restricted from the P2P marketplace.' }
+  if (!enabled) return { offer: null, error: 'P2P trading is currently disabled by an admin.' }
   const tradeWindowMinutes = p.tradeWindowMinutes ?? TRADE_WINDOW_MINUTES
   if (!VALID_TRADE_WINDOW_MINUTES.includes(tradeWindowMinutes as any)) {
     return { offer: null, error: 'Invalid trade payment window.' }
@@ -2094,18 +2096,21 @@ export async function releaseTrade(trade: P2PTrade): Promise<{ success: boolean;
       // contract's own tradeReleased flag will prove the release happened.
       console.error('[p2pService] releaseTrade: on-chain release SUCCEEDED but finalize failed after retries - reconciler will repair', trade.id, result.txHash)
     }
-    await unlockOffer(trade.offerId, trade.id, trade.amountUsdc)
-    await retireOfferIfDepleted(trade.offerId)
-    await sendTradeMessage(trade.id, 'system', `USDC released${result.txHash ? ` - tx ${result.txHash.slice(0, 10)}...` : ''}. Trade complete.`, true)
     // notifyP2P removed here (2026-09-21) - duplicated p2p_notify_trade_event's
     // funds_released case, which fires on this exact status transition
     // (payment_sent -> released/completed) and notifies trade.buyerId
     // reliably.
-    await saveP2PActivity({
-      walletAddress: trade.buyerWallet, userId: trade.buyerId, txHash: result.txHash,
-      activityType: 'p2p_purchase', amount: trade.amountUsdc, status: 'completed',
-      metadata: { tradeId: trade.id, offerId: trade.offerId },
-    })
+    // Bookkeeping runs side by side (it used to be four round trips in a row
+    // before "released" showed). Only unlock -> retire depend on each other.
+    await Promise.allSettled([
+      (async () => { await unlockOffer(trade.offerId, trade.id, trade.amountUsdc); await retireOfferIfDepleted(trade.offerId) })(),
+      sendTradeMessage(trade.id, 'system', `USDC released${result.txHash ? ` - tx ${result.txHash.slice(0, 10)}...` : ''}. Trade complete.`, true),
+      saveP2PActivity({
+        walletAddress: trade.buyerWallet, userId: trade.buyerId, txHash: result.txHash,
+        activityType: 'p2p_purchase', amount: trade.amountUsdc, status: 'completed',
+        metadata: { tradeId: trade.id, offerId: trade.offerId },
+      }),
+    ])
   } else {
     // The claim succeeded but no funds moved - release the claim so the seller
     // can retry. If even THIS write fails after retries, the trade is stuck;

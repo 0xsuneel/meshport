@@ -702,6 +702,11 @@ export function P2PCreateOfferPage() {
     if (storedPasscode) {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
+      // Unlock the wallet key at the same time as the passcode check (both are
+      // slow on purpose) instead of after it - restorePrivateKey below joins
+      // this same in-flight unlock. Silent: a wrong passcode must only show
+      // "Incorrect passcode".
+      if (!useAuthStore.getState().privateKey) import('@/lib/restoreWallet').then(m => m.restorePrivateKey(passEntry, { silent: true })).catch(() => {})
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
       // Verifying the passcode only proves it's correct - it does NOT by
       // itself put the private key back in memory. privateKey is
@@ -946,6 +951,11 @@ export function P2POfferDetailPage() {
     if (storedPasscode) {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
+      // Unlock the wallet key at the same time as the passcode check (both are
+      // slow on purpose) instead of after it - restorePrivateKey below joins
+      // this same in-flight unlock. Silent: a wrong passcode must only show
+      // "Incorrect passcode".
+      if (!useAuthStore.getState().privateKey) import('@/lib/restoreWallet').then(m => m.restorePrivateKey(passEntry, { silent: true })).catch(() => {})
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
       // Verifying the passcode only proves it's correct - it does NOT by
       // itself put the private key back in memory. privateKey is
@@ -1286,9 +1296,11 @@ export function P2PTradePage() {
     // is doing something" rather than an instantly, obviously fake flip.
     setProcessingPayment(true)
     setActing(true)
+    // A short floor only so the processing card doesn't flash (the on-chain
+    // step itself is now ~1s; it used to be hidden behind a fixed 2.4s).
     const [result] = await Promise.all([
       markPaymentSent(trade),
-      new Promise(r => setTimeout(r, 2400)),
+      new Promise(r => setTimeout(r, 700)),
     ])
     setProcessingPayment(false)
     setActing(false)
@@ -1339,6 +1351,11 @@ export function P2PTradePage() {
     if (storedPasscode) {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
+      // Unlock the wallet key at the same time as the passcode check (both are
+      // slow on purpose) instead of after it - restorePrivateKey below joins
+      // this same in-flight unlock. Silent: a wrong passcode must only show
+      // "Incorrect passcode".
+      if (!useAuthStore.getState().privateKey) import('@/lib/restoreWallet').then(m => m.restorePrivateKey(passEntry, { silent: true })).catch(() => {})
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
       // Verifying the passcode only proves it's correct - it does NOT by
       // itself put the private key back in memory. privateKey is
@@ -1740,6 +1757,11 @@ export function P2PMyOffersPage() {
     if (storedPasscode) {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
+      // Unlock the wallet key at the same time as the passcode check (both are
+      // slow on purpose) instead of after it - restorePrivateKey below joins
+      // this same in-flight unlock. Silent: a wrong passcode must only show
+      // "Incorrect passcode".
+      if (!useAuthStore.getState().privateKey) import('@/lib/restoreWallet').then(m => m.restorePrivateKey(passEntry, { silent: true })).catch(() => {})
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
       // Verifying the passcode only proves it's correct - it does NOT by
       // itself put the private key back in memory. privateKey is
@@ -1804,6 +1826,11 @@ export function P2PMyOffersPage() {
     if (storedPasscode) {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
+      // Unlock the wallet key at the same time as the passcode check (both are
+      // slow on purpose) instead of after it - restorePrivateKey below joins
+      // this same in-flight unlock. Silent: a wrong passcode must only show
+      // "Incorrect passcode".
+      if (!useAuthStore.getState().privateKey) import('@/lib/restoreWallet').then(m => m.restorePrivateKey(passEntry, { silent: true })).catch(() => {})
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
     }
     setShowEditPasscode(false); setPassEntry(''); setPassError('')
@@ -1842,6 +1869,11 @@ export function P2PMyOffersPage() {
     if (storedPasscode) {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
+      // Unlock the wallet key at the same time as the passcode check (both are
+      // slow on purpose) instead of after it - restorePrivateKey below joins
+      // this same in-flight unlock. Silent: a wrong passcode must only show
+      // "Incorrect passcode".
+      if (!useAuthStore.getState().privateKey) import('@/lib/restoreWallet').then(m => m.restorePrivateKey(passEntry, { silent: true })).catch(() => {})
       if (!await verifyPasscode(passEntry, storedPasscode)) { setPassError('Incorrect passcode'); setPassEntry(''); return }
       const { restorePrivateKey } = await import('@/lib/restoreWallet')
       const restored = await restorePrivateKey(passEntry)
