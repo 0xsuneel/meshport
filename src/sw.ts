@@ -46,8 +46,14 @@ registerRoute(({ request, url }) => request.destination === 'image' && url.origi
     ],
   }))
 
-self.addEventListener('install', () => {
-  self.skipWaiting()
+// A new version waits instead of taking over the open app: switching
+// mid-use removed the files the open screens still needed (the next screen
+// failed to load and the app reloaded itself — slow, looked frozen). The app
+// tells it to take over when that's safe: at the next app open, behind the
+// opening screen, or when coming back after a long time away (lib/swUpdate.ts).
+// A first install (nothing to replace) still activates straight away.
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {

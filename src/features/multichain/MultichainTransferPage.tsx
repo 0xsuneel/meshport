@@ -39,6 +39,7 @@ import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, Deskt
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
+import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 
 // Derive Arc chain key from env so a mainnet build targets Arc mainnet.
 // All 'Arc_Testnet' literals in this file are replaced with this constant —
@@ -2060,8 +2061,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         } catch {}
 
         try {
-          const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
-          if (senderAddress) readUSDCBalanceOrThrow(senderAddress).then(b => useWalletStore.getState().setBalance(b)).catch(() => {})
+          // Drops at once by the amount sent, then the chain's figure (retried while stale).
+          refreshBalancesAfterTx(senderAddress, { spent: numAmount })
         } catch {}
 
         try {
@@ -2598,8 +2599,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
       // Refresh balance
       try {
-        const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
-        if (senderAddress) readUSDCBalanceOrThrow(senderAddress).then(b => useWalletStore.getState().setBalance(b)).catch(() => {})
+        // Drops at once by the amount sent, then the chain's figure (retried while stale).
+        refreshBalancesAfterTx(senderAddress, { spent: numAmount })
       } catch {}
 
       // Award points — fire-and-forget, same as the Activity.bridge() call

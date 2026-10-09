@@ -40,6 +40,7 @@ import { sheetDrag } from '@/lib/sheetDrag'
 import { ScreenPush } from '@/components/ui/ScreenPush'
 import { readPeople, writePeople } from '@/lib/peopleCache'
 import { SearchField } from '@/components/ui/SearchField'
+import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 
 type Screen = 'search' | 'amount' | 'review'
 type Token = 'USDC' | 'EURC' | 'cirBTC'
@@ -1002,14 +1003,14 @@ export function PaySendPage() {
       })()
 
       try {
-        // Throwing read: a failed refresh never saves $0 as the balance.
-        const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
         const { deriveAddressFromPrivateKey } = await import('@/lib/arc')
         // Fire-and-forget — deriving the address then fetching the balance
         // is only for refreshing the displayed balance after send; no reason
         // to block the success screen on it.
         deriveAddressFromPrivateKey(activePrivateKey).then((realAddr: string) => {
-          readUSDCBalanceOrThrow(realAddr).then((bal: number) => setBalance(bal)).catch(() => {})
+          // Balance drops at once, then the chain's figure replaces it
+          // (retried while the chain still shows the old value).
+          refreshBalancesAfterTx(realAddr, { spent: token === 'USDC' ? numAmount : 0 })
         }).catch(() => {})
       } catch {}
 

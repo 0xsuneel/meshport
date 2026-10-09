@@ -69,6 +69,12 @@ clearLegacyData()
   if (useAuthStore.getState().isLocked) import('./features/auth/PasscodeSetup').catch(() => {})
 }
 
+// App opened (not a refresh) and a new version downloaded last time: switch
+// to it now, behind the opening screen, instead of mid-use later.
+if (!document.documentElement.classList.contains('mp-refresh')) {
+  void import('./lib/swUpdate').then(m => m.applyWaitingUpdate())
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />

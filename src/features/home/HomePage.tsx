@@ -23,6 +23,7 @@ import { getRemovedContacts, unblockIfNewerActivity } from '@/lib/removedContact
 import { searchUsersDb, getOrCreateConversation, fetchContactsDb, type DbUser } from '@/lib/supabase'
 import { filterServices } from '@/lib/searchServices'
 import { RecentNewsRow } from './RecentNewsRow'
+import { BALANCES_STALE_EVENT } from '@/lib/balanceRefresh'
 import { onReconnect, useReconnectCount, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { fetchRecentContacts, recentInitial, recentShortName, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
 import { useSettingsStore } from '@/store/settingsStore'
@@ -2546,6 +2547,15 @@ export function HomePage() {
       }
     }, BALANCE_REFRESH_DEBOUNCE_MS)
   }
+
+  // A payment / swap / transfer just finished (lib/balanceRefresh.ts): read
+  // EURC and cirBTC again too (USDC is refreshed by the helper itself).
+  useEffect(() => {
+    const onStale = () => { refreshBalanceForToken('EURC'); refreshBalanceForToken('CIRBTC') }
+    window.addEventListener(BALANCES_STALE_EVENT, onStale)
+    return () => window.removeEventListener(BALANCES_STALE_EVENT, onStale)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walletAddress])
 
   // Clear any pending debounced refresh on unmount / wallet change so it
   // never fires setState against a stale or gone wallet.
