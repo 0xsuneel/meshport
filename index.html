@@ -82,6 +82,10 @@
       html.mp-opening #splash .tile { width: 107px; height: 107px; border-radius: 29px; transform: translateY(calc(-1 * var(--mp-splash-lift, 0px))); }
       html.mp-opening #splash .mark { width: 72px; height: 72px; }
       html.mp-opening #splash .txt { display: none; }
+      /* "Updating MeshPort…" under the logo while a new version takes over (lib/swUpdate.ts). */
+      #splash .upd { position: absolute; left: 0; right: 0; top: calc(50% + 60px + 24px); text-align: center; font-size: 13px; font-weight: 600; color: #A9D9CF; animation: mpUpdIn .2s ease both; }
+      html.mp-refresh #splash .upd { color: inherit; }
+      @keyframes mpUpdIn { from { opacity: 0; } to { opacity: 1; } }
 
       /* ── Opening splash ──────────────────────────────────────────────
          Shown instantly when the app opens (refreshes get a quiet variant), on top of #root, so the

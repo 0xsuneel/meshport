@@ -64,6 +64,20 @@
         }
       } catch (e) {}
 
+// ── "Updating MeshPort…" carried over the update reload (lib/swUpdate.ts) ──
+      try {
+        if (sessionStorage.getItem('mp_updating')) {
+          sessionStorage.removeItem('mp_updating');
+          document.addEventListener('DOMContentLoaded', function () {
+            var sp = document.getElementById('splash');
+            if (!sp || sp.querySelector('.upd')) return;
+            var u = document.createElement('div');
+            u.className = 'upd'; u.textContent = 'Updating MeshPort\u2026';
+            sp.appendChild(u);
+          });
+        }
+      } catch (e) {}
+
 // ── Splash watchdog ──
       // ── Splash watchdog - pure vanilla JS, runs independently of the React
       // bundle ever loading at all. If the app hasn't mounted (and removed

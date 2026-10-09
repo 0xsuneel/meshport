@@ -96,21 +96,37 @@ export function whenNetworkOk(fn: () => void): () => void {
   return () => { slowListeners.delete(l) }
 }
 
-/** One small request that only succeeds when the internet really works. */
+// What the last probe saw: an answer (any answer - even a server error means
+// the internet works), nothing within PROBE_TIMEOUT_MS, or the request could
+// not go out at all.
+type ProbeResult = 'reached' | 'timeout' | 'down'
+let lastProbe: ProbeResult = 'reached'
+// Probes in a row that got no answer in time. A weak link often misses one;
+// only several in a row (~36s of nothing) count as "no internet".
+let timeoutsInARow = 0
+const TIMEOUTS_FOR_OFFLINE = 3
+
+/** One small request: true when it reached the server (the internet works). */
 export function probeConnection(): Promise<boolean> {
   if (probing) return probing
   probing = (async () => {
     const started = Date.now()
     try {
-      const r = await fetch(PROBE_URL, {
+      await fetch(PROBE_URL, {
         method: 'POST', cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_chainId', params: [] }),
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
       })
-      if (r.ok) setSlow(browserSaysSlow() || Date.now() - started > SLOW_PROBE_MS)
-      return r.ok
-    } catch {
+      // Any HTTP answer, even a 5xx from a busy upstream: the device is online.
+      lastProbe = 'reached'
+      timeoutsInARow = 0
+      setSlow(browserSaysSlow() || Date.now() - started > SLOW_PROBE_MS)
+      return true
+    } catch (e) {
+      const timedOut = (e as any)?.name === 'TimeoutError' || (e as any)?.name === 'AbortError'
+      lastProbe = timedOut ? 'timeout' : 'down'
+      if (timedOut) { timeoutsInARow += 1; setSlow(true) }
       return false
     } finally {
       probing = null
@@ -150,7 +166,10 @@ function stopPolling() {
 /** Confirm the current state with a real request, and update it. */
 async function check(): Promise<void> {
   if (typeof navigator !== 'undefined' && navigator.onLine === false) { setOnline(false); return }
-  setOnline(await probeConnection())
+  if (await probeConnection()) { setOnline(true); return }
+  // No answer in time on a weak link is "slow", not "no internet" - unless it
+  // keeps happening. A request that can't go out at all is offline at once.
+  if (lastProbe === 'down' || timeoutsInARow >= TIMEOUTS_FOR_OFFLINE) setOnline(false)
 }
 
 if (typeof window !== 'undefined') {
