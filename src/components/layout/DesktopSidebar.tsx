@@ -6,7 +6,7 @@
 // import BottomNav's mobile-only concerns (unread realtime subscription,
 // Android back-button interception) - those stay exactly where they are.
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Settings, Users } from 'lucide-react'
+import { NavIcon, type NavIconName } from './navIcons'
 import { HomeIcon, ChatsIcon, RewardsIcon, ActivityIcon, getActiveTabId } from './BottomNav'
 import { useChatUnreadStore, useP2PTradesCountStore } from '@/store'
 import { useHubLabel } from '@/lib/merchant'
@@ -25,59 +25,16 @@ const items = [
   { id: 'settings',         label: 'Settings',            path: '/profile' },
 ]
 
-// Icon shapes adapted from HomePage's MoreSheet (same actions, same glyphs)
-// so the sidebar's icon language matches what mobile users already know -
-// just re-colored per active state like BottomNav's own icons.
-// Same glyphs as HomePage's own Pay/Receive quick-action icons.
-function PayIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <path d="M7 17L17 7M17 7H9M17 7V15" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
-}
-function ReceiveIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <path d="M17 7L7 17M7 17H15M7 17V9" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
-}
-function SwapIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <path d="M4 7h13M4 7l3-3M4 7l3 3" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M20 17H7M20 17l-3 3M20 17l-3-3" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
-}
-function BulkPayIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="6" width="18" height="13" rx="2" stroke={c} strokeWidth="1.7"/>
-      <path d="M3 10h18M7 14h2M11 14h2" stroke={c} strokeWidth="1.4" strokeLinecap="round"/>
-    </svg>
-  )
-}
-// Plain two-person glyph (same lucide set already used for Settings above)
-// - crisp at every size, unlike the previous raster-mask trace which
-// needed real work to stop looking blurry at nav size.
-function P2PIcon({ active }: { active: boolean }) {
-  return <Users size={20} color={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth={1.8} />
-}
-function MultichainHubIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="9" stroke={c} strokeWidth="1.7"/>
-      <path d="M3 12h18M12 3c2.5 2.5 3.8 5.7 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.7-3.8-9s1.3-6.5 3.8-9z" stroke={c} strokeWidth="1.5"/>
-    </svg>
-  )
-}
+// Same icon set as the phone bar (navIcons.tsx), outline on every row.
+const sideIcon = (name: NavIconName) => ({ active }: { active: boolean }) =>
+  <NavIcon name={name} size={22} color={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} />
+const PayIcon = sideIcon('pay')
+const ReceiveIcon = sideIcon('receive')
+const SwapIcon = sideIcon('swap')
+const BulkPayIcon = sideIcon('bulk')
+const P2PIcon = sideIcon('p2p')
+const MultichainHubIcon = sideIcon('multichain')
+const SettingsIcon = sideIcon('settings')
 export function DesktopSidebar() {
   const hub = useHubLabel()
   const location = useLocation()
@@ -152,7 +109,7 @@ export function DesktopSidebar() {
                 {item.id === 'chat'             && <ChatsIcon active={active} />}
                 {item.id === 'activity'         && <ActivityIcon active={active} />}
                 {item.id === 'rewards'          && <RewardsIcon active={active} />}
-                {item.id === 'settings'         && <Settings size={22} color={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth={1.8} />}
+                {item.id === 'settings'         && <SettingsIcon active={active} />}
               </span>
               {hub(item.label)}
               {showChatBadge && (
