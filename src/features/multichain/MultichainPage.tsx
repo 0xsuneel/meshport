@@ -1199,20 +1199,10 @@ export function MultichainPage() {
           </div>
         )}
 
-        {hubTab === 'bring' && !trackCctp && !trackUb && !trackClaim && claimChain && isDesktop && (
-          <div style={{ margin: '0 -12px', minHeight: flowFocused ? '100dvh' : undefined }}>
-            <Suspense fallback={<InlineSpinner />}>
-              <ClaimSheetBody key={claimChain} embedded initialChain={claimChain}
-                initialBalance={bringRows.find(c => c.id === claimChain)?.balance}
-                onClose={() => setClaimChain(null)} merchantMode={isMerchant} onFocusChange={setFlowFocus} />
-            </Suspense>
-          </div>
-        )}
-
-        {/* Phone: the chosen chain's Bring flow opens as a full page that
-            slides in from the right over the chain list - form, processing,
-            Track Progress and success all happen inside it. */}
-        {!isDesktop && (
+        {/* The chosen chain's Bring flow opens as its own page over the chain
+            list (phone: slides in full-screen; desktop: a panel on the right)
+            - form, processing, Track Progress and success all happen inside it. */}
+        {(
           <HubPage open={hubTab === 'bring' && !trackCctp && !trackUb && !trackClaim && !!claimChain}
             header={!flowFocused && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 4px' }}>
@@ -1232,7 +1222,7 @@ export function MultichainPage() {
           </HubPage>
         )}
 
-        {hubTab === 'bring' && !trackCctp && !trackUb && !trackClaim && (!claimChain || !isDesktop) && (() => {
+        {hubTab === 'bring' && !trackCctp && !trackUb && !trackClaim && (() => {
           const chainCard = (
           // Merchants: shown inside the Ledger's "Chains" tab (already a card).
           <div style={isMerchant ? undefined : { ...cardS, borderRadius: 20, padding: isDesktop ? 20 : 18 }}>

@@ -502,7 +502,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const desktopInput = isDesktopMq
   // In the Hub on a phone the form opens as a full page that slides in from
   // the right: recipient, amount, chain, route, then Review.
-  const sheetMode = embedded && !isDesktopMq
+  // Desktop too: the same screens, the page opens as a panel on the right.
+  const sheetMode = embedded
   const [formSheet, setFormSheet] = useState<0 | 1>(0)
 
   // Embedded in the Multichain Hub's bottom sheet: anything that would go
@@ -760,7 +761,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     // scroll area beside the sidebar), not the whole window.
     const target = isDesktop
       ? desktopColumnRef.current
-      : (flowRootRef.current?.closest('[data-flow-scroller]') as HTMLElement | null) ?? flowRootRef.current
+      : (flowRootRef.current?.closest('[data-hub-page], [data-flow-scroller]') as HTMLElement | null) ?? flowRootRef.current
     if (target) setFlashColumnRect(target.getBoundingClientRect())
   }, [successPhase, isDesktop, isDesktopMq])
 
