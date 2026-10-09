@@ -38,6 +38,7 @@ import { EXTERNAL_CHAINS, resolveRpcList } from './chains'
 import { normalizeAddress } from './types'
 import { dedupe, peek, put } from './cache'
 import { countRequest, countError, countDedupeHit } from './rpcMetrics'
+import { isSlowNetwork } from '@/lib/connectivity'
 
 export interface ChainBalanceResult {
   chainId: string
@@ -198,6 +199,27 @@ function emitScanProgress(detail: { wallet: string; chainId: string; phase: 'sta
   try { window.dispatchEvent(new CustomEvent(EXTERNAL_SCAN_PROGRESS_EVENT, { detail })) } catch { /* */ }
 }
 
+// ── Server portfolio (one request for all chains) ─────────────────────────
+const PORTFOLIO_URL = '/api/portfolio'
+/** Every chain's USDC from the server in one call; null when it can't be reached. */
+export async function readPortfolioChains(address: string): Promise<Record<string, number | null> | null> {
+  if (typeof fetch === 'undefined' || typeof window === 'undefined') return null
+  countRequest('portfolio', 'eth_call')
+  try {
+    const res = await fetch(`${PORTFOLIO_URL}?address=${encodeURIComponent(address)}`, {
+      cache: 'no-store',
+      // One small answer - a weak link gets longer to deliver it.
+      signal: AbortSignal.timeout(isSlowNetwork() ? 25_000 : 10_000),
+    })
+    if (!res.ok) throw new Error('http ' + res.status)
+    const json = await res.json()
+    return json && typeof json.chains === 'object' ? json.chains : null
+  } catch {
+    countError()
+    return null
+  }
+}
+
 /** Runs `fn` over `items` with at most `limit` in flight - no batch barriers. */
 async function pooledMap<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length)
@@ -232,7 +254,23 @@ export function externalBalanceReader(
     const chainIds = Object.keys(EXTERNAL_CHAINS).filter(id => isChainEnabledForClaim(settings, id))
 
     const wallet = addr.toLowerCase()
+    // One request for every chain (the server reads them - /api/portfolio).
+    // Chains it couldn't read, or the whole call failing, fall back to the
+    // phone reading those chains itself as before.
+    const viaServer = await readPortfolioChains(addr)
     const chains = await pooledMap(chainIds, SCAN_CONCURRENCY, async (chainId) => {
+      const known = viaServer?.[chainId]
+      if (typeof known === 'number') {
+        lastKnown.set(`${wallet}:${chainId}`, known)
+        emitScanProgress({ wallet, chainId, phase: 'done', balance: known })
+        return { chainId, balance: known }
+      }
+      // Very slow network and the server answer didn't come: keep the last
+      // figure rather than ~21 requests of our own on the same thin pipe.
+      if (isSlowNetwork()) {
+        const last = lastKnown.get(`${wallet}:${chainId}`) ?? 0
+        return { chainId, balance: last }
+      }
       emitScanProgress({ wallet, chainId, phase: 'start' })
       const balance = await readChainUSDCBalance(chainId, addr)
       emitScanProgress({ wallet, chainId, phase: 'done', balance })
