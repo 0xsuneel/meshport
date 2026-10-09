@@ -26,6 +26,7 @@ import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { sheetDrag } from '@/lib/sheetDrag'
+import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 
 type LocalContact = DbUser & { isFavorite?: boolean }
 
@@ -357,7 +358,7 @@ export function ContactsPage() {
       try {
         const { deriveAddressFromPrivateKey } = await import('@/lib/arc')
         const realAddr = await deriveAddressFromPrivateKey(activePrivateKey)
-        getUSDCBalance(realAddr).then(bal => setBalance(bal))
+        refreshBalancesAfterTx(realAddr, { spent: numAmount })
       } catch {}
 
       setPayStep('success')

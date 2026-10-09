@@ -34,6 +34,7 @@ import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { ARC_EXPLORER } from '@/lib/chainExplorers'
+import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 
 // ── Token definitions ─────────────────────────────────────────────────────────
 // Arc Testnet: only USDC, EURC, cirBTC supported for swap (per Arc docs)
@@ -1209,10 +1210,12 @@ export function SwapPage() {
       // background refresh, not a precondition for "done".
       (async () => {
         try {
-          const { getUSDCBalance } = await import('@/lib/arcService')
-          const newUSDC = await getUSDCBalance(walletAddress ?? '')
-          useWalletStore.getState().setBalance(newUSDC)
-          setTokenBals(b => ({ ...b, USDC: newUSDC }))
+          // Throwing read (a failed one used to save $0), then the shared
+          // after-transaction refresh: retried while the chain still shows the
+          // old value, and Home re-reads EURC / cirBTC.
+          refreshBalancesAfterTx(walletAddress)
+          const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
+          readUSDCBalanceOrThrow(walletAddress ?? '').then(newUSDC => setTokenBals(b => ({ ...b, USDC: newUSDC }))).catch(() => {})
           // Also refresh EURC + cirBTC after swap
           if (walletAddress) {
             const pad = walletAddress.toLowerCase().replace('0x','').padStart(64,'0')

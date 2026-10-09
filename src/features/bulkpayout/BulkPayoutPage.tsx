@@ -36,6 +36,7 @@ import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen'
 
 import { ARC_EXPLORER } from '@/lib/chainExplorers'
+import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 const USDC_DECIMALS   = 6
 
 // ── Multicall3 (canonical deterministic deployment, same address on every EVM chain) ──
@@ -572,12 +573,9 @@ export function BulkPayoutPage() {
       // screen already knows which sends succeeded from txResults itself;
       // refreshing the on-chain balance display is a background nicety, not
       // a precondition for showing results.
-      arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [account.address, 'latest'] })
-        .then(newBalJson => {
-          // eth_getBalance returns 18-decimal USDC wei — divide by 1e18
-          setBalance(newBalJson.result && newBalJson.result !== '0x' ? Number(BigInt(newBalJson.result)) / 1e18 : 0)
-        })
-        .catch(e => console.warn('[BulkPayout] post-payout balance refresh failed:', e))
+      // Shared after-transaction refresh: retried while the chain still shows
+      // the old value; a failed read keeps the shown balance.
+      refreshBalancesAfterTx(account.address)
     } catch (err: any) {
       const errMsg = err?.shortMessage || err?.message || 'Unknown error'
       console.error('[BulkPayout] Unexpected error:', errMsg)

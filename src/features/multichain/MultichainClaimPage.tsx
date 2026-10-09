@@ -67,6 +67,7 @@ import { UB_CLAIM_CHAINS, runUbClaim, ubClaimEta } from '@/lib/ubClaim'
 import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
+import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 
 // ─── MeshPort V2 Design System ────────────────────────────────────────────────
 const COLORS = {
@@ -830,10 +831,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       return
     }
     if (claims.every(c => c.status === 'completed' || mintedOnArc[c.id])) {
-      if (walletAddress) refreshScope({ kind: 'arc', wallet: walletAddress })
-      import('@/lib/arcService').then(({ readUSDCBalanceOrThrow }) =>
-        readUSDCBalanceOrThrow(walletAddress ?? '').then(setBalance).catch(() => {})
-      )
+      // Retried while the chain still shows the pre-claim balance.
+      refreshBalancesAfterTx(walletAddress)
       setChainProgress(prev => prev.length
         ? prev.map(p => ({ ...p, stage: 'done', pct: 100 }))
         : claims.map(c => ({ chainId: c.sourceChain, stage: 'done', pct: 100, msg: 'Done', mintTxHash: c.destinationTxHash ?? undefined, txHash: c.txHash })))

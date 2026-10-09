@@ -62,6 +62,7 @@ import { parsePersonalPayLink, PAY_LINK_EVENT, type PersonalPayLink } from '@/li
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { SkeletonRows, SkeletonChat } from '@/components/ui/Skeleton'
+import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 
 // ─── Hidden chats helpers — wallet-scoped so Wallet A hidden chats never bleed into Wallet B
 // Chat pay sheets (phone): closing slides the sheet down; moving to the
@@ -3435,7 +3436,8 @@ export function ChatConversationPage() {
     const addr = useAuthStore.getState().walletAddress || ''
     if (addr) {
       import('@/lib/arcService').then(({ getEURCBalance, getUSDCBalance, getCirBtcBalance }) => {
-        getUSDCBalance(addr).then(b => setBalance(b)).catch(() => {})
+        // Throwing read: a failed one used to save $0 as the balance.
+        import('@/lib/arcService').then(({ readUSDCBalanceOrThrow }) => readUSDCBalanceOrThrow(addr).then(b => setBalance(b)).catch(() => {}))
         getEURCBalance(addr).then(b => setEurcBalance(b)).catch(() => {})
         getCirBtcBalance(addr).then(b => setCirbtcBalance(b)).catch(() => {})
       })
@@ -3681,7 +3683,7 @@ export function ChatConversationPage() {
           } else if (payToken === 'cirBTC') {
             getCirBtcBalance(realAddr).then(b => setCirbtcBalance(b)).catch(() => {})
           } else {
-            getUSDCBalance(realAddr).then(bal => setBalance(bal)).catch(() => {})
+            refreshBalancesAfterTx(realAddr, { spent: numAmount })
           }
         }).catch(() => {})
       } catch {}
