@@ -1277,7 +1277,7 @@ export function MultichainPage() {
                       background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
                       border: has ? '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' : '1px solid var(--border)' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.label}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.25, overflowWrap: 'normal' }}>{c.label}</div>
                       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
                         {ub && (
                           <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,

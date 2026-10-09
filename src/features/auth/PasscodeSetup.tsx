@@ -253,7 +253,7 @@ export function PasscodeSetupPage() {
 
   return (
     <div className="flex flex-col h-full bg-bg px-6 py-12">
-      <button onClick={handleBack} className="back-btn" style={{marginBottom:24}}>
+      <button onClick={handleBack} className="back-btn" style={{marginBottom:14}}>
         <ArrowLeft className="w-5 h-5 text-text-primary" />
       </button>
 

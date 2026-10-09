@@ -448,7 +448,7 @@ export function EmailOTPPage() {
   return (
     <div className="flex flex-col h-full bg-bg px-6 py-12">
       <button onClick={() => step === 'otp' ? setStep('email') : navigate('/auth', { replace: true })}
-        className="back-btn" style={{marginBottom:32}}>
+        className="back-btn" style={{marginBottom:22}}>
         <ArrowLeft className="w-5 h-5 text-text-primary" />
       </button>
       {/* Email ⇄ code push like pages (no fade-out to an empty screen). */}
@@ -660,7 +660,7 @@ export function CreateWalletPage() {
         if (step === 'generate') navigate(-1)
         else if (step === 'backup') setStep('generate')
         else if (step === 'confirm') { setStep('backup'); setConfirmWords(['', '', '']); setConfirmError('') }
-      }} className="back-btn" style={{marginBottom:24}}>
+      }} className="back-btn" style={{marginBottom:14}}>
         <ArrowLeft className="w-5 h-5 text-text-primary" />
       </button>
       <div className="flex gap-1.5 mb-8">
@@ -917,7 +917,7 @@ export function ImportWalletPage() {
 
   return (
     <div className="flex flex-col h-full bg-bg px-6 py-12 overflow-y-auto">
-      <button onClick={() => navigate(-1)} className="back-btn" style={{marginBottom:24}}><ArrowLeft className="w-5 h-5 text-text-primary" /></button>
+      <button onClick={() => navigate(-1)} className="back-btn" style={{marginBottom:14}}><ArrowLeft className="w-5 h-5 text-text-primary" /></button>
       <div className="space-y-5">
         <div><h2 className="text-2xl font-bold text-text-primary">Import Wallet</h2><p className="text-text-secondary mt-1">Works with MetaMask, Trust, OKX, Coinbase</p></div>
         <div className="flex bg-surface rounded-2xl p-1 border border-border">
