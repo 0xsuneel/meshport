@@ -560,8 +560,19 @@ export default function App() {
   // it calls both unlock() AND restorePrivateKey(val) with that SAME
   // passcode (see its last two lines) - one entry, one screen, both the
   // app-unlock and the wallet restore. No separate banner/prompt needed.
+  //
+  // Only after a REAL time offline (OFFLINE_LOCK_AFTER_MS). Phones drop the
+  // signal for a second or two all the time (lifts, 4G/5G hand-over), and the
+  // browser fires 'offline' for each blip: wiping the wallet key on every one
+  // left the app without its key mid-use - a Bring claim failed, and the
+  // session link to the account (signed with that key) couldn't be renewed,
+  // so screens came up empty.
   useEffect(() => {
-    const onOffline = () => {
+    const OFFLINE_LOCK_AFTER_MS = 60_000
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const lockNow = () => {
+      timer = null
+      if (navigator.onLine) return
       const { walletAddress, isAuthenticated, passcodeLockEnabled, lock } = useAuthStore.getState()
       // Every wallet type caches its key for this tab - drop it for all of them.
       import('@/lib/security').then(({ clearSessionPrivateKey }) => clearSessionPrivateKey(walletAddress)).catch(() => {})
@@ -569,8 +580,15 @@ export default function App() {
         lock()
       }
     }
+    const onOffline = () => { if (!timer) timer = setTimeout(lockNow, OFFLINE_LOCK_AFTER_MS) }
+    const onOnline = () => { if (timer) { clearTimeout(timer); timer = null } }
     window.addEventListener('offline', onOffline)
-    return () => window.removeEventListener('offline', onOffline)
+    window.addEventListener('online', onOnline)
+    return () => {
+      if (timer) clearTimeout(timer)
+      window.removeEventListener('offline', onOffline)
+      window.removeEventListener('online', onOnline)
+    }
   }, [])
 
 

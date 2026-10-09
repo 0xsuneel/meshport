@@ -1194,6 +1194,19 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepLinkChain, step, chains])
 
+  // Try Again after a failed claim: the same chain's amount screen again. When
+  // the page came from the Hub (or that chain has nothing left to claim), back
+  // to the Hub's Bring tab - never this page's own old chain list.
+  const retryClaim = () => {
+    const sameChain = selected && chains.some(c => c.chainId === selected && c.claimable > 0) ? selected : null
+    setError(''); setPassEntry(''); setConfirmPhase('processing'); setIsSubmitted(false); setShowPasscodeSheet(false)
+    setAmountConfirmed(false); setClaimRecords([]); setClaimsByStatus({}); setChainProgress([])
+    if (!sameChain && (embedded || openedFromHubRef.current)) { navigate('/multichain', { state: { tab: 'bring' } }); return }
+    setSelected(sameChain)
+    setStep('select')
+    setSearchParams(new URLSearchParams(), { replace: true })
+  }
+
   const leaveAmountStep = () => {
     setError(''); setAmountConfirmed(false); setKeypadOpen(false)
     if (openedFromHubRef.current) { navigate('/multichain', { state: { tab: 'bring' } }); return }
@@ -1233,6 +1246,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     try {
 
       const depositedChains: Array<{ chainId: string; amount: number }> = []
+      // Each chain's failure reason, for the Claim Failed screen. (chainProgress
+      // in this callback is the value from when the claim started, so reading
+      // it back only ever said "failed".)
+      const chainErrors: Record<string, string> = {}
 
       const claimOneChain = async (chain: typeof selChains[0]) => {
         const inputAmt    = parseFloat((claimAmounts[chain.chainId] ?? '').replace(/[^0-9.]/g, '')) || 0
@@ -1245,7 +1262,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           // chain's progress card stayed on whatever it last showed
           // (usually nothing), silently doing nothing with no
           // explanation. Surface it the same way a real failure would be.
-          setChain(chain.chainId, 'error', `Minimum $${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))} to claim`, 0)
+          chainErrors[chain.chainId] = `Minimum $${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))} to claim`
+          setChain(chain.chainId, 'error', chainErrors[chain.chainId], 0)
           return
         }
 
@@ -1330,7 +1348,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           return { chainId: chain.chainId, amount: claimAmount }
 
         } catch (e: any) {
-          setChain(chain.chainId, 'error', (e?.message ?? 'Claim failed').slice(0, 80), 0)
+          const msg = String(e?.shortMessage ?? e?.message ?? 'Claim failed').slice(0, 160)
+          chainErrors[chain.chainId] = msg
+          console.error('[Claim]', chain.chainId, e)
+          setChain(chain.chainId, 'error', msg.slice(0, 80), 0)
           return null
         }
       }
@@ -1342,10 +1363,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
       if (depositedChains.length === 0) {
         const failedSummary = selChains
-          .map(c => {
-            const cp = chainProgress.find(p => p.chainId === c.chainId)
-            return `${getMeta(c.chainId).label}: ${cp?.msg ?? 'failed'}`
-          }).join('\n')
+          .map(c => `${getMeta(c.chainId).label}: ${chainErrors[c.chainId] ?? 'failed'}`)
+          .join('\n')
         setError(failedSummary)
         setStep('failed'); return
       }
@@ -2414,7 +2433,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           <p style={{ fontSize: 18, fontWeight: 700, color: COLORS.error, margin: '0 0 8px', textAlign: 'center' }}>Claim Failed</p>
           {error && <p role="alert" style={{ fontSize: 13, color: COLORS.muted, margin: '0 0 28px', textAlign: 'center', maxWidth: '100%' }}>{error}</p>}
           <div style={{ display: 'flex', gap: SPACING.sm, width: '100%' }}>
-            <button onClick={() => { setStep('select'); setError(''); setPassEntry(''); setSelected(null); setConfirmPhase('processing'); setIsSubmitted(false); setShowPasscodeSheet(false); setAmountConfirmed(false); setClaimRecords([]); setClaimsByStatus({}); setSearchParams(new URLSearchParams(), { replace: true }) }} style={{ flex: 1, padding: `${SPACING.lg}px`, borderRadius: RADII.button, border: 'none', fontSize: 14, fontWeight: 600, color: '#fff', background: COLORS.primary, cursor: 'pointer' }}>
+            <button onClick={retryClaim} style={{ flex: 1, padding: `${SPACING.lg}px`, borderRadius: RADII.button, border: 'none', fontSize: 14, fontWeight: 600, color: '#fff', background: COLORS.primary, cursor: 'pointer' }}>
               Try Again
             </button>
             <button onClick={() => navigate('/multichain', { state: { tab: 'bring' } })} style={{ flex: 1, padding: `${SPACING.lg}px`, borderRadius: RADII.button, border: `1px solid ${COLORS.border}`, background: 'transparent', fontSize: 14, fontWeight: 600, color: COLORS.muted, cursor: 'pointer' }}>
