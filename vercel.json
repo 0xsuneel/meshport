@@ -10,6 +10,9 @@
     },
     "api/bridge-relay.ts": {
       "maxDuration": 60
+    },
+    "api/arc-rpc.js": {
+      "maxDuration": 30
     }
   },
   "rewrites": [

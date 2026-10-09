@@ -426,6 +426,74 @@ function rejectReason(body) {
   return null
 }
 
+// ── Send + confirm in one request (OKX-style) ───────────────────────────────
+// meshport_sendRawTransactionAndWait(rawTx, txHash, waitMs)
+// The phone signs locally and hands the signed bytes over once. The server
+// broadcasts to EVERY Arc endpoint at the same time (one dead or slow node no
+// longer loses a payment), then waits for the receipt here - fast server
+// network instead of the phone polling over a weak link.
+//   result: { hash, status: 'success' | 'failed' | 'pending', blockNumber? }
+//   error -32003: every node that answered rejected it - nothing was sent.
+// 'pending' is NOT failure (SUBMITTED_UNKNOWN): it may still confirm.
+const SEND_METHOD = 'meshport_sendRawTransactionAndWait'
+const SEND_WAIT_MAX_MS = 8000
+const RECEIPT_POLL_MS = 300
+const ALREADY_SENT = /already known|known transaction|already imported|nonce too low|replacement transaction underpriced/i
+
+async function broadcastToAll(raw) {
+  const body = { jsonrpc: '2.0', id: 1, method: 'eth_sendRawTransaction', params: [raw] }
+  const results = await Promise.allSettled(ARC_RPCS.map(async (url) => {
+    const r = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
+    })
+    const json = await r.json().catch(() => null)
+    if (!json) throw new Error('http ' + r.status)
+    return json
+  }))
+  let accepted = false, maybeSent = false, rejection = null
+  for (const r of results) {
+    if (r.status !== 'fulfilled') continue
+    const j = r.value
+    if (j.result) accepted = true
+    else if (j.error && ALREADY_SENT.test(String(j.error.message || ''))) maybeSent = true
+    else if (j.error && !rejection) rejection = j.error
+  }
+  return { accepted, maybeSent, rejection, anyAnswer: results.some(r => r.status === 'fulfilled') }
+}
+
+async function receiptOf(hash) {
+  try {
+    const j = await forward({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionReceipt', params: [hash] })
+    return j?.result || null
+  } catch { return null }
+}
+
+async function sendAndWait(id, params) {
+  const [raw, hash, waitMsIn] = Array.isArray(params) ? params : []
+  if (typeof raw !== 'string' || !/^0x[0-9a-fA-F]+$/.test(raw) || raw.length > 262144) {
+    return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Invalid signed transaction' } }
+  }
+  if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) {
+    return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Invalid transaction hash' } }
+  }
+  const started = Date.now()
+  const waitMs = Math.min(Math.max(Number(waitMsIn) || SEND_WAIT_MAX_MS, 0), SEND_WAIT_MAX_MS)
+  const b = await broadcastToAll(raw)
+  if (!b.accepted && !b.maybeSent) {
+    // Answers came back and every one was a rejection: it was not sent.
+    if (b.rejection) return { jsonrpc: '2.0', id, error: { code: -32003, message: String(b.rejection.message || 'Transaction rejected').slice(0, 300) } }
+    // No node answered at all: unknown - the phone keeps watching it.
+    return { jsonrpc: '2.0', id, result: { hash, status: 'pending', broadcast: 'unknown' } }
+  }
+  while (Date.now() - started < waitMs) {
+    const rc = await receiptOf(hash)
+    if (rc) return { jsonrpc: '2.0', id, result: { hash, status: rc.status === '0x0' ? 'failed' : 'success', blockNumber: rc.blockNumber } }
+    await sleep(RECEIPT_POLL_MS)
+  }
+  return { jsonrpc: '2.0', id, result: { hash, status: 'pending', broadcast: 'sent' } }
+}
+
 module.exports = async function handler(req, res) {
   const origin = req.headers.origin || ''
   const localDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
@@ -434,6 +502,14 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.status(200).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
+
+  if (req.body && !Array.isArray(req.body) && req.body.method === SEND_METHOD) {
+    try { return res.status(200).json(await sendAndWait(req.body.id ?? 1, req.body.params)) }
+    catch (e) {
+      console.error('[arc-rpc] send failed:', e?.message)
+      return res.status(502).json({ error: 'Arc RPC upstream unavailable' })
+    }
+  }
 
   const bad = rejectReason(req.body)
   if (bad) return res.status(400).json({ jsonrpc: '2.0', id: req.body?.id ?? null, error: { code: -32600, message: bad } })
@@ -453,3 +529,4 @@ module.exports = async function handler(req, res) {
 // logic directly - a same-process function call, not an extra HTTP hop -
 // instead of maintaining their own separate, simpler RPC failover.
 module.exports.forward = forward
+module.exports.sendAndWait = sendAndWait
