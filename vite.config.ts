@@ -4,6 +4,18 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 import path from 'path'
 
+// Build id: baked into the app (__MP_BUILD__) and published as /version.json,
+// so an open app can tell within a minute that a newer deploy is live
+// (lib/swUpdate.ts) - a ~50-byte check instead of waiting for the service
+// worker to download the whole new offline copy.
+const MP_BUILD = (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 12) || Date.now().toString(36)
+const mpVersionFile = {
+  name: 'mp-version-file',
+  generateBundle(this: { emitFile: (f: { type: 'asset'; fileName: string; source: string }) => void }) {
+    this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: MP_BUILD }) })
+  },
+}
+
 // build: 20250615
 export default defineConfig({
   server: {
@@ -29,6 +41,7 @@ export default defineConfig({
   define: {
     global: 'globalThis',
     'process.env': {},
+    __MP_BUILD__: JSON.stringify(MP_BUILD),
   },
   optimizeDeps: {
     include: [
@@ -62,6 +75,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    mpVersionFile,
     react(),
     // Circle SDK (and some of its transitive deps) reference `Buffer` as an
     // ambient Node global at module top-level — the manual `window.Buffer =

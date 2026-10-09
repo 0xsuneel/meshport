@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching'
+import { precache, addRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching'
 import { registerRoute, NavigationRoute } from 'workbox-routing'
 import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
@@ -8,19 +8,48 @@ import { CacheableResponsePlugin } from 'workbox-cacheable-response'
 declare let self: ServiceWorkerGlobalScope
 
 // ── Precache (same role generateSW used to handle automatically) ────────────
-precacheAndRoute(self.__WB_MANIFEST)
+// The files are stored now; their route is added AFTER the page route below.
+// (precacheAndRoute() registered it first, and it answers "/" from the stored
+// index.html - so opening the app always ran the stored old version.)
+precache(self.__WB_MANIFEST)
 cleanupOutdatedCaches()
 
-// ── Works on a weak or missing connection ──────────────────────────────────
-// Opening the app (or any page of it: /multichain, /activity…) is answered
-// from the installed copy at once, so a slow network never shows a blank
-// screen or the browser's offline page; only the data loads over the network.
-// A new deploy still arrives as before (the service worker updates itself).
-registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), {
+// ── Pages: the live version first, the installed copy when offline/slow ────
+// Like other web apps (X, Gmail, Slack…): opening the app asks the server for
+// the current page, so a new deploy shows on the very next open or refresh -
+// it no longer waits for this service worker to download the whole new
+// offline copy (~5 MB) in the background. If the network doesn't answer within
+// 2s (weak connection) or there's none, the installed copy opens instead, so
+// a slow network still never shows a blank screen or the browser's offline
+// page. A switch to a new version (lib/swUpdate.ts) adds ?_v=… and waits
+// longer for the network, since the point is to get the new page.
+const appShell = createHandlerBoundToURL('/index.html')
+const NAV_TIMEOUT_MS = 2000
+const NAV_TIMEOUT_UPDATE_MS = 15000
+registerRoute(new NavigationRoute(async (options) => {
+  const { url } = options
+  const wait = url.searchParams.has('_v') ? NAV_TIMEOUT_UPDATE_MS : NAV_TIMEOUT_MS
+  try {
+    // By URL, not the browser's navigation request: always the live page
+    // (no HTTP cache) and server redirects are followed.
+    const res = await Promise.race([
+      fetch(url.href, { credentials: 'same-origin', cache: 'no-store', redirect: 'follow' }),
+      new Promise<null>(resolve => setTimeout(() => resolve(null), wait)),
+    ])
+    if (res && res.ok) {
+      // A followed redirect can't answer a page load as-is (browsers reject it).
+      return res.redirected ? new Response(res.body, { status: res.status, statusText: res.statusText, headers: res.headers }) : res
+    }
+  } catch { /* offline - use the installed copy */ }
+  return appShell(options)
+}, {
   // Server routes (incl. the pay links' preview pages, served by /api/og-pay)
   // and files that aren't app pages always go to the network.
-  denylist: [/^\/api\//, /^\/pay(link)?\//, /^\/auth\/v1\//, /\/[^/?]+\.[a-z0-9]+$/i],
+  denylist: [/^\/api\//, /^\/pay(link)?\//, /^\/auth\/v1\//, /\/[^/?]+\.(?!html$)[a-z0-9]+$/i],
 }))
+
+// Stored files (scripts, styles, icons) - after the page route, see above.
+addRoute()
 
 // Inter font: the stylesheet refreshes in the background, font files are
 // kept (they never change at a given URL).
@@ -46,12 +75,11 @@ registerRoute(({ request, url }) => request.destination === 'image' && url.origi
     ],
   }))
 
-// A new version waits instead of taking over the open app: switching
-// mid-use removed the files the open screens still needed (the next screen
-// failed to load and the app reloaded itself - slow, looked frozen). The app
-// tells it to take over when that's safe: at the next app open, behind the
-// opening screen, or when coming back after a long time away (lib/swUpdate.ts).
-// A first install (nothing to replace) still activates straight away.
+// A new offline copy waits instead of taking over the open app: switching
+// mid-use removed the files the open screens still needed. The app tells it to
+// take over once the page itself is on the new version (lib/swUpdate.ts) -
+// then there is nothing left that needs the old files. A first install
+// (nothing to replace) still activates straight away.
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting()
 })
