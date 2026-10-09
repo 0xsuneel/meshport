@@ -82,6 +82,14 @@ function routeSwapServiceThroughServer() {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
     if (!url.startsWith(SWAP_SERVICE)) return orig(input as any, init)
     const u = new URL(url)
+    // Once our swap is confirmed on Arc it is done (a same-chain swap settles
+    // in that one transaction). The SDK then polls the service's status
+    // endpoint (which can hold up to 30s, with 1-2s sleeps between tries)
+    // only to learn amountOut - which we read from the swap's own receipt
+    // instead (amountOutFromReceipt). A 4xx makes the SDK return DONE at once.
+    if (_swapConfirmed && u.pathname.endsWith('/swap/status')) {
+      return new Response(JSON.stringify({ code: 400, message: 'Status read on-device' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+    }
     const { authApiHeaders } = await import('./supabase')
     const method = init?.method || (input instanceof Request ? input.method : 'GET')
     return orig(`/api/swap-proxy?svc=${encodeURIComponent(u.pathname + u.search)}`, {
@@ -109,6 +117,10 @@ let _confirmedHashes = new Set<string>()
 // Set once a swap transaction (not an approve) has actually been broadcast in
 // the current executeSwapLocal - a retry must never send a second swap then.
 let _swapBroadcast = false
+// The swap transaction's hash and receipt, once Arc has confirmed it.
+let _swapHash: string | null = null
+let _swapConfirmed = false
+let _swapReceipt: any = null
 
 function reportSwapProgress(reqs: any[], results: any[], Transaction: any) {
   const emit = _onSwapProgress ?? (() => {})
@@ -118,10 +130,14 @@ function reportSwapProgress(reqs: any[], results: any[], Transaction: any) {
     try {
       if (req.method === 'eth_sendRawTransaction' && typeof res.result === 'string') {
         const selector = String(Transaction.from(req.params[0]).data || '').slice(0, 10).toLowerCase()
-        if (selector !== APPROVE_SELECTOR) _swapBroadcast = true
+        if (selector !== APPROVE_SELECTOR) { _swapBroadcast = true; _swapHash = String(res.result).toLowerCase() }
         emit({ kind: selector === APPROVE_SELECTOR ? 'approve-sent' : 'swap-sent', hash: res.result })
       } else if (req.method === 'eth_getTransactionReceipt' && res.result && !_confirmedHashes.has(res.result.transactionHash)) {
         _confirmedHashes.add(res.result.transactionHash)
+        if (_swapHash && String(res.result.transactionHash).toLowerCase() === _swapHash && res.result.status === '0x1') {
+          _swapReceipt = res.result
+          _swapConfirmed = true
+        }
         emit({ kind: 'confirmed', hash: res.result.transactionHash, success: res.result.status === '0x1' })
       }
     } catch { /* progress is display-only - never affects the swap itself */ }
@@ -248,6 +264,24 @@ function extractPossibleTxHash(err: any): string | null {
 // simplified to a single call through arcRpcJson (src/lib/arc.ts) - that
 // already goes through the same health-scored /api/arc-rpc proxy the
 // server-side version had to race multiple raw RPC URLs for by hand.
+/** Amount of `tokenOutSymbol` the swap receipt transferred to `walletAddress` (decimal string), or ''. */
+export function amountOutFromReceipt(receipt: any, tokenOutSymbol: string, walletAddress: string): string {
+  const token = TOKEN_CONTRACTS[tokenOutSymbol]
+  if (!receipt || !token || !walletAddress) return ''
+  const to = '0x' + walletAddress.toLowerCase().replace('0x', '').padStart(64, '0')
+  let total = 0n
+  for (const log of receipt.logs ?? []) {
+    try {
+      if (String(log.address).toLowerCase() !== token.address.toLowerCase()) continue
+      if (String(log.topics?.[0]).toLowerCase() !== TRANSFER_TOPIC || String(log.topics?.[2]).toLowerCase() !== to) continue
+      total += BigInt(log.data)
+    } catch { /* not a Transfer we can read */ }
+  }
+  if (total === 0n) return ''
+  const s = total.toString().padStart(token.decimals + 1, '0')
+  return `${s.slice(0, -token.decimals)}.${s.slice(-token.decimals)}`.replace(/\.?0+$/, '')
+}
+
 async function verifySwapLanded(walletAddress: string, tokenOutSymbol: string): Promise<{ txHash: string; amount: number } | null> {
   const token = TOKEN_CONTRACTS[tokenOutSymbol]
   if (!token || !walletAddress) return null
@@ -335,10 +369,12 @@ export async function executeSwapLocal(params: ExecuteSwapParams): Promise<{ txH
   _onSwapProgress = params.onProgress ?? null
   _confirmedHashes = new Set()
   _swapBroadcast = false
+  _swapHash = null; _swapConfirmed = false; _swapReceipt = null
   try {
     return await runSwap(params)
   } finally {
     _onSwapProgress = null
+    _swapConfirmed = false
   }
 }
 
@@ -371,8 +407,11 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
 
   try {
     const result: any = await kit.swap(baseParams)
-    if (result?.txHash) await finish(result.txHash, parseFloat(result?.amountOut || '0') || 0)
-    return { txHash: result?.txHash || '', amountOut: result?.amountOut || '', explorerUrl: result?.explorerUrl || '' }
+    // amountOut from the confirmed swap's own Transfer log to this wallet (the
+    // service's status poll is skipped - see routeSwapServiceThroughServer).
+    const amountOut = result?.amountOut || amountOutFromReceipt(_swapReceipt, params.tokenOut, params.walletAddress) || ''
+    if (result?.txHash) await finish(result.txHash, parseFloat(amountOut || '0') || 0)
+    return { txHash: result?.txHash || '', amountOut, explorerUrl: result?.explorerUrl || '' }
   } catch (e1: any) {
     const { raw: raw1, userMessage: msg1, isLiquidity, isUncertain } = extractError(e1, sdkMods)
     console.warn('[Swap] attempt 1 failed:', msg1)
