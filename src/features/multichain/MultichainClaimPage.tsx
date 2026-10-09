@@ -20,9 +20,10 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { notifyClaimArrived, requestPushPermission } from '@/lib/bridgeTracker'
 import {
-  ArrowLeft, RefreshCw, XCircle, Globe,
+  ArrowLeft, RefreshCw, XCircle,
   Activity as ActivityIcon,
 } from 'lucide-react'
+import { ActionIcon } from '@/components/ui/ActionIcon'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
@@ -1734,7 +1735,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 initial={{ opacity: 0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity: 1, y: 0 }} transition={MOBILE_TAB_FADE_TRANSITION}
                 style={{ textAlign: 'center', padding: `${SPACING.xl * 2}px ${SPACING.md}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}
               >
-                <Globe className="w-12 h-12 mx-auto mb-3" style={{ color: COLORS.muted, opacity: 0.5 }}/>
+                <div style={{ opacity: 0.5, marginBottom: 12 }}><ActionIcon name="hub" size={48} color={COLORS.muted} /></div>
                 <p style={{ fontSize: 15, color: COLORS.muted, margin: 0 }}>No funds available yet</p>
                 <p style={{ fontSize: 12, color: COLORS.muted, margin: '4px 0 0', opacity: 0.7 }}>Transfer USDC to start claiming</p>
               </motion.div>
