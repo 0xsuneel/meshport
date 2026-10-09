@@ -2,7 +2,7 @@ import { useEffect, type Ref, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { FlashAuthIcon } from './FlashAuthIcon'
-import { EASE_OUT } from '@/lib/motion'
+import { EASE_OUT, isDesktopNow } from '@/lib/motion'
 import { successFeedback } from '@/lib/feedback'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 
@@ -35,6 +35,11 @@ export function SuccessFlash({ title, checkRef, viaBiometric, circleReady = true
   useEffect(() => { successFeedback() }, [])
   usePopupOpen()
 
+  // Desktop: never cover the sidebar and header - fill the content area
+  // (screens that pass their own rect keep it).
+  if (portal && !rect && isDesktopNow()) {
+    rect = document.querySelector('[data-desktop-content]')?.getBoundingClientRect() ?? null
+  }
   const box: CSSProperties = portal
     ? { position: 'fixed', ...(rect ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height, borderRadius: radius } : { inset: 0 }) }
     : { position: 'absolute', inset: 0, borderRadius: 'inherit' }

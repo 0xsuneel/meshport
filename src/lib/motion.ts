@@ -58,8 +58,33 @@ export const MOBILE_SLIDE_TRANSITION: Transition = PAGE_TRANSITION
 export const MOBILE_TAB_FADE_Y = 0
 export const MOBILE_TAB_FADE_TRANSITION: Transition = { duration: 0.18, ease: EASE_OUT }
 
-export const DESKTOP_FADE_Y = 5
-export const DESKTOP_FADE_TRANSITION: Transition = { duration: 0.2, ease: EASE_OUT }
+export const DESKTOP_FADE_Y = 4
+export const DESKTOP_FADE_TRANSITION: Transition = { duration: 0.15, ease: EASE_OUT }
+
+// ── Desktop (≥980px, same breakpoint as useMediaQuery callers / Tailwind lg) ─
+// Desktop apps don't use phone motion: popups fade in with a tiny zoom
+// (quick, no grow-and-rise), pages cross-fade in the content area only.
+export const DESKTOP_QUERY = '(min-width: 980px)'
+export function isDesktopNow(): boolean {
+  return typeof window !== 'undefined' && !!window.matchMedia?.(DESKTOP_QUERY).matches
+}
+const DESKTOP_POPUP = {
+  initial: { opacity: 0, scale: 0.96, y: 0 },
+  animate: { opacity: 1, scale: 1, y: 0 },
+  exit: { opacity: 0, scale: 0.98, y: 0, transition: { duration: 0.12, ease: [0.4, 0, 1, 1] } },
+  transition: { duration: 0.18, ease: EASE_OUT } as Transition,
+} as const
+/** Phone variant on phones, the desktop one on wide screens - read at render. */
+function byScreen<T extends object>(phone: T, desktop: object): T {
+  const out = {} as T
+  for (const k of Object.keys(phone) as (keyof T)[]) {
+    Object.defineProperty(out, k, {
+      enumerable: true,
+      get: () => (isDesktopNow() ? (desktop as any)[k] : phone[k]),
+    })
+  }
+  return out
+}
 
 // ── Bottom sheets (incl. PIN sheets and the amount keypad) ─────────────────
 // A tween, not a spring: the old spring (damping 32 / stiffness 300) was just
@@ -91,26 +116,31 @@ export const SHEET_BACKDROP = {
 // than appearing at once. Only the dim fades behind it (PopupDim).
 const POPUP_FADE: Transition = { duration: 0.08, ease: 'linear' }
 const POPUP_GROW = [0.16, 1, 0.3, 1] as const
-export const DIALOG_CARD = {
+export const DIALOG_CARD = byScreen({
   initial: { opacity: 0.85, scale: 0.94, y: 10 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.97, y: 4 },
   transition: { duration: 0.32, ease: POPUP_GROW, opacity: POPUP_FADE } as Transition, // no overshoot
-} as const
+} as const, DESKTOP_POPUP)
 /** Centred popups (DesktopDialogFrame / Sheet): a slightly livelier pop-in
  *  than DIALOG_CARD, which the success receipt keeps. */
-export const POPUP_CARD = {
+export const POPUP_CARD = byScreen({
   initial: { opacity: 0.85, scale: 0.9, y: 22 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } },
   transition: { duration: 0.36, ease: POPUP_GROW, opacity: POPUP_FADE } as Transition, // no overshoot
-} as const
-export const DIALOG_BACKDROP = {
+} as const, DESKTOP_POPUP)
+export const DIALOG_BACKDROP = byScreen({
   initial: { opacity: 0 },
   animate: { opacity: 1 },
   exit: { opacity: 0 },
   transition: { duration: 0.18, ease: EASE_OUT },
-} as const
+} as const, {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0, transition: { duration: 0.12, ease: EASE_OUT } },
+  transition: { duration: 0.15, ease: EASE_OUT },
+})
 
 // ── Toasts / banners ───────────────────────────────────────────────────────
 // Slides down from above the screen fully opaque (like a phone

@@ -15,7 +15,7 @@ import { createPortal } from 'react-dom'
 import { POPUP_CARD } from '@/lib/motion'
 import { PopupDim } from './PopupDim'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
-import { type ReactNode } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
 
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 
@@ -26,6 +26,14 @@ export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex =
   zIndex?: number
 }) {
   usePopupOpen()
+  // Esc closes it, like any desktop dialog (keyboards on phones too).
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   return createPortal(
     <div
       onClick={e => { e.stopPropagation(); onClose() }}
