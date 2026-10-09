@@ -147,6 +147,7 @@ async function processWaiting(row: any) {
   const transferId = res.json?.transferId
   if (res.ok && transferId) {
     await db.from('ub_claim_intents').update({ status: 'submitted', transfer_id: transferId, last_error: null }).eq('id', row.id)
+    row.transfer_id = transferId
     return 'submitted'
   }
   const msg = `transfer http ${res.status}: ${JSON.stringify(res.json).slice(0, 300)}`
@@ -176,6 +177,10 @@ async function processSubmitted(row: any) {
   return 'pending'
 }
 
+// Short inline follow-up after a transfer is submitted (see the end of the run).
+const FOLLOW_MS = 25_000
+const FOLLOW_POLL_MS = 2_500
+
 Deno.serve(async (req: Request) => {
   if (!isCronOrLegacyServiceCaller(req)) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 })
   const { data: rows, error } = await db.from('ub_claim_intents')
@@ -192,6 +197,23 @@ Deno.serve(async (req: Request) => {
       results[row.id] = `error: ${msg}`
       await db.from('ub_claim_intents').update({ last_error: msg.slice(0, 300) }).eq('id', row.id)
     }
+  }
+
+  // The forwarder mint on Arc takes seconds: follow the transfers this run
+  // just submitted (or that are still minting) for a short while, instead of
+  // leaving them for the next cron tick a minute later.
+  const minting = (rows ?? []).filter(r => (results[r.id] === 'submitted' || results[r.id] === 'pending') && r.transfer_id)
+  if (minting.length) {
+    const until = Date.now() + FOLLOW_MS
+    await Promise.all(minting.map(async (row) => {
+      while (Date.now() < until) {
+        await new Promise(r => setTimeout(r, FOLLOW_POLL_MS))
+        try {
+          const out = await processSubmitted(row)
+          if (out !== 'pending') { results[row.id] = out; return }
+        } catch { /* next cron tick retries */ }
+      }
+    }))
   }
   return new Response(JSON.stringify({ processed: rows?.length ?? 0, results }), { headers: { 'Content-Type': 'application/json' } })
 })

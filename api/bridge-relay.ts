@@ -197,12 +197,19 @@ async function sessionOwns(req: VercelRequest, address: string): Promise<boolean
   return (await sessionWallet(req)) === address.toLowerCase()
 }
 
+/** Receipt polling interval: Arc finalizes in under a second. */
+function pollMsFor(chainId: number): number {
+  return chainId === 5042002 ? 250 : 1000
+}
+
 async function clients(chainKey: string) {
   const { createPublicClient, createWalletClient, http, defineChain } = await import('viem')
   const c = CHAINS[chainKey]
   const rpc = process.env[`BRIDGE_RPC_${chainKey.toUpperCase()}`] || c.rpc
   const chain = defineChain({ id: c.id, name: c.name, nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } })
-  const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }) })
+  // Receipt waits check every 250ms on Arc (sub-second blocks) and every 1s
+  // elsewhere - viem's 4s default added seconds to every relayed step.
+  const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }), pollingInterval: pollMsFor(c.id) })
   let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
   if (key && !key.startsWith('0x')) key = '0x' + key
   let wallet: any = null
@@ -317,7 +324,7 @@ async function callClients(chainKey: string) {
     id = await probe.getChainId()
   }
   const chain = defineChain({ id, name: chainKey, nativeCurrency: { name: 'Native', symbol: 'NATIVE', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } })
-  const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }) })
+  const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }), pollingInterval: pollMsFor(id) })
   let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
   if (key && !key.startsWith('0x')) key = '0x' + key
   if (!/^0x[0-9a-fA-F]{64}$/.test(key)) return { pub, wallet: null as any }
@@ -568,8 +575,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const nonce = await pub.readContract({ address: router, abi: ROUTER_ABI, functionName: 'bridgeNonce', args: [bridgeArgs] }) as `0x${string}`
 
+    // The three pre-checks are independent reads - fetched together (they used
+    // to be three round trips in a row) and then checked in the same order.
+    const [used, now_q, bal] = await Promise.all([
+      pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'authorizationState', args: [a.from, nonce] }),
+      quote(chainKey, value),
+      pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'balanceOf', args: [a.from] }) as Promise<bigint>,
+    ])
     // Already used → return the transaction that used it (safe retries).
-    const used = await pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'authorizationState', args: [a.from, nonce] })
     if (used) {
       const logs = await pub.getContractEvents({ address: router, abi: ROUTER_ABI, eventName: 'Bridged', args: { from: a.from, nonce }, fromBlock: 'earliest' }).catch(() => [])
       const hit = (logs as any[])[0]
@@ -578,11 +591,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // The fee must still cover the relayer's gas (some slack for price moves since the quote).
-    const now_q = await quote(chainKey, value)
     if (fee * 100n < now_q.fee * 80n) return res.status(400).json({ error: 'Fee too low - please try again' })
     if (maxFee * 100n < now_q.maxFee * 80n) return res.status(400).json({ error: 'Bridge fee too low - please try again' })
 
-    const bal = await pub.readContract({ address: c.usdc, abi: USDC_ABI, functionName: 'balanceOf', args: [a.from] }) as bigint
     if (bal < value) return res.status(400).json({ error: 'Not enough USDC on this chain' })
 
     const sig = parseSignature(a.signature)

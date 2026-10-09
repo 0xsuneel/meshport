@@ -94,6 +94,8 @@ async function build(urls: string[], chainKey: string, chainId?: number) {
   const providers = urls.map(url => chainId
     ? new JsonRpcProvider(url, { chainId, name: 'chain-' + chainId }, { staticNetwork: true })
     : new JsonRpcProvider(url))
+  // ethers polls every 4s by default; check receipts every second instead.
+  for (const p of providers as any[]) p.pollingInterval = 1000
   const provider: any = providers[0]
   const sends = providers.map((p: any) => p._send.bind(p))
   const rpc = async (payload: any) => {

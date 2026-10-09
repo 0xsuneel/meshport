@@ -79,7 +79,10 @@ export const UB_MIN_SWEEP = 0.5
 export const UB_DUST_CLAIM_MIN = Number.POSITIVE_INFINITY
 
 const CONFIRM_TIMEOUT_MS = 30 * 60 * 1000
+// The source chain's finality takes minutes - checked every 10s. Once the
+// server is sending it to Arc (seconds away) the screen checks every 2s.
 const POLL_MS = 10_000
+const POLL_MINTING_MS = 2_000
 const SPEND_MARGIN = 0.005 // USDC headroom so fee drift never fails the spend
 
 /**
@@ -504,7 +507,7 @@ async function followServerClaim(id: string, chainLabel: string, depositTx: stri
   const started = Date.now()
   let shownMinting = false
   while (Date.now() - started < CONFIRM_TIMEOUT_MS) {
-    await new Promise(r => setTimeout(r, POLL_MS))
+    await new Promise(r => setTimeout(r, shownMinting ? POLL_MINTING_MS : POLL_MS))
     const { data } = await supabase.from('ub_claim_intents').select('status, send_amount, mint_tx, last_error').eq('id', id).maybeSingle()
     const row: any = data
     if (!row) continue
