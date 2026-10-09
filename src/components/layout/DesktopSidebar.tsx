@@ -7,6 +7,7 @@
 // Android back-button interception) - those stay exactly where they are.
 import { useLocation, useNavigate } from 'react-router-dom'
 import { NavIcon, type NavIconName } from './navIcons'
+import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { HomeIcon, ChatsIcon, RewardsIcon, ActivityIcon, getActiveTabId } from './BottomNav'
 import { useChatUnreadStore, useP2PTradesCountStore } from '@/store'
 import { useHubLabel } from '@/lib/merchant'
@@ -25,15 +26,18 @@ const items = [
   { id: 'settings',         label: 'Settings',            path: '/profile' },
 ]
 
-// Same icon set as the phone bar (navIcons.tsx), outline on every row.
+// Home, Chats, Rewards, Activity, Settings: same outline icons as the phone bar (navIcons.tsx).
 const sideIcon = (name: NavIconName) => ({ active }: { active: boolean }) =>
   <NavIcon name={name} size={22} color={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} />
-const PayIcon = sideIcon('pay')
-const ReceiveIcon = sideIcon('receive')
-const SwapIcon = sideIcon('swap')
-const BulkPayIcon = sideIcon('bulk')
-const P2PIcon = sideIcon('p2p')
-const MultichainHubIcon = sideIcon('multichain')
+// Money/feature rows: the same icons as Home's buttons and the More sheet.
+const actIcon = (name: ActionIconName) => ({ active }: { active: boolean }) =>
+  <ActionIcon name={name} size={22} color={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} />
+const PayIcon = actIcon('pay')
+const ReceiveIcon = actIcon('receive')
+const SwapIcon = actIcon('swap')
+const BulkPayIcon = actIcon('bulk')
+const P2PIcon = actIcon('p2p')
+const MultichainHubIcon = actIcon('hub')
 const SettingsIcon = sideIcon('settings')
 export function DesktopSidebar() {
   const hub = useHubLabel()
