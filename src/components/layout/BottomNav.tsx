@@ -4,21 +4,41 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore, useChatUnreadStore } from '@/store'
 
-export const HomeIcon = ({ active }: { active: boolean }) => (
-  <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
-    <path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1H4a1 1 0 01-1-1V10.5z"
-      stroke={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth="1.8" strokeLinejoin="round"/>
-    <path d="M9 22V15h6v7"
-      stroke={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth="1.8" strokeLinejoin="round"/>
-  </svg>
-)
+// Icons: outline when idle. `filled` (the phone bottom bar, PhonePe-style)
+// draws the selected tab as a solid shape in the text colour, with its inner
+// details cut out in the bar colour - no box behind it. The desktop sidebar
+// keeps the outline icons on its brand-teal row.
+type NavIconProps = { active: boolean; filled?: boolean }
+const NAV_ON = 'var(--nav-active-fg)'
+const BAR_ON = 'var(--text-primary)'  // phone bar: selected icon + label
+const BAR_CUT = 'var(--surface)'      // phone bar background, for cut-out details
+const strokeOf = (active: boolean, filled?: boolean) => active ? (filled ? BAR_ON : NAV_ON) : 'var(--nav-idle)'
 
-export const ChatsIcon = ({ active }: { active: boolean }) => (
-  <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
-    <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-      stroke={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-)
+export const HomeIcon = ({ active, filled }: NavIconProps) => {
+  const c = strokeOf(active, filled)
+  const solid = active && filled
+  return (
+    <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
+      <path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1H4a1 1 0 01-1-1V10.5z"
+        fill={solid ? c : 'none'} stroke={c} strokeWidth="1.8" strokeLinejoin="round"/>
+      <path d="M9 22V15h6v7"
+        fill={solid ? BAR_CUT : 'none'} stroke={solid ? BAR_CUT : c} strokeWidth="1.8" strokeLinejoin="round"/>
+    </svg>
+  )
+}
+
+export const ChatsIcon = ({ active, filled }: NavIconProps) => {
+  const c = strokeOf(active, filled)
+  const solid = active && filled
+  return (
+    <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
+      <path d="M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+        fill={solid ? c : 'none'} stroke={c} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M8 12h.01M12 12h.01M16 12h.01"
+        stroke={solid ? BAR_CUT : c} strokeWidth={solid ? 2.2 : 1.7} strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
 
 const ScannerIcon = () => (
   <svg width="27" height="27" viewBox="0 0 28 28" fill="none">
@@ -35,33 +55,40 @@ const ScannerIcon = () => (
   </svg>
 )
 
-export const RewardsIcon = ({ active }: { active: boolean }) => (
-  <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
-    {/* box body */}
-    <rect x="3" y="12" width="18" height="9" rx="1.5" stroke={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth="1.6"/>
-    {/* vertical ribbon on box */}
-    <line x1="12" y1="12" x2="12" y2="21" stroke={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth="1.6"/>
-    {/* lid */}
-    <rect x="2" y="8.5" width="20" height="3.5" rx="1" stroke={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth="1.6"/>
-    {/* vertical ribbon on lid */}
-    <line x1="12" y1="8.5" x2="12" y2="12" stroke={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth="1.6"/>
-    {/* bow left */}
-    <path d="M12 8.5 C10.5 7 8 5.5 7.5 4.5 C7 3.5 9 3.5 10 4.5 C11 5.5 12 8.5 12 8.5Z"
-      stroke={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth="1.4" strokeLinejoin="round"/>
-    {/* bow right */}
-    <path d="M12 8.5 C13.5 7 16 5.5 16.5 4.5 C17 3.5 15 3.5 14 4.5 C13 5.5 12 8.5 12 8.5Z"
-      stroke={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth="1.4" strokeLinejoin="round"/>
-    {/* bow knot */}
-    <circle cx="12" cy="8.5" r="1" fill={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'}/>
-  </svg>
-)
+export const RewardsIcon = ({ active, filled }: NavIconProps) => {
+  const c = strokeOf(active, filled)
+  const solid = active && filled
+  const body = solid ? c : 'none'
+  const ribbon = solid ? BAR_CUT : c
+  return (
+    <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
+      {/* box body */}
+      <rect x="3" y="12" width="18" height="9" rx="1.5" fill={body} stroke={c} strokeWidth="1.6"/>
+      {/* lid */}
+      <rect x="2" y="8.5" width="20" height="3.5" rx="1" fill={body} stroke={c} strokeWidth="1.6"/>
+      {/* ribbon on lid + box (cut out when filled) */}
+      <line x1="12" y1="9.3" x2="12" y2="20.2" stroke={ribbon} strokeWidth="1.6"/>
+      {solid && <line x1="2.8" y1="12" x2="21.2" y2="12" stroke={BAR_CUT} strokeWidth="1.2"/>}
+      {/* bow */}
+      <path d="M12 8.5 C10.5 7 8 5.5 7.5 4.5 C7 3.5 9 3.5 10 4.5 C11 5.5 12 8.5 12 8.5Z"
+        fill={body} stroke={c} strokeWidth="1.4" strokeLinejoin="round"/>
+      <path d="M12 8.5 C13.5 7 16 5.5 16.5 4.5 C17 3.5 15 3.5 14 4.5 C13 5.5 12 8.5 12 8.5Z"
+        fill={body} stroke={c} strokeWidth="1.4" strokeLinejoin="round"/>
+      <circle cx="12" cy="8.5" r="1" fill={c}/>
+    </svg>
+  )
+}
 
-export const ActivityIcon = ({ active }: { active: boolean }) => (
-  <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
-    <circle cx="12" cy="12" r="9" stroke={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth="1.7"/>
-    <path d="M12 7v5l3 3" stroke={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-)
+export const ActivityIcon = ({ active, filled }: NavIconProps) => {
+  const c = strokeOf(active, filled)
+  const solid = active && filled
+  return (
+    <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" fill={solid ? c : 'none'} stroke={c} strokeWidth="1.7"/>
+      <path d="M12 7v5l3 3" stroke={solid ? BAR_CUT : c} strokeWidth={solid ? 2 : 1.7} strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  )
+}
 
 const tabs = [
   { id: 'home',     label: 'Home',     path: '/' },
@@ -220,25 +247,15 @@ export function BottomNav() {
                     position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     width: 36, height: 36, borderRadius: 14,
                   }}>
-                    {isActive && (
-                      <motion.div
-                        layoutId="bottom-nav-active"
-                        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-                        style={{
-                          position: 'absolute', inset: 0, borderRadius: 14,
-                          background: 'var(--nav-active-bg)',
-                        }}
-                      />
-                    )}
                     <motion.div
                       animate={{ scale: isActive ? 1.08 : 1 }}
                       transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
                       style={{ position: 'relative', display: 'flex' }}
                     >
-                      {tab.id === 'home'     && <HomeIcon active={isActive} />}
-                      {tab.id === 'chat'     && <ChatsIcon active={isActive} />}
-                      {tab.id === 'rewards'  && <RewardsIcon active={isActive} />}
-                      {tab.id === 'activity' && <ActivityIcon active={isActive} />}
+                      {tab.id === 'home'     && <HomeIcon active={isActive} filled />}
+                      {tab.id === 'chat'     && <ChatsIcon active={isActive} filled />}
+                      {tab.id === 'rewards'  && <RewardsIcon active={isActive} filled />}
+                      {tab.id === 'activity' && <ActivityIcon active={isActive} filled />}
                     </motion.div>
                     {badgeCount > 0 && (
                       <motion.span
@@ -259,7 +276,7 @@ export function BottomNav() {
                   </div>
                   <span style={{
                     fontSize: 11, fontWeight: isActive ? 700 : 500,
-                    color: isActive ? 'var(--nav-active-label)' : 'var(--nav-idle)',
+                    color: isActive ? 'var(--text-primary)' : 'var(--nav-idle)',
                     lineHeight: 1, fontFamily: '-apple-system,sans-serif',
                     transition: 'color 0.15s',
                   }}>

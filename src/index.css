@@ -88,7 +88,6 @@
   --nav-idle:       #C4C9D0;  /* inactive bottom-bar tabs */
   --nav-active-bg:  var(--brand);   /* selected tab: brand teal, white icon */
   --nav-active-fg:  #FFFFFF;
-  --nav-active-label: var(--text-primary); /* label under the tab (brand teal is too dark to read on dark) */
   --header:         #12665F;
   --header-text:    #FFFFFF;
   --header-subtext: #CDEDE2;
@@ -150,7 +149,6 @@
   --nav-idle:       #C4C9D0;  /* inactive bottom-bar tabs */
   --nav-active-bg:  var(--brand);   /* selected tab: brand teal, white icon */
   --nav-active-fg:  #FFFFFF;
-  --nav-active-label: var(--text-primary); /* label under the tab (brand teal is too dark to read on dark) */
   --header:         #12665F;
   --header-text:    #FFFFFF;
   --header-subtext: #CDEDE2;
@@ -200,7 +198,6 @@
   --nav-idle:       #5B6169;  /* inactive bottom-bar tabs */
   --nav-active-bg:  var(--brand);   /* selected tab: brand teal, white icon */
   --nav-active-fg:  #FFFFFF;
-  --nav-active-label: var(--brand);
   --header:         #0F5C57;
   --header-text:    #FFFFFF;
   --header-subtext: #CDEDE2;
