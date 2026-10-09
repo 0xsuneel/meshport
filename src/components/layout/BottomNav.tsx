@@ -6,14 +6,14 @@ import { useAuthStore, useChatUnreadStore } from '@/store'
 import { NavIcon, type NavIconName } from './navIcons'
 
 // Icons (navIcons.tsx, Phosphor): outline when idle. `filled` (the phone
-// bottom bar, PhonePe-style) shows the selected tab as the solid version in
-// the text colour - no box behind it. The desktop sidebar keeps the outline
-// icons on its brand-teal row.
+// bottom bar) shows the selected tab as the solid version in white on a
+// brand-teal pill. The desktop sidebar keeps the outline icons on its
+// brand-teal row.
 type NavIconProps = { active: boolean; filled?: boolean }
-const colorOf = (active: boolean, filled?: boolean) =>
-  active ? (filled ? 'var(--text-primary)' : 'var(--nav-active-fg)') : 'var(--nav-idle)'
+const colorOf = (active: boolean, _filled?: boolean) =>
+  active ? 'var(--nav-active-fg)' : 'var(--nav-idle)' // selected: white on the brand-teal pill / row
 const navIcon = (name: NavIconName) => ({ active, filled }: NavIconProps) =>
-  <NavIcon name={name} filled={active && !!filled} size={filled === undefined ? 22 : 26} color={colorOf(active, filled)} />
+  <NavIcon name={name} filled={active && !!filled} size={filled === undefined ? 22 : 24} color={colorOf(active, filled)} />
 
 export const HomeIcon = navIcon('home')
 export const ChatsIcon = navIcon('chat')
@@ -176,10 +176,18 @@ export function BottomNav() {
                 <>
                   <div style={{
                     position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    width: 36, height: 36, borderRadius: 14,
+                    width: 48, height: 32, borderRadius: 16,
                   }}>
+                    {/* Selected tab: solid brand-teal pill, slides between tabs */}
+                    {isActive && (
+                      <motion.div
+                        layoutId="bottom-nav-pill"
+                        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                        style={{ position: 'absolute', inset: 0, borderRadius: 16, background: 'var(--brand)' }}
+                      />
+                    )}
                     <motion.div
-                      animate={{ scale: isActive ? 1.08 : 1 }}
+                      animate={{ scale: isActive ? 1.04 : 1 }}
                       transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
                       style={{ position: 'relative', display: 'flex' }}
                     >
@@ -207,7 +215,7 @@ export function BottomNav() {
                   </div>
                   <span style={{
                     fontSize: 11, fontWeight: isActive ? 700 : 500,
-                    color: isActive ? 'var(--text-primary)' : 'var(--nav-idle)',
+                    color: isActive ? 'var(--brand-text)' : 'var(--nav-idle)',
                     lineHeight: 1, fontFamily: '-apple-system,sans-serif',
                     transition: 'color 0.15s',
                   }}>
