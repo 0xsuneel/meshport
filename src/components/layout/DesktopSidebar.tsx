@@ -30,7 +30,7 @@ const items = [
 // just re-colored per active state like BottomNav's own icons.
 // Same glyphs as HomePage's own Pay/Receive quick-action icons.
 function PayIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--brand-text)' : 'var(--nav-idle)'
+  const c = active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <path d="M7 17L17 7M17 7H9M17 7V15" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -38,7 +38,7 @@ function PayIcon({ active }: { active: boolean }) {
   )
 }
 function ReceiveIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--brand-text)' : 'var(--nav-idle)'
+  const c = active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <path d="M17 7L7 17M7 17H15M7 17V9" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -46,7 +46,7 @@ function ReceiveIcon({ active }: { active: boolean }) {
   )
 }
 function SwapIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--brand-text)' : 'var(--nav-idle)'
+  const c = active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <path d="M4 7h13M4 7l3-3M4 7l3 3" stroke={c} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -55,7 +55,7 @@ function SwapIcon({ active }: { active: boolean }) {
   )
 }
 function BulkPayIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--brand-text)' : 'var(--nav-idle)'
+  const c = active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <rect x="3" y="6" width="18" height="13" rx="2" stroke={c} strokeWidth="1.7"/>
@@ -67,10 +67,10 @@ function BulkPayIcon({ active }: { active: boolean }) {
 // - crisp at every size, unlike the previous raster-mask trace which
 // needed real work to stop looking blurry at nav size.
 function P2PIcon({ active }: { active: boolean }) {
-  return <Users size={20} color={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth={1.8} />
+  return <Users size={20} color={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth={1.8} />
 }
 function MultichainHubIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--brand-text)' : 'var(--nav-idle)'
+  const c = active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="9" stroke={c} strokeWidth="1.7"/>
@@ -134,8 +134,8 @@ export function DesktopSidebar() {
                 display: 'flex', alignItems: 'center', gap: 12,
                 padding: '11px 12px', borderRadius: 11, cursor: 'pointer',
                 border: 'none',
-                background: active ? 'color-mix(in srgb, var(--brand) 14%, transparent)' : 'var(--sb-hover-bg, transparent)',
-                color: active ? 'var(--brand-text)' : 'var(--nav-idle)',
+                background: active ? 'var(--nav-active-bg)' : 'var(--sb-hover-bg, transparent)',
+                color: active ? 'var(--nav-active-fg)' : 'var(--nav-idle)',
                 fontSize: 14, fontWeight: active ? 700 : 500,
                 textAlign: 'left', width: '100%', position: 'relative',
                 transition: 'background-color 150ms ease, color 150ms ease',
@@ -152,7 +152,7 @@ export function DesktopSidebar() {
                 {item.id === 'chat'             && <ChatsIcon active={active} />}
                 {item.id === 'activity'         && <ActivityIcon active={active} />}
                 {item.id === 'rewards'          && <RewardsIcon active={active} />}
-                {item.id === 'settings'         && <Settings size={22} color={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth={1.8} />}
+                {item.id === 'settings'         && <Settings size={22} color={active ? 'var(--nav-active-fg)' : 'var(--nav-idle)'} strokeWidth={1.8} />}
               </span>
               {hub(item.label)}
               {showChatBadge && (
