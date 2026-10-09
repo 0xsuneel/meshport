@@ -643,7 +643,7 @@ export default function App() {
         }
         if (awayMs > STALE_AFTER_MS) {
           // Reloading anyway: take a waiting new version with it.
-          void import('./lib/swUpdate').then(m => m.applyWaitingUpdate()).then(done => { if (!done) window.location.reload() })
+          void import('./lib/swUpdate').then(m => m.applyWaitingUpdate({ checkMs: 2500 })).then(done => { if (!done) window.location.reload() })
         }
       }
     }

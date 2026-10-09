@@ -69,11 +69,15 @@ clearLegacyData()
   if (useAuthStore.getState().isLocked) import('./features/auth/PasscodeSetup').catch(() => {})
 }
 
-// App opened (not a refresh) and a new version downloaded last time: switch
-// to it now, behind the opening screen, instead of mid-use later.
-if (!document.documentElement.classList.contains('mp-refresh')) {
-  void import('./lib/swUpdate').then(m => m.applyWaitingUpdate())
-}
+// Page loading (app opened, browser reopened or refreshed): if a new version
+// is out, switch to it now behind the opening screen, instead of mid-use
+// later. Asks the server too, and gives a download that started a moment to
+// finish. Refreshes count: a restored browser tab looks like a refresh, and
+// skipping those meant a reopened app could stay on the old version.
+void import('./lib/swUpdate').then(m => {
+  void m.applyWaitingUpdate({ checkMs: 3000 })
+  m.watchForUpdates()
+})
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

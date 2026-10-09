@@ -1,21 +1,57 @@
 // ── App updates: switch versions only when it's safe ───────────────────────
 // A new version downloads in the background and waits (see sw.ts). It takes
 // over - with one quick reload - only:
-//   • when the app is opened (behind the opening screen), or
+//   • when the page loads: app opened, browser reopened, or refreshed
+//     (behind the opening screen), or
 //   • when the app is about to reload anyway (back after a long time away).
 // Never while someone is using a screen, so an update can't break it.
+//
+// The browser only looks for a new version when a page loads, and a phone
+// can keep the app in memory for days. So we also ask for one ourselves:
+// on load, when the app comes back to the screen, and every 30 minutes.
 
 const GUARD_KEY = 'mp_sw_update_at'
+const CHECK_EVERY_MS = 30 * 60 * 1000
+
+async function registration(): Promise<ServiceWorkerRegistration | undefined> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return undefined
+  try { return await navigator.serviceWorker.getRegistration() } catch { return undefined }
+}
+
+/** Ask the server for a new version (downloads in the background). */
+export async function checkForUpdate(): Promise<void> {
+  const reg = await registration()
+  try { await reg?.update() } catch { /* offline - next time */ }
+}
+
+/** Resolves once a version that's downloading has finished (or after waitMs). */
+function untilInstalled(reg: ServiceWorkerRegistration, waitMs: number): Promise<void> {
+  const sw = reg.installing
+  if (!sw || waitMs <= 0) return Promise.resolve()
+  return new Promise(resolve => {
+    const t = setTimeout(resolve, waitMs)
+    sw.addEventListener('statechange', () => {
+      if (sw.state !== 'installing') { clearTimeout(t); resolve() }
+    })
+  })
+}
 
 /**
- * If a new version is waiting, switch to it and reload. Resolves false when
- * there's nothing to do (then the caller carries on as normal).
+ * If a new version is waiting, switch to it and reload. With `checkMs`, first
+ * ask the server for one and give a download that started up to that long to
+ * finish (on open the opening screen covers it). Resolves false when there's
+ * nothing to do (then the caller carries on as normal).
  */
-export async function applyWaitingUpdate(): Promise<boolean> {
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return false
+export async function applyWaitingUpdate(opts: { checkMs?: number } = {}): Promise<boolean> {
+  const reg = await registration()
+  if (!reg) return false
   try {
-    const reg = await navigator.serviceWorker.getRegistration()
-    const waiting = reg?.waiting
+    if (!reg.waiting && opts.checkMs) {
+      const started = Date.now()
+      await Promise.race([reg.update().catch(() => undefined), new Promise(r => setTimeout(r, opts.checkMs))])
+      await untilInstalled(reg, opts.checkMs - (Date.now() - started))
+    }
+    const waiting = reg.waiting
     if (!waiting || !navigator.serviceWorker.controller) return false
     // Never loop: at most one update reload every 30s.
     try {
@@ -38,6 +74,26 @@ export async function applyWaitingUpdate(): Promise<boolean> {
     return true
   } catch {
     return false
+  }
+}
+
+/** Keep looking for new versions while the app stays open / in memory. */
+export function watchForUpdates(): () => void {
+  if (typeof document === 'undefined') return () => {}
+  let last = Date.now()
+  const maybeCheck = () => {
+    if (Date.now() - last < 60_000) return // at most once a minute
+    last = Date.now()
+    void checkForUpdate()
+  }
+  const onVisible = () => { if (document.visibilityState === 'visible') maybeCheck() }
+  document.addEventListener('visibilitychange', onVisible)
+  window.addEventListener('online', maybeCheck)
+  const timer = setInterval(() => { if (document.visibilityState === 'visible') { last = 0; maybeCheck() } }, CHECK_EVERY_MS)
+  return () => {
+    document.removeEventListener('visibilitychange', onVisible)
+    window.removeEventListener('online', maybeCheck)
+    clearInterval(timer)
   }
 }
 
