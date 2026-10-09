@@ -82,9 +82,9 @@
   --popup-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 28px 64px -16px rgba(16,24,32,0.34), 0 10px 24px -10px rgba(16,24,32,0.18);
   color-scheme: dark;
   --brand:          #12665F;
-  --mesh-loader:    #5DE0C0;  /* moving logo: bright mint on dark so it never looks dim */
-  --brand-text:     #5DCAA5;  /* brand-coloured TEXT (links, highlights): readable on this background */
-  --brand-text-rgb: 93 202 165;
+  --mesh-loader:    #5CD6CB;  /* moving logo: bright brand teal on dark so it never looks dim */
+  --brand-text:     #53C6BC;  /* brand-coloured TEXT (links, highlights): light shade of brand teal, readable on dark */
+  --brand-text-rgb: 83 198 188;
   --nav-idle:       #C4C9D0;  /* inactive bottom-bar tabs */
   --nav-active-bg:  var(--brand);   /* selected tab: brand teal, white icon */
   --nav-active-fg:  #FFFFFF;
@@ -92,8 +92,8 @@
   --header:         #12665F;
   --header-text:    #FFFFFF;
   --header-subtext: #CDEDE2;
-  --accent:         #1FB88A;
-  --accent-text:    #5DCAA5;
+  --accent:         #1E9488;  /* brand teal family */
+  --accent-text:    #53C6BC;
   --success:        #1FB88A;
   --warning:        #F59E0B;
   --danger:         #EF4444;
@@ -104,7 +104,7 @@
   --surface:        #181A20;
   --card:           #181A20;
   --border:         #2B3139;
-  --link:           #5DCAA5;
+  --link:           #53C6BC;
   --avatar-1: #1D9E75; --avatar-2: #97C459; --avatar-3: #7F77DD; --avatar-4: #F0997B;
   --usdc-bg:   #0C447C33;
   --usdc-icon: #85B7EB;
@@ -119,11 +119,11 @@
      these are purely additive for the Tailwind color config. */
   --brand-rgb: 18 102 95;      --header-rgb: 18 102 95;
   --header-text-rgb: 255 255 255; --header-subtext-rgb: 205 237 226;
-  --accent-rgb: 31 184 138;    --accent-text-rgb: 93 202 165;
+  --accent-rgb: 30 148 136;    --accent-text-rgb: 83 198 188;
   --success-rgb: 31 184 138;   --warning-rgb: 245 158 11; --danger-rgb: 239 68 68;
   --text-primary-rgb: 234 236 239; --text-secondary-rgb: 156 163 174; --text-muted-rgb: 118 125 137;
   --bg-rgb: 11 14 17; --surface-rgb: 24 26 32; --card-rgb: 24 26 32; --border-rgb: 43 49 57;
-  --link-rgb: 93 202 165;
+  --link-rgb: 83 198 188;
   --avatar-1-rgb: 29 158 117; --avatar-2-rgb: 151 196 89; --avatar-3-rgb: 127 119 221; --avatar-4-rgb: 240 153 123;
   --usdc-icon-rgb: 133 183 235;
   /* Soft elevation - no glow anywhere. Alpha-black shadows read correctly
@@ -144,9 +144,9 @@
   --popup-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 28px 64px -16px rgba(0,0,0,0.75), 0 10px 24px -10px rgba(0,0,0,0.5);
   color-scheme: dark;
   --brand:          #12665F;
-  --mesh-loader:    #5DE0C0;  /* moving logo: bright mint on dark so it never looks dim */
-  --brand-text:     #5DCAA5;  /* brand-coloured TEXT (links, highlights): readable on this background */
-  --brand-text-rgb: 93 202 165;
+  --mesh-loader:    #5CD6CB;  /* moving logo: bright brand teal on dark so it never looks dim */
+  --brand-text:     #53C6BC;  /* brand-coloured TEXT (links, highlights): light shade of brand teal, readable on dark */
+  --brand-text-rgb: 83 198 188;
   --nav-idle:       #C4C9D0;  /* inactive bottom-bar tabs */
   --nav-active-bg:  var(--brand);   /* selected tab: brand teal, white icon */
   --nav-active-fg:  #FFFFFF;
@@ -154,8 +154,8 @@
   --header:         #12665F;
   --header-text:    #FFFFFF;
   --header-subtext: #CDEDE2;
-  --accent:         #1FB88A;
-  --accent-text:    #5DCAA5;
+  --accent:         #1E9488;  /* brand teal family */
+  --accent-text:    #53C6BC;
   --success:        #1FB88A;
   --warning:        #F59E0B;
   --danger:         #EF4444;
@@ -166,17 +166,17 @@
   --surface:        #181A20;
   --card:           #181A20;
   --border:         #2B3139;
-  --link:           #5DCAA5;
+  --link:           #53C6BC;
   --avatar-1: #1D9E75; --avatar-2: #97C459; --avatar-3: #7F77DD; --avatar-4: #F0997B;
   --usdc-bg:   #0C447C33;
   --usdc-icon: #85B7EB;
   --brand-rgb: 18 102 95;      --header-rgb: 18 102 95;
   --header-text-rgb: 255 255 255; --header-subtext-rgb: 205 237 226;
-  --accent-rgb: 31 184 138;    --accent-text-rgb: 93 202 165;
+  --accent-rgb: 30 148 136;    --accent-text-rgb: 83 198 188;
   --success-rgb: 31 184 138;   --warning-rgb: 245 158 11; --danger-rgb: 239 68 68;
   --text-primary-rgb: 234 236 239; --text-secondary-rgb: 156 163 174; --text-muted-rgb: 118 125 137;
   --bg-rgb: 11 14 17; --surface-rgb: 24 26 32; --card-rgb: 24 26 32; --border-rgb: 43 49 57;
-  --link-rgb: 93 202 165;
+  --link-rgb: 83 198 188;
   --avatar-1-rgb: 29 158 117; --avatar-2-rgb: 151 196 89; --avatar-3-rgb: 127 119 221; --avatar-4-rgb: 240 153 123;
   --usdc-icon-rgb: 133 183 235;
   --shadow-1: 0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.24);
@@ -204,8 +204,8 @@
   --header:         #0F5C57;
   --header-text:    #FFFFFF;
   --header-subtext: #CDEDE2;
-  --accent:         #1FB88A;
-  --accent-text:    #1FB88A;
+  --accent:         #1E9488;  /* brand teal family */
+  --accent-text:    #0F5C57;
   --success:        #1FB88A;
   --warning:        #F59E0B;
   --danger:         #EF4444;
@@ -222,7 +222,7 @@
   --usdc-icon: #0C447C;
   --brand-rgb: 15 92 87;       --header-rgb: 15 92 87;
   --header-text-rgb: 255 255 255; --header-subtext-rgb: 205 237 226;
-  --accent-rgb: 31 184 138;    --accent-text-rgb: 31 184 138;
+  --accent-rgb: 30 148 136;    --accent-text-rgb: 15 92 87;
   --success-rgb: 31 184 138;   --warning-rgb: 245 158 11; --danger-rgb: 239 68 68;
   --text-primary-rgb: 26 26 26; --text-secondary-rgb: 102 107 115; --text-muted-rgb: 95 94 90;
   --bg-rgb: 245 246 248; --surface-rgb: 255 255 255; --card-rgb: 255 255 255; --border-rgb: 216 219 224;

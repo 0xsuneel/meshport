@@ -584,10 +584,10 @@ export function InsightsPage() {
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: narrow ? 3 : 5, whiteSpace: 'nowrap',
                     padding: narrow ? '5px 9px' : '5px 11px', marginRight: 6,
-                    background: period === p ? 'color-mix(in srgb, var(--brand) 25%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
-                    border: period === p ? '1px solid color-mix(in srgb, var(--brand) 45%, transparent)' : '1px solid color-mix(in srgb, var(--brand) 20%, transparent)',
+                    background: period === p ? 'var(--brand)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
+                    border: period === p ? '1px solid var(--brand)' : '1px solid color-mix(in srgb, var(--brand) 20%, transparent)',
                     borderRadius: 22, fontSize: 12, fontWeight: 600,
-                    color: period === p ? 'var(--text-primary)' : 'var(--brand)',
+                    color: period === p ? '#fff' : 'var(--brand-text)',
                     cursor: 'pointer', fontFamily: 'inherit',
                   }}
                 >

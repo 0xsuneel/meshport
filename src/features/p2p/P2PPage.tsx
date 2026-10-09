@@ -406,7 +406,7 @@ export function P2PHubPage() {
       <div style={{ display: 'flex', gap: 8, padding: '0 16px 14px' }}>
         <button onClick={() => setTab('buy')} style={{
           flex: 1, padding: '12px 0', borderRadius: 14, border: 'none', cursor: 'pointer',
-          background: tab === 'buy' ? COLORS.success : COLORS.surface,
+          background: tab === 'buy' ? COLORS.primary : COLORS.surface,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
         }}>
           <TrendingDown size={16} color={tab === 'buy' ? '#fff' : COLORS.muted} />
@@ -414,7 +414,7 @@ export function P2PHubPage() {
         </button>
         <button onClick={() => setTab('sell')} style={{
           flex: 1, padding: '12px 0', borderRadius: 14, border: 'none', cursor: 'pointer',
-          background: tab === 'sell' ? COLORS.error : COLORS.surface,
+          background: tab === 'sell' ? COLORS.primary : COLORS.surface,
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
         }}>
           <TrendingUp size={16} color={tab === 'sell' ? '#fff' : COLORS.muted} />
@@ -427,11 +427,11 @@ export function P2PHubPage() {
         {(['all', 'verified', 'community'] as MerchantFilter[]).map(f => (
           <button key={f} onClick={() => setMerchantFilter(f)} style={{
             flexShrink: 0, padding: '7px 13px', borderRadius: 20, border: `1px solid ${merchantFilter === f ? COLORS.primary : COLORS.border}`,
-            background: merchantFilter === f ? 'color-mix(in srgb, var(--brand) 15%, transparent)' : 'transparent', cursor: 'pointer',
+            background: merchantFilter === f ? 'var(--brand)' : 'transparent', cursor: 'pointer',
             display: 'flex', alignItems: 'center', gap: 5,
           }}>
-            {f === 'verified' && <ShieldCheck size={12} color={merchantFilter === f ? 'var(--accent-text)' : COLORS.muted} />}
-            <span style={{ fontSize: 12, fontWeight: 600, color: merchantFilter === f ? 'var(--accent-text)' : COLORS.muted }}>
+            {f === 'verified' && <ShieldCheck size={12} color={merchantFilter === f ? '#fff' : COLORS.muted} />}
+            <span style={{ fontSize: 12, fontWeight: 600, color: merchantFilter === f ? '#fff' : COLORS.muted }}>
               {f === 'all' ? 'All Offers' : f === 'verified' ? 'Verified Merchants' : 'Community P2P'}
             </span>
           </button>
@@ -797,8 +797,8 @@ export function P2PCreateOfferPage() {
               <button key={opt.minutes} onClick={() => setTradeWindowMinutes(opt.minutes)} style={{
                 padding: '8px 12px', borderRadius: 10, fontSize: 12, cursor: 'pointer',
                 border: `1px solid ${tradeWindowMinutes === opt.minutes ? COLORS.primary : COLORS.border}`,
-                background: tradeWindowMinutes === opt.minutes ? 'color-mix(in srgb, var(--brand) 15%, transparent)' : COLORS.surface,
-                color: tradeWindowMinutes === opt.minutes ? 'var(--accent-text)' : COLORS.muted, fontWeight: 600,
+                background: tradeWindowMinutes === opt.minutes ? 'var(--brand)' : COLORS.surface,
+                color: tradeWindowMinutes === opt.minutes ? '#fff' : COLORS.muted, fontWeight: 600,
               }}>{opt.label}</button>
             ))}
           </div>
@@ -1507,7 +1507,7 @@ export function P2PTradePage() {
         {processingPayment && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-            <MeshLoader size={44} color="#5DE0C0" label="Processing" />
+            <MeshLoader size={44} color="#5CD6CB" label="Processing" />
             <p style={{ fontSize: 14.5, fontWeight: 600, color: '#fff' }}>Processing demo payment…</p>
             <p style={{ fontSize: 11.5, color: COLORS.muted, textAlign: 'center', maxWidth: 260 }}>Simulating a real payment rail - no real money is moving.</p>
           </motion.div>

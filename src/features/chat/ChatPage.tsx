@@ -4836,9 +4836,9 @@ export function ChatConversationPage() {
                     <button key={t} onClick={() => { setPayToken(t); setPayAmount(''); setPayError('') }}
                       className="flex-1 flex items-center justify-center gap-2 py-2 rounded-2xl transition-all"
                       style={{
-                        background: payToken === t ? 'color-mix(in srgb, var(--brand) 15%, transparent)' : 'var(--surface)',
+                        background: payToken === t ? 'var(--brand)' : 'var(--surface)',
                         border: payToken === t ? '1px solid var(--brand)' : '1px solid var(--border)',
-                        color: payToken === t ? 'var(--brand-text)' : 'var(--text-secondary)',
+                        color: payToken === t ? '#fff' : 'var(--text-secondary)',
                         fontWeight: payToken === t ? 700 : 500, fontSize: 13,
                       }}>
                       <span style={{ width: 18, height: 18, borderRadius: '50%',

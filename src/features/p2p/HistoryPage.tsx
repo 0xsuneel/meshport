@@ -207,9 +207,9 @@ export function P2PHistoryPage() {
           <button key={c.key} onClick={() => setCategory(c.key)} style={{
             flexShrink: 0, padding: '7px 13px', borderRadius: 20,
             border: `1px solid ${category === c.key ? COLORS.primary : COLORS.border}`,
-            background: category === c.key ? 'color-mix(in srgb, var(--brand) 15%, transparent)' : 'transparent', cursor: 'pointer',
+            background: category === c.key ? 'var(--brand)' : 'transparent', cursor: 'pointer',
           }}>
-            <span style={{ fontSize: 12, fontWeight: 600, color: category === c.key ? 'var(--accent-text)' : COLORS.muted }}>{c.label}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: category === c.key ? '#fff' : COLORS.muted }}>{c.label}</span>
           </button>
         ))}
       </div>
