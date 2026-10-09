@@ -76,6 +76,12 @@
          launch screen closes on the first paint — if that frame was the
          dark/light page instead of the splash, it flashed in between. */
       html.mp-opening, html.mp-opening body { background: #0F5C57 !important; }
+      /* App open: exactly the phone's launch screen — same logo size and
+         place, no text (measured from a screen recording: the launch tile is
+         ~107px, centred on the whole screen). */
+      html.mp-opening #splash .tile { width: 107px; height: 107px; border-radius: 29px; transform: translateY(calc(-1 * var(--mp-splash-lift, 0px))); }
+      html.mp-opening #splash .mark { width: 72px; height: 72px; }
+      html.mp-opening #splash .txt { display: none; }
 
       /* ── Opening splash ──────────────────────────────────────────────
          Shown instantly when the app opens (refreshes get a quiet variant), on top of #root, so the
