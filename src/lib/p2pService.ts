@@ -13,6 +13,7 @@
 
 import { supabase } from './supabase'
 import { authHeaders, subscribeWithRetry } from './chatService'
+import { bootPart } from './homeBootstrap'
 import { escrowProvider, paymentProvider } from './p2pProviders'
 import { CURRENCY_REGISTRY, currencySymbol, formatFiat, getCurrency, type CurrencyEntry } from './currencyRegistry'
 import { saveActivity } from './ActivityService'
@@ -1238,6 +1239,9 @@ export async function fetchCounterpartyProfiles(trades: P2PTrade[], myUserId: st
 }
 
 export async function fetchMyTrades(userId: string): Promise<P2PTrade[]> {
+  // App start: the first read comes from the one startup call (lib/homeBootstrap.ts).
+  const boot = await bootPart('trades', 'fetchMyTrades', { userId })
+  if (boot) return boot.map(tradeFromRow)
   const res = await fetch(
     `${SUPA_URL}/rest/v1/p2p_trades?or=(buyer_id.eq.${encodeURIComponent(userId)},seller_id.eq.${encodeURIComponent(userId)})&order=created_at.desc`,
     { headers: await authHeaders() },

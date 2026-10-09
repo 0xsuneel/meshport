@@ -533,12 +533,16 @@ export async function resealWaiting(payload: string, keys: ChatKeys): Promise<st
 export async function resealWaitingMessages(walletAddress: string, myUserId: string): Promise<number> {
   try {
     const { supabase } = await import('@/lib/supabase')
-    const { data: rows } = await supabase.from('messages')
+    // App start: both reads come from the one startup call (lib/homeBootstrap.ts).
+    const { bootPart } = await import('@/lib/homeBootstrap')
+    const bootRows = await bootPart('waiting_messages', 'reseal', { userId: myUserId })
+    const { data: rows } = bootRows ? { data: bootRows } : await supabase.from('messages')
       .select('id, conversation_id, content')
       .eq('sender_id', myUserId).like('content', Q2_PREFIX + '%').limit(200)
     if (!rows?.length) return 0
     const convIds = [...new Set(rows.map(r => r.conversation_id as string))]
-    const { data: convs } = await supabase.from('conversations')
+    const bootConvs = bootRows ? await bootPart('conversations', 'reseal', { userId: myUserId }) : undefined
+    const { data: convs } = bootConvs ? { data: bootConvs.filter(c => convIds.includes(c.id)) } : await supabase.from('conversations')
       .select('id, participant_a, participant_b').in('id', convIds)
     let done = 0
     for (const c of convs ?? []) {

@@ -2951,16 +2951,28 @@ export function HomePage() {
         // re-discover every payment_sent message within the limit=20
         // window below (regardless of age) and re-notify for all of them,
         // even ones the user already saw and explicitly cleared long ago.
+        // App start: watermark + conversations come from the one startup
+        // call (lib/homeBootstrap.ts); otherwise the normal reads below.
+        const { bootPart } = await import('@/lib/homeBootstrap')
         let since: string | undefined
-        const { data: userRow } = await supabase.from('users').select('notifications_cleared_at').eq('id', user.id).maybeSingle()
-        since = userRow?.notifications_cleared_at || undefined
+        const bootCleared = await bootPart('cleared_at', 'home-pay-catchup', { userId: user.id })
+        if (bootCleared !== undefined) since = bootCleared || undefined
+        else {
+          const { data: userRow } = await supabase.from('users').select('notifications_cleared_at').eq('id', user.id).maybeSingle()
+          since = userRow?.notifications_cleared_at || undefined
+        }
         const sinceFilter = since ? `&created_at=gt.${encodeURIComponent(since)}` : ''
 
-        const convRes = await fetch(
-          `${SUPA_URL}/rest/v1/conversations?or=(participant_a.eq.${user.id},participant_b.eq.${user.id})&select=id,participant_a,participant_b&limit=100`,
-          { headers }
-        )
-        const convs: any[] = convRes.ok ? await convRes.json() : []
+        const bootConvs = await bootPart('conversations', 'home-pay-catchup', { userId: user.id })
+        let convs: any[]
+        if (bootConvs) convs = bootConvs.slice(0, 100)
+        else {
+          const convRes = await fetch(
+            `${SUPA_URL}/rest/v1/conversations?or=(participant_a.eq.${user.id},participant_b.eq.${user.id})&select=id,participant_a,participant_b&limit=100`,
+            { headers }
+          )
+          convs = convRes.ok ? await convRes.json() : []
+        }
         for (const c of convs) {
           const otherId = c.participant_a === user.id ? c.participant_b : c.participant_a
           if (!otherId) continue
@@ -3266,9 +3278,15 @@ export function HomePage() {
         let since: string | undefined
         if (user?.id) {
           try {
-            const { supabase } = await import('@/lib/supabase')
-            const { data } = await supabase.from('users').select('notifications_cleared_at').eq('id', user.id).maybeSingle()
-            since = data?.notifications_cleared_at || undefined
+            // App start: from the one startup call (lib/homeBootstrap.ts).
+            const { bootPart } = await import('@/lib/homeBootstrap')
+            const bootCleared = await bootPart('cleared_at', 'home-activity-catchup', { userId: user.id })
+            if (bootCleared !== undefined) since = bootCleared || undefined
+            else {
+              const { supabase } = await import('@/lib/supabase')
+              const { data } = await supabase.from('users').select('notifications_cleared_at').eq('id', user.id).maybeSingle()
+              since = data?.notifications_cleared_at || undefined
+            }
           } catch {}
         }
         Promise.all([

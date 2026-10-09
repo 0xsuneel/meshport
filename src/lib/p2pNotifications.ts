@@ -21,6 +21,7 @@
 
 import { supabase } from './supabase'
 import { authHeaders, subscribeWithRetry } from './chatService'
+import { bootPart } from './homeBootstrap'
 import { useNotificationStore, useUIStore, type AppNotification } from '../store'
 
 const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
@@ -99,12 +100,17 @@ export function startP2PNotifications(userId: string): () => void {
 
   ;(async () => {
     try {
-      const res = await fetch(
-        `${SUPA_URL}/rest/v1/notifications?user_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&limit=50`,
-        { headers: await authHeaders() },
-      )
-      if (!res.ok || cancelled) return
-      const rows: NotificationRow[] = await res.json()
+      // App start: part of the one startup call (lib/homeBootstrap.ts).
+      let rows = (await bootPart('notifications', 'startP2PNotifications', { userId })) as NotificationRow[] | undefined
+      if (!rows) {
+        const res = await fetch(
+          `${SUPA_URL}/rest/v1/notifications?user_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&limit=50`,
+          { headers: await authHeaders() },
+        )
+        if (!res.ok || cancelled) return
+        rows = await res.json() as NotificationRow[]
+      }
+      if (cancelled) return
       // Oldest first, so they land in the store in the same chronological
       // order addNotification's own prepend-to-front logic expects.
       for (const row of [...rows].reverse()) {

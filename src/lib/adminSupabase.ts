@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { bootPart } from './homeBootstrap'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface AppSetting {
@@ -24,10 +25,15 @@ export type SettingsMap = Record<string, AppSetting>
 
 // ─── Fetch all settings, keyed by `feature` ──────────────────────────────────
 export async function fetchAllSettings(): Promise<SettingsMap> {
-  const { data, error } = await supabase.from('app_settings').select('*').order('category')
-  if (error) { console.error('[adminSupabase] fetchAllSettings:', error.message); return {} }
+  // App start: part of the one startup call (lib/homeBootstrap.ts).
+  let rows = (await bootPart('settings', 'fetchAllSettings')) as AppSetting[] | undefined
+  if (!rows?.length) {
+    const { data, error } = await supabase.from('app_settings').select('*').order('category')
+    if (error) { console.error('[adminSupabase] fetchAllSettings:', error.message); return {} }
+    rows = (data || []) as AppSetting[]
+  }
   const map: SettingsMap = {}
-  for (const row of (data || []) as AppSetting[]) map[row.feature] = row
+  for (const row of rows) map[row.feature] = row
   return map
 }
 

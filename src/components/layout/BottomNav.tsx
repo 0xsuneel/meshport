@@ -93,6 +93,10 @@ export function BottomNav() {
     // it's now called on every relevant insert/update (see below).
     const fetchUnread = async () => {
       try {
+        // App start: the count comes from the one startup call (lib/homeBootstrap.ts).
+        const { bootPart } = await import('@/lib/homeBootstrap')
+        const bootCount = await bootPart('unread_chats', 'bottomnav', { userId: user.id })
+        if (typeof bootCount === 'number') { setUnreadChats(bootCount); return }
         const { supabase } = await import('@/lib/supabase')
         const { data: convs } = await supabase
           .from('conversations').select('id')
