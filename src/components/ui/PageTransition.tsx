@@ -100,7 +100,13 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
     if (!page || !host || reduceMotion) return
 
     if (isDesktop) {
-      page.animate([{ opacity: 0, transform: 'translateY(5px)' }, { opacity: 1, transform: 'none' }], { duration: 200, easing: EASE })
+      // A new page opens at its top: the desktop content column is one
+      // shared scroller, so it kept the previous page's scroll position.
+      const scroller = host.closest<HTMLElement>('[data-desktop-content]')
+      if (scroller) scroller.scrollTop = 0
+      // Content area only (sidebar and header stay): a quick cross-fade,
+      // like desktop apps - no sliding.
+      page.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 150, easing: EASE })
       return
     }
     // Tabs switch instantly, like a native tab bar. A fade from opacity 0

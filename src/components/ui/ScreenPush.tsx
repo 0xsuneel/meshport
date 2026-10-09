@@ -1,6 +1,8 @@
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 import { pushLook } from '@/lib/pushLook'
 import { useReducedMotion } from 'framer-motion'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DESKTOP_QUERY } from '@/lib/motion'
 
 // Screens that follow one another inside one page (Pay: search → amount →
 // review; Swap: form → review; Multichain Bring: form → processing → Track
@@ -52,6 +54,8 @@ export function ScreenPush({ screenKey, back = false, style, children }: {
   children: ReactNode
 }) {
   const reduce = useReducedMotion()
+  // Desktop: no phone push - the new step fades in place (see below).
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
   const hostRef = useRef<HTMLDivElement>(null)
   const liveRef = useRef<HTMLDivElement>(null)
   const shown = useRef(screenKey)
@@ -60,7 +64,7 @@ export function ScreenPush({ screenKey, back = false, style, children }: {
 
   // About to change screens: picture the old one while it's still on screen
   // (render runs before React touches the DOM).
-  if (!reduce && shown.current !== screenKey && snap.current?.key !== screenKey && liveRef.current) {
+  if (!reduce && !isDesktop && shown.current !== screenKey && snap.current?.key !== screenKey && liveRef.current) {
     try { snap.current = { key: screenKey, ...pictureOf(liveRef.current) } } catch { snap.current = null }
   }
 
@@ -71,6 +75,10 @@ export function ScreenPush({ screenKey, back = false, style, children }: {
     const s = snap.current
     snap.current = null
     const host = hostRef.current, live = liveRef.current
+    if (isDesktop && !reduce && live) {
+      live.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 150, easing: EASE })
+      return
+    }
     if (!s || s.key !== screenKey || !host || !live) return
 
     const opts: KeyframeAnimationOptions = { duration: back ? BACK_MS : OPEN_MS, easing: EASE, fill: 'both' }

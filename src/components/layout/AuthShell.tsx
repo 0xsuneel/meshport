@@ -1,5 +1,7 @@
 import { useLocation } from 'react-router-dom'
 import { PageTransition } from '@/components/ui/PageTransition'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DESKTOP_QUERY } from '@/lib/motion'
 
 // AuthShell - wraps public, pre-login pages (login/register flow, the
 // public payment link, legal pages) so they get the same phone-width
@@ -20,22 +22,30 @@ const LEGAL = new Set(['/legal', '/terms', '/privacy'])
 export function AuthShell({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const pageKey = LEGAL.has(location.pathname) ? '/legal' : location.pathname
+  // Desktop: a centred card on a soft background (like desktop sign-in
+  // pages), not a phone-width strip stuck to the top of a wide screen.
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
 
   return (
     <div style={{
       position: 'fixed',
       inset: 0,
-      background: 'var(--bg)',
+      background: isDesktop ? 'color-mix(in srgb, var(--brand) 6%, var(--bg))' : 'var(--bg)',
       display: 'flex',
-      alignItems: 'flex-start',
+      alignItems: isDesktop ? 'center' : 'flex-start',
       justifyContent: 'center',
+      padding: isDesktop ? 24 : 0,
     }}>
       <div data-page-shell="" style={{
         width: '100%',
-        maxWidth: '430px',
-        height: '100%',
+        maxWidth: isDesktop ? '460px' : '430px',
+        height: isDesktop ? 'min(860px, 100%)' : '100%',
         position: 'relative',
         overflow: 'hidden',
+        ...(isDesktop ? {
+          background: 'var(--bg)', borderRadius: 24,
+          border: '1px solid var(--border)', boxShadow: 'var(--shadow-2, 0 24px 60px -24px rgba(0,0,0,0.35))',
+        } : {}),
         // BUG FIX: this inner box was never a flex container, so any child
         // page using `flex-1` + `overflow-y-auto` for its own internal
         // scroll (e.g. TermsPrivacyPage) had `flex-1` do nothing - the
