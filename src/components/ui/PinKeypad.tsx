@@ -116,15 +116,24 @@ export function PinKeypad({
   // appears once the scan fails or is cancelled, or on "Use passcode".
   const [mode, setMode] = useState<'bio' | 'pin'>(() =>
     autoBiometric && biometricReady && !isDesktop ? 'bio' : 'pin')
-  useEffect(() => { if (liveSupported === false) setMode('pin') }, [liveSupported])
+  // The prompt is about to open by itself (below): show "Waiting for…" from
+  // the first frame instead of "Tap to use…" flipping as the sheet appears.
+  const [autoPending, setAutoPending] = useState(() => mode === 'bio' && typeof document !== 'undefined' && document.visibilityState === 'visible')
+  useEffect(() => { if (liveSupported === false) { setMode('pin'); setAutoPending(false) } }, [liveSupported])
   // A wrong passcode (e.g. a stale one from biometrics) → let them type.
-  useEffect(() => { if (error || shake) setMode('pin') }, [error, shake])
+  useEffect(() => { if (error || shake) { setMode('pin'); setBiometricTrying(false); setAutoPending(false) } }, [error, shake])
+  // A screen that clears a fingerprint-filled passcode (without an error)
+  // gets the fingerprint button back.
+  useEffect(() => { if (!value && viaBiometricRef.current) setBiometricTrying(false) }, [value])
 
   const tryBiometric = async () => {
     if (!walletAddress || biometricTrying) return
     setBiometricTrying(true)
+    setAutoPending(false)
     const pc = await verifyBiometricAndGetPasscode(walletAddress, storedPasscodeHash ?? undefined)
-    setBiometricTrying(false)
+    // Accepted: stay on "Waiting for…" while the sheet closes - switching
+    // back to "Tap to use…" for that moment read like the scan had failed.
+    if (!pc) setBiometricTrying(false)
     // A cancelled/failed check just leaves the keypad ready for manual
     // entry - no error shown, cancelling is a normal choice here.
     if (pc) {
@@ -152,10 +161,10 @@ export function PinKeypad({
   // the device can't do it the call just fails into the passcode pad.
   const canAuto = autoBiometric && biometricReady && liveSupported !== false
   useEffect(() => {
-    if (!canAuto) return
+    if (!canAuto) { setAutoPending(false); return }
     let timer: ReturnType<typeof setTimeout> | undefined
     const run = () => {
-      if (autoTriedRef.current || valueRef.current.length > 0) return
+      if (autoTriedRef.current || valueRef.current.length > 0) { setAutoPending(false); return }
       autoTriedRef.current = true
       tryBiometricRef.current()
     }
@@ -202,8 +211,8 @@ export function PinKeypad({
     return (
       <div className="w-full">
         {/* Same height as dots (46) + number pad (4×56 + 3×10) */}
-        <BiometricFirst Icon={Icon} label={label} trying={biometricTrying} onTry={tryBiometric}
-          onUsePasscode={() => setMode('pin')} height={300} />
+        <BiometricFirst Icon={Icon} label={label} trying={biometricTrying || autoPending} onTry={tryBiometric}
+          onUsePasscode={() => { setAutoPending(false); setMode('pin') }} height={300} />
       </div>
     )
   }

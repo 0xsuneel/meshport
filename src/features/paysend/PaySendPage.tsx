@@ -199,6 +199,13 @@ export function PaySendPage() {
   // Paying a merchant payment request (/pay/r/<code>): the tx is handed to
   // the server for on-chain verification, then we return to the request.
   const merchantPayCode = searchParams.get('merchantPay')
+  // Arriving on the amount screen with nothing entered yet: open the number
+  // pad straight away. It used to wait for a tap on the "$0", leaving a bare
+  // screen with no keypad and no button to continue.
+  useEffect(() => {
+    if (screen === 'amount' && !isDesktop && !merchantPayCode && !amount) setShowAmountPad(true)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen])
   // Merchant payment: order number + amount come from the request and
   // can't be edited; the payment is confirmed against both.
   const [merchantOrderNumber, setMerchantOrderNumber] = useState<string | null>(() => searchParams.get('order'))
