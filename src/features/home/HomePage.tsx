@@ -1726,16 +1726,16 @@ function MultichainHubCard({
           still shrinking independently via statFontSize() above. */}
       <div style={{ display: 'flex', gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11.5, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px', ...ellipsisLine }}>Available To Transfer</div>
+          <div style={{ fontSize: 11.5, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px' }}>Available To Transfer</div>
           <div style={{ fontSize: transferFontSize, fontWeight: 800, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', ...ellipsisLine }}>
             {balanceHidden ? '••••' : <>${renderStat(arcAvailable, transferFontSize)}</>}
           </div>
         </div>
         <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
-          <div style={{ fontSize: 11.5, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px', ...ellipsisLine,
+          <div style={{ fontSize: 11.5, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px',
             ...(claimLoading ? { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5, overflow: 'visible' } : null) }}>
             {claimLoading && <span style={{ margin: '-2px 0', display: 'flex' }}><ChainScanSpinner chain={scanChain} /></span>}
-            <span style={claimLoading ? { minWidth: 0, ...ellipsisLine } : undefined}>{isMerchantHero ? 'In Ledger Chains' : 'Available To Bring'}</span>
+            <span style={claimLoading ? { minWidth: 0 } : undefined}>{isMerchantHero ? 'In Ledger Chains' : 'Available To Bring'}</span>
           </div>
           <div style={{ fontSize: claimFontSize, fontWeight: 800, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', ...ellipsisLine }}>
             {balanceHidden ? '••••' : <>${renderStat(claimAvailable, claimFontSize)}</>}
@@ -4062,7 +4062,7 @@ export function HomePage() {
       </div>
       )}
 
-      <div className="lg:max-w-[1500px]" style={{
+      <div className="lg:max-w-[1500px] lg:mx-auto lg:w-full" style={{
         padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 18, paddingBottom: 12,
         flex: isDesktop ? 1 : undefined, minHeight: isDesktop ? 0 : undefined,
       }}>
@@ -4095,7 +4095,7 @@ export function HomePage() {
             right. Mobile keeps its original flat stacking order below
             (flex-col) - only the lg:col/row-start placement below reorders
             things visually at desktop width; DOM order is untouched. */}
-        <div className="flex flex-col gap-[18px] lg:grid lg:grid-cols-1 xl:grid-cols-[2.7fr_1.15fr] lg:gap-4 lg:items-start lg:flex-1 lg:min-h-0 lg:min-w-0 lg:pt-4 min-[1800px]:max-w-[1680px] min-[1800px]:mx-auto min-[1800px]:w-full">
+        <div className="flex flex-col gap-[18px] lg:grid lg:grid-cols-1 xl:grid-cols-[2.7fr_1.15fr] lg:gap-4 lg:items-start lg:flex-1 lg:min-h-0 lg:min-w-0 lg:pt-4">
         {/* ── COLUMNS 1+2 WRAPPER - column 2 (Quick Actions/Recent Activity)
              needs to match column 1's bottom edge, NOT the grid row's full
              height (which is set by whichever column is tallest - column 3

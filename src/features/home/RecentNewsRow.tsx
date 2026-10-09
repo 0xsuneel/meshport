@@ -33,11 +33,11 @@ function Box({ title, onViewAll, children }: { title: string; onViewAll?: () => 
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 10, minWidth: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-        <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
+        <span style={{ fontSize: 'min(15px, 4.2vw)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: 0 }}>{title}</span>
         {onViewAll && (
           <button onClick={onViewAll}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 1, padding: '4px 0 4px 6px', margin: '-4px 0',
-              background: 'none', border: 'none', cursor: 'pointer', fontSize: 'min(12.5px, 3.4vw)', fontWeight: 600, color: 'var(--brand-text)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              background: 'none', border: 'none', cursor: 'pointer', fontSize: 'min(12.5px, 3.3vw)', fontWeight: 600, color: 'var(--brand-text)', whiteSpace: 'nowrap', flexShrink: 0 }}>
             View all
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="m9 6 6 6-6 6"/></svg>
           </button>
