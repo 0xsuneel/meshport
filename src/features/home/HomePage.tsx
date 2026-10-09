@@ -38,6 +38,7 @@ import { SearchField } from '@/components/ui/SearchField'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { ActionIcon } from '@/components/ui/ActionIcon'
+import { NavIcon } from '@/components/layout/navIcons'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { biometricLabel } from '@/lib/biometric'
 
@@ -2234,17 +2235,10 @@ const FEATURE_BANNERS: Array<{ title: string; text: string; path: string; icon: 
   { title: 'Bulk Payout',       text: 'Pay many people in one go',     path: '/bulk-payout', icon: 'bulk' },
 ]
 
+// Same icons as Home's buttons / More sheet; Pay in Chat uses the Chats tab icon.
 function BannerIcon({ kind }: { kind: typeof FEATURE_BANNERS[number]['icon'] }) {
-  const p = { stroke: '#fff', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' }
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24">
-      {kind === 'globe' && (<><circle cx="12" cy="12" r="9" {...p} /><ellipse cx="12" cy="12" rx="4.5" ry="9" {...p} /><path d="M3 12h18" {...p} /></>)}
-      {kind === 'p2p' && (<><circle cx="8" cy="8" r="3" {...p} /><circle cx="16" cy="16" r="3" {...p} /><path d="M14 5h4v4M10 19H6v-4" {...p} /></>)}
-      {kind === 'swap' && (<path d="M5 8h13l-3-3M19 16H6l3 3" {...p} />)}
-      {kind === 'chat' && (<><path d="M4 5h16v11H9l-5 4z" {...p} /><path d="M12 8v5M10 9.5h3a1 1 0 0 1 0 2h-2a1 1 0 0 0 0 2h3" {...p} /></>)}
-      {kind === 'bulk' && (<><circle cx="12" cy="6" r="2.5" {...p} /><circle cx="5" cy="17" r="2.5" {...p} /><circle cx="19" cy="17" r="2.5" {...p} /><path d="M12 8.5v3M12 11.5L6.5 15M12 11.5l5.5 3.5" {...p} /></>)}
-    </svg>
-  )
+  if (kind === 'chat') return <NavIcon name="chat" size={24} color="#fff" />
+  return <ActionIcon name={kind === 'globe' ? 'hub' : kind} size={24} />
 }
 
 function FeatureBanner({ height, onOpen }: { height: number; onOpen: (path: string) => void }) {
