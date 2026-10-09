@@ -1,86 +1,97 @@
 // ── App updates: switch versions only when it's safe ───────────────────────
-// A new version downloads in the background and waits (see sw.ts). It takes
-// over - with one quick reload - only:
-//   • when the page loads: app opened, browser reopened, or refreshed
-//     (behind the opening screen), or
-//   • when the app is about to reload anyway (back after a long time away), or
-//   • while open, on a resting screen nobody is touching (watchForUpdates).
+// How it works now (like X, Gmail, Slack and other web apps):
+//   • Opening or refreshing the app loads the live page from the server
+//     (sw.ts), so it is already the newest version - nothing to wait for.
+//   • Every deploy publishes /version.json (vite.config.ts). The open app
+//     compares it with its own build (__MP_BUILD__) on load, when it comes
+//     back to the screen and every minute - a ~50-byte check - and switches
+//     with one quick reload as soon as it's safe (watchForUpdates below).
+//   • The service worker's new offline copy downloads in the background and
+//     takes over quietly once the page is on the new version (no reload).
 // Never in the middle of something, so an update can't break it.
-//
-// The browser only looks for a new version when a page loads, and a phone
-// can keep the app in memory for days. So we also ask for one ourselves:
-// on load, when the app comes back to the screen, and every minute while
-// it's open (see watchForUpdates below for switching while open).
 
 const GUARD_KEY = 'mp_sw_update_at'
+const MY_BUILD: string = typeof __MP_BUILD__ === 'string' ? __MP_BUILD__ : ''
+let newerBuild: string | null = null
+let upToDate = false // the server confirmed this page is the live version
 
 async function registration(): Promise<ServiceWorkerRegistration | undefined> {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return undefined
   try { return await navigator.serviceWorker.getRegistration() } catch { return undefined }
 }
 
-/** Ask the server for a new version (downloads in the background). */
-export async function checkForUpdate(): Promise<void> {
-  const reg = await registration()
-  try { await reg?.update() } catch { /* offline - next time */ }
+/** The build that is live on the server, or null when it can't be read (offline). */
+async function liveBuild(timeoutMs = 5000): Promise<string | null> {
+  try {
+    const res = await fetch('/version.json', { cache: 'no-store', signal: AbortSignal.timeout(timeoutMs) })
+    if (!res.ok) return null
+    const j = await res.json()
+    return typeof j?.build === 'string' && j.build ? j.build : null
+  } catch { return null }
 }
 
-/** Resolves once a version that's downloading has finished (or after waitMs). */
-function untilInstalled(reg: ServiceWorkerRegistration, waitMs: number): Promise<void> {
-  const sw = reg.installing
-  if (!sw || waitMs <= 0) return Promise.resolve()
-  return new Promise(resolve => {
-    const t = setTimeout(resolve, waitMs)
-    sw.addEventListener('statechange', () => {
-      if (sw.state !== 'installing') { clearTimeout(t); resolve() }
+/** Ask the server whether a newer version is live (and let the offline copy update). */
+export async function checkForUpdate(): Promise<boolean> {
+  void registration().then(reg => reg?.update().catch(() => undefined))
+  const live = await liveBuild()
+  if (live && MY_BUILD) {
+    if (live !== MY_BUILD) newerBuild = live
+    else upToDate = true
+  }
+  return !!newerBuild
+}
+
+/** This page is the live version: let a waiting offline copy take over, quietly. */
+async function adoptWaitingCopy(): Promise<void> {
+  if (!upToDate || newerBuild) return // an older page still needs the old copy's files
+  const reg = await registration()
+  try { reg?.waiting?.postMessage({ type: 'SKIP_WAITING' }) } catch { /* next time */ }
+}
+
+/** Reload onto the live version, with "Updating MeshPort…" on screen. */
+async function switchToNewVersion(): Promise<boolean> {
+  // Never loop: at most one update reload every 30s.
+  try {
+    if (Date.now() - Number(sessionStorage.getItem(GUARD_KEY) || 0) < 30_000) return false
+    sessionStorage.setItem(GUARD_KEY, String(Date.now()))
+  } catch { /* private mode */ }
+  showUpdating()
+  // Keep the message up through the reload too (boot.js puts it back on
+  // the new page's opening screen), and on screen long enough to read.
+  try { sessionStorage.setItem('mp_updating', '1') } catch { /* private mode */ }
+  const shownAt = Date.now()
+  const reg = await registration()
+  const waiting = reg?.waiting
+  if (waiting && navigator.serviceWorker.controller) {
+    await new Promise<void>(resolve => {
+      navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })
+      waiting.postMessage({ type: 'SKIP_WAITING' })
+      setTimeout(resolve, 1500) // never hang on it
     })
-  })
+  }
+  await new Promise(r => setTimeout(r, Math.max(0, 700 - (Date.now() - shownAt))))
+  // ?_v tells the service worker to wait for the live page rather than open
+  // the installed copy after 2s (sw.ts); markBuildHealthy() tidies it away.
+  const url = new URL(window.location.href)
+  url.searchParams.set('_v', String(Date.now()))
+  window.location.replace(url.toString())
+  return true
 }
 
 /**
- * If a new version is waiting, switch to it and reload. With `checkMs`, first
- * ask the server for one and give a download that started up to that long to
- * finish (on open the opening screen covers it). Resolves false when there's
- * nothing to do (then the caller carries on as normal).
+ * Page load, or about to reload anyway: if a newer version is live, switch
+ * to it now and resolve true. Otherwise (already the newest, or offline)
+ * resolve false - and a waiting offline copy takes over quietly.
  */
-export async function applyWaitingUpdate(opts: { checkMs?: number } = {}): Promise<boolean> {
-  const reg = await registration()
-  if (!reg) return false
-  try {
-    if (!reg.waiting && opts.checkMs) {
-      const started = Date.now()
-      await Promise.race([reg.update().catch(() => undefined), new Promise(r => setTimeout(r, opts.checkMs))])
-      await untilInstalled(reg, opts.checkMs - (Date.now() - started))
-    }
-    const waiting = reg.waiting
-    if (!waiting || !navigator.serviceWorker.controller) return false
-    // Never loop: at most one update reload every 30s.
-    try {
-      if (Date.now() - Number(sessionStorage.getItem(GUARD_KEY) || 0) < 30_000) return false
-      sessionStorage.setItem(GUARD_KEY, String(Date.now()))
-    } catch { /* private mode */ }
-    showUpdating()
-    // Keep the message up through the reload too (boot.js puts it back on
-    // the new page's opening screen), and on screen long enough to read.
-    try { sessionStorage.setItem('mp_updating', '1') } catch { /* private mode */ }
-    const shownAt = Date.now()
-    await new Promise<void>(resolve => {
-      const done = () => resolve()
-      navigator.serviceWorker.addEventListener('controllerchange', done, { once: true })
-      waiting.postMessage({ type: 'SKIP_WAITING' })
-      setTimeout(done, 3000) // never hang on it
-    })
-    await new Promise(r => setTimeout(r, Math.max(0, 900 - (Date.now() - shownAt))))
-    window.location.reload()
-    return true
-  } catch {
-    return false
-  }
+export async function applyWaitingUpdate(_opts: { checkMs?: number } = {}): Promise<boolean> {
+  if (await checkForUpdate()) return switchToNewVersion()
+  void adoptWaitingCopy()
+  return false
 }
 
 // ── Instant updates while the app is open ──────────────────────────────────
-// A new deploy is noticed within a minute (cheap: the browser re-checks the
-// small sw.js file) and switched to as soon as it is safe:
+// A new deploy is noticed within a minute (/version.json, ~50 bytes) and
+// switched to as soon as it is safe:
 //   • right away on a "resting" screen (Home, Chats list, Activity, News,
 //     P2P lists, Profile, lock screen…) once nobody has touched the screen
 //     for a few seconds, nothing is being typed and no popup is open;
@@ -122,7 +133,7 @@ function showReadyPill(): void {
       border: 'none', background: 'var(--brand, #12665F)', color: '#fff', cursor: 'pointer',
       font: '600 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', boxShadow: '0 6px 20px rgba(0,0,0,0.25)',
     })
-    el.addEventListener('click', () => { el.remove(); void applyWaitingUpdate() })
+    el.addEventListener('click', () => { el.remove(); void switchToNewVersion() })
     document.body.appendChild(el)
   } catch { /* cosmetic only */ }
 }
@@ -134,15 +145,19 @@ export function watchForUpdates(): () => void {
   const maybeCheck = () => {
     if (Date.now() - last < 30_000) return
     last = Date.now()
-    void checkForUpdate()
+    void checkForUpdate().then(found => { if (found) void tryApply() })
   }
   const markInput = () => { lastInput = Date.now() }
+  // The new offline copy finished downloading after this (live) page loaded.
+  void registration().then(reg => reg?.addEventListener('updatefound', () => {
+    const sw = reg.installing
+    sw?.addEventListener('statechange', () => { if (sw.state === 'installed') void adoptWaitingCopy() })
+  }))
   const tryApply = async () => {
-    const reg = await registration()
-    if (!reg?.waiting || !navigator.serviceWorker.controller) return
+    if (!newerBuild) return
     if (document.visibilityState === 'hidden' ? onRestingScreen() : safeToSwitchNow()) {
       document.getElementById('mp-update-ready')?.remove()
-      void applyWaitingUpdate()
+      void switchToNewVersion()
     } else if (document.visibilityState === 'visible') {
       showReadyPill()
     }
@@ -151,11 +166,6 @@ export function watchForUpdates(): () => void {
     if (document.visibilityState === 'visible') maybeCheck()
     else void tryApply() // going to the background: switch now if it's safe
   }
-  // A new version that finishes downloading while we're open.
-  void registration().then(reg => reg?.addEventListener('updatefound', () => {
-    const sw = reg.installing
-    sw?.addEventListener('statechange', () => { if (sw.state === 'installed') void tryApply() })
-  }))
   for (const ev of ['pointerdown', 'keydown', 'touchstart', 'wheel']) window.addEventListener(ev, markInput, { passive: true, capture: true })
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('online', maybeCheck)
