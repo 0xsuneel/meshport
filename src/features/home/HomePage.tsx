@@ -3596,16 +3596,9 @@ export function HomePage() {
     // across the external RPCs). Skips the second trigger instead; the
     // next tick or the next reactive event picks it up.
     let inFlight = false
-    let cancelWaitScan = () => {}
     const fullScan = () => {
       if (inFlight) return
-      // ~21 chains read over public RPCs - on a very slow network this waits
-      // until the network is better (the last figure stays on screen).
-      if (isSlowNetwork()) {
-        if (unifiedLoadingRef.current) { unifiedLoadingRef.current = false; setUnifiedLoading(false) }
-        cancelWaitScan(); cancelWaitScan = whenNetworkOk(() => { if (!cancelled) fullScan() })
-        return
-      }
+      // One server request (/api/portfolio), so it runs on a slow network too.
       inFlight = true
       readExternalBalances(walletAddress, settingsMap, settingsLoaded).then(result => {
         if (cancelled) return
@@ -3670,7 +3663,7 @@ export function HomePage() {
         .subscribe()
     })
 
-    return () => { cancelled = true; cancelWaitScan(); clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal); window.removeEventListener(EXTERNAL_SCAN_PROGRESS_EVENT, onScanProgress) }
+    return () => { cancelled = true; clearInterval(iv); channel?.unsubscribe(); window.removeEventListener(EXTERNAL_BALANCE_EVENT, onExternal); window.removeEventListener(EXTERNAL_SCAN_PROGRESS_EVENT, onScanProgress) }
   }, [walletAddress, settingsMap, settingsLoaded])
 
   if (!user) return null
