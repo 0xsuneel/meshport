@@ -82,6 +82,7 @@
       html.mp-opening #splash .tile { width: 107px; height: 107px; border-radius: 29px; transform: translateY(calc(-1 * var(--mp-splash-lift, 0px))); }
       html.mp-opening #splash .mark { width: 72px; height: 72px; }
       html.mp-opening #splash .txt { display: none; }
+      html.mp-lift-pending #splash .tile { visibility: hidden; }
       /* "Updating MeshPort…" under the logo while a new version takes over (lib/swUpdate.ts). */
       #splash .upd { position: absolute; left: 0; right: 0; top: calc(50% + 60px + 24px); text-align: center; font-size: 13px; font-weight: 600; color: #A9D9CF; animation: mpUpdIn .2s ease both; }
       html.mp-refresh #splash .upd { color: inherit; }
@@ -120,10 +121,11 @@
       #splash .tag { margin-top: 6px; font-size: 13px; color: #A9D9CF; }
       /* Animated logo (Pulse) - same as MeshLoader.tsx. */
       #splash .mark .n, #splash .mark .hub { transform-box: fill-box; transform-origin: center; }
-      /* App open: still, like the phone's launch screen it continues; the
-         pulse starts only if loading takes a while (boot.js). */
-      html:not(.mp-refresh):not(.mp-splash-slow) #splash .mark .n,
-      html:not(.mp-refresh):not(.mp-splash-slow) #splash .mark .hub { animation-name: none !important; }
+      /* App open: always still, like the phone's launch screen it continues
+         (a pulse starting on a slow open read as the logo "dancing" just
+         before it glides to the lock screen). Refreshes keep the pulse. */
+      html:not(.mp-refresh) #splash .mark .n,
+      html:not(.mp-refresh) #splash .mark .hub { animation-name: none !important; }
       #splash .mark .n { animation: mplPop 1.8s ease-in-out infinite; }
       #splash .mark .s2 { animation-delay: .2s; } #splash .mark .s3 { animation-delay: .4s; }
       #splash .mark .s4 { animation-delay: .6s; } #splash .mark .s5 { animation-delay: .8s; }
