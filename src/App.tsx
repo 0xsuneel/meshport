@@ -495,10 +495,65 @@ function SplashRemover() {
       const wait = shownUntil - performance.now()
       if (wait > 0) { timer = setTimeout(hide, wait); return }
       hidden = true
-      splash.classList.add('splash-hide')
       document.getElementById('mp-splash-theme')?.remove() // back to the app's own status bar colour
-      document.documentElement.classList.remove('mp-opening') // and the page's own background
       try { sessionStorage.setItem('mp_opened', '1') } catch { /* private mode */ }
+      // App open onto the lock screen: the opening logo glides into the lock
+      // screen's own logo while the teal fades away - one continuous logo, no
+      // empty teal frame and no jump from the middle to the top.
+      const tile = splash.querySelector<HTMLElement>('.tile')
+      const target = root.querySelector<HTMLElement>('[data-splash-target]')
+      const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      if (freshOpen && tile && target && !reduced) {
+        const a = tile.getBoundingClientRect()
+        if (a.width > 0 && target.getBoundingClientRect().width > 0) {
+          // Drawn frame by frame, re-reading the target each frame: the lock
+          // screen can still shift its layout for a moment (the fingerprint
+          // check answering), and the logo must land exactly on it.
+          const FLY_MS = 380
+          const base = getComputedStyle(tile).transform
+          const ease = (t: number) => 1 - Math.pow(1 - t, 3)
+          target.style.visibility = 'hidden'
+          // The lock screen appears around the logo once it has landed (it
+          // isn't laid out any differently - just not shown yet), so the logo
+          // never slides over its text on the way up.
+          root.style.opacity = '0'
+          const pageBg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || 'transparent'
+          // Freeze the opening logo as it is now, then let the page take its own
+          // background (behind the splash) - so nothing jumps or turns teal
+          // again when the opening-screen styles go.
+          const mark = tile.querySelector<HTMLElement>('.mark')
+          const tcs = getComputedStyle(tile), mcs = mark ? getComputedStyle(mark) : null
+          Object.assign(tile.style, { width: tcs.width, height: tcs.height, borderRadius: tcs.borderRadius })
+          if (mark && mcs) Object.assign(mark.style, { width: mcs.width, height: mcs.height })
+          const txt = splash.querySelector<HTMLElement>('.txt')
+          if (txt) txt.style.display = 'none'
+          document.documentElement.classList.remove('mp-opening')
+          tile.style.transformOrigin = 'center'
+          splash.style.transition = `background-color ${FLY_MS}ms ease`
+          splash.style.pointerEvents = 'none'
+          const start = performance.now()
+          const frame = (now: number) => {
+            const t = Math.min(1, (now - start) / FLY_MS), k = ease(t)
+            const r = target.getBoundingClientRect()
+            const dx = (r.left + r.width / 2) - (a.left + a.width / 2)
+            const dy = (r.top + r.height / 2) - (a.top + a.height / 2)
+            const sc = 1 + (r.width / a.width - 1) * k
+            tile.style.transform = `${base === 'none' ? '' : base} translate(${dx * k}px, ${dy * k}px) scale(${sc})`
+            if (t < 1) { requestAnimationFrame(frame); return }
+            // Landed: the page fades in under the (still shown) logo, then the
+            // page's own logo takes over in the same place.
+            splash.style.transition = 'none'
+            splash.style.backgroundColor = 'transparent'
+            root.style.opacity = ''
+            root.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'ease-out' })
+            timer = setTimeout(() => { target.style.visibility = ''; splash.remove(); markSplashDone() }, 190)
+          }
+          requestAnimationFrame(now => { splash.style.backgroundColor = pageBg; frame(now) })
+          return
+        }
+      }
+      splash.classList.add('splash-hide')
+      document.documentElement.classList.remove('mp-opening') // and the page's own background
       timer = setTimeout(() => { splash.remove(); markSplashDone() }, 250)
     }
     const obs = new MutationObserver(() => { if (hasPage()) hide() })
