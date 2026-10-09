@@ -337,7 +337,14 @@
 .pt-header,
 .pt-safe,
 .pt-safe-top {
-  padding-top: calc(env(safe-area-inset-top, 0px) + 22px);
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px));
+}
+/* Installed app (home-screen icon): the status bar sits right above the
+   page, so headers start closer to it, like native apps. The browser keeps
+   the roomier spacing. --home-header-gap is Home's own top padding. */
+:root { --header-gap: 22px; --home-header-gap: 14px; }
+@media (display-mode: standalone) {
+  :root { --header-gap: 12px; --home-header-gap: 4px; }
 }
 
 /* Uniform header height: title/icon size differences across screens no

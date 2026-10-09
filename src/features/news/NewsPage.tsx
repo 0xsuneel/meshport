@@ -83,7 +83,7 @@ export function NewsPage() {
       <div style={{
         position: 'sticky', top: 0, zIndex: 20,
         background: 'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter: 'blur(20px)',
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 22px)', paddingLeft: 20, paddingRight: 20, paddingBottom: 10,
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))', paddingLeft: 20, paddingRight: 20, paddingBottom: 10,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44 }}>
           {!isDesktop && (

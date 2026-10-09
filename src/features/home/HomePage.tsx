@@ -3920,7 +3920,7 @@ export function HomePage() {
         background: 'color-mix(in srgb, var(--bg) 94%, transparent)',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)',
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))',
         paddingBottom: 4, paddingLeft: 20, paddingRight: 20,
         boxSizing: 'border-box',
       }}>
