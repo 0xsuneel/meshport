@@ -3,92 +3,23 @@ import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore, useChatUnreadStore } from '@/store'
+import { NavIcon, type NavIconName } from './navIcons'
 
-// Icons: outline when idle. `filled` (the phone bottom bar, PhonePe-style)
-// draws the selected tab as a solid shape in the text colour, with its inner
-// details cut out in the bar colour - no box behind it. The desktop sidebar
-// keeps the outline icons on its brand-teal row.
+// Icons (navIcons.tsx, Phosphor): outline when idle. `filled` (the phone
+// bottom bar, PhonePe-style) shows the selected tab as the solid version in
+// the text colour - no box behind it. The desktop sidebar keeps the outline
+// icons on its brand-teal row.
 type NavIconProps = { active: boolean; filled?: boolean }
-const NAV_ON = 'var(--nav-active-fg)'
-const BAR_ON = 'var(--text-primary)'  // phone bar: selected icon + label
-const BAR_CUT = 'var(--surface)'      // phone bar background, for cut-out details
-const strokeOf = (active: boolean, filled?: boolean) => active ? (filled ? BAR_ON : NAV_ON) : 'var(--nav-idle)'
+const colorOf = (active: boolean, filled?: boolean) =>
+  active ? (filled ? 'var(--text-primary)' : 'var(--nav-active-fg)') : 'var(--nav-idle)'
+const navIcon = (name: NavIconName) => ({ active, filled }: NavIconProps) =>
+  <NavIcon name={name} filled={active && !!filled} size={filled === undefined ? 22 : 26} color={colorOf(active, filled)} />
 
-export const HomeIcon = ({ active, filled }: NavIconProps) => {
-  const c = strokeOf(active, filled)
-  const solid = active && filled
-  return (
-    <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
-      <path d="M3 10.5L12 3l9 7.5V21a1 1 0 01-1 1H4a1 1 0 01-1-1V10.5z"
-        fill={solid ? c : 'none'} stroke={c} strokeWidth="1.8" strokeLinejoin="round"/>
-      <path d="M9 22V15h6v7"
-        fill={solid ? BAR_CUT : 'none'} stroke={solid ? BAR_CUT : c} strokeWidth="1.8" strokeLinejoin="round"/>
-    </svg>
-  )
-}
-
-export const ChatsIcon = ({ active, filled }: NavIconProps) => {
-  const c = strokeOf(active, filled)
-  const solid = active && filled
-  return (
-    <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
-      <path d="M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-        fill={solid ? c : 'none'} stroke={c} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M8 12h.01M12 12h.01M16 12h.01"
-        stroke={solid ? BAR_CUT : c} strokeWidth={solid ? 2.2 : 1.7} strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
-}
-
-const ScannerIcon = () => (
-  <svg width="27" height="27" viewBox="0 0 28 28" fill="none">
-    <rect x="3" y="3" width="8" height="8" rx="1.5" stroke="white" strokeWidth="1.8"/>
-    <rect x="5.5" y="5.5" width="3" height="3" fill="white"/>
-    <rect x="17" y="3" width="8" height="8" rx="1.5" stroke="white" strokeWidth="1.8"/>
-    <rect x="19.5" y="5.5" width="3" height="3" fill="white"/>
-    <rect x="3" y="17" width="8" height="8" rx="1.5" stroke="white" strokeWidth="1.8"/>
-    <rect x="5.5" y="19.5" width="3" height="3" fill="white"/>
-    <rect x="17" y="17" width="3" height="3" rx="0.5" fill="white"/>
-    <rect x="22" y="17" width="3" height="3" rx="0.5" fill="white"/>
-    <rect x="17" y="22" width="3" height="3" rx="0.5" fill="white"/>
-    <rect x="22" y="22" width="3" height="3" rx="0.5" fill="white"/>
-  </svg>
-)
-
-export const RewardsIcon = ({ active, filled }: NavIconProps) => {
-  const c = strokeOf(active, filled)
-  const solid = active && filled
-  const body = solid ? c : 'none'
-  const ribbon = solid ? BAR_CUT : c
-  return (
-    <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
-      {/* box body */}
-      <rect x="3" y="12" width="18" height="9" rx="1.5" fill={body} stroke={c} strokeWidth="1.6"/>
-      {/* lid */}
-      <rect x="2" y="8.5" width="20" height="3.5" rx="1" fill={body} stroke={c} strokeWidth="1.6"/>
-      {/* ribbon on lid + box (cut out when filled) */}
-      <line x1="12" y1="9.3" x2="12" y2="20.2" stroke={ribbon} strokeWidth="1.6"/>
-      {solid && <line x1="2.8" y1="12" x2="21.2" y2="12" stroke={BAR_CUT} strokeWidth="1.2"/>}
-      {/* bow */}
-      <path d="M12 8.5 C10.5 7 8 5.5 7.5 4.5 C7 3.5 9 3.5 10 4.5 C11 5.5 12 8.5 12 8.5Z"
-        fill={body} stroke={c} strokeWidth="1.4" strokeLinejoin="round"/>
-      <path d="M12 8.5 C13.5 7 16 5.5 16.5 4.5 C17 3.5 15 3.5 14 4.5 C13 5.5 12 8.5 12 8.5Z"
-        fill={body} stroke={c} strokeWidth="1.4" strokeLinejoin="round"/>
-      <circle cx="12" cy="8.5" r="1" fill={c}/>
-    </svg>
-  )
-}
-
-export const ActivityIcon = ({ active, filled }: NavIconProps) => {
-  const c = strokeOf(active, filled)
-  const solid = active && filled
-  return (
-    <svg width="23" height="23" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="9" fill={solid ? c : 'none'} stroke={c} strokeWidth="1.7"/>
-      <path d="M12 7v5l3 3" stroke={solid ? BAR_CUT : c} strokeWidth={solid ? 2 : 1.7} strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  )
-}
+export const HomeIcon = navIcon('home')
+export const ChatsIcon = navIcon('chat')
+export const RewardsIcon = navIcon('rewards')
+export const ActivityIcon = navIcon('activity')
+const ScannerIcon = () => <NavIcon name="scan" size={28} color="#fff" />
 
 const tabs = [
   { id: 'home',     label: 'Home',     path: '/' },
