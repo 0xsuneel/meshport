@@ -210,7 +210,7 @@ export function LedgerInsightsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto lg:max-w-[900px]" style={{ background: 'var(--bg)' }}>
-      <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 22px)', paddingLeft: 20, paddingRight: 20, position: 'sticky', top: 0, zIndex: 20, background: 'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter: 'blur(12px)' }}>
+      <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))', paddingLeft: 20, paddingRight: 20, position: 'sticky', top: 0, zIndex: 20, background: 'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter: 'blur(12px)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 16 }}>
           {!isDesktop && (
             <button onClick={() => navigate('/')} className="back-btn" aria-label="Back">

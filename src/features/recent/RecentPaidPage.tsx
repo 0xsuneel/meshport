@@ -88,7 +88,7 @@ export function RecentPaidPage() {
       <div style={{
         position: 'sticky', top: 0, zIndex: 20,
         background: 'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter: 'blur(20px)',
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 22px)',
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))',
         paddingBottom: 18, paddingLeft: 20, paddingRight: 20,
         minHeight: 44, boxSizing: 'border-box',
         display: 'flex', alignItems: 'center', gap: 12,
