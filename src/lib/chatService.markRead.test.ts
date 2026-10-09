@@ -3,8 +3,8 @@
 // Regression test for the self-chat unread bug (2026-09-03): markRead's PATCH
 // filtered on `sender_id=neq.${myId}`, which matches ZERO rows in a
 // self-conversation (participant_a === participant_b === myId), since every
-// message there — including the payment_received mirror row, whose
-// sender_id is deliberately rewritten to the recipient's id elsewhere — has
+// message there - including the payment_received mirror row, whose
+// sender_id is deliberately rewritten to the recipient's id elsewhere - has
 // sender_id === myId too. Those messages could never be marked read, so a
 // self-chat's unread badge only ever grew, one row per self-payment,
 // forever (reported as "why is my own account showing 29 unread").
@@ -12,13 +12,13 @@
 // Fixed by looking up the conversation's participants first and dropping
 // the sender_id filter entirely when it's a self-chat. Pinned here by
 // asserting the exact PATCH URL markRead builds in each case, via a stubbed
-// global fetch — no real network, no live Supabase project needed.
+// global fetch - no real network, no live Supabase project needed.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // chatService.ts imports @/lib/supabase for its realtime client, which
 // constructs a real Supabase client at module load and throws without env
-// vars — same issue ActivityPage.test.ts hit. markRead never touches
+// vars - same issue ActivityPage.test.ts hit. markRead never touches
 // _sbClient except inside authHeaders' try/catch (which falls back to the
 // anon key on any failure), so a minimal stub is enough here.
 vi.mock('./supabase', () => ({
@@ -46,7 +46,7 @@ function mockFetchSequence(convRow: { participant_a: string; participant_b: stri
   return calls
 }
 
-describe('markRead — self-chat unread fix', () => {
+describe('markRead - self-chat unread fix', () => {
   beforeEach(() => {
     vi.unstubAllGlobals()
   })
@@ -73,7 +73,7 @@ describe('markRead — self-chat unread fix', () => {
     expect(patchCall).toContain(`sender_id=neq.${MY_ID}`)
   })
 
-  it('does not throw if the conversation lookup fails — falls back to the safe (sender-filtered) behavior', async () => {
+  it('does not throw if the conversation lookup fails - falls back to the safe (sender-filtered) behavior', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
       if (url.includes('/conversations?')) throw new Error('network down')
       return { ok: true, json: async () => [] } as any

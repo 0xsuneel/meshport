@@ -1,7 +1,7 @@
 /**
- * bridgeTracker.ts — claim/bridge notification helpers
+ * bridgeTracker.ts - claim/bridge notification helpers
  *
- * IMPORTANT — audit note: this file used to also contain an entire second,
+ * IMPORTANT - audit note: this file used to also contain an entire second,
  * independent claim-tracking system built on a separate `bridge_sessions`
  * table: saveBridgeSession/updateBridgeSession (writes), startBridgePoller
  * (an active setInterval loop hitting Circle's attestation API directly),
@@ -9,13 +9,13 @@
  * own separate status enum ('burning'/'attesting'/'minting'/'arrived'/...).
  *
  * None of the writer/poller functions were called from anywhere in the app
- * — confirmed via a full-codebase audit — but they still shipped in the
+ * - confirmed via a full-codebase audit - but they still shipped in the
  * bundle, including a hardcoded Supabase service_role key (bypasses RLS)
  * used only by those dead functions. That's a real credential exposure
  * regardless of whether the code calling it ever ran, since anyone can read
  * a shipped JS bundle. All of it has been removed.
  *
- * The one thing that WAS live here — notifyClaimArrived — is kept. It's
+ * The one thing that WAS live here - notifyClaimArrived - is kept. It's
  * called from exactly one place (MultichainClaimPage.tsx's Realtime
  * claims.status subscription effect), only after claims.status has
  * genuinely reached 'completed'. claims.status is the single source of
@@ -31,7 +31,7 @@ export function notifyClaimArrived(amount: number, sourceChain: string, timeTake
   const chainLabel = sourceChain.replace(/_Sepolia|_Testnet|_Fuji/g, '').replace(/_/g, ' ')
   const timeStr = timeTakenMs ? ` in ${Math.round(timeTakenMs / 1000)}s` : ''
   useNotificationStore.getState().addNotification({
-    // Stable, claim-derived id — same convention notifyPaymentReceived
+    // Stable, claim-derived id - same convention notifyPaymentReceived
     // already uses. addNotification dedupes by id (both against the live
     // list and its permanent seen-ids ledger), so even if some future
     // caller re-invokes this for the same claim, the store itself refuses
@@ -39,10 +39,10 @@ export function notifyClaimArrived(amount: number, sourceChain: string, timeTake
     // gotten its own guard right.
     id:      claimId ? `claim_${claimId}` : undefined,
     type:    'payment_received',
-    // "Claimed from {chain}" — matches ActivityPage.tsx's label for the
+    // "Claimed from {chain}" - matches ActivityPage.tsx's label for the
     // same claim row (deriveActivityRow / DetailSheet), not the old
     // generic "Funds Arrived!".
-    // A merchant's claim moves Ledger money to Arc — same wording as the Hub.
+    // A merchant's claim moves Ledger money to Arc - same wording as the Hub.
     ...(isMerchantClaim({ createdAt: createdAt ?? new Date().toISOString(), sourceChain })
       ? { title: 'Moved to Arc',
           body:  `$${formatAmount(amount)} USDC from your ${chainLabel} Ledger` }

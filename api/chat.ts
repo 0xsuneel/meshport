@@ -10,14 +10,14 @@ import { sendPushToUser } from './_lib/push'
  * All three are called as POST /api/chat?action=<create|send|touch>
  */
 
-// H-2 FIX: hardcoded Supabase project URL removed — a missing env var now
+// H-2 FIX: hardcoded Supabase project URL removed - a missing env var now
 // fails loudly at request time instead of silently hitting production DB.
 const SUPABASE_URL = (
   process.env.SUPABASE_URL ||
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
   ''
 ).trim()
-if (!SUPABASE_URL) console.error('[chat] SUPABASE_URL is not set — all chat/conversation requests will fail')
+if (!SUPABASE_URL) console.error('[chat] SUPABASE_URL is not set - all chat/conversation requests will fail')
 
 const SERVICE_KEY = (
   process.env.SUPABASE_SERVICE_KEY ||
@@ -56,7 +56,7 @@ async function insertActivity(row: object) {
 }
 
 async function insertMessage(row: any) {
-  // Payment cards (payment_sent / payment_received) carry a payment_tx_hash —
+  // Payment cards (payment_sent / payment_received) carry a payment_tx_hash -
   // upsert on (payment_tx_hash, type) so a client-side retry of this same
   // request (e.g. after a timed-out-but-actually-succeeded first attempt)
   // returns the existing row instead of inserting a duplicate card.
@@ -83,7 +83,7 @@ async function insertMessage(row: any) {
 // participant could post "+1,000,000 USDC" cards and pushes for free.
 // M-2 FIX: expand the Arc RPC fallback list to include all four official Arc
 // Testnet providers (matching api/arc-rpc.js). The previous single legacy
-// endpoint was a single point of failure — a slow or rate-limited node
+// endpoint was a single point of failure - a slow or rate-limited node
 // rejected valid payment-card verifications with 409 instead of retrying.
 // Endpoints read from env first so the authenticated/private URL is preferred
 // without ever being hard-coded into source.
@@ -114,13 +114,13 @@ const PAY_TOKENS: Record<string, { contract: string; decimals: number }> = {
 const pad32 = (a: string) => '0x' + a.toLowerCase().replace(/^0x/, '').padStart(64, '0')
 // B-1 FIX: the previous toUnits used Number.toFixed() which produces
 // floating-point precision artifacts (e.g. (0.1).toFixed(18) is
-// '0.100000000000000005551...') — amounts like 0.1 USDC failed the
+// '0.100000000000000005551...') - amounts like 0.1 USDC failed the
 // >= comparison even when the correct amount was sent. Multiply to integer
 // using BigInt arithmetic via a scaled integer to avoid all FP rounding.
 function toUnits(amount: number, decimals: number): bigint {
   if (!Number.isFinite(amount) || amount < 0) return 0n
   // Scale: split at the decimal point, pad or truncate the fractional part
-  // to exactly `decimals` digits, then parse as a pure integer — no FP math.
+  // to exactly `decimals` digits, then parse as a pure integer - no FP math.
   const str = amount.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: decimals })
   const [intPart, fracPart = ''] = str.split('.')
   const frac = fracPart.padEnd(decimals, '0').slice(0, decimals)
@@ -163,7 +163,7 @@ async function verifyPayment(txHash: string, from: string, to: string, token: st
 // This API writes with the service key, so it must check the caller itself:
 // the request carries the caller's Supabase session (Authorization: Bearer),
 // and a user id is only accepted when that account is linked to exactly this
-// session (users.auth_uid — linked with a wallet signature, see the
+// session (users.auth_uid - linked with a wallet signature, see the
 // bind-session function). Without this, anyone could post messages or fake
 // payment cards as anyone.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -197,7 +197,7 @@ async function isParticipant(conversationId: unknown, userId: string): Promise<{
 
 const NOT_LINKED = { error: 'Not signed in to this account', code: 'not_linked' }
 
-// ── action=create — get-or-create a conversation between two users ─────────
+// ── action=create - get-or-create a conversation between two users ─────────
 async function handleCreateConversation(req: VercelRequest, res: VercelResponse) {
   if (!SERVICE_KEY) {
     return res.status(500).json({ error: 'SUPABASE_SERVICE_KEY not set in Vercel env vars' })
@@ -244,7 +244,7 @@ async function handleCreateConversation(req: VercelRequest, res: VercelResponse)
   return res.status(200).json({ id: row?.id || '', error: null })
 }
 
-// ── action=send — persist a chat message (including payment cards) ─────────
+// ── action=send - persist a chat message (including payment cards) ─────────
 async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
   if (!SERVICE_KEY) {
     console.error('[chat/send] SUPABASE_SERVICE_KEY not set')
@@ -261,7 +261,7 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
   if (!conversationId || !senderId || !content) {
     return res.status(400).json({ error: 'Missing: conversationId, senderId, content' })
   }
-  // Independent checks — run together instead of back to back (each is a
+  // Independent checks - run together instead of back to back (each is a
   // round trip to the database).
   const [isCaller, member] = await Promise.all([callerIs(req, senderId), isParticipant(conversationId, senderId)])
   if (!isCaller) return res.status(403).json(NOT_LINKED)
@@ -271,7 +271,7 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
   if (!PAY_TOKENS[tokenSymbol]) return res.status(400).json({ error: 'Bad token' })
 
   // Payment cards need a real on-chain payment between the two participants.
-  // Wallets always come from the database — never from the request body.
+  // Wallets always come from the database - never from the request body.
   let payFromWallet: string | null = null, payToWallet: string | null = null
   if (type === 'payment_sent') {
     const amountNum = Number(paymentAmount)
@@ -341,13 +341,13 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
       const recipientId = conv.participant_a === senderId ? conv.participant_b : conv.participant_a
 
       // Resolve wallets if not passed
-      // From the database only (verified above) — body-supplied wallets are ignored.
+      // From the database only (verified above) - body-supplied wallets are ignored.
       let senderWallet: string | null = payFromWallet
       let recipientWallet: string | null = payToWallet
       let senderUsername: string | null = null
       // Always look the sender up: the username is needed for the push text
       // and the receive row even when both wallets were passed in (which is
-      // every caller) — otherwise every push read "from someone".
+      // every caller) - otherwise every push read "from someone".
       {
         const userIds = [senderId, recipientId].filter(Boolean)
         const usersRes = await supaFetch(`/users?id=in.(${userIds.join(',')})&select=id,wallet_address,username`, 'GET')
@@ -410,12 +410,12 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
         const recvRow = Array.isArray(recvRes.data) ? recvRes.data[0] : recvRes.data
         console.log('[chat/send] ✓ recipient payment_received id:', recvRow?.id)
 
-        // Push notification — works for any token (USDC, EURC, cirBTC, ...)
+        // Push notification - works for any token (USDC, EURC, cirBTC, ...)
         // since tokenSymbol is generic.
         const fromLabel = senderName ?? 'someone'
         // AWAITED (bounded): a Vercel function is frozen the moment it
         // responds, so an un-awaited push was usually cut off before it
-        // reached the push service — the phone got nothing while the app
+        // reached the push service - the phone got nothing while the app
         // was closed. The sender's UI doesn't wait on this response.
         try {
           const push = await Promise.race([
@@ -441,7 +441,7 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
   return res.status(200).json({ data: msgRow, error: null })
 }
 
-// ── action=touch — update a conversation's last_message preview ────────────
+// ── action=touch - update a conversation's last_message preview ────────────
 async function handleTouchConversation(req: VercelRequest, res: VercelResponse) {
   if (!SERVICE_KEY) {
     console.error('[chat/touch] SUPABASE_SERVICE_KEY not set')
@@ -488,7 +488,7 @@ async function handleTouchConversation(req: VercelRequest, res: VercelResponse) 
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // H-3 FIX: restrict CORS to the configured production origin rather than '*'.
-  // chat handles authenticated, financial operations — wildcard CORS is too broad.
+  // chat handles authenticated, financial operations - wildcard CORS is too broad.
   const allowedOrigin = process.env.ALLOWED_ORIGIN || ''
   const origin = String(req.headers.origin || '')
   const isLocalDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)

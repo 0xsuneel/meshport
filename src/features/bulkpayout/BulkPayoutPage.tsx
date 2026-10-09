@@ -40,12 +40,12 @@ import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 const USDC_DECIMALS   = 6
 
 // ── Multicall3 (canonical deterministic deployment, same address on every EVM chain) ──
-// https://github.com/mds1/multicall — deployed via CREATE2 at this address on 100+ chains.
+// https://github.com/mds1/multicall - deployed via CREATE2 at this address on 100+ chains.
 const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as const
 
 // Only the piece of the Multicall3 ABI we actually call: aggregate3Value.
 // Call3Value.value lets each leg forward native value, and the whole batch is
-// submitted (and mined) as ONE transaction — one txHash covers every recipient.
+// submitted (and mined) as ONE transaction - one txHash covers every recipient.
 const MULTICALL3_ABI = [
   {
     type: 'function',
@@ -106,7 +106,7 @@ function parseCSV(text: string): Array<{ input: string; amount: number }> {
 }
 
 // Digit/decimal sanitizing for the desktop "Amount" native input (mirrors
-// AmountKeypad's own internal sanitizer, which isn't exported) — max one
+// AmountKeypad's own internal sanitizer, which isn't exported) - max one
 // '.', capped at 2 typed decimal places.
 function sanitizeBulkAmount(raw: string): string {
   let cleaned = raw.replace(/[^\d.]/g, '')
@@ -147,7 +147,7 @@ export function BulkPayoutPage() {
   }, [showReviewPinSheet])
   const payoutInFlightRef = useRef(false)
   const [showBulkAmountPad, setShowBulkAmountPad] = useState(false)
-  // Mobile: same amount box as Multichain Transfer — tapping it opens the
+  // Mobile: same amount box as Multichain Transfer - tapping it opens the
   // amount keypad and the form glides up so the box sits just above it.
   const bulkAmountBoxRef = useRef<HTMLDivElement>(null)
   const bulkKeypadLift = useKeypadLift(showBulkAmountPad, bulkAmountBoxRef, !isDesktop)
@@ -171,11 +171,11 @@ export function BulkPayoutPage() {
   // ─── Resume an in-flight bulk payout after a refresh ────────────────────
   // If the page reloads while the Multicall3 tx was still confirming, don't
   // drop back to the empty setup screen with zero record the whole batch
-  // might have already gone out — that's exactly the situation most likely
+  // might have already gone out - that's exactly the situation most likely
   // to make someone re-run the entire payout by accident. There's no
   // reliable way to reconstruct the original per-recipient results list
   // from just a tx hash, so this deliberately doesn't fabricate a fake
-  // results screen — it shows a real "checking" state, then tells the user
+  // results screen - it shows a real "checking" state, then tells the user
   // plainly what happened once the activity table (the actual source of
   // truth) confirms it, rather than guessing at a breakdown it can't know.
   useEffect(() => {
@@ -199,13 +199,13 @@ export function BulkPayoutPage() {
         setProcessing(false)
         setStep('setup')
         showToastMessage(
-          `Your bulk payout of ${trimTrailingZeros(Number(ctx.totalAmount ?? 0).toFixed(4))} USDC to ${ctx.recipientCount ?? 'your'} recipient(s) went through — see Activity for details.`,
+          `Your bulk payout of ${trimTrailingZeros(Number(ctx.totalAmount ?? 0).toFixed(4))} USDC to ${ctx.recipientCount ?? 'your'} recipient(s) went through - see Activity for details.`,
           'success',
         )
         return
       }
       if (attempts >= 8) {
-        setProcessingStatus('Still confirming — check Activity for the latest status.')
+        setProcessingStatus('Still confirming - check Activity for the latest status.')
         return
       }
       setTimeout(poll, 1500)
@@ -236,14 +236,14 @@ export function BulkPayoutPage() {
   // estimate rather than resolvedCount separate transaction fees.
   const estimatedFee   = resolvedCount > 0 ? 0.002 + resolvedCount * 0.0002 : 0
 
-  // Live search for manual row — suppress when user already selected
+  // Live search for manual row - suppress when user already selected
   useEffect(() => {
     const q = rowUsername.trim()
-    // Don't search if user already selected — prevents dropdown reopening
+    // Don't search if user already selected - prevents dropdown reopening
     if (rowSelected) { setRowResults([]); setRowSearching(false); return }
     if (!q) { setRowResults([]); setAddressMatch(null); setAddressChecking(false); return }
     if (isValidAddress(q)) {
-      // Typed a full wallet address — check if it belongs to a registered MeshPort
+      // Typed a full wallet address - check if it belongs to a registered MeshPort
       // user before assuming it's an external wallet.
       setRowResults([]); setAddressMatch(null); setAddressChecking(true)
       const t = setTimeout(() => {
@@ -342,10 +342,10 @@ export function BulkPayoutPage() {
     setProcessing(true); setStep('processing')
     const txResults: TxResult[] = []
     // One BulkPay operation = one idempotency key, generated once per
-    // executePayout invocation (i.e. once per button click) — a genuinely
+    // executePayout invocation (i.e. once per button click) - a genuinely
     // new click gets a fresh key; nothing in this function regenerates it
     // mid-flight. Server-enforced via transaction_intents_wallet_idem_key
-    // UNIQUE(wallet_address, idempotency_key) — see
+    // UNIQUE(wallet_address, idempotency_key) - see
     // docs/BULKPAY_TRANSACTION_INTENT_MIGRATION_AUDIT.md Question B.
     const idempotencyKey = crypto.randomUUID()
 
@@ -363,7 +363,7 @@ export function BulkPayoutPage() {
     setProcessingStatus('Connecting to Arc Testnet...')
     try {
       const account = privateKeyToAccount(activePrivateKey as `0x${string}`)
-      // Arc docs: walletClient WITHOUT chain — chain is passed inline to sendTransaction
+      // Arc docs: walletClient WITHOUT chain - chain is passed inline to sendTransaction
       // pollingInterval: the receipt wait below would otherwise re-check only
       // every 4s (viem's default), though Arc finalizes in under a second.
       const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 250 })
@@ -385,7 +385,7 @@ export function BulkPayoutPage() {
       // transaction_attempt, created server-side BEFORE any broadcast
       // (docs/BULKPAY_TRANSACTION_INTENT_MIGRATION_AUDIT.md /
       // docs/BULKPAY_BROADCAST_RESPONSE_LOSS_AUDIT.md). The nonce this
-      // returns is the ONLY nonce used below — this function no longer
+      // returns is the ONLY nonce used below - this function no longer
       // computes its own authoritative nonce via
       // publicClient.getTransactionCount at all; a client-computed nonce
       // is exactly the value a lost broadcast response leaves nothing to
@@ -396,7 +396,7 @@ export function BulkPayoutPage() {
 
       // PERF FIX: building the multicall calldata is pure/synchronous and
       // does not depend on the intent result (the intent's nonce is only
-      // consumed later, at broadcast time) — moved up so gas estimation
+      // consumed later, at broadcast time) - moved up so gas estimation
       // below can be issued concurrently with intent creation instead of
       // waiting for it first. Same independent-calls fix already proven in
       // arcService.ts's sendUSDC (balance/intent/gas via Promise.all).
@@ -446,13 +446,13 @@ export function BulkPayoutPage() {
       const serverNonce = intentResult.nonce
 
       // ── Send ALL payouts in ONE Multicall3 transaction ─────────────────────────
-      // Arc's USDC is the chain's native currency (see sendUSDC in arcService.ts —
+      // Arc's USDC is the chain's native currency (see sendUSDC in arcService.ts -
       // sends move funds via call value, not an ERC-20 transfer() call).
       // aggregate3Value lets the caller attach native value to the outer tx and have
       // Multicall3 forward a slice of it to each `target` as `target.call{value: v}("")`.
       // Recipients here are plain wallet addresses expecting a plain value transfer
       // (no calldata to execute), so it doesn't matter that msg.sender inside that
-      // call is the Multicall3 contract — Multicall3 holds the value for the
+      // call is the Multicall3 contract - Multicall3 holds the value for the
       // duration of the call because we funded it via msg.value on this same tx.
       // allowFailure is set to false for every leg, so the batch is atomic: either
       // every recipient is paid in this one transaction, or none are and the whole
@@ -460,8 +460,8 @@ export function BulkPayoutPage() {
       let bulkTxHash: `0x${string}` | null = null
       try {
         // calls/totalValue/data/gasEst were computed above, concurrently
-        // with createBulkPayIntent — see the PERF FIX comment there.
-        // Server-issued nonce (above) — NEVER a client-computed
+        // with createBulkPayIntent - see the PERF FIX comment there.
+        // Server-issued nonce (above) - NEVER a client-computed
         // publicClient.getTransactionCount call. See
         // docs/BULKPAY_BROADCAST_RESPONSE_LOSS_AUDIT.md for why an
         // authoritative, server-independently-recorded nonce is what makes
@@ -472,7 +472,7 @@ export function BulkPayoutPage() {
         // Cast: viem's sendTransaction overload resolution (in the installed
         // viem/typescript combination) spuriously demands an EIP-4844 `kzg`
         // field for this plain EIP-1559 transaction. Runtime behavior is
-        // unaffected — this is purely a type-level viem overload issue.
+        // unaffected - this is purely a type-level viem overload issue.
         const txHash = await walletClient.sendTransaction({
           to:    MULTICALL3_ADDRESS,
           data,
@@ -486,7 +486,7 @@ export function BulkPayoutPage() {
 
         // FIX (docs/BULKPAY_TRANSACTION_INTENT_IMPLEMENTATION.md Phase 3):
         // bulkTxHash is now assigned IMMEDIATELY here, before the receipt
-        // wait below — not after it succeeds. sendTransaction returning is
+        // wait below - not after it succeeds. sendTransaction returning is
         // proof a real transaction was broadcast; if the receipt wait times
         // out or throws, the outer catch block (which only has access to
         // the OUTER `bulkTxHash`, not this inner `const txHash`, since the
@@ -495,7 +495,7 @@ export function BulkPayoutPage() {
         bulkTxHash = txHash
 
         // Persist enough to resume this screen if the page gets refreshed
-        // while still confirming — without this, a refresh here drops back
+        // while still confirming - without this, a refresh here drops back
         // to the empty setup screen with no record the batch might have
         // already gone out, the exact situation most likely to make
         // someone re-run the whole payout by accident. Cleared once this
@@ -505,14 +505,14 @@ export function BulkPayoutPage() {
         })
 
         // Persist the real tx_hash server-side, ALSO immediately, ALSO
-        // before the receipt wait — this is what makes the attempt
+        // before the receipt wait - this is what makes the attempt
         // recoverable even if THIS process is killed a moment from now
         // (tab close, network loss), which the local bulkTxHash variable
         // alone cannot help with. Deliberately fire-and-forget from this
         // flow's own perspective: markBulkPayAttemptSubmitted never throws
         // (it catches its own errors and returns {success:false}), and its
         // own failure must never block or fail the user's already-broadcast,
-        // already-real payment — the attempt simply stays server-side
+        // already-real payment - the attempt simply stays server-side
         // unconfirmed for this one call's worth of tx_hash persistence,
         // recoverable later by the existing UNKNOWN/nonce-recovery
         // machinery (docs/BULKPAY_BROADCAST_RESPONSE_LOSS_AUDIT.md) exactly
@@ -526,21 +526,21 @@ export function BulkPayoutPage() {
         const { waitForConfirmation } = await import('@/lib/arcService')
         const conf = await waitForConfirmation(txHash, 60_000)
         if (conf.state === 'failed') throw new Error('Multicall3 transaction reverted')
-        if (conf.state === 'pending') throw new Error('Not confirmed yet — it may still complete. Check Activity before retrying.')
+        if (conf.state === 'pending') throw new Error('Not confirmed yet - it may still complete. Check Activity before retrying.')
 
-        // ONE tx, ONE hash — every recipient references the same bulkTxHash.
+        // ONE tx, ONE hash - every recipient references the same bulkTxHash.
         resolved.forEach(r => txResults.push({ recipient: r, txHash: bulkTxHash, status: 'success' }))
       } catch (e: any) {
         const errMsg = e?.shortMessage || e?.message || 'Bulk multicall send failed'
         // bulkTxHash may now be non-null here (a real broadcast whose
-        // receipt wait failed) — surfaced to txResults exactly as before,
+        // receipt wait failed) - surfaced to txResults exactly as before,
         // now correctly carrying the real hash instead of null whenever a
         // broadcast genuinely happened. The 'failed' label in this
         // client-only TxResult type is retained (not changed to a new
         // 'unknown' status) deliberately: the full CONFIRMING/UNKNOWN
         // state distinction belongs to the server-side state machine
         // (server/transactionStateMachine, already supports it), not this
-        // component's own, narrower UI-result type — introducing a new
+        // component's own, narrower UI-result type - introducing a new
         // client-side status value without the corresponding UI/reconciler
         // work to act on it would be a partial, unsafe change. See
         // docs/BULKPAY_TRANSACTION_INTENT_IMPLEMENTATION.md's "remaining
@@ -548,7 +548,7 @@ export function BulkPayoutPage() {
         resolved.forEach(r => txResults.push({ recipient: r, txHash: bulkTxHash, status: 'failed', error: errMsg }))
       }
 
-      // PERF FIX: fire-and-forget — rewards points are a nice-to-have on top
+      // PERF FIX: fire-and-forget - rewards points are a nice-to-have on top
       // of an already-confirmed batch; awaiting this server round trip
       // before showing results only added latency with no correctness
       // benefit. Internal try/catch still swallows all errors, so this can
@@ -569,7 +569,7 @@ export function BulkPayoutPage() {
         } catch {}
       })()
 
-      // PERF FIX: fire-and-forget — same reasoning as above. The results
+      // PERF FIX: fire-and-forget - same reasoning as above. The results
       // screen already knows which sends succeeded from txResults itself;
       // refreshing the on-chain balance display is a background nicety, not
       // a precondition for showing results.
@@ -585,17 +585,17 @@ export function BulkPayoutPage() {
         }
       })
     }
-    // Save bulk_payment metadata to Supabase — ALL recipients share the SAME
+    // Save bulk_payment metadata to Supabase - ALL recipients share the SAME
     // Multicall3 transaction hash (bulkTxHash), since they were paid atomically
     // in one on-chain transaction rather than one tx each.
     try {
       const successTxs = txResults.filter((t: any) => t.status === 'success')
       if (successTxs.length > 0) {
         const totalSent = successTxs.reduce((sum: number, t: any) => sum + t.recipient.amount, 0)
-        // Every entry in successTxs carries the identical hash — pull it once.
+        // Every entry in successTxs carries the identical hash - pull it once.
         const bulkTxHash = successTxs[0].txHash || ''
 
-        // PERF FIX: fire-and-forget — this is a best-effort analytics/
+        // PERF FIX: fire-and-forget - this is a best-effort analytics/
         // metadata row and its failure was already swallowed (console.warn
         // only, no effect on correctness); awaiting it before showing
         // results only added latency with no benefit. Internal try/catch
@@ -629,12 +629,12 @@ export function BulkPayoutPage() {
             Activity.bulk({
               walletAddress:  bwa2,
               userId:         buser2?.id,
-              // Store the raw on-chain hash — do NOT prefix it (e.g. `bulk_0x…`).
+              // Store the raw on-chain hash - do NOT prefix it (e.g. `bulk_0x…`).
               // The prefix was being saved as the actual tx_hash, so both the
               // displayed hash and the explorer link (built from this same
               // value) ended up wrong / broken. Activity.bulk() itself now adds
               // its own bulk_/bulkrecv_ prefix internally, AFTER computing the
-              // explorer URL from this clean value — see its own comment.
+              // explorer URL from this clean value - see its own comment.
               txHash:         bulkTxHash,
               amount:         totalSent,
               recipientCount: successTxs.length,
@@ -643,31 +643,31 @@ export function BulkPayoutPage() {
                 // NOTE (2026-09-02): previously labeled yourself "You" here
                 // when you were one of your own batch's recipients. Per
                 // product decision, the SENT-side breakdown should read
-                // like an ordinary batch payment — no self-callout — since
+                // like an ordinary batch payment - no self-callout - since
                 // it's a summary of who got paid, not a self-transfer in
                 // the send/receive sense. The self indication now shows
                 // only on the RECEIVE side (see bulkSubtitle's `from Self`
                 // in ActivityPage.tsx's deriveActivityRow, driven by that
                 // row's own counterpartyAddress === walletAddress check on
-                // the bulkrecv_ leg — untouched by this change).
+                // the bulkrecv_ leg - untouched by this change).
                 return {
                   label: t.recipient.username
                     ? (t.recipient.username.endsWith('.arc') ? t.recipient.username : t.recipient.username + '.arc')
                     : t.recipient.walletAddress,
                   amount: t.recipient.amount || 0,
-                  // Same bulkTxHash for every recipient — Alice, Bob, and Carol all
+                  // Same bulkTxHash for every recipient - Alice, Bob, and Carol all
                   // point at the one Multicall3 transaction.
                   txHash: bulkTxHash,
                 }
               }),
             }).catch(() => {})
 
-            // Write a receiver-side record to EACH paid recipient's own history too —
+            // Write a receiver-side record to EACH paid recipient's own history too -
             // shows the amount THEY were allocated (not the payer's total), who paid
-            // them, and the purpose text — not just a summary on the payer's side.
+            // them, and the purpose text - not just a summary on the payer's side.
             // All of these also reference the same bulkTxHash.
             //
-            // Including yourself, if you're one of the recipients — previously
+            // Including yourself, if you're one of the recipients - previously
             // silently dropped by a key collision with the sent-summary row
             // above (both used the exact same unprefixed tx_hash on the same
             // wallet); Activity.bulk()/bulkReceived() now use distinct
@@ -715,7 +715,7 @@ export function BulkPayoutPage() {
   // split across a persistent left column (recipients + summary) and a
   // step-driven right column (purpose → review → processing → results),
   // with the action buttons in normal document flow at the bottom of
-  // whichever column they belong to instead of position:fixed — the fixed
+  // whichever column they belong to instead of position:fixed - the fixed
   // bar was anchored to the whole content area (not the page's own
   // column/maxWidth), which is why it rendered outside/misaligned on
   // desktop's wider layout.
@@ -747,7 +747,7 @@ export function BulkPayoutPage() {
         <div className={isDesktop ? "p-4 space-y-2 flex-shrink-0" : "p-4 space-y-2"}>
           <div className="relative">
             {rowPending && rowSelected ? (
-              // Selected state — show green badge, amount input below
+              // Selected state - show green badge, amount input below
               <div className="flex items-center gap-2 bg-success/10 border border-success/30 rounded-xl px-4 py-3.5">
                 <CheckCircle className="w-4 h-4 text-success flex-shrink-0" />
                 <span className="flex-1 text-base text-success truncate">
@@ -786,7 +786,7 @@ export function BulkPayoutPage() {
                       addUser(u, amt)
                     } else {
                       setRowPending(u)
-                      setRowUsername('')      // clear input — prevents re-triggering search
+                      setRowUsername('')      // clear input - prevents re-triggering search
                       setRowResults([])
                       setRowSearching(false)
                       setRowSelected(true)   // shows green badge
@@ -807,7 +807,7 @@ export function BulkPayoutPage() {
               </div>
             )}
 
-            {/* Wallet address entered — checking / MeshPort match / external wallet */}
+            {/* Wallet address entered - checking / MeshPort match / external wallet */}
             {isValidAddress(rowUsername.trim()) && rowResults.length === 0 && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border rounded-2xl z-20 shadow-xl">
                 {addressChecking ? (
@@ -816,7 +816,7 @@ export function BulkPayoutPage() {
                     <p className="text-xs text-text-secondary">Checking if this is an MeshPort wallet...</p>
                   </div>
                 ) : addressMatch ? (
-                  // Address belongs to a registered MeshPort user — show their username, not "External Wallet"
+                  // Address belongs to a registered MeshPort user - show their username, not "External Wallet"
                   <button onClick={() => {
                       const amt = parseFloat(rowAmount)
                       if (amt && amt > 0) {
@@ -871,7 +871,7 @@ export function BulkPayoutPage() {
             )}
           </div>
 
-          {/* Mobile only — desktop's live amount input is the
+          {/* Mobile only - desktop's live amount input is the
               always-open AmountKeypad card below instead of a
               tap-to-reveal box; its own Add button moves below the
               card there too (see the isDesktop block after it). */}
@@ -905,7 +905,7 @@ export function BulkPayoutPage() {
           )}
           {isDesktop ? (
             // Same bare-box + overlaid Max pill treatment as Multichain
-            // Transfer's amount box (centered value, plain bordered box —
+            // Transfer's amount box (centered value, plain bordered box -
             // not AmountKeypad's own elevated/shadowed desktop card).
             <div style={{ position: 'relative' }}>
               <div style={{
@@ -914,7 +914,7 @@ export function BulkPayoutPage() {
                 padding: '28px 20px', minHeight: 108, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
               }}>
                 {/* $ pinned to a fixed left inset, not inline before the
-                    input — keeps the digits truly centered in the box no
+                    input - keeps the digits truly centered in the box no
                     matter how many are typed. */}
                 <span style={{ position: 'absolute', left: 20, fontSize: 34, fontWeight: 700, color: rowAmount ? 'var(--text-primary)' : 'var(--text-muted)', pointerEvents: 'none' }}>$</span>
                 <input
@@ -973,16 +973,16 @@ export function BulkPayoutPage() {
         </div>
       )}
 
-      {/* Added recipients — shown under whichever input mode is active, for
+      {/* Added recipients - shown under whichever input mode is active, for
           both manual entries and CSV imports, so the full list with amounts
           is always visible right below where you just added them.
           Desktop: given its own bounded, scrollable box (same pattern
           reviewContent's recipient list already uses) instead of relying on
-          the left column's ambient overflow — a CSV import can add far more
+          the left column's ambient overflow - a CSV import can add far more
           rows than fit on screen, and without this the list just grew the
           whole column past the viewport with no reliable way to reach the
           rows (or the Purpose/Summary/actions below it) further down.
-          Mobile unchanged — the page itself is the scroll container there,
+          Mobile unchanged - the page itself is the scroll container there,
           so nesting a second one would only fight it. */}
       {recipients.length > 0 && (
         <div
@@ -1019,7 +1019,7 @@ export function BulkPayoutPage() {
                   </div>
                 ) : (
                   <p className="text-xs text-text-secondary truncate flex-1">
-                    {isExternal(r) ? 'External Wallet' : r.status === 'unresolved' ? r.error : '—'}
+                    {isExternal(r) ? 'External Wallet' : r.status === 'unresolved' ? r.error : '-'}
                   </p>
                 )}
               </div>
@@ -1177,7 +1177,7 @@ export function BulkPayoutPage() {
     </>
   )
 
-  // Action-button rows — same JSX, mobile places them inside the fixed
+  // Action-button rows - same JSX, mobile places them inside the fixed
   // bottom bar (unchanged), desktop places them in-flow at the bottom of
   // the right column's current step.
   const setupActionButtons = recipients.length === 0 ? (
@@ -1248,7 +1248,7 @@ export function BulkPayoutPage() {
   )
 
   return (
-    // Desktop: overflow:visible, not hidden — each column already manages
+    // Desktop: overflow:visible, not hidden - each column already manages
     // its own scroll (overflowY:'auto' below), and a hard-clipping root on
     // top of that was the same bug already found and fixed on Swap/Pay/
     // Multichain Claim: it clipped the Cancel/Review Payout buttons at the
@@ -1285,14 +1285,14 @@ export function BulkPayoutPage() {
         <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
           {/* BUG FIX (2026-09-03): this column used to be overflowY: 'auto'
               itself, WHILE the recipient list inside addRecipientsSection
-              also had its own overflow-y-auto + maxHeight: 40vh — two
+              also had its own overflow-y-auto + maxHeight: 40vh - two
               nested scroll containers competing for the same wheel input.
               With few recipients (list shorter than 40vh, nothing to
               scroll internally), every scroll gesture fell through to
               THIS column instead, dragging the "Add Recipient" header/
               form out of view and giving no reliable way to see how many
               people had actually been added. Now `overflow: hidden` here
-              — addRecipientsSection manages its own internal scroll (see
+              - addRecipientsSection manages its own internal scroll (see
               its own flex-1/min-h-0 structure), so the recipient list is
               the ONE genuine scroll region, and the input form above it
               stays fixed/visible while it scrolls. */}
@@ -1396,7 +1396,7 @@ export function BulkPayoutPage() {
       </>
       )}
 
-      {/* ── Review step: Pay PIN sheet / dialog — opens only when Pay is tapped ── */}
+      {/* ── Review step: Pay PIN sheet / dialog - opens only when Pay is tapped ── */}
       <AnimatePresence>
         {showReviewPinSheet && (() => {
           const keypadContent = (
@@ -1407,7 +1407,7 @@ export function BulkPayoutPage() {
                 length={6}
                 error={!!passError}
                 onComplete={async () => {
-                  // Synchronous guard — prevents a double-fire from triggering
+                  // Synchronous guard - prevents a double-fire from triggering
                   // two separate batch payout transactions.
                   if (payoutInFlightRef.current) return
                   payoutInFlightRef.current = true
@@ -1446,7 +1446,7 @@ export function BulkPayoutPage() {
             </DesktopTransactionAuthDialog>
           ) : (
             <>
-              {/* Plain dim — no backdrop blur (Android re-blurs it every frame of the fade). */}
+              {/* Plain dim - no backdrop blur (Android re-blurs it every frame of the fade). */}
               <PopupOpen key="bp-popup-open" />
               <motion.div key="bp-pass-dim" transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.24 } }}
                 className="absolute inset-0 bg-black/70 z-40"
@@ -1462,7 +1462,7 @@ export function BulkPayoutPage() {
         })()}
       </AnimatePresence>
 
-      {/* How it works tooltip — tap anywhere to dismiss */}
+      {/* How it works tooltip - tap anywhere to dismiss */}
       <AnimatePresence>
         {showHowItWorks && (
           <motion.div

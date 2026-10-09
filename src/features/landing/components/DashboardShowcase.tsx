@@ -11,7 +11,7 @@ export function DashboardShowcase() {
             One interface, every screen size
           </h2>
           <p className="mt-4 text-[15.5px] leading-relaxed text-text-secondary">
-            The same premium experience on desktop and mobile — nothing feels like an afterthought.
+            The same premium experience on desktop and mobile - nothing feels like an afterthought.
           </p>
         </Reveal>
 

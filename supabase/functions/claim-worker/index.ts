@@ -245,7 +245,7 @@ async function findMintAndWithdrawLog(recipient: string, amountUsdc: number): Pr
   try {
     logs = await fetchLogsBounded(filter)
   } catch (e) {
-    console.error('[claim-worker] MintAndWithdraw scan failed (non-fatal — falling back to Transfer-based detection):', e instanceof Error ? e.message : e)
+    console.error('[claim-worker] MintAndWithdraw scan failed (non-fatal - falling back to Transfer-based detection):', e instanceof Error ? e.message : e)
     return null
   }
   if (logs.length === 0) return null
@@ -284,11 +284,11 @@ async function findIncomingMintByAmount(recipient: string, amountUsdc: number): 
   const wrapperFilter = { address: ARC_USDC_CONTRACT,   topics: [TRANSFER_TOPIC0, null, recipientTopic] }
   const [nativeLogsRaw, wrapperLogsRaw] = await Promise.all([
     fetchLogsBounded(nativeFilter).catch(e => {
-      console.error('[claim-worker] native-emitter mint scan failed (non-fatal — wrapper-contract scan below still applies):', e instanceof Error ? e.message : e)
+      console.error('[claim-worker] native-emitter mint scan failed (non-fatal - wrapper-contract scan below still applies):', e instanceof Error ? e.message : e)
       return [] as any[]
     }),
     fetchLogsBounded(wrapperFilter).catch(e => {
-      console.error('[claim-worker] wrapper-contract mint scan failed (non-fatal — native-emitter scan above still applies):', e instanceof Error ? e.message : e)
+      console.error('[claim-worker] wrapper-contract mint scan failed (non-fatal - native-emitter scan above still applies):', e instanceof Error ? e.message : e)
       return [] as any[]
     }),
   ])
@@ -354,7 +354,7 @@ function getServiceRoleKey(): string {
     }
   }
   throw new Error(
-    'No Supabase service role key found — checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS. ' +
+    'No Supabase service role key found - checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS. ' +
     'Set one of these as a project secret.'
   )
 }
@@ -416,7 +416,7 @@ function serializeError(e: unknown): string {
   try {
     const j = JSON.stringify(e)
     if (j && j !== '{}') return j
-  } catch { /* circular or non-serializable — fall through */ }
+  } catch { /* circular or non-serializable - fall through */ }
   return String(e)
 }
 // ── 2026-09-20 duplicate-mint-collision fix ─────────────────────────────────
@@ -424,20 +424,20 @@ function serializeError(e: unknown): string {
 // wallet_address + SAME amount, submitted close together from different
 // source chains, can both match the SAME destination mint via the
 // amount-fuzzy fallbacks (findMintAndWithdrawLog / findIncomingMintByAmount)
-// — those matchers have no per-claim identity stronger than wallet+amount.
+// - those matchers have no per-claim identity stronger than wallet+amount.
 // The pre-write "already used?" SELECT is a soft check with a real race
 // window: two concurrent claim-worker invocations (single-mode webhook +
 // sweep, or two overlapping sweeps) can both pass the SELECT before either
-// commits, then both attempt the UPDATE — one wins, the other hits Postgres
+// commits, then both attempt the UPDATE - one wins, the other hits Postgres
 // unique constraint `claims_destination_tx_hash_unique` (code 23505).
 // Previously that error just fell into the outer catch, which persists a
-// generic diagnostic and returns — next sweep pass re-finds the SAME
+// generic diagnostic and returns - next sweep pass re-finds the SAME
 // already-claimed tx via the SAME amount-fuzzy match and repeats the same
 // failing write forever. The claim then sits in 'settling' until
 // SETTLING_TIMEOUT_MS falsely marks it 'failed', even though its OWN mint
 // may have already landed on-chain separately.
 // Fix: detect this specific constraint by name/code and treat it as
-// "this candidate belongs to a different claim" rather than a fatal error —
+// "this candidate belongs to a different claim" rather than a fatal error -
 // callers now fall through to the next detection method / next candidate
 // instead of retrying the identical doomed write.
 function isDuplicateDestinationTxError(e: unknown): boolean {
@@ -461,7 +461,7 @@ async function updateClaim(supabase: SupabaseClient, claimId: string, patch: Rec
   const { error } = await supabase.from('claims').update(patch).eq('id', claimId)
   if (error) {
     if (isDuplicateDestinationTxError(error)) {
-      // Not a fatal worker error — a different claim already owns this
+      // Not a fatal worker error - a different claim already owns this
       // destination_tx_hash. Let the caller decide how to move on (next
       // candidate / next detection method) instead of persisting a scary
       // diagnostic and throwing.
@@ -510,8 +510,8 @@ async function settleClaim(supabase: SupabaseClient, claim: Claim) {
 }
 // Gasless bridges (MeshPortBridgeRouter) burn with Circle's Forwarding
 // Service hook, so Circle itself mints on Arc and Iris reports that mint as
-// forwardTxHash. That is the exact destination tx for THIS message — no log
-// scanning or amount matching needed — so it is checked first.
+// forwardTxHash. That is the exact destination tx for THIS message - no log
+// scanning or amount matching needed - so it is checked first.
 async function findForwardedMint(claim: Claim): Promise<CctpReceiveLog | null> {
   const domain = CCTP_DOMAINS[claim.source_chain]
   if (domain === undefined || !claim.tx_hash) return null
@@ -564,11 +564,11 @@ async function confirmArrival(supabase: SupabaseClient, claim: Claim) {
       }
     }
 
-    // Nonce-based match FIRST — decoded straight from this claim's own CCTP
+    // Nonce-based match FIRST - decoded straight from this claim's own CCTP
     // message, so it's collision-proof by construction (unlike the
     // amount-fuzzy matchers below, which only know wallet+amount and can
     // pick up a DIFFERENT claim's already-consumed mint when two claims for
-    // the same wallet+amount are in flight together — see the 2026-09-20
+    // the same wallet+amount are in flight together - see the 2026-09-20
     // fix note above updateClaim for the full root-cause writeup).
     if (claim.message_hash) {
       const decoded = decodeCctpMessageNonce(claim.message_hash)
@@ -592,10 +592,10 @@ async function confirmArrival(supabase: SupabaseClient, claim: Claim) {
             return
           } catch (e) {
             if (!isDuplicateDestinationTxError(e)) throw e
-            // Own nonce matched a tx some other claim already owns — should
+            // Own nonce matched a tx some other claim already owns - should
             // be effectively impossible (nonce is unique per message), but
             // fall through defensively rather than loop forever on it.
-            await persistErrorBestEffort(supabase, claim.id, `nonce-matched tx ${log.transactionHash} already claimed by another row — investigate`)
+            await persistErrorBestEffort(supabase, claim.id, `nonce-matched tx ${log.transactionHash} already claimed by another row - investigate`)
           }
         }
       }
@@ -627,13 +627,13 @@ async function confirmArrival(supabase: SupabaseClient, claim: Claim) {
           return
         } catch (e) {
           if (!isDuplicateDestinationTxError(e)) throw e
-          // Lost the race to another claim for this same wallet+amount —
+          // Lost the race to another claim for this same wallet+amount -
           // don't keep retrying the same collision. Wait for THIS claim's
           // own mint (nonce-based match above will pick it up once it's
           // found) instead of hammering an already-claimed tx every sweep.
           await persistErrorBestEffort(
             supabase, claim.id,
-            `amount-match collision: ${mawLog.transactionHash} already claimed by another row (same wallet+amount) — waiting for own mint`
+            `amount-match collision: ${mawLog.transactionHash} already claimed by another row (same wallet+amount) - waiting for own mint`
           )
           return
         }
@@ -675,7 +675,7 @@ async function confirmArrival(supabase: SupabaseClient, claim: Claim) {
       } catch (e) {
         if (!isDuplicateDestinationTxError(e)) throw e
         // Race: another claim's write landed between our SELECT and our
-        // UPDATE. Same fix as findMintAndWithdrawLog above — move on to the
+        // UPDATE. Same fix as findMintAndWithdrawLog above - move on to the
         // next ranked candidate instead of throwing out of the loop.
         skippedAlreadyUsed.push(`${mint.transactionHash}->(race)`)
         continue
@@ -718,7 +718,7 @@ const CHAIN_EXPLORER: Record<string, string> = {
 }
 async function notifyClaimComplete(supabase: SupabaseClient, claim: Claim, amount: number): Promise<void> {
   if (!PUSH_INTERNAL_SECRET) {
-    console.warn('[claim-worker] PUSH_INTERNAL_SECRET not set — skipping completion push, claim itself is unaffected')
+    console.warn('[claim-worker] PUSH_INTERNAL_SECRET not set - skipping completion push, claim itself is unaffected')
     return
   }
   try {
@@ -728,7 +728,7 @@ async function notifyClaimComplete(supabase: SupabaseClient, claim: Claim, amoun
       .eq('wallet_address', claim.wallet_address.toLowerCase())
       .maybeSingle()
     if (error || !user?.id) return
-    // A merchant's claim moves Ledger money to Arc — same wording as the Hub.
+    // A merchant's claim moves Ledger money to Arc - same wording as the Hub.
     const { data: m } = await supabase.from('merchant_applications').select('status')
       .eq('wallet_address', claim.wallet_address.toLowerCase()).eq('status', 'approved').limit(1)
     const merchant = (m?.length ?? 0) > 0
@@ -856,7 +856,7 @@ async function fetchDueClaims(supabase: SupabaseClient, claimId?: string): Promi
     all.push(...(data as Claim[]))
     if (data.length < FETCH_PAGE_SIZE) break
     offset += FETCH_PAGE_SIZE
-    if (offset > 10_000) break // sane upper bound — this many non-terminal claims would indicate something else is wrong
+    if (offset > 10_000) break // sane upper bound - this many non-terminal claims would indicate something else is wrong
   }
   return all
 }
@@ -912,10 +912,10 @@ Deno.serve(async (req: Request) => {
   try { body = await req.json() } catch { /* sweep may send no body */ }
   const mode = body?.mode === 'single' ? 'single' : 'sweep'
   // Cron-only gate on the sweep path (unchanged: mode:'single' has never had
-  // an auth check here, and this doesn't add one — kicking processing of a
+  // an auth check here, and this doesn't add one - kicking processing of a
   // specific already-submitted claimId grants no privilege beyond what that
   // claim can already do). Key-migration cutover: accepts CRON_SECRET or the
-  // legacy service_role key — see _shared/cronAuth.ts.
+  // legacy service_role key - see _shared/cronAuth.ts.
   if (mode === 'sweep' && !isCronOrLegacyServiceCaller(req)) {
     return json({ success: false, error: 'Forbidden' }, 403)
   }

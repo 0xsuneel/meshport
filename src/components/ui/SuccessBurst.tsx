@@ -3,8 +3,8 @@ import { motion } from 'framer-motion'
 /**
  * Shared "hero" visual for every payment-success screen (Send/Pay, Chat Pay,
  * Swap, Multichain Transfer, Multichain Claim). Each variant choreographs a
- * different lead-in so the five screens read as their own moment — sent,
- * exchanged, bridged, claimed — instead of one template reused everywhere,
+ * different lead-in so the five screens read as their own moment - sent,
+ * exchanged, bridged, claimed - instead of one template reused everywhere,
  * while keeping the same checkmark payoff, footprint, and container size so
  * every screen still reads as one consistent UI (callers keep their own
  * heading/details-card/buttons unchanged, which now share identical
@@ -42,7 +42,7 @@ export function SuccessBurst({ variant, height = 170, circle = 96 }: { variant: 
   const stroke = circle >= 94 ? 3 : 2.6
 
   if (variant === 'send') {
-    // Sent — an arrow streaks out and away while two rings ping outward,
+    // Sent - an arrow streaks out and away while two rings ping outward,
     // reading unambiguously as "this left and is on its way."
     return (
       <div style={{ position: 'relative', width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -69,7 +69,7 @@ export function SuccessBurst({ variant, height = 170, circle = 96 }: { variant: 
   }
 
   if (variant === 'chat') {
-    // Coin drop — small coin-colored dots tumble in from above and settle
+    // Coin drop - small coin-colored dots tumble in from above and settle
     // around the circle, like change landing after a payment.
     const coins = [
       { x: -46, delay: 0.05 }, { x: -18, delay: 0.16 }, { x: 14, delay: 0.1 }, { x: 44, delay: 0.22 },
@@ -90,7 +90,7 @@ export function SuccessBurst({ variant, height = 170, circle = 96 }: { variant: 
   }
 
   if (variant === 'swap') {
-    // Rotation seal — an arc of dots spins a full turn into place and the
+    // Rotation seal - an arc of dots spins a full turn into place and the
     // checkmark itself turns in with them, reading as an exchange rather
     // than a simple pop-in.
     const arcDots = Array.from({ length: 8 }, (_, i) => {
@@ -119,7 +119,7 @@ export function SuccessBurst({ variant, height = 170, circle = 96 }: { variant: 
   }
 
   if (variant === 'transfer') {
-    // Bridge crossing — a dashed line draws in first, then chain-colored
+    // Bridge crossing - a dashed line draws in first, then chain-colored
     // dots travel along it and converge into the circle, echoing funds
     // hopping across a bridge into Arc.
     const corners = [
@@ -146,7 +146,7 @@ export function SuccessBurst({ variant, height = 170, circle = 96 }: { variant: 
     )
   }
 
-  // claim — settle drop: particles fall from above and land with a soft
+  // claim - settle drop: particles fall from above and land with a soft
   // bounce while the circle itself rises to meet them, echoing funds
   // arriving and settling into the wallet.
   const drops = [

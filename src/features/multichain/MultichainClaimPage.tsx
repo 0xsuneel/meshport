@@ -1,12 +1,12 @@
 /**
- * MultichainClaimPage — Single-action claim flow
+ * MultichainClaimPage - Single-action claim flow
  *
  * User flow (ONE action):
  *   1. Page loads → shows Arc balance + claimable funds per chain
  *   2. User selects chain(s) → Claim button updates total dynamically
  *   3. User enters 6-digit passcode (if set)
  *   4. Tap Claim → bridge + Arc credit happen automatically
- *   5. Done — Arc balance updated, activity recorded
+ *   5. Done - Arc balance updated, activity recorded
  *
  * No deposit step. No wallet balance tab. No second confirmation.
  * 
@@ -97,7 +97,7 @@ const RADII = {
 }
 
 // ─── Chain metadata ────────────────────────────────────────────────────────────
-// All logos are local files under public/logos/chains/ — sourced from
+// All logos are local files under public/logos/chains/ - sourced from
 // @web3icons/core (MIT licensed, actively maintained, verified authentic by
 // cross-checking brand colors) and downloaded ahead of time so nothing here
 // hotlinks an external URL. Pharos, EDGE, and Morph weren't in web3icons
@@ -115,7 +115,7 @@ const CHAIN_META: Record<string, { label: string; color: string; short: string; 
   Sonic_Testnet:       { label: 'Sonic',       color: '#FF6B2B', short: 'S',    logo: '/logos/chains/sonic.svg' },
   Unichain_Sepolia:    { label: 'Unichain',    color: '#FF007A', short: 'UNI',  logo: '/logos/chains/unichain.svg' },
   World_Chain_Sepolia: { label: 'World Chain', color: '#1B1B1B', short: 'WLD',  logo: '/logos/chains/world.svg' },
-  // Added to bring Claim up to parity with Transfer's 21-chain list — these
+  // Added to bring Claim up to parity with Transfer's 21-chain list - these
   // 10 were completely missing, meaning funds could be sent TO these chains
   // but never claimed back FROM them.
   Linea_Sepolia:       { label: 'Linea',       color: '#121212', short: 'LINEA', logo: '/logos/chains/linea.svg' },
@@ -131,7 +131,7 @@ const CHAIN_META: Record<string, { label: string; color: string; short: string; 
 }
 
 // Digit/decimal sanitizing for the desktop "Amount" native input (mirrors
-// AmountKeypad's own internal sanitizer, which isn't exported) — max one
+// AmountKeypad's own internal sanitizer, which isn't exported) - max one
 // '.', capped at 2 typed decimal places.
 function sanitizeClaimAmount(raw: string): string {
   let cleaned = raw.replace(/[^\d.]/g, '')
@@ -215,7 +215,7 @@ function toSdkChainId(internalId: string): string {
 
 // CCTP V2's depositForBurn requires maxFee < amount at the contract level,
 // and real quoted fees on routes like Monad/Polygon Amoy have been seen
-// running close to $1.40 — $2.00 leaves real headroom. Was three separate
+// running close to $1.40 - $2.00 leaves real headroom. Was three separate
 // hardcoded `2.00`/`2.00` literals (the amount screen's desktop Confirm
 // button, its mobile keypad onDone, and executeClaim's own defensive
 // re-check) that could silently drift apart; one constant now, shared by
@@ -224,7 +224,7 @@ const MIN_CLAIM_AMOUNT = 2.00
 
 const _arcProviderCache = new Map<string, any>()
 
-/** The claim adapter — for merchant auto-collect. */
+/** The claim adapter - for merchant auto-collect. */
 export async function buildClaimAdapter(privateKey: string) {
   const { createEthersAdapterFromPrivateKey } = await import('@circle-fin/adapter-ethers-v6')
   return buildAdapter(createEthersAdapterFromPrivateKey, privateKey)
@@ -339,27 +339,27 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const settingsMap = useSettingsStore((s) => s.settings)
   const settingsLoaded = useSettingsStore((s) => s.loaded)
   const loadSettings = useSettingsStore((s) => s.load)
-  // Must call this — isChainEnabledForClaim fails OPEN (every chain reads
+  // Must call this - isChainEnabledForClaim fails OPEN (every chain reads
   // as enabled) whenever a row isn't in the store yet, which is correct
   // while settings are still genuinely loading but was silently permanent
   // if nothing else had already triggered load() first. This page used to
   // only ever READ settingsMap/settingsLoaded reactively, assuming some
   // other already-mounted page (e.g. Home) had called load() before this
-  // one mounted. Reached directly — a deep link, a page refresh while
+  // one mounted. Reached directly - a deep link, a page refresh while
   // already on /multichain-claim, or just being the first page opened in
-  // the session — settingsLoaded stayed false for the entire session, and
+  // the session - settingsLoaded stayed false for the entire session, and
   // every admin-disabled chain's balance was scanned and counted into
   // claimableTotal indefinitely instead of just for one brief render.
   useEffect(() => { loadSettings() }, [loadSettings])
 
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // Deep-link from the Hub's "Processing Claims" list ("Tap to view") —
+  // Deep-link from the Hub's "Processing Claims" list ("Tap to view") -
   // jumps straight into the tracking screen for an already-submitted claim.
   //
   // Checked in two places: router `location.state` (set by the Hub's
   // navigate call) AND the `?claim=` URL param (set both by the Hub and by
-  // this page itself once a claim starts being tracked — see the
+  // this page itself once a claim starts being tracked - see the
   // URL-mirroring effect below). location.state is not reliable across a
   // hard refresh in every environment this app runs in; the URL is. This
   // is what was causing "Track Progress" to silently drop back to the
@@ -370,13 +370,13 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     (searchParams.get('claim') || undefined)
 
   // Opened from a Hub chain row that already knows the balance: start right
-  // on the amount form (like Transfer) — no "opening…" spinner, no slide-in.
+  // on the amount form (like Transfer) - no "opening…" spinner, no slide-in.
   // The balance scan still runs, quietly, in the background.
   const prefilledFromHub = !trackClaimIdFromHub && !!initialChain && (initialBalance ?? 0) > 0
   const [step,           setStep]          = useState<Step>(() => trackClaimIdFromHub ? 'confirm' : prefilledFromHub ? 'select' : 'loading')
   const [confirmPhase,   setConfirmPhase]  = useState<ConfirmPhase>(() => trackClaimIdFromHub ? 'tracking' : 'processing')
   // The live view that was up before 'done' (processing/submitted or
-  // tracking) — kept on screen underneath the success flash so the screen is
+  // tracking) - kept on screen underneath the success flash so the screen is
   // never blank while the flash's circle grows.
   const lastLivePhase = useRef<ConfirmPhase>(confirmPhase)
   if (confirmPhase !== 'done') lastLivePhase.current = confirmPhase
@@ -398,9 +398,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   useEffect(() => () => onFocusChange?.('none'), [])
 
   // ── Desktop-only: Claimed History (right column) ────────────────────────
-  // Real data — claims are NOT written to the `activity` table by this
+  // Real data - claims are NOT written to the `activity` table by this
   // page's flow (they go through the server-owned `claims` table via
-  // submitClaim()/claim-worker instead — see claimService.ts), so this
+  // submitClaim()/claim-worker instead - see claimService.ts), so this
   // reads from fetchClaimsForWallet, the same source MultichainPage's hub
   // already uses for its own claims list. Skipped entirely on mobile;
   // re-fetched once a claim finishes so it shows up without a page reload.
@@ -419,11 +419,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // Device/browser back button on Track Progress → Multichain Hub, matching
   // the in-app back arrow. confirmPhase is component state, not a route, so
   // without this a back-press would just unwind normal browser history to
-  // whatever page was open before this one — not necessarily the Hub, and
+  // whatever page was open before this one - not necessarily the Hub, and
   // not consistent with what the visible back arrow already does here.
   useEffect(() => {
     // Inside the Hub, the Hub itself owns the device back button (it closes
-    // this inline view) — see MultichainPage's sub-view history handling.
+    // this inline view) - see MultichainPage's sub-view history handling.
     if (embedded) return
     if (confirmPhase !== 'tracking') return
     window.history.pushState({ trackProgress: true }, '')
@@ -433,14 +433,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   }, [confirmPhase, navigate, embedded])
 
   // Server-owned claim rows created for this session, keyed by source chain.
-  // These are the single source of truth once populated — the worker keeps
+  // These are the single source of truth once populated - the worker keeps
   // advancing them via Supabase regardless of what this page/tab does.
   const [claimRecords,   setClaimRecords]  = useState<Array<{ chainId: string; claimId: string; initialClaim?: ServerClaim | null }>>([])
   const [claimsByStatus, setClaimsByStatus] = useState<Record<string, ServerClaim>>({})
   // Chains claimed via Unified Balance this session. UB claims have no
   // `claims` row, so Track Progress follows their live chainProgress instead.
   const [ubClaimChains,  setUbClaimChains] = useState<string[]>([])
-  // Last non-error stage of the first chain — lets the stepper mark the step
+  // Last non-error stage of the first chain - lets the stepper mark the step
   // that actually failed instead of the first one.
   const lastClaimStageRef = useRef<string>('waiting')
   const [showPasscodeSheet, setShowPasscodeSheet] = useState(false)
@@ -466,7 +466,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     ? [{ chainId: initialChain!, claimable: Math.floor((initialBalance ?? 0) * 100) / 100, pending: 0 }] : [])
   const [claimableTotal, setClaimableTotal] = useState(0)
   const [selected,       setSelected]      = useState<string | null>(() => prefilledFromHub ? initialChain! : null)
-  // Which way the chain-select <-> amount-entry slide should travel — set on
+  // Which way the chain-select <-> amount-entry slide should travel - set on
   // every navigation between the two so back mirrors forward instead of
   // always animating the same direction regardless of which way you went.
   const [direction,      setDirection]     = useState<NavDirection>('forward')
@@ -475,15 +475,15 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const reduceMotion = useReducedMotion()
   const [claimAmounts,   setClaimAmounts]  = useState<Record<string, string>>({})
   // Route for the claim: CCTP (burn → mint) or Unified Balance (Gateway deposit → spend).
-  // Merchants: CCTP only (gasless — MeshPort's relayer pays the gas).
+  // Merchants: CCTP only (gasless - MeshPort's relayer pays the gas).
   const [claimRoute, setClaimRoute] = useState<'cctp' | 'ub'>('cctp')
-  // Pre-claim fee estimate — shown on the amount screen, BEFORE the user
+  // Pre-claim fee estimate - shown on the amount screen, BEFORE the user
   // enters their passcode, so "You will receive" reflects what actually
   // lands instead of the raw claim amount. Previously the only fee number
   // anywhere on this page was claimFees below, which only populates DURING
-  // execution (after the passcode) — the user had zero fee visibility
+  // execution (after the passcode) - the user had zero fee visibility
   // before committing, unlike the Send/Transfer page's Review step.
-  // `forKey` is `${chainId}|${amount}` — lets the render check whether the
+  // `forKey` is `${chainId}|${amount}` - lets the render check whether the
   // current amount/chain still matches what this estimate was computed for,
   // so a stale number from a just-edited amount never gets displayed as if
   // it were live.
@@ -505,14 +505,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const [txRecords,      setTxRecords]     = useState<ActivityRecord[]>([])
   const [chainProgress,  setChainProgress] = useState<ChainProgress[]>([])
   // Per-chain fee each gasless bring actually signed (MeshPort fee + CCTP
-  // maxFee) —
+  // maxFee) -
   // summed for the success screen's "Total Fees" row, mirroring
   // MultichainTransferPage's own transfer success screen.
   const [claimFees,      setClaimFees]     = useState<Record<string, number>>({})
   const notifiedClaimIdsRef = useRef<Set<string>>(new Set())
   const sdkRef = useRef<{ AppKit: any; createEthersAdapterFromPrivateKey: any } | null>(null)
 
-  // ─── Success screen — same full-screen flash → hero-card takeover
+  // ─── Success screen - same full-screen flash → hero-card takeover
   // SwapPage/PaySendPage use for a completed action, reused here so a
   // completed claim feels identical: whole screen flashes brand color
   // with a big checkmark + "Claimed Successfully", holds briefly, then
@@ -522,7 +522,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const [hashCopied, setHashCopied] = useState(false)
   const { showToastMessage } = useUIStore()
   // Whether THIS claim's passcode came from a biometric check vs typed
-  // manually — drives which icon (checkmark vs fingerprint/Face ID) shows
+  // manually - drives which icon (checkmark vs fingerprint/Face ID) shows
   // on the flash->hero success animation. Set from PinKeypad's onComplete
   // second argument, same as SwapPage/PaySendPage.
   const [paidViaBiometric, setPaidViaBiometric] = useState(false)
@@ -532,7 +532,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     return () => clearTimeout(t)
   }, [confirmPhase])
 
-  // Gates FlashAuthIcon's own bio->check swap — flips true only once the
+  // Gates FlashAuthIcon's own bio->check swap - flips true only once the
   // white circle below has actually finished its spring entrance
   // (onAnimationComplete), not on a guessed timer. Reset alongside
   // successPhase so a second claim in the same session gets a fresh flash
@@ -563,13 +563,13 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const [travelRect, setTravelRect] = useState<{ from: DOMRect; to: DOMRect } | null>(null)
   const [travelDone, setTravelDone] = useState(false)
   // Desktop's flash overlay used to portal straight to `document.body` with
-  // `position:fixed; inset:0` — meaning it flashed the ENTIRE screen,
+  // `position:fixed; inset:0` - meaning it flashed the ENTIRE screen,
   // covering the Claimed History column too, not just the flow column the
   // rest of this page's desktop layout confines itself to. It was ported
   // to `document.body` in the first place because PageTransition's
   // motion.div (wraps every route) leaves a stray transform on itself,
   // which makes it the containing block for any `position:fixed`
-  // descendant — so a naive non-portalled fixed overlay rendered sized/
+  // descendant - so a naive non-portalled fixed overlay rendered sized/
   // positioned to that transformed ancestor instead of the viewport. The
   // portal still needs to happen for that reason, but on desktop the
   // overlay's rect is now pinned to this ref (the same flow-column
@@ -584,7 +584,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     }
   })
 
-  // Separate, dependency-gated effect — NOT folded into the unconditional
+  // Separate, dependency-gated effect - NOT folded into the unconditional
   // one above. That one has no dep array on purpose (it needs to keep
   // re-measuring flashCheckRef every render while flash is up), but
   // getBoundingClientRect() always returns a brand-new DOMRect object, so
@@ -605,7 +605,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   }, [successPhase, isDesktop, isDesktopMq])
 
   // Measured in a layout effect (before paint) so the traveling checkmark is
-  // already on screen in the receipt's very first frame — no frame where
+  // already on screen in the receipt's very first frame - no frame where
   // the receipt shows an empty header circle.
   useLayoutEffect(() => {
     if (successPhase !== 'collapsed') { setTravelDone(false); setTravelRect(null); return }
@@ -627,7 +627,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   }
 
   useEffect(() => {
-    // Pre-warm SDK chunks immediately on mount — not deferred to chain-select.
+    // Pre-warm SDK chunks immediately on mount - not deferred to chain-select.
     // The dynamic import of app-kit + adapter-ethers-v6 is a separate JS chunk
     // that can take 500ms-1s to download and parse on a cold load. Kicking it
     // here means the chunk is already cached by the time the user picks a chain
@@ -649,17 +649,17 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // Deep link from Hub → jump straight into the tracking screen for a claim
   // that's already being processed server-side (survives navigation/reload).
   //
-  // BUG FIX: must only ever do this ONCE, on the actual mount — not every
+  // BUG FIX: must only ever do this ONCE, on the actual mount - not every
   // time trackClaimIdFromHub's value changes. The URL-mirroring effect just
   // above now writes ?claim=<id> as soon as a claim is submitted (so a
   // refresh during the "Claim submitted!" countdown screen can resume too),
   // which changes trackClaimIdFromHub's value mid-session. Without this
   // guard, that change would re-run this effect and force confirmPhase
   // straight to 'tracking', hijacking the submitted countdown screen before
-  // the user ever saw it — the exact bug the mirroring effect's own history
+  // the user ever saw it - the exact bug the mirroring effect's own history
   // already describes. Gating on a ref (not the dependency array) means a
   // genuine fresh mount with ?claim= already in the URL (a hard refresh)
-  // still resumes correctly — this only ignores changes that happen AFTER
+  // still resumes correctly - this only ignores changes that happen AFTER
   // the component is already up and running in the same session.
   const hasCheckedResumeRef = useRef(false)
   useEffect(() => {
@@ -668,7 +668,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     if (!trackClaimIdFromHub) return
     getClaim(trackClaimIdFromHub).then(claim => {
       if (!claim) {
-        // Id was stale/invalid/expired (or arrived from a bad/old link) —
+        // Id was stale/invalid/expired (or arrived from a bad/old link) -
         // there's nothing to resume, so fall through to a normal scan
         // instead of leaving the screen stuck on an empty tracking view
         // forever. Also strip the dead ?claim= param so a further refresh
@@ -687,19 +687,19 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   }, [trackClaimIdFromHub])
 
   // Mirror the claim being tracked into the URL as soon as it's submitted
-  // (not just once the user reaches the live tracking view) — so a hard
+  // (not just once the user reaches the live tracking view) - so a hard
   // refresh during the "Claim submitted!" countdown screen can resume too,
   // not only a refresh from the tracking view itself.
   //
   // BUG FIX: this used to wait for confirmPhase === 'tracking' specifically,
   // because writing ?claim= any earlier changed trackClaimIdFromHub, which
   // re-ran the resume-effect below and forced confirmPhase straight to
-  // 'tracking' — hijacking the "Claim submitted!" countdown screen the
+  // 'tracking' - hijacking the "Claim submitted!" countdown screen the
   // instant it appeared, before the user ever saw it. That's now fixed at
   // the resume-effect itself (see its own comment): it only ever resumes
   // ONCE per mount, so this mirroring firing earlier in the SAME session no
   // longer re-triggers it. A refresh is a fresh mount, so it still resumes
-  // correctly — straight to the live tracking view, which is the right
+  // correctly - straight to the live tracking view, which is the right
   // screen to land on after a refresh regardless of which sub-phase you
   // were on before it.
   useEffect(() => {
@@ -713,7 +713,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
   // ── Server-truth subscription ──────────────────────────────────────────────
   // For every claim row created this session, subscribe to its realtime
-  // updates. This is purely a UI reflection — claim-worker (Edge Function +
+  // updates. This is purely a UI reflection - claim-worker (Edge Function +
   // pg_cron) is what actually advances status, so it keeps running even if
   // every listener below is torn down (unmount, tab close, navigation).
   useEffect(() => {
@@ -729,11 +729,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // Optional acceleration: while someone's actively on this screen watching
   // a non-terminal claim, ask claim-worker to check it every few seconds
   // instead of waiting for pg_cron's next ~60s tick. Doesn't change what
-  // decides anything — still only claims.status, delivered through the same
+  // decides anything - still only claims.status, delivered through the same
   // subscription above; this just makes the authoritative check itself run
   // sooner. Stops automatically once every tracked claim reaches a terminal
   // status, and tearing down this effect (navigating away, closing the tab)
-  // simply stops the acceleration — claim-worker keeps going regardless via
+  // simply stops the acceleration - claim-worker keeps going regardless via
   // pg_cron, same guarantee as always.
   useEffect(() => {
     if (claimRecords.length === 0) return
@@ -742,20 +742,20 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       return status !== 'completed' && status !== 'failed'
     })
     if (pending.length === 0) return
-    // 8s — matches claim-worker's own SWEEP_INTERVAL_MS, and the RPC behind
+    // 8s - matches claim-worker's own SWEEP_INTERVAL_MS, and the RPC behind
     // kickClaimWorker (fetch_and_lock_due_claims) now enforces the same
     // staleness cutoff for single-claim kicks as it always did for the cron
     // sweep. A shorter client interval than that no longer buys anything: the
     // extra kicks just get skipped server-side as stale instead of actually
     // reprocessing the claim, so they'd be wasted requests, not faster
-    // updates. (Previously this ran every 2s — the RPC didn't rate-limit
+    // updates. (Previously this ran every 2s - the RPC didn't rate-limit
     // single-claim kicks yet, so it silently reprocessed the claim on every
     // one of those, inflating claims.attempts up to ~5x faster than
     // MAX_ATTEMPTS was calibrated for. Fixed server-side; this brings the
     // client back in line with that fix instead of relying on it as a
     // backstop.) The worker still decides everything; this just asks it to
     // check sooner than pg_cron's next ~60s tick.
-    // Kick once immediately — otherwise a freshly-submitted claim just sits
+    // Kick once immediately - otherwise a freshly-submitted claim just sits
     // in 'submitted' doing nothing until this interval's FIRST tick fires
     // at the 8s mark (setInterval doesn't fire on mount), which is exactly
     // the "checklist looks stuck for 5-10s before it starts pulsing" gap:
@@ -769,16 +769,16 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   }, [claimRecords, claimsByStatus])
 
   // PERF FIX (reported: "funds arrive first, Track Progress catches up
-  // later") — arcDepositWatcher.ts already watches Arc in real time and
+  // later") - arcDepositWatcher.ts already watches Arc in real time and
   // fires 'meshport:arc-deposit' (session-wide, see AppLayout.tsx) the
-  // instant a deposit — including this claim's own CCTP mint — lands,
+  // instant a deposit - including this claim's own CCTP mint - lands,
   // which is what makes the Home balance/Activity feel instant. The
   // checklist above only asked claim-worker to recheck on a fixed 5s
   // timer, so it could lag behind a mint that was already detected.
   // Kicking immediately on this event closes that gap: it's the exact
   // same kickClaimWorker() call the 5s timer above already makes (just
   // triggered by a real signal instead of a fixed clock), so it still
-  // doesn't decide anything itself — claims.status is still written
+  // doesn't decide anything itself - claims.status is still written
   // authoritatively by claim-worker and delivered through the same
   // subscription above.
   useEffect(() => {
@@ -794,7 +794,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   }, [claimRecords, claimsByStatus])
 
   // Circle's forwarder mints on Arc seconds after attestation, but the row
-  // only flips to 'completed' on claim-worker's next pass — the Track
+  // only flips to 'completed' on claim-worker's next pass - the Track
   // Progress checklist (ClaimProgressTracker) already shows Completed from
   // Circle, so the success screen and balances follow the same signal.
   const [mintedOnArc, setMintedOnArc] = useState<Record<string, true>>({})
@@ -818,7 +818,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     return () => { stop = true; clearInterval(iv) }
   }, [claimRecords, claimsByStatus, mintedOnArc])
 
-  // Auto-advance the UI once the server-side state machine finishes —
+  // Auto-advance the UI once the server-side state machine finishes -
   // works even if this page was just opened via the Hub deep link.
   useEffect(() => {
     if (claimRecords.length === 0) return
@@ -838,7 +838,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         : claims.map(c => ({ chainId: c.sourceChain, stage: 'done', pct: 100, msg: 'Done', mintTxHash: c.destinationTxHash ?? undefined, txHash: c.txHash })))
       setConfirmPhase(phase => (phase === 'submitted' || phase === 'tracking') ? 'done' : phase)
 
-      // Notification now fires HERE — driven by the same Realtime
+      // Notification now fires HERE - driven by the same Realtime
       // claims.status event as the UI transition above, instead of a
       // separate client-SDK completion signal that could arrive at a
       // different time than the actual server-confirmed status. Guarded on
@@ -848,14 +848,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       // which re-fetches claimsByStatus as already-'completed' and would
       // otherwise re-fire with an empty ref) from notifying again for a
       // claim that was already durably marked notified server-side.
-      // Notify once the row is final — it carries the exact arrived amount.
+      // Notify once the row is final - it carries the exact arrived amount.
       for (const c of claims) {
         if (c.status !== 'completed') continue
         if (c.userNotifiedAt) { notifiedClaimIdsRef.current.add(c.id); continue }
         if (!notifiedClaimIdsRef.current.has(c.id)) {
           notifiedClaimIdsRef.current.add(c.id)
           notifyClaimArrived(c.arrivedAmount ?? c.amount, c.sourceChain, undefined, undefined, c.id)
-          // Mark it server-side too — without this, AppLayout.tsx's
+          // Mark it server-side too - without this, AppLayout.tsx's
           // catch-up check (which exists specifically to notify for claims
           // that complete while nobody's watching) has no way to know this
           // one was already handled live, and fires a second, duplicate
@@ -873,17 +873,17 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // (checked getUSDCBalance() against a startBalance snapshot, same
   // `newBal >= before + expected*0.99` pattern that was removed from
   // server-side settlement for being unreliable under concurrent activity).
-  // It's been removed — it was fully redundant with the effect above, which
+  // It's been removed - it was fully redundant with the effect above, which
   // already flips confirmPhase to 'done' the moment claims.status genuinely
   // reaches 'completed' via Realtime. claims.status is now the single
   // source of truth end-to-end; this page no longer has its own competing
   // notion of "arrived".
   //
-  // A second, entirely separate polling loop also used to live here —
+  // A second, entirely separate polling loop also used to live here -
   // polling a `bridge_sessions` table (distinct from `claims`) every 15s
   // for statuses like 'burning'/'attesting'/'minting'. Nothing writes to
   // that table anymore (confirmed via full-codebase audit), and the result
-  // was never even rendered anywhere — pure dead weight that was still a
+  // was never even rendered anywhere - pure dead weight that was still a
   // second, disconnected notion of claim progress sitting in the codebase.
   // Removed along with its backing functions in bridgeTracker.ts.
 
@@ -893,10 +893,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     if (key && addr) return { key, addr }
 
     // privateKey is deliberately never persisted to disk (see store/index.ts
-    // partialize + App.tsx) — it's re-derived from the mnemonic, or for
+    // partialize + App.tsx) - it's re-derived from the mnemonic, or for
     // social-auto accounts fetched fresh from the server, on every app
     // load/reload. That restore is async and, for the server-fetch path,
-    // a real network round trip — it can easily take longer than a short
+    // a real network round trip - it can easily take longer than a short
     // fixed poll on a slow connection. This used to only poll raw store
     // state for 8 x 400ms (3.2s total) and give up with "Wallet not
     // available" → Claim Failed, even while restoration was still quietly
@@ -910,11 +910,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     // import-privkey) wallet whose sessionStorage-cached key has already
     // gone cold (session cache cleared on 'offline', or just an old tab),
     // restoreWallet.ts's own decrypt step (step 3) needs a passcode to try
-    // and had none here — `pendingRawPasscode` is only ever stashed by the
+    // and had none here - `pendingRawPasscode` is only ever stashed by the
     // passcode SETUP/CHANGE screens, never by this page's own passcode-
     // confirm sheet. The result: a claim on a cold session silently fell
     // through every restore path, burned the full ~10s poll below, and
-    // failed with "Wallet unavailable" — even though the user had just
+    // failed with "Wallet unavailable" - even though the user had just
     // typed their correct passcode into the sheet one line above this call.
     // handlePasscodeConfirm now passes that verified passcode through.
     if (addr && !key) {
@@ -928,7 +928,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
     // Remaining fallback: addr itself not hydrated yet (auth store persist
     // rehydration hasn't landed on first render) or restore is genuinely
-    // still settling. 20 x 500ms = 10s — generous enough to cover a slow
+    // still settling. 20 x 500ms = 10s - generous enough to cover a slow
     // network restore without leaving the scan screen spinning forever.
     for (let i = 0; i < 20 && !(key && addr); i++) {
       await new Promise(r => setTimeout(r, 500))
@@ -947,11 +947,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   }, [])
 
   // ── Pre-claim fee estimate ───────────────────────────────────────────────
-  // The gasless relayer's quote — read-only, signs nothing.
+  // The gasless relayer's quote - read-only, signs nothing.
   const fetchClaimFeeEstimate = useCallback(async (chainId: string, amount: number) => {
     const key = `${chainId}|${amount}`
     setFeeEstimate(prev => ({ ...prev, loading: true, error: '' }))
-    // Gasless chains: the relayer's own quote — the exact fees the claim
+    // Gasless chains: the relayer's own quote - the exact fees the claim
     // will sign, so what's shown here is what's charged.
     if (isGaslessBridgeAvailable(chainId)) {
       try {
@@ -966,7 +966,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     setFeeEstimate({ loading: false, error: 'Not available for this chain', totalFee: 0, receiverGets: 0, forKey: key, networkFee: 0, bridgeFee: 0 })
   }, [])
 
-  // Debounced trigger — fires ~600ms after the user stops typing/adjusting
+  // Debounced trigger - fires ~600ms after the user stops typing/adjusting
   // the amount, same cadence MultichainTransferPage.tsx uses for its own
   // Review-step estimate. Skipped below MIN_CLAIM_AMOUNT: an estimate for an
   // amount that can't actually be claimed is just noise, and some routes'
@@ -986,7 +986,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
   // SDK modules are already pre-warmed on mount (see the useEffect above
   // that populates sdkRef on load), so this secondary kick on chain-select
-  // is retained purely as a belt-and-suspenders guarantee — if the mount
+  // is retained purely as a belt-and-suspenders guarantee - if the mount
   // pre-warm was a cache hit (same session, second claim) the call is a
   // no-op; if mount failed for any reason, selecting a chain recovers it.
   useEffect(() => {
@@ -994,7 +994,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   }, [step, selected, loadSdk])
 
   // ── Manual refresh cooldown ──────────────────────────────────────────────
-  // 20s client-side rate limit on the header's Refresh button — independent
+  // 20s client-side rate limit on the header's Refresh button - independent
   // of (and shorter than) the underlying 90s cache TTL, since a manual tap
   // now always forces a genuine bypass (see scan()'s force param below) and
   // this is what actually protects the RPC providers from being hammered by
@@ -1013,39 +1013,39 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     // Deep-linking into an existing claim's Track Progress (from the Hub's
     // "Tap to view") has nothing to do with scanning for NEW claimable
     // balances. Previously this ran unconditionally on every mount and
-    // finished with an unconditional setStep('select') — racing against the
+    // finished with an unconditional setStep('select') - racing against the
     // trackClaimIdFromHub effect below, which sets step to 'confirm'. Since
     // both are async and whichever resolves last wins, this multi-chain scan
     // (several RPC calls) would often finish after the single getClaim()
     // fetch and silently stomp the correct step back to the selection
-    // screen — exactly the "Track Progress flashes then redirects to Claim
+    // screen - exactly the "Track Progress flashes then redirects to Claim
     // Funds" bug. Skip the scan entirely in this case.
     if (trackClaimIdFromHub) return
 
-    // `quiet`: the amount form is already showing — refresh balances
+    // `quiet`: the amount form is already showing - refresh balances
     // without flipping to the loading screen or touching the step.
     if (!quiet) { setStep('loading'); setError('') }
     const wallet = await getKey()
     if (!wallet) { if (!quiet) { setError('Wallet not available'); setStep('failed') } return }
     // BUG FIX (2026-09-21): the manual refresh button called this same scan()
     // with no way to bypass readExternalBalances' own 90s cache (raised from
-    // 20s after a real Alchemy 429 incident — see externalBalanceReader.ts's
+    // 20s after a real Alchemy 429 incident - see externalBalanceReader.ts's
     // own CACHE_TTL_MS comment). Clicking Refresh twice within that window
-    // silently served the SAME cached result both times — the button looked
+    // silently served the SAME cached result both times - the button looked
     // broken even though it technically ran. refreshScope({kind:'external'})
     // is the API this codebase already built for exactly this ("all is
     // reserved for launch / login / wallet-import / explicit manual
-    // refresh" — see BlockchainManager.ts's own refreshScope comment) —
+    // refresh" - see BlockchainManager.ts's own refreshScope comment) -
     // invalidating just the external-balance cache entries before the read
     // below, so a forced scan is always genuinely fresh.
     if (force) refreshScope({ kind: 'external', wallet: wallet.addr })
     try {
-      // Admin-disabled chains must never contribute to claimableTotal —
+      // Admin-disabled chains must never contribute to claimableTotal -
       // same isChainEnabledForClaim filter Home's scanExternalBalances and
       // the Hub's totalExternal already apply *before* summing. This used
       // to filter only for the chainsWithFunds list further down, so the
       // "Available to Claim" total here still included disabled chains'
-      // balances even though the list underneath correctly hid them —
+      // balances even though the list underneath correctly hid them -
       // that mismatch is exactly why this total never matched Home/Hub.
       const { chains: scanResults } = await readExternalBalances(wallet.addr, settingsMap, settingsLoaded)
 
@@ -1077,16 +1077,16 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     scan(true)
   }, [refreshCooldownUntil, scan])
 
-  // ── Reactive live updates — INSTANT-detect a real external-chain credit ──
+  // ── Reactive live updates - INSTANT-detect a real external-chain credit ──
   // BUG FIX (2026-09-21): this page previously only ever scanned external
-  // balances once on mount (plus the manual refresh button above) — no
+  // balances once on mount (plus the manual refresh button above) - no
   // polling, no live updates at all. If funds arrived on an external chain
   // while this exact page was open, "Available to Claim" just sat there
   // until the user manually refreshed. Same reactive pattern now applied
   // consistently across every page that shows this figure (Home's card,
   // the Hub page, and this one): a Realtime subscription on claims/activity
   // for this wallet, patching ONLY the one chain that actually changed via
-  // readExternalChainBalance — not a full rescan — the moment a claim or
+  // readExternalChainBalance - not a full rescan - the moment a claim or
   // transfer genuinely completes.
   useEffect(() => {
     if (!walletAddress) return
@@ -1153,7 +1153,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   }, [selected, claimAmounts])
 
   // Falls back to the real server-confirmed amount(s) when selectedTotal is
-  // 0 — which is always the case when this screen is reached via the Hub's
+  // 0 - which is always the case when this screen is reached via the Hub's
   // "Tap to view" deep-link (trackClaimIdFromHub), since that path jumps
   // straight to tracking/done and never populates the local chain-selection
   // state selectedTotal depends on. Without this fallback, Track Progress,
@@ -1239,9 +1239,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         const claimAmount = Math.min(inputAmt, chain.claimable ?? 0)
 
         // MIN_CLAIM_AMOUNT (module-level, shared with the amount screen's own
-        // gate and the pre-claim fee estimate) — see its doc comment.
+        // gate and the pre-claim fee estimate) - see its doc comment.
         if (claimAmount < MIN_CLAIM_AMOUNT) {
-          // Previously just `return`ed here with zero feedback — the
+          // Previously just `return`ed here with zero feedback - the
           // chain's progress card stayed on whatever it last showed
           // (usually nothing), silently doing nothing with no
           // explanation. Surface it the same way a real failure would be.
@@ -1269,7 +1269,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   setIsSubmitted(true)
                   setConfirmPhase(phase => phase === 'processing' ? 'submitted' : phase)
                 }
-                // UB has no server row — the arrival on Arc is the success signal.
+                // UB has no server row - the arrival on Arc is the success signal.
                 if (stage === 'done') {
                   setConfirmPhase(phase => (phase === 'processing' || phase === 'submitted' || phase === 'tracking') ? 'done' : phase)
                 }
@@ -1288,7 +1288,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             return { chainId: chain.chainId, amount: claimAmount }
           }
 
-          // Burn confirmed on-chain — record the claim and show "Claim
+          // Burn confirmed on-chain - record the claim and show "Claim
           // Submitted" right away.
           const handOffBurn = (cid: string, txHash: string, amount: number) => {
             submitClaim({ walletAddress: wallet.addr, sourceChain: cid, amount, txHash }).then(res => {
@@ -1298,7 +1298,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 )
                 // Show the "Claim Submitted" screen (with View in Hub /
                 // Track Progress buttons) the instant submission is
-                // confirmed — previously there was an extra artificial
+                // confirmed - previously there was an extra artificial
                 // 550ms pause here on top of submitClaim()'s own network
                 // latency, making the buttons appear noticeably late.
                 setConfirmPhase(phase => phase === 'processing' ? 'submitted' : phase)
@@ -1309,7 +1309,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           // ── Gasless route (MeshPortBridgeRouter) ──
           // One signature, no gas on the source chain: the relayer submits it,
           // MeshPort's fee is taken in the same transaction, and Circle's
-          // forwarder mints on Arc. The only CCTP route — chains without a
+          // forwarder mints on Arc. The only CCTP route - chains without a
           // router (VITE_BRIDGE_ROUTERS) aren't offered.
           if (!isGaslessBridgeAvailable(chain.chainId)) throw new Error('Bring Funds is not available for this chain')
           const r = await bringFundsGasless({
@@ -1318,12 +1318,12 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             // means the authorization is signed and MeshPort's relayer is
             // sending the burn (it pays the gas in that transaction).
             onStatus: msg => msg === 'Submitting…' || msg === 'Confirming…'
-              ? setChain(chain.chainId, 'burning', msg === 'Confirming…' ? `Waiting for ${getMeta(chain.chainId).label} to confirm the burn…` : 'Signed — MeshPort is sending the transfer…', 45)
+              ? setChain(chain.chainId, 'burning', msg === 'Confirming…' ? `Waiting for ${getMeta(chain.chainId).label} to confirm the burn…` : 'Signed - MeshPort is sending the transfer…', 45)
               : setChain(chain.chainId, 'approving', msg === 'Signing…' ? 'Signing the USDC transfer…' : 'Getting fee…', 25),
           })
           setClaimFees(prev => ({ ...prev, [chain.chainId]: r.fee + r.maxFee }))
           setIsSubmitted(true)
-          setChain(chain.chainId, 'attesting', 'Burn confirmed — Circle processing…', 65, { txHash: r.txHash })
+          setChain(chain.chainId, 'attesting', 'Burn confirmed - Circle processing…', 65, { txHash: r.txHash })
           notifyExternalBalanceChanged(chain.chainId, wallet.addr)
           // The claim is the burned amount: MeshPort's fee was taken before the burn.
           handOffBurn(chain.chainId, r.txHash, Math.max(0, claimAmount - r.fee))
@@ -1375,7 +1375,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const handlePasscodeConfirm = useCallback(async () => {
     if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
     // PERF FIX (transaction-speed audit): kick off private-key restore
-    // concurrently with verifyPasscode below instead of after it — see
+    // concurrently with verifyPasscode below instead of after it - see
     // PaySendPage.tsx's own verifyAndSend for the full reasoning (two
     // independent PBKDF2 derives from the same passcode, otherwise run
     // back-to-back). `silent: true` so a wrong PIN doesn't flip on the
@@ -1391,7 +1391,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     setConfirmPhase('processing')
     setStep('confirm')
     // Passed through to getKey() as an authoritative fallback (see its own
-    // BUG FIX comment) — never used for the speculative restore above (that
+    // BUG FIX comment) - never used for the speculative restore above (that
     // one is already in flight/done via the shared single-flight guard).
     await executeClaim(enteredPasscode)
   }, [passEntry, storedPasscode, executeClaim])
@@ -1399,16 +1399,16 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const selectedChain = chains.find(c => c.chainId === selected)
 
   // ─── Receive summary / estimate readiness (shared by both render spots
-  // below — the reordered desktop pre-confirm position and the original
+  // below - the reordered desktop pre-confirm position and the original
   // mobile/post-confirm position) ─────────────────────────────────────────
   const claimAmt = parseFloat(claimAmounts[selected ?? ''] ?? '0') || 0
   const claimEstimateIsLive = feeEstimate.forKey === `${selected}|${claimAmt}`
   const showClaimEstimateRow = claimAmt >= MIN_CLAIM_AMOUNT
   const estimateReady = showClaimEstimateRow && claimEstimateIsLive && !feeEstimate.loading && !feeEstimate.error
   const canConfirm = claimAmt >= MIN_CLAIM_AMOUNT && claimAmt <= (selectedChain?.claimable ?? 0) && estimateReady
-  // Route (CCTP vs Unified Balance) — UB only for chains Gateway supports.
+  // Route (CCTP vs Unified Balance) - UB only for chains Gateway supports.
   const selectedSdkId = selected ? toSdkChainId(selected) : ''
-  // Merchants never get the Unified Balance route — CCTP only.
+  // Merchants never get the Unified Balance route - CCTP only.
   const ubAvailable = !merchantMode && UB_CLAIM_CHAINS.has(selectedSdkId)
   // CCTP here is the gasless router; a chain without one is Unified Balance only.
   const cctpAvailable = !!selected && isGaslessBridgeAvailable(selected)
@@ -1469,22 +1469,22 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     // Only chains Bring Funds can actually move: a gasless router, or Unified
     // Balance. Merchants: gasless router (CCTP) chains only.
     .filter(c => isGaslessBridgeAvailable(c.chainId) || (!merchantMode && UB_CLAIM_CHAINS.has(toSdkChainId(c.chainId))))
-    // `chains` only ever contains enabled chains to begin with — scan()
+    // `chains` only ever contains enabled chains to begin with - scan()
     // above reads via readExternalBalances, which is already settings-aware
     // and never even fetches a disabled chain's balance. This filter is now
     // just a safety net; disabledClaimChains below is what actually
     // surfaces disabled chains in the list.
     .filter(c => isChainEnabledForClaim(settingsMap, c.chainId))
-    // Highest balance first — makes the biggest claimable amounts the most
+    // Highest balance first - makes the biggest claimable amounts the most
     // prominent/easiest to act on instead of showing in arbitrary chain
     // config order.
     .sort((a, b) => (b.claimable + b.pending) - (a.claimable + a.pending))
 
-  // Admin-disabled Claim chains — shown in the list too (dimmed,
+  // Admin-disabled Claim chains - shown in the list too (dimmed,
   // unclickable, with a reason) instead of silently disappearing, so
   // someone with funds sitting on a chain that just got disabled can see
   // why it's temporarily unavailable instead of wondering where it went.
-  // Never counted in claimableTotal — that total is summed in scan() from
+  // Never counted in claimableTotal - that total is summed in scan() from
   // readExternalBalances, which skips disabled chains entirely and never
   // reads their balance in the first place, so there's nothing of theirs
   // to (mis)count here.
@@ -1494,10 +1494,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     .map(id => ({
       chainId: id,
       // Lets an admin set a specific reason per chain by putting text in
-      // that chain's chains_claim toggle row (the `value` column — same
+      // that chain's chains_claim toggle row (the `value` column - same
       // free-text field maintenance_mode already uses for its message).
       // Falls back to a generic reason when nothing's been set.
-      reason: settingsMap[CHAIN_CLAIM_FEATURE_MAP[id]]?.value || 'Upgrading — coming soon',
+      reason: settingsMap[CHAIN_CLAIM_FEATURE_MAP[id]]?.value || 'Upgrading - coming soon',
     }))
 
   // ─── Render ──────────────────────────────────────────────────────────────────
@@ -1513,30 +1513,30 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
   // Held in a variable (not returned directly) so the exact same JSX renders
   // either as the whole page (mobile) or as the left column of the desktop
-  // 2-column layout below — never duplicated.
-  // Desktop: no root-level overflow-hidden — each screen already has its
+  // 2-column layout below - never duplicated.
+  // Desktop: no root-level overflow-hidden - each screen already has its
   // own bounded height + inner scroll container (mobile's proven
   // pattern), and the desktop column wrapping `flow` already has its own
   // overflowY:'auto'. Hard-clipping here too (on top of that) was cutting
-  // off the bottom of tall content — the Success screen's summary card +
-  // buttons — with no way to reach it, since this was the innermost clip
+  // off the bottom of tall content - the Success screen's summary card +
+  // buttons - with no way to reach it, since this was the innermost clip
   // boundary. Mobile keeps overflow-hidden, unchanged.
   const flow = (
     <div ref={flowRootRef} style={{ background: COLORS.bg, display: 'flex', flexDirection: 'column', height: '100%',
-      // Inside the Hub: clip only sideways (the step slide-ins) — never
+      // Inside the Hub: clip only sideways (the step slide-ins) - never
       // vertically, so the amount form can glide up over the Hub's balance
       // card and tabs when the keypad opens, like Transfer.
       ...(isDesktop ? { overflow: 'visible' } : embedded ? { overflowX: 'clip', overflowY: 'visible' } : { overflow: 'hidden' }) }}>
 
-      {/* LOADING STATE — chains scroll horizontally through a fixed scan
+      {/* LOADING STATE - chains scroll horizontally through a fixed scan
           line, like a barcode scanner, using real chain logos rather than
           a generic spinner. Purely decorative/illustrative (not literally
-          tied to per-chain completion) — same idea as the Hub's chain list,
+          tied to per-chain completion) - same idea as the Hub's chain list,
           just the enabled set for Claim specifically.
 
           Wrapped in the AnimatePresence below (shared with the chain-select
           screen) so finishing the scan crossfades smoothly into the results
-          instead of instantly cutting from one screen to the other — that
+          instead of instantly cutting from one screen to the other - that
           instant, un-animated unmount/mount swap was the "flicker" when the
           scan ended. */}
       <PushIf on={pushScreens} screenKey={pushKey}>
@@ -1550,13 +1550,13 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: SPACING.lg }}
         >
           {deepLinkChain ? (
-            // Opened from a chain card in the Hub, which already scanned —
+            // Opened from a chain card in the Hub, which already scanned -
             // just a short "opening <chain>" state while its balance loads.
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
               <div style={{ position: 'relative', width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {/* CSS animation, not framer: this sits under the
                     AnimatePresence initial={false} below, which blocks every
-                    descendant motion element's first animation — so a framer
+                    descendant motion element's first animation - so a framer
                     spin here never started and the ring looked frozen. */}
                 <span aria-hidden className="mp-ring-spin"
                   style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '2.5px solid transparent', borderTopColor: 'var(--brand)', borderRightColor: 'color-mix(in srgb, var(--brand) 40%, transparent)' }} />
@@ -1675,7 +1675,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     </motion.div>
                   )
                 })}
-                {/* Admin-disabled chains — dimmed, unclickable, reason
+                {/* Admin-disabled chains - dimmed, unclickable, reason
                     shown in place of a balance. Sorted after every enabled
                     chain (funded or not) so they never push real, actionable
                     balances further down the list. */}
@@ -1734,7 +1734,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           {...(pushScreens ? INSTANT_STEP : {})}
           style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
         >
-          {/* Header — hidden inside the Hub (the form has its own Back) */}
+          {/* Header - hidden inside the Hub (the form has its own Back) */}
           {!embedded && <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.md, padding: `${SPACING.sm}px ${SPACING.md}px`, background: COLORS.bg, borderBottom: `1px solid ${COLORS.border}`, flexShrink: 0 }}>
             {!isDesktop && (
               <button onClick={e => { e.stopPropagation(); leaveAmountStep() }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: COLORS.text, display: 'flex', alignItems: 'center' }}>
@@ -1748,7 +1748,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           {/* Bring Funds form (Arc Bridge layout, MeshPort brand):
               From → Amount → Route → Destination → Back / Review & Claim.
               Review & Claim goes to the same passcode + claim flow as before. */}
-          {/* Inside the Hub the page itself scrolls — this box must not clip, so
+          {/* Inside the Hub the page itself scrolls - this box must not clip, so
               the lifted form can slide up over the Hub's balance card and tabs
               exactly like Transfer does. */}
           <div style={{ flex: 1, minHeight: 0, overflowY: embedded ? 'visible' : 'auto', padding: `${SPACING.lg}px ${SPACING.lg}px`, paddingBottom: SPACING.xl }}>
@@ -1880,7 +1880,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.text }}>Arc Testnet</span>
               </div>
 
-              {/* Fee summary (unchanged) — CCTP only; the UB route's fee comes from Gateway at send time */}
+              {/* Fee summary (unchanged) - CCTP only; the UB route's fee comes from Gateway at send time */}
               {effectiveRoute === 'cctp' && receiveSummaryCard}
 
               {error && <p role="alert" style={{ fontSize: 13, color: COLORS.error, margin: 0, textAlign: 'center' }}>{error}</p>}
@@ -1915,7 +1915,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             </motion.div>
           </div>
 
-          {/* Amount Keypad — mobile only; Done just closes it (Review & Claim is on the card). */}
+          {/* Amount Keypad - mobile only; Done just closes it (Review & Claim is on the card). */}
           {!desktopInput && (
             <div className="keypad-eraser-fix" onClick={e => e.stopPropagation()}>
               <AmountKeypad
@@ -1939,7 +1939,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             </div>
           )}
 
-          {/* Passcode Sheet / Dialog — opens on this same page, no navigation */}
+          {/* Passcode Sheet / Dialog - opens on this same page, no navigation */}
           <AnimatePresence>
             {showPasscodeSheet && (() => {
               const passContent = (
@@ -2040,10 +2040,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           {...(pushScreens ? INSTANT_STEP : {})}
           style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
         >
-          {/* PROCESSING -> SUBMITTED — one continuous screen. The icon and
+          {/* PROCESSING -> SUBMITTED - one continuous screen. The icon and
               title update (spinner/"Processing claim" -> paper-plane/"Claim
               Submitted") and the extra text + countdown + buttons fade in
-              underneath, but the stepper itself never resets or swaps out —
+              underneath, but the stepper itself never resets or swaps out -
               it's the same checklist throughout, not two separate screens. */}
           {/* Success flash (portaled), drawn over the live view underneath.
               It stays until the receipt's check circle has mounted, so the
@@ -2080,9 +2080,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               { label: 'Finalized',       subtitle: `${srcLabel} confirmed the deposit`,             done: at('minting') },
               { label: 'Sent to Arc',     subtitle: 'USDC minted to your Arc wallet',                done: at('done') },
             ] : [
-              { label: 'Transfer signed', subtitle: 'You authorized the USDC — no gas needed',       done: at('burning') },
+              { label: 'Transfer signed', subtitle: 'You authorized the USDC - no gas needed',       done: at('burning') },
               { label: 'Burned on ' + srcLabel, subtitle: 'MeshPort paid the network fee',          done: at('attesting') },
-              { label: 'Submitted',       subtitle: 'Handed to MeshPort — Circle mints on Arc',      done: isSubmittedNow },
+              { label: 'Submitted',       subtitle: 'Handed to MeshPort - Circle mints on Arc',      done: isSubmittedNow },
             ]
             // Exactly one step is in progress: the first not yet done.
             const firstOpen = raw.findIndex(x => !x.done)
@@ -2099,7 +2099,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             >
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: `${SPACING.xl}px ${SPACING.md}px`, gap: SPACING.md, overflowY: 'auto', minHeight: 0 }}>
 
-                {/* Title row + amount/route card — compact, so the whole
+                {/* Title row + amount/route card - compact, so the whole
                     screen fits without scrolling on a phone. The stepper
                     below still never resets; only its title and the notes
                     change once the claim is submitted. */}
@@ -2132,7 +2132,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   )
                 })()}
 
-                {/* Stepper — same checklist throughout, never resets */}
+                {/* Stepper - same checklist throughout, never resets */}
                 <div style={{
                   background: COLORS.surface, border: `1px solid ${COLORS.border}`,
                   borderRadius: 22, padding: '14px 18px 16px 16px',
@@ -2179,12 +2179,12 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     initial={{ opacity: 0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity: 1, y: 0 }} transition={{ ...MOBILE_TAB_FADE_TRANSITION, delay: 0.1 }}
                     style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--accent-text)', padding: '10px 12px', borderRadius: 14,
                       background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-                    ✓ Safe to leave — MeshPort finishes this claim on its servers and you'll get a notification.
+                    ✓ Safe to leave - MeshPort finishes this claim on its servers and you'll get a notification.
                   </motion.div>
                 ) : null}
               </div>
 
-              {/* Pinned action bar — always visible. Before submission the
+              {/* Pinned action bar - always visible. Before submission the
                   wallet is still signing on this device, so only a note;
                   after it, the claim runs server-side and the user can go. */}
               <div style={{ flexShrink: 0, padding: `${SPACING.md}px ${SPACING.md}px calc(env(safe-area-inset-bottom, 0px) + ${SPACING.lg}px)`, borderTop: `1px solid ${COLORS.border}`, background: 'var(--bg)' }}>
@@ -2205,7 +2205,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   </div>
                 ) : (
                   <p style={{ fontSize: 12, color: COLORS.muted, textAlign: 'center', margin: 0 }}>
-                    Please wait — don't close this screen until the claim is submitted.
+                    Please wait - don't close this screen until the claim is submitted.
                   </p>
                 )}
               </div>
@@ -2213,7 +2213,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             )
           })()}
 
-          {/* TRACKING — same page, driven entirely by Supabase Realtime */}
+          {/* TRACKING - same page, driven entirely by Supabase Realtime */}
           {(confirmPhase === 'tracking'
             || (confirmPhase === 'done' && successPhase === 'flash' && lastLivePhase.current === 'tracking')) && (
             <motion.div
@@ -2303,18 +2303,18 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             const txHash = chainProgress.find(p => p.mintTxHash)?.mintTxHash
               ?? chainProgress.find(p => p.txHash)?.txHash
               ?? ''
-            const shortHash = txHash ? `${txHash.slice(0, 6)}...${txHash.slice(-4)}` : '—'
+            const shortHash = txHash ? `${txHash.slice(0, 6)}...${txHash.slice(-4)}` : '-'
             const fromChainIds = chainProgress.length ? chainProgress.map(p => p.chainId) : (selected ? [selected] : [])
             const timeLabel = new Date().toLocaleString('en-US', {
               month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
             })
             const fmtAmount = `${formatAmount(displayTotal)} USDC`
             // All per-chain fees each gasless bring signed rolled into one
-            // number for the "Total Fees" row — same treatment
+            // number for the "Total Fees" row - same treatment
             // MultichainTransferPage's transfer success screen gives its own
             // totalFeesLabel.
             const totalFeesLabel = `${trimTrailingZeros(Object.values(claimFees).reduce((sum, f) => sum + f, 0).toFixed(4))} USDC`
-            // Process checklist — same stages Track Progress shows
+            // Process checklist - same stages Track Progress shows
             // (Submitted excluded there too, already confirmed on the
             // screen before it), all rendered as already-done since this
             // only ever mounts after the claim has actually succeeded.
@@ -2322,13 +2322,13 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
             return (
             <motion.div key="done-step" style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-              {/* `minHeight: 0` is required here — without it this flex item
+              {/* `minHeight: 0` is required here - without it this flex item
                   (a child of confirm-step's height:100% flex column) grows
                   to fit its own content instead of being capped to the
                   available space, so the child below's `height:'100%';
                   overflowY:'auto'` never actually gets a shorter box to
                   scroll inside. On mobile `flow`'s own `overflow:'hidden'`
-                  then just clips whatever doesn't fit — hiding the bottom
+                  then just clips whatever doesn't fit - hiding the bottom
                   of the success screen (including the buttons) with no way
                   to reach it, which is what read as "not scrolling". The
                   sibling 'claiming-step' above already has this same
@@ -2345,7 +2345,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   const label = getMeta(p.chainId).label
                   const burnHref = explorerTxUrl(p.chainId, p.txHash)
                   // ONLY link the mint when there's a genuine Arc-side mint
-                  // hash — p.txHash is the SOURCE-chain burn hash, which
+                  // hash - p.txHash is the SOURCE-chain burn hash, which
                   // doesn't exist on Arc's explorer. claim-worker fills
                   // destination_tx_hash (→ p.mintTxHash) once the mint lands.
                   const mintHref = arcExplorerTxUrl(p.mintTxHash)
@@ -2510,7 +2510,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           const chainLabel = (c.sourceChain || 'Unknown chain').replace(/_/g, ' ')
           const statusColor = failed ? 'var(--danger)' : pending ? 'var(--warning)' : 'var(--success)'
           const burnHref = explorerTxUrl(c.sourceChain, c.txHash)
-          // Mint link only from the real Arc mint hash — never c.txHash, which
+          // Mint link only from the real Arc mint hash - never c.txHash, which
           // is the source-chain burn hash (an Arc-explorer link to it 404s).
           const mintHref = arcExplorerTxUrl(c.destinationTxHash)
           return (
@@ -2523,7 +2523,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               amountColor={statusColor}
               rows={[
                 { label: 'From', value: chainLabel },
-                { label: 'Time', value: failed ? '—' : timeAgo(c.completedAt || c.createdAt) },
+                { label: 'Time', value: failed ? '-' : timeAgo(c.completedAt || c.createdAt) },
                 { label: 'Status', value: failed ? 'Failed' : pending ? 'In progress' : 'Completed' },
                 ...(c.txHash ? [{ label: 'Tx Hash', value: `${c.txHash.slice(0, 8)}…${c.txHash.slice(-6)}` }] : []),
               ]}

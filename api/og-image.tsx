@@ -8,8 +8,8 @@ import { ImageResponse } from '@vercel/og'
  * it). Runs on the Edge runtime because @vercel/og needs it.
  *
  * Layout: brand-teal banner (#07211E base + #145C54 glow, matching the
- * og-default.png brand palette) with a centered avatar circle — the user's real
- * photo if they've set one, otherwise a colored initials badge — their
+ * og-default.png brand palette) with a centered avatar circle - the user's real
+ * photo if they've set one, otherwise a colored initials badge - their
  * display name and @handle below it, and the real MeshPort logo mark +
  * tagline underneath that. With `amount` (a payment link for a set amount, or
  * a merchant bill) the person moves left and a white card on the right shows
@@ -58,7 +58,7 @@ export default async function handler(req: Request) {
   const { searchParams } = new URL(req.url)
   const name = (searchParams.get('name') || 'MeshPort User').slice(0, 40)
   const username = (searchParams.get('username') || '').slice(0, 40)
-  // Avatars only from our own storage / Google profile photos — the image
+  // Avatars only from our own storage / Google profile photos - the image
   // renderer fetches this URL server-side, so arbitrary hosts aren't allowed.
   const avatar = (() => {
     const raw = searchParams.get('avatar') || ''

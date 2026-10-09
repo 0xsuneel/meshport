@@ -2,13 +2,13 @@
 //
 // The chain-observation half of the indexer. It reads new blocks, derives
 // chain events, and returns them with the cursor-advance decision. It has no
-// database access and no business logic — it is a pure(ish) function from
+// database access and no business logic - it is a pure(ish) function from
 // (chain, range) -> (events, safeCursor), which is what makes it testable and
 // keeps the "indexer contains no business logic" rule structural.
 //
 // The native-block scan mirrors deposit-scan-all's approach (eth_getBlockByNumber
 // with full transactions, matching tx.to against a known-wallet set) because
-// that is how Arc deposits are detectable at all — plain native USDC transfers
+// that is how Arc deposits are detectable at all - plain native USDC transfers
 // emit no logs, and USDC is Arc's native gas currency. The ERC-20 scan mirrors
 // its eth_getLogs approach (unfiltered by recipient, matched in memory).
 //
@@ -32,19 +32,19 @@ export interface ScannedResult {
 const TRANSFER_TOPIC0 = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 const NATIVE_DECIMALS = 18
 
-// topicToAddress and MINT_FROM_TOPIC previously lived here — both were
+// topicToAddress and MINT_FROM_TOPIC previously lived here - both were
 // removed once the decodeTransferLog.ts extraction (docs/
 // BULKPAY_RECONCILIATION_IMPLEMENTATION.md) made them dead code: every call
 // site in this file now goes through decodeTransferLog()/isMintTransfer(),
 // which carry their own copies (with the exact same fixed-width slice(-40)
 // reasoning, quoted there). Not deleting them would have left two genuinely
-// unused declarations behind — confirmed via `deno lint`, not assumed.
+// unused declarations behind - confirmed via `deno lint`, not assumed.
 
 /**
  * HTTP statuses worth retrying.
  *
  * Deliberately a CLOSED whitelist. A JSON-RPC error body (thrown as a plain
- * object below) and any 4xx other than 429 are deterministic — retrying them
+ * object below) and any 4xx other than 429 are deterministic - retrying them
  * would burn the very quota that is already exhausted. Timeouts and network
  * errors are also NOT retried here: 24 h of production logs contained 8,492
  * RPC rejections, 100% of them HTTP 429 and zero timeouts, so widening this
@@ -54,13 +54,13 @@ const NATIVE_DECIMALS = 18
 export const RETRYABLE_STATUSES: ReadonlySet<number> = new Set([429, 500, 502, 503, 504])
 
 /**
- * Backoff before attempts 2, 3 and 4 — so four attempts in total.
+ * Backoff before attempts 2, 3 and 4 - so four attempts in total.
  *
  * Sized from the measured failure mode, NOT a generic sub-second default.
  * deposit-scan-all logs 5-43 HTTP 429s EVERY minute, sustained overnight: the
  * shared dRPC quota is continuously saturated rather than bursty, so a 250 ms
  * retry lands inside the same exhausted window and buys nothing. This ladder
- * spans ~6.6 s of wall clock — long enough for a token-bucket limiter to
+ * spans ~6.6 s of wall clock - long enough for a token-bucket limiter to
  * refill, and comfortably inside both the 2-minute cron interval and the
  * function time budget even when several blocks in a pass each retry.
  */
@@ -207,7 +207,7 @@ async function rpcCallSingle(
  * caller turns that throw into `firstFailedBlock` (native path) or `ok:false`
  * (log paths), and the cursor still stops strictly BELOW the unverified block.
  * Retrying changes only how many times a block is asked for before being
- * declared failed — never whether the cursor may advance past it. There is no
+ * declared failed - never whether the cursor may advance past it. There is no
  * path through this function that reports success for a block it did not read.
  */
 export async function rpcCallRace(
@@ -239,14 +239,14 @@ export async function rpcCallRace(
 
     if (attempt === RPC_RETRY_BASE_MS.length) break
 
-    // Retry while ANY endpoint failed transiently — only one needs to recover.
+    // Retry while ANY endpoint failed transiently - only one needs to recover.
     // A lone deterministic failure (400, or a JSON-RPC error object) therefore
     // fails fast instead of sleeping through the ladder.
     const anyTransient = rejections.some(
       r => r.reason instanceof RpcHttpError && RETRYABLE_STATUSES.has(r.reason.status))
     if (!anyTransient) break
 
-    // An explicit Retry-After is honored EXACTLY — jittering it below what the
+    // An explicit Retry-After is honored EXACTLY - jittering it below what the
     // endpoint asked for would defeat the point of the header.
     const advised = rejections
       .map(r => (r.reason instanceof RpcHttpError ? r.reason.retryAfterMs : null))
@@ -322,14 +322,14 @@ export async function scanRange(
 
   // ── Native block scan (Arc USDC = native gas) ─────────────────────────────
   //
-  // FIX 1 — block-level failure granularity. This previously wrapped an entire
+  // FIX 1 - block-level failure granularity. This previously wrapped an entire
   // 500-block chunk in one try/catch and marked the whole chunk ok:false on any
   // failure, so a single transient RPC hiccup at block 250 of 500 discarded 249
   // successfully-fetched blocks and advanced the cursor by ZERO. safeAdvance
   // then returned `from - 1`, which is below the scan window, and index.ts took
   // its "no contiguous progress in pass" branch. Deployed result: 33 consecutive
   // failures, last_success_at NULL, cursor frozen at cold start while the chain
-  // moved 8,737 blocks ahead — so the three missed transactions were never in
+  // moved 8,737 blocks ahead - so the three missed transactions were never in
   // scan range at all.
   //
   // Now tracks firstFailedBlock at BLOCK granularity and advances to
@@ -337,7 +337,7 @@ export async function scanRange(
   // has always done. A failed block is never skipped and never passed over: the
   // cursor stops below it and the next pass retries from there.
   //
-  // FIX 2 — concurrency 8, matching deposit-scan-all's NATIVE_BLOCK_CONCURRENCY.
+  // FIX 2 - concurrency 8, matching deposit-scan-all's NATIVE_BLOCK_CONCURRENCY.
   // Measured on Arc: 310ms/block serial vs 49ms/block at 8 (6.3x). Serial made a
   // transient failure near-certain over a 155s chunk, which under the old
   // all-or-nothing rule meant permanent zero progress. Bounded batches, never an
@@ -350,7 +350,7 @@ export async function scanRange(
   let firstFailedBlock: number | null = null
 
   for (let i = 0; i < blockNumbers.length; i += NATIVE_BLOCK_CONCURRENCY) {
-    // Stop launching new batches once a failure is known — blocks beyond it
+    // Stop launching new batches once a failure is known - blocks beyond it
     // cannot be committed anyway, so fetching them is wasted RPC budget.
     if (firstFailedBlock !== null) break
 
@@ -401,7 +401,7 @@ export async function scanRange(
           assets: ['USDC'],
           metadata: { recipient: to, sender: from, amount },
           status: 'pending',
-          // No log at all for a plain top-level native-value transfer — there is
+          // No log at all for a plain top-level native-value transfer - there is
           // no contract, no log_index, no event signature. block_hash and
           // transaction_index ARE available on the tx object this came from
           // (eth_getBlockByNumber with full transactions), captured here at
@@ -484,7 +484,7 @@ export async function scanRange(
             metadata: { recipient: wallet, sender: from, amount: decoded.amount, via: 'native-transfer-log' },
             status: 'pending',
             // Captured directly from the eth_getLogs response already being
-            // read — no extra RPC call. See docs/PHASE_3_INDEXER_AUDIT.md §6/§7
+            // read - no extra RPC call. See docs/PHASE_3_INDEXER_AUDIT.md §6/§7
             // for why log_index in particular matters: this is the field that
             // makes the dedup identity correct when a tx produces more than
             // one Transfer log.
@@ -521,14 +521,14 @@ export async function scanRange(
       ),
     )
     logResults.push(...segments)
-    // Filters mirror deposit-scan-all's log path exactly — same reason as
+    // Filters mirror deposit-scan-all's log path exactly - same reason as
     // the native branch above.
     for (const log of logs) {
       const decoded = decodeTransferLog(log as any, token.decimals, token.contract)
       if (!decoded) continue
       const { wallet, from } = decoded
       if (!wallet || !knownWallets.has(wallet)) continue
-      // A zero-address sender is a MINT, which is a CCTP claim arriving —
+      // A zero-address sender is a MINT, which is a CCTP claim arriving -
       // claim-recovery-scan owns that, and the legacy deposit scan skips
       // it. Emitting it here would look like an indexer_only find.
       if (isMintTransfer(decoded)) continue
@@ -542,7 +542,7 @@ export async function scanRange(
         assets: [token.symbol],
         metadata: { to: wallet, from, amount: decoded.amount },
         status: 'pending',
-        // Same reasoning as the native-transfer-log branch above — this is
+        // Same reasoning as the native-transfer-log branch above - this is
         // the field that makes multi-recipient transactions (BulkPay/
         // Multicall3, once that coverage is added) dedup correctly instead
         // of colliding with each other. See
@@ -561,13 +561,13 @@ export async function scanRange(
   // contiguously. If EITHER had a gap, the cursor must stop before it.
   //
   // nativeSafe is now computed at BLOCK granularity above (firstFailedBlock - 1)
-  // rather than via safeAdvance over 500-block chunks — that chunk-level rule is
+  // rather than via safeAdvance over 500-block chunks - that chunk-level rule is
   // what froze the deployed cursor. The log scan keeps chunk granularity because
   // eth_getLogs is inherently range-based: a failed range yields no per-block
   // information, so there is no finer boundary available to stop at.
   const logSafe = safeAdvance(fromBlock, logResults)
   // The contract-mediated pass is a third source that can gap independently.
-  // If it failed partway, the cursor must stop below that failure too —
+  // If it failed partway, the cursor must stop below that failure too -
   // otherwise a wrapper-routed deposit in the skipped range is lost forever.
   const nativeLogSafe = nativeLogContract
     ? safeAdvance(fromBlock, nativeLogResults)
@@ -577,7 +577,7 @@ export async function scanRange(
   // A block is only confirmable if the cursor actually reached it. The native
   // loop pushes every block it successfully read, but a failure at a LOWER block
   // (or a gap in the log scan) holds safeUpTo back while higher blocks in the
-  // same batch may already have succeeded — so this list can legitimately
+  // same batch may already have succeeded - so this list can legitimately
   // contain blocks above the cursor. Marking those 'confirmed' would finalize
   // events in a range the next pass is going to re-scan, which is precisely the
   // cursor/status inconsistency the reorg design exists to prevent.

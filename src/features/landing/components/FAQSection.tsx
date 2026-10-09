@@ -6,15 +6,15 @@ import { Reveal } from './Reveal'
 const FAQS = [
   {
     q: 'Is MeshPort self-custodial?',
-    a: 'Yes — every wallet. Whether you create one, import one, or sign in with Google or an email code, the wallet key is generated on your own device and is never sent to MeshPort. MeshPort cannot move your funds.',
+    a: 'Yes - every wallet. Whether you create one, import one, or sign in with Google or an email code, the wallet key is generated on your own device and is never sent to MeshPort. MeshPort cannot move your funds.',
   },
   {
     q: 'How are Google/email wallets secured?',
-    a: 'The key is made on your device and kept there, sealed by your browser. To use it on another device you unlock it with a passkey (Face ID, fingerprint or device PIN) or scan your Recovery QR and enter its password. MeshPort stores none of these secrets — no private key, no recovery password, no seed phrase.',
+    a: 'The key is made on your device and kept there, sealed by your browser. To use it on another device you unlock it with a passkey (Face ID, fingerprint or device PIN) or scan your Recovery QR and enter its password. MeshPort stores none of these secrets - no private key, no recovery password, no seed phrase.',
   },
   {
     q: 'What if I lose my phone?',
-    a: 'Sign in on your new device and unlock with your passkey (if it syncs through iCloud Keychain or Google Password Manager), or scan your Recovery QR and type its password. Without either one the wallet can’t be recovered — not even by MeshPort — so save your Recovery QR somewhere safe.',
+    a: 'Sign in on your new device and unlock with your passkey (if it syncs through iCloud Keychain or Google Password Manager), or scan your Recovery QR and type its password. Without either one the wallet can’t be recovered - not even by MeshPort - so save your Recovery QR somewhere safe.',
   },
   {
     q: 'Are my chats private?',
@@ -26,7 +26,7 @@ const FAQS = [
   },
   {
     q: 'How do username payments work?',
-    a: 'Every MeshPort wallet has a .arc username. Send USDC to that username instead of a long wallet address — no copying or verifying a hex string before you pay.',
+    a: 'Every MeshPort wallet has a .arc username. Send USDC to that username instead of a long wallet address - no copying or verifying a hex string before you pay.',
   },
   {
     q: 'What assets does MeshPort support?',
@@ -46,7 +46,7 @@ const FAQS = [
   },
   {
     q: 'Is the P2P marketplace safe?',
-    a: 'P2P trades run through an escrow flow — funds are held until both sides confirm the trade, so neither party can walk away with the other’s money mid-trade.',
+    a: 'P2P trades run through an escrow flow - funds are held until both sides confirm the trade, so neither party can walk away with the other’s money mid-trade.',
   },
   {
     q: 'Is MeshPort currently on Arc Testnet?',

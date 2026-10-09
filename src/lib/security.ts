@@ -4,7 +4,7 @@
  *   EVERY account (social-login and create/import alike) purely to lock
  *   the app UI and gate sensitive actions (send, reveal seed, export key).
  *   This passcode is NEVER used to derive a wallet-encryption key for
- *   social-login (Google/Email-OTP) accounts — those wallets are
+ *   social-login (Google/Email-OTP) accounts - those wallets are
  *   self-custodial, locked with a passkey / Recovery QR (lib/socialWallet.ts)
  *   and have nothing to do with this file's passcode functions.
  * - encryptPrivateKey / decryptPrivateKey / storeEncryptedKey / getEncryptedKey:
@@ -18,7 +18,7 @@
  */
 
 const PBKDF2_ITERATIONS = 100000          // legacy "v2"/"v2enc" records (still readable)
-// Current records ("v3"/"v3enc"): 600,000 iterations — the OWASP figure for
+// Current records ("v3"/"v3enc"): 600,000 iterations - the OWASP figure for
 // PBKDF2-SHA256. Six times the work per guess for anyone who copied this
 // device's storage. Native WebCrypto keeps it fast on phones. Older records
 // are upgraded on the next successful unlock (upgradeLegacyEncryption).
@@ -49,13 +49,13 @@ function fromBase64(str: string): Uint8Array<ArrayBuffer> {
   return new Uint8Array(atob(str).split('').map(c => c.charCodeAt(0)))
 }
 
-// ─── Hash passcode — salt embedded in output string ───────────────────────────
+// ─── Hash passcode - salt embedded in output string ───────────────────────────
 // Output format: "v2:<base64-16-byte-salt>:<base64-ciphertext>"
 // This makes the hash self-contained and portable across devices.
 export async function hashPasscode(passcode: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16))
   const key = await deriveKey(passcode, salt, ['encrypt'], PBKDF2_ITERATIONS_V3)
-  const iv = new Uint8Array(12) // fixed IV — deterministic for same key
+  const iv = new Uint8Array(12) // fixed IV - deterministic for same key
   const enc = new TextEncoder()
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
@@ -66,7 +66,7 @@ export async function hashPasscode(passcode: string): Promise<string> {
 }
 
 // ─── Brute-force lockout for the app-lock passcode ───────────────────────────
-// /cso finding: verifyPasscode() had no attempt limiting at all — a script
+// /cso finding: verifyPasscode() had no attempt limiting at all - a script
 // with devtools/localStorage access could exhaust all 10^6 six-digit codes
 // well within an hour (each PBKDF2-100k check is single-digit milliseconds).
 // State is per-device (localStorage), same threat model as the passcode hash
@@ -99,7 +99,7 @@ export function getPasscodeLockoutRemainingMs(): number {
 
 /**
  * Clears the passcode lockout. Callers must only invoke this after a
- * check at least as strong as the passcode itself — e.g. a successful
+ * check at least as strong as the passcode itself - e.g. a successful
  * platform biometric assertion (Face ID / fingerprint), which recovers the
  * real passcode via a device-bound credential rather than guessing it, and
  * so isn't subject to the brute-force threat this lockout defends against.
@@ -110,12 +110,12 @@ export function clearPasscodeLockout(): void {
 }
 
 // ─── Passcodes already verified in this app session ──────────────────────────
-// The real check stretches the passcode 600,000 times on purpose (PBKDF2) —
+// The real check stretches the passcode 600,000 times on purpose (PBKDF2) -
 // about a second on a phone, which made every payment approval feel slow.
 // Once a passcode has passed that check, later checks of the SAME passcode
 // against the SAME stored hash in this page session are answered from
 // memory. Memory only (never stored), keyed by a SHA-256 tag rather than the
-// passcode itself, and cleared whenever the app locks or signs out — so the
+// passcode itself, and cleared whenever the app locks or signs out - so the
 // first check after unlocking is always the full one (or a biometric
 // assertion, see markPasscodeVerified).
 const verifiedThisSession = new Set<string>()
@@ -179,7 +179,7 @@ export async function verifyPasscode(passcode: string, storedHash: string): Prom
 async function verifyPasscodeUnthrottled(passcode: string, storedHash: string): Promise<boolean> {
   try {
 
-    // v2 format: "v2:<salt>:<hash>" — portable, works across devices
+    // v2 format: "v2:<salt>:<hash>" - portable, works across devices
     if (storedHash.startsWith('v2:') || storedHash.startsWith('v3:')) {
       const parts = storedHash.split(':')
       if (parts.length !== 3) return false
@@ -314,7 +314,7 @@ export function getEncryptedMnemonic(walletAddress: string): string | null {
 
 // ─── Session-scoped private key cache (import-privkey wallets only) ──────────
 // import-privkey wallets have no mnemonic, so a page refresh has nothing to
-// silently re-derive the key from — the only way back is decrypting the
+// silently re-derive the key from - the only way back is decrypting the
 // locally-stored ciphertext with the user's passcode (see restoreWallet.ts
 // step 3), which is why those wallets used to re-prompt for the passcode on
 // EVERY refresh, not just after a real gap in the session.
@@ -323,7 +323,7 @@ export function getEncryptedMnemonic(walletAddress: string): string | null {
 // text in sessionStorage, which is accessible to any script on the page
 // (XSS, a compromised dependency) via `sessionStorage.getItem(key)`. The
 // improved strategy is:
-//   1. Primary: in-memory map (zero storage footprint — cleared on tab close
+//   1. Primary: in-memory map (zero storage footprint - cleared on tab close
 //      or page reload automatically). XSS in the same page load can still
 //      read JS module scope, but this removes the persistent sessionStorage
 //      string that survives a devtools open or a storage inspector.
@@ -332,14 +332,14 @@ export function getEncryptedMnemonic(walletAddress: string): string | null {
 //      bindWalletToDevice) before being written to sessionStorage. A copied
 //      sessionStorage dump is useless without the exact IndexedDB key from
 //      this browser, matching the protection the locally-stored encrypted key
-//      already has. sessionStorage — not localStorage — is still deliberate:
+//      already has. sessionStorage - not localStorage - is still deliberate:
 //      cleared when the tab/window closes. App.tsx clears it on 'offline'.
 //   3. On any IndexedDB error, fall back to the previous plain-text
 //      sessionStorage behaviour rather than silently losing the cache and
 //      forcing a passcode prompt on every single interaction.
 const SESSION_PK_PREFIX = 'meshport_session_pk_'
 
-// In-memory primary cache — never serialised anywhere. Cleared automatically
+// In-memory primary cache - never serialised anywhere. Cleared automatically
 // when the page/tab unloads.
 const _sessionPkMemory = new Map<string, string>()
 
@@ -352,7 +352,7 @@ export async function cacheSessionPrivateKey(walletAddress: string, privateKey: 
     const wrapped = await wrapForDevice(privateKey)
     sessionStorage.setItem(SESSION_PK_PREFIX + key, wrapped)
   } catch {
-    // IndexedDB unavailable or no device key yet — write plain text as last
+    // IndexedDB unavailable or no device key yet - write plain text as last
     // resort, same as the original behaviour. The in-memory copy above still
     // gives better safety within the current page load.
     try { sessionStorage.setItem(SESSION_PK_PREFIX + key, privateKey) } catch {}
@@ -372,7 +372,7 @@ export async function getSessionPrivateKey(walletAddress: string): Promise<strin
     if (stored.startsWith(DEVICE_PREFIX)) {
       plain = await unwrapFromDevice(stored)
     } else {
-      // Legacy plain-text entry written by an older session — accept it.
+      // Legacy plain-text entry written by an older session - accept it.
       plain = stored
     }
     if (plain) _sessionPkMemory.set(key, plain)
@@ -405,7 +405,7 @@ export function clearSessionPrivateKey(walletAddress?: string | null) {
 // without this exact browser.
 //
 // The cost: if this browser's IndexedDB is ever wiped while localStorage
-// survives, the saved copy can't be opened on this device any more — the
+// survives, the saved copy can't be opened on this device any more - the
 // wallet is then restored from its recovery phrase / private key (funds are
 // on-chain and unaffected). That's why binding only happens once the owner
 // has a backup: after creating a wallet (the recovery-phrase word check),
@@ -474,7 +474,7 @@ export async function openFromDevice(sealed: string): Promise<string | null> {
 
 /**
  * The owner has a backup of this wallet (recovery phrase / private key).
- * Resolves once the device layer is on the saved key and phrase — wallet
+ * Resolves once the device layer is on the saved key and phrase - wallet
  * setup awaits it so closing the page right after can't leave them unbound.
  */
 export function markWalletBackedUp(walletAddress: string): Promise<void> {
@@ -510,7 +510,7 @@ export function bindWalletToDevice(walletAddress: string): Promise<void> {
 
 /**
  * True when this wallet's saved copy is device-bound but this browser no
- * longer has the device key (its site data was partly cleared) — the wallet
+ * longer has the device key (its site data was partly cleared) - the wallet
  * has to be restored from its recovery phrase or private key.
  */
 export async function isDeviceBindingLost(walletAddress: string): Promise<boolean> {
@@ -526,7 +526,7 @@ export async function isDeviceBindingLost(walletAddress: string): Promise<boolea
  * Re-encrypts this wallet's stored key and recovery phrase with the current
  * (600k-iteration) scheme, keeping any device binding, and returns a new
  * passcode hash if the stored one is the legacy format (the caller saves it).
- * Safe to call on every unlock — it does nothing once everything is current.
+ * Safe to call on every unlock - it does nothing once everything is current.
  */
 export async function upgradeLegacyEncryption(walletAddress: string | null, passcode: string, storedHash: string | null): Promise<string | null> {
   const isLegacyBlob = async (v: string | null) => {
@@ -553,7 +553,7 @@ export async function upgradeLegacyEncryption(walletAddress: string | null, pass
         put(upgraded)
       }
     }
-  } catch { /* keep the old copy — it still opens */ }
+  } catch { /* keep the old copy - it still opens */ }
   if (storedHash && !storedHash.startsWith('v3:')) {
     try { return await hashPasscode(passcode) } catch { return null }
   }

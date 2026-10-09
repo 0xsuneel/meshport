@@ -7,7 +7,7 @@ import {
   type NewsItem, type NewsSource,
 } from '@/lib/news'
 
-// /news — every story, newest first, with source filters. Live Arc network
+// /news - every story, newest first, with source filters. Live Arc network
 // notices are pinned at the top. Tapping a story opens /news/:id.
 
 const FILTERS: { key: NewsSource | null; label: string }[] = [

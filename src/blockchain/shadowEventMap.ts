@@ -1,13 +1,13 @@
 /**
- * shadowEventMap.ts — pure mapping/statistics for shadow-mode chain events.
+ * shadowEventMap.ts - pure mapping/statistics for shadow-mode chain events.
  *
  * Deliberately imports NOTHING. Kept separate from shadowEventBus.ts (which
  * pulls in the Supabase client, and with it `import.meta.env`) so this logic
  * is testable under plain node/tsx without Vite's env shim or credentials.
  *
  * The column contract with the Phase 3 `chain_events` migration is exactly
- * what can silently drift — a mis-mapped column would make every latency
- * reading wrong rather than obviously broken — so it lives here and is
+ * what can silently drift - a mis-mapped column would make every latency
+ * reading wrong rather than obviously broken - so it lives here and is
  * asserted in scripts/verify-phase4-bus.ts.
  */
 
@@ -22,7 +22,7 @@ export interface ShadowEvent {
   createdAt: string
   /**
    * ms between the row's created_at (server insert) and the client receiving
-   * it. -1 when created_at is missing/unparseable — NOT 0, because 0 would
+   * it. -1 when created_at is missing/unparseable - NOT 0, because 0 would
    * read as "instant delivery" and quietly drag every percentile toward zero.
    */
   deliveryLatencyMs: number
@@ -59,7 +59,7 @@ export function latencyStats(events: ShadowEvent[]): {
   const lats = events.map(e => e.deliveryLatencyMs).filter(n => n >= 0).sort((a, b) => a - b)
   if (lats.length === 0) return null
   // Nearest-rank percentile: index = ceil(p * n) - 1, the convention monitoring
-  // tools use for p95/p99. An earlier floor(p * n) here was inconsistent — it
+  // tools use for p95/p99. An earlier floor(p * n) here was inconsistent - it
   // returned the UPPER median for even-length samples (400 rather than 300 over
   // [100,200,300,400,1000,5000]), so p50 and p95 disagreed about what a
   // percentile meant and the reported median ran optimistically high.

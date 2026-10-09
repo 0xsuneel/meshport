@@ -1,7 +1,7 @@
 // src/lib/describeFunctionsError.test.ts
 //
 // Regression guard for a live bug report: a Swap failed with the error
-// banner reading "Edge Function returned a non-2xx status code" — completely
+// banner reading "Edge Function returned a non-2xx status code" - completely
 // uninformative, and NOT what swap-intent's own response body actually said.
 //
 // Root cause: @supabase/functions-js's FunctionsHttpError ALWAYS carries that

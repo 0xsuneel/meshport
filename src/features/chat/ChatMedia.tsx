@@ -128,7 +128,7 @@ const TYPE_COLOR: Record<string, string> = { pdf: '#d95c4a', doc: '#3b6fd4', doc
 /**
  * A file: type badge, name, size and type; tap to download (progress ring),
  * then tap to open. Opening happens on that second tap, so it's a real user
- * gesture — browsers don't block it the way they block a popup opened after
+ * gesture - browsers don't block it the way they block a popup opened after
  * a download.
  */
 export function ChatFile({ name, url, iv, convKey, isMine, upload, failed, onRetry, onOpenImage }: {
@@ -293,7 +293,7 @@ export function ChatImageViewer({ items, startId, convKey, onClose, onReply, onF
 }) {
   const [idx, setIdx] = useState(() => Math.max(0, items.findIndex(i => i.id === startId)))
   const item = items[idx]
-  // Decrypted image per photo id — the current one AND its neighbours, so
+  // Decrypted image per photo id - the current one AND its neighbours, so
   // the next/previous photo is already there while you slide to it.
   const [srcs, setSrcs] = useState<Record<string, string>>({})
   const src = item ? srcs[item.id] ?? null : null
@@ -341,7 +341,7 @@ export function ChatImageViewer({ items, startId, convKey, onClose, onReply, onF
     if (e.target !== e.currentTarget) return
     const next = pendingIdx.current
     pendingIdx.current = null
-    // Same frame: switch photo and reset the strip — nothing visibly moves.
+    // Same frame: switch photo and reset the strip - nothing visibly moves.
     setGliding(false)
     setSlideX(0)
     if (next !== null) setIdx(next)

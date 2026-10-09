@@ -1,7 +1,7 @@
 import { Layers, ArrowRight } from 'lucide-react'
 import { Reveal } from './Reveal'
 
-// Count reflects src/blockchain/chains.ts (EXTERNAL_CHAINS registry) — kept
+// Count reflects src/blockchain/chains.ts (EXTERNAL_CHAINS registry) - kept
 // as a single readable number here rather than hardcoding a chain list, so
 // this stays correct as the registry grows without another copy to update.
 const SUPPORTED_CHAIN_COUNT = 21

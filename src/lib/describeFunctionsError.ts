@@ -1,7 +1,7 @@
 /**
  * describeFunctionsError.ts
  *
- * BUG FIX (2026-09-05, traced from a live "Swap Failed — Edge Function
+ * BUG FIX (2026-09-05, traced from a live "Swap Failed - Edge Function
  * returned a non-2xx status code" report): every intent-service call site
  * in this codebase (payIntentService, bulkPayIntentService,
  * swapIntentService, claimService) did
@@ -10,22 +10,22 @@
  *   if (error) return { success: false, error: error.message }
  *
  * but @supabase/functions-js's FunctionsHttpError ALWAYS carries the exact
- * same hardcoded message — 'Edge Function returned a non-2xx status code'
- * (see node_modules/@supabase/functions-js/dist/module/types.js) —
+ * same hardcoded message - 'Edge Function returned a non-2xx status code'
+ * (see node_modules/@supabase/functions-js/dist/module/types.js) -
  * regardless of what the edge function itself actually returned. The real,
  * specific reason (a validation failure like "walletAddress required", or
  * whatever the function's own catch block produced, e.g. pay-intent/
  * swap-intent/bulkpay-intent/claim-submit's `{ success: false, error: '...' }`
- * JSON body) is sitting unread in `error.context`, the raw fetch Response —
+ * JSON body) is sitting unread in `error.context`, the raw fetch Response -
  * FunctionsClient.js throws immediately on `!response.ok`, before ever
  * calling `.json()` on it, so the body is still there to read. Every
  * validation failure or 500 from ANY of these edge functions was surfacing
  * to the user (and to anyone reading the console) as this same generic,
- * uninformative string, with zero information about what actually failed —
+ * uninformative string, with zero information about what actually failed -
  * exactly what the swap screenshot showed. This is the shared fix: read the
  * real reason out of `error.context` when it's an HTTP error, and only fall
  * back to the SDK's generic message for the cases where there genuinely is
- * no server-side reason to read (FunctionsFetchError — request never
+ * no server-side reason to read (FunctionsFetchError - request never
  * reached the function at all; FunctionsRelayError; a non-JSON body).
  */
 import { FunctionsHttpError } from '@supabase/supabase-js'

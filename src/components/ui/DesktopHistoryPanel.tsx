@@ -1,10 +1,10 @@
 // DesktopHistoryPanel.tsx
 // Desktop-only right-column card shell shared by Send/Swap/Multichain
-// Transfer/Multichain Claim/P2P — each of those pages gets a 2-column
+// Transfer/Multichain Claim/P2P - each of those pages gets a 2-column
 // desktop layout (existing flow on the left, unchanged; a real history list
 // on the right, see each page's own fetch). This component is only the
 // chrome (title row + "View all" link + a scrollable body) so the 5 call
-// sites don't each reinvent the same card styling — matches the surface/
+// sites don't each reinvent the same card styling - matches the surface/
 // border/radius/shadow language already used throughout Home's desktop
 // cards. The body's `overflowY: auto` (not `hidden`) is what makes the
 // history list scroll independently of the flow column next to it, and
@@ -60,7 +60,7 @@ export function DesktopHistorySkeleton() {
 }
 
 // Row-tap detail popup shared by Pay/Multichain Claim/Multichain Transfer's
-// desktop history panels — tapping a row opens this instead of navigating
+// desktop history panels - tapping a row opens this instead of navigating
 // away (matches Swap's own HistoryDetail popup); "View all" at the top of
 // the panel is the only thing that still navigates anywhere.
 //

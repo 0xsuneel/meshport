@@ -1,4 +1,4 @@
-// True while the phone's on-screen keyboard is up — i.e. while a text field
+// True while the phone's on-screen keyboard is up - i.e. while a text field
 // has focus. Detected from focus rather than from viewport sizes: this app's
 // viewport uses interactive-widget=resizes-content, so on Android the whole
 // layout viewport shrinks with the keyboard and a height comparison can't

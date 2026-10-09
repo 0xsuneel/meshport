@@ -41,17 +41,17 @@ export function NotificationBroadcastPage() {
   useEffect(() => { loadHistory() }, [])
 
   // Removes this broadcast's record everywhere the app still reads it
-  // from (this list AND the in-app feed every user sees — both read live
+  // from (this list AND the in-app feed every user sees - both read live
   // from the same admin_broadcasts row, see api/push.ts's handleFeed).
   // Cannot recall the raw OS push notification that already appeared on
-  // someone's device — no server-side code can reach back into a device's
+  // someone's device - no server-side code can reach back into a device's
   // notification tray after Web Push delivery, a hard platform
   // limitation rather than something this button failed to do.
   const handleDelete = async (id: string) => {
     setDeletingId(id)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) { setError('Your admin session expired — sign in again.'); setDeletingId(null); return }
+      if (!session?.access_token) { setError('Your admin session expired - sign in again.'); setDeletingId(null); return }
       const r = await fetch('/api/push?action=broadcast', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
@@ -76,7 +76,7 @@ export function NotificationBroadcastPage() {
     setSending(true); setError(null); setResult(null)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) { setError('Your admin session expired — sign in again.'); setSending(false); return }
+      if (!session?.access_token) { setError('Your admin session expired - sign in again.'); setSending(false); return }
 
       const r = await fetch('/api/push?action=broadcast', {
         method: 'POST',

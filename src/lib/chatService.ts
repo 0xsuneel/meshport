@@ -1,5 +1,5 @@
 /**
- * chatService.ts — Bulletproof chat persistence.
+ * chatService.ts - Bulletproof chat persistence.
  * No supabase-js for writes. All writes go to /api/send-message (service key)
  * with direct Supabase REST as fallback.
  */
@@ -10,8 +10,8 @@ import { supabase as _sbClient, chatApiHeaders } from './supabase'
 // ('cvvpzfvzweszuuxvaayb.supabase.co') instead of reading the same env vars
 // as src/lib/supabase.ts (whose `supabase` client is what every realtime
 // channel in ChatPage.tsx subscribes through). If VITE_SUPABASE_URL ever
-// points to a different project than this hardcoded one — a redeployed/
-// rotated project, a staging vs prod mismatch, anything — every read/write
+// points to a different project than this hardcoded one - a redeployed/
+// rotated project, a staging vs prod mismatch, anything - every read/write
 // here would go to one project while realtime subscribes to another,
 // producing exactly "message shows after a refresh but never live": refresh
 // re-reads from wherever THIS file points, which always has the data,
@@ -22,14 +22,14 @@ import { supabase as _sbClient, chatApiHeaders } from './supabase'
 const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || 'https://cvvpzfvzweszuuxvaayb.supabase.co'
 const ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || 'sb_publishable_PA16DyqFzvPLjxUeWqJU-Q_PPinntp2'
 if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-  console.error('[chatService] VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY not set — falling back to a hardcoded project. Chat reads/writes may be pointed at a different Supabase project than realtime subscribes to.')
+  console.error('[chatService] VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY not set - falling back to a hardcoded project. Chat reads/writes may be pointed at a different Supabase project than realtime subscribes to.')
 }
 
 // ── Auth headers for raw REST calls ─────────────────────────────────────────
 // This file intentionally bypasses supabase-js for most calls (see file
 // header), using the bare ANON_KEY as the bearer token. That was invisible
 // under wide-open RLS (using (true) doesn't care who's asking) but breaks
-// silently once RLS actually scopes rows by auth.uid() — a bare anon-key
+// silently once RLS actually scopes rows by auth.uid() - a bare anon-key
 // request carries no session, so auth.uid() is null and every ownership
 // check fails, with PostgREST just returning 0 matching rows (no error).
 // Using the real session's access_token here fixes that while keeping the
@@ -49,13 +49,13 @@ export async function authHeaders(): Promise<Record<string, string>> {
  *
  * Plain `.subscribe()` has no built-in recovery: if the socket drops (tab
  * backgrounded, a brief network blip, an auth token refresh invalidating the
- * channel) it just goes silent — CHANNEL_ERROR / TIMED_OUT / CLOSED never
+ * channel) it just goes silent - CHANNEL_ERROR / TIMED_OUT / CLOSED never
  * retry on their own. Without this, "instant live messages" quietly
  * degrades into "works until something hiccups, then needs a manual
- * refresh" — which is indistinguishable from realtime being broken
+ * refresh" - which is indistinguishable from realtime being broken
  * entirely from the user's point of view. That's the bug this fixes.
  *
- * `configure` receives a fresh channel on each (re)connect attempt — attach
+ * `configure` receives a fresh channel on each (re)connect attempt - attach
  * .on(...) handlers to it and return it. This function handles calling
  * .subscribe(), retrying on drop, resyncing on tab-focus/network-regain,
  * and cleanup.
@@ -76,18 +76,18 @@ export function subscribeWithRetry(
   const baseRetryDelayMs = opts?.retryDelayMs ?? 2000
   // Bug fix: this used to retry at a flat 2s forever, no backoff, no cap.
   // On a persistently bad connection (seen in practice well under 10 KB/s),
-  // the socket can fail to establish over and over — a flat interval means
+  // the socket can fail to establish over and over - a flat interval means
   // that's a genuinely unbounded retry loop, hundreds of attempts within a
   // few minutes, each one creating a fresh channel and tearing down the
   // last. That volume of churn is the most likely trigger for a real
   // Supabase-js RangeError (stack overflow deep inside its own channel
   // trigger/cleanup logic) observed directly in production under exactly
-  // these conditions — not something reachable from a normal drop-and-
+  // these conditions - not something reachable from a normal drop-and-
   // recover connection, only from sustained hammering like this. Backing
   // off exponentially (capped, with jitter so many tabs/subscriptions
   // don't all retry in lockstep) cuts the attempt volume dramatically
   // under a bad connection while staying just as fast to recover from a
-  // single brief drop — the very next attempt is still at the original
+  // single brief drop - the very next attempt is still at the original
   // 2s baseline; only REPEATED failures slow the pace down.
   const MAX_RETRY_DELAY_MS = 30_000
   let currentRetryDelayMs = baseRetryDelayMs
@@ -100,13 +100,13 @@ export function subscribeWithRetry(
   const connect = () => {
     if (cancelled) return
     // A resync (below) or a fresh manual connect supersedes any pending
-    // auto-retry — without this, a retry scheduled right as the tab was
+    // auto-retry - without this, a retry scheduled right as the tab was
     // backgrounded (backgrounding very commonly drops the socket, which
     // schedules exactly this) would still fire later and create a second,
     // duplicate connection on top of whatever connect() is doing right now.
     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
     attempt += 1
-    // Unique-per-attempt channel name — supabase-js can reject a
+    // Unique-per-attempt channel name - supabase-js can reject a
     // re-subscribe on a channel name still mid-teardown as "already
     // subscribed"; a fresh name per attempt sidesteps that entirely.
     const myAttempt = attempt
@@ -116,7 +116,7 @@ export function subscribeWithRetry(
     // inside supabase-js runs leave() -> trigger() and re-invokes THIS status
     // callback with 'CLOSED'. Before this flag existed the terminal branch
     // below therefore called removeChannel() again on the same dying channel,
-    // which closed again, which re-entered again — unbounded SYNCHRONOUS
+    // which closed again, which re-entered again - unbounded SYNCHRONOUS
     // recursion ending in "RangeError: Maximum call stack size exceeded" deep
     // in supabase-js (Array.filter -> trigger -> leave -> unsubscribe).
     //
@@ -126,7 +126,7 @@ export function subscribeWithRetry(
     // nested frame read the same stale value.
     //
     // `cancelled` did not cover this: it is only set by the unsubscribe
-    // cleanup. A resync (visibilitychange/online — i.e. simply navigating to a
+    // cleanup. A resync (visibilitychange/online - i.e. simply navigating to a
     // page) or a real socket drop both reach the branch with cancelled=false
     // and myAttempt===attempt, so neither existing guard applied.
     let settled = false
@@ -134,21 +134,21 @@ export function subscribeWithRetry(
     channel.subscribe((status) => {
       if (cancelled) return
       // A newer connect() has already superseded this one (e.g. a second
-      // resync fired before this attempt finished subscribing) — this
+      // resync fired before this attempt finished subscribing) - this
       // callback is for a channel that's no longer the current one, so
       // don't act on it. Without this, a stale callback could remove the
       // channel a NEWER attempt is actively using, or schedule a redundant
       // retry on top of one already in progress.
       if (myAttempt !== attempt) return
       if (status === 'SUBSCRIBED') {
-        // A real, successful connection — the backoff earned by however
+        // A real, successful connection - the backoff earned by however
         // many failures came before this no longer applies. Reset it so
         // the NEXT drop (a fresh, likely-unrelated issue) starts fast
         // again at the 2s baseline instead of inheriting a slow pace from
         // trouble that's already resolved.
         currentRetryDelayMs = baseRetryDelayMs
         if (attempt > 1) {
-          // Reconnected after a drop — the socket only sees INSERTs from
+          // Reconnected after a drop - the socket only sees INSERTs from
           // this point forward, so anything that happened during the gap
           // (a message sent while we were disconnected) needs a manual
           // re-fetch to avoid silently missing it.
@@ -162,7 +162,7 @@ export function subscribeWithRetry(
         settled = true
 
         const delay = currentRetryDelayMs
-        console.warn(`[Realtime] ${channelNameBase} dropped (${status}) — reconnecting in ${Math.round(delay)}ms`)
+        console.warn(`[Realtime] ${channelNameBase} dropped (${status}) - reconnecting in ${Math.round(delay)}ms`)
 
         // Detach the reference BEFORE removing, so no other path (onResync, the
         // unsubscribe cleanup) can remove this same object a second time.
@@ -182,7 +182,7 @@ export function subscribeWithRetry(
 
         retryTimer = setTimeout(connect, delay)
         // ±20% jitter applied to NEXT attempt's delay, not this one already
-        // scheduled — keeps repeated failures from many tabs/subscriptions
+        // scheduled - keeps repeated failures from many tabs/subscriptions
         // syncing up and retrying in lockstep.
         currentRetryDelayMs = Math.min(currentRetryDelayMs * 2, MAX_RETRY_DELAY_MS) * (0.8 + Math.random() * 0.4)
       }
@@ -190,12 +190,12 @@ export function subscribeWithRetry(
   }
   connect()
 
-  // Resync on tab focus / network regain — catches gaps the socket-level
+  // Resync on tab focus / network regain - catches gaps the socket-level
   // reconnect above can still miss (e.g. a laptop asleep for a long stretch,
   // where the OS may not even surface a clean CLOSE event to the socket).
   // Debounced and reentrancy-guarded: some mobile browsers fire
   // visibilitychange more than once (sometimes paired with an 'online'
-  // event too) on a single resume from background — without this, each of
+  // event too) on a single resume from background - without this, each of
   // those fired its own overlapping teardown-and-reconnect, which for the
   // 2-3 realtime subscriptions active at once while a chat is open could
   // cascade into several simultaneous WebSocket rebuilds and visibly hang
@@ -211,7 +211,7 @@ export function subscribeWithRetry(
       if (cancelled) return
       // Detach before removing, then let connect() build a fresh channel. The
       // removal still triggers a 'CLOSED' on the old channel's callback, but
-      // that attempt's `settled` guard absorbs it — and because `channel` is
+      // that attempt's `settled` guard absorbs it - and because `channel` is
       // already null here, nothing can double-remove this object.
       const dying = channel
       channel = null
@@ -228,7 +228,7 @@ export function subscribeWithRetry(
     cancelled = true
     if (retryTimer) { clearTimeout(retryTimer); retryTimer = null }
     // Same detach-then-remove discipline. `cancelled` already makes the status
-    // callback a no-op, so the 'CLOSED' this triggers is inert — but nulling
+    // callback a no-op, so the 'CLOSED' this triggers is inert - but nulling
     // first guarantees no path can remove the same channel twice, which is what
     // makes leaving and re-entering a page reliably produce exactly one
     // subscription.
@@ -260,7 +260,7 @@ export interface ChatMessage {
   reply_to_id?: string | null
   forwarded?: boolean
   deleted_at?: string | null
-  /** Client-only: sending failed — shown with "tap to retry". */
+  /** Client-only: sending failed - shown with "tap to retry". */
   _failed?: boolean
 }
 
@@ -281,7 +281,7 @@ export interface SendParams {
   replyToId?: string | null
 }
 
-// ── Load messages from Supabase REST (anon key — SELECT works fine) ───────────
+// ── Load messages from Supabase REST (anon key - SELECT works fine) ───────────
 export async function loadMessages(conversationId: string): Promise<ChatMessage[]> {
   try {
     // Fetch newest 100 first (DESC), then reverse for display order
@@ -351,7 +351,7 @@ export async function ensureConversation(myId: string, otherId: string): Promise
   return null
 }
 
-// ── Persist message — 3 paths ─────────────────────────────────────────────────
+// ── Persist message - 3 paths ─────────────────────────────────────────────────
 export async function persistMessage(p: SendParams): Promise<ChatMessage | null> {
   // PATH 1: Vercel /api/send-message with service role key
   try {
@@ -385,7 +385,7 @@ export async function persistMessage(p: SendParams): Promise<ChatMessage | null>
 
   // PATH 2: Direct REST with anon key (needs RLS INSERT policy for anon role)
   try {
-    // Minimal row — no token_symbol in case column doesn't exist yet
+    // Minimal row - no token_symbol in case column doesn't exist yet
     const minRow: Record<string, any> = {
       conversation_id: p.conversationId,
       sender_id:       p.senderId,
@@ -430,7 +430,7 @@ export async function touchConversation(
   senderId?: string,
   messageType?: string,
 ) {
-  // PATH 1: privileged server endpoint (service-role key, bypasses RLS —
+  // PATH 1: privileged server endpoint (service-role key, bypasses RLS -
   // same reliable pattern as persistMessage's /api/send-message call).
   try {
     const r = await fetch('/api/chat?action=touch', {
@@ -449,7 +449,7 @@ export async function touchConversation(
     console.error('[chatService] touchConversation API error:', e?.message)
   }
 
-  // PATH 2: direct REST fallback — only succeeds if RLS allows anon updates,
+  // PATH 2: direct REST fallback - only succeeds if RLS allows anon updates,
   // but kept as a best-effort safety net if the API route itself is down.
   try {
     const patch: Record<string, string> = {
@@ -476,19 +476,19 @@ export async function touchConversation(
 export async function markRead(conversationId: string, myId: string) {
   try {
     // BUG FIX (2026-09-03): a self-conversation (participant_a ===
-    // participant_b === myId — you paying/messaging your own username) has
+    // participant_b === myId - you paying/messaging your own username) has
     // EVERY message's sender_id equal to myId, including the
     // payment_received leg (its sender_id is deliberately rewritten to the
-    // recipient's id elsewhere — see fetchConversations's trueSender
-    // comment in supabase.ts — which in a self-chat is also myId). So
+    // recipient's id elsewhere - see fetchConversations's trueSender
+    // comment in supabase.ts - which in a self-chat is also myId). So
     // `sender_id=neq.${myId}` matches ZERO rows here for a self-chat, no
-    // matter how many times it's opened — those messages can NEVER be
+    // matter how many times it's opened - those messages can NEVER be
     // marked read, and the unread badge only ever grows, one row per
     // self-payment, forever. That's the real cause behind a self-chat
     // showing a large, permanently-climbing unread count (e.g. "29") even
     // though there's no one else who could have left something unread.
     // Detected with a cheap, single-row lookup rather than requiring every
-    // caller to know/pass this — self-chats are rare enough that the extra
+    // caller to know/pass this - self-chats are rare enough that the extra
     // request is negligible, and this keeps the fix contained to exactly
     // where the bug lives instead of touching every call site.
     let isSelfChat = false
@@ -500,7 +500,7 @@ export async function markRead(conversationId: string, myId: string) {
       const rows = await res.json().catch(() => [])
       const conv = Array.isArray(rows) ? rows[0] : null
       isSelfChat = !!conv && conv.participant_a === conv.participant_b
-    } catch { /* fall through — worst case, self-chat messages stay unread this one call */ }
+    } catch { /* fall through - worst case, self-chat messages stay unread this one call */ }
 
     const senderFilter = isSelfChat ? '' : `&sender_id=neq.${myId}`
     await fetch(

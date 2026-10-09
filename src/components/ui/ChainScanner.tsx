@@ -35,7 +35,7 @@ export function ChainScanner({ logos, title = 'Scanning chains…', subtitle, co
       }}>
         {/* CSS animations, not framer loops: callers mount this under an
             AnimatePresence initial={false}, which blocks a descendant motion
-            element's first animation — the strip then never moved. */}
+            element's first animation - the strip then never moved. */}
         <div
           style={{ position: 'absolute', top: '50%', left: 0, marginTop: -size / 2, display: 'flex', gap, alignItems: 'center', width: 'max-content',
             animation: reduce ? undefined : `mpScanStrip ${duration}s linear infinite` }}>

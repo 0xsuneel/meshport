@@ -1,14 +1,14 @@
 // src/lib/arcService.decimalAmount.test.ts
 //
 // Regression guard for reported bug: sending 0.00000001 cirBTC to another
-// MeshPort user showed "Payment Failed — Value `1e-7` is not a valid decimal
+// MeshPort user showed "Payment Failed - Value `1e-7` is not a valid decimal
 // number." on Review Payment, even though the amount was well above cirBTC's
 // 8-decimal minimum unit and well under the sender's balance.
 //
 // Root cause: sendEURC/sendCirBTC built viem's `parseUnits` input with
 // `params.amount.toString()`. `params.amount` is a plain JS `number` (from
 // PaySendPage.tsx's `parseFloat(amount)`), and `Number.prototype.toString()`
-// switches to EXPONENTIAL notation for any magnitude below 1e-6 —
+// switches to EXPONENTIAL notation for any magnitude below 1e-6 -
 // `(0.00000001).toString()` is `'1e-8'`, not `'0.00000001'`. viem's
 // `parseUnits` only accepts a plain decimal string and throws exactly this
 // error ("Value `<x>` is not a valid decimal number.") on exponential input.

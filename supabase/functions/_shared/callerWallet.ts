@@ -1,5 +1,5 @@
 // The wallet address of the MeshPort account linked to this request's
-// Supabase session (users.auth_uid — linked with a wallet signature by
+// Supabase session (users.auth_uid - linked with a wallet signature by
 // bind-session), or null. Edge functions that act on a wallet compare the
 // wallet in the request against this, so nobody can act for someone else's.
 // deno-lint-ignore no-explicit-any

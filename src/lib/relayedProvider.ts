@@ -2,16 +2,16 @@
 //
 // Ethers provider for Circle App Kit on non-Arc chains, used wherever the kit
 // would otherwise need the user's wallet to hold native gas there. Instead of
-// broadcasting, a transaction MeshPort's relayer can submit for the user —
+// broadcasting, a transaction MeshPort's relayer can submit for the user -
 // a Gateway Wallet deposit the user signed, a Gateway Minter gatewayMint or a
-// CCTP receiveMessage — is handed to /api/bridge-relay ({ action: 'call' }),
+// CCTP receiveMessage - is handed to /api/bridge-relay ({ action: 'call' }),
 // which sends the same call from the relayer wallet. Those calls don't depend
 // on who sends them (the recipient is fixed by the user's signature or
 // Circle's attestation), so nothing changes except who pays the gas.
 //
 // The kit still signs its own transaction and waits on that hash, so the
 // provider answers receipt/transaction lookups for it with the relayer's
-// transaction. Anything the relayer can't submit fails with a clear error —
+// transaction. Anything the relayer can't submit fails with a clear error -
 // it is never broadcast from a gas-less wallet.
 
 import { RPC_BY_CHAIN_NAME } from './chainRpcs'

@@ -6,17 +6,17 @@
 // separate pure/impure module split like blockchain-indexer's files have),
 // and its three scan branches (runUsdcClaimAndReceiveScan / runTokenScan /
 // runNativeExplorerScan) are inline closures inside Deno.serve, not exported
-// functions — so they cannot be imported and unit-tested directly the way
+// functions - so they cannot be imported and unit-tested directly the way
 // e.g. trackedFeatureCorrelation.ts can be. Extracting them into standalone
 // exports purely to make them testable would be a materially bigger, riskier
 // refactor than the latency fix itself warrants (this fix intentionally
 // touched wall-clock ORDERING only, not any of the three scans' internal
-// logic — see index.ts's own "LATENCY FIX" comment).
+// logic - see index.ts's own "LATENCY FIX" comment).
 //
 // What IS directly, honestly testable without that refactor is the actual
 // mechanism the fix relies on: that Promise.allSettled([a(), b(), c()]) with
 // three independent async operations completes in roughly max(a, b, c) time,
-// not sum(a, b, c) — which is precisely the property that turns "USDC scan
+// not sum(a, b, c) - which is precisely the property that turns "USDC scan
 // time + token scan time + native scan time" (the pre-fix, sequential
 // behavior) into "max(USDC scan time, token scan time, native scan time)"
 // (the post-fix, concurrent behavior). This is a synthetic reproduction of
@@ -36,7 +36,7 @@ Deno.test('root cause reproduction: sequential awaits of 3 independent scans tak
   // for the deposit being looked for. Small delays (50/30/20ms) stand in for
   // the real scans' RPC-bound costs (measured against real production data:
   // the USDC scan's ~100-chunk, 20-sequential-batch eth_getLogs pass was the
-  // dominant, unconditionally-paid cost) — the ratio matters here, not the
+  // dominant, unconditionally-paid cost) - the ratio matters here, not the
   // absolute magnitude.
   const start = performance.now()
   await delay(50) // stand-in for the USDC scan (RECOVERY_SCAN_WINDOW_BLOCKS = 500,000)
@@ -54,8 +54,8 @@ Deno.test('fix mechanism: Promise.allSettled runs the same 3 operations concurre
   const elapsed = performance.now() - start
 
   // Concurrent: expect close to the max (50ms), well under the sequential sum (100ms).
-  assert(elapsed < 90, `expected concurrent total to be close to the 50ms max, not the 100ms sum — got ${elapsed}ms`)
-  assert(elapsed >= 45, `expected concurrent total to be at least as long as the slowest branch (50ms) — got ${elapsed}ms`)
+  assert(elapsed < 90, `expected concurrent total to be close to the 50ms max, not the 100ms sum - got ${elapsed}ms`)
+  assert(elapsed >= 45, `expected concurrent total to be at least as long as the slowest branch (50ms) - got ${elapsed}ms`)
 })
 
 Deno.test('fix does not swallow all outcomes: Promise.allSettled still lets every branch finish even if one throws', async () => {
@@ -65,7 +65,7 @@ Deno.test('fix does not swallow all outcomes: Promise.allSettled still lets ever
   const okB = async () => { await delay(5); completed.push('native-scan') }
 
   // Mirrors the fix's actual pattern: each branch's own .catch() logs and
-  // resolves, so allSettled always sees fulfilled results — this is what
+  // resolves, so allSettled always sees fulfilled results - this is what
   // makes "one scan failing no longer blocks the other two" true, matching
   // the fix's documented, intentional behavior change (previously a thrown
   // error from the USDC scan aborted the whole invocation before the other

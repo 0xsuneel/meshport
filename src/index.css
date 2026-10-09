@@ -6,7 +6,7 @@
 
 @layer base {
   html, body { height: 100%; }
-  /* #root (React's actual mount point) had no height rule of its own — CSS
+  /* #root (React's actual mount point) had no height rule of its own - CSS
      percentage heights only resolve against a parent with a real (non-auto)
      height, so any page using h-full/min-h-full directly under #root
      (routes outside AppLayout's own fixed shell, e.g. the passcode lock
@@ -24,7 +24,7 @@
     color: var(--text-primary);
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, sans-serif;
     /* Without these, light text on a dark background anti-aliases heavier
-       by default in WebKit/Blink — reads as blurry/"weak" compared to the
+       by default in WebKit/Blink - reads as blurry/"weak" compared to the
        platform-native font rendering apps like this are being compared
        against. Crisps up text in both themes, not just dark. */
     -webkit-font-smoothing: antialiased;
@@ -32,7 +32,7 @@
     text-rendering: optimizeLegibility;
     transition: background-color 0.2s ease, color 0.2s ease;
     /* Was `overscroll-behavior: none` (blocks ALL overscroll effects,
-       including the browser's native vertical pull-to-refresh gesture —
+       including the browser's native vertical pull-to-refresh gesture -
        which meant a stuck page couldn't be manually recovered by pulling
        down to reload). Scoping to horizontal-only keeps the original intent
        (stopping the iOS edge-swipe back/forward gesture and the page
@@ -45,7 +45,7 @@
   ::-webkit-scrollbar { display: none; }
   * { scrollbar-width: none; -ms-overflow-style: none; }
 
-  /* Respect the OS-level "reduce motion" accessibility setting app-wide —
+  /* Respect the OS-level "reduce motion" accessibility setting app-wide -
      collapses (near-)instant any animation/transition that isn't already
      scoped tighter, rather than requiring every single component to check
      this individually. Framer Motion components read this natively via
@@ -65,11 +65,11 @@
 /* ── MeshPort Design Tokens ─────────────────────────────────────────────────
    Two full palettes, switched at runtime by toggling `data-theme` on <html>
    (see src/store/themeStore.ts + the pre-paint bootstrap script in
-   index.html — nothing here decides the theme, it only defines the two
+   index.html - nothing here decides the theme, it only defines the two
    value sets).
    Dark palette uses a Binance-style near-black surface hierarchy
    (#0B0E11 page / #181A20 elevated surface / #2B3139 border) instead of
-   pure #000000 — pure black gives every card/border/icon the same flat
+   pure #000000 - pure black gives every card/border/icon the same flat
    value, so surfaces stop reading as separate elevated layers and icons
    drawn in a fixed white lose their intended contrast the moment they sit
    on anything lighter than the page. This mirrors how professional dark-mode
@@ -106,13 +106,13 @@
   --usdc-bg:   #0C447C33;
   --usdc-icon: #85B7EB;
   /* RGB-channel companions (space-separated, no rgb() wrapper) for every
-     token above — this is what lets Tailwind's opacity modifiers
+     token above - this is what lets Tailwind's opacity modifiers
      (bg-brand/20, text-danger/10, border-border/50, …) work against a
      runtime CSS-variable color. Tailwind can only apply `/<alpha>` to a
      color function it controls (`rgb(var(--x) / <alpha-value>)`); it
      can't parse an arbitrary hex string held in a var(). Every direct
      `var(--brand)` etc. usage elsewhere (plain inline styles, the
-     utility classes below) keeps using the hex vars above, untouched —
+     utility classes below) keeps using the hex vars above, untouched -
      these are purely additive for the Tailwind color config. */
   --brand-rgb: 18 102 95;      --header-rgb: 18 102 95;
   --header-text-rgb: 255 255 255; --header-subtext-rgb: 205 237 226;
@@ -123,7 +123,7 @@
   --link-rgb: 93 202 165;
   --avatar-1-rgb: 29 158 117; --avatar-2-rgb: 151 196 89; --avatar-3-rgb: 127 119 221; --avatar-4-rgb: 240 153 123;
   --usdc-icon-rgb: 133 183 235;
-  /* Soft elevation — no glow anywhere. Alpha-black shadows read correctly
+  /* Soft elevation - no glow anywhere. Alpha-black shadows read correctly
      on both a white and a near-black surface without a separate dark
      variant of each. */
   --shadow-1: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
@@ -357,7 +357,7 @@
 }
 .pb-header { padding-bottom: 18px; }
 
-/* Canonical header title size — every screen's <h1>/title uses this so
+/* Canonical header title size - every screen's <h1>/title uses this so
    font sizes line up exactly across the whole app. */
 .header-title {
   font-size: 20px;
@@ -414,7 +414,7 @@
   pointer-events: none;
 }
 
-/* ── Brand fills — flat brand color, no gradients/glow per design spec ────── */
+/* ── Brand fills - flat brand color, no gradients/glow per design spec ────── */
 .bg-brand-gradient,
 .bg-balance-gradient { background: var(--brand); }
 .shadow-glow-purple { box-shadow: var(--shadow-2); }
@@ -445,7 +445,7 @@
    Used by DesktopSidebar/DesktopHeader/HomePage/ActivityPage's desktop-only
    markup. These elements set background/border-color inline (this codebase's
    convention), which normally has higher specificity than any stylesheet
-   :hover rule — so each inline declaration below references a CSS custom
+   :hover rule - so each inline declaration below references a CSS custom
    property (`var(--x-hover-bg, <default>)`) instead of a literal value, and
    the rules here only set that custom property on :hover. Custom-property
    cascade isn't subject to the inline-style specificity trump card, so this
@@ -479,7 +479,7 @@
 }
 @keyframes mpAlertIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
 
-/* CSS-driven sheets / drawers (screens not on Framer Motion) — same curve
+/* CSS-driven sheets / drawers (screens not on Framer Motion) - same curve
    and length as the shared bottom-sheet spring. */
 @keyframes mpSheetUp { from { transform: translateY(100%); } to { transform: none; } }
 @keyframes mpDrawerIn { from { transform: translateX(100%); } to { transform: none; } }

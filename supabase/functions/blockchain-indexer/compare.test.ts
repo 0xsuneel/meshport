@@ -1,10 +1,10 @@
 // supabase/functions/blockchain-indexer/compare.test.ts
 //
-// Phase 3 tests for the shadow-comparison classification logic — the code
+// Phase 3 tests for the shadow-comparison classification logic - the code
 // that decides the cutover gate. Run with:
 //   deno test supabase/functions/blockchain-indexer/compare.test.ts
 //
-// Zero external imports — see cursorMath.test.ts's header for why.
+// Zero external imports - see cursorMath.test.ts's header for why.
 import { compareDeposits, compareClaims, assessComparability, normalizeTxHash, internalSenderOf, KNOWN_INTERNAL_CONTRACTS, TIMING_DIFFERENCE_THRESHOLD_MS } from './compare.ts'
 import type { IndexerEventLike, WorkerRowLike } from './compare.ts'
 
@@ -51,7 +51,7 @@ Deno.test('compareDeposits: legacy detected it, indexer did not -> FAIL with wor
   assertEquals(result.workerOnly, 1)
   assertEquals(result.matched, 0)
   // Fix 3 changed recallPct's formula to (matched+accountedFor)/(matched+
-  // accountedFor+trueIndexerOnly) — a measure of the INDEXER's own
+  // accountedFor+trueIndexerOnly) - a measure of the INDEXER's own
   // detection rate, not the old matched/(matched+workerOnly). With zero
   // indexer events at all, that denominator is legitimately 0 (there is
   // nothing to measure the indexer's recall against), so this now
@@ -80,7 +80,7 @@ Deno.test('compareDeposits: an indexer-only event from a known internal (Circle 
     },
   ]
   const result = compareDeposits(indexerEvents, [], comparable)
-  // Not a FAIL from a real miss — this is the documented "different scope,
+  // Not a FAIL from a real miss - this is the documented "different scope,
   // not a defect" case (compare.ts header, Fix C).
   assertEquals(result.status, 'NOT_COMPARABLE')
   assertEquals(result.indexerOnly, 0)
@@ -89,7 +89,7 @@ Deno.test('compareDeposits: an indexer-only event from a known internal (Circle 
 
 Deno.test('compareDeposits: internal-sender suppression never masks a REAL worker_only miss (matching happens before suppression)', () => {
   const internalContract = [...KNOWN_INTERNAL_CONTRACTS][0]
-  // Same tx/wallet exists on BOTH sides — must match normally, not be
+  // Same tx/wallet exists on BOTH sides - must match normally, not be
   // suppressed as "internal", even though its sender happens to be a known
   // internal contract too.
   const indexerEvents: IndexerEventLike[] = [
@@ -120,12 +120,12 @@ Deno.test('compareClaims: indexer emits no claim events by design -> NOT_APPLICA
   ]
   const result = compareClaims([], workerRows, comparable)
   assertEquals(result.status, 'NOT_APPLICABLE')
-  // workerOnly is factual context here, NOT a failure signal — status is
+  // workerOnly is factual context here, NOT a failure signal - status is
   // what disambiguates it (compare.ts's own documented contract).
   assertEquals(result.workerOnly, 1)
 })
 
-Deno.test('compareClaims: destination_tx_hash as undefined (not just null) is handled — regression test for the type-error fix', () => {
+Deno.test('compareClaims: destination_tx_hash as undefined (not just null) is handled - regression test for the type-error fix', () => {
   // Exercises the exact shape that caused a Deno type-check failure before
   // the Phase 3 fix (destination_tx_hash?: string | null, so `undefined` is
   // a real possible value, not just a theoretical one).
@@ -171,7 +171,7 @@ Deno.test('compareDeposits Fix 3: an indexer event matching a swap/bulk/p2p_purc
   }
 })
 
-Deno.test('compareDeposits Fix 3: raw indexerOnly is unchanged (still includes accounted-for items) — nothing is hidden, only reclassified', () => {
+Deno.test('compareDeposits Fix 3: raw indexerOnly is unchanged (still includes accounted-for items) - nothing is hidden, only reclassified', () => {
   const indexerEvents: IndexerEventLike[] = [
     { wallet_address: '0xwallet1', tx_hash: '0xhash1', event_type: 'transfer_detected', status: 'confirmed' },
   ]
@@ -179,7 +179,7 @@ Deno.test('compareDeposits Fix 3: raw indexerOnly is unchanged (still includes a
     { wallet_address: '0xwallet1', tx_hash: '0xhash1', activity_type: 'p2p_purchase' },
   ]
   const result = compareDeposits(indexerEvents, workerRows, comparable, null, Date.now())
-  assertEquals(result.indexerOnly, 1, 'raw indexerOnly must still count the accounted-for item — Fix 3 reclassifies, it does not delete')
+  assertEquals(result.indexerOnly, 1, 'raw indexerOnly must still count the accounted-for item - Fix 3 reclassifies, it does not delete')
   assertEquals(result.indexerOnlyKeys.length, 1)
 })
 
@@ -195,8 +195,8 @@ Deno.test('compareDeposits Fix 3: a genuine miss (no activity row of ANY type) i
   assertEquals(result.status, 'FAIL')
 })
 
-Deno.test('compareDeposits Fix 3: ordering safety — a receive-type match still wins over an accounted-for-other-activity classification', () => {
-  // Same tx has BOTH a receive row and (hypothetically) a same-key swap row —
+Deno.test('compareDeposits Fix 3: ordering safety - a receive-type match still wins over an accounted-for-other-activity classification', () => {
+  // Same tx has BOTH a receive row and (hypothetically) a same-key swap row -
   // receive must win, exactly mirroring Fix C's own safety ordering (real
   // detections/matches always checked before any suppression/reclassification).
   const indexerEvents: IndexerEventLike[] = [
@@ -221,7 +221,7 @@ Deno.test('compareDeposits Fix 3: a very recent one-sided indexer_only is TIMING
   assertEquals(result.trueIndexerOnly, 0)
   assertEquals(result.timingDifference, 1)
   // A window whose ONLY content is a timing-difference item hasn't actually
-  // proven anything yet either way — NOT_COMPARABLE ("wait for the next
+  // proven anything yet either way - NOT_COMPARABLE ("wait for the next
   // window"), not a false PASS and not a false FAIL.
   assertEquals(result.status, 'NOT_COMPARABLE')
 })
@@ -243,7 +243,7 @@ Deno.test('compareDeposits Fix 3: timing carve-out applies symmetrically to work
     { wallet_address: '0xwallet1', tx_hash: 'recv_0xhash1', activity_type: 'receive', created_at: veryRecent },
   ]
   const result = compareDeposits([], workerRows, comparable, null, Date.now())
-  assertEquals(result.status, 'NOT_COMPARABLE', 'a very recent worker_only-only window should not FAIL — the indexer may just not have caught up yet')
+  assertEquals(result.status, 'NOT_COMPARABLE', 'a very recent worker_only-only window should not FAIL - the indexer may just not have caught up yet')
   assertEquals(result.timingDifference, 1)
 })
 
@@ -309,7 +309,7 @@ Deno.test('internalSenderOf: reads sender from either "sender" or "from" metadat
     internalSenderOf({ wallet_address: 'w', tx_hash: 't', event_type: 'x', metadata: { sender: '0xnotinternal' } }),
     null,
   )
-  // Malformed/missing metadata must never throw — a comparison run must not
+  // Malformed/missing metadata must never throw - a comparison run must not
   // die on one bad row (compare.ts's own documented contract).
   assertEquals(internalSenderOf({ wallet_address: 'w', tx_hash: 't', event_type: 'x', metadata: null }), null)
   assertEquals(internalSenderOf({ wallet_address: 'w', tx_hash: 't', event_type: 'x' }), null)

@@ -1,5 +1,5 @@
 /**
- * Regression tests for backfillP2PActivity — the P2P → Activity catch-up that
+ * Regression tests for backfillP2PActivity - the P2P → Activity catch-up that
  * runs on every ActivityPage mount.
  *
  * WHAT WENT WRONG IN PRODUCTION
@@ -14,7 +14,7 @@
  *      unreadable set looked exactly like "no history yet";
  *   2. no mutual exclusion, so overlapping runs both snapshotted `covered`
  *      before either wrote (React.StrictMode double-invokes the effect);
- *   3. hashless rows have no DB uniqueness — a plain UNIQUE (tx_hash,
+ *   3. hashless rows have no DB uniqueness - a plain UNIQUE (tx_hash,
  *      wallet_address) treats NULLs as distinct.
  *
  * These tests pin the fix: a completed backfill latches, concurrent callers
@@ -103,7 +103,7 @@ function installFetch(opts: {
 }
 const jsonRes = (body: any) => ({ ok: true, status: 200, json: async () => body })
 
-/** In-memory localStorage — node has none, and the latch depends on it. */
+/** In-memory localStorage - node has none, and the latch depends on it. */
 function installLocalStorage() {
   const store = new Map<string, string>()
   vi.stubGlobal('localStorage', {
@@ -120,7 +120,7 @@ const writes = () => saveActivity.mock.calls.map(c => (c as any[])[0] as any)
 const writeKeys = () => writes().map(w => `${w.activityType}:${w.metadata?.tradeId ?? w.metadata?.offerId}`)
 
 beforeEach(() => {
-  // mockReset (not mockClear) — mockClear leaves queued mockResolvedValueOnce
+  // mockReset (not mockClear) - mockClear leaves queued mockResolvedValueOnce
   // values in place, which would leak a forced failure into the next test.
   saveActivity.mockReset()
   saveActivity.mockImplementation(async (_p: any) => true)
@@ -132,7 +132,7 @@ afterEach(() => {
 
 // ── Idempotence across repeated mounts ───────────────────────────────────────
 
-describe('backfillP2PActivity — repeated ActivityPage mounts cannot duplicate', () => {
+describe('backfillP2PActivity - repeated ActivityPage mounts cannot duplicate', () => {
   it('writes on the first mount and NOTHING on five further mounts', async () => {
     // The exact production shape: six visits to Activity.
     installFetch({ offers: [offerRow()], trades: [] })
@@ -196,7 +196,7 @@ describe('backfillP2PActivity — repeated ActivityPage mounts cannot duplicate'
 
 // ── Fail closed ──────────────────────────────────────────────────────────────
 
-describe('backfillP2PActivity — an unreadable dedup set aborts instead of guessing', () => {
+describe('backfillP2PActivity - an unreadable dedup set aborts instead of guessing', () => {
   it('writes nothing when the existing-activity read returns 500', async () => {
     installFetch({ offers: [offerRow()], trades: [], existingStatus: 500 })
 
@@ -219,7 +219,7 @@ describe('backfillP2PActivity — an unreadable dedup set aborts instead of gues
     await backfillP2PActivity(USER, WALLET)
     expect(writes()).toHaveLength(0)
 
-    // Next visit, the read works — the backfill must still be allowed to run.
+    // Next visit, the read works - the backfill must still be allowed to run.
     installFetch({ offers: [offerRow()], trades: [] })
     await backfillP2PActivity(USER, WALLET)
     expect(writes()).toHaveLength(1)
@@ -228,7 +228,7 @@ describe('backfillP2PActivity — an unreadable dedup set aborts instead of gues
 
 // ── Only provable, money-moved events are emitted ────────────────────────────
 
-describe('backfillP2PActivity — emits only events with on-chain proof', () => {
+describe('backfillP2PActivity - emits only events with on-chain proof', () => {
   it('every emitted row carries a tx_hash, so the DB constraint can dedupe it', async () => {
     installFetch({
       offers: [offerRow({ status: 'cancelled', escrow_withdraw_tx_hash: '0xwd1' })],
@@ -293,7 +293,7 @@ describe('backfillP2PActivity — emits only events with on-chain proof', () => 
 
 // ── The latch must never hide a failed write ─────────────────────────────────
 
-describe('backfillP2PActivity — a failed write cannot permanently latch the backfill', () => {
+describe('backfillP2PActivity - a failed write cannot permanently latch the backfill', () => {
   it('does NOT latch when saveActivity returns false, and retries next visit', async () => {
     // The exact sequence: write fails, error is absorbed, latch must stay unset.
     installFetch({ offers: [offerRow()], trades: [] })
@@ -303,7 +303,7 @@ describe('backfillP2PActivity — a failed write cannot permanently latch the ba
     expect(writes()).toHaveLength(1)          // attempted
     expect(localStorage.getItem(`meshport_p2p_backfill_v2_${WALLET}`)).toBeNull()
 
-    // Next mount: the wallet is NOT stranded — it tries again and succeeds.
+    // Next mount: the wallet is NOT stranded - it tries again and succeeds.
     await backfillP2PActivity(USER, WALLET)
     expect(writes()).toHaveLength(2)
     expect(localStorage.getItem(`meshport_p2p_backfill_v2_${WALLET}`)).toBe('1')
@@ -347,7 +347,7 @@ describe('backfillP2PActivity — a failed write cannot permanently latch the ba
     expect(localStorage.getItem(`meshport_p2p_backfill_v2_${WALLET}`)).toBe('1')
   })
 
-  it('retrying after a partial failure cannot duplicate — every row carries a hash', async () => {
+  it('retrying after a partial failure cannot duplicate - every row carries a hash', async () => {
     // Why retrying is safe: the DB constraint absorbs the repeat, so the retry
     // is a no-op server-side rather than a second row.
     installFetch({ offers: [offerRow()], trades: [] })
@@ -372,7 +372,7 @@ describe('backfillP2PActivity — a failed write cannot permanently latch the ba
 })
 
 
-describe('backfillP2PActivity — refund amount fidelity', () => {  it('subtracts what actually sold instead of refunding the offer ceiling', async () => {
+describe('backfillP2PActivity - refund amount fidelity', () => {  it('subtracts what actually sold instead of refunding the offer ceiling', async () => {
     // 100 offered, 30 sold => 70 genuinely came back. The old code wrote 100.
     installFetch({
       offers: [offerRow({ status: 'cancelled', escrow_withdraw_tx_hash: '0xwd1', max_amount: '100' })],

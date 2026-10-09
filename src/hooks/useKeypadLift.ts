@@ -1,11 +1,11 @@
 // Lifts an amount box above the on-screen AmountKeypad while it's open, and
-// back down when it closes — moving together with the keypad sheet (same
+// back down when it closes - moving together with the keypad sheet (same
 // spring), as one smooth glide.
 //
 // It moves the form with a transform instead of scrolling the page: a
 // transform runs on the GPU and never changes layout, so there's no spacer
 // to add / remove, no second correction pass and no scroll fighting the
-// sheet's animation — the causes of the old flicker.
+// sheet's animation - the causes of the old flicker.
 //
 // Usage:
 //   const lift = useKeypadLift(open, amountBoxRef, !isDesktop)
@@ -63,7 +63,7 @@ export function useKeypadLift(open: boolean, boxRef: RefObject<HTMLElement | nul
       const bottom = rect.bottom + liftRef.current
       const top = rect.top + liftRef.current
       const need = Math.max(0, Math.round(bottom - (viewH - sheetH - GAP)))
-      // Never push the box up under the page's header — keep its top in view.
+      // Never push the box up under the page's header - keep its top in view.
       const lift = Math.min(need, Math.max(0, Math.round(top - headerBottom())))
       liftRef.current = lift
       setLift(lift)

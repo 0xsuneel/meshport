@@ -42,14 +42,14 @@ import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 
 // Derive Arc chain key from env so a mainnet build targets Arc mainnet.
-// All 'Arc_Testnet' literals in this file are replaced with this constant —
+// All 'Arc_Testnet' literals in this file are replaced with this constant -
 // same pattern ubClaim.ts, swapService.ts, and ubFundRecovery.ts use.
 const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
   ? 'Arc'
   : 'Arc_Testnet'
 
 // Digit/decimal sanitizing for the desktop "Amount" native input (mirrors
-// AmountKeypad's own internal sanitizer, which isn't exported) — max one
+// AmountKeypad's own internal sanitizer, which isn't exported) - max one
 // '.', capped at 2 typed decimal places.
 function sanitizeMultichainAmount(raw: string): string {
   let cleaned = raw.replace(/[^\d.]/g, '')
@@ -60,7 +60,7 @@ function sanitizeMultichainAmount(raw: string): string {
   return cleaned
 }
 
-// ── Module-level caches — survive re-renders, reset only on full page reload ──
+// ── Module-level caches - survive re-renders, reset only on full page reload ──
 // Caching the three heavy SDK packages eliminates the 500ms–1s dynamic-import
 // penalty from the signing hot-path on every bridge attempt.
 interface SdkModules {
@@ -78,7 +78,7 @@ const _sdkCallbacks: Array<() => void> = []
 async function loadSdkModules(): Promise<SdkModules> {
   if (_sdkModules) return _sdkModules
   if (_sdkLoading) {
-    // Already in-flight — wait for it to finish
+    // Already in-flight - wait for it to finish
     return new Promise(res => _sdkCallbacks.push(() => res(_sdkModules!)))
   }
   _sdkLoading = true
@@ -93,12 +93,12 @@ async function loadSdkModules(): Promise<SdkModules> {
   return _sdkModules
 }
 
-// JsonRpcProvider cache — one provider instance per RPC URL per session.
+// JsonRpcProvider cache - one provider instance per RPC URL per session.
 // Avoids repeated eth_chainId auto-detect on each approve/burn call.
 const _providerCache = new Map<string, any>()
 
 // ── Resolve a possibly-relative RPC URL to an absolute one ──────────────────
-// ARC_RPCS is deliberately relative ('/api/arc-rpc' — a same-origin proxy,
+// ARC_RPCS is deliberately relative ('/api/arc-rpc' - a same-origin proxy,
 // see arc.ts) so the real upstream RPC URL/key never ships in client JS.
 // fetch() and viem's http() transport both resolve a relative URL against
 // the page origin automatically, which is why arcTransport()/arcRpcJson()
@@ -110,7 +110,7 @@ const _providerCache = new Map<string, any>()
 // which fails ethers' http/https check with
 // `unsupported protocol /api/arc-rpc (...code=UNSUPPORTED_OPERATION)`.
 //
-// THIS was the actual, original cause of the bridge failures — a plain
+// THIS was the actual, original cause of the bridge failures - a plain
 // JsonRpcProvider throws it directly; wrapped in FallbackProvider (the
 // prior code path) it got caught internally, marked the provider
 // permanently dead, and resurfaced later as ethers' generic "no runners?!"
@@ -137,7 +137,7 @@ function toAbsoluteRpcUrl(url: string): string {
 // transient network blip on that one proxied endpoint) and NEVER clears
 // that flag. With only one config, that single bad response permanently
 // exhausts every "runner" FallbackProvider has to try, and every future
-// call — including reads deep inside kit.bridge()/estimateBridge() —
+// call - including reads deep inside kit.bridge()/estimateBridge() -
 // throws ethers' own internal `"no runners?!"` error for the rest of the
 // session. Because this provider is cached at module scope (see
 // _providerCache below), the poisoning survives across retries: clicking
@@ -147,7 +147,7 @@ function toAbsoluteRpcUrl(url: string): string {
 // A FallbackProvider only earns its name when there's more than one
 // endpoint to fail over BETWEEN. With a single URL there's nothing to fall
 // back to, so skip FallbackProvider entirely in that case and hand back a
-// plain JsonRpcProvider instead — its failures are per-call and
+// plain JsonRpcProvider instead - its failures are per-call and
 // recoverable, not permanent. If ARC_RPCS ever grows to multiple entries,
 // this automatically goes back to using FallbackProvider across them.
 const _ARC_FALLBACK_KEY = '__arc_fallback__'
@@ -156,7 +156,7 @@ function getArcFallbackProvider(JsonRpcProvider: any, FallbackProvider: any) {
     // pollingInterval 200: ethers' 4000ms default made each SDK receipt wait
     // (approve, burn, UB deposit) cost ~4s on Arc's sub-second chain.
     const providers = ARC_RPCS.map(url => new JsonRpcProvider(toAbsoluteRpcUrl(url), ARC_NETWORK, { staticNetwork: true, pollingInterval: 200 }))
-    // quorum: 1 — treat this purely as failover, not multi-node consensus
+    // quorum: 1 - treat this purely as failover, not multi-node consensus
     _providerCache.set(_ARC_FALLBACK_KEY, providers.length === 1
       ? providers[0]
       : new FallbackProvider(providers, undefined, { quorum: 1 }))
@@ -167,7 +167,7 @@ function getArcFallbackProvider(JsonRpcProvider: any, FallbackProvider: any) {
 
 
 // e.g. ARC_RPCS grows to multiple entries in the future and a
-// FallbackProvider gets fatally poisoned again — evict it so the next call
+// FallbackProvider gets fatally poisoned again - evict it so the next call
 // builds a fresh instance instead of retrying against the same dead one.
 // Cheap to call defensively; a no-op if nothing's cached.
 function resetArcFallbackProvider() {
@@ -201,19 +201,19 @@ interface FeeEstimate {
 }
 
 // Circle Gateway's estimateSpend() only prices the SPEND leg (unified
-// balance -> destination) — it has no visibility into the DEPOSIT leg that
+// balance -> destination) - it has no visibility into the DEPOSIT leg that
 // has to happen first (Arc USDC -> the Gateway Wallet contract), which is
 // itself a normal Arc transaction and therefore needs Arc gas. Arc's
 // native gas token is USDC (same fact PaySendPage.tsx's own feeReserve is
 // built on), so that deposit's gas has to come out of the exact same
-// balance being sent — reserving nothing for it here is exactly what let
+// balance being sent - reserving nothing for it here is exactly what let
 // someone type an amount right up to their full balance, have the deposit
 // itself succeed, and then have nothing left over once the spend step's
 // own (correctly estimated) fee tried to come out of what's left.
 // A flat conservative reserve, not a live estimate: depositWithPermit is
 // a more complex contract call than the simple 21000-gas native transfer
 // estimateTransferFee() prices, and this only needs to be safely
-// sufficient, not exact — any leftover just makes receiverGets a touch
+// sufficient, not exact - any leftover just makes receiverGets a touch
 // more conservative than reality.
 const UB_DEPOSIT_GAS_RESERVE = 0.05 // USDC
 
@@ -221,7 +221,7 @@ const UB_DEPOSIT_GAS_RESERVE = 0.05 // USDC
 // Circle's "Unified Balance Kit: Production Safeguards and Recovery
 // Patterns for spend()"). The resumable-retry path below fires
 // synchronously right after a spend() failure, so in practice this rarely
-// matters today — but it's the correct guard if a delayed/manual "resume"
+// matters today - but it's the correct guard if a delayed/manual "resume"
 // ever gets added later. Deliberately time-based rather than checking
 // `trace.expirationBlock`: that field isn't documented as belonging to a
 // specific chain (source vs destination), and guessing wrong would be worse
@@ -234,10 +234,10 @@ const GATEWAY_ATTESTATION_EXPIRY_SAFETY_MS = 8 * 60 * 1000
 // Circle's kit validates this itself and throws a clear error when it
 // doesn't match (see "Select source blockchains" in the App Kit docs), but
 // that validation error surfaces from deep inside the SDK call, mixed in
-// with every other possible spend/estimate failure — indistinguishable from
+// with every other possible spend/estimate failure - indistinguishable from
 // a genuine on-chain issue without reading the message text. Both UB call
 // sites here build `amount` and `allocations` from the same local variable,
-// so today they can never actually diverge — this is intentionally
+// so today they can never actually diverge - this is intentionally
 // redundant with the SDK's own check, there purely so that if a future edit
 // ever computes them separately and lets them drift, it fails loudly and
 // immediately at the call site (with the two actual numbers in the message)
@@ -256,7 +256,7 @@ interface SuccessInfo {
   receiverGets: number
   totalFees: number
   completionTime: number // seconds
-  // Best hash to surface as "the" transaction on the success card — the real
+  // Best hash to surface as "the" transaction on the success card - the real
   // destination mint hash when we have one, otherwise the Arc-side burn/deposit
   // hash. Not safe to pair with the DESTINATION chain's explorer (it may be an
   // Arc hash); use `mintTxHash` for that.
@@ -267,17 +267,17 @@ interface SuccessInfo {
   // mint step's `data` is undefined. The "View on {chain} Explorer" link is
   // gated on this so it never points at a tx that isn't on that chain.
   mintTxHash?: string
-  burnTxHash?: string  // source-chain (Arc burn/deposit) tx hash — for the "View on Arc Explorer" link
+  burnTxHash?: string  // source-chain (Arc burn/deposit) tx hash - for the "View on Arc Explorer" link
 }
 
-// ── Official chain logos — URL-based, from the provided CHAIN_LOGOS map ──────
+// ── Official chain logos - URL-based, from the provided CHAIN_LOGOS map ──────
 // Falls back to a colored circle with ticker text if the image fails to load.
-// ── Official chain logos — local files under public/logos/chains/, sourced
+// ── Official chain logos - local files under public/logos/chains/, sourced
 // from @web3icons/core (MIT licensed) and downloaded ahead of time, plus a
 // few supplied directly for chains web3icons didn't cover.
 // Falls back to a colored circle with ticker text if the image fails to load.
 const CHAIN_LOGOS: Record<string, string> = {
-  arc         : '/logos/chains/arc.svg',   // Arc Testnet — source of every transfer out
+  arc         : '/logos/chains/arc.svg',   // Arc Testnet - source of every transfer out
   eth         : '/logos/chains/ethereum.svg',
   base        : '/logos/chains/base.svg',
   arb         : '/logos/chains/arbitrum.svg',
@@ -326,7 +326,7 @@ const CHAIN_FALLBACK: Record<string, { bg: string; text: string; label: string }
   injective: { bg: '#00d4ff22', text: '#00d4ff', label: 'INJ' },
 }
 
-// Point at parameter t (0-1) along a quadratic bezier — used to position
+// Point at parameter t (0-1) along a quadratic bezier - used to position
 // the animated dot/trail on the transfer-progress journey path so its
 // motion follows the actual curve instead of a straight line.
 function quadBezierPoint(t: number, p0: [number, number], p1: [number, number], p2: [number, number]): [number, number] {
@@ -336,7 +336,7 @@ function quadBezierPoint(t: number, p0: [number, number], p1: [number, number], 
   return [x, y]
 }
 
-// Chain logo img component — official URL with fallback
+// Chain logo img component - official URL with fallback
 function ChainLogoImg({ id, size = 32 }: { id: string; size?: number }) {
   const [ok, setOk] = React.useState(true)
   const url = CHAIN_LOGOS[id]
@@ -367,7 +367,7 @@ function ChainLogoImg({ id, size = 32 }: { id: string; size?: number }) {
   )
 }
 
-// Small pill shown next to a chain wherever it's picked or displayed —
+// Small pill shown next to a chain wherever it's picked or displayed -
 // ub===true routes through Circle Gateway (unified balance, <500ms per
 // Circle's own docs: developers.circle.com/gateway/references/supported-blockchains),
 // everything else still goes through the CCTP flow (20-90s Circle
@@ -415,21 +415,21 @@ const ALL_CHAINS = [
 type ChainId = typeof ALL_CHAINS[number]['id']
 
 // Approve/Burn happen ON Arc (source of the transfer), but Mint happens on
-// the DESTINATION chain — a real bug existed here where every step's
+// the DESTINATION chain - a real bug existed here where every step's
 // explorer link pointed at Arc's own explorer regardless of which chain the
 // transaction actually happened on. ARC_EXPLORER/explorerTxUrl/
-// arcExplorerTxUrl now come from src/lib/chainExplorers.ts — this used to be
+// arcExplorerTxUrl now come from src/lib/chainExplorers.ts - this used to be
 // a local copy that drifted out of sync with three other copies elsewhere
 // in the app (and with the SDK's own values); see that file for details.
 
 // Circle's Crosschain Forwarding Service (useForwarder:true) automates the
 // destination-chain mint + pays destination gas, but it only covers an
-// explicit allow-list of chains — it is NOT available for every CCTP-enabled
+// explicit allow-list of chains - it is NOT available for every CCTP-enabled
 // destination. Routing every chain through useForwarder:true regardless of
 // this list is what silently broke Plume (and would equally break Pharos,
 // XDC, Codex, Edge, Injective, Morph): estimateBridge doesn't throw for an
 // unsupported route (see fetchFeeEstimate/handleSend below), it just returns
-// a null/error fee entry that we were papering over — so the estimate looked
+// a null/error fee entry that we were papering over - so the estimate looked
 // fine right up until kit.bridge() had no forwarder available to submit the
 // mint, and the transfer stalled after the burn.
 // FORWARDER_SUPPORTED_SDK_CHAINS and chainSupportsForwarder now live in
@@ -463,17 +463,17 @@ function makeDefaultSteps(destName: string): BridgeStepState[] {
   }))
 }
 
-// Circle Gateway (unified balance) path — used instead of the 4-step CCTP
+// Circle Gateway (unified balance) path - used instead of the 4-step CCTP
 // flow above for chains with ub===true (see CHAINS below). Gateway is a
 // deposit-once/spend-anywhere model: USDC already sitting in the unified
 // balance is available on every ub-supported chain in <500ms (per Circle's
 // own docs), so a transfer from Arc is really "move Arc USDC into the
 // unified balance" (~0.5s, Arc's own confirmation time) then "spend it out
-// to the destination" (<500ms) — two fast, deterministic steps, not the
+// to the destination" (<500ms) - two fast, deterministic steps, not the
 // CCTP burn/attest/mint cycle with its unpredictable 20-90s attestation
 // wait. That's why this only needs 2 steps instead of 4, and why the
 // step-advancement TIMER the CCTP path relies on (to paper over that CCTP
-// wait) isn't used here — both legs resolve directly, so steps just flip
+// wait) isn't used here - both legs resolve directly, so steps just flip
 // active/done as each call actually completes.
 const UB_STEP_DEFS = [
   { key: 'deposit',  label: 'Deposit to Unified Balance', pendingMsg: 'Waiting for deposit…',     activeMsg: 'Moving USDC to Unified Balance…' },
@@ -616,13 +616,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   // ─── Resume an in-flight transfer after a refresh ───────────────────────
   // The burn is irreversible the moment it confirms (funds have already
-  // left Arc) — a refresh right after that must never look like nothing
+  // left Arc) - a refresh right after that must never look like nothing
   // happened, or someone could reasonably retry and double-send. There's no
   // reliable way to rebuild the full multi-step bridge UI (fee estimate,
   // per-step timestamps, etc.) from just a tx hash after a fresh mount, so
   // this deliberately shows a plain "checking" state and a toast with the
-  // real outcome — reusing the same `activity` (type 'bridge') row this
-  // page already writes the moment the burn confirms — rather than trying
+  // real outcome - reusing the same `activity` (type 'bridge') row this
+  // page already writes the moment the burn confirms - rather than trying
   // to fake the detailed step-by-step screen.
   const [resumingTransfer, setResumingTransfer] = useState(false)
   useEffect(() => {
@@ -651,19 +651,19 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           if (match.status === 'failed') {
             clearResumableOperation('multichain_transfer')
             setResumingTransfer(false)
-            showToastMessage('Your last transfer failed — see Activity for details.', 'error')
+            showToastMessage('Your last transfer failed - see Activity for details.', 'error')
             return
           }
         }
       } catch {}
       if (attempts >= 10) {
-        // Still pending after a reasonable window — CCTP attestation can
+        // Still pending after a reasonable window - CCTP attestation can
         // genuinely take a few minutes, so this is expected, not an error.
         // Stop polling rather than doing so forever in the background;
         // the marker (and the real activity row) are both still there for
         // the next visit or an explicit Activity check.
         setResumingTransfer(false)
-        showToastMessage('Still confirming your last transfer — check Activity for the latest status.', 'info')
+        showToastMessage('Still confirming your last transfer - check Activity for the latest status.', 'info')
         return
       }
       setTimeout(poll, 3000)
@@ -673,7 +673,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Success screen — same full-screen flash → hero-card takeover
+  // ── Success screen - same full-screen flash → hero-card takeover
   // MultichainClaimPage uses for a completed claim, reused here so a
   // completed transfer feels identical: whole screen flashes brand color
   // with a big checkmark + "Transfer Successful", holds briefly, then that
@@ -682,7 +682,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const [successPhase, setSuccessPhase] = useState<'flash' | 'collapsed'>('flash')
   const [hashCopied, setHashCopied] = useState(false)
   // Whether THIS transfer's passcode came from a biometric check vs typed
-  // manually — drives which icon (checkmark vs fingerprint/Face ID) shows
+  // manually - drives which icon (checkmark vs fingerprint/Face ID) shows
   // on the flash->hero success animation. Set from PinKeypad's onComplete
   // second argument, same as MultichainClaimPage/PaySendPage.
   const [paidViaBiometric, setPaidViaBiometric] = useState(false)
@@ -692,7 +692,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     return () => clearTimeout(t)
   }, [step])
 
-  // Gates FlashAuthIcon's own bio->check swap — flips true only once the
+  // Gates FlashAuthIcon's own bio->check swap - flips true only once the
   // white circle below has actually finished its spring entrance
   // (onAnimationComplete), not on a guessed timer. Reset alongside
   // successPhase so a second transfer in the same session gets a fresh
@@ -723,13 +723,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const [travelRect, setTravelRect] = useState<{ from: DOMRect; to: DOMRect } | null>(null)
   const [travelDone, setTravelDone] = useState(false)
   // Desktop's flash overlay used to portal straight to `document.body` with
-  // `position:fixed; inset:0` — meaning it flashed the ENTIRE screen,
+  // `position:fixed; inset:0` - meaning it flashed the ENTIRE screen,
   // covering the Recent History column too, not just the flow column the
   // rest of this page's desktop layout confines itself to. It was ported
   // to `document.body` in the first place because PageTransition's
   // motion.div (wraps every route) leaves a stray transform on itself,
   // which makes it the containing block for any `position:fixed`
-  // descendant — so a naive non-portalled fixed overlay rendered sized/
+  // descendant - so a naive non-portalled fixed overlay rendered sized/
   // positioned to that transformed ancestor instead of the viewport. The
   // portal still needs to happen for that reason, but on desktop the
   // overlay's rect is now pinned to this ref (the same flow-column
@@ -744,7 +744,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     }
   })
 
-  // Separate, dependency-gated effect — NOT folded into the unconditional
+  // Separate, dependency-gated effect - NOT folded into the unconditional
   // one above. That one has no dep array on purpose (it needs to keep
   // re-measuring flashCheckRef every render while flash is up), but
   // getBoundingClientRect() always returns a brand-new DOMRect object, so
@@ -765,7 +765,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }, [successPhase, isDesktop, isDesktopMq])
 
   // Measured in a layout effect (before paint) so the traveling checkmark is
-  // already on screen in the receipt's very first frame — no frame where
+  // already on screen in the receipt's very first frame - no frame where
   // the receipt shows an empty header circle.
   useLayoutEffect(() => {
     if (successPhase !== 'collapsed') { setTravelDone(false); setTravelRect(null); return }
@@ -787,10 +787,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }
 
   // ── Desktop-only: Transfer History (right column) ────────────────────────
-  // Real data — this wallet's own outgoing 'bridge' rows. fetchActivity's
+  // Real data - this wallet's own outgoing 'bridge' rows. fetchActivity's
   // 'bridge' filter also returns 'claim'/'withdraw' rows server-side (see
   // ActivityService.ts), so this filters back down to just 'bridge' client-
-  // side — the same technique MultichainPage.tsx's hub already uses for its
+  // side - the same technique MultichainPage.tsx's hub already uses for its
   // own combined list. Skipped entirely on mobile; re-fetched once a
   // transfer actually succeeds so it shows up without a page reload.
   // (`isDesktop` is already declared above, at the top of this component.)
@@ -817,11 +817,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const keypadLift = useKeypadLift(showAmountPad, amountBoxRef, !isDesktop)
   const [selectedChain, setSelectedChain] = useState<ChainId>('eth')
   // Editing the address, amount or chain while the inline review is showing
-  // hides it again — the fees shown must always match what's in the fields.
+  // hides it again - the fees shown must always match what's in the fields.
   useEffect(() => {
     setStep(prev => (prev === 'review' ? 'form' : prev))
   }, [address, amount, selectedChain])
-  // MeshPort always uses Fast transfer — no user-facing speed selector anymore.
+  // MeshPort always uses Fast transfer - no user-facing speed selector anymore.
   const selectedSpeed: SpeedId = 'fast'
   const [showAllChains,    setShowAllChains]    = useState(false)
   const [showChainPicker,  setShowChainPicker]  = useState(false)
@@ -845,7 +845,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const [txHash, setTxHash] = useState('')
   const [txError, setTxError] = useState('')
   // True once initiateUBRecovery has successfully started the 7-day
-  // trustless recovery for a failed UB transfer — drives the "your funds
+  // trustless recovery for a failed UB transfer - drives the "your funds
   // are safe" messaging on the failed screen instead of (or alongside) the
   // existing "Retry anyway" flow. See the outer catch block below and
   // lib/ubFundRecovery.ts.
@@ -857,7 +857,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const [bridgeSteps, setBridgeSteps] = useState<BridgeStepState[]>(makeDefaultSteps('Destination'))
   const [feeEstimate, setFeeEstimate] = useState<FeeEstimate>({ bridgeFee: 0, networkFee: 0, forwarderFee: 0, totalFee: 0, receiverGets: 0, loading: false, error: '' })
   // Which (address, amount, chain, speed) combination `feeEstimate` above
-  // was actually fetched for — lets canContinue tell a fresh fee apart from
+  // was actually fetched for - lets canContinue tell a fresh fee apart from
   // a stale one left over from a previous amount/chain, instead of trusting
   // whatever number happens to be sitting in state.
   const [feeEstimateKey, setFeeEstimateKey] = useState('')
@@ -870,16 +870,16 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const [ticker, setTicker] = useState(0)
   // Set when the fee is re-checked immediately before signing (see
   // handleConfirm) and turns out to have moved since the person last saw
-  // it on Review — surfaced as a banner there instead of silently signing
+  // it on Review - surfaced as a banner there instead of silently signing
   // against the old number.
   const [feeChangedNotice, setFeeChangedNotice] = useState('')
 
   const bridgeStartRef = useRef<number>(0)
   const tickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  // Ref holds the mint txHash synchronously — avoids stale-closure bug when
+  // Ref holds the mint txHash synchronously - avoids stale-closure bug when
   // reading `txHash` state immediately after the bridge.mint event fires.
   const finalTxHashRef = useRef('')
-  // Set the moment the CCTP burn is known to have landed on Arc — either from
+  // Set the moment the CCTP burn is known to have landed on Arc - either from
   // the `bridge.burn` SDK event or from the resolved result's burn step. Once
   // this is set, the USDC has irreversibly left the wallet and Circle's
   // attestation + forwarder mint WILL still complete on their own, even if
@@ -888,7 +888,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // regardless of whether the auto-advance timer had marked the burn step
   // done yet when the failure surfaced.
   const burnTxHashRef = useRef('')
-  // Set the moment a UB deposit succeeds — `targetDepositAmount` itself is
+  // Set the moment a UB deposit succeeds - `targetDepositAmount` itself is
   // block-scoped inside the UB branch below and unreachable from the outer
   // catch, but the fund-recovery initiation (see initiateUBRecovery in the
   // catch block) needs exactly this: how much actually made it into Unified
@@ -900,7 +900,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // reset deliberately leaves this alone, so a "Retry" after a post-deposit
   // failure re-enters the UB branch, sees this set, and RESUMES from the
   // spend leg instead of depositing a second time on top of funds that were
-  // never lost — the double-deposit "Try Again" trap.
+  // never lost - the double-deposit "Try Again" trap.
   const ubDepositCompletedRef = useRef(false)
   // Guards initiateUBRecovery so a deposit that fails its spend more than
   // once (first attempt + a manual retry) can't kick off two parallel 7-day
@@ -909,7 +909,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   // Clear all UB deposit/recovery bookkeeping. Called only at genuine
   // "this is a brand-new transfer" boundaries (navigating back to the form,
-  // or a transfer that fully completed) — NOT on a retry, which needs the
+  // or a transfer that fully completed) - NOT on a retry, which needs the
   // prior deposit remembered so it can resume.
   const resetUBTransientState = () => {
     ubDepositedAmountRef.current = null
@@ -919,12 +919,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   // ── Wavy-tank processing visual ──────────────────────────────────────────────
   // The old version only recomputed level/percent on React re-renders, which
-  // only happen once a second (the `ticker` interval) — so the water level,
+  // only happen once a second (the `ticker` interval) - so the water level,
   // the "42%" text, and the progress bar all visibly jumped once a second
   // instead of moving continuously. Now a single requestAnimationFrame loop
   // recomputes progress every frame (~60fps) straight from bridgeSteps'
   // real timestamps and writes directly to the DOM (path `d`, text content,
-  // bar width) — bypassing React state entirely for these three elements so
+  // bar width) - bypassing React state entirely for these three elements so
   // there's nothing to wait on and nothing to jump.
   const tankFromPathRef = useRef<SVGPathElement | null>(null)
   const tankToPathRef = useRef<SVGPathElement | null>(null)
@@ -958,7 +958,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     }
     // Destination doesn't change mid-flight once broadcasting has started,
     // so it's safe to compute the per-chain step thresholds once here
-    // rather than every frame — same numbers the step-advancement timer
+    // rather than every frame - same numbers the step-advancement timer
     // (startStepTimer) itself runs on, so this visual and the moment a
     // step actually flips to "done" stay in agreement.
     const thresholds = getStepThresholds(chain)
@@ -1005,7 +1005,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   // ── Pre-warm SDK imports as soon as confirm screen appears ───────────────────
   // By the time the user clicks "Confirm & Pay" the three heavy packages are
-  // already parsed and cached — eliminates the 500ms–1s import delay from signing.
+  // already parsed and cached - eliminates the 500ms–1s import delay from signing.
   useEffect(() => {
     if (step === 'confirm') loadSdkModules()
   }, [step])
@@ -1014,7 +1014,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const settingsMap = useSettingsStore((s) => s.settings)
   const settingsLoaded = useSettingsStore((s) => s.loaded)
   const loadSettings = useSettingsStore((s) => s.load)
-  // See the identical fix + comment in MultichainClaimPage.tsx — this page
+  // See the identical fix + comment in MultichainClaimPage.tsx - this page
   // only ever read settingsMap/settingsLoaded reactively too, without ever
   // calling load() itself, so isChainEnabledForTransfer's fail-open default
   // (every chain enabled until its row arrives) could stay permanent rather
@@ -1022,12 +1022,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   useEffect(() => { loadSettings() }, [loadSettings])
   // Applies the Admin Panel's optional per-chain UB/CCTP override (see
   // featureFilters.ts's resolveChainMechanism + supabase-chains-ub-cctp-
-  // override.sql) at this ONE spot — every `chain.ub` / `ch.ub` read
+  // override.sql) at this ONE spot - every `chain.ub` / `ch.ub` read
   // elsewhere in this file traces back to objects that came from
   // ENABLED_CHAINS, so overriding it here is enough for the whole flow to
   // respect it without touching any of those individual call sites. Only
   // ever recomputes `ub` for chains that statically support it in the first
-  // place (`c.ub === true`) — CCTP-only chains (`c.ub === false`) are left
+  // place (`c.ub === true`) - CCTP-only chains (`c.ub === false`) are left
   // exactly as-is, since they have no UB path to override. Defaults
   // reproduce today's exact behavior until the Admin Panel toggles are used.
   const ENABLED_CHAINS = ALL_CHAINS
@@ -1035,12 +1035,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     .map(c => c.ub ? { ...c, ub: resolveChainMechanism(settingsMap, c.id) === 'ub' } : c)
   const baseChain = ENABLED_CHAINS.find(c => c.id === selectedChain)
     ?? (() => {
-      // Same resolution as ENABLED_CHAINS above, applied here too — this
+      // Same resolution as ENABLED_CHAINS above, applied here too - this
       // fallback only runs if the selected chain isn't in ENABLED_CHAINS
       // (e.g. it was just disabled for Transfer entirely while already
       // selected). Without this, `chain.ub` would briefly reflect the raw,
       // unresolved default instead of the admin's actual UB/CCTP choice for
-      // that chain — a real way the two could end up mixed, even if a rare
+      // that chain - a real way the two could end up mixed, even if a rare
       // one to hit in practice.
       const c = ALL_CHAINS.find(c => c.id === selectedChain)!
       return c.ub ? { ...c, ub: resolveChainMechanism(settingsMap, c.id) === 'ub' } : c
@@ -1057,11 +1057,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     if (!ENABLED_CHAINS.find(c => c.id === selectedChain)) setSelectedChain(ENABLED_CHAINS[0].id)
   }, [settingsLoaded, settingsMap])
 
-  // ── Route picker (UB vs CCTP v2) — shown below the amount box ──────────────
+  // ── Route picker (UB vs CCTP v2) - shown below the amount box ──────────────
   // Independent of the single-mechanism resolution above: for chains the
   // Admin Panel has switched BOTH routes on for, the user gets to pick which
   // one this transfer actually uses. For every other chain (only one route
-  // on, or the chain has no UB path at all) there's nothing to pick — the
+  // on, or the chain has no UB path at all) there's nothing to pick - the
   // one available route is used automatically and no selector is shown.
   const availableMechanisms = resolveAvailableMechanisms(settingsMap, baseChain.id)
   const [selectedRoute, setSelectedRoute] = useState<'ub' | 'cctp' | null>(null)
@@ -1100,20 +1100,20 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // checklist itself advances solely on the SDK's step events (handleEvent).
   const stepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Cumulative ms thresholds — when reached, advance to the NEXT step.
+  // Cumulative ms thresholds - when reached, advance to the NEXT step.
   //
   // Previously this was one flat set of numbers (2.5s/5.5s/18s/24s) applied
-  // identically to every destination chain — Ethereum (~12s block time) and
+  // identically to every destination chain - Ethereum (~12s block time) and
   // Base (~2s block time) both got the same "mint confirmed" timing, which
   // is wrong for the same reason a flat "~5s" arrival estimate would be
   // wrong (see estLabel's own comment on this below). Only the approve/burn
   // legs are legitimately chain-independent, because both happen on the
   // *source* chain, which is always Arc Testnet here regardless of
-  // destination. Attestation is Circle's Iris API under FAST mode — also
+  // destination. Attestation is Circle's Iris API under FAST mode - also
   // chain-independent (Circle's documented ~8-20s window, not
   // destination-specific). Mint is the one leg that actually happens on the
   // destination chain, so it's the one leg that should use that chain's own
-  // finality time — the same `chain.time` field already driving the UB
+  // finality time - the same `chain.time` field already driving the UB
   // estimate and the ring's expectedSec math below, instead of a fixed
   // guess that's only ever correct by coincidence.
   const ARC_APPROVE_MS = 2500   // Arc Testnet tx confirmation (source-chain, chain-independent)
@@ -1126,7 +1126,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }
 
   const getStepThresholds = (destChain: typeof chain): Record<string, number> => {
-    const mintMs = parseChainTimeMs(destChain.time) // destination-chain finality — the only leg that actually varies
+    const mintMs = parseChainTimeMs(destChain.time) // destination-chain finality - the only leg that actually varies
     const approve = ARC_APPROVE_MS
     const burn = approve + ARC_BURN_MS
     const attestation = burn + IRIS_ATTESTATION_MS
@@ -1155,8 +1155,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     setAddress(val)
     setGasWarning('')
     if (!val) { setAddrHint({ type: '', text: 'Enter wallet address on destination chain' }); return }
-    if (/\.arc/i.test(val)) { setAddrHint({ type: 'error', text: '⚠ .arc usernames not supported — enter wallet address' }); return }
-    if (isEVMAddress(val)) { setAddrHint({ type: 'ok', text: `🔗 EVM address — will receive on ${chain.name}` }); return }
+    if (/\.arc/i.test(val)) { setAddrHint({ type: 'error', text: '⚠ .arc usernames not supported - enter wallet address' }); return }
+    if (isEVMAddress(val)) { setAddrHint({ type: 'ok', text: `🔗 EVM address - will receive on ${chain.name}` }); return }
     if (isSolanaAddress(val)) { setAddrHint({ type: 'ok', text: '◎ Solana address detected' }); return }
     if (val.startsWith('0x') && val.length < 42) { setAddrHint({ type: 'warn', text: `Address: ${val.length}/42 characters` }); return }
     if (val.length > 10) { setAddrHint({ type: 'error', text: '⚠ Invalid address format' }); return }
@@ -1165,14 +1165,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   const MIN_AMOUNT = 3
   // Conservative static reserve used anywhere we need a "roughly how much
-  // fee will this cost" number WITHOUT calling the SDK — the Max button and
+  // fee will this cost" number WITHOUT calling the SDK - the Max button and
   // the AmountKeypad's max-amount math use this instead of the live fee
   // estimate. The live estimate (the actual forwarder service fee) is only
-  // ever fetched once the user reaches Review — see the review-step effect
+  // ever fetched once the user reaches Review - see the review-step effect
   // below.
   const feeReserveEstimate = Math.max(0.15, balance * 0.002)
 
-  // Basic form validity. Deliberately does NOT depend on any fee estimate —
+  // Basic form validity. Deliberately does NOT depend on any fee estimate -
   // fees are no longer fetched while the user is on the amount-entry form at
   // all, so Continue only needs to know the typed amount/address are sane.
   const formValid = (isEVMAddress(address) || isSolanaAddress(address)) && numAmount >= MIN_AMOUNT && numAmount <= balance
@@ -1180,7 +1180,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   // If a silent background refresh (see the Review polling effect below)
   // finds the forwarder fee moved meaningfully since the last time it was
-  // shown, surface a brief notice — the numbers on Review update themselves
+  // shown, surface a brief notice - the numbers on Review update themselves
   // regardless, this is just letting the person know why the total moved.
   // Auto-clears after a few seconds rather than blocking anything.
   const notifyIfFeeChanged = (fresh: FeeEstimate, silent: boolean) => {
@@ -1196,10 +1196,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   // ── Fetch live fee estimate from SDK ─────────────────────────────────────────
   // Only ever called once the user reaches the Review step (see the effect
-  // below) — never while typing an amount, never after the passcode is
+  // below) - never while typing an amount, never after the passcode is
   // entered. Returns the freshly-fetched estimate (or null if it couldn't be
   // fetched at all).
-  // `silent` skips the loading spinner — used for the periodic background
+  // `silent` skips the loading spinner - used for the periodic background
   // refresh while Review is open, so numbers update in place instead of
   // flashing "Fetching fees…" every poll.
   const fetchFeeEstimate = async (silent = false): Promise<FeeEstimate | null> => {
@@ -1225,7 +1225,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         getProvider: ({ chain: sdkChain }: any) => {
           const rpcUrl: string | undefined = sdkChain?.rpcEndpoints?.[0]
           // The SDK always hands us a single default endpoint for Arc
-          // (rpc.testnet.arc.io) — trusting it directly meant we never
+          // (rpc.testnet.arc.io) - trusting it directly meant we never
           // failed over across ARC_RPCS when that one endpoint was rate
           // limited. Force the fallback list for Arc regardless of what the
           // SDK provides; only use its endpoint for non-Arc chains.
@@ -1239,20 +1239,20 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
       // ── Gateway (unified balance) path ──────────────────────────────────
       // This used to fall through to kit.estimateBridge() below regardless
-      // of chain.ub — meaning every UB transfer still paid CCTP's slower
+      // of chain.ub - meaning every UB transfer still paid CCTP's slower
       // estimate-call latency on the Review screen before the (correctly
       // fast) UB execution ever started. That's the actual reason UB felt
       // as slow as CCTP end-to-end even though the execution step itself
-      // was already fast — the estimate step never got branched.
+      // was already fast - the estimate step never got branched.
       if (chain.ub) {
         // Cap the amount we ask the SDK to estimate so there's still room
-        // left in `balance` for Arc's own deposit gas (Arc gas = USDC) —
+        // left in `balance` for Arc's own deposit gas (Arc gas = USDC) -
         // estimating on the full numAmount let this diverge from what
         // handleConfirm can actually deposit once the gas reserve is
         // carved out.
         const ubTargetAmount = Math.min(numAmount, Math.max(0, balance - UB_DEPOSIT_GAS_RESERVE))
 
-        // `from` takes an allocations object, not a bare adapter array —
+        // `from` takes an allocations object, not a bare adapter array -
         // `[{ adapter }]` silently satisfied the `any`-typed call but isn't
         // the shape the SDK actually expects (see "Select source
         // blockchains" in the App Kit docs).
@@ -1276,37 +1276,37 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         }
         // Circle's Unified Balance fee model (docs.arc.io/app-kit/concepts/
         // unified-balance-fees) treats these four fee types in two
-        // fundamentally different ways — they must NOT be summed into one
+        // fundamentally different ways - they must NOT be summed into one
         // "spendFee" the way this used to work:
         //   - Gateway protocol fee ('provider') and burn-intent gas
         //     ('gasFee') are deducted from the Unified Balance IN ADDITION
         //     to the spend amount. They never touch what gets minted on
         //     the destination chain, so they must not reduce receiverGets
-        //     — but the wallet/balance DOES need extra room for them on
+        //     - but the wallet/balance DOES need extra room for them on
         //     top of the spend amount.
         //   - The custom/kit fee ('kit') and Forwarding Service fee
         //     ('forwarder') are carved OUT of the spend amount itself
         //     before minting, so they DO reduce what the recipient
-        //     receives — but since they come out of the spend amount
+        //     receives - but since they come out of the spend amount
         //     that's already reserved, they need no extra balance on top.
         // The old code lumped all four together and used that single
         // number for both receiverGets and the required-balance check,
         // which simultaneously overstated the balance requirement (kit/
         // forwarder don't need extra balance) and understated
         // receiverGets (provider/gas don't come out of the destination
-        // amount) — the exact contradiction between the preview and the
+        // amount) - the exact contradiction between the preview and the
         // balance check that was reported.
         const balanceOnlyFee = providerFee + gasFee
         const spendReducingFee = kitFee + forwarderFee
         // totalFee is what's needed ON TOP of the spend amount: the
         // Gateway protocol fee + burn gas (drawn from the Unified Balance
-        // alongside the spend), plus UB_DEPOSIT_GAS_RESERVE — a completely
+        // alongside the spend), plus UB_DEPOSIT_GAS_RESERVE - a completely
         // separate cost (Arc's own gas for the deposit transaction, paid
         // from the sender's Arc wallet, never touches the Unified Balance
         // spend accounting or the destination amount at all).
         const totalFee = balanceOnlyFee + UB_DEPOSIT_GAS_RESERVE
         // receiverGets is based on ubTargetAmount (what's actually going to
-        // be deposited/spent), not the raw numAmount — otherwise this
+        // be deposited/spent), not the raw numAmount - otherwise this
         // preview overstates what the recipient gets whenever the gas
         // reserve had to cap the deposit below what the user typed. Only
         // the spend-reducing fees come off it; provider/gas fees are paid
@@ -1329,12 +1329,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         return fresh
       }
 
-      // Only route through Circle's forwarder for chains it actually covers —
+      // Only route through Circle's forwarder for chains it actually covers -
       // otherwise we submit the destination mint ourselves via `adapter`
       // (same private key, reused across chains) after funding it with a
       // little native gas via /api/relay-gas. See FORWARDER_SUPPORTED_SDK_CHAINS.
       // Not for chains where Circle's forwarder mint keeps failing
-      // (FORWARDER_MINT_FAILING_SDK_CHAINS) — MeshPort's relayer mints there.
+      // (FORWARDER_MINT_FAILING_SDK_CHAINS) - MeshPort's relayer mints there.
       const useForwarder = circleForwarderMintsTo(chain.sdk)
       const estimate = await kit.estimateBridge({
         from: { adapter, chain: ARC_CHAIN_KEY },
@@ -1349,10 +1349,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // Parse fees from EstimateResult
       // estimate.fees[].type is 'kit' | 'provider' | 'forwarder' per the
       // installed @circle-fin/provider-cctp-v2 SDK (gas fees live separately
-      // in estimate.gasFees, NOT as a 'gasFee' entry in this array — that
+      // in estimate.gasFees, NOT as a 'gasFee' entry in this array - that
       // branch never matched anything). 'kit' only appears when
       // config.customFee is set, which this app never does, so it's normally
-      // 0 — included here for correctness/future-proofing, not because it
+      // 0 - included here for correctness/future-proofing, not because it
       // explained any observed discrepancy.
       let bridgeFee = 0, networkFee = 0, forwarderFee = 0
       if (estimate?.fees) {
@@ -1376,7 +1376,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       lastTotalFeeRef.current = totalFee
       return fresh
     } catch (e: any) {
-      // Same "no runners?!" defense as handleConfirm's catch below — this
+      // Same "no runners?!" defense as handleConfirm's catch below - this
       // estimate call runs on Review, BEFORE the user ever hits Confirm, so
       // if a poisoned Arc provider caused this failure, evict it now rather
       // than silently falling back to static fees here and letting the
@@ -1397,10 +1397,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }
 
   // ── Check source-chain gas balance ───────────────────────────────────────────
-  // Arc Testnet uses USDC as gas — balance check is already covered by the USDC balance check.
+  // Arc Testnet uses USDC as gas - balance check is already covered by the USDC balance check.
   // For destination chain, useForwarder=true means Circle pays destination gas.
   // We just ensure: balance >= amount + estimated fees.
-  // On the form step no live fee has been fetched yet (by design — see
+  // On the form step no live fee has been fetched yet (by design - see
   // below), so this falls back to the same static reserve the Max button
   // uses. Once on Review/Confirm, feeEstimate.totalFee is the real,
   // SDK-fetched forwarder service fee and is used instead.
@@ -1416,7 +1416,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }
 
   // ── Surface a rough balance warning on the form step ─────────────────────
-  // Uses only the static reserve estimate — no SDK call, no live fee fetch.
+  // Uses only the static reserve estimate - no SDK call, no live fee fetch.
   // The exact forwarder service fee is calculated once on Review instead.
   useEffect(() => {
     if (step !== 'form') return
@@ -1429,7 +1429,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // This is the ONLY place the forwarder service fee gets calculated. It
   // fires once on arrival at Review, then keeps polling quietly in the
   // background for as long as Review stays open, so a change in the
-  // forwarder's live rate shows up automatically here — never after the
+  // forwarder's live rate shows up automatically here - never after the
   // passcode sheet opens, and never re-fetched once the user has entered
   // their PIN (see handleConfirm).
   // One-screen layout: the fee and "You'll receive" are calculated live on
@@ -1449,7 +1449,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }, [step, address, amount, selectedChain, selectedSpeed])
 
   // ── Navigate to review ────────────────────────────────────────────────────
-  // No fee has been fetched yet at this point — Continue only checks
+  // No fee has been fetched yet at this point - Continue only checks
   // formValid. Landing on 'review' triggers the fee-fetch effect above,
   // which is where the forwarder service fee actually gets calculated.
   const handleContinue = () => {
@@ -1460,16 +1460,16 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // ── Main bridge execution ────────────────────────────────────────────────────
   const handleConfirm = async () => {
     // Re-entrancy lock for the FULL transfer, not just the passcode check.
-    // `loading` alone isn't enough here — it gets reset to false the instant
+    // `loading` alone isn't enough here - it gets reset to false the instant
     // passcode verification resolves (a few lines down), which is well
     // before deposit()/spend() even start. If onComplete fires a second
     // time in that multi-second window (e.g. a duplicate PinKeypad
     // auto-fire, a double biometric event), the `if (!loading)` guard at
     // the call site sees loading===false again and lets a second
     // handleConfirm() through. Both runs build byte-identical, deterministic
-    // spendParams (same amount/address/allocations/chain) — the first
+    // spendParams (same amount/address/allocations/chain) - the first
     // spend() succeeds, and Circle Gateway's replay protection (the burn
-    // intent's transfer-spec hash can only ever be submitted once — see
+    // intent's transfer-spec hash can only ever be submitted once - see
     // developers.circle.com/gateway/concepts/technical-guide) then rejects
     // the second, identical submission with "Transfer spec has already
     // been used". That FATAL, non-resumable rejection is what was landing
@@ -1479,7 +1479,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     if (isConfirmingRef.current) return
     isConfirmingRef.current = true
 
-    // Show loading indicator immediately — user gets instant visual feedback
+    // Show loading indicator immediately - user gets instant visual feedback
     setLoading(true)
     const t0 = Date.now()
     const testRunId = newRunId(`send-${chain.id}`)
@@ -1514,17 +1514,17 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     setLoading(false)
 
     // Fees are never (re-)calculated at this point. The forwarder service
-    // fee was already fetched — and kept fresh via polling — while the user
+    // fee was already fetched - and kept fresh via polling - while the user
     // was on Review (see the review-step effect above); whatever is in
     // `feeEstimate` right now is what they saw and confirmed against. We
     // sign and broadcast against that number rather than firing another SDK
     // call from the passcode screen.
     if (!validateGasBalance()) {
       // validateGasBalance() only sets `gasWarning`, which is rendered on
-      // the 'form' step — but by the time someone's entered their passcode
+      // the 'form' step - but by the time someone's entered their passcode
       // here on 'confirm', they're nowhere near that step. The function
       // would just silently `return`, leaving the passcode dots filled in
-      // and nothing visibly happening — exactly the "why isn't this doing
+      // and nothing visibly happening - exactly the "why isn't this doing
       // anything" symptom. Surface the same message through `passError`,
       // which this screen already renders, and clear the passcode so they
       // can back out and adjust the amount.
@@ -1564,7 +1564,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     // done before its transaction/attestation really is.
 
     try {
-      // ── 4. Resolve private key (may need PBKDF2 — happens during broadcasting view) ──
+      // ── 4. Resolve private key (may need PBKDF2 - happens during broadcasting view) ──
       let activePrivateKey = privateKey
 
       // Fast path: decrypt from localStorage encrypted key (no network).
@@ -1613,7 +1613,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // Same fix as the estimate-side getProvider above: the SDK's own
           // default endpoint for Arc is trusted blindly here otherwise,
           // which skips ARC_RPCS failover entirely and was the direct cause
-          // of "RPC endpoint error on Arc Testnet" bridge failures — every
+          // of "RPC endpoint error on Arc Testnet" bridge failures - every
           // retry hit the same rate-limited rpc.testnet.arc.io with no
           // failover to /api/arc-rpc or any other fallback.
           const isArc = sdkChain?.name?.toLowerCase?.().includes('arc') || /arc[.-]/i.test(rpcUrl ?? '')
@@ -1626,19 +1626,19 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
       // ── Gateway (unified balance) path ────────────────────────────────────
       // Chains with ub===true (see CHAINS below, kept in sync with Circle's
-      // Gateway docs — developers.circle.com/gateway/references/
+      // Gateway docs - developers.circle.com/gateway/references/
       // supported-blockchains) skip the whole CCTP flow below entirely:
       // deposit Arc USDC into the unified balance, then spend it straight to
       // the destination. Both legs resolve directly (no attestation wait to
       // paper over), so this returns as soon as the 2 steps above are done
       // rather than falling through into the 4-step CCTP block.
       // Same defensive extraction the CCTP path below already needs for
-      // this SDK family — see its own getHash() comment: "Arc SDK: txHash
+      // this SDK family - see its own getHash() comment: "Arc SDK: txHash
       // is at step.txHash OR step.data.txHash OR step.values.txHash", i.e.
       // the top-level field the type definitions promise isn't always
       // reliably populated at runtime. Applying the same fallback chain
       // here rather than trusting depositResult.txHash / spendResult.txHash
-      // directly — if it wasn't the cause of transfers missing from
+      // directly - if it wasn't the cause of transfers missing from
       // Activity, it's a no-op; if it was, this is the fix.
       // realTxHash: a mint submitted through MeshPort's relayer reports a
       // hash only the relayer's transaction has on-chain.
@@ -1650,7 +1650,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
       if (chain.ub) {
         // Resume path: a prior attempt already deposited into Unified Balance
-        // and then failed its spend. Do NOT deposit again — reuse what's
+        // and then failed its spend. Do NOT deposit again - reuse what's
         // already there and go straight to the spend leg. This is what makes
         // "Retry" safe after a post-deposit failure instead of stacking a
         // second deposit on funds that were never lost.
@@ -1660,7 +1660,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
         if (resumingFromPriorDeposit) {
           targetDepositAmount = parseFloat(ubDepositedAmountRef.current!)
-          logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: 'UB resume — reusing prior deposit, skipping deposit step', data: { targetDepositAmount } })
+          logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: 'UB resume - reusing prior deposit, skipping deposit step', data: { targetDepositAmount } })
           setBridgeSteps(prev => prev.map(s => {
             if (s.name === 'deposit') return { ...s, status: 'done', verified: true, message: 'Already in Unified Balance', completedAt: Date.now() }
             if (s.name === 'sign')    return { ...s, status: 'active', message: UB_STEP_DEFS[1].activeMsg, startedAt: Date.now() }
@@ -1671,7 +1671,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             ? { ...s, status: 'active', message: UB_STEP_DEFS[0].activeMsg }
             : s))
 
-          // Cap the deposit the same way fetchFeeEstimate caps its estimate —
+          // Cap the deposit the same way fetchFeeEstimate caps its estimate -
           // leave room in `balance` for Arc's own deposit gas. Depositing the
           // raw numAmount (unadjusted) risked leaving nothing for that gas.
           targetDepositAmount = Math.min(numAmount, Math.max(0, balance - UB_DEPOSIT_GAS_RESERVE))
@@ -1686,7 +1686,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             from: { adapter, chain: ARC_CHAIN_KEY as any },
             amount: targetDepositAmount.toFixed(6),
             token: 'USDC',
-            // Gasless EIP-2612 signature — same rationale as arc.ts's default
+            // Gasless EIP-2612 signature - same rationale as arc.ts's default
             // allowanceStrategy: avoids a separate on-chain approve tx before
             // the deposit can happen, which would add a full extra round trip
             // on top of what's supposed to be a sub-second step.
@@ -1706,13 +1706,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         }
 
         // Fetch a guaranteed-fresh estimate rather than trusting
-        // feeEstimate from React state — that state was computed against
+        // feeEstimate from React state - that state was computed against
         // numAmount on Review, but the deposit above may have used a
         // gas-adjusted (smaller) amount, so the net spend figure needs to
         // be recomputed against what was actually just deposited. Retry a
         // couple of times with backoff before giving up: the deposit has
         // already landed, so a transient estimate hiccup here must NOT
-        // immediately dump the user on the failed screen — a plain retry of
+        // immediately dump the user on the failed screen - a plain retry of
         // just this call usually clears it.
         let freshEstimate = await fetchFeeEstimate(true)
         for (let attempt = 0; (!freshEstimate || freshEstimate.receiverGets <= 0) && attempt < 3; attempt++) {
@@ -1723,14 +1723,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         if (!freshEstimate || freshEstimate.receiverGets <= 0) {
           throw new Error(
             `Your USDC is safely in your Unified Balance, but the fee estimate for the ` +
-            `send step keeps failing. Your funds are NOT lost — tap Retry to resume the ` +
+            `send step keeps failing. Your funds are NOT lost - tap Retry to resume the ` +
             `send (it will not deposit again), or check your Unified Balance.`
           )
         }
 
         // Spend from the DEPOSITED amount minus the balance-only fees
         // (Gateway protocol fee + burn gas), not from freshEstimate.receiverGets.
-        // receiverGets is the recipient-side figure — it's already had the
+        // receiverGets is the recipient-side figure - it's already had the
         // spend-reducing fees (kit/forwarder) carved out. Circle's spend()
         // carves those same fees out of whatever `amount` it's given
         // automatically, so passing receiverGets here subtracted the
@@ -1738,16 +1738,16 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // recipient below what the preview promised. What spend() actually
         // needs headroom for is the balance-only fees (provider + gas),
         // which come out of the Unified Balance IN ADDITION to whatever
-        // amount is passed in — that's the "insufficient total maxFee
+        // amount is passed in - that's the "insufficient total maxFee
         // across intents to cover forwarding fee"-style failure this
         // margin exists to avoid, not the kit/forwarder deduction.
         //
         // FIX: this margin used to be a single flat 0.0005 USDC for EVERY
-        // chain — calibrated from one observed shortfall (0.000005 USDC)
+        // chain - calibrated from one observed shortfall (0.000005 USDC)
         // that was almost certainly seen on Ethereum Sepolia, the most-used
         // route. A flat margin doesn't scale with how large the actual
         // fee is on a given destination. Confirmed in production: an
-        // Avalanche Fuji transfer failed with exactly this error — AVAX's
+        // Avalanche Fuji transfer failed with exactly this error - AVAX's
         // live-fee drift between estimate and execution exceeded what a
         // flat 0.0005 covers, even though the same code path works fine on
         // Ethereum. Scaling the margin to a percentage of the fee just
@@ -1777,27 +1777,27 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         }
         // Covers both the first spend() attempt and the resumable retry
         // below, since the retry only adds `config.retry` on top of these
-        // same spendParams — amount/allocations never change between them.
+        // same spendParams - amount/allocations never change between them.
         assertAllocationsMatchAmount(spendParams.amount, spendParams.from.allocations, 'unifiedBalance.spend')
 
         // spend() can fail after the burn-side of the forwarder transfer has
         // already gone out (e.g. "Forwarder transfer failed: ON_CHAIN_FAILURE"
         // while waiting on the mint). Circle's own recovery pattern for this
         // is NOT a separate "retrySpend" call (no such method exists on the
-        // SDK) — it's re-calling spend() with the same params plus
+        // SDK) - it's re-calling spend() with the same params plus
         // config.retry, seeded from the attestation/signature Circle attaches
         // to a KitError when error.recoverability === 'RESUMABLE'. Handling
         // that here, right where spend() is called, means a resumable
         // failure resumes the SAME in-flight transfer instead of falling
         // through to the outer catch below, which would land on the
-        // 'failed' screen and — since deposit already succeeded — make
+        // 'failed' screen and - since deposit already succeeded - make
         // "Try Again" restart from handleConfirm and submit a SECOND
         // deposit on top of Unified Balance funds that were never lost in
         // the first place.
         // UB FIX: this used to only be checked from the FIRST spend() call's
         // catch block (see the `else` branch below). The maxFee top-up retry
         // a few lines down calls spend() a second time and can fail with the
-        // exact same RESUMABLE/ON_CHAIN_FAILURE signature — the burn already
+        // exact same RESUMABLE/ON_CHAIN_FAILURE signature - the burn already
         // went out on that attempt, Gateway hands back an attestation +
         // signature, and Circle's own recovery pattern is to resume with
         // them rather than give up. Before this fix, only the first
@@ -1810,14 +1810,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           const isKitError = KitError && err instanceof KitError
           // forwarderMintRetry also accepts a forwarder mint failure that
           // isn't flagged RESUMABLE (or isn't a KitError instance from this
-          // bundle) as long as Circle attached the attestation + signature —
+          // bundle) as long as Circle attached the attestation + signature -
           // the strict check alone skipped real "ON_CHAIN_FAILURE" cases.
           const seed = forwarderMintRetry(err)
           // The forwarder failed this mint: later transfers here skip it for a while.
           if (seed) noteForwarderMintFailed(chain.sdk)
           const trace = seed ?? err?.cause?.trace
           if (!seed) {
-            // UB FIX: this used to return null here with zero visibility —
+            // UB FIX: this used to return null here with zero visibility -
             // every non-resumed failure looked identical in the logs to a
             // deliberately-non-resumable one, whether the SDK genuinely
             // reported non-RESUMABLE or the detection just missed a real
@@ -1838,9 +1838,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
           const elapsedMs = Date.now() - attemptStartedAt
           if (elapsedMs > GATEWAY_ATTESTATION_EXPIRY_SAFETY_MS) {
-            logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'error', label: 'unifiedBalance.spend resume SKIPPED — attestation likely expired', data: { elapsedMs } })
+            logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'error', label: 'unifiedBalance.spend resume SKIPPED - attestation likely expired', data: { elapsedMs } })
             err.message = `Deposit succeeded but the spend attempt failed and took too long to retry safely ` +
-              `(the Gateway attestation may have expired). Check your Unified Balance before retrying — ` +
+              `(the Gateway attestation may have expired). Check your Unified Balance before retrying - ` +
               `original error: ${err?.message || 'unknown error'}`
             throw err
           }
@@ -1856,13 +1856,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             // flow and parameters, not a partial spend call". Prefer that
             // dedicated method when the installed SDK exposes it, and fall
             // back to re-calling spend() with config.retry (the pattern this
-            // code has always used) when it doesn't — the retry seed
+            // code has always used) when it doesn't - the retry seed
             // (attestation + signature off the KitError trace) is the same
             // either way.
             const ub: any = kit.unifiedBalance
             // The forwarder's mint is what failed, so resuming must NOT go
             // back through the forwarder (with config.retry the SDK has no
-            // transferId and rejects a forwarder destination outright) —
+            // transferId and rejects a forwarder destination outright) -
             // mint it on the destination through MeshPort's relayer
             // (relayedProviderFor). Same recipient, same attestation.
             const resumeParams = {
@@ -1875,13 +1875,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 ...resumeParams,
                 retry: { attestation: trace.attestation, signature: trace.signature },
               })
-              logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'unifiedBalance.retrySpend — SUCCESS', data: result })
+              logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'unifiedBalance.retrySpend - SUCCESS', data: result })
             } else {
               result = await ub.spend({
                 ...resumeParams,
                 config: { retry: { attestation: trace.attestation, signature: trace.signature } },
               })
-              logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'unifiedBalance.spend resumed — SUCCESS', data: result })
+              logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'unifiedBalance.spend resumed - SUCCESS', data: result })
             }
             return result
           } catch (resumeErr: any) {
@@ -1921,7 +1921,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             on('gateway.spend.step.signBurnIntents', (p: any) => { if (p?.data?.state !== 'error') ubStepDone('sign', 'ubAttest') })
             on('gateway.spend.step.fetchAttestation', (p: any) => {
               if (p?.data?.state === 'error') return
-              // A resumed spend skips straight to mint — close out earlier steps too.
+              // A resumed spend skips straight to mint - close out earlier steps too.
               ubStepDone('sign', 'ubAttest'); ubStepDone('ubAttest', 'spend')
             })
             on('gateway.spend.step.mint', (p: any) => {
@@ -1940,7 +1940,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'error', label: 'unifiedBalance.spend failed', data: { message: spendErr?.message } })
 
           // Gateway 400: "Insufficient total maxFee across intents to cover
-          // forwarding fee. Required additional: 0.000051" — a pre-execution
+          // forwarding fee. Required additional: 0.000051" - a pre-execution
           // validation rejection (no burn has happened yet, unlike the
           // RESUMABLE/ON_CHAIN_FAILURE case below), seen so far on
           // lower-volume forwarder destinations (Sei) where estimateSpend()'s
@@ -1950,8 +1950,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // number Gateway already hands back: top up `amount` by that much
           // (plus a small buffer, in case a second live quote at retry time
           // asks for slightly more than the first) and retry once. Bounded
-          // by `headroom` — the gap SPEND_SAFETY_MARGIN already reserved
-          // between spendAmount+spendFeeEstimate and targetDepositAmount —
+          // by `headroom` - the gap SPEND_SAFETY_MARGIN already reserved
+          // between spendAmount+spendFeeEstimate and targetDepositAmount -
           // so this can never spend more than what's actually sitting in
           // the Unified Balance.
           const maxFeeShortfallMatch = /insufficient total maxfee.*forwarding fee.*required additional:\s*([\d.]+)/i.exec(spendErr?.message || '')
@@ -1972,11 +1972,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               const topUpAttemptStartedAt = Date.now()
               try {
                 spendResult = await kit.unifiedBalance.spend(bumpedParams)
-                logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'unifiedBalance.spend maxFee top-up — SUCCESS', data: spendResult })
+                logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'unifiedBalance.spend maxFee top-up - SUCCESS', data: spendResult })
               } catch (topUpErr: any) {
                 logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'error', label: 'unifiedBalance.spend maxFee top-up FAILED', data: { message: topUpErr?.message } })
                 // UB FIX: the top-up retry can itself fail with the burn
-                // already gone out (RESUMABLE/ON_CHAIN_FAILURE) — try to
+                // already gone out (RESUMABLE/ON_CHAIN_FAILURE) - try to
                 // resume it the same way the first attempt's failure does
                 // below, instead of unconditionally surfacing "Transfer
                 // Status Unclear" for a failure that was actually resumable.
@@ -1990,7 +1990,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               }
             } else {
               // Either Gateway's own error text didn't parse to a usable
-              // number, or the shortfall exceeds the margin we set aside —
+              // number, or the shortfall exceeds the margin we set aside -
               // topping up further would eat into the balance-only fee
               // reserve itself, which isn't safe to do blindly. Surface the
               // original error rather than attempt a top-up we can't afford.
@@ -1998,7 +1998,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             }
           } else {
             // Uses the same tryResumeSpend helper the maxFee top-up retry's
-            // catch block now uses above — was inlined here separately
+            // catch block now uses above - was inlined here separately
             // before, which is exactly why the top-up path never got the
             // same recovery chance in the first place.
             const resumed = await tryResumeSpend(spendErr, spendAttemptStartedAt)
@@ -2010,7 +2010,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           }
         }
 
-        logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'unifiedBalance.spend result — SUCCESS', data: spendResult })
+        logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'unifiedBalance.spend result - SUCCESS', data: spendResult })
         const spendHash = getUBHash(spendResult)
 
         setBridgeSteps(prev => prev.map(s => {
@@ -2029,17 +2029,17 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           totalFees:      freshEstimate.totalFee,
           completionTime: completionSec,
           // UB spend always goes through Circle's forwarder, so spendHash is
-          // normally empty — fall back to the deposit hash (a real Arc tx)
+          // normally empty - fall back to the deposit hash (a real Arc tx)
           // for the "Transaction Hash" row so it isn't just a dash.
           txHash:         spendHash || depositHash,
           mintTxHash:     spendHash || '',
           burnTxHash:     depositHash,
         })
 
-        // Record in activity — same Activity.bridge() call the CCTP path
+        // Record in activity - same Activity.bridge() call the CCTP path
         // uses below, so a Gateway transfer shows up in history identically
         // to a CCTP one regardless of which rail actually moved the funds.
-        // Gated on depositHash (not spendHash) — the deposit always exists
+        // Gated on depositHash (not spendHash) - the deposit always exists
         // by this point since it already resolved above; the spend hash
         // going into the row's own fields is best-effort (undefined isn't
         // a crash), but recording is not skipped just because it's empty.
@@ -2070,7 +2070,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           const uid = u?.id && !u.id.startsWith('usr_') ? u.id : wa ? 'wallet_' + wa.toLowerCase().slice(2, 18) : null
           // UB spend always goes through Circle's forwarder, so spendHash is
           // normally empty (same reason the success screen and Activity
-          // record above both fall back to depositHash) — gating the points
+          // record above both fall back to depositHash) - gating the points
           // award on spendHash alone meant a completed, Activity-recorded UB
           // transfer silently never got its points, since this was the one
           // place in this block that didn't apply the same fallback.
@@ -2084,7 +2084,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
         logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: 'SUCCESS', data: { spendHash } })
         stopTicker()
-        // Transfer fully landed — the deposited funds now have a completed
+        // Transfer fully landed - the deposited funds now have a completed
         // forward path, so clear the "resume from prior deposit" bookkeeping.
         resetUBTransientState()
         setStep('success')
@@ -2108,7 +2108,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           payload?.values?.txHash || payload?.txHash || payload?.data?.txHash || ''
 
         if (doneKey === 'mint' && hash) finalTxHashRef.current = hash
-        // Burn confirmed — funds have irreversibly left Arc. Record it
+        // Burn confirmed - funds have irreversibly left Arc. Record it
         // synchronously so the outer catch / failed screen can tell a
         // still-settling transfer apart from one where nothing moved.
         if (doneKey === 'burn' && hash) burnTxHashRef.current = hash
@@ -2119,7 +2119,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // This is the same signal that already drives the UI's own step
         // indicator (handleEvent is trusted for that already), just also
         // persisted now instead of only ever mutating local component
-        // state. Written as 'pending' — the final block below (after
+        // state. Written as 'pending' - the final block below (after
         // kit.bridge() fully resolves) finalizes this exact row via
         // markBridgeCompleted(), a PATCH, not a second insert, so this
         // can never create a duplicate row.
@@ -2128,7 +2128,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             const { walletAddress: burnWa } = useAuthStore.getState()
             if (burnWa) {
               // Persist enough to resume this screen if the page gets
-              // refreshed while still waiting on attestation/mint below —
+              // refreshed while still waiting on attestation/mint below -
               // the burn is irreversible at this point (funds have already
               // left Arc), so a refresh must never drop back to the empty
               // form as if nothing happened. Cleared once this reaches a
@@ -2159,7 +2159,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           const idx = STEP_KEYS.indexOf(s.name)
           if (s.name === doneKey) {
             if (state === 'error') return { ...s, status: 'error', message: 'Step failed', txHash: hash || s.txHash }
-            // Submitted but not yet confirmed — stays in progress, shows its hash.
+            // Submitted but not yet confirmed - stays in progress, shows its hash.
             if (state === 'pending') return { ...s, status: 'active', txHash: hash || s.txHash, startedAt: s.startedAt || Date.now() }
             return { ...s, status: 'done', verified: true, message: STEP_DONE_MESSAGE[doneKey], txHash: hash || s.txHash, completedAt: s.completedAt || Date.now() }
           }
@@ -2185,17 +2185,17 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // Wildcard: was previously a no-op, silently discarding every payload.
       // That meant there was no way to tell, even from the console, which
       // steps had a REAL SDK event fire vs which were only ever advanced by
-      // the client-side timer above — exactly the ambiguity a user hit when
+      // the client-side timer above - exactly the ambiguity a user hit when
       // "Burn confirmed" showed no txHash. Log it for real now.
       //
       // Deliberately does NOT log the raw `payload` object. Checked this
       // SDK's own shipped type definitions (@circle-fin/app-kit) and found
       // every documented event/bus payload shaped around tx status
-      // (txHash/txId) — no evidence of credential data ever appearing here.
+      // (txHash/txId) - no evidence of credential data ever appearing here.
       // Logging only these specific known-safe fields (not the whole
       // object) means a future SDK version can't silently start including
       // something sensitive in a payload this code blindly forwards to the
-      // console — the extraction stays correct by construction, not by
+      // console - the extraction stays correct by construction, not by
       // continuing to trust an `any`-typed third-party object every release.
       kit.on('*', (payload: any) => {
         const eventName = payload?.type || payload?.event || payload?.name || '(unknown)'
@@ -2210,24 +2210,24 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // approximately 60 seconds but varies based on the source blockchain's
       // finality" and the forwarder waits under `maxFee` for destination gas
       // to come into range rather than erroring. 3 minutes routinely expired
-      // on transfers that then completed fine — and this app's own
+      // on transfers that then completed fine - and this app's own
       // server-side settlement budget for the same wait is 40 minutes. The
       // timeout is a backstop against a genuinely wedged call, not a
       // per-step SLA. When it does fire after the burn already landed
       // (burnTxHashRef set), the outer catch routes to the "still settling"
-      // screen, not "failed" — the burn is irreversible and the mint will
+      // screen, not "failed" - the burn is irreversible and the mint will
       // still complete on its own.
       const BRIDGE_TIMEOUT_MS = 12 * 60 * 1000
       const timeoutPromise = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error(
           'Bridge is taking longer than expected. Your burn on Arc may have already ' +
-          'gone through — check your destination balance before retrying to avoid a double spend.'
+          'gone through - check your destination balance before retrying to avoid a double spend.'
         )), BRIDGE_TIMEOUT_MS)
       )
 
       const transferSpeed = selectedSpeed === 'fast' ? 'FAST' : 'SLOW'
 
-      // maxFee is a CAP the source-chain burn signs into the message — the
+      // maxFee is a CAP the source-chain burn signs into the message - the
       // relayer must stay under it to submit the mint. With
       // useForwarder:true, that cap has to cover BOTH the CCTP protocol fee
       // AND the Forwarding Service's own cut (deducted at mint time), and
@@ -2238,37 +2238,37 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // blamed a missing 'kit' fee type): tracing into the exact installed
       // @circle-fin/provider-cctp-v2@1.8.3 (what bridge-kit@1.10.2 actually
       // resolves to) shows result.fees[] only ever contains a 'kit' entry
-      // when `config.customFee` is set — this app never sets it, so that
+      // when `config.customFee` is set - this app never sets it, so that
       // fix was harmless but not the real cause.
       //
       // The actual gap: when Circle's live fee-rate lookup
       // (fetchUsdcFastBurnFee / fetchForwardingFee, keyed by source+dest
-      // CCTP domain) rejects for a route — which newer/lower-volume
+      // CCTP domain) rejects for a route - which newer/lower-volume
       // forwarder destinations are more exposed to than long-established
-      // ones — the SDK does NOT throw. `estimate()` still resolves, but
+      // ones - the SDK does NOT throw. `estimate()` still resolves, but
       // pushes `{ type: 'provider', amount: null, error }` with NO
       // forwarder entry at all. `parseFloat(null) || 0` silently turns that
       // into a $0 contribution, `feeTotal > 0` is false, and we fall back to
-      // the static value anyway — so a failed lookup and a
+      // the static value anyway - so a failed lookup and a
       // successful-but-zero lookup were indistinguishable, and neither told
       // us whether the static fallback is actually enough for this route.
       //
       // Fix: (1) detect a null/error fee entry explicitly and retry the
-      // estimate once — these lookups are more prone to transient failures
+      // estimate once - these lookups are more prone to transient failures
       // than outright unsupported-route errors; (2) if it still can't be
       // verified, use a fallback that scales with amount (mirroring the
       // SDK's own bps-based provider fee formula: ~14bps + 10% buffer) with
-      // a higher floor, since maxFee is only a ceiling — signing a higher
+      // a higher floor, since maxFee is only a ceiling - signing a higher
       // cap costs nothing extra if the relayer's real fee is lower, it only
       // avoids under-provisioning.
       // BUG FIX: this floor used to be a flat 0.15 USDC / 20bps regardless
       // of destination chain. maxFee is a hard CAP signed into the burn
-      // message — the relayer legally cannot submit the mint above it. On
+      // message - the relayer legally cannot submit the mint above it. On
       // an L1 destination (Ethereum is the only one in this app's chain
       // list) mint gas is routinely 10-50x an L2's, so that flat floor can
       // easily sit below what the relayer actually needs to spend, and
       // there is no way to raise a cap after it's signed short of a manual
-      // retryBridge. When that happens the relayer doesn't error out — it
+      // retryBridge. When that happens the relayer doesn't error out - it
       // just waits for gas to fall back under the cap, which is very
       // plausibly what turned a normally-~5s mint into a multi-minute
       // stall on Ethereum Sepolia. Give L1 destinations real headroom.
@@ -2276,10 +2276,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       let maxFee = String(Math.max(isL1Destination ? 1.0 : 0.15, numAmount * (isL1Destination ? 0.01 : 0.002)).toFixed(6))
 
       // Chains outside Circle's forwarder allow-list have no forwarder to
-      // submit the destination mint, so `adapter` submits it — through
+      // submit the destination mint, so `adapter` submits it - through
       // MeshPort's relayer (relayedProviderFor), so the wallet needs no gas.
       // Not for chains where Circle's forwarder mint keeps failing
-      // (FORWARDER_MINT_FAILING_SDK_CHAINS) — MeshPort's relayer mints there.
+      // (FORWARDER_MINT_FAILING_SDK_CHAINS) - MeshPort's relayer mints there.
       const useForwarder = circleForwarderMintsTo(chain.sdk)
 
       const destTarget = useForwarder
@@ -2315,11 +2315,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           .filter((f: any) => (f.type === 'provider' || f.type === 'forwarder' || f.type === 'kit') && f.amount !== null)
           .reduce((sum: number, f: any) => sum + (parseFloat(f.amount) || 0), 0)
         if (hadFailedLookup) {
-          console.warn('[Bridge] fee estimate returned a null/error entry for this route — using the scaled fallback maxFee instead of the partial result:', feeEntries)
+          console.warn('[Bridge] fee estimate returned a null/error entry for this route - using the scaled fallback maxFee instead of the partial result:', feeEntries)
         } else if (feeTotal > 0) {
           // Pad the live number rather than signing it bare: feeTotal
           // reflects fee/gas conditions AT ESTIMATE TIME, not whenever the
-          // relayer actually gets around to executing the mint — which on
+          // relayer actually gets around to executing the mint - which on
           // a slow/congested route can be minutes later. maxFee is only
           // ever a ceiling, so padding it costs nothing if the relayer's
           // real fee comes in lower; it only prevents a cap that was
@@ -2333,23 +2333,23 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
       // ── Safety clamp: maxFee MUST stay below the burn amount ────────────────
       // CCTPv2's depositForBurn rejects maxFee >= amount at the contract level
-      // ("Max fee must be less than amount" — and Arc's docs note the burn
+      // ("Max fee must be less than amount" - and Arc's docs note the burn
       // amount must exceed the CCTPv2 max fee, ~1.4 USDC, for Arc-sourced
       // transfers). The scaled fallback above (numAmount*0.01 for L1, or a
       // 1.5x pad on a live estimate) can land at or past the amount on a
-      // small transfer to a high-fee L1 destination — which surfaces as an
+      // small transfer to a high-fee L1 destination - which surfaces as an
       // opaque "Simulation failed: Transaction reverted" with no burn ever
       // reaching the chain, indistinguishable from a gas/balance problem.
       // Clamp to at most 90% of the amount (real margin, not barely under),
       // same ratio src/lib/backgroundBridge.ts already applies on the claim
       // direction. If even that can't leave a sane gap, the amount is just
-      // too small for this route — fail early with an actionable message
+      // too small for this route - fail early with an actionable message
       // instead of the SDK's opaque revert.
       const MAX_FEE_SAFETY_RATIO = 0.9
       const MIN_VIABLE_MARGIN = 0.05 // USDC
       const clampedMaxFee = Math.min(parseFloat(maxFee), numAmount * MAX_FEE_SAFETY_RATIO)
       if (numAmount - clampedMaxFee < MIN_VIABLE_MARGIN) {
-        logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'error', label: 'amount too small for route fee — aborting before bridge()', data: { amount: numAmount, estimatedMaxFee: maxFee } })
+        logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'error', label: 'amount too small for route fee - aborting before bridge()', data: { amount: numAmount, estimatedMaxFee: maxFee } })
         throw new Error(
           `This amount ($${trimTrailingZeros(numAmount.toFixed(2))}) is too small for ${chain.name}'s current transfer fee ` +
           `(~$${trimTrailingZeros(parseFloat(maxFee).toFixed(2))}). Try sending a larger amount to this chain.`
@@ -2373,7 +2373,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       ])
       logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'result', label: `kit.bridge() → state: ${result.state}`, data: { state: result.state, steps: (result as any).steps } })
 
-      // Capture the burn hash off the resolved result the instant we have it —
+      // Capture the burn hash off the resolved result the instant we have it -
       // BEFORE any retry or throw below. The `bridge.burn` event usually sets
       // burnTxHashRef already, but it's a best-effort SDK event; the resolved
       // result's own burn step is authoritative. Once this is set, the USDC
@@ -2386,14 +2386,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       }
 
       if (result.state === 'error') {
-        // Don't give up immediately — if the burn already succeeded and only
+        // Don't give up immediately - if the burn already succeeded and only
         // a later step (e.g. the forwarder's mint submission) failed, this is
         // an "actionable" failure per Circle's Bridge Kit recovery docs:
         // resuming continues from the failed step using the attestation
         // already signed, instead of re-doing the whole burn (and instead of
         // punting the user to a manual "retry anyway / may double-send" flow).
         //
-        // Gate the retry on isRetryableError() — a definitively non-retryable
+        // Gate the retry on isRetryableError() - a definitively non-retryable
         // failure (e.g. the maxFee-vs-amount contract validation) fails the
         // exact same way a second time, so skip the redundant round trip.
         // Same pattern src/lib/backgroundBridge.ts already uses on the claim
@@ -2405,7 +2405,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         try {
           const { isRetryableError } = await import('@circle-fin/app-kit')
           if (typeof isRetryableError === 'function' && errForCheck) shouldRetry = isRetryableError(errForCheck)
-        } catch { /* helper unavailable — attempt anyway, same as before */ }
+        } catch { /* helper unavailable - attempt anyway, same as before */ }
 
         if (shouldRetry) {
           try {
@@ -2416,12 +2416,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             console.error('[Bridge] retryBridge failed:', retryErr)
           }
         } else {
-          logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: 'skipping retryBridge — error confirmed non-retryable', data: { error: String(errForCheck).slice(0, 200) } })
+          logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: 'skipping retryBridge - error confirmed non-retryable', data: { error: String(errForCheck).slice(0, 200) } })
         }
       }
 
       // Burned but Circle's forwarder didn't deliver the mint (e.g. its mint
-      // ran out of gas on the destination) — finish it now through MeshPort's
+      // ran out of gas on the destination) - finish it now through MeshPort's
       // relayer instead of showing an error. Uses Circle's own attestation, so
       // the recipient and amount can't change and it can't double-send.
       if (result.state === 'error' && burnTxHashRef.current) {
@@ -2445,18 +2445,18 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         }
       }
 
-      // ── 8. Stop timer — actual results take over ─────────────────────────
+      // ── 8. Stop timer - actual results take over ─────────────────────────
       stopStepTimer()
 
       if (result.state === 'error') {
         const failed = result.steps.find((s: any) => s.state === 'error')
         const raw = (failed as any)?.errorMessage || (failed as any)?.error?.message || 'Bridge failed'
         // If the burn already landed, the funds are gone from Arc and the
-        // mint may still complete on its own — say so, so the failed screen
+        // mint may still complete on its own - say so, so the failed screen
         // shows the "status unclear / may have arrived" variant and steers
         // away from a blind retry that could double-send.
         throw new Error(burnTxHashRef.current
-          ? `${raw} — but the burn on Arc already went through, so the transfer may still complete on its own. Check your destination balance before retrying.`
+          ? `${raw} - but the burn on Arc already went through, so the transfer may still complete on its own. Check your destination balance before retrying.`
           : raw)
       }
 
@@ -2483,12 +2483,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // active -> done one at a time with artificial delays, purely so each
       // of the 4 checklist circles visibly animated in sequence even if the
       // timer had pre-completed them all instantly. That replay ran AFTER
-      // kit.bridge() already resolved — i.e. after the funds had actually
-      // moved — and the progress ring reads its percentage straight from
+      // kit.bridge() already resolved - i.e. after the funds had actually
+      // moved - and the progress ring reads its percentage straight from
       // this same bridgeSteps state, so the reset made the ring visibly
       // drop back down and re-fill right when the transfer was already
       // done, looking like it had restarted. The ring doesn't need a
-      // step-by-step reveal the way 4 separate checklist circles did — one
+      // step-by-step reveal the way 4 separate checklist circles did - one
       // direct update to the real, final state (same pattern the UB path
       // already uses) lets it ease smoothly to 100% via its own CSS
       // transition instead of replaying a fake sequence.
@@ -2501,13 +2501,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         completedAt: s.completedAt || Date.now(),
       })))
 
-      // BUG FIX: this used to try getHash(burnStep) FIRST — meaning `txHash`
+      // BUG FIX: this used to try getHash(burnStep) FIRST - meaning `txHash`
       // (used below on the success screen as "View on {destination chain}
       // Explorer") was usually the Arc-side BURN hash, not the destination
       // MINT hash. That hash only ever existed on Arc's explorer, so pairing
       // it with EXPLORER_BY_SDK[chain.sdk] (the destination chain's
       // explorer) produced a link to a transaction that never happened on
-      // that chain — "transaction not found". The ActivityService comment
+      // that chain - "transaction not found". The ActivityService comment
       // just below even already assumed finalHash was the mint hash; the
       // priority order here just never matched that. Mint is now tried
       // first (matching what "destination-chain arrival hash" actually
@@ -2527,7 +2527,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         totalFees:      feeEstimate.totalFee,
         completionTime: completionSec,
         txHash:         finalHash,
-        // Only a REAL mint hash here — never the burnHash fallback that
+        // Only a REAL mint hash here - never the burnHash fallback that
         // finalHash carries for forwarder transfers. getHash(mintStep) is
         // empty when Circle's forwarder submitted the mint.
         mintTxHash:     getHash(mintStep) || '',
@@ -2535,19 +2535,19 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       })
 
       // Finalize the activity row that was already written early, the
-      // moment the burn event fired (see handleEvent above) — this PATCHes
+      // moment the burn event fired (see handleEvent above) - this PATCHes
       // that exact row to 'completed' with the mint hash, rather than
       // attempting a second insert for the same transaction. If the burn
       // event never actually fired (best-effort SDK event, genuinely
       // absent this run), there's no early row to find, and
-      // markBridgeCompleted() itself falls back to a full upsert — so this
+      // markBridgeCompleted() itself falls back to a full upsert - so this
       // is a superset of the old behavior, never a regression from it.
       try {
         const { walletAddress: bwa } = useAuthStore.getState()
         const srcChainName = ARC_CHAIN_KEY
         const dstChainName = chain.sdk || chain.name || selectedChain
         // The Arc-side departure hash (row's primary tx_hash) and the REAL
-        // destination mint hash (destination_tx_hash) — the latter only when
+        // destination mint hash (destination_tx_hash) - the latter only when
         // one genuinely exists. finalHash falls back to burnHash for
         // forwarder transfers, so passing it as destination_tx_hash was
         // writing the Arc burn hash into the destination slot; a later
@@ -2555,19 +2555,19 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // real mint hash once the forwarder's mint is observed on-chain.
         const departureHash = burnHash || finalHash
         const realMintHash = getHash(mintStep) || ''
-        // ROOT-CAUSE FIX: this used to call markBridgeCompleted() —
-        // status:'completed', unconditionally — the moment departureHash
+        // ROOT-CAUSE FIX: this used to call markBridgeCompleted() -
+        // status:'completed', unconditionally - the moment departureHash
         // (the Arc-side BURN) existed, regardless of whether realMintHash
         // was ever found. For a Circle forwarder-relayed transfer,
         // realMintHash is empty by design (see this function's own
         // comment above: "getHash(mintStep) is empty when Circle's
-        // forwarder submitted the mint") — meaning EVERY forwarded
+        // forwarder submitted the mint") - meaning EVERY forwarded
         // transfer got marked 'completed' in the database the instant the
         // burn confirmed, with no verification the destination mint had
         // happened at all. Confirmed directly against production data:
         // every 'completed' bridge row from before this fix has
         // attempts=0 and updated_at==created_at, meaning transfer-worker
-        // (which DOES verify the real mint on-chain) never touched them —
+        // (which DOES verify the real mint on-chain) never touched them -
         // something else marked them done instantly. This was that
         // "something else." The app showed a green checkmark while the
         // recipient's wallet may never have actually received anything.
@@ -2575,11 +2575,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // Fix: only call markBridgeCompleted (which sets status:
         // 'completed') when realMintHash is a genuine, observed hash.
         // Otherwise leave the row exactly as Activity.bridge wrote it at
-        // burn-time — 'pending' — so transfer-worker's own on-chain
+        // burn-time - 'pending' - so transfer-worker's own on-chain
         // verification (which already handles the forwarder case this
         // client-side check can't see) is the one that actually confirms
         // arrival and completes it. The UI's own success screen above is
-        // unaffected either way — it's just no longer also writing a
+        // unaffected either way - it's just no longer also writing a
         // false completion to the database.
         if (departureHash && realMintHash) {
           import('@/lib/ActivityService').then(({ Activity }) => {
@@ -2594,7 +2594,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             }).catch((e: any) => console.error('[MultichainSend] markBridgeCompleted failed:', e?.message))
           }).catch((e: any) => console.error('[MultichainSend] import ActivityService failed:', e?.message))
         }
-        // Bridge tx on-chain — source of truth
+        // Bridge tx on-chain - source of truth
       } catch {}
 
       // Refresh balance
@@ -2603,10 +2603,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         refreshBalancesAfterTx(senderAddress, { spent: numAmount })
       } catch {}
 
-      // Award points — fire-and-forget, same as the Activity.bridge() call
+      // Award points - fire-and-forget, same as the Activity.bridge() call
       // above. This used to `await` the Supabase round-trip right before
       // setStep('success'), meaning the success screen didn't appear until
-      // reward-point crediting finished — visible as a lag between the
+      // reward-point crediting finished - visible as a lag between the
       // transfer actually completing and the screen showing up, worse
       // whenever Supabase was briefly slow. Whether points were awarded has
       // nothing to do with whether the transfer succeeded; it can resolve
@@ -2648,7 +2648,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       setTxError(/no runners/i.test(msg) ? 'Connection to Arc Testnet dropped. Please try again.' : msg)
       setBridgeSteps(prev => prev.map(s => s.status === 'active' ? { ...s, status: 'error', message: 'Step failed' } : s))
       setStep('failed')
-      // If the burn never happened, nothing irreversible occurred — safe to
+      // If the burn never happened, nothing irreversible occurred - safe to
       // drop the marker, exactly like a normal retry. If it DID happen (see
       // the "may still complete on its own" message above), deliberately
       // keep it: the transfer might still land via the forwarder, and a
@@ -2657,12 +2657,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       if (!burnTxHashRef.current) clearResumableOperation('multichain_transfer')
 
       // UB transfers that got as far as depositing into Unified Balance
-      // before failing have real USDC sitting there with no forward path —
+      // before failing have real USDC sitting there with no forward path -
       // start the 7-day trustless recovery back to the Arc wallet right
       // now rather than leaving it to "Retry anyway" as the only option.
       // Fire-and-forget: this must never throw into or block the failure
       // screen the user is already looking at. Safe to call even if spend
-      // secretly succeeded despite the error (see ubFundRecovery.ts) — the
+      // secretly succeeded despite the error (see ubFundRecovery.ts) - the
       // "Transfer Status Unclear" case gets this too, since there's no way
       // to be certain from here whether spend actually landed.
       // Guarded by ubRecoveryStartedRef so a deposit whose spend fails more
@@ -2693,7 +2693,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     }
     } finally {
       // Released only once the whole attempt has fully settled (success,
-      // failed, or unclear) — this is what actually closes the double-submit
+      // failed, or unclear) - this is what actually closes the double-submit
       // window described above, rather than the early setLoading(false).
       isConfirmingRef.current = false
     }
@@ -2721,7 +2721,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // UB's spend/arrival step reuses chain.time (the same per-chain estimate
   // already shown in the chain picker) rather than a flat "~5s" for every
   // destination. Gateway's own <500ms figure is how fast Circle's
-  // attestation/signature is ready — it isn't a promise about how fast the
+  // attestation/signature is ready - it isn't a promise about how fast the
   // destination chain will actually have mined and confirmed the mint
   // transaction, which is still bounded by that chain's own block time.
   // Ethereum's ~12s blocks alone make a flat "~5s" wrong for that specific
@@ -2734,7 +2734,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // Each step is an equal-width slice of the ring (100/N). The active
   // step's slice fills in gradually rather than jumping straight to its
   // boundary, using a diminishing-returns curve against a rough expected
-  // duration for that step — capped at 90% of the slice so the ring never
+  // duration for that step - capped at 90% of the slice so the ring never
   // visually claims a step finished before the real completion event
   // (kit.bridge()/kit.unifiedBalance.*  resolving) actually flips it to done.
   const ringPercent = (() => {
@@ -2748,7 +2748,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // chain.time, e.g. "<30s" -> 30). CCTP steps now use the exact same
       // per-chain thresholds the step-advancement timer itself runs on
       // (getStepThresholds), so the ring's fill speed and the moment a step
-      // actually flips to "done" agree with each other — previously the
+      // actually flips to "done" agree with each other - previously the
       // ring assumed a flat ~5s for approve/burn/mint regardless of which
       // step was active or which chain USDC was headed to, while the timer
       // underneath was already using real per-step, per-chain numbers.
@@ -2770,7 +2770,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   // Two-tier waiting UI. The first tier fires while a step is still well
   // inside Circle's own documented normal range (attestation is
-  // "usually 20-90 seconds" per Circle's docs — see the label rendered
+  // "usually 20-90 seconds" per Circle's docs - see the label rendered
   // below) and is intentionally calm/informational, not a warning: a user
   // sitting at 45-60s on mint is not looking at a stuck transfer, they're
   // looking at a completely normal CCTP Fast Transfer. The second tier
@@ -2791,7 +2791,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const STEP_INFO_HINT: Record<string, string> = {
     approve:     'Waiting on your wallet to confirm the approval.',
     burn:        'Waiting on Arc Testnet to confirm the burn.',
-    attestation: "Circle's attestation service is signing off on the burn. This step normally takes 20-90 seconds — nothing to worry about yet.",
+    attestation: "Circle's attestation service is signing off on the burn. This step normally takes 20-90 seconds - nothing to worry about yet.",
     mint:        "Circle's relayer is submitting the mint on the destination chain. This is normal and usually resolves within a minute or two.",
     ubAttest:    'Circle Gateway is checking your Unified Balance and attesting the transfer.',
     spend:       "Circle's forwarder is minting on the destination chain. This usually resolves within a minute.",
@@ -2799,9 +2799,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const STEP_TIMEOUT_HINT: Record<string, string> = {
     approve:     'Wallet may be slow to sign. Check your RPC connection.',
     burn:        'Arc Testnet RPC may be congested. Check ArcScan for activity.',
-    attestation: "This is past Circle's normal 20-90s attestation window. Your funds are safe on Arc — still waiting on Circle's network.",
-    mint:        'Destination mint is taking longer than usual via the relayer. Your funds are not lost — still waiting on Circle to submit it.',
-    spend:       'The destination mint is taking longer than usual. Your funds are safe in your Unified Balance — if it fails they appear in Multichain Hub → Recover.',
+    attestation: "This is past Circle's normal 20-90s attestation window. Your funds are safe on Arc - still waiting on Circle's network.",
+    mint:        'Destination mint is taking longer than usual via the relayer. Your funds are not lost - still waiting on Circle to submit it.',
+    spend:       'The destination mint is taking longer than usual. Your funds are safe in your Unified Balance - if it fails they appear in Multichain Hub → Recover.',
   }
   const activeStepElapsed = activeStep?.startedAt
     ? Math.floor((Date.now() - activeStep.startedAt) / 1000)
@@ -2815,7 +2815,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   // Held in a variable (not returned directly) so the exact same JSX renders
   // either as the whole page (mobile) or as the left column of the desktop
-  // 2-column layout below — never duplicated.
+  // 2-column layout below - never duplicated.
   // ── Form pieces ── one copy of each, laid out either as the single form
   // card (desktop / standalone page) or, inside the Hub on a phone, split
   // over the two slide-up sheets below.
@@ -2995,7 +2995,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       data-hub-page={procPage ? '' : undefined}
       style={procPage ? { position: 'fixed', inset: 0, zIndex: 45, maxWidth: 430, margin: '0 auto', background: 'transparent' } : undefined}>
       {/* Desktop-only compact "Success" header (same padding/size as
-          MultichainClaimPage's own done-step header) — the success step
+          MultichainClaimPage's own done-step header) - the success step
           had no header at all before, so its content started right at
           the column's top edge instead of level with DesktopHistoryPanel's
           own header row next to it. */}
@@ -3109,14 +3109,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     balance={balance}
                     token="USDC"
                     quickAmounts={[10, 20, 50, 100]}
-                    // Same reserve as the inline Max button below — this sheet
+                    // Same reserve as the inline Max button below - this sheet
                     // has its own separate Max button and was filling in the
                     // full balance too. No live fee estimate is fetched here
-                    // (that only happens on Review now) — this is a static,
+                    // (that only happens on Review now) - this is a static,
                     // conservative reserve just to leave enough USDC for the
                     // transaction to actually execute.
                     feeReserve={feeReserveEstimate}
-                    // Removed — this page already has its own inline Max
+                    // Removed - this page already has its own inline Max
                     // button in the balance row just below (see the comment
                     // above), so the sheet's copy was a duplicate. Dropping
                     // it also shortens the sheet enough that the amount box
@@ -3233,7 +3233,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     )
                   })}
 
-                  {/* Normal-range wait — calm/informational, not a warning. */}
+                  {/* Normal-range wait - calm/informational, not a warning. */}
                   {showStepInfo && (
                     <div className="flex items-start gap-2 p-3 mt-2 bg-brand/10 border border-brand/20 rounded-xl">
                       <Clock className="w-4 h-4 text-brand-text flex-shrink-0 mt-0.5" />
@@ -3267,14 +3267,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               <div style={{ flex: 1 }} />
 
               {/* Pinned note. A transfer is signed and tracked in this browser,
-                  so the screen must stay open until it finishes — no way out
+                  so the screen must stay open until it finishes - no way out
                   of this screen is offered while it runs. */}
               <div style={{
                 position: 'sticky', bottom: 0, margin: '0 -12px -12px', padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 16px)',
                 background: 'var(--bg)', borderTop: '1px solid var(--border)',
               }}>
                 <p className="text-xs text-text-secondary text-center" style={{ margin: 0 }}>
-                  Keep this screen open until the {chain.ub ? 'transfer' : 'bridge'} finishes — your funds are safe.
+                  Keep this screen open until the {chain.ub ? 'transfer' : 'bridge'} finishes - your funds are safe.
                 </p>
               </div>
             </motion.div>
@@ -3293,14 +3293,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             const approveHash = bridgeSteps.find(s => s.name === 'approve' || s.name === 'deposit')?.txHash
             const burnHash = bridgeSteps.find(s => s.name === 'burn')?.txHash
             const sourceHash = burnHash || approveHash || ''
-            const shortHash = txHash ? `${txHash.slice(0, 6)}...${txHash.slice(-4)}` : '—'
+            const shortHash = txHash ? `${txHash.slice(0, 6)}...${txHash.slice(-4)}` : '-'
             const timeLabel = new Date().toLocaleString('en-US', {
               month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
             })
             const fmtAmount = `${formatAmount(successInfo?.sentAmount || numAmount)} USDC`
             const sourceHref = arcExplorerTxUrl(sourceHash)
             // Only build the destination-explorer link from a REAL destination
-            // mint/spend hash — never from `txHash`, which for forwarder
+            // mint/spend hash - never from `txHash`, which for forwarder
             // transfers is the Arc-side burn/deposit hash and would produce a
             // "transaction not found" link on the destination chain's
             // explorer. Empty for every forwarder transfer (Circle's
@@ -3309,16 +3309,16 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               || bridgeSteps.find(s => s.name === 'mint' || s.name === 'spend')?.txHash || ''
             const destHref = explorerTxUrl(chain.sdk, destMintHash)
             // True when the transfer genuinely succeeded but no destination tx
-            // hash exists to link to — surface a one-liner instead of just
+            // hash exists to link to - surface a one-liner instead of just
             // silently dropping the button.
             const forwarderMint = !destHref
             // All fee components (bridge/protocol fee + forwarder fee +
-            // network gas) rolled into one number — successInfo.totalFees
+            // network gas) rolled into one number - successInfo.totalFees
             // is set from feeEstimate.totalFee at the moment this transfer
             // actually completed, so it reflects what was really charged,
             // not a live re-estimate that could've since drifted.
             const totalFeesLabel = `${trimTrailingZeros((successInfo?.totalFees ?? feeEstimate.totalFee).toFixed(4))} USDC`
-            // Process checklist — the actual bridge steps this transfer
+            // Process checklist - the actual bridge steps this transfer
             // went through (approve → burn → attestation → mint for CCTP
             // chains, or the 2-step Gateway path for ub chains), all
             // rendered as already-done since this only ever mounts after
@@ -3363,7 +3363,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     ...(destHref ? [{ title: chain.ub ? `View on ${chain.name}` : `View Mint on ${chain.name}`, explorer: chain.name, hash: destMintHash, href: destHref }] : []),
                   ]}
                   linksNote={forwarderMint && sourceHref
-                    ? `${formatAmount(successInfo?.receiverGets || 0)} USDC was delivered on ${chain.name} by Circle's Forwarding Service — there's no separate destination transaction hash to view.`
+                    ? `${formatAmount(successInfo?.receiverGets || 0)} USDC was delivered on ${chain.name} by Circle's Forwarding Service - there's no separate destination transaction hash to view.`
                     : undefined}
                   onPrimary={() => navigate('/multichain')}
                   checkRef={heroCheckCallback}
@@ -3385,30 +3385,30 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             // burn has ALREADY happened at that point, funds are already gone
             // from Arc, and the mint may still land on its own (another party
             // can submit it with the attestation Circle already signed).
-            // A blind "Try Again" here restarts the WHOLE flow — a fresh
-            // approve + burn + attestation + mint — while the original burn's
+            // A blind "Try Again" here restarts the WHOLE flow - a fresh
+            // approve + burn + attestation + mint - while the original burn's
             // mint could still complete independently, risking an unwanted
             // double-burn. Steer the user to check their destination balance
             // first, matching what Circle's own error text already says.
             // Text-based detection alone misses a real case: if kit.bridge()
             // THROWS (rejects) instead of resolving with a {state:'error'}
-            // result — e.g. an exception while polling for attestation after
-            // burn already succeeded — this never gets the chance to match
+            // result - e.g. an exception while polling for attestation after
+            // burn already succeeded - this never gets the chance to match
             // 'relayer failed to forward' text, because that phrasing only
             // ever appears in a resolved error result, not a thrown one. But
             // bridgeSteps (updated live via kit.on('bridge.burn', ...))
             // already reflects the true on-chain state regardless of how the
             // failure surfaced. If burn is marked 'done' here, the USDC was
-            // actually burned on Arc — funds DID leave the wallet — so
+            // actually burned on Arc - funds DID leave the wallet - so
             //
-            // UB FIX: this was checking `s.name === 'burn'` unconditionally —
+            // UB FIX: this was checking `s.name === 'burn'` unconditionally -
             // a CCTP-only step name (see STEP_DEFS above). The UB flow's
             // equivalent completed-source-side-action step is named
             // 'deposit' (see UB_STEP_DEFS), which never matches 'burn'. That
             // meant this check could NEVER fire on the UB path: if the
             // deposit step succeeded and the spend/forwarder step then
-            // failed — exactly what a "Forwarder transfer failed:
-            // ON_CHAIN_FAILURE" error means — the page still said "No funds
+            // failed - exactly what a "Forwarder transfer failed:
+            // ON_CHAIN_FAILURE" error means - the page still said "No funds
             // were moved," even though the deposit had already moved USDC
             // out of the wallet and into the Unified Balance. Branch on
             // chain.ub so each flow checks its own step name, and recognize
@@ -3417,20 +3417,20 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             // the real `bridge.burn` event / resolved burn step, so it stays
             // correct even when kit.bridge() threw (timeout, RPC blip, a
             // later step erroring) before the auto-advance timer flipped the
-            // burn checklist row to 'done' — the case where this screen used
+            // burn checklist row to 'done' - the case where this screen used
             // to wrongly say "No funds were moved".
             const burnAlreadyDone = !!burnTxHashRef.current
               || bridgeSteps.some(s => s.name === 'burn' && s.status === 'done')
             const depositAlreadyDone = !!ubDepositedAmountRef.current
               || bridgeSteps.some(s => s.name === 'deposit' && s.status === 'done')
             const sourceActionAlreadyDone = chain.ub ? depositAlreadyDone : burnAlreadyDone
-            // "Transfer spec has already been used" — Gateway's way of saying
+            // "Transfer spec has already been used" - Gateway's way of saying
             // this exact spend request was already accepted and processed
             // once before. Seen in practice on slow/flaky connections: the
             // first kit.unifiedBalance.spend() call actually reaches Gateway
             // and succeeds, but the response never makes it back to the
             // client (timeout, dropped connection), so it looks like a plain
-            // failure here — a resubmission of the same request then gets
+            // failure here - a resubmission of the same request then gets
             // correctly rejected as a duplicate. The transfer itself already
             // went through; only this particular network round-trip failed.
             const mintMayHaveSucceeded = sourceActionAlreadyDone
@@ -3465,7 +3465,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               </div>
 
               {/* UB only: initiateUBRecovery already started the moment this
-                  failure was caught (see the outer catch block above) — this
+                  failure was caught (see the outer catch block above) - this
                   is Circle's trustless removeFund() escape hatch, not a
                   "someone will look into it" promise. Shown as its own,
                   reassuring block distinct from the generic error box above,
@@ -3487,7 +3487,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
               {/* Circle's SDK labels "RPC endpoint error on <chain>" using
                   whichever chain's step was active, NOT necessarily the
-                  chain whose RPC actually failed — verified directly
+                  chain whose RPC actually failed - verified directly
                   against @circle-fin/app-kit source. A burn-step failure
                   can be caused by the destination chain's RPC being
                   unreachable, not Arc's. Worth knowing before assuming
@@ -3495,7 +3495,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               {/RPC endpoint error/i.test(txError) && (
                 <p className="text-xs text-text-secondary text-left px-1">
                   This message names the step that was running, not necessarily which
-                  network's RPC failed — it can point to the destination chain too.
+                  network's RPC failed - it can point to the destination chain too.
                   Check your browser console's Network tab for the actual failing request
                   if this keeps happening.
                 </p>
@@ -3515,7 +3515,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   ) : (
                     !chain.ub && burnTxHashRef.current ? (
                     // The USDC already left Arc and Circle has (or will have)
-                    // attested it — finish THIS transfer's mint through
+                    // attested it - finish THIS transfer's mint through
                     // MeshPort's relayer. Never sends a second transfer.
                     <>
                       <button disabled={finishingMint}
@@ -3526,7 +3526,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                           try {
                             const { finishCctpMintViaRelayer } = await import('@/lib/cctpRecovery')
                             const done = await finishCctpMintViaRelayer({ sourceChain: ARC_CHAIN_KEY, destinationChain: chain.sdk, burnTxHash: burn })
-                            if (!done?.mintTxHash) { setFinishMintError('Circle hasn’t confirmed this transfer yet — try again in a minute.'); return }
+                            if (!done?.mintTxHash) { setFinishMintError('Circle hasn’t confirmed this transfer yet - try again in a minute.'); return }
                             setTxHash(done.mintTxHash)
                             setSuccessInfo({
                               sentAmount: numAmount,
@@ -3544,7 +3544,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                             clearResumableOperation('multichain_transfer')
                             setStep('success')
                           } catch (e: any) {
-                            setFinishMintError(e?.message || 'Couldn’t finish the transfer — try again from Multichain Hub → Recover.')
+                            setFinishMintError(e?.message || 'Couldn’t finish the transfer - try again from Multichain Hub → Recover.')
                           } finally {
                             setFinishingMint(false)
                           }
@@ -3614,10 +3614,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       )}
 
       {/* ── Confirm & Pay: clean passcode entry, matching the same bottom
-          sheet pattern used in Send/Pay — drag handle, title, one subtitle
+          sheet pattern used in Send/Pay - drag handle, title, one subtitle
           line, then PinKeypad directly. No summary card or fee breakdown
           here; that's all already shown on the Review page underneath. ── */}
-      {/* ── REVIEW page — rises from the bottom and stays (the form pushes up
+      {/* ── REVIEW page - rises from the bottom and stays (the form pushes up
           behind it); Back reverses it. The passcode sheet opens on top.
           In the Hub on a phone it slides in from the right like the form
           pages, and gives way to the processing screen without sliding back. */}
@@ -3673,7 +3673,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 </div>
               </div>
 
-              {/* Fee-changed notice — shown briefly when the background poll
+              {/* Fee-changed notice - shown briefly when the background poll
                   that keeps this screen's fee numbers fresh (while Review is
                   open, before the passcode sheet) detects the forwarder fee
                   moved. The numbers below already reflect the new total;
@@ -3695,7 +3695,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   <>
                     {[
                       ['You Send', `${formatAmount(numAmount)} USDC`, 'var(--text-primary)'],
-                      // UB/Gateway doesn't bridge (no lock-and-mint) — this
+                      // UB/Gateway doesn't bridge (no lock-and-mint) - this
                       // field holds the Gateway protocol fee there, not a
                       // bridge fee, so it needs its own label or it
                       // contradicts the "Circle Gateway" caption right below
@@ -3870,11 +3870,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
   // ── Desktop: flow (left) + Transfer History (right), independently scrollable ──
   return (
-    // Fills the full available content width (no maxWidth cap — the row
+    // Fills the full available content width (no maxWidth cap - the row
     // stretches edge to edge minus the outer padding) at a fixed 65/35
     // grow split, per explicit sizing direction. Bottom padding trimmed
-    // so the row — and DesktopHistoryPanel's own height:100% column
-    // inside it — reaches down close to the viewport's bottom edge
+    // so the row - and DesktopHistoryPanel's own height:100% column
+    // inside it - reaches down close to the viewport's bottom edge
     // instead of leaving a gap under it.
     <div style={{ display: 'flex', height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
       <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto' }} ref={desktopColumnRef}>{flow}</div>

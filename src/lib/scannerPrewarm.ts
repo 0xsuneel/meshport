@@ -27,7 +27,7 @@ export function prewarmCamera(): void {
   preloadScanner()
   const p = openCameraStream().then(r => r.stream)
   pending = p
-  // Nobody claimed it (navigation cancelled) — turn the camera back off.
+  // Nobody claimed it (navigation cancelled) - turn the camera back off.
   expiry = setTimeout(() => {
     if (pending !== p) return
     pending = null

@@ -1,11 +1,11 @@
-// The destination chain key for Arc — env-driven so mainnet builds target
+// The destination chain key for Arc - env-driven so mainnet builds target
 // the production chain rather than testnet.
 const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
   ? 'Arc'
   : 'Arc_Testnet'
 
 /**
- * ActivityService.ts — Centralized Supabase-backed activity tracking.
+ * ActivityService.ts - Centralized Supabase-backed activity tracking.
  *
  * Supabase `activity` table is the SINGLE SOURCE OF TRUTH.
  * No localStorage, no RPC history, no browser caches.
@@ -23,10 +23,10 @@ import { subscribeWithRetry } from './chatService'
 
 
 export type ActivityType = 'send' | 'receive' | 'swap' | 'bridge' | 'claim' | 'deposit' | 'withdraw' | 'bulk'
-  // P2P marketplace events (see src/lib/p2pService.ts) — every one of these
+  // P2P marketplace events (see src/lib/p2pService.ts) - every one of these
   // corresponds to a real on-chain escrow movement, not just a status
   // change: 'p2p_sell_order' fires when YOUR crypto gets locked into P2P
-  // escrow (creating a sell offer, or accepting someone else's buy offer —
+  // escrow (creating a sell offer, or accepting someone else's buy offer -
   // both are "I've committed USDC to a P2P trade" from a ledger point of
   // view); 'p2p_refund' fires when escrowed crypto comes back to you
   // without a completed sale (cancelling a sell offer, or a buy-offer
@@ -61,7 +61,7 @@ export interface ActivityRecord {
 // prefix purely so the DB's UNIQUE(tx_hash, wallet_address) constraint can
 // tell apart a self-transfer's send-leg and receive-leg (same wallet, same
 // on-chain hash). `ubrecover_` is the same idea for UB fund-recovery rows
-// (see lib/ubFundRecovery.ts) — none of these prefixes should ever reach
+// (see lib/ubFundRecovery.ts) - none of these prefixes should ever reach
 // the UI. Every consumer (display, explorer links) should see the real
 // on-chain hash, not the storage-layer key it's saved under.
 function stripHashPrefix(hash: string): string {
@@ -75,7 +75,7 @@ function fromRow(r: any): ActivityRecord {
     userId:              r.user_id ?? undefined,
     walletAddress:       r.wallet_address,
     // 'fail_<ts>' is a placeholder key for a failed swap that never got an
-    // on-chain hash — show no hash / explorer link for it.
+    // on-chain hash - show no hash / explorer link for it.
     txHash:              r.tx_hash && !String(r.tx_hash).startsWith('fail_') ? stripHashPrefix(r.tx_hash) : undefined,
     destinationTxHash:   r.destination_tx_hash ?? undefined,
     activityType:        r.activity_type as ActivityType,
@@ -128,17 +128,17 @@ function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 /**
  * Writes one activity row. Returns true on confirmed success (insert OR a
  * harmless duplicate-of-existing-row), false only after every retry has
- * been exhausted — callers that care can surface that to the user or queue
+ * been exhausted - callers that care can surface that to the user or queue
  * a manual "refresh" nudge instead of losing the row silently.
  *
  * Two bugs this fixes vs. the original fire-and-forget version:
  *
  * 1. `on_conflict=tx_hash,wallet_address` was ALWAYS sent, but the DB's
- *    unique index is partial — `UNIQUE (tx_hash, wallet_address) WHERE
+ *    unique index is partial - `UNIQUE (tx_hash, wallet_address) WHERE
  *    tx_hash IS NOT NULL` (see supabase_migration.sql). For any row with no
  *    real tx hash (a swap that returned no hash, a fallback id, etc.),
  *    Postgres has no matching arbiter for that ON CONFLICT target and the
- *    whole insert throws — previously that throw was only console.error'd
+ *    whole insert throws - previously that throw was only console.error'd
  *    and the row was gone for good. Now `on_conflict` is only sent when
  *    txHash is actually present, so a hashless row does a plain insert
  *    instead of erroring out.
@@ -171,7 +171,7 @@ export async function saveActivity(p: SaveParams): Promise<boolean> {
   }
 
   // Only ask Postgres to dedupe on (tx_hash, wallet_address) when tx_hash is
-  // actually set — that's the only case the partial unique index covers.
+  // actually set - that's the only case the partial unique index covers.
   const url = row.tx_hash
     ? `${SUPA_URL}/rest/v1/activity?on_conflict=tx_hash,wallet_address`
     : `${SUPA_URL}/rest/v1/activity`
@@ -195,7 +195,7 @@ export async function saveActivity(p: SaveParams): Promise<boolean> {
       if (res.ok || res.status === 409) return true // success, or benign duplicate
       const txt = await res.text()
       lastErr = `${res.status}: ${txt}`
-      // 4xx other than 409 is a bad request / auth problem — retrying the
+      // 4xx other than 409 is a bad request / auth problem - retrying the
       // exact same payload won't fix it, so stop immediately.
       if (res.status >= 400 && res.status < 500) break
     } catch (e: any) {
@@ -210,7 +210,7 @@ export async function saveActivity(p: SaveParams): Promise<boolean> {
 }
 
 /**
- * Updates an already-saved activity row's status — used to correct the rare
+ * Updates an already-saved activity row's status - used to correct the rare
  * case where a transaction that was optimistically recorded as successful
  * (see arcService.ts's confirmTransactionInBackground) turns out to have
  * actually reverted on-chain. txHash here should be the SAME prefixed form
@@ -235,36 +235,36 @@ export async function updateActivityStatus(txHash: string, walletAddress: string
 
 /**
  * Whether ANY activity row already exists for this wallet under EITHER the
- * plain or `recv_`-prefixed form of a tx hash — i.e. "has this blockchain
+ * plain or `recv_`-prefixed form of a tx hash - i.e. "has this blockchain
  * transaction already been represented in this wallet's history, under any
  * activity_type at all".
  *
  * Required because `send`/`swap`/`bulk` store the plain hash while
- * `receive` stores `recv_<hash>` — a plain `tx_hash + wallet_address`
+ * `receive` stores `recv_<hash>` - a plain `tx_hash + wallet_address`
  * lookup only ever catches an exact-string duplicate of the SAME type, not
  * the cross-type case (e.g. a `bulk`/received row and a `receive` row for
  * the same real transfer, which is exactly the BulkPay race this function
- * exists to close — see docs/BULKPAY_ACTIVITY_SAFETY_FIX.md).
+ * exists to close - see docs/BULKPAY_ACTIVITY_SAFETY_FIX.md).
  *
  * One request, not a poll: this queries once, immediately before the
  * caller's write, rather than checking-then-waiting-then-rechecking the way
  * claim-recovery-scan's existsActivityForTxHash does server-side. That
  * function polls because IT is racing an ~synchronous client write it has
  * no way to wait on directly. This function is called FROM the client write
- * itself, at the moment it's about to happen — there's nothing to wait for
+ * itself, at the moment it's about to happen - there's nothing to wait for
  * on this side of the race; a single immediate check is the correct
  * primitive here, not a weaker version of the server-side one. It narrows,
  * but does not eliminate, the race: a competing writer's row landing in the
  * brief gap between this check and the caller's own insert is still
  * possible in principle (true elimination needs an atomic check-and-insert,
- * which is future Ledger-migration work, not this mitigation's job — see
+ * which is future Ledger-migration work, not this mitigation's job - see
  * the doc above for the full reasoning).
  *
  * Fails OPEN (returns false, i.e. "proceed with the write") on any network/
  * query error, matching the reasoning already used elsewhere in this
  * codebase for the equivalent server-side check (deposit-scan-all's
  * recentSwapOutputsByWallet: "losing the row would be worse" than a
- * possible duplicate) — never crediting a recipient at all is a worse
+ * possible duplicate) - never crediting a recipient at all is a worse
  * outcome than an occasional cosmetic duplicate.
  */
 export async function hasAnyActivityForTx(walletAddress: string, txHash: string): Promise<boolean> {
@@ -281,7 +281,7 @@ export async function hasAnyActivityForTx(walletAddress: string, txHash: string)
         `&select=id&limit=1`,
       { headers: { ...(await authHeaders()) } },
     )
-    if (!res.ok) return false // fail open — see doc comment above
+    if (!res.ok) return false // fail open - see doc comment above
     const rows = await res.json()
     return Array.isArray(rows) && rows.length > 0
   } catch (e) {
@@ -386,7 +386,7 @@ export const Activity = {
 
   // Finalizes a bridge row that was already written early (as 'pending',
   // via Activity.bridge above, right when the burn confirms) by PATCHing
-  // it to 'completed' with the destination (mint) hash — a targeted
+  // it to 'completed' with the destination (mint) hash - a targeted
   // update to the ONE existing row, never a second insert. This is what
   // lets the activity row appear the moment the burn confirms instead of
   // only once the entire bridge (through mint) finishes, without
@@ -394,8 +394,8 @@ export const Activity = {
   // only ever runs once per tx_hash for this flow.
   //
   // Falls back to a normal saveActivity() upsert if the PATCH matches
-  // zero rows (e.g. the early 'pending' write never happened — burn event
-  // genuinely never fired, only the UI timer advanced) — so the
+  // zero rows (e.g. the early 'pending' write never happened - burn event
+  // genuinely never fired, only the UI timer advanced) - so the
   // transaction still ends up recorded even in that fallback case,
   // exactly as it always was before this change, just not instantly.
   markBridgeCompleted: async (p: {
@@ -425,7 +425,7 @@ export const Activity = {
       }
       const updated = res.ok ? await res.json() : []
       if (!res.ok || !Array.isArray(updated) || updated.length === 0) {
-        // Fallback: no existing row to finalize — record it fresh, same as
+        // Fallback: no existing row to finalize - record it fresh, same as
         // the pre-existing behavior this replaces.
         await saveActivity({
           walletAddress: p.walletAddress, txHash: p.txHash, destinationTxHash: p.destinationTxHash,
@@ -443,7 +443,7 @@ export const Activity = {
     walletAddress: string; userId?: string; txHash: string
     amount: number; sourceChain?: string; explorerUrl?: string
   }) => {
-    // Normalize chain names — 'Optimism Sepolia' and 'Optimism_Sepolia' → same key
+    // Normalize chain names - 'Optimism Sepolia' and 'Optimism_Sepolia' → same key
     const normalizeChain = (c?: string) => c?.replace(/ /g, '_') ?? c
     return saveActivity({
       walletAddress:    p.walletAddress,
@@ -458,7 +458,7 @@ export const Activity = {
     })
   },
 
-  // Unified Balance claim into Arc (no `claims` row — UB has no server
+  // Unified Balance claim into Arc (no `claims` row - UB has no server
   // worker). Direct claim: keyed by the source-chain deposit tx.
   // Recovered (Recover → Send to Arc): keyed by the Arc spend tx and marked
   // metadata.recovered_via = 'ub' so history reads "Recovered via UB".
@@ -482,7 +482,7 @@ export const Activity = {
     walletAddress: string; sourceChain: string; received: number; claimedAmount: number
     depositTxHash?: string; arcTxHash?: string; recovered?: boolean; merchant?: boolean
   }) => {
-    // First complete the "Processing" row for this claim if there is one —
+    // First complete the "Processing" row for this claim if there is one -
     // by deposit tx when known, otherwise the pending UB claim for this chain
     // (auto-finish / Recover sending held funds to Arc).
     try {
@@ -494,7 +494,7 @@ export const Activity = {
         filter = `tx_hash=eq.${encodeURIComponent(p.depositTxHash.toLowerCase())}&wallet_address=eq.${w}`
       } else {
         // No deposit hash: complete exactly ONE pending UB claim (the newest
-        // for this chain) — never every held claim on the chain at once.
+        // for this chain) - never every held claim on the chain at once.
         const pick = await fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${w}&activity_type=eq.claim&status=eq.pending&source_chain=eq.${encodeURIComponent(p.sourceChain)}&metadata->>route=eq.ub&select=id&order=created_at.desc&limit=1`, {
           headers: { ...(await authHeaders()), 'Accept': 'application/json' },
         })
@@ -521,7 +521,7 @@ export const Activity = {
     } catch { /* fall through to insert */ }
 
     // The server trigger may already have completed this claim under its own
-    // key (deposit tx / ubclaim_<id>) — don't add a second row for the same
+    // key (deposit tx / ubclaim_<id>) - don't add a second row for the same
     // Arc mint.
     if (p.arcTxHash) {
       try {
@@ -554,7 +554,7 @@ export const Activity = {
         ...(p.recovered ? { recovered_via: 'ub' } : {}),
         ...(p.merchant ? { merchant: true } : {}),
         // No source-chain deposit hash known (auto-finish / Recover): the
-        // row's tx_hash is the Arc mint — same convention as CCTP recovered
+        // row's tx_hash is the Arc mint - same convention as CCTP recovered
         // claims, so Activity doesn't show it as a source-chain link.
         ...(p.depositTxHash ? {} : { recovered: true, hasRealSourceHash: false }),
       },
@@ -586,9 +586,9 @@ export const Activity = {
     // BUG FIX: previously stored with NO prefix at all (unlike send/receive,
     // which always use send_/recv_ specifically so a self-transfer's two
     // legs never collide on the DB's UNIQUE(tx_hash, wallet_address) index
-    // — see stripHashPrefix's own comment). When a bulk payout includes the
+    // - see stripHashPrefix's own comment). When a bulk payout includes the
     // payer's own wallet as a recipient, this row and bulkReceived()'s row
-    // below shared the exact same (wallet_address, tx_hash) key — the two
+    // below shared the exact same (wallet_address, tx_hash) key - the two
     // legs collided, AND bulkReceived()'s own hasAnyActivityForTx guard
     // (built to catch a genuinely different race, see that function's own
     // comment) found this row first and silently skipped writing the
@@ -601,7 +601,7 @@ export const Activity = {
     metadata:      { direction: 'sent', recipientCount: p.recipientCount, purpose: p.purpose, recipients: p.recipients },
   }),
 
-  // Receiver-side record — written to a RECIPIENT's own wallet_address when they're
+  // Receiver-side record - written to a RECIPIENT's own wallet_address when they're
   // paid as part of someone else's bulk payout. Shows the individual amount THEY
   // were allocated (never the payer's total), the purpose text the payer entered,
   // and who paid them. Distinguished from the payer's own 'bulk' summary row via
@@ -609,29 +609,29 @@ export const Activity = {
   //
   // P0 safety mitigation (see docs/BULKPAY_ACTIVITY_SAFETY_FIX.md): this write
   // comes from the PAYER's browser, on behalf of a DIFFERENT wallet, with no
-  // confirmation wait — the same shape of race already known for claim-recovery-
+  // confirmation wait - the same shape of race already known for claim-recovery-
   // scan's swap-vs-receive collision (docs/ACTIVITY_WRITER_AUDIT.md §2), but here
   // completely unguarded before this fix. Guarded now with hasAnyActivityForTx:
   // if a recovery worker (deposit-scan-all reconcile, claim-recovery-scan) already
   // credited this recipient a plain 'receive' row for this same transaction before
   // this call ran, skip the write rather than create a second, differently-labeled
-  // row for the same money movement. Returns `true` on skip (not a failure — the
+  // row for the same money movement. Returns `true` on skip (not a failure - the
   // recipient's history already correctly reflects this transaction, just under a
   // different activity_type) as well as on a normal successful write.
   //
   // Self-transfer note: the guard above checks hasAnyActivityForTx with the RAW
-  // (unprefixed) txHash, exactly as written — that's intentional, not a bug to
+  // (unprefixed) txHash, exactly as written - that's intentional, not a bug to
   // "fix" alongside the prefix change below. It still needs to catch a real
   // recv_<hash> row from an unrelated recovery worker; it just no longer
   // false-positives against Activity.bulk()'s own sent-leg row for the same
   // wallet, now that that row lives under a different key (bulk_<hash>, not
-  // plain/recv_<hash>) — see that writer's own comment for the full reasoning.
+  // plain/recv_<hash>) - see that writer's own comment for the full reasoning.
   bulkReceived: async (p: {
     walletAddress: string; userId?: string; txHash: string
     amount: number; fromAddress: string; fromUsername?: string; purpose?: string
   }): Promise<boolean> => {
     if (await hasAnyActivityForTx(p.walletAddress, p.txHash)) {
-      console.log('[ActivityService] bulkReceived skipped — activity already exists for this tx/wallet under another type:', p.txHash, p.walletAddress)
+      console.log('[ActivityService] bulkReceived skipped - activity already exists for this tx/wallet under another type:', p.txHash, p.walletAddress)
       return true
     }
     return saveActivity({
@@ -656,7 +656,7 @@ export interface FetchOptions {
   // call, not just the first page): anchors the next page to the last
   // loaded row's own (created_at, id) instead of a raw numeric position.
   // FIX: offset-based pagination silently drifts whenever a row is
-  // inserted while the user is actively scrolling — "position 20" means a
+  // inserted while the user is actively scrolling - "position 20" means a
   // genuinely different row once something new lands above it, so the
   // next page's offset=20 either re-shows a row already on screen (the
   // dedup in useActivity.ts's load() was papering over exactly this) or,
@@ -673,14 +673,14 @@ export interface FetchOptions {
   activityType?: ActivityType | 'p2p'
   status?:       ActivityStatus
   search?:       string
-  // ISO timestamp — only rows created strictly after this are returned.
+  // ISO timestamp - only rows created strictly after this are returned.
   // Used by catch-up scans to respect users.notifications_cleared_at, so a
   // cleared browser doesn't resurrect notifications for events that
   // happened before the user last tapped Clear (see the migration
   // 20260719090000_notifications_cleared_watermark.sql for why this exists
   // server-side rather than relying on local storage alone).
   since?:        string
-  // Pending bridge/claim rows are excluded by default — see fetchActivity's
+  // Pending bridge/claim rows are excluded by default - see fetchActivity's
   // own comment for why. Opt in explicitly for callers that need them
   // (MultichainPage.tsx's own progress view, MultichainClaimPage.tsx's
   // internal claimed-hash tracking).
@@ -706,7 +706,7 @@ export async function fetchActivity(
   // `created_at` genuinely can tie at millisecond/microsecond resolution
   // for rows written back-to-back (e.g. a bulk payout's sent + received
   // legs). Without this, the exact same underlying rows could come back in
-  // a different relative order across two otherwise-identical requests —
+  // a different relative order across two otherwise-identical requests -
   // "history doesn't follow timestamp order" from the user's perspective,
   // even though every row's own timestamp was always correct. Matches the
   // tiebreak direction ActivityPage.tsx's client-side sort already uses.
@@ -714,14 +714,14 @@ export async function fetchActivity(
   if (cursorCreatedAt && cursorId) {
     // Strictly "before" the last-seen row in (created_at, id) DESC order:
     // either an older created_at, OR the same created_at with a smaller id
-    // (the same tiebreak the ORDER BY itself uses) — a single PostgREST
+    // (the same tiebreak the ORDER BY itself uses) - a single PostgREST
     // `or` filter expresses that exact composite condition.
     url += `&or=(created_at.lt.${encodeURIComponent(cursorCreatedAt)},and(created_at.eq.${encodeURIComponent(cursorCreatedAt)},id.lt.${encodeURIComponent(cursorId)}))`
   } else {
     url += `&offset=${offset}`
   }
   if (activityType === 'bridge') {
-    // 'withdraw' included here too — the ONLY thing that ever writes that
+    // 'withdraw' included here too - the ONLY thing that ever writes that
     // activity_type is the UB fund-recovery flow (lib/ubFundRecovery.ts),
     // which is itself a byproduct of a failed multichain transfer. It
     // belongs in the same "Multichain" bucket as bridge/claim, both for
@@ -739,7 +739,7 @@ export async function fetchActivity(
 
   // ── Search: username / wallet address / tx hash, across every activity type ──
   // The `search` option was previously accepted but never actually applied
-  // to the query (dead param) — this wired it up for real.
+  // to the query (dead param) - this wired it up for real.
   //
   // Username isn't a column on `activity` at all (it's resolved client-side
   // afterward, see Pass 4 below), so a username search first resolves it to
@@ -747,16 +747,16 @@ export async function fetchActivity(
   // Send flow's "as you type" search already uses (searchUsersPartialDb),
   // then matches those wallets against counterparty_address. A wallet/hash
   // -shaped term matches directly against tx_hash / destination_tx_hash /
-  // counterparty_address — no need to guess which one, since ilike across
+  // counterparty_address - no need to guess which one, since ilike across
   // all three catches whichever it actually is. Runs across every activity
-  // type (send/receive/swap/bridge/bulk/p2p/etc.) — the activityType filter
+  // type (send/receive/swap/bridge/bulk/p2p/etc.) - the activityType filter
   // above (if any) narrows further, it doesn't gate search away from any
   // one type.
   let searchOrClause = ''
   const rawSearch = (search ?? '').trim()
   if (rawSearch) {
     // Strip characters that would break out of the PostgREST OR-group
-    // syntax (`,` `(` `)`) — everything else is passed through as-is.
+    // syntax (`,` `(` `)`) - everything else is passed through as-is.
     // Still fully scoped to this wallet's own rows (wallet_address=eq.
     // above), so at worst a stray character just narrows/broadens the
     // match, it can never reach another wallet's data.
@@ -784,7 +784,7 @@ export async function fetchActivity(
   // -built home: MultichainPage.tsx's own all/pending/success/failed view,
   // which shows live progress and lets the user tap through to the actual
   // in-flight claim/transfer screen. The main navigation Activity list is a
-  // history of what's happened, not a progress tracker — a pending bridge
+  // history of what's happened, not a progress tracker - a pending bridge
   // row sitting there (sometimes for many minutes on a slow chain) reads
   // as clutter, not information, and there's nothing useful to tap into
   // from a plain history row anyway. Excluded here by default; callers
@@ -792,12 +792,12 @@ export async function fetchActivity(
   // MultichainClaimPage.tsx's own internal claimed-hash tracking) opt back
   // in explicitly with includePendingBridge: true. Once a bridge/claim
   // row's status leaves 'pending', it's a completed part of the wallet's
-  // history and shows up in the main list exactly like anything else —
+  // history and shows up in the main list exactly like anything else -
   // no special-casing needed there, this only ever filters the pending state.
   const pendingClause = 'or(activity_type.not.in.(bridge,claim,withdraw),status.neq.pending)'
   if (searchOrClause) {
     // Both conditions must hold at once, and PostgREST only allows one
-    // top-level `or=` per query — nest both OR-groups under a single `and=`
+    // top-level `or=` per query - nest both OR-groups under a single `and=`
     // instead of sending two competing `or=` params (the second would just
     // silently overwrite the first).
     url += includePendingBridge
@@ -829,7 +829,7 @@ export async function fetchActivity(
       if (lastRow?.createdAt && lastRow?.id) opts.meta.lastRaw = { createdAt: lastRow.createdAt, id: lastRow.id }
     }
 
-    // Pass 1: deduplicate by (activityType + txHash) — using activityType too
+    // Pass 1: deduplicate by (activityType + txHash) - using activityType too
     // means a self-transfer's send-leg and receive-leg (same wallet, same
     // clean on-chain hash) are still treated as distinct rows here for
     // send/receive, since those legs have different activityType values
@@ -837,17 +837,17 @@ export async function fetchActivity(
     //
     // BUG FIX: that reasoning does NOT hold for a self-included BulkPay.
     // Both the sent summary and the payer's own received leg are stored
-    // with the SAME activityType ('bulk') and the SAME clean hash —
+    // with the SAME activityType ('bulk') and the SAME clean hash -
     // they're only distinguished by metadata.direction ('sent' vs
     // 'received'), which this key never looked at. The query returns
     // newest-first, and the received leg is always written a few hundred
     // ms after the sent summary, so it always won this filter and the
-    // sent row was silently dropped right here — before it ever reached
+    // sent row was silently dropped right here - before it ever reached
     // ActivityPage's own (already direction-aware) dedup, which never got
     // a chance to see both rows. Folding direction into the key fixes
     // this the same way it was already fixed in ActivityPage.tsx's
     // dedupeAndSortActivityRecords and useActivity.ts's
-    // mergeOnchainIntoRecords — this was the one remaining place using
+    // mergeOnchainIntoRecords - this was the one remaining place using
     // the old, non-direction-aware key.
     const seenHash = new Set<string>()
     const pass1 = rows.filter(r => {
@@ -859,19 +859,19 @@ export async function fetchActivity(
       return true
     })
 
-    // Pass 2: deduplicate bridge/claim — burn+mint can create two rows when
+    // Pass 2: deduplicate bridge/claim - burn+mint can create two rows when
     // a hash is briefly missing on insert. Same fix as Pass 3 below: only
     // apply this fuzzy (type+amount+chain, 2-minute window) heuristic to
     // rows that don't already have a real txHash. Bridge/claim rows always
     // carry a real, unique burn hash (see Activity.bridge/Activity.claim
     // above) once fully recorded, and Pass 1 already dedupes exactly on
-    // that — applying the fuzzy heuristic unconditionally would silently
+    // that - applying the fuzzy heuristic unconditionally would silently
     // hide two genuinely separate transfers/claims of the same amount from
     // the same chain sent within 2 minutes of each other.
     const seenKey2 = new Map<string, number>()
     const pass2 = pass1.filter(r => {
       if (r.activityType !== 'claim' && r.activityType !== 'bridge') return true
-      if (r.txHash) return true // has a real, unique hash — Pass 1 already handled it correctly
+      if (r.txHash) return true // has a real, unique hash - Pass 1 already handled it correctly
       const chain = r.sourceChain || r.destinationChain || ''
       const key   = `${r.activityType}:${r.amount}:${chain}`
       const t     = new Date(r.createdAt).getTime()
@@ -881,20 +881,20 @@ export async function fetchActivity(
       return true
     })
 
-    // Pass 3: catch LEGACY duplicates only — rows from before txHash was
+    // Pass 3: catch LEGACY duplicates only - rows from before txHash was
     // reliably recorded on every send/receive row. Every current row always
-    // gets a real, unique hash (`send_${hash}` / `recv_${hash}` — see
+    // gets a real, unique hash (`send_${hash}` / `recv_${hash}` - see
     // Activity.send/Activity.receive above), and Pass 1 already dedupes
     // exactly on that. This heuristic used to run unconditionally on EVERY
     // send/receive row regardless of whether it had a real hash, which meant
-    // two genuinely separate payments — same recipient, same amount, sent
-    // back-to-back — got silently collapsed into one on both the sender's
+    // two genuinely separate payments - same recipient, same amount, sent
+    // back-to-back - got silently collapsed into one on both the sender's
     // and the recipient's Activity page. Now gated to only rows with no
     // txHash at all, which is what "legacy duplicates" actually meant.
     const seenLegacy = new Map<string, number>()
     const pass3 = pass2.filter(r => {
       if (r.activityType !== 'send' && r.activityType !== 'receive') return true
-      if (r.txHash) return true // has a real, unique hash — Pass 1 already handled it correctly
+      if (r.txHash) return true // has a real, unique hash - Pass 1 already handled it correctly
       const cp = (r.counterpartyAddress || '').toLowerCase().slice(0, 10)
       const key = `${r.activityType}:${r.amount}:${cp}`
       const t = new Date(r.createdAt).getTime()
@@ -917,7 +917,7 @@ export async function fetchActivity(
       try {
         const addrs = [...new Set(needsLookup.map(r => r.counterpartyAddress!.toLowerCase()))]
         const orFilter = addrs.map(a => `wallet_address.ilike.${a}`).join(',')
-        // Use the session JWT as bearer — not the anon key — so this read is
+        // Use the session JWT as bearer - not the anon key - so this read is
         // scoped to the signed-in session. The anon key as a bearer is only
         // safe for truly unauthenticated reads and should never be reused for
         // authenticated write paths or user-data lookups.
@@ -975,10 +975,10 @@ export async function fetchActivityById(
 // `.subscribe()`. A plain subscription has no built-in recovery: if the
 // socket drops (tab backgrounded, brief network blip, an auth token
 // refresh invalidating the channel) it goes silent and nothing ever tells
-// the page to reconnect — new activity keeps landing in Supabase fine, but
+// the page to reconnect - new activity keeps landing in Supabase fine, but
 // the open tab stops hearing about it until the page happens to remount.
 // That's what "history doesn't appear instantly, only after reopening the
-// page" was — the row was never actually late, the listener was dead.
+// page" was - the row was never actually late, the listener was dead.
 //
 // On every reconnect (including the very first connect) this also runs a
 // catch-up fetch for anything created since the last row we actually saw,
@@ -994,19 +994,19 @@ export function subscribeToActivity(
   const addr = walletAddress.toLowerCase()
   // Seeded to "now", not null. subscribeToActivity's own catchUp() below
   // deliberately only runs on a genuine RECONNECT (see its onReconnect
-  // comment) — callers are expected to do their own initial fetch first
+  // comment) - callers are expected to do their own initial fetch first
   // (HomePage.tsx's own separate catch-up IIFE does exactly this, and
   // additionally respects the user's notifications_cleared_at watermark,
   // which this function has no way to know about). But leaving this null
-  // at setup meant a reconnect happening shortly after page load — a brief
-  // mobile network blip is enough — ran catchUp() with no lower time bound
+  // at setup meant a reconnect happening shortly after page load - a brief
+  // mobile network blip is enough - ran catchUp() with no lower time bound
   // at all, re-fetching and re-delivering the last 50 rows regardless of
   // whether the caller's own initial fetch had just handled them seconds
   // earlier. That produced a real, reproducible duplicate notification for
   // any receive landing right around a reconnect. Seeding to "now" here
   // means catchUp() can only ever pick up rows created AFTER the
-  // subscription itself was established — exactly the reconnect-gap it's
-  // meant to cover — never anything from before it, which is the caller's
+  // subscription itself was established - exactly the reconnect-gap it's
+  // meant to cover - never anything from before it, which is the caller's
   // own initial fetch's job.
   let lastSeenAt: string | null = new Date().toISOString()
 
@@ -1019,7 +1019,7 @@ export function subscribeToActivity(
   const catchUp = async () => {
     try {
       const missed = await fetchActivity(addr, { limit: 50, since: lastSeenAt ?? undefined })
-      // fetchActivity returns newest-first — replay oldest-first so onNew's
+      // fetchActivity returns newest-first - replay oldest-first so onNew's
       // prepend-to-list callers end up with correct ordering.
       for (const rec of [...missed].reverse()) {
         touchLastSeen(rec.createdAt)
@@ -1054,7 +1054,7 @@ export function subscribeToActivity(
     {
       // Fires on the very first successful subscribe too is NOT desired
       // (that would double-deliver rows the initial fetchActivity() already
-      // loaded) — subscribeWithRetry only calls this for attempt > 1, i.e.
+      // loaded) - subscribeWithRetry only calls this for attempt > 1, i.e.
       // genuine reconnects after a drop.
       onReconnect: () => { catchUp() },
     },
@@ -1116,7 +1116,7 @@ export function activityColor(type: ActivityType, status: ActivityStatus, direct
 
 
 // ── Backfill activity from messages table ─────────────────────────────────────
-// Called on login/import — syncs historical sends & receives from chat messages
+// Called on login/import - syncs historical sends & receives from chat messages
 export async function backfillActivityFromMessages(
   walletAddress: string,
   userId: string,
@@ -1141,7 +1141,7 @@ export async function backfillActivityFromMessages(
     const norm = (h: string) => h.toLowerCase().replace(/^(send_|recv_)/, '')
     const existingHashes = new Set<string>((existRows as any[]).map((r: any) => r.tx_hash).filter(Boolean).map(norm))
     // Beyond the 500 rows loaded above, ask the DB for this exact hash in
-    // every stored form before backfilling — never create a second row.
+    // every stored form before backfilling - never create a second row.
     const alreadyStored = async (h: string): Promise<boolean> => {
       if (existingHashes.has(h)) return true
       try {

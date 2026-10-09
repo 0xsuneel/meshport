@@ -5,12 +5,12 @@ import { useReducedMotion } from 'framer-motion'
 // Screens that follow one another inside one page (Pay: search → amount →
 // review; Swap: form → review; Multichain Bring: form → processing → Track
 // Progress). When `screenKey` changes, the new screen slides in from the
-// right over a picture of the old one, which shifts left and dims — the same
+// right over a picture of the old one, which shifts left and dims - the same
 // push, timing and curve as opening a page (PageTransition). Going back
 // reverses it: the old screen slides off to the right, uncovering the new
 // one as it comes back from the left.
 //
-// Both screens stay fully opaque the whole time — no cross-fade — so two
+// Both screens stay fully opaque the whole time - no cross-fade - so two
 // screens are never seen through each other and nothing ever flashes empty.
 // The children are never remounted; only what they render changes, so the
 // caller's own enter/exit animations for these screens should be instant.
@@ -19,7 +19,7 @@ const BACK_MS = 250
 const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
 const PARALLAX = '-28%'
 
-/** A frozen, non-interactive copy of what's on screen right now — without
+/** A frozen, non-interactive copy of what's on screen right now - without
  *  fixed-position overlays (sheets, dims) that happen to be inside it. The
  *  amount keypad is the exception: it's returned separately (`floats`) so it
  *  stays in the picture and slides away with the old screen, instead of

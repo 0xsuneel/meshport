@@ -22,7 +22,7 @@ export function Avatar({ name, src, size = 'md', className, showRing, style }: A
   const initials = getInitials(name)
   const gradient = getAvatarColor(name.toLowerCase())
   // A query string that changes between fetches of the same underlying
-  // image (even an unintentional one — e.g. a stale cache-busting param
+  // image (even an unintentional one - e.g. a stale cache-busting param
   // left over from an old upload flow) makes the browser treat every
   // fetch as a brand-new resource, defeating HTTP caching entirely: the
   // avatar visibly reloads/flickers every time this component remounts,

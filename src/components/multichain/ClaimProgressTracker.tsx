@@ -7,7 +7,7 @@
  *
  * Driven by the claims row (subscribeToClaim) plus Circle directly (Iris):
  * Circle's forwarder mints on Arc within seconds, but the row only flips to
- * 'completed' on the server worker's next pass — so Completed shows as soon
+ * 'completed' on the server worker's next pass - so Completed shows as soon
  * as Circle reports the Arc mint. Rendered by UbProgressTracker, the same
  * component every Track Progress screen uses.
  */
@@ -62,7 +62,7 @@ export function ClaimProgressTracker({ claimId, initialClaim }: { claimId: strin
       chainLabel=""
       steps={TRACK_PROGRESS_STEPS.map(s => ({ label: s.label, subtitle: s.subtitle }))}
       // claim-worker flags needs_review once a claim has been stuck >10 min.
-      note={claim?.needsReview ? 'This is taking longer than usual — our team has been notified. No action needed; it keeps retrying automatically.' : undefined}
+      note={claim?.needsReview ? 'This is taking longer than usual - our team has been notified. No action needed; it keeps retrying automatically.' : undefined}
     />
   )
 }

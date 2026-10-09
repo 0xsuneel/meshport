@@ -1,16 +1,16 @@
 // src/lib/chatCrypto.test.ts
 //
 // These tests exercise the actual Web Crypto API (available natively in
-// Node's test runner — verified: globalThis.crypto.subtle exists), not
+// Node's test runner - verified: globalThis.crypto.subtle exists), not
 // mocks. That matters here specifically: a crypto module is exactly the
 // kind of code where "the function returned without throwing" tells you
-// almost nothing — the thing that actually needs verifying is that
+// almost nothing - the thing that actually needs verifying is that
 // encrypt→decrypt round-trips to the original bytes, that a payload
 // encrypted under one key can't be read with another, and that every
 // fallback path (no key yet, legacy unencrypted content) behaves exactly
 // as chatCrypto.ts's own comments promise it does.
 //
-// getConversationKey/ensureChatKeysReady themselves aren't tested here —
+// getConversationKey/ensureChatKeysReady themselves aren't tested here -
 // they need a real localStorage + Supabase client, which is what
 // getConversationKey internally uses to derive the AES key this file
 // tests directly (generated with crypto.subtle.generateKey, bypassing that
@@ -36,14 +36,14 @@ describe('isEncryptedPayload', () => {
   })
 })
 
-describe('deriveMyChatIdentity — the multi-device fix', () => {
+describe('deriveMyChatIdentity - the multi-device fix', () => {
   const walletKeyA = '0x' + '11'.repeat(32)
   const walletKeyB = '0x' + '22'.repeat(32)
 
-  it('derives the exact same key pair from the same wallet key every time — the core "any device" property', () => {
+  it('derives the exact same key pair from the same wallet key every time - the core "any device" property', () => {
     // Simulates the SAME wallet being re-imported on a second device: this
     // is called completely independently twice, with no shared state
-    // between the calls (no localStorage, no cache) — exactly what happens
+    // between the calls (no localStorage, no cache) - exactly what happens
     // across two real devices. If this ever produced different output, the
     // whole multi-device fix would be broken.
     const identity1 = deriveMyChatIdentity(walletKeyA)
@@ -52,7 +52,7 @@ describe('deriveMyChatIdentity — the multi-device fix', () => {
     expect(Array.from(identity1.privateKey)).toEqual(Array.from(identity2.privateKey))
   })
 
-  it('derives a DIFFERENT identity for a different wallet — not the same key for everyone', () => {
+  it('derives a DIFFERENT identity for a different wallet - not the same key for everyone', () => {
     const identityA = deriveMyChatIdentity(walletKeyA)
     const identityB = deriveMyChatIdentity(walletKeyB)
     expect(Array.from(identityA.publicKey)).not.toEqual(Array.from(identityB.publicKey))
@@ -64,11 +64,11 @@ describe('deriveMyChatIdentity — the multi-device fix', () => {
     expect(Array.from(withPrefix.publicKey)).toEqual(Array.from(withoutPrefix.publicKey))
   })
 
-  it('two independently-derived identities can still agree on a shared secret via X25519 — proves getConversationKey\'s actual DH step works with this derivation', () => {
+  it('two independently-derived identities can still agree on a shared secret via X25519 - proves getConversationKey\'s actual DH step works with this derivation', () => {
     // This is the actual end-to-end property that matters: two different
     // "people" (wallets), each independently deriving their own identity,
     // must still be able to agree on the same shared secret from each
-    // other's public key — exactly what getConversationKey relies on.
+    // other's public key - exactly what getConversationKey relies on.
     const alice = deriveMyChatIdentity(walletKeyA)
     const bob   = deriveMyChatIdentity(walletKeyB)
     const sharedByAlice = x25519.getSharedSecret(alice.privateKey, bob.publicKey)
@@ -94,7 +94,7 @@ describe('deriveMyChatIdentity — the multi-device fix', () => {
 
     // "Device 2": Alice reinstalls / switches phones, re-imports the SAME
     // wallet (same private key), and opens the same conversation with Bob.
-    // No localStorage, no prior state carried over — this is the whole
+    // No localStorage, no prior state carried over - this is the whole
     // point of the fix.
     const aliceDevice2 = deriveMyChatIdentity(walletKeyA)
     const sharedSecret2 = x25519.getSharedSecret(aliceDevice2.privateKey, bob.publicKey)
@@ -109,10 +109,10 @@ describe('deriveMyChatIdentity — the multi-device fix', () => {
   })
 })
 
-describe('encryptText / decryptText — round trip', () => {
+describe('encryptText / decryptText - round trip', () => {
   it('decrypts back to the exact original plaintext', async () => {
     const key = await makeAesKey()
-    const original = 'Hey — can you send me the invoice for last month?'
+    const original = 'Hey - can you send me the invoice for last month?'
     const encrypted = await encryptText(original, key)
     expect(isEncryptedPayload(encrypted)).toBe(true)
     expect(encrypted).not.toContain(original) // never leaks plaintext into the ciphertext string
@@ -122,7 +122,7 @@ describe('encryptText / decryptText — round trip', () => {
 
   it('round-trips unicode, emoji, and newlines correctly', async () => {
     const key = await makeAesKey()
-    const original = '¡Hola! 🔒💸\nLine two — 日本語のテスト'
+    const original = '¡Hola! 🔒💸\nLine two - 日本語のテスト'
     const encrypted = await encryptText(original, key)
     const decrypted = await decryptText(encrypted, key)
     expect(decrypted).toBe(original)
@@ -140,7 +140,7 @@ describe('encryptText / decryptText — round trip', () => {
     const keyB = await makeAesKey()
     const encrypted = await encryptText('secret', keyA)
     const result = await decryptText(encrypted, keyB)
-    // Fails soft — returns a placeholder, never throws, never silently
+    // Fails soft - returns a placeholder, never throws, never silently
     // returns garbage that looks like it might be real content.
     expect(result).toContain('🔒')
     expect(result).not.toBe('secret')
@@ -168,7 +168,7 @@ describe('encryptText / decryptText — round trip', () => {
   })
 })
 
-describe('encryptBlob / decryptBlob — round trip', () => {
+describe('encryptBlob / decryptBlob - round trip', () => {
   it('decrypts back to the exact original bytes', async () => {
     const key = await makeAesKey()
     const originalBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 1, 2, 3, 255, 254, 253])
@@ -215,7 +215,7 @@ describe('encryptBlob / decryptBlob — round trip', () => {
   })
 })
 
-// ── e2e:v2 — every message carries its own key ─────────────────────────────
+// ── e2e:v2 - every message carries its own key ─────────────────────────────
 describe('e2e:v2 per-message keys', async () => {
   const { makeChatKeys, LOCKED_TEXT } = await import('./chatCrypto')
   const alice = deriveMyChatIdentity('0x' + 'a1'.repeat(32))
@@ -234,7 +234,7 @@ describe('e2e:v2 per-message keys', async () => {
     expect(await decryptText(msg, aliceNewDevice)).toBe('hello bob')
   })
 
-  it('opens without the other person\'s published key — the message names both keys itself', async () => {
+  it('opens without the other person\'s published key - the message names both keys itself', async () => {
     const msg = await encryptText('no lookup needed', await aliceToBob())
     const bobWithoutAlicesKey = await makeChatKeys(bob.privateKey, null)
     expect(await decryptText(msg, bobWithoutAlicesKey)).toBe('no lookup needed')
@@ -280,7 +280,7 @@ describe('e2e:v2 per-message keys', async () => {
     expect(await decryptText(msg, await makeChatKeys(eve.privateKey, alice.publicKey))).toBe(WAITING_TEXT)
   })
 
-  it('a waiting message is handed over once the recipient has a key — text and file keys', async () => {
+  it('a waiting message is handed over once the recipient has a key - text and file keys', async () => {
     const { resealWaiting } = await import('./chatCrypto')
     const aliceNoKey = await makeChatKeys(alice.privateKey, null)
     const bytes = new Uint8Array([9, 8, 7])

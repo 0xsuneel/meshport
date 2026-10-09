@@ -48,7 +48,7 @@ registerRoute(({ request, url }) => request.destination === 'image' && url.origi
 
 // A new version waits instead of taking over the open app: switching
 // mid-use removed the files the open screens still needed (the next screen
-// failed to load and the app reloaded itself — slow, looked frozen). The app
+// failed to load and the app reloaded itself - slow, looked frozen). The app
 // tells it to take over when that's safe: at the next app open, behind the
 // opening screen, or when coming back after a long time away (lib/swUpdate.ts).
 // A first install (nothing to replace) still activates straight away.
@@ -76,7 +76,7 @@ self.addEventListener('push', (event: PushEvent) => {
     body:  payload.body || '',
     icon:  payload.icon  || '/notification-icon.png',
     // Android draws the badge (status bar + header icon) from its alpha only,
-    // so it must be a white mark on transparent — not the solid app icon.
+    // so it must be a white mark on transparent - not the solid app icon.
     badge: payload.badge || '/notification-badge.png',
     tag:   payload.tag,
     data:  payload.data || {},
@@ -88,10 +88,10 @@ self.addEventListener('push', (event: PushEvent) => {
   event.waitUntil(self.registration.showNotification(title, options))
 })
 
-// ── Tap a notification — focus an existing tab or open a new one ───────────
+// ── Tap a notification - focus an existing tab or open a new one ───────────
 self.addEventListener('notificationclick', (event: NotificationEvent) => {
   event.notification.close()
-  // Only pages of this app — a notification can never open another site.
+  // Only pages of this app - a notification can never open another site.
   const targetUrl = (() => {
     try {
       const u = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin)
@@ -109,7 +109,7 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
         try {
           await (focused ?? client).navigate(targetUrl)
         } catch {
-          // navigate() rejects for a window this SW doesn't control yet —
+          // navigate() rejects for a window this SW doesn't control yet -
           // open the target instead of silently doing nothing.
           if (self.clients.openWindow) await self.clients.openWindow(targetUrl)
         }

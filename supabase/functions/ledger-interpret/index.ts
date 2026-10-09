@@ -136,7 +136,7 @@ async function findUninterpretedConfirmedSwapChainEvents(supabase: ReturnType<ty
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  // Scheduled job only — the pg_cron caller's secret, never a user session.
+  // Scheduled job only - the pg_cron caller's secret, never a user session.
   // Also accepted: this project's own service-role key, which blockchain-indexer
   // sends when it triggers a sweep itself (server-to-server only).
   const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')

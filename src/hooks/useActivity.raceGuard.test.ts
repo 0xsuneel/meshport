@@ -3,17 +3,17 @@
 // Regression test for the request-race fix in useActivity.ts's load():
 // filter/search/wallet changes (or two overlapping loadMore calls) can
 // start a second request before the first one resolves. Without a guard,
-// whichever RESPONSE arrives last wins — not whichever REQUEST was started
-// last — so a slow "all" response landing after a fast "swap" filter
+// whichever RESPONSE arrives last wins - not whichever REQUEST was started
+// last - so a slow "all" response landing after a fast "swap" filter
 // switch would silently overwrite the newer, correct results with stale
 // ones. useActivity.ts fixes this with a monotonically-increasing
 // requestIdRef: each load() captures the id at call time (before the
 // await) and only applies its result if that id still matches the ref's
 // current value when it resolves.
 //
-// The hook itself can't be mounted here — this repo's vitest config is
+// The hook itself can't be mounted here - this repo's vitest config is
 // deliberately Node-only (no jsdom/@testing-library/react, see
-// vitest.config.ts's own comment) — so, matching the existing convention
+// vitest.config.ts's own comment) - so, matching the existing convention
 // for mergeOnchainIntoRecords (useActivity.test.ts), this pins the exact
 // counter algorithm in isolation: a tiny harness that mirrors
 // requestIdRef's increment-before-await / compare-after-await shape,
@@ -31,7 +31,7 @@ function makeRaceGuardedLoader<T>(fetcher: (arg: string) => Promise<T>) {
   async function load(arg: string) {
     const myRequestId = ++requestId
     const data = await fetcher(arg)
-    if (myRequestId !== requestId) return // stale — a newer load() started since
+    if (myRequestId !== requestId) return // stale - a newer load() started since
     applied = data
     applyCount++
   }
@@ -48,7 +48,7 @@ describe('useActivity request race guard', () => {
     const { load, getApplied, getApplyCount } = makeRaceGuardedLoader(fetcher)
 
     const pA = load('all')   // requestId 1
-    const pB = load('swap')  // requestId 2 — supersedes A before A resolves
+    const pB = load('swap')  // requestId 2 - supersedes A before A resolves
 
     resolvers['swap']('swap-result') // B resolves first
     await pB
@@ -56,7 +56,7 @@ describe('useActivity request race guard', () => {
 
     resolvers['all']('all-result')   // A resolves late, after B already applied
     await pA
-    // A must NOT have overwritten B's result — this is the exact bug.
+    // A must NOT have overwritten B's result - this is the exact bug.
     expect(getApplied()).toBe('swap-result')
     expect(getApplyCount()).toBe(1)
   })

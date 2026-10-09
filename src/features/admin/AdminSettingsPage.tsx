@@ -82,7 +82,7 @@ export function AdminSettingsPage() {
             <p style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)', fontSize: 15 }}>Admin</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
               <Mail size={12} color="var(--text-secondary)" />
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{adminEmail ?? '—'}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{adminEmail ?? '-'}</span>
             </div>
           </div>
         </div>

@@ -4,9 +4,9 @@ import { isLiveStatusNotice, newsDate, NEWS_SOURCE_TINT, type NewsItem } from '@
 // Cover drawn for a story that has no picture (Arc network notices, MeshPort
 // posts without a cover, or an image that failed to load): the source's
 // colour, an icon tile and a short label, so the slot never looks empty.
-//   row   — wide and short (Home Updates box): icon left, one short label right
-//   stack — small thumbnail (Updates list): icon over a one-word label
-//   hero  — article header: large icon and label
+//   row   - wide and short (Home Updates box): icon left, one short label right
+//   stack - small thumbnail (Updates list): icon over a one-word label
+//   hero  - article header: large icon and label
 
 type Variant = 'row' | 'stack' | 'hero'
 

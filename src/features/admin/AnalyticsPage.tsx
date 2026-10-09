@@ -33,7 +33,7 @@ export function AnalyticsPage() {
         <StatCard label="Multichain Claims" value={loading ? '…' : data?.totalMultichainClaims ?? 0} icon={Gift} accent="var(--brand)" hint={loading ? undefined : `+${data?.claimsToday ?? 0} today`} />
         <StatCard label="Total Swap Volume" value={loading ? '…' : `$${(data?.totalSwapVolume ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`} icon={Repeat} accent="var(--success)" hint={loading ? undefined : `+$${(data?.swapVolumeToday ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} today`} />
         <StatCard label="Bulk Payments" value={loading ? '…' : data?.totalBulkPayments ?? 0} icon={Layers} accent="var(--accent)" hint={loading ? undefined : `+${data?.bulkPaymentsToday ?? 0} today`} />
-        <StatCard label="Treasury Balance" value={loading ? '…' : balance !== null ? `${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC` : '—'} icon={Landmark} accent="var(--success)" />
+        <StatCard label="Treasury Balance" value={loading ? '…' : balance !== null ? `${balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} USDC` : '-'} icon={Landmark} accent="var(--success)" />
       </div>
 
       <button

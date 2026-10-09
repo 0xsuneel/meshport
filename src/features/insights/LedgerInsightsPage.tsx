@@ -1,7 +1,7 @@
-// Ledger Insights — Insights for approved merchants (normal users keep
+// Ledger Insights - Insights for approved merchants (normal users keep
 // InsightsPage). Everything here comes from the merchant's own records:
 //   • order payments (merchant_payments) and payments received straight to
-//     the wallet on other chains (merchant_chain_receipts) — the same list the
+//     the wallet on other chains (merchant_chain_receipts) - the same list the
 //     Ledger shows (withChainReceipts)
 //   • payment requests / bills (merchant_payment_intents)
 //   • merchant claims moved to Arc (activity claims, isMerchantClaim)

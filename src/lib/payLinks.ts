@@ -1,4 +1,4 @@
-// MeshPort personal payment links — `<app>/paylink/<username>` with an
+// MeshPort personal payment links - `<app>/paylink/<username>` with an
 // optional `?amount=` (Receive / "Collect USDC" share). Chat turns these into
 // a card. Links shared before the rename (`<app>/pay/<username>`) still parse.
 // Merchant links (`/paylink/r/<code>`) are handled by merchantPay.codeFromLink.

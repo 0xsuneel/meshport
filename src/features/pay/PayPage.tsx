@@ -47,7 +47,7 @@ export function PayPage() {
   const [searchParams]      = useSearchParams()
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
 
-  // Optional `?amount=` — set when this pay link came from a "Collect USDC"
+  // Optional `?amount=` - set when this pay link came from a "Collect USDC"
   // QR/link generated on the Home screen. When present, the amount is
   // carried straight through into the Send flow so the payer never has to
   // type it in themselves; they only confirm and sign.
@@ -161,12 +161,12 @@ export function PayPage() {
         </div>
 
         {/* Scanned with a wallet app (opened in its browser) or no MeshPort
-            account: pay from the wallet — Arc added if needed. */}
+            account: pay from the wallet - Arc added if needed. */}
         {!isAuthenticated && recipient.wallet_address && (
           <WalletPayPanel to={recipient.wallet_address} amount={requestedAmount ? Number(requestedAmount) : null} />
         )}
 
-        {/* Pay button — Option C */}
+        {/* Pay button - Option C */}
         <button onClick={handlePay}
           className="w-full flex items-center gap-4 active:scale-[.98] transition-all"
           style={{
@@ -229,7 +229,7 @@ export function PayPage() {
 
         {/* Footer */}
         <div className="flex flex-col items-center gap-3 pt-2 pb-2">
-          {/* Back to Home — medium pill button, clearly visible */}
+          {/* Back to Home - medium pill button, clearly visible */}
           <button onClick={() => navigate('/')}
             className="flex items-center gap-2 px-6 py-3 rounded-2xl active:scale-95 transition-transform"
             style={{

@@ -4,7 +4,7 @@
 //   deno test supabase/functions/blockchain-indexer/cursorMath.test.ts
 //
 // Deliberately zero external imports (no jsr:/npm: specifiers, not even
-// jsr:@std/assert) — this sandbox's network policy blocks jsr.io, and more
+// jsr:@std/assert) - this sandbox's network policy blocks jsr.io, and more
 // generally a shared test-helper module shouldn't need network access to
 // assert on values it already has in memory. assertEquals below is a
 // minimal deep-equal, sufficient for the plain numbers/arrays/objects these
@@ -42,8 +42,8 @@ Deno.test('detectReorg: true only when hashes genuinely differ', () => {
   assertEquals(detectReorg('0xabc', '0xabc'), false)
   assertEquals(detectReorg('0xABC', '0xabc'), false) // case-insensitive
   assertEquals(detectReorg('0xabc', '0xdef'), true)
-  assertEquals(detectReorg(null, '0xdef'), false) // nothing recorded yet — not a reorg
-  assertEquals(detectReorg('0xabc', null), false) // could not verify — not a reorg
+  assertEquals(detectReorg(null, '0xdef'), false) // nothing recorded yet - not a reorg
+  assertEquals(detectReorg('0xabc', null), false) // could not verify - not a reorg
 })
 
 Deno.test('reorgRollbackBlock: rolls back a full confirmation depth plus one', () => {
@@ -57,7 +57,7 @@ Deno.test('chunkRange: splits into inclusive chunks of the given size', () => {
   assertEquals(chunkRange(200, 100, 50), []) // to < from
 })
 
-Deno.test('safeAdvance: THE critical rule — stop at the FIRST gap, not the last success', () => {
+Deno.test('safeAdvance: THE critical rule - stop at the FIRST gap, not the last success', () => {
   // [100-199] ok, [200-299] FAILS, [300-399] ok (out of order in the array on
   // purpose, to prove the function sorts before deciding).
   const results = [
@@ -65,7 +65,7 @@ Deno.test('safeAdvance: THE critical rule — stop at the FIRST gap, not the las
     { chunk: [100, 199] as [number, number], ok: true },
     { chunk: [200, 299] as [number, number], ok: false },
   ]
-  // Must stop at 199 — NOT 399, even though "most of it" succeeded. Advancing
+  // Must stop at 199 - NOT 399, even though "most of it" succeeded. Advancing
   // to 399 would silently and permanently skip blocks 200-299.
   assertEquals(safeAdvance(100, results), 199)
 })
@@ -78,7 +78,7 @@ Deno.test('safeAdvance: all chunks ok advances to the very end', () => {
   assertEquals(safeAdvance(100, results), 299)
 })
 
-Deno.test('safeAdvance: first chunk fails — no progress at all, returns from - 1', () => {
+Deno.test('safeAdvance: first chunk fails - no progress at all, returns from - 1', () => {
   const results = [{ chunk: [100, 199] as [number, number], ok: false }]
   assertEquals(safeAdvance(100, results), 99)
 })

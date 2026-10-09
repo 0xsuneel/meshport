@@ -1,7 +1,7 @@
 // components/ui/GlassPopCard.tsx
 //
-// A richer, top-anchored frosted-glass confirmation — a checkmark/error
-// badge, bold title, message, and an optional action button — for
+// A richer, top-anchored frosted-glass confirmation - a checkmark/error
+// badge, bold title, message, and an optional action button - for
 // confirmations that deserve more than Toast.tsx's plain single-line bar
 // but don't need ProcessingFlipCard's full processing→flip→result modal
 // (no async action to wait on here; the thing being confirmed already

@@ -61,7 +61,7 @@ export async function createSwapIntent(params: {
   try {
     await ensureAnonSession()
     const { data, error } = await invokeLinked('swap-intent', params as Record<string, unknown>)
-    // BUG FIX: see describeFunctionsError.ts's own header comment — error.message
+    // BUG FIX: see describeFunctionsError.ts's own header comment - error.message
     // here used to always be the SDK's generic "Edge Function returned a
     // non-2xx status code", hiding the real validation reason (e.g.
     // "walletAddress required") that swap-intent's own response body carried.

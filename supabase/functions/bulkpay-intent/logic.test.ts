@@ -81,7 +81,7 @@ Deno.test('creates exactly one intent and one attempt for a normal request', asy
   if (result.outcome === 'created') assertEquals(result.nonce, 42)
 })
 
-Deno.test('the intent transitions AUTHORIZING -> SUBMITTED once its attempt is created — prevents deriveDisplayState from showing "AUTHORIZING" forever', async () => {
+Deno.test('the intent transitions AUTHORIZING -> SUBMITTED once its attempt is created - prevents deriveDisplayState from showing "AUTHORIZING" forever', async () => {
   const { repo, intents } = makeFakeRepo()
   const fetcher: NonceFetcher = { getPendingNonce: () => Promise.resolve(42) }
   await createBulkPayIntent(repo, fetcher, REQ)
@@ -158,7 +158,7 @@ Deno.test('invalid request: non-positive amount rejected', async () => {
   assertEquals(result.outcome, 'invalid_request')
 })
 
-Deno.test('recipient metadata carries only non-authoritative context — never a canonical recipient list', async () => {
+Deno.test('recipient metadata carries only non-authoritative context - never a canonical recipient list', async () => {
   const { repo } = makeFakeRepo()
   const capturedMetadata: Record<string, unknown>[] = []
   const capturingRepo: IntentRepository = {

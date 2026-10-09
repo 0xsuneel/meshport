@@ -4,7 +4,7 @@
 // saved copy replaces the sending one).
 //
 // Size / dimensions travel in the storage URL's #fragment
-// (…/file.jpg#w=1200&h=900&s=183422) — ignored by the server and by fetch,
+// (…/file.jpg#w=1200&h=900&s=183422) - ignored by the server and by fetch,
 // but lets a bubble reserve the right shape before the image loads (no
 // jumping) and show the file size before downloading.
 import { authHeaders } from '@/lib/chatService'
@@ -125,7 +125,7 @@ export function loadMedia(url: string, iv: string | null, key: any, onProgress?:
 /**
  * Photos are resized + re-encoded before sending (like WhatsApp): standard
  * 1600px / JPEG 0.82, HD 4096px / 0.92. GIFs are kept as they are. Returns
- * null when the browser can't decode the image (e.g. HEIC) — send it as a
+ * null when the browser can't decode the image (e.g. HEIC) - send it as a
  * file then.
  */
 export async function preparePhoto(file: File, hd: boolean): Promise<{ blob: Blob; w: number; h: number } | null> {
@@ -151,7 +151,7 @@ export async function preparePhoto(file: File, hd: boolean): Promise<{ blob: Blo
   }
 }
 
-// ── upload with progress (XHR — fetch can't report upload progress) ─────────
+// ── upload with progress (XHR - fetch can't report upload progress) ─────────
 export type UploadHandle = { promise: Promise<string>; abort: () => void }
 /** Uploads to the public `attachments` bucket; resolves to its public URL. */
 export function uploadWithProgress(path: string, blob: Blob, contentType: string, onProgress: (p: number) => void): UploadHandle {
@@ -169,7 +169,7 @@ export function uploadWithProgress(path: string, blob: Blob, contentType: string
         if (xhr.status >= 200 && xhr.status < 300) { onProgress(1); resolve(`${SUPA_URL}/storage/v1/object/public/attachments/${path}`) }
         else reject(new Error(`Upload failed (${xhr.status})`))
       }
-      xhr.onerror = () => reject(new Error('Upload failed — check your connection'))
+      xhr.onerror = () => reject(new Error('Upload failed - check your connection'))
       xhr.onabort = () => reject(new Error('cancelled'))
       xhr.send(blob)
     })

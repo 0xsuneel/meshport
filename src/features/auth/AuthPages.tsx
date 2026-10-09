@@ -71,7 +71,7 @@ function makeUser(id: string, email: string, extra?: Partial<User>): User {
  * BUG FIX (2026-09-03): this used to only carry over id/username/
  * walletAddress from `existing`, silently dropping display_name and
  * avatar_url even though both are already present in the same query result
- * — GoogleAuthPage's equivalent restore (this same file, social-auto path)
+ * - GoogleAuthPage's equivalent restore (this same file, social-auto path)
  * does carry both over; this path just never matched it. A wallet
  * re-imported on a fresh device or after a reinstall would keep its correct
  * username but revert its profile picture and display name to blank/
@@ -80,7 +80,7 @@ function makeUser(id: string, email: string, extra?: Partial<User>): User {
 
 // A fresh Google/email sign-in may set a new passcode on /auth/passcode?returning=1.
 // The flag proves the page was reached from that sign-in (not typed by
-// someone holding a locked device) — see RequireNoPasscode in App.tsx.
+// someone holding a locked device) - see RequireNoPasscode in App.tsx.
 function markReturningSignIn() {
   try { sessionStorage.setItem('mp_returning_signin', String(Date.now())) } catch { /* private mode */ }
 }
@@ -119,14 +119,14 @@ export function LoginPage() {
   const handleGoogleLogin = async () => {
     if (!agreed) return
     // signInWithOAuth redirects the whole page to Google, then back to
-    // /auth/callback once the OAuth flow completes — the actual account
+    // /auth/callback once the OAuth flow completes - the actual account
     // lookup/creation logic lives there (AuthCallbackPage below), not
     // here, since this function's own execution ends the moment the
     // redirect happens.
     //
     // queryParams.prompt: 'select_account' forces Google's account chooser
     // to show every time, even when the browser already has an active
-    // Google session it could silently reuse — without this, Google skips
+    // Google session it could silently reuse - without this, Google skips
     // the picker and auto-signs into whichever account was last used,
     // which is exactly the behavior that was confusing on re-login (no
     // visible account choice, just an instant redirect into whatever
@@ -150,10 +150,10 @@ export function LoginPage() {
           <p className="text-text-secondary mt-2">USDC Payments, Made Simple</p>
         </div>
 
-        {/* Terms & Privacy — must be explicitly checked before any sign-up
+        {/* Terms & Privacy - must be explicitly checked before any sign-up
             action is available. Previously this was just a passive line of
             text at the bottom ("By continuing you agree to...") with no
-            actual consent mechanism — nothing required the person to read
+            actual consent mechanism - nothing required the person to read
             or acknowledge it, and it wasn't even a link. This makes
             agreement an explicit, required step instead. */}
         <motion.button
@@ -226,15 +226,15 @@ export function LoginPage() {
 
 // ─── Google OAuth Callback ───────────────────────────────────────────────────
 // Reached after Google redirects back post-authentication (reuses the
-// existing /auth/google route — this used to just show a "coming soon"
+// existing /auth/google route - this used to just show a "coming soon"
 // toast and bounce back to /auth). Mirrors verifyOTP's existing/new-user
-// logic intentionally, not by accident — Google and Email OTP are two
+// logic intentionally, not by accident - Google and Email OTP are two
 // different ways to verify the SAME kind of thing (a real email address),
 // and must produce identical account behavior for the same email: same
 // lookup, same wallet, no duplicate account just because a different
 // button was tapped.
 // Another MeshPort account already uses this email, but this sign-in isn't
-// linked to it — never merged silently (see resolveAccountForSession).
+// linked to it - never merged silently (see resolveAccountForSession).
 const ACCOUNT_CONFLICT_MESSAGE =
   'This email already belongs to a MeshPort account that this sign-in isn\'t linked to. Sign in with the method you used to create that account.'
 
@@ -257,7 +257,7 @@ export function GoogleAuthPage() {
 
       setLoginType('social')
 
-      // The account this Google login belongs to — through the session's
+      // The account this Google login belongs to - through the session's
       // own binding only, never by matching emails (see
       // resolveAccountForSession). Same lookup as the email-code login.
       const resolved = await resolveAccountForSession(supaUser.id, supaUser.email)
@@ -288,17 +288,17 @@ export function GoogleAuthPage() {
         // key backup fallback if this device has no local key material.
         if (existing.wallet_address) useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: 'social-auto' })
         // A new sign-in always unlocks the wallet with the passkey or
-        // Recovery QR — never a copy left on this device from before.
+        // Recovery QR - never a copy left on this device from before.
         clearSocialDeviceState()
         markReturningSignIn()
         navigate('/auth/passcode?returning=1', { replace: true })
         return
       }
 
-      // New user — identical starting point to verifyOTP's new-user path.
+      // New user - identical starting point to verifyOTP's new-user path.
       // No 'next' param here on purpose: PasscodeSetup routes loginType
       // === 'social' straight to AutoWalletPage automatically, same as
-      // the email OTP flow — adding next=create here would incorrectly
+      // the email OTP flow - adding next=create here would incorrectly
       // route through the manual create-wallet flow instead.
       setUser(makeUser(supaUser.id, supaUser.email || ''))
       navigate('/auth/passcode', { replace: true })
@@ -422,13 +422,13 @@ export function EmailOTPPage() {
       }))
       if (existing.username) setUsername((existing.username || '').replace(/\.arc$/, ''))
       if (existing.wallet_address) {
-        // Same reasoning as GoogleAuthPage above — tag walletSource so the
+        // Same reasoning as GoogleAuthPage above - tag walletSource so the
       // server-side key backup fallback is reachable on a fresh device.
       useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: 'social-auto' })
       }
       setLoading(false)
       showToastMessage(`Welcome back, ${existing.username || existing.display_name}! 👋`, 'success')
-      // Returning user — set a new passcode (no old passcode needed), then
+      // Returning user - set a new passcode (no old passcode needed), then
       // unlock the wallet with the passkey or Recovery QR (never a copy left
       // on this device from before this sign-in).
       clearSocialDeviceState()
@@ -513,7 +513,7 @@ export function WalletSetupPage() {
   const navigate = useNavigate()
   const logout = useAuthStore(s => s.logout)
 
-  // Not a plain "back" link — /auth (the welcome screen) redirects anyone
+  // Not a plain "back" link - /auth (the welcome screen) redirects anyone
   // who's still authenticated with a passcode set straight back to THIS
   // page (see RequireNoAuth in App.tsx), so a bare back-arrow would just
   // loop. Getting back to the welcome screen for real means undoing the
@@ -577,9 +577,9 @@ export function CreateWalletPage() {
   const [confirmError, setConfirmError] = useState('')
   const [copied, setCopied] = useState(false)
   // Three random positions, picked per wallet and only revealed on the verify
-  // screen — one fixed, highlighted word could be noted without saving the rest.
+  // screen - one fixed, highlighted word could be noted without saving the rest.
   const [verifyIdx, setVerifyIdx] = useState<number[]>([])
-  // No inline guards — handled entirely by RequireNoWallet in App.tsx router
+  // No inline guards - handled entirely by RequireNoWallet in App.tsx router
 
   const handleGenerate = async () => {
     setLoading(true)
@@ -599,7 +599,7 @@ export function CreateWalletPage() {
     setConfirmError('')
     setWallet(walletData.address, walletData.privateKey, walletData.mnemonic, 'create')
     setBalance(0)
-    // Create the local user id FIRST if needed — this used to run AFTER the
+    // Create the local user id FIRST if needed - this used to run AFTER the
     // cloud-save check below, which meant `user` (captured from this
     // component's render, not updated by setUser() within this same
     // synchronous call) was still null for any brand-new self-custody
@@ -612,11 +612,11 @@ export function CreateWalletPage() {
       setUser(makeUser('usr_' + Date.now(), ''))
     }
     // setUser() above already fires ensureAnonSession() itself, but only as
-    // a fire-and-forget .then() chain — nothing actually waits for it. This
+    // a fire-and-forget .then() chain - nothing actually waits for it. This
     // flow happened to get away with that because there's real elapsed time
     // between here and reaching any page that needs a working session (the
     // mnemonic backup + confirm-word screens the user has to get through
-    // first). Import has no such screens — see the identical await in
+    // first). Import has no such screens - see the identical await in
     // handleImport below, where this was a genuine, reproducible race, not
     // just a theoretical one. Awaiting explicitly here too so both flows
     // are correct on their own merits rather than one leaning on the other
@@ -629,16 +629,16 @@ export function CreateWalletPage() {
       try {
         const encrypted = await encryptPrivateKey(walletData.privateKey, rawPasscode)
         // Local device storage only. No server-side copy of this, or of the
-        // mnemonic, is ever saved — by design, not omission. See the
+        // mnemonic, is ever saved - by design, not omission. See the
         // removed cloud-save code this replaced: private keys and recovery
         // phrases never leave this device now, in any form. The tradeoff is
-        // real and intentional — if this device's storage and the user's
+        // real and intentional - if this device's storage and the user's
         // own saved recovery phrase are both lost, this wallet is
         // unrecoverable. There is no server-side fallback left to catch
         // that case.
         storeEncryptedKey(walletData.address, encrypted)
         // SECURITY FIX: the mnemonic used to be persisted in plain text via
-        // useAuthStore's own Zustand persist (see store/index.ts) — this is
+        // useAuthStore's own Zustand persist (see store/index.ts) - this is
         // the encrypted replacement, same AES-GCM/passcode-derived scheme
         // as the private key right above, stored under its own localStorage
         // key (security.ts's storeEncryptedMnemonic). Read back on-demand
@@ -693,7 +693,7 @@ export function CreateWalletPage() {
             <div><h2 className="text-2xl font-bold text-text-primary">Save Recovery Phrase</h2><p className="text-text-secondary mt-1">Write down all 12 words, in order. Next you'll be asked for 3 of them.</p></div>
             <div className="p-3 bg-warning/10 border border-warning/30 rounded-2xl flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-warning">Never share this. Anyone with it controls your wallet. Avoid taking a screenshot — write it down instead.</p>
+              <p className="text-sm text-warning">Never share this. Anyone with it controls your wallet. Avoid taking a screenshot - write it down instead.</p>
             </div>
             <div className="grid grid-cols-3 gap-2">
               {walletData.mnemonic.split(' ').map((word, i) => (
@@ -738,7 +738,7 @@ export function CreateWalletPage() {
             <Card className="p-4 text-left"><div><p className="text-xs text-text-secondary mb-1">Wallet Address</p><p className="text-xs font-mono text-text-primary break-all">{walletData.address}</p></div></Card>
             <Button fullWidth onClick={() => {
               showToastMessage('Wallet created!', 'success')
-              // Always go to claim-username — the guard there handles existing profiles
+              // Always go to claim-username - the guard there handles existing profiles
               navigate('/auth/claim-username', { replace: true })
             }}>Continue →</Button>
           </motion.div>
@@ -769,25 +769,25 @@ export function ImportWalletPage() {
   const wordCount = input.trim() ? input.trim().split(/\s+/).length : 0
 
   // Set only when an ALREADY-EXISTING wallet's address doesn't match what
-  // was just imported — e.g. this page was reached via the "restore your
+  // was just imported - e.g. this page was reached via the "restore your
   // wallet" recovery banner and the user pasted the wrong phrase/key (a
   // personal MetaMask/OKX one, say, instead of the one MeshPort actually
   // showed them). Deliberately does NOT fire for a fresh signup with no
-  // wallet yet — existingWalletAddress is null/empty there, so the import
+  // wallet yet - existingWalletAddress is null/empty there, so the import
   // proceeds exactly as it always has, no extra step, no warning.
   const [mismatch, setMismatch] = useState<{
     result: { address: string; privateKey: string; mnemonic?: string }
     walletSource: 'import-seed' | 'import-privkey'
   } | null>(null)
 
-  // No inline guards — handled entirely by RequireNoWallet in App.tsx router
+  // No inline guards - handled entirely by RequireNoWallet in App.tsx router
 
   const handleImport = async () => {
     setError(''); setLoading(true)
     let result: { address: string; privateKey: string } | null = null
     if (method === 'mnemonic') {
       const v = validateMnemonic(input)
-      if (!v.valid) { setError(!([12,15,18,21,24].includes(v.wordCount)) ? `Need 12 words, got ${v.wordCount}.` : `Invalid characters in words: ${v.invalidWords.slice(0,3).join(', ')} — use only letters`); setLoading(false); return }
+      if (!v.valid) { setError(!([12,15,18,21,24].includes(v.wordCount)) ? `Need 12 words, got ${v.wordCount}.` : `Invalid characters in words: ${v.invalidWords.slice(0,3).join(', ')} - use only letters`); setLoading(false); return }
       result = await importFromMnemonic(input.trim())
       if (result) { (result as any).mnemonic = input.trim() }  // Store the mnemonic that was imported
     } else {
@@ -799,7 +799,7 @@ export function ImportWalletPage() {
     const walletSource = method === 'mnemonic' ? 'import-seed' : 'import-privkey'
 
     // Only checked when an existing wallet is actually present on this
-    // account — see the state comment above for why this never affects a
+    // account - see the state comment above for why this never affects a
     // fresh signup.
     if (existingWalletAddress && result.address.toLowerCase() !== existingWalletAddress.toLowerCase()) {
       setMismatch({ result, walletSource })
@@ -810,7 +810,7 @@ export function ImportWalletPage() {
     await finishImport(result, walletSource)
   }
 
-  // The actual "commit" step — unchanged from what handleImport always did,
+  // The actual "commit" step - unchanged from what handleImport always did,
   // just factored out so it can run either immediately (no existing wallet,
   // or the imported address already matches it) or after explicit
   // confirmation from the mismatch warning below.
@@ -824,13 +824,13 @@ export function ImportWalletPage() {
     }
     // This is the real fix for chats/contacts/rewards not working specifically
     // after importing (both seed-phrase and private-key): setUser() above
-    // fires ensureAnonSession() as a fire-and-forget .then() chain — nothing
+    // fires ensureAnonSession() as a fire-and-forget .then() chain - nothing
     // actually waits for the anonymous sign-in's real network round-trip to
     // finish. The create-wallet flow gets away with the same fire-and-forget
     // call because there's a mnemonic-backup + confirm-word screen between
     // here and reaching any page that needs a working session. This flow has
-    // no equivalent delay — it navigates to claim-username and then into the
-    // main app almost immediately after this point — so it was a genuine,
+    // no equivalent delay - it navigates to claim-username and then into the
+    // main app almost immediately after this point - so it was a genuine,
     // reproducible race: chat/contacts/rewards writes were firing with no
     // established session yet, silently falling back to the bare anon key
     // (see authHeaders()), which RLS correctly refuses for anything actually
@@ -844,17 +844,17 @@ export function ImportWalletPage() {
     if (rawPasscodeImport) {
       try {
         const e = await encryptPrivateKey(result.privateKey, rawPasscodeImport)
-        // Local device storage only — no server-side copy, ever, of the
+        // Local device storage only - no server-side copy, ever, of the
         // private key or (for seed imports) the mnemonic. This is the
         // wallet type that matters most for this design: private-key-only
-        // imports have no mnemonic at all, so this local copy — and
-        // whatever the user has independently saved of their own key — is
+        // imports have no mnemonic at all, so this local copy - and
+        // whatever the user has independently saved of their own key - is
         // now the *only* thing standing between them and permanent loss if
         // this device's storage is ever cleared. That's the accepted
         // tradeoff for genuinely never collecting this server-side.
         storeEncryptedKey(result.address, e)
         // SECURITY FIX: same encrypted-at-rest treatment as CreateWalletPage
-        // — see its own comment for the full reasoning. `result.mnemonic`
+        // - see its own comment for the full reasoning. `result.mnemonic`
         // is only ever set for the mnemonic import method (see handleImport
         // above), so this naturally no-ops for a private-key-only import.
         if (result.mnemonic) {
@@ -886,14 +886,14 @@ export function ImportWalletPage() {
             <p className="text-sm text-warning flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>If you meant to recover your <strong>existing</strong> MeshPort wallet, double-check you pasted
-              the right phrase/key — this looks like a <strong>different</strong> wallet (e.g. a personal
+              the right phrase/key - this looks like a <strong>different</strong> wallet (e.g. a personal
               MetaMask or OKX one), not the one MeshPort originally gave you.</span>
             </p>
             <p className="text-xs text-text-secondary font-mono break-all">Current: {existingWalletAddress}</p>
             <p className="text-xs text-text-secondary font-mono break-all">Importing: {mismatch.result.address}</p>
           </div>
           <p className="text-sm text-text-secondary">
-            Switching will move you to this different wallet inside MeshPort. Your existing wallet isn't deleted —
+            Switching will move you to this different wallet inside MeshPort. Your existing wallet isn't deleted -
             it's just no longer the one this account uses.
           </p>
           <div className="flex flex-col gap-2">
@@ -901,7 +901,7 @@ export function ImportWalletPage() {
               onClick={() => setMismatch(null)}
               className="w-full py-3 bg-brand rounded-2xl text-sm font-bold text-white"
             >
-              Cancel — check my input again
+              Cancel - check my input again
             </button>
             <button
               onClick={() => finishImport(mismatch.result, mismatch.walletSource)}
@@ -978,22 +978,22 @@ export function ClaimUsernamePage() {
     if (!walletAddress) { setChecking(false); return }
     getUserByWalletAddress(walletAddress).then(existing => {
       if (existing?.username) {
-        // Wallet already registered — restore the REAL id along with the
+        // Wallet already registered - restore the REAL id along with the
         // username, not just the username. At this point (before
         // handleClaim ever runs) user.id is still the temporary
-        // usr_<timestamp> placeholder — setUsername alone only sets the
+        // usr_<timestamp> placeholder - setUsername alone only sets the
         // display username field, never touches id. Without this, someone
         // re-importing a wallet they'd already registered on another
         // device (or after clearing local data) would see their correct
         // username show up, while every subsequent query for their
         // contacts/conversations/activity/rewards silently used the wrong
-        // id and came back empty — a "successful" login into an account
+        // id and came back empty - a "successful" login into an account
         // that looks right but has none of their real data.
         //
         // BUG FIX (2026-09-03): this used to stop at id/username/
         // walletAddress and never carried over display_name/avatar_url,
         // even though `existing` already has both from the exact same
-        // query — GoogleAuthPage's equivalent restore (a few hundred lines
+        // query - GoogleAuthPage's equivalent restore (a few hundred lines
         // up in this same file) does carry these over for social-auto
         // accounts; this path just never matched it. A re-imported wallet
         // with a previously-set profile picture and display name was
@@ -1011,7 +1011,7 @@ export function ClaimUsernamePage() {
   // While checking whether this wallet already has a username, show a
   // real loading state instead of nothing. Returning null here used to be
   // fine for the fast path (an existing profile redirects away almost
-  // instantly), but it's also the path a BRAND-NEW wallet takes — no
+  // instantly), but it's also the path a BRAND-NEW wallet takes - no
   // existing profile means this same blank screen sits through the full
   // getUserByWalletAddress round trip before the claim form ever appears,
   // which is exactly what reads as "the claim page shows up late" right
@@ -1067,7 +1067,7 @@ export function ClaimUsernamePage() {
     }
 
 
-    // Update local state — use the stable ID so it's consistent on future logins
+    // Update local state - use the stable ID so it's consistent on future logins
     if (user?.id.startsWith('usr_')) {
       setUser({ ...user, id: stableId, username: handle + '.arc', walletAddress })
     } else if (user) {
@@ -1076,7 +1076,7 @@ export function ClaimUsernamePage() {
     setUsername(handle)
     setLoading(false)
     showToastMessage(`${handle}.arc claimed! Welcome to MeshPort 🎉`, 'success')
-    // replace: true removes /auth/claim-username from history — back button skips it
+    // replace: true removes /auth/claim-username from history - back button skips it
     navigate(getAndClearReturnTo() || '/', { replace: true })
   }
 

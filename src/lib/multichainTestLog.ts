@@ -1,17 +1,17 @@
 /**
- * multichainTestLog.ts — Manual test-data collector for Claim + Send
+ * multichainTestLog.ts - Manual test-data collector for Claim + Send
  *
  * Purpose: while manually testing every chain in MultichainClaimPage /
  * MultichainTransferPage, capture every SDK event, fee estimate, error, and
  * final result to localStorage instead of relying on copy-pasting devtools
- * console output by hand. Not wired into production analytics — this is a
+ * console output by hand. Not wired into production analytics - this is a
  * throwaway QA tool. Safe to delete once chain-by-chain testing is done.
  *
  * Usage:
  *   - Open either page with ?testlog=1 in the URL to show the floating
  *     panel (see TestLogPanel.tsx).
  *   - Every kit event, fee estimate, and terminal result on both pages is
- *     already wired to call logTestEvent() — no per-test action needed.
+ *     already wired to call logTestEvent() - no per-test action needed.
  *   - Use the panel's "Copy JSON" / "Download JSON" button to hand the full
  *     run log back for diagnosis, or call exportTestLog() from the console.
  */
@@ -66,10 +66,10 @@ export function newRunId(prefix: string): string {
 }
 
 // The claim flow's internal chainId for Polygon really is 'Polygon_Sepolia'
-// (see CIRCLE_SDK_CHAIN_ID in MultichainClaimPage.tsx — it's translated to
+// (see CIRCLE_SDK_CHAIN_ID in MultichainClaimPage.tsx - it's translated to
 // the real SDK chain 'Polygon_Amoy_Testnet' right before every SDK call).
 // That's intentional and correct, but printing it raw in a log made it look
-// like the wrong network was being tested — easy to misread as "this is
+// like the wrong network was being tested - easy to misread as "this is
 // hitting Sepolia" when it's actually Amoy. Friendly labels below are
 // purely a display fix; nothing about chain resolution changes.
 export function friendlyChainLabel(flow: TestFlow, chainId: string): string {
@@ -103,7 +103,7 @@ export function exportTestLogJson(): string {
   return JSON.stringify(getTestLog(), null, 2)
 }
 
-/** Groups entries by runId — one group per claim/send attempt, in order. */
+/** Groups entries by runId - one group per claim/send attempt, in order. */
 export function getTestLogGroupedByRun(): { runId: string; flow: TestFlow; chainId: string; service: TestService; entries: TestLogEntry[] }[] {
   const log = getTestLog()
   const order: string[] = []
@@ -187,7 +187,7 @@ export interface CoverageRow {
 /**
  * Maps every known chain in a flow onto its most recent logged run (if any).
  * A chain that's never appeared in the log shows as 'untested' rather than
- * being silently omitted — that's the whole point of using a fixed list
+ * being silently omitted - that's the whole point of using a fixed list
  * instead of just deriving rows from getTestLogGroupedByRun().
  */
 export function getCoverage(flow: TestFlow): CoverageRow[] {

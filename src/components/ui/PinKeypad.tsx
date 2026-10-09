@@ -1,20 +1,20 @@
-// PinKeypad — circular numeric keypad with dot progress indicator.
+// PinKeypad - circular numeric keypad with dot progress indicator.
 // Auto-calls onComplete when all digits are entered.
 //
 // Also the single integration point for transaction-approval biometric
-// unlock — 9 pages across the app (Send, Swap, Multichain Send/Claim,
+// unlock - 9 pages across the app (Send, Swap, Multichain Send/Claim,
 // Chat, Contacts, Bulk Payout, Profile) already share this one component,
 // so wiring biometric in here covers all of them at once rather than
 // repeating the same logic 9 times. On a successful OS biometric check,
 // this calls onChange with the real decrypted passcode, which every
 // caller already treats identically to the user having typed it manually
-// — no caller-side changes needed, they already verify whatever value
+// - no caller-side changes needed, they already verify whatever value
 // arrives against the stored passcode hash.
 //
 // onComplete's second argument, viaBiometric, tells the caller WHICH of
 // those two paths just happened, so callers that show something
 // biometric-specific after success (PaySendPage/ChatPage's paid-flash icon)
-// know whether to. tryBiometric() records this in a ref (not state — it
+// know whether to. tryBiometric() records this in a ref (not state - it
 // has to be readable synchronously the instant the pin fills, with zero
 // risk of a stale render) the moment the OS check succeeds, right before
 // onChange(pc); handleKey's manual path clears that ref back to false on
@@ -39,7 +39,7 @@ interface PinKeypadProps {
   onComplete?: (pin: string, viaBiometric?: boolean) => void
   accentFrom?: string
   accentTo?: string
-  // Revived — previously declared but never actually wired to anything
+  // Revived - previously declared but never actually wired to anything
   // (see git history / the file this replaced). Both now optional and
   // both default to the real, live check below if omitted, so existing
   // callers that don't pass these get real biometric support for free;
@@ -73,7 +73,7 @@ export function PinKeypad({
   const completedRef = useRef(false)
   const viaBiometricRef = useRef(false)
   const [biometricTrying, setBiometricTrying] = useState(false)
-  // Desktop users type on a physical keyboard — the tap-grid below is a
+  // Desktop users type on a physical keyboard - the tap-grid below is a
   // mobile-only affordance. Same value/onChange/onComplete contract either
   // way, so every caller of this component needs zero changes.
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -84,7 +84,7 @@ export function PinKeypad({
   const Icon = label === 'Face ID' ? ScanFace : Fingerprint
 
   // The doc comment above promised callers "the real, live check" by
-  // default, but nothing here ever actually called it — biometricAvailable
+  // default, but nothing here ever actually called it - biometricAvailable
   // being merely !== false meant the key rendered whenever a credential had
   // ever been registered, with zero regard for whether this device/browser
   // can currently do a platform biometric check at all. On platforms where
@@ -92,14 +92,14 @@ export function PinKeypad({
   // PWA vs. a regular Safari tab, or a desktop machine with no Windows
   // Hello/Touch ID configured), that showed a key that reliably went
   // nowhere: verifyBiometricAndGetPasscode's failure is silent by design
-  // (see its own comment — cancelling is normal), so the only visible
+  // (see its own comment - cancelling is normal), so the only visible
   // symptom was "biometric doesn't work here," with no error to explain
   // why. Checked live, same as EnableBiometricPage already does.
   // null until the live probe answers: the key shows meanwhile (as before),
   // but the automatic prompt below waits for a real yes.
   const [liveSupported, setLiveSupported] = useState<boolean | null>(null)
   useEffect(() => {
-    if (biometricAvailable === false) return // caller already opted out — no need to probe
+    if (biometricAvailable === false) return // caller already opted out - no need to probe
     let cancelled = false
     isBiometricSupported().then(ok => { if (!cancelled) setLiveSupported(ok) })
     return () => { cancelled = true }
@@ -126,7 +126,7 @@ export function PinKeypad({
     const pc = await verifyBiometricAndGetPasscode(walletAddress, storedPasscodeHash ?? undefined)
     setBiometricTrying(false)
     // A cancelled/failed check just leaves the keypad ready for manual
-    // entry — no error shown, cancelling is a normal choice here.
+    // entry - no error shown, cancelling is a normal choice here.
     if (pc) {
       viaBiometricRef.current = true
       onBiometric?.() // optional notification hook for a caller that wants one
@@ -138,8 +138,8 @@ export function PinKeypad({
 
   // Biometric enabled → the fingerprint / Face ID prompt opens by itself as
   // soon as the pad appears (unlock and every transaction approval). If the
-  // scan fails or is cancelled — or the browser refuses a prompt nobody
-  // tapped for (iOS Safari can) — nothing else happens: the PIN pad is
+  // scan fails or is cancelled - or the browser refuses a prompt nobody
+  // tapped for (iOS Safari can) - nothing else happens: the PIN pad is
   // already on screen and the fingerprint key stays there to try again.
   // Once per pad, never after the person has started typing, and only while
   // the page is actually visible.
@@ -189,7 +189,7 @@ export function PinKeypad({
       completedRef.current = true
       const viaBiometric = viaBiometricRef.current
       // Fire right after the frame that paints the last dot filled (two
-      // rAFs ≈ one paint) instead of a fixed 200ms — that delay sat on the
+      // rAFs ≈ one paint) instead of a fixed 200ms - that delay sat on the
       // critical path of every Chat Pay / passcode confirm.
       requestAnimationFrame(() => requestAnimationFrame(() => onComplete(value, viaBiometric)))
     }
@@ -238,7 +238,7 @@ export function PinKeypad({
       </motion.div>
 
       {isDesktop ? (
-        /* Desktop — a real keyboard already exists, so no on-screen grid.
+        /* Desktop - a real keyboard already exists, so no on-screen grid.
            Same onChange(val)/onComplete contract as the mobile branch: this
            just sanitizes typed input to digits and caps it at `length`. */
         <div className="flex items-center gap-3 max-w-[320px] mx-auto">
@@ -275,11 +275,11 @@ export function PinKeypad({
         </div>
       ) : (
       <>
-      {/* Keypad — wide rounded-rectangle keys that fill their full grid cell
+      {/* Keypad - wide rounded-rectangle keys that fill their full grid cell
           (no dead space around a small circle), matching the Paytm-style
           reference and the same change made to AmountKeypad. Biometric key
           (when available) fills the grid's empty bottom-left cell instead
-          of sitting in a separate button above — tap it to try again after
+          of sitting in a separate button above - tap it to try again after
           the automatic prompt was cancelled or failed. */}
       <div className="grid grid-cols-3 gap-2.5 max-w-[320px] mx-auto">
         {KEYS.map((key, i) => {

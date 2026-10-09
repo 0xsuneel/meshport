@@ -64,7 +64,7 @@ import { sheetDrag } from '@/lib/sheetDrag'
 import { SkeletonRows, SkeletonChat } from '@/components/ui/Skeleton'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 
-// ─── Hidden chats helpers — wallet-scoped so Wallet A hidden chats never bleed into Wallet B
+// ─── Hidden chats helpers - wallet-scoped so Wallet A hidden chats never bleed into Wallet B
 // Chat pay sheets (phone): closing slides the sheet down; moving to the
 // other pay step leaves at once, so the sheet's content just swaps in place.
 const PAY_SHEET_LEAVE = {
@@ -76,20 +76,20 @@ function hiddenKey(addr: string | null) {
 }
 
 // Module-level cache
-// Module-level cache — survives navigation, cleared on logout
+// Module-level cache - survives navigation, cleared on logout
 let _cachedConversations: DbConversation[] = []
 let _cacheLoadedForUser: string | null = null
 
 // Instantly zero out a conversation's unread badge in the shared cache the
 // moment its thread is opened, so if the user backs out to the chat list
-// right away the badge is already gone — no waiting on a realtime round trip.
+// right away the badge is already gone - no waiting on a realtime round trip.
 function markConversationReadLocally(conversationId: string): number {
   let cleared = 0
   _cachedConversations = _cachedConversations.map(c => {
     if (c.id === conversationId && (c.unread_count || 0) > 0) {
       cleared = c.unread_count || 0
       // Remember that this conversation was just read, and as-of which
-      // last_message_at — see _readOverrides below for why.
+      // last_message_at - see _readOverrides below for why.
       _readOverrides[conversationId] = {
         since: c.last_message_at ? new Date(c.last_message_at).getTime() : Date.now(),
         expiresAt: Date.now() + 5000,
@@ -102,14 +102,14 @@ function markConversationReadLocally(conversationId: string): number {
 }
 
 // ChatListPage always does a fresh server refetch on mount (see the
-// invalidateConversationsCache() + loadConversations() call below) — that's
+// invalidateConversationsCache() + loadConversations() call below) - that's
 // correct in general (something could've changed while the page wasn't
 // mounted), but it used to race the *deliberately delayed* markRead() DB
 // write (see ChatConversationPage: markRead only fires ~1.2s after opening a
 // thread, on purpose, so a quick glance-and-leave doesn't count as "read").
 // If you backed out to the list within that window, the refetch would
 // overwrite the just-cleared badge with the still-unread count from the DB,
-// and it'd only flip back to 0 once the delayed write finally landed —
+// and it'd only flip back to 0 once the delayed write finally landed -
 // a visible flicker instead of staying instantly read, like WhatsApp does.
 //
 // This map remembers "conversation X was just read locally, as of
@@ -128,7 +128,7 @@ function applyReadOverrides(convs: DbConversation[]): DbConversation[] {
     if (!ov) return c
     if (now > ov.expiresAt) { delete _readOverrides[c.id]; return c }
     const lastMsgTime = c.last_message_at ? new Date(c.last_message_at).getTime() : 0
-    if (lastMsgTime > ov.since) { delete _readOverrides[c.id]; return c } // genuine new activity — trust the server
+    if (lastMsgTime > ov.since) { delete _readOverrides[c.id]; return c } // genuine new activity - trust the server
     if (!c.unread_count) { delete _readOverrides[c.id]; return c } // server has confirmed the read already
     return { ...c, unread_count: 0 }
   })
@@ -138,26 +138,26 @@ const _cachedOtherUser: Record<string, any> = {}
 
 // ─── Linkify plain-text message content ───────────────────────────────────────
 // Message bubbles previously rendered raw text content directly (see the
-// final `: msg.content` fallback in MessageBubble below) — a pasted URL was
+// final `: msg.content` fallback in MessageBubble below) - a pasted URL was
 // just inert text: not underlined, not tappable, no way to open it, and
 // worse, the WHOLE bubble has onTouchStart wired to a long-press handler
 // (for the Forward/Delete/Copy context menu) with userSelect: 'none', so a
 // tap on what LOOKED like a link either did nothing or triggered that
-// context menu instead — reported as a shared link "going outside the
+// context menu instead - reported as a shared link "going outside the
 // conversation" instead of opening. This finds URLs in the text and wraps
 // each one in a real, tappable <a> (opens in a new tab, matching WhatsApp's
-// own link behavior — the app itself is never navigated away from), with
+// own link behavior - the app itself is never navigated away from), with
 // event propagation stopped so a tap on the link can't also trigger the
 // bubble's long-press/selection handling.
 const URL_PATTERN = /(https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+\.[a-z]{2,}[^\s<>"')\]]*)/gi
 
 export function linkifyText(text: string, isMine: boolean): ReactNode {
   const parts = text.split(URL_PATTERN)
-  if (parts.length === 1) return text // no URL found — plain text, unchanged
+  if (parts.length === 1) return text // no URL found - plain text, unchanged
 
   // `split` with a single-capturing-group regex interleaves the captured
   // matches into the result at ODD indices (0: text, 1: match, 2: text,
-  // 3: match, ...) — using that directly, rather than re-testing each part
+  // 3: match, ...) - using that directly, rather than re-testing each part
   // against the same global regex object, sidesteps the regex's own
   // stateful `lastIndex` (which a repeated `.test()` call would otherwise
   // have to carefully reset between parts, and is easy to get wrong).
@@ -192,12 +192,12 @@ export function linkifyText(text: string, isMine: boolean): ReactNode {
 // user object is already on hand before navigating into a chat) warm this
 // cache BEFORE the conversation screen ever mounts. Previously this cache
 // was only ever written from inside ChatPage.tsx itself, after a
-// conversation had already been opened once — meaning the very first time
+// conversation had already been opened once - meaning the very first time
 // you opened a chat via any of those other entry points (not the Chats
 // list itself), there was nothing to read yet and the header still
 // flickered in, even after messages/otherUser were made cache-aware.
 // Last-known other person per conversation, kept in localStorage (public
-// profile fields only — never email) so a chat's header is ready on the
+// profile fields only - never email) so a chat's header is ready on the
 // first paint even when the in-memory caches are empty (reload, deep link).
 const PEER_KEY = (convId: string) => `meshport_chat_peer_${convId}`
 function readStoredPeer(convId: string): any {
@@ -217,7 +217,7 @@ export function cacheOtherUser(userId: string, userData: any) {
 // tell whether a chat was hidden *before* new activity happened on it (e.g. a
 // payment arriving while the Chats tab wasn't open) and auto-restore it. A
 // plain id list can't distinguish "still deserves to be hidden" from
-// "something new came in after I hid this" — which used to leave a chat
+// "something new came in after I hid this" - which used to leave a chat
 // permanently hidden even after a fresh payment/message came in, since the
 // live auto-restore subscription only fires while the Chats page is mounted.
 function getHiddenChatsMap(addr: string | null): Record<string, string> {
@@ -246,12 +246,12 @@ function unhideChat(convId: string, addr: string | null) {
 }
 
 // ─── ChatPay token display helpers ──────────────────────────────────────────
-// USDC/EURC are both ~$1-pegged, so 3 decimals used to read fine — but that
+// USDC/EURC are both ~$1-pegged, so 3 decimals used to read fine - but that
 // cap also silently rounded away dust-size ChatPay amounts (e.g. a real
 // 0.000004 USDC payment showed as "$0" on the payment card and in history).
 // Now that formatAmount (lib/utils.ts) trims trailing zeros on every
 // display, there's no downside to using full 8-decimal precision for every
-// token — a normal "5 USDC" still renders as "5" — so this now matches
+// token - a normal "5 USDC" still renders as "5" - so this now matches
 // AmountKeypad.tsx's decimalCap and PaySendPage.tsx's tokenDisplayDecimals
 // (both also raised to 8 for every token).
 export type ChatPayToken = 'USDC' | 'EURC' | 'cirBTC'
@@ -267,9 +267,9 @@ export function chatPayTokenIconBg(t: ChatPayToken): string {
 }
 
 // ─── Chat List ─────────────────────────────────────────────────────────────────
-// ─── Conversation list preview text — decrypts before classifying ───────────
+// ─── Conversation list preview text - decrypts before classifying ───────────
 // Same classification/transform logic the inline IIFE used to run
-// synchronously on conv.last_message — now async because that value may be
+// synchronously on conv.last_message - now async because that value may be
 // E2E-encrypted ciphertext (see chatCrypto.ts) that has to be decrypted
 // first. A tiny standalone component (not a plain function) so it can hold
 // its own decrypt-in-progress state via useEffect, the same reason
@@ -291,7 +291,7 @@ export function formatPaymentMessagePreview(msg: string, opts: {
   const { isSelfChat, uname, myId, lastMessageSender, myUsername } = opts
 
   // A bill / order payment carries a trailing " · Order #ORD-100001" (older
-  // ones " · Bill #ABC123") — rewrite the
+  // ones " · Bill #ABC123") - rewrite the
   // payment part as usual and put the bill tag back on the end.
   const billTag = / · (?:Bill|Order) #[A-Z0-9-]{6,20}$/.exec(msg)
   if (billTag) {
@@ -310,7 +310,7 @@ export function formatPaymentMessagePreview(msg: string, opts: {
   // Self-chat: "sent to sunil.arc" and "received from
   // sunil.arc" are both literally true at once (the
   // raw stored content is your own username either
-  // way — see the trueSender comment in
+  // way - see the trueSender comment in
   // fetchConversations, supabase.ts). Showing your
   // own username as if it were a separate recipient
   // reads like you're chatting with someone else,
@@ -323,7 +323,7 @@ export function formatPaymentMessagePreview(msg: string, opts: {
   // Strategy 1: use last_message_sender if available (new records)
   if (lastMessageSender) {
     if (lastMessageSender === myId) {
-      // I sent it — keep message unchanged
+      // I sent it - keep message unchanged
       return msg
     }
     // Someone else sent it → I received it
@@ -336,11 +336,11 @@ export function formatPaymentMessagePreview(msg: string, opts: {
   const recipient = (toMatch?.[1] || '').toLowerCase()
 
   if (myUsername && recipient && recipient === myUsername) {
-    // Message says "Sent X to ME.arc" — so they sent it, I received it
+    // Message says "Sent X to ME.arc" - so they sent it, I received it
     return msg.replace(/^Sent /, 'Received ').replace(/ to [\S]+$/, ` from ${uname}.arc`)
   }
 
-  // Recipient is someone else — I sent it, keep unchanged
+  // Recipient is someone else - I sent it, keep unchanged
   return msg
 }
 
@@ -349,7 +349,7 @@ function ConversationPreview({ conv, isSelfChat, uname, userId }: {
 }) {
   const raw = conv.last_message || (isSelfChat ? 'You' : `${uname}.arc`)
   const [msg, setMsg] = useState<string>(() => (isEncryptedPayload(raw) ? raw : raw))
-  // Reactive, not getState() — same fix as ChatPage's convKey effect below:
+  // Reactive, not getState() - same fix as ChatPage's convKey effect below:
   // reading walletAddress once via getState() meant the preview got stuck
   // on the "🔒 New message" fallback for good if the Chats list rendered
   // before the wallet address finished loading, since nothing re-ran the
@@ -369,7 +369,7 @@ function ConversationPreview({ conv, isSelfChat, uname, userId }: {
     return () => { cancelled = true }
   }, [raw, conv.other_user?.id, walletAddress, walletKeyReady])
 
-  // Image/file messages store a raw markdown-style URL — show a clean label instead
+  // Image/file messages store a raw markdown-style URL - show a clean label instead
   const previewCaption = splitCaption(msg).caption
   if (msg.startsWith('[IMAGE](') || msg.startsWith('[IMAGE-E:')) return <>📷 {previewCaption || 'Photo'}</>
   if (msg.startsWith('[FILE:') || msg.startsWith('[FILE-E:')) {
@@ -493,7 +493,7 @@ export function ChatListPage() {
   useEffect(() => {
     if (!user?.id) return
     // Belt-and-suspenders alongside the nav badge's own cache invalidation
-    // (see BottomNav.tsx) — every fresh mount of this page should be a
+    // (see BottomNav.tsx) - every fresh mount of this page should be a
     // genuinely current read, since anything could have changed while this
     // page wasn't mounted at all (e.g. a message arrived while you were on
     // Home) and there's no guarantee some other listener already busted
@@ -505,19 +505,19 @@ export function ChatListPage() {
       .on('postgres_changes', { event: 'INSERT',  schema: 'public', table: 'messages' }, () => { invalidateConversationsCache(); loadConversations() })
       // BUG FIX (desktop chat-list flicker): this used to unconditionally
       // invalidateConversationsCache() + loadConversations() on EVERY
-      // messages UPDATE — including the read-receipt write that fires the
+      // messages UPDATE - including the read-receipt write that fires the
       // instant you open a chat (see ChatConversationPage's markRead call).
       // On mobile that full-list refetch happens off-screen, since the list
       // isn't visible while a conversation is open, so it was never
       // noticed. On desktop (ChatDesktopSplit) the list stays visible the
       // whole time in the persistent left column, so opening ANY chat
       // visibly reloaded and re-rendered the entire list right next to it
-      // — i.e. clicking a chat card also changed the "user cards column",
+      // - i.e. clicking a chat card also changed the "user cards column",
       // when only the right-side conversation pane should have changed.
       // A read-receipt update only ever needs to clear ONE conversation's
       // unread badge, so do that directly in local state (same pattern as
       // markConversationReadLocally above) instead of round-tripping the
-      // whole list through the network. Any other messages UPDATE (rare —
+      // whole list through the network. Any other messages UPDATE (rare -
       // e.g. a future edit/delete flag) still falls back to the original
       // full refetch, so nothing besides this one common case changes.
       .on('postgres_changes', { event: 'UPDATE',  schema: 'public', table: 'messages' }, (payload: any) => {
@@ -538,7 +538,7 @@ export function ChatListPage() {
       // Re-fetch conversations when any user profile updates (avatar, display name)
       .on('postgres_changes', { event: 'UPDATE',  schema: 'public', table: 'users' },    () => { invalidateConversationsCache(); loadConversations() }),
       // Catch up on anything missed during a drop (a message that arrived
-      // while the socket was down) the moment the connection comes back —
+      // while the socket was down) the moment the connection comes back -
       // without this, the list wouldn't refresh again until the next
       // unrelated change event happened to fire.
       { onReconnect: () => { invalidateConversationsCache(); loadConversations() } },
@@ -555,7 +555,7 @@ export function ChatListPage() {
     const hiddenMap = getHiddenChatsMap(chatWalletAddr)
     // A conversation stays hidden only if nothing has happened on it since it
     // was hidden. If a payment or message landed afterwards (last_message_at
-    // is newer than the hide timestamp), surface it again automatically —
+    // is newer than the hide timestamp), surface it again automatically -
     // this is what makes a payment from a previously-removed contact show up
     // in Chats even if this page wasn't open when it arrived.
     let hiddenChanged = false
@@ -573,11 +573,11 @@ export function ChatListPage() {
     setConversations(filtered)
     setLoading(false)
 
-    // ── Background prefetch — the reason opening a chat previously always
+    // ── Background prefetch - the reason opening a chat previously always
     // showed a spinner ──────────────────────────────────────────────────
     // There was already a small prefetch trick on each row (onTouchStart
     // kicked off loadMessages a beat before the tap registered), but that
-    // only gives ~100ms head start — nowhere near enough time for a full
+    // only gives ~100ms head start - nowhere near enough time for a full
     // network round trip, so the spinner still showed almost every time.
     // WhatsApp/Telegram feel instant because they preload chats
     // *proactively* the moment the list itself loads, not *reactively*
@@ -593,7 +593,7 @@ export function ChatListPage() {
     })
   }, [user?.id, chatWalletAddr])
 
-  // This session was just linked to the account — conversations that the
+  // This session was just linked to the account - conversations that the
   // database hid before the link are readable now.
   useEffect(() => {
     const on = () => { invalidateConversationsCache(); loadConversations() }
@@ -610,7 +610,7 @@ export function ChatListPage() {
         if (!msg?.conversation_id) return
         const hidden = getHiddenChats(chatWalletAddr)
         if (hidden.has(msg.conversation_id)) {
-          // Fully restore the conversation — unhide and reload
+          // Fully restore the conversation - unhide and reload
           unhideChat(msg.conversation_id, chatWalletAddr)
           invalidateConversationsCache()
           await loadConversations()
@@ -620,7 +620,7 @@ export function ChatListPage() {
     return unsubscribe
   }, [user?.id])
 
-  // Search users to start new chat — exact .arc match only
+  // Search users to start new chat - exact .arc match only
   useEffect(() => {
     const q = newChatSearch.trim()
     if (!q) { setSearchResults([]); return }
@@ -628,7 +628,7 @@ export function ChatListPage() {
     if (!q.toLowerCase().endsWith('.arc')) { setSearchResults([]); return }
     setSearching(true)
     const timer = setTimeout(() => {
-      // Pass full "username.arc" — searchUsersDb handles exact match
+      // Pass full "username.arc" - searchUsersDb handles exact match
       searchUsersDb(q, user?.id).then(results => {
         setSearchResults(results)
         setSearching(false)
@@ -648,9 +648,9 @@ export function ChatListPage() {
     return () => clearTimeout(timer)
   }, [addContactSearch, user?.id])
 
-  // Load contacts on mount — saved contacts + anyone with a conversation, merged & sorted A-Z, excluding removed.
+  // Load contacts on mount - saved contacts + anyone with a conversation, merged & sorted A-Z, excluding removed.
   // Reuses the `conversations` state the main chat list already loads (and
-  // keeps live via realtime) instead of calling fetchConversations again —
+  // keeps live via realtime) instead of calling fetchConversations again -
   // that duplicate call was firing the same expensive batched query twice
   // on every single Chats page load, which is what made the contacts sheet
   // feel slow to open: it was waiting on a second, entirely redundant fetch.
@@ -711,14 +711,14 @@ export function ChatListPage() {
     setOpeningId(otherId)
     try {
       const convId = await ensureConversation(user.id, otherId)
-      if (!convId) { useUIStore.getState().showToastMessage("Couldn't open this chat — try again", 'error'); return }
+      if (!convId) { useUIStore.getState().showToastMessage("Couldn't open this chat - try again", 'error'); return }
       open(convId)
     } finally {
       setOpeningId(null)
     }
   }
 
-  // Saves someone as a contact and opens their chat straight away — the save
+  // Saves someone as a contact and opens their chat straight away - the save
   // runs alongside, it doesn't hold up opening the conversation.
   const addAndChat = (u: DbUser) => {
     if (!user?.id) return
@@ -819,14 +819,14 @@ export function ChatListPage() {
         <div className="pb-4">
           {filtered.map((conv, idx) => {
             // A self-conversation (paying/messaging your own username) has
-            // conv.other_user resolved to your OWN user record — see
+            // conv.other_user resolved to your OWN user record - see
             // fetchConversations's otherIdByConv in supabase.ts, which
             // returns participant_b when participant_a === myId, and in a
             // self-chat participant_b === myId too. Showing your own real
             // name/username here reads as if you were chatting with a
-            // separate contact, which is exactly what this card is not —
+            // separate contact, which is exactly what this card is not -
             // "You" matches the self-transfer labeling already used
-            // everywhere else in the app (Contacts, Send, Activity list —
+            // everywhere else in the app (Contacts, Send, Activity list -
             // see BulkPayoutPage.tsx's own comment on this same
             // convention).
             const isSelfChat = !!(user?.id && conv.other_user?.id === user.id)
@@ -844,14 +844,14 @@ export function ChatListPage() {
                 ? d.toLocaleDateString([], {month:'short',day:'numeric'})
                 : d.toLocaleDateString([], {month:'short',day:'numeric',year:'2-digit'})
             return (
-              // Plain <button>, not motion.button with a mount fade-in —
+              // Plain <button>, not motion.button with a mount fade-in -
               // ChatDesktopSplit already keeps this whole list mounted as a
               // stable element separate from the conversation panel (which
               // lives behind its own <Outlet/>), so switching between
               // conversations never remounts these rows in the first place.
               // The fade only ever risked replaying visibly if this list
               // ever re-renders for an unrelated reason (e.g. a read-status
-              // resort) — removing it entirely guarantees the cards never
+              // resort) - removing it entirely guarantees the cards never
               // animate on their own, only the conversation panel changes.
               <button key={conv.id}
                 onClick={() => navigate(`/chat/${conv.id}`)}
@@ -865,7 +865,7 @@ export function ChatListPage() {
                 onContextMenu={e => e.preventDefault()}
                 className="flex items-center gap-3 px-4 py-3 w-full active:bg-[rgb(var(--text-primary-rgb)/0.05)] transition-colors"
                 style={{ borderBottom: idx < filtered.length-1 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'none' }}>
-                {/* Avatar — tap to open profile */}
+                {/* Avatar - tap to open profile */}
                 <div className="relative flex-shrink-0"
                   onClick={e => { e.stopPropagation(); setProfileConv(conv) }}>
                   <Avatar name={name} src={conv.other_user?.avatar_url} size="lg" className="!w-[52px] !h-[52px]" />
@@ -1081,12 +1081,12 @@ const UnreadDivider = memo(function UnreadDivider({ count }: { count: number }) 
 
 // ─── Decrypted image bubble ──────────────────────────────────────────────────
 // A plaintext [IMAGE](url) can just be an <img src>. An encrypted one
-// [IMAGE-E:iv](url) points at ciphertext bytes at that URL — this fetches
+// [IMAGE-E:iv](url) points at ciphertext bytes at that URL - this fetches
 // them, decrypts with the conversation key, and renders an object URL
 // instead. Its own small component (not inlined in MessageBubble) so the
 // fetch+decrypt only re-runs when THIS image's url/iv actually change, not
 // on every unrelated re-render of the message list.
-/** "Not encrypted" next to a message's time — open lock + label. */
+/** "Not encrypted" next to a message's time - open lock + label. */
 function NotEncryptedTag({ light }: { light?: boolean }) {
   return (
     <span title="Sent without end-to-end encryption" aria-label="Not encrypted"
@@ -1166,9 +1166,9 @@ function EncryptedImage({ url, ivBase64, convKey, isLastInGroup, isMine, onTap }
   )
 }
 
-// ─── Memoized message bubble — only re-renders if message itself changes ─────
+// ─── Memoized message bubble - only re-renders if message itself changes ─────
 // "Delete for me": message ids are unique, so one list for every chat. Older
-// builds kept a list per page address (meshport_deleted_<route id>) — those
+// builds kept a list per page address (meshport_deleted_<route id>) - those
 // are still read, so nothing deleted earlier comes back.
 const DELETED_FOR_ME_KEY = 'meshport_deleted_msgs'
 function deletedForMe(): Set<string> {
@@ -1289,12 +1289,12 @@ const MessageBubble = memo(function MessageBubble({
   recipientClean: string, userId: string,
   onImageTap: (src: string, msgId?: string) => void
   convKey: any
-  // Stable, unbound callbacks — msg/isMine are passed as call arguments
+  // Stable, unbound callbacks - msg/isMine are passed as call arguments
   // from inside this already-memoized component instead of the parent
   // pre-binding a fresh closure per message on every single render. That
   // pre-binding is what previously defeated memo() entirely: a new
   // function reference on every prop is, by React's shallow comparison,
-  // indistinguishable from "this message actually changed" — so every
+  // indistinguishable from "this message actually changed" - so every
   // bubble re-rendered on every keystroke in the composer, every unrelated
   // state change anywhere in the parent, etc.
   onLongPress?: (msg: any, isMine: boolean) => void
@@ -1317,11 +1317,11 @@ const MessageBubble = memo(function MessageBubble({
 
   // ── E2E decryption ──────────────────────────────────────────────────────
   // Every other prefix check below (`[IMAGE](`, `[FILE:`, etc.) has to run
-  // against the DECRYPTED string, not the raw ciphertext — a ciphertext
+  // against the DECRYPTED string, not the raw ciphertext - a ciphertext
   // blob obviously never matches any of those literal prefixes, which
   // would otherwise make every encrypted image/file silently fall through
   // to the plain-text rendering branch as a wall of base64. Legacy
-  // plaintext (no e2e:v1: prefix — every message sent before this
+  // plaintext (no e2e:v1: prefix - every message sent before this
   // feature existed) resolves instantly with no async delay at all.
   const [decryptedContent, setDecryptedContent] = useState<string>(() =>
     (isDeleted || !isEncryptedPayload(msg.content)) ? msg.content : (_plainByContent.get(msg.content) ?? '')
@@ -1330,11 +1330,11 @@ const MessageBubble = memo(function MessageBubble({
     if (isDeleted || !isEncryptedPayload(msg.content)) { setDecryptedContent(msg.content); return }
     const cached = _plainByContent.get(msg.content)
     if (cached != null) { setDecryptedContent(cached); return }
-    // Key still unlocking (e.g. just after a refresh) — not a failure.
+    // Key still unlocking (e.g. just after a refresh) - not a failure.
     if (convKey === undefined) { setDecryptedContent('🔒 Decrypting…'); return }
     let cancelled = false
     decryptText(msg.content, convKey).then(d => {
-      // Only a real decrypt is remembered — "unable to decrypt" (wallet key
+      // Only a real decrypt is remembered - "unable to decrypt" (wallet key
       // not unlocked yet on this device) must be retried once the key is ready.
       if (!isDecryptFailure(d)) _plainByContent.set(msg.content, d)
       if (!cancelled) setDecryptedContent(d)
@@ -1343,7 +1343,7 @@ const MessageBubble = memo(function MessageBubble({
   }, [msg.content, convKey, isDeleted])
 
   const content = decryptedContent
-  // Bills / payment requests are payment records — never deletable (the
+  // Bills / payment requests are payment records - never deletable (the
   // content is only readable after decryption, so the check lives here).
   const isPaymentRecord = !!codeFromLink(content)
   // Bill / request / shared payment link: the card fills the bubble, which
@@ -1358,7 +1358,7 @@ const MessageBubble = memo(function MessageBubble({
   // Mine, sealed for me only until they sign in (e2e:q2).
   const waitingForThem = isMine && !isDeleted && !!msg.content && isWaitingPayload(msg.content)
   const handleLongPressStart = () => { if (!isPaymentRecord) onLongPress?.(msg, isMine) }
-  // A long-press only counts if the finger stays put — scrolling never selects.
+  // A long-press only counts if the finger stays put - scrolling never selects.
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   // Swipe right to reply (WhatsApp): only a clearly sideways drag counts, so
   // scrolling is never hijacked; past 56px, letting go replies.
@@ -1422,7 +1422,7 @@ const MessageBubble = memo(function MessageBubble({
   const isEncryptedFile  = mediaContent.startsWith('[FILE-E:')
   const plainImageUrl = /^\[IMAGE\]\(.+\)$/.test(mediaContent) ? mediaContent.slice(8, -1) : null
   const encImageMatch = isEncryptedImage ? mediaContent.match(/^\[IMAGE-E:(.+?)\]\((.+)\)$/) : null
-  // [FILE-E:name:iv](url) — the iv (base64, no ':') is the LAST segment, so a
+  // [FILE-E:name:iv](url) - the iv (base64, no ':') is the LAST segment, so a
   // name containing ':' still parses. New names are URI-encoded when sent.
   const fileMatch = isEncryptedFile
     ? mediaContent.match(/^\[FILE-E:(.+):([^:\]]+)\]\((.+)\)$/)
@@ -1431,7 +1431,7 @@ const MessageBubble = memo(function MessageBubble({
 
   return (
     <motion.div key={msg.id} id={`msg-${msg.id}`} className={isFirstInGroup ? 'mt-3' : 'mt-1'}
-      // Only genuinely new live-arrival messages animate in — the initial
+      // Only genuinely new live-arrival messages animate in - the initial
       // batch load and older-message pagination render with no transition
       // at all (instant, matching how they've always worked), since
       // animating all 50 initial messages in would look like an odd
@@ -1482,7 +1482,7 @@ const MessageBubble = memo(function MessageBubble({
               </p>
             </div>
             {billRef && (
-              // Reply to the bill card this payment settles — tap to jump to it.
+              // Reply to the bill card this payment settles - tap to jump to it.
               <div onClick={e => { e.stopPropagation(); document.getElementById(billAnchor!)?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }}
                 style={{
                   margin: '7px 10px 0', padding: '4px 8px', borderRadius: 8, cursor: 'pointer',
@@ -1586,8 +1586,8 @@ const MessageBubble = memo(function MessageBubble({
                 // A MeshPort personal payment link (/paylink/<user> or older /pay/<user>, optional amount) → card.
                 const personal = parsePersonalPayLink(content)
                 if (personal) {
-                  const leftover = content.replace(personal.url, '').replace(/[\s—–-]+$/, '').trim()
-                  // Hide the default share text ("Pay me $5 USDC on MeshPort") — the card says it.
+                  const leftover = content.replace(personal.url, '').replace(/[\s-–-]+$/, '').trim()
+                  // Hide the default share text ("Pay me $5 USDC on MeshPort") - the card says it.
                   const rest = /^Pay me( \$[\d.,]+ USDC)? on MeshPort$/i.test(leftover) ? '' : leftover
                   return <><PayLinkCard link={personal} isMine={isMine} />{rest ? <div style={{ padding: '2px 8px 0', maxWidth: cardInnerWidth(isMine) }}>{linkifyText(rest, isMine)}</div> : null}</>
                 }
@@ -1620,7 +1620,7 @@ const MessageBubble = memo(function MessageBubble({
 
 // Long-press on a whole group selects all of it (shared by album + files).
 // Long-press on a whole group selects all of it; swiping it right replies to
-// it (like a single message) — shared by the album and the files bubble.
+// it (like a single message) - shared by the album and the files bubble.
 function useGroupLongPress(msgs: any[], onSelectAll: (msgs: any[]) => void, onReply?: () => void) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const start = useRef<{ x: number; y: number } | null>(null)
@@ -1795,8 +1795,8 @@ const FileGroupBubble = memo(function FileGroupBubble({ msgs, isMine, convKey, o
   )
 })
 
-// ─── Reply quote body (bubble + composer bar): name, then what it was —
-// 📷 Photo / 📄 file name / text — with a thumbnail on the right (WhatsApp) ──
+// ─── Reply quote body (bubble + composer bar): name, then what it was -
+// 📷 Photo / 📄 file name / text - with a thumbnail on the right (WhatsApp) ──
 function QuoteBody({ quoted, name, nameColor, textColor, convKey }: {
   quoted: any | null; name: string; nameColor: string; textColor: string; convKey: any
 }) {
@@ -1823,11 +1823,11 @@ function QuoteBody({ quoted, name, nameColor, textColor, convKey }: {
   )
 }
 
-// ─── Chat wallpaper — WhatsApp/Telegram-style tiled doodle background ──────────
+// ─── Chat wallpaper - WhatsApp/Telegram-style tiled doodle background ──────────
 // Payments-app take on the pattern: crypto coin, food and merchant line icons,
 // scattered and rotated, tinted with the app's own brand color so it reads as
 // MeshPort-branded rather than generic gray doodles. Real inline SVG (not a
-// CSS data-URI background-image) so it can reference var(--brand) directly —
+// CSS data-URI background-image) so it can reference var(--brand) directly -
 // one pattern definition, automatically correct in both light and dark mode,
 // no separate theme-specific assets to keep in sync. useId() keeps the
 // <pattern> id collision-free if this ever mounts more than once (e.g. a
@@ -1972,7 +1972,7 @@ function ChatWallpaper() {
             <path d="M0 -11l9.5 5.5v11L0 11l-9.5 -5.5v-11z" stroke={c} strokeWidth="1.2" fill="none" strokeLinejoin="round" />
             <text x="0" y="4" fontSize="8" textAnchor="middle" fill={c} fontFamily="sans-serif" fontWeight="700">NFT</text>
           </g>
-          {/* Scattered tiny accents — small crosses/dots for texture, matching
+          {/* Scattered tiny accents - small crosses/dots for texture, matching
               the reference image's busier confetti-like scattering between
               the main icons. */}
           <g stroke={c} strokeWidth="1.1" strokeLinecap="round" opacity="0.13">
@@ -2006,7 +2006,7 @@ export function ChatConversationPage() {
   const storedPasscode = useAuthStore(s => s.passcode)
   const { showToastMessage } = useUIStore()
   const { balance, setBalance } = useWalletStore()
-  // Desktop users type on a physical keyboard — the pay-flow's inline
+  // Desktop users type on a physical keyboard - the pay-flow's inline
   // tap-grid below is a mobile-only affordance.
   const isDesktop = useMediaQuery('(min-width: 980px)')
 
@@ -2015,7 +2015,7 @@ export function ChatConversationPage() {
   // Cache-first init for the header identity, same reasoning as messages
   // below: _cachedConversations (populated the moment the Chats list loads,
   // well before this component ever mounts) already carries each
-  // conversation's full other_user object — avatar, username, display
+  // conversation's full other_user object - avatar, username, display
   // name, all of it. Previously otherUser always started as null and only
   // got set inside the async setupConversation() effect, which is exactly
   // why the avatar/name/header visibly popped in after a delay instead of
@@ -2031,14 +2031,14 @@ export function ChatConversationPage() {
     return deleted.size ? _initMsgs.filter(m => !deleted.has(m.id)) : _initMsgs
   })
   const [otherUser, setOtherUser] = useState<any>(_findCachedOtherUser)
-  // Remember this chat's header identity on the device, so reopening it —
-  // even after a reload or from a notification — paints the name and avatar
+  // Remember this chat's header identity on the device, so reopening it -
+  // even after a reload or from a notification - paints the name and avatar
   // on the very first frame instead of a bare ".arc" that fills in later.
   useEffect(() => { if (id && otherUser?.id) storePeer(id, otherUser) }, [id, otherUser])
-  // E2E encryption — the AES key shared with `otherUser`, derived from their
+  // E2E encryption - the AES key shared with `otherUser`, derived from their
   // public key + this device's own private key (see chatCrypto.ts). Stays
   // null (meaning "send/display as plaintext") until otherUser is known AND
-  // both sides have a chat_public_key on file — see getConversationKey's
+  // both sides have a chat_public_key on file - see getConversationKey's
   // own comment on why that's a safe, non-blocking fallback rather than an
   // error state.
   const [convKey, setConvKey] = useState<any>(null)
@@ -2047,17 +2047,17 @@ export function ChatConversationPage() {
   // Which conversation partner convKey was resolved for (null key is a valid
   // "no E2E yet" answer, so readiness is tracked separately).
   const [convKeyFor, setConvKeyFor] = useState<string | null>(null)
-  // Reactive, not getState() — this used to read walletAddress once via
+  // Reactive, not getState() - this used to read walletAddress once via
   // getState() with only otherUser?.id in the dependency array. If the chat
   // page opened before the wallet address had finished loading (a real race
   // on cold app start / fresh login), this bailed to convKey=null and never
   // ran again for this conversation once the address DID become available a
-  // moment later, since walletAddress wasn't a dependency — every message
+  // moment later, since walletAddress wasn't a dependency - every message
   // was then stuck showing the "unable to decrypt on this device" fallback
   // for the rest of that chat session, even though the key was derivable
   // moments after the page opened.
   const walletAddress = useAuthStore((s) => s.walletAddress)
-  // The wallet key can unlock after the chat opens (passcode, restore) —
+  // The wallet key can unlock after the chat opens (passcode, restore) -
   // the conversation key is derived from it, so derive again then.
   const walletKeyReady = useAuthStore((s) => !!s.privateKey)
   // The key counts as final once it's found, or once it was looked up with
@@ -2102,7 +2102,7 @@ export function ChatConversationPage() {
       setKeyNonce(n => n + 1)
     })
   }
-  // What text bubbles get: the key, null (no key — final), or undefined
+  // What text bubbles get: the key, null (no key - final), or undefined
   // (still unlocking).
   const bubbleKey = convKey || (keyFinalFor === otherUser?.id || keyWaitOver ? null : undefined)
   // The keys every send needs. Nothing is ever sent readable: without a chat
@@ -2131,7 +2131,7 @@ export function ChatConversationPage() {
   const [loading, setLoading] = useState(true)
   const [showAttach, setShowAttach] = useState(false)
   const [attachMode, setAttachMode] = useState<'attachments' | 'bill'>('attachments')
-  // Merchants: "Bill" in the attach menu — build a bill and send it here.
+  // Merchants: "Bill" in the attach menu - build a bill and send it here.
   const merchant = useMerchant()
   const [showBill, setShowBill] = useState(false)
   const [deleteMsg, setDeleteMsg] = useState<any | null>(null)
@@ -2175,15 +2175,15 @@ export function ChatConversationPage() {
   }, [])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesAreaRef = useRef<HTMLDivElement>(null)
-  // The first unread message for THIS open of the conversation — set once,
+  // The first unread message for THIS open of the conversation - set once,
   // right when messages are fetched (using their real is_read/sender_id at
   // that moment, before markRead() has a chance to flip them server-side).
   // Cleared after its one-time use so it never affects later scroll
   // behavior (sending a message, a new message arriving live, etc. should
-  // always still go straight to the bottom — only the very first landing
+  // always still go straight to the bottom - only the very first landing
   // spot on open should target unread messages, matching WhatsApp/Telegram).
   const firstUnreadIdRef = useRef<string | null>(_initFirstUnreadId)
-  // Timestamp-based fallback anchor — the dedup pass below can legitimately
+  // Timestamp-based fallback anchor - the dedup pass below can legitimately
   // drop the exact message firstUnreadIdRef points to (echo payment rows
   // the other side shouldn't see, content-based duplicate detection, etc),
   // which would silently mean the "Unread Messages" divider never renders
@@ -2193,7 +2193,7 @@ export function ChatConversationPage() {
   const _initFirstUnreadAt = _initFirstUnreadId ? (_initMsgs.find(m => m.id === _initFirstUnreadId)?.created_at || null) : null
   const firstUnreadAtRef = useRef<string | null>(_initFirstUnreadAt)
   // Only show the divider once there are genuinely a few unread messages to
-  // review — a single unread message doesn't need a "catch up on this"
+  // review - a single unread message doesn't need a "catch up on this"
   // banner, same as WhatsApp not bothering for just one either.
   const _initUnreadCount = user?.id ? _initMsgs.filter(m => !m.is_read && m.sender_id !== user.id).length : 0
   const unreadCountRef = useRef<number>(_initUnreadCount)
@@ -2202,23 +2202,23 @@ export function ChatConversationPage() {
   // this file (BottomNav's realtime listener busts it on every new
   // message, ChatListPage always refetches on mount). If the list says
   // there ARE unread messages here but this messages cache says zero,
-  // this specific cache is stale about read status — its "confidently
+  // this specific cache is stale about read status - its "confidently
   // zero unread, safe to scroll to bottom" conclusion can't be trusted.
   // Without this check, that wrong-but-confident guess would render
   // immediately (scrolled to bottom), then get corrected a moment later
-  // once the fresh fetch reveals the real unread messages — a visible
+  // once the fresh fetch reveals the real unread messages - a visible
   // jump/flicker right as the conversation opens, which is exactly what
   // was being reported.
   const _cachedConvUnread = _cachedConversations.find(c => c.id === id)?.unread_count ?? 0
   const _cacheUnreadUncertain = _initUnreadCount === 0 && _cachedConvUnread > 0
-  // Controls the divider's exit animation — stays visible for a beat after
+  // Controls the divider's exit animation - stays visible for a beat after
   // opening so it's actually seen, then fades out smoothly once the
   // messages it's marking are genuinely read (not the instant data loads,
   // which is what "is_read" flipping alone would otherwise imply).
   const [dividerDismissed, setDividerDismissed] = useState(false)
   // Guards against double-positioning: both the cache layout effect and the
   // fresh-fetch finally-block can each try to set the initial scroll
-  // position, but only the first one to actually run should do anything —
+  // position, but only the first one to actually run should do anything -
   // otherwise a fresh fetch resolving shortly after the cached content was
   // already correctly positioned would cause a second, unwanted jump.
   const hasPositionedInitialScrollRef = useRef(false)
@@ -2230,7 +2230,7 @@ export function ChatConversationPage() {
   }
   const isKeyboardOpen = useRef(false)
   // Cache-aware, same reasoning as `messages` above: if there's already
-  // cached content to show for this conversation, reveal it immediately —
+  // cached content to show for this conversation, reveal it immediately -
   // previously this always started false and only flipped true inside
   // scrollToBottom() after setupConversation()'s async fetch resolved
   // (plus an 80ms delay on top), which meant the message area sat
@@ -2240,22 +2240,22 @@ export function ChatConversationPage() {
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [hasMoreHistory, setHasMoreHistory] = useState(true)
 
-  // Positions the view on conversation open — lands on the first unread
+  // Positions the view on conversation open - lands on the first unread
   // message (matching WhatsApp/Telegram) if one exists, otherwise the
-  // latest message. Runs SYNCHRONOUSLY before the browser paints —
+  // latest message. Runs SYNCHRONOUSLY before the browser paints -
   // critical specifically because messagesReady can start `true` already
   // (cached messages render instantly, see above). Without this, content
-  // was visible on the very first paint but not yet positioned — the
+  // was visible on the very first paint but not yet positioned - the
   // actual scroll only happened later via a requestAnimationFrame +
-  // setTimeout chain — so the first thing anyone saw was the TOP of the
+  // setTimeout chain - so the first thing anyone saw was the TOP of the
   // cached conversation, followed by a visible jump a beat later.
   // useLayoutEffect runs after the DOM updates but before the browser
   // paints anything, so this repositions before there's ever a frame
-  // rendered at the wrong spot — same "position first, then let it be
+  // rendered at the wrong spot - same "position first, then let it be
   // seen" idea the rest of this file already uses.
   useLayoutEffect(() => {
     // Refs only take their initial value on the component's very first
-    // render — switching conversations (same component instance, just a
+    // render - switching conversations (same component instance, just a
     // different :id param) doesn't re-run that initializer, so without
     // this explicit sync these would silently keep showing the PREVIOUS
     // conversation's values. _initMsgs/_initFirstUnreadId are recomputed
@@ -2270,7 +2270,7 @@ export function ChatConversationPage() {
       const target = firstUnreadIdRef.current && document.getElementById(`msg-${firstUnreadIdRef.current}`)
       if (target && unreadCountRef.current > 0) {
         // Position the divider with a small, FIXED amount of read-message
-        // context above it — not flush at the very top, not scrolled past
+        // context above it - not flush at the very top, not scrolled past
         // it. This one rule is deliberately the same regardless of unread
         // count: with many unread messages, that small buffer is a tiny
         // fraction of the viewport, so the divider ends up effectively near
@@ -2278,10 +2278,10 @@ export function ChatConversationPage() {
         // downward through. With few unread messages, the exact same rule
         // shows the divider with a little prior context above it and the
         // (short) remainder of unread content below. Same math either way
-        // — no branching on count needed, which is exactly what "identical
+        // - no branching on count needed, which is exactly what "identical
         // regardless of whether there are 2 or 100 unread" means.
         //
-        // getBoundingClientRect, not offsetTop — offsetTop is relative to
+        // getBoundingClientRect, not offsetTop - offsetTop is relative to
         // each element's OWN nearest position:relative ancestor, which
         // isn't guaranteed to be the same for the target message and the
         // scrollable container (message bubbles have their own internal
@@ -2294,18 +2294,18 @@ export function ChatConversationPage() {
         const CONTEXT_ABOVE_DIVIDER_PX = 72 // roughly one short message bubble's worth of "peek"
         el.scrollTop = Math.max(0, el.scrollTop + (targetTop - containerTop) - CONTEXT_ABOVE_DIVIDER_PX)
         // This positioning used CONFIRMED unread data (found a real target),
-        // so it's final — no need for positionInitialView to redo it once
+        // so it's final - no need for positionInitialView to redo it once
         // the fresh fetch resolves.
         hasPositionedInitialScrollRef.current = true
       } else {
-        // No unread messages in the CACHED snapshot — open at the bottom
+        // No unread messages in the CACHED snapshot - open at the bottom
         // for now. Deliberately NOT marking this as final: the cache can be
         // stale (e.g. everything was read last visit, but new messages have
         // arrived since then that this cache doesn't know about yet). If
         // that's the case, the upcoming fresh fetch will reveal a real
         // unread count, and positionInitialView needs to actually be
         // allowed to act on it instead of finding this flag already set
-        // and skipping — which is exactly what was leaving new messages
+        // and skipping - which is exactly what was leaving new messages
         // sitting at the bottom, behind the composer, instead of properly
         // showing the divider.
         el.scrollTop = el.scrollHeight
@@ -2347,12 +2347,12 @@ export function ChatConversationPage() {
   useEffect(() => {
     if (payStep === 'confirm') import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
   }, [payStep])
-  // Broadcast but not yet confirmed — shown as "submitted", not success.
+  // Broadcast but not yet confirmed - shown as "submitted", not success.
   const [payPending, setPayPending] = useState(false)
   const payStartRef = useRef(0)
   const [elapsedSeconds, setElapsedSeconds] = useState('0.00')
   // Whether THIS payment's passcode came from a biometric check vs typed
-  // manually — same purpose/mechanism as PaySendPage's own paidViaBiometric,
+  // manually - same purpose/mechanism as PaySendPage's own paidViaBiometric,
   // see PinKeypad.tsx's own comment on why onComplete's second argument
   // exists at all.
   const [payViaBiometric, setPayViaBiometric] = useState(false)
@@ -2374,7 +2374,7 @@ export function ChatConversationPage() {
   }, [payStep])
 
   // Gates FlashAuthIcon's own bio->check swap (see that component's own
-  // comment) — flips true only once the white circle below has actually
+  // comment) - flips true only once the white circle below has actually
   // finished its spring entrance (onAnimationComplete), not on a guessed
   // timer. Reset alongside paySuccessPhase so a repeat chat payment gets
   // a fresh flash instead of starting pre-armed.
@@ -2409,7 +2409,7 @@ export function ChatConversationPage() {
   }, [paySuccessPhase])
   const chatPayInFlightRef = useRef(false)
   // RESILIENCE FIX (2026-09-17): same vulnerability as PaySendPage.tsx's
-  // own idempotencyKeyRef (see its full comment there) — ChatPay never
+  // own idempotencyKeyRef (see its full comment there) - ChatPay never
   // passed an idempotencyKey at all, so arcService.ts minted a brand new
   // random one on every single call, including retries. On a bad
   // connection, retrying after a dropped response could silently create a
@@ -2434,7 +2434,7 @@ export function ChatConversationPage() {
   }
   const startPayDeleteHold = () => {
     clearPayDeleteTimers()
-    // First character is already removed by the button's own onClick — this
+    // First character is already removed by the button's own onClick - this
     // just arms the repeat-on-hold for presses that continue past a beat,
     // so a quick tap still behaves exactly like a single delete.
     payDeleteTimeoutRef.current = setTimeout(() => {
@@ -2452,7 +2452,7 @@ export function ChatConversationPage() {
   // ChatPay feel slow. Importing them the instant the conversation page
   // mounts (before the user has even opened the pay sheet or typed a PIN)
   // means V8 has already parsed and cached all three by the time they're
-  // actually needed — the broadcast path becomes purely network-bound
+  // actually needed - the broadcast path becomes purely network-bound
   // rather than network + module-parse bound.
   // Fire-and-forget: errors silently ignored, pure warm-ups.
   useEffect(() => {
@@ -2472,12 +2472,12 @@ export function ChatConversationPage() {
   const [linkPay, setLinkPay] = useState<{ username: string; amount: string | null } | null>(null)
   const payLocked = !!billPay || !!linkPay?.amount
   // BUG FIX (2026-09-17): the confirm sheet used to hardcode "Network Fee:
-  // Free" as a static label — never computed anything, just always showed
+  // Free" as a static label - never computed anything, just always showed
   // that regardless of token. Every send has a real, if tiny, gas cost
   // (see arcService.ts's own estimateTransferFee, same helper PaySendPage.tsx
   // uses). Mirrors PaySendPage's own pattern: token-aware (EURC/cirBTC are
   // ERC-20 transfer() calls with a different, higher gas-unit assumption
-  // than a native USDC send — see estimateTransferFee's own comment).
+  // than a native USDC send - see estimateTransferFee's own comment).
   const [payEstimatedFee, setPayEstimatedFee] = useState(0)
   useEffect(() => {
     let cancelled = false
@@ -2502,7 +2502,7 @@ export function ChatConversationPage() {
   const [payTxHash, setPayTxHash] = useState('')
   const [payPassEntry, setPayPassEntry] = useState('')
 
-  // ── Pay button — static logo (no flip) ──────────────────────────────────
+  // ── Pay button - static logo (no flip) ──────────────────────────────────
 
   // ── Pending attachments (staged, uploaded only on Send) ──────────────────
   const [pendingFiles, setPendingFiles] = useState<{ id: string; file: File; previewUrl: string | null; isImage: boolean }[]>([])
@@ -2510,13 +2510,13 @@ export function ChatConversationPage() {
 
   const messageInputRef = useRef<HTMLTextAreaElement>(null)
 
-  // Auto-resize the textarea (WhatsApp-style) — grows up to ~6 lines then scrolls
+  // Auto-resize the textarea (WhatsApp-style) - grows up to ~6 lines then scrolls
   const autoResize = useCallback(() => {
     const el = messageInputRef.current
     if (!el) return
     const maxHeight = 132 // ~6 lines
     // The textarea's className has `transition-[height]` for a smooth
-    // grow/shrink animation — but that transition fights the very
+    // grow/shrink animation - but that transition fights the very
     // technique below: right after resetting height to '22px', the
     // element's own RENDERED height (mid-transition) briefly stays close
     // to whatever it was before, which inflates clientHeight and the
@@ -2538,13 +2538,13 @@ export function ChatConversationPage() {
     el.style.transition = prevTransition
   }, [])
 
-  // autoResize is now called directly in onChange — no useEffect needed (avoids re-render blink)
+  // autoResize is now called directly in onChange - no useEffect needed (avoids re-render blink)
 
   // ── Fetch messages using supabase-js (SELECT works with sb_publishable_ key) ──
   const fetchMessagesFromDB = async (conversationId: string, limit = 50): Promise<ChatMessage[]> => {
     try {
       // Fetch newest `limit` first (DESC), then reverse for display order.
-      // Defaults to 50 for the initial open — matches WhatsApp/Telegram-style
+      // Defaults to 50 for the initial open - matches WhatsApp/Telegram-style
       // lazy loading instead of pulling the entire history up front. Older
       // messages are fetched separately via loadOlderMessages() only when
       // the user actually scrolls up to them.
@@ -2592,7 +2592,7 @@ export function ChatConversationPage() {
     }
   }
 
-  // ── Lazy history — fetch the next page of OLDER messages, only called on
+  // ── Lazy history - fetch the next page of OLDER messages, only called on
   // scroll-to-top. Keeps the initial open fast (50 messages) while still
   // letting the user scroll back through full history a page at a time,
   // same pattern as WhatsApp/Telegram/Signal.
@@ -2613,12 +2613,12 @@ export function ChatConversationPage() {
     }
   }
 
-  // ── Setup conversation — always fetches fresh from Supabase ─────────────
+  // ── Setup conversation - always fetches fresh from Supabase ─────────────
   useEffect(() => {
     if (!user?.id || !id) return
     setupConversation()
   }, [id, user?.id])
-  // Session just linked to the account — reload what the database hid before.
+  // Session just linked to the account - reload what the database hid before.
   useEffect(() => {
     if (!user?.id || !id) return
     const on = () => setupConversation()
@@ -2630,7 +2630,7 @@ export function ChatConversationPage() {
   // that had no cache to show instantly (so the layout effect above never
   // got a chance to run its own positioning). If the layout effect DID
   // already position things (the cached-content path), this only handles
-  // revealing the content — never repositions a second time, which would
+  // revealing the content - never repositions a second time, which would
   // show up as an unwanted extra jump right after the first one settled.
   const positionInitialView = () => {
     requestAnimationFrame(() => {
@@ -2655,7 +2655,7 @@ export function ChatConversationPage() {
     if (!id || !user?.id) return
     setLoading(true)
     const cachedId = id.startsWith('new_') ? null : id
-    // Only hide if THIS conversation has no cache — e.g. switching from an
+    // Only hide if THIS conversation has no cache - e.g. switching from an
     // already-cached chat straight into a brand new one. If it's cached,
     // stay visible the whole time; the background fetch below will just
     // silently update in place with no visible hide/reveal at all.
@@ -2701,7 +2701,7 @@ export function ChatConversationPage() {
       } else {
         // Set convId immediately so the realtime subscription starts right
         // away, and kick off the messages fetch in parallel with the
-        // conversation-row lookup below — previously this awaited the
+        // conversation-row lookup below - previously this awaited the
         // conversation row FIRST and only started fetching messages after
         // it resolved, even though `id` (the conversation id) is already
         // known from the URL and messages don't actually need anything from
@@ -2739,20 +2739,20 @@ export function ChatConversationPage() {
       setLoading(false)
       // Lands on the first unread message if there is one (matching real
       // WhatsApp/Telegram behavior), otherwise the latest message. Not a
-      // restored absolute scroll pixel value — that approach previously
+      // restored absolute scroll pixel value - that approach previously
       // caused its own bug, since an old pixel offset stops meaning
       // anything sensible once content height changes between visits.
       setTimeout(positionInitialView, 80)
     }
   }
 
-  // ── Realtime subscription — supabase-js postgres_changes ─────────────────
+  // ── Realtime subscription - supabase-js postgres_changes ─────────────────
   // supabase-js realtime works with sb_publishable_ key (confirmed via ChatListPage)
   useEffect(() => {
     if (!conversationId || !user?.id) return
 
     // Only mark messages read while the tab/app is actually in the
-    // foreground — marking as read just because data was fetched or a
+    // foreground - marking as read just because data was fetched or a
     // realtime event arrived (regardless of whether anyone's actually
     // looking at the screen right now) isn't real "read" state. If the tab
     // is backgrounded when this would fire, defer it and catch up the
@@ -2774,7 +2774,7 @@ export function ChatConversationPage() {
     const clearedCount = markConversationReadLocally(conversationId)
     if (clearedCount > 0) useChatUnreadStore.getState().decrementBy(clearedCount)
     invalidateConversationsCache()
-    // Real delay, not instant-on-mount — marking read the moment data
+    // Real delay, not instant-on-mount - marking read the moment data
     // loads isn't "the user has actually seen these messages," it's just
     // "a fetch resolved." 1.2s is enough for the screen to have actually
     // rendered and been looked at before counting it as read.
@@ -2793,28 +2793,28 @@ export function ChatConversationPage() {
         // row owned by the real sender, and a 'payment_received' row whose
         // sender_id is set to the recipient (a view-filter convention, not a
         // real sender). Each viewer should only ever see the one row meant
-        // for them — ignore the other party's echo before it ever enters state.
+        // for them - ignore the other party's echo before it ever enters state.
         //
         // SELF-TRANSFER: sender and recipient are the SAME user, so both rows
         // have sender_id === user.id and neither of the two checks below can
-        // tell them apart on that basis alone — without this extra check both
+        // tell them apart on that basis alone - without this extra check both
         // rows would survive, showing one "Sent" bubble AND one "Received"
         // bubble for a single self-payment. In a self-chat the 'payment_sent'
-        // row alone is the correct, complete record — always drop the
+        // row alone is the correct, complete record - always drop the
         // 'payment_received' echo here regardless of sender_id.
         const isSelfChat = !!(user?.id && otherUser?.id && otherUser.id === user.id)
         if (newMsg.type === 'payment_received' && (isSelfChat || newMsg.sender_id !== user!.id)) return
         // A payment TO me: the payer's 'payment_sent' row isn't shown here (my
         // 'payment_received' row is), but it's the row that counts as unread
-        // in the chat list — so it must still be marked read while I'm here.
+        // in the chat list - so it must still be marked read while I'm here.
         // (Returning before tryMarkRead left an unread dot after every
         // payment received during a live chat.)
         if (newMsg.type === 'payment_sent'     && newMsg.sender_id !== user!.id) { tryMarkRead(); return }
 
         setMessages(prev => {
-          // Already present by exact id — skip (handles race with optimistic replace)
+          // Already present by exact id - skip (handles race with optimistic replace)
           if (prev.find(m => m.id === newMsg.id)) return prev
-          // Already present by tx hash — skip (handles payment cards where the
+          // Already present by tx hash - skip (handles payment cards where the
           // optimistic copy was already swapped in by persistMessage())
           if (newMsg.payment_tx_hash && prev.find(m => m.payment_tx_hash === newMsg.payment_tx_hash)) return prev
 
@@ -2843,12 +2843,12 @@ export function ChatConversationPage() {
           tryMarkRead()
           if (!wasNearBottomRef.current) setNewBelow(n => n + 1)
         }
-        // Only auto-scroll if already near the bottom — never yank someone
+        // Only auto-scroll if already near the bottom - never yank someone
         // away from history they're actively reading just because a new
         // message arrived. This is the exact rule requirement #6 asks for.
         if (wasNearBottomRef.current) {
           scrollToBottom()
-          // Catch-up correction — payment cards (and any other animated
+          // Catch-up correction - payment cards (and any other animated
           // message content) can still be growing to their final height when
           // the immediate scrollToBottom() above measures scrollHeight, which
           // silently lands the scroll short of the true bottom, cutting off
@@ -2859,7 +2859,7 @@ export function ChatConversationPage() {
       })
       // BUG FIX: this channel only ever listened for INSERT. "Delete for
       // everyone" (handleDeleteForEveryone) does `supabase.from('messages')
-      // .update({ content: '[deleted]', ... })` — an UPDATE, not an INSERT —
+      // .update({ content: '[deleted]', ... })` - an UPDATE, not an INSERT -
       // so a recipient with this exact thread already open never received
       // it live; only a full reload (which re-fetches from the DB fresh)
       // ever showed the message as deleted. The chat-LIST channel above
@@ -2880,7 +2880,7 @@ export function ChatConversationPage() {
         })
       }),
       {
-        // Reconnected after a drop — pull anything sent during the gap
+        // Reconnected after a drop - pull anything sent during the gap
         // (the fresh socket only sees INSERTs from here forward) and merge
         // it in the same de-duplicated way as fetchMessagesFromDB does.
         onReconnect: () => {
@@ -2915,7 +2915,7 @@ export function ChatConversationPage() {
   }, [conversationId, user?.id])
 
   // Stats card: hide on keyboard open, show on keyboard close
-  // Only touches statsCardRef DOM — nothing else
+  // Only touches statsCardRef DOM - nothing else
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
@@ -2935,7 +2935,7 @@ export function ChatConversationPage() {
       c.style.overflow = 'hidden'
       // Scroll re-anchoring on keyboard open is now handled generally by
       // the viewportHeight useLayoutEffect above (which also correctly
-      // respects wasNearBottomRef — never force-scrolling someone away
+      // respects wasNearBottomRef - never force-scrolling someone away
       // from history they're reading, unlike this used to).
     }
 
@@ -2964,7 +2964,7 @@ export function ChatConversationPage() {
   }, [])
 
 
-  // Matches for in-conversation search — chronological order, text messages
+  // Matches for in-conversation search - chronological order, text messages
   // only (payment cards don't have freeform text worth searching).
   const msgSearchMatches = msgSearchQuery.trim()
     // Search the decrypted text (encrypted messages never matched before).
@@ -2997,7 +2997,7 @@ export function ChatConversationPage() {
         setMessagesReady(true)  // ensure visible for smooth scrolls
         parent.scrollTo({ top: parent.scrollHeight, behavior: 'smooth' })
       } else {
-        // Instant scroll — scroll first then reveal to prevent seeing the jump
+        // Instant scroll - scroll first then reveal to prevent seeing the jump
         parent.scrollTop = parent.scrollHeight
         setMessagesReady(true)
       }
@@ -3019,20 +3019,20 @@ export function ChatConversationPage() {
       const { error } = await supabase.from('messages')
         .update({ content: '[deleted]', type: 'text' })
         .eq('id', msg.id)
-      if (error) throw new Error(/2 days/.test(error.message) ? 'Messages can only be deleted for everyone within 2 days' : 'Could not delete — try again')
+      if (error) throw new Error(/2 days/.test(error.message) ? 'Messages can only be deleted for everyone within 2 days' : 'Could not delete - try again')
       // Replace locally with deleted placeholder
       setMessages(prev => prev.map(m =>
         m.id === msg.id ? { ...m, content: '[deleted]', type: 'text', deleted_at: new Date().toISOString() } : m
       ))
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Could not delete — try again', 'error')
+      showToastMessage(e instanceof Error ? e.message : 'Could not delete - try again', 'error')
     }
     setDeleting(false)
     setDeleteMsg(null)
   }
 
   const startMsgLongPress = useCallback((msg: any, isMine: boolean) => {
-    // Only text, image and file messages are deletable — never payment cards
+    // Only text, image and file messages are deletable - never payment cards
     const isText  = msg.type === 'text' && !msg.content?.startsWith('[IMAGE](') && !msg.content?.startsWith('[FILE:')
     const isImage = msg.content?.startsWith('[IMAGE](')
     const isFile  = msg.content?.startsWith('[FILE:')
@@ -3067,7 +3067,7 @@ export function ChatConversationPage() {
   const canCopy = selecting && selAllText
   const canForward = selecting && !selDeleted
   const canInfo = selectedList.length === 1 && (selectedList[0] as any).isMine && !selDeleted
-  // Reply works on one message — or on one album / files group (long-press
+  // Reply works on one message - or on one album / files group (long-press
   // selects the whole group): the reply quotes the group's first item.
   const replyTarget: any = (() => {
     if (selectedList.length === 1) return selectedList[0]
@@ -3121,7 +3121,7 @@ export function ChatConversationPage() {
     setDeleting(false)
     setDeleteTargets(null)
     clearSelection()
-    if (failed) showToastMessage(failed === 1 ? 'Could not delete 1 message — try again' : `Could not delete ${failed} messages — try again`, 'error')
+    if (failed) showToastMessage(failed === 1 ? 'Could not delete 1 message - try again' : `Could not delete ${failed} messages - try again`, 'error')
   }
 
   const cancelMsgLongPress = useCallback(() => {
@@ -3141,7 +3141,7 @@ export function ChatConversationPage() {
   // the user's own draft and pending files are left untouched.
   // Sends one text message: shows it at once (clock tick), encrypts, saves.
   // On failure it STAYS in the chat, marked "Not sent · Tap to retry", with
-  // its text — never silently disappears. `retryId` resends that message.
+  // its text - never silently disappears. `retryId` resends that message.
   const sendTextMessage = async (text: string, convId: string, retryId?: string, replyToId?: string | null) => {
     if (!user?.id) return
     const optId = retryId ?? 'optimistic_' + Date.now() + Math.random()
@@ -3166,7 +3166,7 @@ export function ChatConversationPage() {
       const isPaymentRecordCard = /^(🧾 Bill|💸 Payment request)\b/u.test(text) && !!codeFromLink(text)
       const { encryptText } = await import('@/lib/chatCrypto')
       encryptedContent = isPaymentRecordCard ? text : await encryptText(text, await keyForSend())
-      // Known plaintext for this ciphertext — the saved copy (and the live
+      // Known plaintext for this ciphertext - the saved copy (and the live
       // echo) show the text at once instead of flashing empty.
       _plainByContent.set(encryptedContent, text)
       saved = await persistMessage({ conversationId: convId, senderId: user.id, content: encryptedContent, type: 'text', replyToId: replyId })
@@ -3176,7 +3176,7 @@ export function ChatConversationPage() {
     if (saved) {
       const real = saved
       setMessages(prev => {
-        // The live echo may already have replaced the optimistic copy — then
+        // The live echo may already have replaced the optimistic copy - then
         // there's nothing to swap. Otherwise swap it and drop any duplicate.
         if (!prev.some(m => m.id === optId)) return prev
         const withoutEcho = prev.filter(m => m.id !== real.id)
@@ -3215,7 +3215,7 @@ export function ChatConversationPage() {
       })
       job.abort = handle.abort
       const remote = withMeta(await handle.promise, job.meta)
-      // The saved copy shows the local bytes at once — no re-download, no flash.
+      // The saved copy shows the local bytes at once - no re-download, no flash.
       putCachedMedia(remote, job.blob, job.localUrl)
       patchMsg(convId, optId, { _remote: remote.split('#')[0] })
       const safeName = encodeURIComponent(job.name)
@@ -3239,7 +3239,7 @@ export function ChatConversationPage() {
     } catch (e: any) {
       if (e?.message === 'cancelled') return
       patchMsg(convId, optId, { _failed: true })
-      showToastMessage(`Couldn't send ${job.isImage ? 'photo' : job.name} — tap Retry`, 'error')
+      showToastMessage(`Couldn't send ${job.isImage ? 'photo' : job.name} - tap Retry`, 'error')
     }
   }
 
@@ -3382,10 +3382,10 @@ export function ChatConversationPage() {
       const fileName = `chat/${conversationId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`
 
       // Encrypt the file's own bytes with the conversation key BEFORE
-      // upload — the storage bucket serves public URLs (see the comment on
+      // upload - the storage bucket serves public URLs (see the comment on
       // getPublicUrl below), so without this step anyone with the link
       // could view the raw file, not just the two people in this chat.
-      // Never uploaded readable — keyForSend fails without a chat key.
+      // Never uploaded readable - keyForSend fails without a chat key.
       const sendKey = await keyForSend()
       const { blob: uploadBlob, ivBase64, encrypted } = await encryptBlob(file, sendKey)
 
@@ -3395,7 +3395,7 @@ export function ChatConversationPage() {
       const fileUrl = urlData.publicUrl
 
       // Inner marker carries the FILE's own IV (needed to decrypt the blob
-      // at that URL) — separate from the message-level e2e:v1: wrapper
+      // at that URL) - separate from the message-level e2e:v1: wrapper
       // encryptText adds next, which also hides the filename/URL itself
       // from the server, not just the file content.
       const isImage = file.type.startsWith('image/')
@@ -3416,10 +3416,10 @@ export function ChatConversationPage() {
     setPayAmount(''); setPayToken('USDC'); setPayNote(''); setPayError(''); setPayTxHash('')
     setBillPay(null)
     setLinkPay(null)
-    setPayPassEntry('') // clear any stale PIN from a previous payment — otherwise PinKeypad
+    setPayPassEntry('') // clear any stale PIN from a previous payment - otherwise PinKeypad
                          // remounts already "full" and auto-fires onComplete with the old PIN
     // RESILIENCE FIX (2026-09-17): a fresh sheet-open always means a NEW,
-    // separate payment attempt — even if it happens to end up with the
+    // separate payment attempt - even if it happens to end up with the
     // same recipient/amount/token as an earlier, already-completed one
     // (e.g. paying the same person the same amount again). Without this
     // reset, chatPayIdempotencyKeyRef's signature-based reuse (see its own
@@ -3427,7 +3427,7 @@ export function ChatConversationPage() {
     // payment as a retry of the first and silently return the FIRST
     // payment's old tx_hash instead of sending a new one. Retries WITHIN
     // one sheet session (form -> confirm -> failed -> form again, same
-    // amount still filled in) are unaffected — this only resets at the
+    // amount still filled in) are unaffected - this only resets at the
     // point a fresh session begins.
     chatPayIdempotencyKeyRef.current = null
     setPayStep('form')
@@ -3517,7 +3517,7 @@ export function ChatConversationPage() {
   const [showProfile, setShowProfile] = useState(false)
 
   const executeChatPayment = async () => {
-    // Synchronous guard — payStep (React state) doesn't flip to 'processing'
+    // Synchronous guard - payStep (React state) doesn't flip to 'processing'
     // until AFTER the async verifyPasscode() call below resolves, leaving a
     // window where a second onComplete fire would slip through and trigger a
     // second real on-chain send. A ref is checked/set synchronously instead.
@@ -3546,7 +3546,7 @@ export function ChatConversationPage() {
       })).catch(() => {})
     }
 
-    // ── Passcode verification — same pattern as PaySendPage ─────────────────
+    // ── Passcode verification - same pattern as PaySendPage ─────────────────
     if (storedPasscode) {
       if (!payPassEntry || payPassEntry.length < 6) {
         setPayError('Enter your 6-digit passcode to confirm.')
@@ -3590,7 +3590,7 @@ export function ChatConversationPage() {
     try {
       const { sendUSDC, sendEURC, sendCirBTC, getUSDCBalance, getEURCBalance, getCirBtcBalance } = await import('@/lib/arcService')
 
-      // Send the correct token — mirrors PaySendPage's own token-routing
+      // Send the correct token - mirrors PaySendPage's own token-routing
       const result = payToken === 'EURC'
         ? await sendEURC({ privateKey: activePrivateKey, to: otherUser.wallet_address, amount: numAmount, idempotencyKey })
         : payToken === 'cirBTC'
@@ -3635,7 +3635,7 @@ export function ChatConversationPage() {
           }).catch(() => {})
         }).catch(() => {})
 
-        // Confirm in the background — the user already sees success at
+        // Confirm in the background - the user already sees success at
         // this point (see setPayTxHash above). This only ever needs to
         // act in the rare case the transaction actually reverted,
         // correcting the row just written optimistically above.
@@ -3646,15 +3646,15 @@ export function ChatConversationPage() {
             import('@/lib/ActivityService').then(({ updateActivityStatus }) => {
               updateActivityStatus(`send_${result.txHash.toLowerCase()}`, result.senderAddress, 'failed')
             })
-            showToastMessage('Payment failed to confirm on-chain — please check Activity', 'error')
+            showToastMessage('Payment failed to confirm on-chain - please check Activity', 'error')
           })
         })
       }
 
-      // Transaction on-chain — ArcScan is source of truth
+      // Transaction on-chain - ArcScan is source of truth
 
 
-      // PERF FIX: fire-and-forget — rewards points are a nice-to-have on top
+      // PERF FIX: fire-and-forget - rewards points are a nice-to-have on top
       // of an already-confirmed payment; awaiting this server round trip
       // before showing success only added latency with no correctness
       // benefit. Same fix already applied to Pay/Send, Swap, and Bulk
@@ -3675,7 +3675,7 @@ export function ChatConversationPage() {
 
       try {
         const { deriveAddressFromPrivateKey } = await import('@/lib/arc')
-        // Fire-and-forget — only refreshes the displayed balance, no reason
+        // Fire-and-forget - only refreshes the displayed balance, no reason
         // to block the success screen on it.
         deriveAddressFromPrivateKey(activePrivateKey).then((realAddr: string) => {
           if (payToken === 'EURC') {
@@ -3690,13 +3690,13 @@ export function ChatConversationPage() {
 
       try {
         const convId = conversationIdRef.current || conversationId
-        const token  = payToken || 'USDC'   // always defined — payToken state declared above
+        const token  = payToken || 'USDC'   // always defined - payToken state declared above
 
 
         if (!convId) {
-          console.error('[Chat] ✗ No conversationId — payment card cannot be saved')
+          console.error('[Chat] ✗ No conversationId - payment card cannot be saved')
         } else if (!user) {
-          console.error('[Chat] ✗ No user — payment card cannot be saved')
+          console.error('[Chat] ✗ No user - payment card cannot be saved')
         } else {
           // BUG FIX: formatAmount's default 2 decimals truncates a realistic
           // cirBTC amount (e.g. 0.00025) to "0.00" -- this string is the
@@ -3705,7 +3705,7 @@ export function ChatConversationPage() {
           // matters more than anywhere else in this file.
           const payContent = `Sent ${formatAmount(numAmount, chatPayTokenDecimals(token as ChatPayToken))} ${token} to ${recipientClean}.arc${billPay ? ` · Order #${billPay.number}` : ''}`
 
-          // Optimistic card — visible immediately before DB confirms
+          // Optimistic card - visible immediately before DB confirms
           const optId  = 'optimistic_pay_' + Date.now()
           const optMsg: ChatMessage = {
             id:               optId,
@@ -3725,7 +3725,7 @@ export function ChatConversationPage() {
 
           // BUG FIX: `persistMessage` used to be awaited here, blocking the
           // success screen on a full network round-trip (API → REST
-          // fallback) — but the payment card the user actually SEES is the
+          // fallback) - but the payment card the user actually SEES is the
           // optimistic one added just above, already on screen before this
           // point. Persisting to the DB (and swapping the optimistic card
           // for the real saved row once done) is a background reconciliation
@@ -3752,7 +3752,7 @@ export function ChatConversationPage() {
               })
               touchConversation(convId, payContent, user.id, 'payment_sent')
             } else {
-              console.error('[Chat] ✗ Payment card persist failed — optimistic shown for this session only')
+              console.error('[Chat] ✗ Payment card persist failed - optimistic shown for this session only')
               // optimistic stays visible in current session but won't survive refresh
             }
           }).catch(e => console.error('[Chat] ✗ persistMessage threw:', e))
@@ -3762,7 +3762,7 @@ export function ChatConversationPage() {
       }
 
       // Paying someone in chat is exactly the "return pay" signal that should
-      // save them as a real contact — dedup-safe (never creates duplicates),
+      // save them as a real contact - dedup-safe (never creates duplicates),
       // and also clears any previous "removed" flag since paying them again
       // is an explicit re-add signal.
       if (user?.id && otherUser?.id) {
@@ -3788,18 +3788,18 @@ export function ChatConversationPage() {
   // Only block with a spinner on a conversation that's NEVER been opened
   // before on this device (no cached messages, no cached identity). Once
   // there's anything cached, render it instantly and let the background
-  // fetch in setupConversation() silently refresh it — `loading` staying
+  // fetch in setupConversation() silently refresh it - `loading` staying
   // true during that refresh should never re-block the UI that's already
   // showing real content.
-  // ── Real, dynamic viewport height — the actual fix for keyboard handling ──
+  // ── Real, dynamic viewport height - the actual fix for keyboard handling ──
   // 100dvh does NOT reliably shrink when the mobile software keyboard opens
-  // (browser support/behavior for this varies widely) — VisualViewport.height
+  // (browser support/behavior for this varies widely) - VisualViewport.height
   // does, on every platform that has a keyboard at all (Android Chrome, iOS
   // Safari). Desktop/no-keyboard environments fall back to window.innerHeight
   // via the resize event. Feeding this real, current pixel height directly
   // into the root container's height means flexbox (header flex-shrink-0,
   // messages flex-1, composer flex-shrink-0) does ALL the space-splitting
-  // math itself, automatically, every time — no hardcoded padding, no manual
+  // math itself, automatically, every time - no hardcoded padding, no manual
   // keyboard-height guessing, no per-device tuning. The composer's actual
   // rendered height (which already grows/shrinks naturally with multi-line
   // text, attachments, reply previews, etc., since it's a normal DOM flex
@@ -3813,7 +3813,7 @@ export function ChatConversationPage() {
       setViewportHeight(vv ? vv.height : window.innerHeight)
       if (isFirstCall) {
         isFirstCall = false
-        // Flip this shortly after — not immediately — so the initial jump
+        // Flip this shortly after - not immediately - so the initial jump
         // from the 100dvh fallback to the real measured height always
         // renders with transition:'none' first. Flipping it right away
         // would apply the transition to that very first jump too, which
@@ -3841,12 +3841,12 @@ export function ChatConversationPage() {
     }
   }, [])
 
-  // Tracks whether the user is currently at/near the bottom — the single
+  // Tracks whether the user is currently at/near the bottom - the single
   // source of truth for two related rules: (a) if they were at the bottom
   // right before the keyboard opens/closes, keep the latest message
   // anchored above the composer through the resize; (b) if a new message
   // arrives while they're scrolled up reading history, never force-scroll
-  // them away from what they're reading — matching WhatsApp exactly.
+  // them away from what they're reading - matching WhatsApp exactly.
   const wasNearBottomRef = useRef(true)
   const NEAR_BOTTOM_PX = 120
   // "Scroll to newest" button (shown once you're a screen up) and how many
@@ -3899,15 +3899,15 @@ export function ChatConversationPage() {
   }
 
   // ── Scroll anchoring (no jumps) ─────────────────────────────────────────
-  // Whenever anything in the list changes height — older messages added on
+  // Whenever anything in the list changes height - older messages added on
   // top, a photo / payment card / link preview finishing loading, the typing
-  // line — the message at the top of the screen is kept at exactly the same
+  // line - the message at the top of the screen is kept at exactly the same
   // spot (or, at the bottom, the view stays at the bottom). The correction
   // runs in the ResizeObserver callback, which comes after layout but before
   // paint, so no shifted frame is ever drawn.
   const contentRef = useRef<HTMLDivElement>(null)
   // Browsers with built-in scroll anchoring (Chrome / Android, Firefox) keep
-  // the view steady themselves — and without stopping a fling mid-way. Only
+  // the view steady themselves - and without stopping a fling mid-way. Only
   // where it's missing (Safari) do we correct by hand.
   const nativeAnchor = useMemo(() => { try { return CSS.supports('overflow-anchor', 'auto') } catch { return false } }, [])
   const anchorRef = useRef<{ id: string; offset: number } | null>(null)
@@ -3930,7 +3930,7 @@ export function ChatConversationPage() {
   const manualAnchorUntilRef = useRef(0)
   const nativeAnchorTimerRef = useRef(0)
   // Called just before older messages are added on top: remember the message
-  // being read and hold it in place by hand — with the browser's own
+  // being read and hold it in place by hand - with the browser's own
   // anchoring paused meanwhile so the two never both shift the list.
   const holdPlaceForHistory = () => {
     const el = messagesAreaRef.current
@@ -3957,7 +3957,7 @@ export function ChatConversationPage() {
     if (!el || !hasPositionedInitialScrollRef.current) return
     if (wasNearBottomRef.current) { el.scrollTop = el.scrollHeight; return }
     // Browsers skip their own anchoring when the list is scrolled right to
-    // the top — exactly where older history gets added — so a history load
+    // the top - exactly where older history gets added - so a history load
     // is always corrected by hand (see holdPlaceForHistory).
     if (nativeAnchor && performance.now() > manualAnchorUntilRef.current) return
     const a = anchorRef.current
@@ -3980,7 +3980,7 @@ export function ChatConversationPage() {
   useLayoutEffect(() => { if (hasPositionedInitialScrollRef.current) keepAnchorRef.current() }, [messages])
 
   // Decrypt every loaded message up front (one batch), so albums, search and
-  // previews know what each message is before it's drawn — no regrouping
+  // previews know what each message is before it's drawn - no regrouping
   // jump later. Bubbles read the same cache.
   const [, setDecryptTick] = useState(0)
   useEffect(() => {
@@ -3998,7 +3998,7 @@ export function ChatConversationPage() {
   }, [messages, convKey])
 
   // Images (and decrypted images) load after the view is positioned and grow
-  // the list — which used to leave the chat opening short of the bottom. If
+  // the list - which used to leave the chat opening short of the bottom. If
   // you were at the bottom, stay there as each one loads. ('load' doesn't
   // bubble, so it's caught on the way down.)
   useEffect(() => {
@@ -4013,7 +4013,7 @@ export function ChatConversationPage() {
   })
 
   // Re-anchor to the latest message across a viewport height change (keyboard
-  // open/close) ONLY if the user was already at the bottom beforehand —
+  // open/close) ONLY if the user was already at the bottom beforehand -
   // otherwise leave their scroll position alone so reading history is never
   // interrupted by the keyboard toggling.
   const prevViewportHeightRef = useRef<number | null>(null)
@@ -4029,48 +4029,48 @@ export function ChatConversationPage() {
 
   // No whole-page placeholder any more: the header and composer render at
   // once, and until the messages are positioned the message area shows chat
-  // bubble placeholders (left and right) in its own space — see below.
+  // bubble placeholders (left and right) in its own space - see below.
 
 
   return (
     <div className="flex flex-col bg-bg" style={{
       position: 'relative',
       // Desktop: no on-screen keyboard to react to, and this panel lives
-      // inside ChatDesktopSplit's right column — NOT the full browser
+      // inside ChatDesktopSplit's right column - NOT the full browser
       // viewport (that column is already shorter than window.innerHeight
       // by DesktopHeader's 68px). Using the mobile visualViewport-tracked
       // pixel height here made this panel taller than its actual
       // container, and the overflow got clipped by that column's own
-      // overflow:hidden — which is what was making the header and
+      // overflow:hidden - which is what was making the header and
       // composer look like they were "hiding": they weren't hiding, this
       // whole panel just didn't fit in the space it was given. height:
       // '100%' simply fills that column instead.
       height: isDesktop ? '100%' : (viewportHeight ? `${viewportHeight}px` : '100dvh'),
       maxHeight: isDesktop ? '100%' : (viewportHeight ? `${viewportHeight}px` : '100dvh'),
       overflow: 'hidden',
-      // Smooth, not instant — requirement #3 ("restore smoothly" on keyboard
+      // Smooth, not instant - requirement #3 ("restore smoothly" on keyboard
       // close). Keyboard-open transitions happen fast enough that this
       // reads as responsive, not laggy, while keyboard-close gets a real
       // eased transition instead of an abrupt snap.
       //
-      // Only applies AFTER the first real measurement — this transition
+      // Only applies AFTER the first real measurement - this transition
       // was also firing on the very first jump from the 100dvh fallback to
       // the real measured pixel height, which meant the initial
       // scroll-to-first-unread positioning could run while the container
       // was still mid-animation, measuring a temporary/wrong size and
       // landing the scroll position past the unread content entirely
-      // (only revealed by manually scrolling up) — exactly this bug.
+      // (only revealed by manually scrolling up) - exactly this bug.
       // Desktop never animates its height at all (no keyboard, so no
-      // height changes to smooth over — '100%' is stable).
+      // height changes to smooth over - '100%' is stable).
       transition: isDesktop ? 'none' : (hasSettledInitialHeightRef.current ? 'height 0.15s ease-out' : 'none'),
     }}>
-      {/* Wallpaper — a sibling of the scrollable messages area (not a child
+      {/* Wallpaper - a sibling of the scrollable messages area (not a child
           of it), pinned via position:absolute to this whole conversation
           panel. WhatsApp/Telegram's chat background never moves as you
-          scroll message history — only the bubbles scroll, the wallpaper
+          scroll message history - only the bubbles scroll, the wallpaper
           stays put. Putting it inside the scrollable container (the
           earlier approach) can't guarantee that; living outside it here
-          means it structurally cannot scroll — there's no scroll container
+          means it structurally cannot scroll - there's no scroll container
           between it and this panel. Header is opaque and paints over it;
           the messages area below has no background of its own, so the
           wallpaper shows through in the gaps between bubbles. */}
@@ -4177,7 +4177,7 @@ export function ChatConversationPage() {
         )}
       </div>
 
-      {/* Open bills / payment requests between the two of us — both sides. */}
+      {/* Open bills / payment requests between the two of us - both sides. */}
       {!msgSearchOpen && otherUser?.id && otherUser.id !== user?.id && (
         <ChatPendingOrders otherUserId={otherUser.id} refreshKey={messages.length} />
       )}
@@ -4249,7 +4249,7 @@ export function ChatConversationPage() {
           const seenContent = new Set<string>()
           const seenTxHash = new Set<string>()
           // SELF-TRANSFER: see the identical comment on the Realtime handler
-          // above — both the 'payment_sent' and 'payment_received' rows for a
+          // above - both the 'payment_sent' and 'payment_received' rows for a
           // self-payment carry sender_id === user.id, so the plain sender_id
           // check below can't distinguish them here either. Always drop the
           // 'payment_received' echo in a self-chat so only the single 'Sent'
@@ -4263,7 +4263,7 @@ export function ChatConversationPage() {
             if (msg.type === 'payment_sent' && msg.sender_id !== user!.id) return false
             if (seenIds.has(msg.id)) return false
             seenIds.add(msg.id)
-            // Dedup payment cards by tx hash first — it's stable across the
+            // Dedup payment cards by tx hash first - it's stable across the
             // optimistic → realtime-echo → persisted lifecycle of the same
             // transaction, even when ids/timestamps differ between those copies.
             if ((msg.type === 'payment_sent' || msg.type === 'payment_received') && msg.payment_tx_hash) {
@@ -4272,7 +4272,7 @@ export function ChatConversationPage() {
             }
             // Dedup by content+type within same second (removes true DB duplicates only)
             const second = new Date(msg.created_at).toISOString().slice(0, 19)
-            // Content is part of the key deliberately — type+payment_amount
+            // Content is part of the key deliberately - type+payment_amount
             // alone are identical for every text message ('text'/null), so
             // without this, two DIFFERENT messages from the same sender
             // landing in the same second (easy to hit when typing quickly,
@@ -4286,7 +4286,7 @@ export function ChatConversationPage() {
             return true
           })
           // Find where the divider actually belongs in the list that
-          // survived dedup — matching by created_at rather than requiring
+          // survived dedup - matching by created_at rather than requiring
           // the original anchor message's exact id to still be present,
           // since dedup above can legitimately drop that exact row (echo
           // payment cards, content-based duplicates) while an adjacent
@@ -4417,7 +4417,7 @@ export function ChatConversationPage() {
       </div>
       </div>
 
-      {/* Composer — sticky above home indicator */}
+      {/* Composer - sticky above home indicator */}
       {/* ── Message input bar ───────────────────────────────────────────────── */}
       <div className="border-t border-border bg-bg flex-shrink-0 relative"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
@@ -4437,7 +4437,7 @@ export function ChatConversationPage() {
           )}
         </AnimatePresence>
 
-        {/* Security info changed — WhatsApp's "security code changed", but held
+        {/* Security info changed - WhatsApp's "security code changed", but held
             until confirmed since a changed wallet would also redirect payments. */}
         {idChanged && (
           <div className="mx-3 mt-2 rounded-xl px-3 py-2.5 flex items-start gap-2.5"
@@ -4511,7 +4511,7 @@ export function ChatConversationPage() {
           )}
         </AnimatePresence>
 
-        {/* Input row — attach | textarea | send */}
+        {/* Input row - attach | textarea | send */}
         <div className="px-3 pt-2.5 pb-2 flex items-end gap-2">
           {/* Attach button */}
           <button onClick={() => { setAttachMode('attachments'); setShowAttach(v => !v); messageInputRef.current?.blur() }} type="button"
@@ -4535,7 +4535,7 @@ export function ChatConversationPage() {
             />
           </div>
 
-          {/* Send button — +15% again (39.6px -> 45.5px), icon scaled to
+          {/* Send button - +15% again (39.6px -> 45.5px), icon scaled to
               keep the same ~50% fill proportion. Nothing else resized. */}
           <button
             onClick={() => handleSend()}
@@ -4551,7 +4551,7 @@ export function ChatConversationPage() {
           </button>
         </div>
 
-        {/* Attach panel — opens right under the typing box in place of the
+        {/* Attach panel - opens right under the typing box in place of the
             keyboard (WhatsApp-style): a grid of round buttons in the app's
             brand colour. Order: Camera, Gallery, Document, File, Pay, Bill. */}
         <AnimatePresence initial={false}>
@@ -4782,10 +4782,10 @@ export function ChatConversationPage() {
         })()}
       </AnimatePresence>
 
-      {/* In-Chat Payment Modal — STEP 1: Amount entry form */}
+      {/* In-Chat Payment Modal - STEP 1: Amount entry form */}
       {/* Chat pay (phone): ONE dim behind both pay sheets, so it doesn't fade
           out and back in between them, and no backdrop blur (Android
-          re-blurs it every frame of a fade — the flicker). While paying,
+          re-blurs it every frame of a fade - the flicker). While paying,
           the chat's own header blur is off too. */}
       {payStep !== 'closed' && <PopupOpen />}
       <AnimatePresence>
@@ -4822,7 +4822,7 @@ export function ChatConversationPage() {
                   </div>
                 )}
 
-                {/* Token selector — USDC / EURC / cirBTC */}
+                {/* Token selector - USDC / EURC / cirBTC */}
                 {linkPay?.amount && !billPay && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: 14,
                     background: 'color-mix(in srgb, var(--brand) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
@@ -4852,7 +4852,7 @@ export function ChatConversationPage() {
                   ))}
                 </div>}
 
-                {/* Amount — mobile taps to reveal the keypad below (unchanged).
+                {/* Amount - mobile taps to reveal the keypad below (unchanged).
                     Desktop uses the same bare-box + overlaid Max pill +
                     Balance row treatment as Multichain Transfer/Swap's own
                     amount box instead of this static display duplicated
@@ -4939,10 +4939,10 @@ export function ChatConversationPage() {
                   )
                 })()}
 
-                {/* Inline numeric keypad — part of the SAME sheet's normal document
+                {/* Inline numeric keypad - part of the SAME sheet's normal document
                     flow (no separate position:fixed overlay), so it can never get
                     clipped or stacked behind/under anything else in this sheet.
-                    Mobile only — desktop's live input above needs no on-screen grid. */}
+                    Mobile only - desktop's live input above needs no on-screen grid. */}
                 {!isDesktop && showAmountPad && !payLocked && (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, maxWidth: 320, margin: '4px auto 0' }}>
                     {['1','2','3','4','5','6','7','8','9','.','0','del'].map((key, i) => (
@@ -5017,7 +5017,7 @@ export function ChatConversationPage() {
           )
           const closeForm = () => { setPayStep('closed'); setPayPassEntry(''); setShowAmountPad(false) }
           return isDesktop ? (
-            // Not a popup — Chat has no separate page to put the amount
+            // Not a popup - Chat has no separate page to put the amount
             // step "inline" on like Send/Swap/etc. do, so instead of a
             // centered dialog this slides in from the right edge of the
             // screen, with a light non-blocking dim rather than a heavy
@@ -5025,7 +5025,7 @@ export function ChatConversationPage() {
             // compose pane) instead of a dialog floating over it.
             // position:'fixed' (viewport-relative, same mechanism every
             // other dialog in the app already uses) rather than
-            // position:'absolute' scoped to the conversation panel — the
+            // position:'absolute' scoped to the conversation panel - the
             // panel-scoped version was found to visibly drag the whole
             // conversation column sideways when this animated in, so this
             // is pinned to the viewport instead and simply positioned to
@@ -5041,7 +5041,7 @@ export function ChatConversationPage() {
                 key="pay-form-drawer"
                 initial={{ x: '100%' }}
                 // Exit noticeably snappier than enter (higher stiffness,
-                // less damping) — a dismiss should feel quicker than the
+                // less damping) - a dismiss should feel quicker than the
                 // arrival, not mirror it 1:1.
                 animate={{ x: 0, transition: { duration: 0.34, ease: [0.32, 0.72, 0, 1] } }}
                 exit={{ x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
@@ -5069,7 +5069,7 @@ export function ChatConversationPage() {
         })()}
       </AnimatePresence>
 
-      {/* In-Chat Payment Modal — STEP 2: Review + PIN confirm (separate full-height
+      {/* In-Chat Payment Modal - STEP 2: Review + PIN confirm (separate full-height
           sheet so the PIN keypad always has room and is never pushed off-screen) */}
       <AnimatePresence custom={payStep}>
         {(payStep === 'confirm' || payStep === 'processing' || payStep === 'success') && (
@@ -5174,7 +5174,7 @@ export function ChatConversationPage() {
             // Desktop's PIN moment specifically gets the premium
             // DesktopTransactionAuthDialog (its own amount+recipient
             // summary replaces the "Review Payment" card step2Content
-            // shows on mobile) — processing/success keep the plain
+            // shows on mobile) - processing/success keep the plain
             // DesktopDialogFrame + the exact same step2Content mobile
             // uses, unchanged, since neither of those states is a PIN
             // entry moment.
@@ -5278,7 +5278,7 @@ export function ChatConversationPage() {
           background: 'rgba(0,0,0,0.95)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          {/* Close button — top right */}
+          {/* Close button - top right */}
           <button
             onClick={() => setViewerSrc(null)}
             style={{
@@ -5293,7 +5293,7 @@ export function ChatConversationPage() {
             <X style={{ width: 20, height: 20 }} />
           </button>
 
-          {/* Download button — bottom center, pill shape, clearly labelled */}
+          {/* Download button - bottom center, pill shape, clearly labelled */}
           <button
             onClick={async (e) => {
               e.stopPropagation()
@@ -5407,7 +5407,7 @@ export function ChatConversationPage() {
             </div>
             {(() => {
               const live: any = messages.find(m => m.id === infoMsg.id) ?? infoMsg
-              const fmt = (t?: string | null) => t ? new Date(t).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '—'
+              const fmt = (t?: string | null) => t ? new Date(t).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '-'
               const rows: Array<[string, string, string]> = [
                 ['Read', live.read_at || (live.is_read ? live.created_at : null) ? fmt(live.read_at) : 'Not yet', '#53bdeb'],
                 ['Delivered', live.delivered_at ? fmt(live.delivered_at) : 'Not yet', 'var(--text-secondary)'],

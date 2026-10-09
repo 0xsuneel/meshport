@@ -80,7 +80,7 @@ export function NewsAdminPage() {
       setError(res.error.code === '23505' ? 'Another story already uses that link' : res.error.message)
       return
     }
-    setNotice(editingId ? 'Post updated' : 'Posted — it now shows in the app')
+    setNotice(editingId ? 'Post updated' : 'Posted - it now shows in the app')
     reset(); load()
   }
 
@@ -135,7 +135,7 @@ export function NewsAdminPage() {
             <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://…" style={field} />
           </div>
           <div>
-            <label style={label}>Button link (optional — adds an "Open link" button)</label>
+            <label style={label}>Button link (optional - adds an "Open link" button)</label>
             <input value={link} onChange={e => setLink(e.target.value)} placeholder="https://…" style={field} />
           </div>
 

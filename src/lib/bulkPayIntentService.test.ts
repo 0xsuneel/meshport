@@ -46,7 +46,7 @@ describe('createBulkPayIntent', () => {
     expect(ensureAnonSessionMock).toHaveBeenCalled()
   })
 
-  it('3. calls the bulkpay-intent function with exactly the request params as the body — no client-side nonce field ever sent', async () => {
+  it('3. calls the bulkpay-intent function with exactly the request params as the body - no client-side nonce field ever sent', async () => {
     invokeMock.mockResolvedValueOnce({ data: { success: true, intentId: 'i', attemptId: 'a', nonce: 1 }, error: null })
     await createBulkPayIntent(PARAMS)
     expect(invokeMock).toHaveBeenCalledWith('bulkpay-intent', { body: PARAMS })
@@ -90,7 +90,7 @@ describe('markBulkPayAttemptSubmitted (7. tx_hash persistence before receipt wai
     expect(invokeMock).toHaveBeenCalledWith('bulkpay-intent', { body: { action: 'markSubmitted', attemptId: 'attempt-1', txHash: '0xRealTxHash' } })
   })
 
-  it('never throws, even on failure — safe to call fire-and-forget from the broadcast flow', async () => {
+  it('never throws, even on failure - safe to call fire-and-forget from the broadcast flow', async () => {
     invokeMock.mockRejectedValueOnce(new Error('network blip'))
     const result = await markBulkPayAttemptSubmitted('attempt-1', '0xRealTxHash')
     expect(result.success).toBe(false)

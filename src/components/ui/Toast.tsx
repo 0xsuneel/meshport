@@ -21,19 +21,19 @@ export function Toast() {
     warning: 'border-warning/30 bg-surface',
   }
 
-  // Portalled straight to <body> — this component used to render as a
+  // Portalled straight to <body> - this component used to render as a
   // sibling of the page content inside a `position: sticky` shell.
   // `position: sticky` establishes a containing block for `position:
   // absolute` descendants (same as `relative`/`fixed` would), so the
   // toast's "centered on screen" math was actually being computed relative
-  // to that 430px-wide sticky shell, not the real viewport — on a device
+  // to that 430px-wide sticky shell, not the real viewport - on a device
   // whose actual viewport is wider than that shell, this shifts the toast
   // off-center and can clip it at the screen edge, exactly as reported.
   // Rendering into `document.body` via a portal removes it from that
   // ancestor chain entirely, so `fixed` here always centers on the true
   // viewport regardless of any layout happening elsewhere in the app.
   // Positioning lives on this plain wrapper div, untouched by Framer
-  // Motion. The motion.div below only ever controls its own fade/slide —
+  // Motion. The motion.div below only ever controls its own fade/slide -
   // Framer Motion takes ownership of the `transform` CSS property on any
   // element it animates (composing its own value for the y-animation), so
   // a manually-set `transform: translateX(-50%)` on that SAME element gets

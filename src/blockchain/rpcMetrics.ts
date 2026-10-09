@@ -1,12 +1,12 @@
 /**
- * blockchain/rpcMetrics.ts — count what actually goes over the wire
+ * blockchain/rpcMetrics.ts - count what actually goes over the wire
  *
  * The migration's success criteria are stated as percentages ("~90% fewer RPC
  * requests"). Those numbers are only meaningful if they're measured rather than
  * asserted, so every request issued through ProviderManager is counted here.
  *
  * Deliberately tiny and dependency-free: a counter that costs anything is a
- * counter that changes what it measures. Nothing is sent anywhere — this is
+ * counter that changes what it measures. Nothing is sent anywhere - this is
  * read on demand (dev console / diagnostics), not reported.
  *
  * Usage while validating a phase:
@@ -62,7 +62,7 @@ export function report(): string {
   const pctAvoided = attempted === 0 ? 0 : Math.round((avoided / attempted) * 100)
   const lines = [
     `RPC requests: ${m.total} in ${mins.toFixed(1)} min (${(m.total / mins).toFixed(1)}/min)`,
-    `Avoided: ${avoided} (${m.cacheHits} cache, ${m.dedupeHits} dedupe) — ${pctAvoided}% of ${attempted} attempted`,
+    `Avoided: ${avoided} (${m.cacheHits} cache, ${m.dedupeHits} dedupe) - ${pctAvoided}% of ${attempted} attempted`,
     `Errors: ${m.errors}`,
     `By chain: ${JSON.stringify(m.byChain)}`,
     `By method: ${JSON.stringify(m.byMethod)}`,
@@ -71,7 +71,7 @@ export function report(): string {
 }
 
 // Dev-only console handle. Guarded so it never runs during SSR/build and never
-// ships behavior — it only exposes the counters that already exist.
+// ships behavior - it only exposes the counters that already exist.
 if (typeof window !== 'undefined' && (import.meta as any).env?.DEV) {
   ;(window as any).__meshportRpc = { snapshot, reset: resetMetrics, report: () => console.log(report()) }
 }

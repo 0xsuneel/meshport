@@ -45,7 +45,7 @@ export function ReceivePage() {
   const [qrReady, setQrReady] = useState(false)
   const [qrError, setQrError] = useState(false)
 
-  // Merchants: "MeshPort QR" (Arc — works in MeshPort and any wallet) |
+  // Merchants: "MeshPort QR" (Arc - works in MeshPort and any wallet) |
   // "Merchant QR" (amount + one of the other networks, any wallet).
   const isMerchant = useMerchant().isMerchant
   const [params] = useSearchParams()
@@ -59,7 +59,7 @@ export function ReceivePage() {
 
   const displayUsername = (username || (user?.username || '')).replace(/\.arc$/, '')
 
-  // Payment link — the real shareable URL
+  // Payment link - the real shareable URL
   const paymentLink = displayUsername
     ? `${APP_URL}/paylink/${displayUsername}`
     : walletAddress
@@ -90,7 +90,7 @@ export function ReceivePage() {
       })
     }).catch(() => setQrError(true))
     // Redraw when My QR comes back into view (after Request payment or the
-    // Merchant QR tab) — the canvas is a fresh, empty element then.
+    // Merchant QR tab) - the canvas is a fresh, empty element then.
   }, [qrData, requesting, merchantTab])
 
   const handleCopy = async (value: string, key: string) => {
@@ -116,7 +116,7 @@ export function ReceivePage() {
     }
   }
 
-  // ── Download / Share QR — same feature as Home's MyQrCard ─────────────
+  // ── Download / Share QR - same feature as Home's MyQrCard ─────────────
   const handleDownloadQr = () => {
     if (!canvasRef.current) return
     try {
@@ -135,7 +135,7 @@ export function ReceivePage() {
       canvasRef.current.toBlob(async (blob) => {
         if (!blob) { showToastMessage('Could not share QR', 'error'); return }
         const file = new File([blob], 'meshport-qr.png', { type: 'image/png' })
-        const shareText = `Pay me on MeshPort — ${paymentLink}`
+        const shareText = `Pay me on MeshPort - ${paymentLink}`
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({ files: [file], title: 'My QR', text: shareText })
         } else if (navigator.share) {
@@ -189,7 +189,7 @@ export function ReceivePage() {
         )}
       </div>
 
-      {/* Request payment — an order-numbered request (replaces Collect USDC) */}
+      {/* Request payment - an order-numbered request (replaces Collect USDC) */}
       <button
         onClick={() => setRequesting(true)}
         style={{
@@ -201,7 +201,7 @@ export function ReceivePage() {
         <span style={{ fontSize: 13, fontWeight: 600 }}>Request payment</span>
       </button>
 
-      {/* Divider + Download/Share row — same layout as Home's MyQrCard */}
+      {/* Divider + Download/Share row - same layout as Home's MyQrCard */}
       <div style={{ width: '100%', height: 1, background: 'var(--border)', margin: '6px 0 2px' }} />
       <div style={{ display: 'flex', width: '100%', alignItems: 'stretch' }}>
         <button
@@ -266,7 +266,7 @@ export function ReceivePage() {
     <div className="p-3 bg-surface rounded-2xl border border-border flex items-start gap-2">
       <Lightbulb className="w-4 h-4 text-text-secondary flex-shrink-0 mt-0.5" />
       <p className="text-xs text-text-secondary flex-1">
-        Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) — it opens your payment page on Arc
+        Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) - it opens your payment page on Arc
       </p>
     </div>
   )

@@ -1,10 +1,10 @@
 // DesktopSidebar.tsx
 // Persistent left nav shown only at desktop widths (see AppLayout's
-// isDesktop branch) — reuses BottomNav's exact icon components and active-
+// isDesktop branch) - reuses BottomNav's exact icon components and active-
 // tab logic (getActiveTabId) rather than re-deriving them, so "which tab is
 // highlighted" can never drift between the mobile and desktop nav. Does NOT
 // import BottomNav's mobile-only concerns (unread realtime subscription,
-// Android back-button interception) — those stay exactly where they are.
+// Android back-button interception) - those stay exactly where they are.
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Settings, Users } from 'lucide-react'
 import { HomeIcon, ChatsIcon, RewardsIcon, ActivityIcon, getActiveTabId } from './BottomNav'
@@ -26,7 +26,7 @@ const items = [
 ]
 
 // Icon shapes adapted from HomePage's MoreSheet (same actions, same glyphs)
-// so the sidebar's icon language matches what mobile users already know —
+// so the sidebar's icon language matches what mobile users already know -
 // just re-colored per active state like BottomNav's own icons.
 // Same glyphs as HomePage's own Pay/Receive quick-action icons.
 function PayIcon({ active }: { active: boolean }) {
@@ -64,7 +64,7 @@ function BulkPayIcon({ active }: { active: boolean }) {
   )
 }
 // Plain two-person glyph (same lucide set already used for Settings above)
-// — crisp at every size, unlike the previous raster-mask trace which
+// - crisp at every size, unlike the previous raster-mask trace which
 // needed real work to stop looking blurry at nav size.
 function P2PIcon({ active }: { active: boolean }) {
   return <Users size={20} color={active ? 'var(--brand-text)' : 'var(--nav-idle)'} strokeWidth={1.8} />
@@ -85,9 +85,9 @@ export function DesktopSidebar() {
   const activeId = getActiveTabId(location.pathname, items)
   const unreadChats = useChatUnreadStore(s => s.unreadChats)
 
-  // Ongoing P2P trades count — the red dot on the P2P nav item.
+  // Ongoing P2P trades count - the red dot on the P2P nav item.
   // BUG FIX (2026-09-22): this used to be its own independent fetch+
-  // subscribe effect (duplicated in HomePage and P2PPage too) — THIS was
+  // subscribe effect (duplicated in HomePage and P2PPage too) - THIS was
   // the component whose simultaneous mount with whichever page is active
   // caused the crash: subscribeToMyTrades's channel names are fixed per
   // userId, not unique per caller, so DesktopSidebar (always mounted) and

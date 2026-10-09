@@ -1,6 +1,6 @@
 // supabase/functions/merchant-pay/index.ts
 //
-// Merchant payment requests — the only place a request's status changes.
+// Merchant payment requests - the only place a request's status changes.
 //
 //   POST { action: 'get',    code }                 public: what the pay page shows
 //   POST { action: 'submit', code, chain, txHash, orderNumber?, amount? }
@@ -58,7 +58,7 @@ export const PAY_CHAINS: Record<string, ChainDef> = {
   HyperEVM_Testnet: { label: 'HyperEVM',  chainId: 998,      usdc: '0x2B3370eE501B4a559b57D449569354196457D8Ab', rpcs: ['https://rpcs.chain.link/hyperevm/testnet', 'https://rpc.hyperliquid-testnet.xyz/evm'], route: 'ub' },
   Sei_Testnet:      { label: 'Sei',       chainId: 1328,     usdc: '0x4fCF1784B31630811181f670Aea7A7bEF803eaED', rpcs: [...d('sei-testnet'), 'https://evm-rpc-testnet.sei-apis.com'], route: 'ub' },
   Unichain_Sepolia: { label: 'Unichain',  chainId: 1301,     usdc: '0x31d0220469e10c4E71834a79b1f276d740d3768F', rpcs: [...d('unichain-sepolia'), 'https://sepolia.unichain.org'], route: 'ub' },
-  // MeshPort bridge-router (CCTP) chains — values copied from src/blockchain/chains.ts.
+  // MeshPort bridge-router (CCTP) chains - values copied from src/blockchain/chains.ts.
   Sonic_Testnet: { label: 'Sonic', chainId: 14601, usdc: '0x0BA304580ee7c9a980CF72e55f5Ed2E9fd30Bc51', rpcs: ['https://rpc.testnet.soniclabs.com', 'https://sonic-testnet.rpc.thirdweb.com'], route: 'ub' },
   World_Chain_Sepolia: { label: 'World Chain', chainId: 4801, usdc: '0x66145f38cBAC35Ca6F1Dfb4914dF98F1614aeA88', rpcs: ['https://worldchain-sepolia.g.alchemy.com/public', 'https://worldchain-sepolia.rpc.thirdweb.com'], route: 'ub' },
   Linea_Sepolia: { label: 'Linea', chainId: 59141, usdc: '0xFEce4462D57bD51A6A552365A011b95f0E16d9B7', rpcs: ['https://rpc.sepolia.linea.build'], route: 'ub' },
@@ -156,9 +156,9 @@ async function loadPayments(intentId: string) {
   return data ?? []
 }
 
-// Arc: USDC is the native coin. Every native movement — a plain native send
+// Arc: USDC is the native coin. Every native movement - a plain native send
 // (what MeshPort Pay/Chat Pay does) and the native leg of an ERC-20
-// transfer() — emits a standard Transfer log from the EIP-7708 system
+// transfer() - emits a standard Transfer log from the EIP-7708 system
 // emitter, in 18 decimals. A plain native send emits NOTHING on the ERC-20
 // contract (0x3600…), so reading only that contract misses it. Arc docs:
 // https://docs.arc.io/arc/references/usdc-system-events
@@ -185,7 +185,7 @@ function usdcToMerchant(receipt: any, usdc: string, to: string, chainId: string)
     return { amount: Number(six) / 1e6, from }
   }
   if (chainId === 'Arc_Testnet') {
-    // Native emitter only — an ERC-20 transfer() also logs on 0x3600…, and
+    // Native emitter only - an ERC-20 transfer() also logs on 0x3600…, and
     // counting both would double the amount.
     const native = sum(ARC_NATIVE_EMITTER, TRANSFER_TOPIC, 18)
     if (native.amount > 0) return native
@@ -201,7 +201,7 @@ type MatchedBy = 'customer' | 'merchant' | 'watcher'
 async function recordPayment(req: Request | null, i: any, chainId: string, txHash: string, who: Awaited<ReturnType<typeof caller>>, order: OrderCheck, matchedBy: MatchedBy = 'customer') {
   const chain = PAY_CHAINS[chainId]
   if (!chain) return { error: "This network isn't supported for this payment.", status: 400 }
-  // Personal requests (non-merchant users) are paid on Arc only — there's no
+  // Personal requests (non-merchant users) are paid on Arc only - there's no
   // merchant auto-collect to move funds from other chains.
   if (i.personal && chainId !== 'Arc_Testnet') return { error: 'This request can only be paid on Arc.', status: 400 }
   if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return { error: 'Invalid transaction', status: 400 }
@@ -224,7 +224,7 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
     return { error: `Order number doesn't match this payment request (#${i.order_number}).`, status: 409 }
   }
   if (order.amount != null && Math.abs(order.amount - due) > 0.000001) {
-    return { error: `Amount doesn't match order #${i.order_number} — $${due.toFixed(2)} USDC is due.`, status: 409 }
+    return { error: `Amount doesn't match order #${i.order_number} - $${due.toFixed(2)} USDC is due.`, status: 409 }
   }
   const receipt = await rpc(chain.rpcs, 'eth_getTransactionReceipt', [tx]).catch(() => null)
   if (!receipt) return { pending: true }
@@ -236,7 +236,7 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   }
 
   // A payer claiming a transfer for an order must show it's really theirs and
-  // really for this order — otherwise anyone could point an order at someone
+  // really for this order - otherwise anyone could point an order at someone
   // else's (or an old) transfer into the merchant's wallet and get it marked paid.
   // (Merchant 'verify'/'assign' and the watcher are trusted paths.)
   if (matchedBy === 'customer') {
@@ -249,7 +249,7 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
     if (!minedAt) return { pending: true }
     if (minedAt + 60_000 < createdAt) return { error: 'This transaction was sent before the order was created.', status: 409 }
     if (!who?.wallet && Date.now() - minedAt > 30 * 60_000) {
-      return { error: 'This transaction is too old to confirm here — ask the merchant to verify it.', status: 409 }
+      return { error: 'This transaction is too old to confirm here - ask the merchant to verify it.', status: 409 }
     }
   }
 
@@ -280,7 +280,7 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
 
   const payments = await loadPayments(i.id)
   const received = payments.reduce((s, p) => s + Number(p.amount), 0)
-  // Paid on arrival, whichever chain — the money is the merchant's; only its
+  // Paid on arrival, whichever chain - the money is the merchant's; only its
   // conversion to Arc waits for auto-convert.
   const full = received >= Number(i.requested_amount) * 0.999
   const status = !full ? 'partially_paid' : 'paid'
@@ -303,7 +303,7 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
 // order names a customer, the sender is that customer's wallet). Several
 // matches → "needs review" for the merchant; none → an ordinary transfer.
 // Arc: native USDC Transfer logs come from the EIP-7708 system emitter
-// (18 decimals) — https://docs.arc.io/integrate/exchanges/deposits
+// (18 decimals) - https://docs.arc.io/integrate/exchanges/deposits
 // World Chain's and Monad's public RPCs only answer eth_getLogs for 100 blocks.
 const SCAN_RANGE: Record<string, number> = { Arc_Testnet: 3000, World_Chain_Sepolia: 100, Monad_Testnet: 100 }
 const DEFAULT_RANGE = 1000
@@ -314,7 +314,7 @@ const PRUNED_JUMP = 1000
 
 /**
  * eth_getLogs for [from, to], recovering from the two refusals public RPCs
- * give: "pruned history" (the node no longer keeps blocks that old — the
+ * give: "pruned history" (the node no longer keeps blocks that old - the
  * cursor fell behind, e.g. Ethereum Sepolia's publicnode keeps ~10k blocks,
  * which left this watcher stuck there for days) → skip ahead to recent
  * blocks; and a block-range limit → retry with a 100-block window.
@@ -328,7 +328,7 @@ async function scanLogs(rpcs: string[], filter: Record<string, unknown>, from: n
     const msg = errText(e)
     if (/prun|history|not available|missing trie/i.test(msg) && latest - from > PRUNED_JUMP) {
       const f = latest - PRUNED_JUMP + 1, t = Math.min(latest, f + (to - from))
-      console.warn('[merchant-pay/watch] history pruned — skipping ahead to block', f)
+      console.warn('[merchant-pay/watch] history pruned - skipping ahead to block', f)
       return { fromBlock: f, toBlock: t, logs: await query(f, t) }
     }
     if (/range|limit|too many|exceed/i.test(msg) && to - from + 1 > SMALL_RANGE) {
@@ -346,13 +346,13 @@ const OWN_TRANSFER_WINDOW_MS = 6 * 3600_000
 const GATEWAY_CONTRACTS = new Set(['0x0077777d7eba4688bdef3e311b846f25870a19b9', '0x0022222abe238cc2c7bb1f21003f0a260052475b'])
 
 // Key-migration cutover: this used to decode the bearer token's JWT payload
-// and trust its `role` claim without verifying the signature — only safe
+// and trust its `role` claim without verifying the signature - only safe
 // while verify_jwt=true already verified that signature upstream. Now that
 // verify_jwt is coming off (the new sb_secret_... key format isn't a JWT and
 // can never pass that gate), a decode-without-verify check would be
 // forgeable by anyone sending a JWT-shaped string with the right claim and
 // no valid signature. Delegates to the shared exact-string-match check
-// instead — see _shared/cronAuth.ts.
+// instead - see _shared/cronAuth.ts.
 function isServiceCaller(req: Request): boolean {
   return isCronOrLegacyServiceCaller(req)
 }
@@ -431,7 +431,7 @@ async function watchDeposits() {
         // usually the merchant's own Transfer Funds from Arc, otherwise
         // someone paying through a bridge. Recorded (own transfers with the
         // merchant's own address as sender, bridge payments with 0x0) and
-        // never auto-matched to an order — there's no paying wallet to check.
+        // never auto-matched to an order - there's no paying wallet to check.
         const minted = from === ZERO
         if (minted && (isArc || !merchantWallets.has(to))) continue
         let atomic = 0n
@@ -487,7 +487,7 @@ async function watchDeposits() {
         if (exact.length > 1) { await park(exact, 'multiple_orders'); return }
 
         // 2) From the customer an order was made for: partial / split payment
-        //    (less than due) or overpayment (more) — linked to that order.
+        //    (less than due) or overpayment (more) - linked to that order.
         const theirs = live.filter((i: any) => custOf(i) === from)
         if (theirs.length === 1) { await record(theirs[0]); return }
         if (theirs.length > 1) { await park(theirs, 'amount_mismatch'); return }
@@ -497,7 +497,7 @@ async function watchDeposits() {
           .filter((i: any) => !custOf(i) && Math.abs(dueOf(i) - amount) <= Math.max(0.1 * dueOf(i), 0.01))
           .sort((a: any, b: any) => Math.abs(dueOf(a) - amount) - Math.abs(dueOf(b) - amount))
         if (close.length > 0) { await park(close, 'amount_mismatch'); return }
-        // 4) Nothing close — an ordinary transfer, not an order payment.
+        // 4) Nothing close - an ordinary transfer, not an order payment.
         }
         if (!known && !queued && !minted) await matchOrder()
 
@@ -558,7 +558,7 @@ Deno.serve(async (req: Request) => {
   // MeshPort scanned a wallet payment QR (address + amount, no link): the
   // newest open order for that wallet with exactly that amount due, if any.
   if (action === 'find') {
-    // Signed-in MeshPort users only (the in-app scanner) — open order codes
+    // Signed-in MeshPort users only (the in-app scanner) - open order codes
     // must not be enumerable by anyone walking amounts for a public wallet.
     const finder = await caller(req)
     if (!finder?.userId) return jsonFor(req, { order: null })
@@ -594,7 +594,7 @@ Deno.serve(async (req: Request) => {
       if (!dep || dep.status !== 'needs_review' || dep.merchant_wallet !== String(i.merchant_wallet).toLowerCase()) return jsonFor(req, { error: 'Deposit not found' }, 404)
       const out: any = await recordPayment(req, i, dep.source_chain, dep.tx_hash, who, { orderNumber: null, amount: null }, 'merchant')
       if (out.error) return jsonFor(req, { error: out.error }, out.status ?? 400)
-      if (out.pending) return jsonFor(req, { error: 'Not confirmed on-chain yet — try again shortly' }, 409)
+      if (out.pending) return jsonFor(req, { error: 'Not confirmed on-chain yet - try again shortly' }, 409)
       await db.from('merchant_unmatched_deposits').update({ status: 'assigned', assigned_code: i.code, updated_at: new Date().toISOString() }).eq('id', dep.id)
       const fresh = await loadIntent(code)
       return jsonFor(req, publicView(fresh, await loadPayments(i.id)))
@@ -641,6 +641,6 @@ Deno.serve(async (req: Request) => {
     return jsonFor(req, { error: 'Unknown action' }, 400)
   } catch (e) {
     console.error('[merchant-pay]', e instanceof Error ? e.message : e)
-    return jsonFor(req, { error: 'Something went wrong — try again' }, 500)
+    return jsonFor(req, { error: 'Something went wrong - try again' }, 500)
   }
 })

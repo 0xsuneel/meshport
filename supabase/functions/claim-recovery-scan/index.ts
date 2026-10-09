@@ -8,8 +8,8 @@
 // A claim only ever gets durably tracked from the moment its burn
 // transaction CONFIRMS (that's when the app saves a recovery record and
 // calls claim-submit). If the app is closed in the narrow window after
-// approval but before the burn confirms, the burn can still go through —
-// irreversible once broadcast — and Circle's infrastructure will still
+// approval but before the burn confirms, the burn can still go through -
+// irreversible once broadcast - and Circle's infrastructure will still
 // complete the mint on Arc entirely independent of MeshPort's own tracking.
 // But since nothing was ever recorded, there's no `claims` row: no Hub card,
 // no notification, no history, even though the money is real and already in
@@ -20,22 +20,22 @@
 // wallet. That's fragile in practice: different bridge routers (e.g. "Bridge
 // With Preapproval And Hook") wrap the underlying CCTP burn call, and
 // correctly detecting a DepositForBurn event requires knowing the right
-// event signature per CCTP version per router — exactly the ambiguity that
+// event signature per CCTP version per router - exactly the ambiguity that
 // caused real confusion earlier (a stuck claim's attestation lookup
 // returning 404 with no clear way to confirm whether a valid CCTP message
 // was ever emitted). Scanning Arc for INCOMING mints instead reuses the
 // exact same event-matching code already proven reliable in claim-worker
-// (fetchLogsBounded / TRANSFER_TOPIC0 / MINT_FROM_TOPIC) — one chain, one
+// (fetchLogsBounded / TRANSFER_TOPIC0 / MINT_FROM_TOPIC) - one chain, one
 // battle-tested code path, no per-router guessing.
 //
 // Trade-off, stated plainly: since detection happens from the Arc side only,
 // a recovered claim's source_chain isn't known from the mint's Transfer
 // event alone. It's resolved separately, from that same mint transaction's
 // CCTP MessageReceived event (emitted by Circle's MessageTransmitter
-// contract, which encodes the real sourceDomain) — the same decoding
+// contract, which encodes the real sourceDomain) - the same decoding
 // claim-worker's normal path already relies on. Only falls back to
 // 'Unknown' if ARC_MESSAGE_TRANSMITTER_ADDRESS isn't configured, the log
-// can't be found, or the domain isn't one of ours — genuinely unresolvable
+// can't be found, or the domain isn't one of ours - genuinely unresolvable
 // cases, not the common case.
 
 import { createClient, SupabaseClient } from 'jsr:@supabase/supabase-js@2'
@@ -55,13 +55,13 @@ function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }
 
-// drpc.live API key — set DRPC_KEY in Supabase project secrets
+// drpc.live API key - set DRPC_KEY in Supabase project secrets
 const DRPC_KEY = Deno.env.get('DRPC_KEY') ?? ''
-// Optional explicit authenticated RPC URL override — set ARC_RPC_URL in
+// Optional explicit authenticated RPC URL override - set ARC_RPC_URL in
 // Supabase project secrets to point at a specific authenticated gateway.
 const CONFIGURED_ARC_RPC_URL = (Deno.env.get('ARC_RPC_URL') ?? '').trim()
 
-// Authenticated-only Arc endpoints — no direct public gateways
+// Authenticated-only Arc endpoints - no direct public gateways
 // (rpc.testnet.arc.io, Blockdaemon, dRPC public, QuickNode, thirdweb,
 // drpc.org). Those were exactly how this scan could end up querying
 // arc-testnet.rpc.thirdweb.com even with an authenticated RPC configured.
@@ -71,12 +71,12 @@ const CONFIGURED_ARC_RPC_URL = (Deno.env.get('ARC_RPC_URL') ?? '').trim()
 // this session with real, reproducible evidence: whatever
 // CONFIGURED_ARC_RPC_URL/DRPC_KEY currently resolve to was returning EMPTY
 // eth_getLogs results for mints that had genuinely already confirmed on
-// Arc — same query, same filter, same block range — while this exact
+// Arc - same query, same filter, same block range - while this exact
 // public endpoint found them immediately, every time. This is not the
 // mistake the comment above warns about (a rotating pool silently letting
 // an unauthenticated endpoint answer instead of the configured one): every
 // URL here is queried in parallel on every call and results are unioned
-// (fetchLogsBounded below), not short-circuited to "first success" — so
+// (fetchLogsBounded below), not short-circuited to "first success" - so
 // when the configured provider is healthy, this fallback only ever
 // contributes duplicate copies of the same real logs, which callers
 // already dedupe via their own already-recorded checks. It only actually
@@ -84,7 +84,7 @@ const CONFIGURED_ARC_RPC_URL = (Deno.env.get('ARC_RPC_URL') ?? '').trim()
 // configured provider silently returning nothing instead of erroring. If
 // that provider gets fixed, this fallback simply stops mattering rather
 // than needing to be removed. Kept identical to claim-worker's own copy of
-// this same fix — see that file's version of this comment for the fuller
+// this same fix - see that file's version of this comment for the fuller
 // original diagnosis.
 const ARC_RPCS = [
   ...(CONFIGURED_ARC_RPC_URL ? [CONFIGURED_ARC_RPC_URL] : []),
@@ -96,13 +96,13 @@ const TRANSFER_TOPIC0 = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55
 const MINT_FROM_TOPIC = '0x' + '0'.repeat(64)
 // ROOT-CAUSE FIX (2026-09-18): CCTP mints on Arc are guaranteed to emit the
 // native EIP-7708 Transfer log (18 decimals) but NOT guaranteed to also
-// emit the ERC-20 wrapper's own Transfer (0x3600…0000, 6 decimals) — see
+// emit the ERC-20 wrapper's own Transfer (0x3600…0000, 6 decimals) - see
 // claim-worker/index.ts's fetchMintAmountForTx comment for the full
 // writeup (Arc docs: "Mint and burn... go through the precompile"; this
 // repo's own blockchain-indexer/chains.ts already measured thousands of
 // native-only mints with no wrapper twin). Used ONLY for the claim-mint
 // scan below (see NATIVE_USDC_EMITTER's mint-only query), never for the
-// generic-receive scan — that one keeps its existing wrapper-based
+// generic-receive scan - that one keeps its existing wrapper-based
 // behavior unchanged.
 const NATIVE_USDC_EMITTER = '0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE'
 const ARC_EXPLORER = 'https://testnet.arcscan.app'
@@ -110,14 +110,14 @@ const ARC_EXPLORER = 'https://testnet.arcscan.app'
 // ── Sender-based internal-contract classification (docs/CLAIM_RECOVERY_SENDER_CLASSIFICATION_FIX.md) ──
 // A Transfer whose SENDER is one of these addresses is a MeshPort-internal
 // transaction leg (a swap's output, a BulkPay/Multicall3 payout, CCTP
-// infrastructure, or — if configured — a P2P escrow release/refund), not a
+// infrastructure, or - if configured - a P2P escrow release/refund), not a
 // genuine external deposit. Checked BEFORE existsActivityForTxHash/
 // recordExternalReceive in every generic-receive branch below, so the
 // classification no longer depends entirely on winning a timing race against
 // the transaction's own, purpose-built Activity writer (SwapPage.tsx,
-// BulkPayoutPage.tsx, p2pService.ts) — see the doc for the full EURC trace
+// BulkPayoutPage.tsx, p2pService.ts) - see the doc for the full EURC trace
 // this fixes. P2P's escrow address(es), same env vars
-// p2p-release-reconcile/index.ts already reads — not hardcoded here since no
+// p2p-release-reconcile/index.ts already reads - not hardcoded here since no
 // address was ever confirmed configured in every environment (see
 // knownInternalContracts.ts's own comment on `extra`).
 const P2P_ESCROW_CONTRACT = (Deno.env.get('P2P_ESCROW_CONTRACT') ?? '').trim().toLowerCase()
@@ -125,23 +125,23 @@ const P2P_ESCROW_CONTRACTS_LEGACY = (Deno.env.get('P2P_ESCROW_CONTRACTS_LEGACY')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
 const KNOWN_INTERNAL_EXTRA = [P2P_ESCROW_CONTRACT, ...P2P_ESCROW_CONTRACTS_LEGACY].filter(Boolean)
 // Added for native-USDC deposit detection (see the block below the ERC20-log
-// scan, further down) — same values deposit-scan-all uses, kept in sync
+// scan, further down) - same values deposit-scan-all uses, kept in sync
 // deliberately so both scanners agree on what a "native USDC transfer"
 // looks like.
 const ARC_EXPLORER_API = 'https://testnet.arcscan.app/api/v2'
 const NATIVE_DECIMALS = 18
 
 // ── CCTP source-chain resolution ───────────────────────────────────────────
-// A recovered claim is detected purely from the INCOMING mint on Arc — but
+// A recovered claim is detected purely from the INCOMING mint on Arc - but
 // that mint's own transaction also carries a MessageReceived event, emitted
 // by Circle's CCTP MessageTransmitter contract, whose log data encodes the
 // sourceDomain the message originated from. This is the exact same event
-// claim-worker's normal (non-recovery) path already decodes — reusing it
+// claim-worker's normal (non-recovery) path already decodes - reusing it
 // here means recovered claims no longer need to fall back to 'Unknown':
 // the real source chain is sitting right there in the same transaction.
 const ARC_MESSAGE_TRANSMITTER = Deno.env.get('ARC_MESSAGE_TRANSMITTER_ADDRESS') ?? ''
 // CCTP v2 changed this event's shape from v1 (nonce: uint64 → bytes32, and
-// added finalityThresholdExecuted before messageBody) — a different event
+// added finalityThresholdExecuted before messageBody) - a different event
 // shape means a completely different topic0 hash, even though the event
 // name and the emitting contract are the same. Checking both makes this
 // robust regardless of which CCTP version a given mint actually went
@@ -181,7 +181,7 @@ const CCTP_DOMAIN_TO_CHAIN: Record<number, string> = {
   31: 'Pharos_Testnet',
 }
 
-// Inlined rather than imported from _shared/chains.ts — matching this
+// Inlined rather than imported from _shared/chains.ts - matching this
 // file's existing preference elsewhere (see claim-worker's own inlined
 // copy of these same constants) for staying self-contained.
 const CHAIN_RPCS: Record<string, string[]> = {
@@ -209,11 +209,11 @@ const CHAIN_RPCS: Record<string, string[]> = {
 }
 
 // keccak256("DepositForBurn(uint64,address,uint256,address,bytes32,uint32,bytes32,bytes32)")
-// CCTP v1 only — nonce is the first indexed parameter, which is what makes
+// CCTP v1 only - nonce is the first indexed parameter, which is what makes
 // an exact, reliable match possible at all (search by the exact nonce we
 // already decoded from the Arc-side mint, not a fuzzy amount/time guess).
 // CCTP v2 restructured DepositForBurn to no longer include nonce as part of
-// this event at all — correlating a v2 burn requires matching by message
+// this event at all - correlating a v2 burn requires matching by message
 // hash instead, a genuinely different lookup this does not attempt. A v2
 // source chain's claim will still fall back to the placeholder/no-source-
 // link behavior rather than risk showing an unreliable, possibly wrong match.
@@ -231,7 +231,7 @@ async function rpcCall(urls: string[], method: string, params: unknown[]): Promi
         signal: AbortSignal.timeout(8000),
       })
       // Non-2xx (429 rate-limit, 5xx, etc.) doesn't always come back as
-      // JSON-RPC-shaped JSON with an `.error` field — fail over on it too.
+      // JSON-RPC-shaped JSON with an `.error` field - fail over on it too.
       if (!res.ok) { lastErr = new Error(`RPC ${res.status} from ${url}`); continue }
       const respJson = await res.json()
       if (respJson.error) { lastErr = respJson.error; continue }
@@ -274,8 +274,8 @@ async function getTransactionReceiptRaced(txHash: string): Promise<any | null> {
 
 async function resolveSourceChain(mintTxHash: string): Promise<{ chain: string; nonce: bigint | null; isCctpMint: boolean }> {
   if (!ARC_MESSAGE_TRANSMITTER) {
-    console.error('[claim-recovery-scan] resolveSourceChain: ARC_MESSAGE_TRANSMITTER_ADDRESS is not set — falling back to Unknown for', mintTxHash)
-    // Can't tell either way without this configured — treat as "might be
+    console.error('[claim-recovery-scan] resolveSourceChain: ARC_MESSAGE_TRANSMITTER_ADDRESS is not set - falling back to Unknown for', mintTxHash)
+    // Can't tell either way without this configured - treat as "might be
     // CCTP" (true) rather than risk misclassifying real claims as external
     // receives. This only affects environments missing the env var, not
     // normal operation.
@@ -294,32 +294,32 @@ async function resolveSourceChain(mintTxHash: string): Promise<{ chain: string; 
        (l.topics?.[0] as string)?.toLowerCase() === MESSAGE_RECEIVED_TOPIC0_V2.toLowerCase())
     )
     if (!receiveLog?.data) {
-      // No MessageReceived log from Circle's own MessageTransmitter at all —
+      // No MessageReceived log from Circle's own MessageTransmitter at all -
       // this transfer's `from = address(0)` did NOT come through CCTP. It's
       // some other mechanism entirely (a different bridge, an exchange's own
       // mint-on-deposit flow, a faucet, etc.) that happens to look like a
       // mint at the log level. isCctpMint: false is what tells the caller
-      // NOT to try matching this against one of our own claims by amount —
+      // NOT to try matching this against one of our own claims by amount -
       // see the isMint branch in Deno.serve below for why that matters.
       console.error(
         '[claim-recovery-scan] resolveSourceChain: no MessageReceived log from', ARC_MESSAGE_TRANSMITTER,
-        'in tx', mintTxHash, '— not a CCTP mint, addresses seen in receipt:', logs.map(l => l.address).join(', ')
+        'in tx', mintTxHash, '- not a CCTP mint, addresses seen in receipt:', logs.map(l => l.address).join(', ')
       )
       return { chain: 'Unknown', nonce: null, isCctpMint: false }
     }
     // event MessageReceived(address indexed caller, uint32 sourceDomain, uint64 indexed nonce, bytes32 sender, bytes messageBody)
-    // sourceDomain is the first non-indexed field — the first 32-byte word of `data`, uint32 right-aligned.
+    // sourceDomain is the first non-indexed field - the first 32-byte word of `data`, uint32 right-aligned.
     const data = (receiveLog.data as string).startsWith('0x') ? receiveLog.data.slice(2) : receiveLog.data
     const sourceDomain = parseInt(data.slice(0, 64).slice(-8), 16)
     const chain = CCTP_DOMAIN_TO_CHAIN[sourceDomain]
     // nonce is the second indexed topic (topics[0]=event sig, topics[1]=caller, topics[2]=nonce)
-    // — only reliably present for the v1 event shape; v2 moved nonce out of
+    // - only reliably present for the v1 event shape; v2 moved nonce out of
     // MessageReceived's indexed params entirely, so this is null for v2
     // mints, which is exactly why findSourceBurnTx below can't attempt a
     // lookup for those (there's nothing to search by).
     let nonce: bigint | null = null
     try { if (receiveLog.topics?.[2]) nonce = BigInt(receiveLog.topics[2]) } catch { /* leave null */ }
-    // A real MessageReceived log WAS found here — this genuinely is a CCTP
+    // A real MessageReceived log WAS found here - this genuinely is a CCTP
     // mint, even if the specific sourceDomain isn't one we recognize.
     if (!chain) {
       console.error('[claim-recovery-scan] resolveSourceChain: unrecognized sourceDomain', sourceDomain, 'for', mintTxHash)
@@ -328,7 +328,7 @@ async function resolveSourceChain(mintTxHash: string): Promise<{ chain: string; 
     return { chain, nonce, isCctpMint: true }
   } catch (e) {
     console.error('[claim-recovery-scan] resolveSourceChain threw for', mintTxHash, ':', e instanceof Error ? e.message : e)
-    // Threw (RPC error, etc.) — genuinely couldn't determine either way.
+    // Threw (RPC error, etc.) - genuinely couldn't determine either way.
     // Same reasoning as the missing-env-var case: don't risk misrouting a
     // real claim, so default to "might be CCTP".
     return { chain: 'Unknown', nonce: null, isCctpMint: true }
@@ -336,8 +336,8 @@ async function resolveSourceChain(mintTxHash: string): Promise<{ chain: string; 
 }
 
 // Recovery scans further back than claim-worker's normal 5000-block
-// live-settlement window — this is meant to catch claims that have been
-// missing for potentially hours, not seconds. 500k rather than 200k — a
+// live-settlement window - this is meant to catch claims that have been
+// missing for potentially hours, not seconds. 500k rather than 200k - a
 // deliberately conservative widening: chunks are fetched in sequential
 // batches of 5 (see fetchLogsBounded below), so this scales the number of
 // batches roughly linearly. A much larger window risks the edge function
@@ -382,7 +382,7 @@ async function fetchLogsBounded(filterBase: Record<string, unknown>, windowBlock
   const currentBlock = await getCurrentArcBlockNumber()
   const fromBlock = Math.max(0, currentBlock - windowBlocks)
 
-  // Query one chunk — races all RPC endpoints, returns whichever succeeds
+  // Query one chunk - races all RPC endpoints, returns whichever succeeds
   // first with actual results (or [] if all agree there's nothing there).
   const queryChunk = async (from: number, to: number): Promise<{ ok: boolean; logs: any[] }> => {
     const filter = { ...filterBase, fromBlock: '0x' + from.toString(16), toBlock: '0x' + to.toString(16) }
@@ -396,12 +396,12 @@ async function fetchLogsBounded(filterBase: Record<string, unknown>, windowBlock
 
   // Proactively split into fixed-size chunks rather than requesting the
   // full window in one call and reactively retrying on a specific error
-  // message pattern — that approach silently breaks if an RPC provider's
+  // message pattern - that approach silently breaks if an RPC provider's
   // "range too large" wording doesn't match what we expect (very possible
   // for Arc's testnet RPCs, which are new and largely undocumented). Fixed
   // 5,000-block chunks are within limits for effectively every EVM JSON-RPC
   // provider in practice, so this never depends on parsing error text at
-  // all — and one bad chunk doesn't sink the whole scan.
+  // all - and one bad chunk doesn't sink the whole scan.
   const CHUNK_SIZE = 5_000
   const CONCURRENCY = 5
   const chunks: Array<[number, number]> = []
@@ -423,7 +423,7 @@ async function fetchLogsBounded(filterBase: Record<string, unknown>, windowBlock
       } else {
         const [from, to] = batch[j]
         console.error(`[claim-recovery-scan] chunk ${from}-${to} failed:`, serializeErrorForRpc(r.reason))
-        // Keep going — one bad chunk shouldn't sink the whole recovery scan.
+        // Keep going - one bad chunk shouldn't sink the whole recovery scan.
       }
     }
   }
@@ -449,7 +449,7 @@ async function getBlockTimestamp(blockNumber: number): Promise<string | null> {
   }
 }
 
-// Same reasoning as claim-worker/index.ts's getServiceRoleKey — legacy name
+// Same reasoning as claim-worker/index.ts's getServiceRoleKey - legacy name
 // tried first (currently verified working), new SUPABASE_SECRET_KEYS format
 // only as a fallback, clear error instead of a silent crash if neither is set.
 function getServiceRoleKey(): string {
@@ -468,7 +468,7 @@ function getServiceRoleKey(): string {
   }
 
   throw new Error(
-    'No Supabase service role key found — checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS. ' +
+    'No Supabase service role key found - checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS. ' +
     'Set one of these as a project secret.'
   )
 }
@@ -485,7 +485,7 @@ async function recordClaimActivity(supabase: SupabaseClient, walletAddress: stri
         // Dated by the mint's block (see txTime) so a claim found late isn't shown as today.
         ...(createdAt ? { created_at: createdAt } : {}),
         wallet_address:      walletAddress.toLowerCase(),
-        // Real source-chain burn hash when findSourceBurnTx found one —
+        // Real source-chain burn hash when findSourceBurnTx found one -
         // otherwise the same placeholder reasoning as before: the mint
         // hash standing in for both fields, distinguishable via
         // metadata.recovered so the frontend knows not to build a broken
@@ -501,7 +501,7 @@ async function recordClaimActivity(supabase: SupabaseClient, walletAddress: stri
         status:            'completed',
         explorer_url:      `${ARC_EXPLORER}/tx/${txHash}`,
         // recovered stays true either way (this claim was still found via
-        // the recovery scan, not the normal tracked flow) — but
+        // the recovery scan, not the normal tracked flow) - but
         // hasRealSourceHash lets the frontend distinguish "we have a real,
         // verified burn hash, show the link" from "placeholder only, hide it".
         metadata:          { recovered: true, hasRealSourceHash: hasRealBurnHash },
@@ -513,10 +513,10 @@ async function recordClaimActivity(supabase: SupabaseClient, walletAddress: stri
 }
 
 // A recently-failed claim being reconciled back to 'completed' already has
-// an activity row from when claim-worker's markFailed() ran — keyed by the
+// an activity row from when claim-worker's markFailed() ran - keyed by the
 // claim's BURN tx_hash, not the mint tx_hash this scan just found. Upserting
 // with ignoreDuplicates (recordClaimActivity above) wouldn't touch that
-// existing row at all, since it's a different tx_hash — it would silently
+// existing row at all, since it's a different tx_hash - it would silently
 // leave the old 'failed' entry sitting in history forever while the claims
 // row itself now says 'completed'. This explicitly corrects the SAME row in
 // place instead.
@@ -547,13 +547,13 @@ async function reconcileFailedClaimActivity(
 }
 
 // TOCTOU guard for the swap-collision checks below. A swap's output-token
-// leg lands on-chain as a plain Transfer to this wallet — indistinguishable
-// from a genuine external deposit at the log level — and is already being
+// leg lands on-chain as a plain Transfer to this wallet - indistinguishable
+// from a genuine external deposit at the log level - and is already being
 // recorded, separately, by the client (SwapPage.tsx → Activity.swap(),
 // under this exact unprefixed tx hash) the moment the swap confirms in the
 // user's own browser. This scan runs independently (on app mount / tab
 // refocus) and can win that race if it happens to check for an existing row
-// before the client's write has landed — a single point-in-time SELECT
+// before the client's write has landed - a single point-in-time SELECT
 // can't tell "genuinely no row" apart from "row is still being written a
 // few hundred ms from now". That was silently producing a real duplicate:
 // a correct 'swap' row plus a spurious 'receive' row for the same
@@ -567,16 +567,16 @@ async function reconcileFailedClaimActivity(
 // external-deposit case (which has no competing writer and simply pays this
 // same short cost once).
 //
-// Widened from ~3s to ~8s (2026-09-02) — docs/ACTIVITY_WRITER_AUDIT.md
+// Widened from ~3s to ~8s (2026-09-02) - docs/ACTIVITY_WRITER_AUDIT.md
 // flagged this window as "P1, worth tightening... narrow but not zero
 // probability", the exact mechanism behind the traced EURC duplicate. NOT
 // widened all the way to activity-consumer's 30s despite that doc's
 // suggestion: every caller of this function sits inside a `for` loop over
 // every candidate transfer in the scan window (see below), so this delay
-// is paid ONCE PER CANDIDATE, not once per invocation — at 30s, a wallet
+// is paid ONCE PER CANDIDATE, not once per invocation - at 30s, a wallet
 // with several genuinely-ambiguous candidates in one pass could push a
 // single scan invocation toward Edge Function execution limits. 8s is a
-// real improvement (this poll is now also the THIRD, last-resort layer —
+// real improvement (this poll is now also the THIRD, last-resort layer -
 // see the sender-exclusion and transaction_attempts correlation checks
 // above it in each caller, added by
 // docs/CLAIM_RECOVERY_SENDER_CLASSIFICATION_FIX.md, which structurally
@@ -604,7 +604,7 @@ async function existsActivityForTxHash(supabase: SupabaseClient, walletAddress: 
 // A Unified Balance (Circle Gateway) claim mints to the wallet from
 // address(0) WITHOUT a CCTP MessageReceived log, so on-chain it looks like a
 // generic external deposit. Its Activity row is written by the ub-claim-worker
-// / app — possibly a few seconds AFTER the mint lands. Skip any mint that
+// / app - possibly a few seconds AFTER the mint lands. Skip any mint that
 // belongs to (or plausibly belongs to) a UB claim so it's never also recorded
 // as "Received from 0x0000…".
 async function isUbClaimMint(supabase: SupabaseClient, walletAddress: string, txHash: string, amount: number): Promise<boolean> {
@@ -640,7 +640,7 @@ async function isUbClaimMint(supabase: SupabaseClient, walletAddress: string, tx
     // Unified Balance money coming back to this wallet (Recover → "Send back
     // to my wallet") mints from address(0) the same way. Its row is the
     // stuck-transfer row (withdraw + ub_stuck_transfer), which the app only
-    // flips to ub_recovery a few seconds AFTER the mint — so match either
+    // flips to ub_recovery a few seconds AFTER the mint - so match either
     // state. Gateway's fee comes out of the amount, hence the same 70%..100%
     // window as a pending UB claim. Without this, every refund also showed
     // as "Received from 0x0000…" next to its "Recovered via UB" row.
@@ -663,7 +663,7 @@ async function isUbClaimMint(supabase: SupabaseClient, walletAddress: string, tx
 
 // When the transfer actually happened on Arc. A deposit found late (a
 // backfill, a reconcile pass, a catch-up after downtime) must be dated by its
-// block, not by when it was found — otherwise a month-old deposit shows up in
+// block, not by when it was found - otherwise a month-old deposit shows up in
 // Activity as "today". Arc receipts carry blockTimestamp on their logs; the
 // block itself is the fallback. null → the row keeps its default (now()).
 async function txTime(txHash: string): Promise<string | null> {
@@ -678,7 +678,7 @@ async function txTime(txHash: string): Promise<string | null> {
 }
 
 // A real transfer (not a mint from address(0)) landing in the wallet with no
-// matching claims/activity row at all — this is what a Circle testnet
+// matching claims/activity row at all - this is what a Circle testnet
 // faucet drop actually looks like on-chain: a plain Transfer from a funded
 // faucet/treasury address, not a CCTP mint. Recorded as a genuine 'receive'
 // row (not 'claim') so it correctly appears under Received/All, with the
@@ -717,15 +717,15 @@ async function recordExternalReceive(supabase: SupabaseClient, walletAddress: st
   }
 }
 
-// ── Native USDC deposit detection — added because the ERC20-log scan above
+// ── Native USDC deposit detection - added because the ERC20-log scan above
 // is structurally blind to plain native transfers ──────────────────────
 // USDC on Arc is the chain's NATIVE currency (18-decimal value transfers),
 // not the token contract this file's ERC20-log scan (above) watches. A
 // plain wallet-to-wallet send or an exchange withdrawal (OKX, etc. sent
 // straight to a MeshPort address) never touches ARC_USDC_CONTRACT and never
-// emits the Transfer log the scan above filters for — so it was invisible
+// emits the Transfer log the scan above filters for - so it was invisible
 // to this fast, app-open-triggered path entirely, only ever caught later by
-// deposit-scan-all's slower scheduled sweep (up to ~1-2 min, by design —
+// deposit-scan-all's slower scheduled sweep (up to ~1-2 min, by design -
 // see that function's own header comment).
 //
 // This is the SAME detection logic already proven in deposit-scan-all
@@ -827,7 +827,7 @@ Deno.serve(async (req: Request) => {
     // nothing was wrong with THEIR data source).
 
     const runUsdcClaimAndReceiveScan = async () => {
-      // No MINT_FROM_TOPIC filter here anymore — catches every incoming
+      // No MINT_FROM_TOPIC filter here anymore - catches every incoming
       // Transfer, not just CCTP mints. A Circle faucet drop is a plain
       // Transfer from a funded address, not a mint from address(0), so the
       // old mint-only filter silently excluded it entirely.
@@ -836,14 +836,14 @@ Deno.serve(async (req: Request) => {
         RECOVERY_SCAN_WINDOW_BLOCKS
       )
 
-      // Narrow, mint-only, native-emitter query — see NATIVE_USDC_EMITTER's
+      // Narrow, mint-only, native-emitter query - see NATIVE_USDC_EMITTER's
       // comment above. This is what lets a claim already marked 'failed' by
       // claim-worker's settling timeout (because ITS scan had the same
       // wrapper-only blind spot) get reconciled the next time this scan
       // runs, via the "RECENTLY-failed claims" pool further down. Filtered
       // to matches[1]=MINT_FROM_TOPIC in the query itself, so every result
       // here is unambiguously a real system mint (per Arc docs, a native
-      // value transfer to/from the zero address reverts — only mint/burn
+      // value transfer to/from the zero address reverts - only mint/burn
       // can produce a Transfer(0x0, ...) here), never a plain send.
       const nativeMintLogs = await fetchLogsBounded(
         { address: NATIVE_USDC_EMITTER, topics: [TRANSFER_TOPIC0, MINT_FROM_TOPIC, recipientTopic] },
@@ -851,7 +851,7 @@ Deno.serve(async (req: Request) => {
       )
       const wrapperTxHashes = new Set(wrapperLogs.map((l: any) => (l.transactionHash as string).toLowerCase()))
       // Only ADD native-mint logs whose tx isn't already covered by the
-      // wrapper scan — a mint with a wrapper twin already flows through the
+      // wrapper scan - a mint with a wrapper twin already flows through the
       // existing isMint branch below unchanged, so this only fills the gap.
       const nativeOnlyMintLogs = nativeMintLogs.filter((l: any) => !wrapperTxHashes.has((l.transactionHash as string).toLowerCase()))
 
@@ -862,7 +862,7 @@ Deno.serve(async (req: Request) => {
       const txHash = (log.transactionHash as string).toLowerCase()
       const fromTopic = (log.topics?.[1] as string) || ''
       const isMint = fromTopic.toLowerCase() === MINT_FROM_TOPIC.toLowerCase()
-      // Only nativeOnlyMintLogs entries carry this address — everything
+      // Only nativeOnlyMintLogs entries carry this address - everything
       // from the wrapper scan is 6-decimal as before.
       const isNativeOnlyLog = (log.address as string)?.toLowerCase() === NATIVE_USDC_EMITTER.toLowerCase()
 
@@ -872,7 +872,7 @@ Deno.serve(async (req: Request) => {
       } catch { continue }
       if (!Number.isFinite(amount) || amount <= 0) continue
 
-      // Real transfer (not a mint) — this is the faucet-drop / generic
+      // Real transfer (not a mint) - this is the faucet-drop / generic
       // external-deposit case. Check it isn't already tracked as a receive,
       // then record it as one.
       if (!isMint) {
@@ -887,11 +887,11 @@ Deno.serve(async (req: Request) => {
         const fromAddress = '0x' + fromTopic.slice(-40)
         if (fromAddress.toLowerCase() === walletAddress.toLowerCase()) continue // self-transfer, not a real incoming payment
 
-        // Sender-based classification — checked BEFORE existsActivityForTxHash,
+        // Sender-based classification - checked BEFORE existsActivityForTxHash,
         // per docs/CLAIM_RECOVERY_SENDER_CLASSIFICATION_FIX.md. A known
         // internal contract's output (swap router, Multicall3/BulkPay, CCTP
         // infra, or a configured P2P escrow) is never a generic external
-        // deposit — skip it structurally instead of relying on winning a
+        // deposit - skip it structurally instead of relying on winning a
         // race against that flow's own Activity writer.
         if (isKnownInternalContract(fromAddress, KNOWN_INTERNAL_EXTRA)) continue
 
@@ -909,8 +909,8 @@ Deno.serve(async (req: Request) => {
         // is already recorded under this exact (unprefixed) tx hash as its
         // own 'swap' activity row. Skip so it isn't double-counted as an
         // "external" payment on top of the correct "Swap Complete" one.
-        // Poll-with-delay (not a single check) — see existsActivityForTxHash.
-        // Now a THIRD layer of defense, not the only one — the sender check
+        // Poll-with-delay (not a single check) - see existsActivityForTxHash.
+        // Now a THIRD layer of defense, not the only one - the sender check
         // and the tracked-feature correlation above already catch the
         // common cases structurally, before any race can even occur.
         if (await existsActivityForTxHash(supabase, walletAddress, txHash)) continue
@@ -931,19 +931,19 @@ Deno.serve(async (req: Request) => {
       // Resolved once, up front, and reused below for both the
       // claim-matching decision AND (if it turns out to be a genuine,
       // fully-untracked CCTP mint) recordClaimActivity's realBurnTxHash
-      // lookup — no need to re-derive it a second time later.
+      // lookup - no need to re-derive it a second time later.
       const { chain: resolvedSourceChain, nonce, isCctpMint } = await resolveSourceChain(txHash)
 
       // A `from = address(0)` transfer that ISN'T actually a CCTP mint (no
       // MessageReceived log from Circle's MessageTransmitter at all) can't
-      // belong to any of our claims — CCTP is the only thing our claim
+      // belong to any of our claims - CCTP is the only thing our claim
       // system tracks. Routing it through the amount-only matching below
       // anyway was the real bug: a genuine external deposit (e.g. funded via
       // OKX/MetaMask through whatever mint-on-deposit mechanism THEY use)
       // that happened to be a similar amount to an unrelated pending or
       // recently-failed MeshPort claim got silently absorbed into
       // *completing that claim* instead of creating its own Activity entry
-      // — the deposit was real and the balance was right, but no new
+      // - the deposit was real and the balance was right, but no new
       // history row ever appeared for it. Treat it exactly like any other
       // non-mint external transfer instead.
       if (!isCctpMint) {
@@ -951,14 +951,14 @@ Deno.serve(async (req: Request) => {
         if (fromAddress.toLowerCase() !== walletAddress.toLowerCase()) {
           // fromAddress is always address(0) on this branch by construction
           // (isMint was true, resolveSourceChain just determined it wasn't a
-          // real CCTP mint) — isKnownInternalContract will never match it,
+          // real CCTP mint) - isKnownInternalContract will never match it,
           // so this is a no-op here today. Kept for consistency with the
           // other three generic-receive branches rather than special-cased,
           // per docs/CLAIM_RECOVERY_SENDER_CLASSIFICATION_FIX.md, and as a
           // safety net if this branch's sender resolution ever changes.
           if (isKnownInternalContract(fromAddress, KNOWN_INTERNAL_EXTRA)) { continue }
           // See the tracked-feature correlation comment on the first
-          // generic-receive branch above — same check, kept consistent
+          // generic-receive branch above - same check, kept consistent
           // across all four branches per
           // docs/CLAIM_RECOVERY_SENDER_CLASSIFICATION_FIX.md's own reasoning
           // for why the other three do this uniformly rather than special-
@@ -976,7 +976,7 @@ Deno.serve(async (req: Request) => {
       // so the check above wouldn't have caught it) that this mint actually
       // belongs to? Fee-tolerant match, same 70%-100.1% band claim-worker
       // itself uses. If so, complete THAT claim instead of creating a new
-      // 'Unknown' row — this is the fix for a real bug found in production:
+      // 'Unknown' row - this is the fix for a real bug found in production:
       // a legitimately still-processing claim got permanently blocked
       // because the scanner created a redundant duplicate for the same
       // mint before claim-worker's own retry logic could claim it.
@@ -987,7 +987,7 @@ Deno.serve(async (req: Request) => {
       // transfer that outlasted the timeout but was never actually lost).
       // Without this, that money would show as both a 'failed' entry AND a
       // separate, unrelated-looking new 'completed' entry once this scan
-      // finds the mint — same underlying claim, two disagreeing records.
+      // finds the mint - same underlying claim, two disagreeing records.
       // Bounded to a recency window so an old failed claim can't be
       // resurrected by an unrelated, coincidentally-similar-amount mint.
       const RECONCILE_FAILED_WINDOW_MS = 24 * 60 * 60 * 1000
@@ -1027,18 +1027,18 @@ Deno.serve(async (req: Request) => {
           console.error('[claim-recovery-scan] failed to complete matching existing claim', matchingClaim.id, updateErr.message)
         } else {
           // This claim was already tracked (the user picked a source chain
-          // when they submitted it) — reuse that instead of re-deriving it,
+          // when they submitted it) - reuse that instead of re-deriving it,
           // it's already the real value, not 'Unknown'.
           if (isReconcilingFailed && matchingClaim.tx_hash) {
             // Correct the existing 'failed' activity row in place (keyed by
             // the burn hash) rather than upserting a new row keyed by the
-            // mint hash — see reconcileFailedClaimActivity for why the
+            // mint hash - see reconcileFailedClaimActivity for why the
             // normal recordClaimActivity path can't do this.
             await reconcileFailedClaimActivity(supabase, walletAddress, matchingClaim.tx_hash, amount, txHash)
           } else {
             // FIX: matchingClaim.tx_hash IS the real source-chain burn hash
             // (claim-submit writes the client-submitted burn tx hash there
-            // at claim-submission time — see claim-submit/index.ts) — not a
+            // at claim-submission time - see claim-submit/index.ts) - not a
             // placeholder. Previously this was never passed through as
             // recordClaimActivity's realBurnTxHash argument, so every claim
             // completed via this "already tracked" path got recorded with
@@ -1046,7 +1046,7 @@ Deno.serve(async (req: Request) => {
             // sitting right here the whole time. The frontend (see
             // ActivityPage.tsx's isRecoveredClaim) treats hasRealSourceHash:
             // false as "genuinely unresolvable" and deliberately hides the
-            // source hash row AND the "View Burn" explorer link — so this
+            // source hash row AND the "View Burn" explorer link - so this
             // was silently hiding real, known, correct links for every claim
             // that happened to complete through the recovery scan instead of
             // claim-worker's normal path (exactly the "recovery scan helped
@@ -1058,18 +1058,18 @@ Deno.serve(async (req: Request) => {
         continue
       }
 
-      // Fully untracked mint — no claims row ever existed for it, but we
+      // Fully untracked mint - no claims row ever existed for it, but we
       // already confirmed above (isCctpMint) that it genuinely IS a CCTP
       // mint, and resolvedSourceChain/nonce were already derived from that
-      // same MessageReceived log — no need to re-resolve it here.
-      // Attempt to find the REAL source-chain burn transaction — only
+      // same MessageReceived log - no need to re-resolve it here.
+      // Attempt to find the REAL source-chain burn transaction - only
       // possible when we have both a recognized chain and a nonce (v1 CCTP
       // shape; v2 doesn't carry nonce in this event at all, see
       // resolveSourceChain's comment). Falls back to the existing
       // placeholder behavior (mint hash standing in for both fields) when
       // this can't be determined, rather than risk showing a wrong match.
       // A claim that was already completed WITHOUT its mint hash (e.g. minted
-      // by hand from Recover) — attach this mint to it instead of creating a
+      // by hand from Recover) - attach this mint to it instead of creating a
       // second "recovered" claim for the same funds.
       {
         const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
@@ -1100,7 +1100,7 @@ Deno.serve(async (req: Request) => {
         source_chain:         resolvedSourceChain,
         amount,
         // Real burn hash when found; otherwise the same placeholder
-        // reasoning as before — using the mint hash as the required NOT
+        // reasoning as before - using the mint hash as the required NOT
         // NULL tx_hash value, distinguishable via tx_hash === destination_tx_hash
         // (see ActivityPage.tsx / MultichainPage.tsx's isRecoveredClaim checks).
         tx_hash:              realBurnTxHash ?? txHash,
@@ -1114,7 +1114,7 @@ Deno.serve(async (req: Request) => {
       if (insertErr) {
         // Unique constraint races are expected/harmless here (e.g. two
         // concurrent recovery scans, or claim-worker completing it normally
-        // a moment before this ran) — anything else gets logged.
+        // a moment before this ran) - anything else gets logged.
         if (!insertErr.message?.includes('duplicate') && !insertErr.message?.includes('unique')) {
           console.error('[claim-recovery-scan] insert failed for', txHash, insertErr.message)
         }
@@ -1126,7 +1126,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // EURC and cirBTC — no CCTP claims exist for these tokens in this app,
+    // EURC and cirBTC - no CCTP claims exist for these tokens in this app,
     // so none of the claim-matching logic above applies. Just the same
     // "untracked incoming transfer" detection as the USDC !isMint branch,
     // for a payment sent directly to this wallet's raw address rather than
@@ -1135,7 +1135,7 @@ Deno.serve(async (req: Request) => {
     //
     // Fetched concurrently with each other (unchanged from before), AND now
     // concurrently with the USDC scan above and the native-explorer scan
-    // below too — see the LATENCY FIX comment earlier in this function for
+    // below too - see the LATENCY FIX comment earlier in this function for
     // why. A smaller window here too (these only need to catch recent direct
     // transfers, not the months-old edge cases claim recovery has to
     // consider).
@@ -1181,7 +1181,7 @@ Deno.serve(async (req: Request) => {
         const fromAddress = '0x' + fromTopic.slice(-40)
         if (fromAddress.toLowerCase() === walletAddress.toLowerCase()) continue // self-transfer, not a real incoming payment
 
-        // THE EURC FIX — docs/CLAIM_RECOVERY_SENDER_CLASSIFICATION_FIX.md.
+        // THE EURC FIX - docs/CLAIM_RECOVERY_SENDER_CLASSIFICATION_FIX.md.
         // This is the exact branch that produced the traced duplicate
         // (docs/ACTIVITY_WRITER_AUDIT.md §2, docs/CLAIM_RECOVERY_AUDIT.md
         // §5): a swap's EURC/cirBTC output leg is a plain Transfer from the
@@ -1192,7 +1192,7 @@ Deno.serve(async (req: Request) => {
         // 'swap' Activity write.
         if (isKnownInternalContract(fromAddress, KNOWN_INTERNAL_EXTRA)) continue
 
-        // Deterministic, race-free correlation check — see
+        // Deterministic, race-free correlation check - see
         // trackedFeatureCorrelation.ts's header. This is the direct fix for
         // the traced EURC duplicate (docs/ACTIVITY_WRITER_AUDIT.md §2): the
         // swap's transaction_attempts row (feature='swap') exists from
@@ -1202,12 +1202,12 @@ Deno.serve(async (req: Request) => {
 
         // A swap's output-token leg (e.g. the EURC this wallet receives back
         // from the router) emits the exact same on-chain Transfer event this
-        // scan is watching for — same tx hash, `to` = this wallet. That swap
+        // scan is watching for - same tx hash, `to` = this wallet. That swap
         // is already recorded client-side as its own 'swap' activity row,
         // keyed by the plain (unprefixed) tx hash. Any activity row already
-        // existing under this exact tx hash for this wallet — regardless of
-        // type — means it's already been accounted for. Poll-with-delay
-        // (not a single check) — see existsActivityForTxHash. Now a THIRD
+        // existing under this exact tx hash for this wallet - regardless of
+        // type - means it's already been accounted for. Poll-with-delay
+        // (not a single check) - see existsActivityForTxHash. Now a THIRD
         // layer of defense (e.g. for a router/contract not yet in the known-
         // internal list, or a feature not tracked via transaction_attempts),
         // not the only one.
@@ -1219,12 +1219,12 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    // ── Native USDC — catches what the ERC20-log scan above structurally
+    // ── Native USDC - catches what the ERC20-log scan above structurally
     // can't (see the comment on fetchNativeDepositsViaExplorer). Best-effort:
     // wrapped so an explorer hiccup never breaks the CCTP claim-recovery
     // logic above, which is this function's primary job. Already ran
     // independently of the other two scans before this change (its own
-    // try/catch) — now also runs CONCURRENTLY with them, not just
+    // try/catch) - now also runs CONCURRENTLY with them, not just
     // independently-if-reached, per the LATENCY FIX comment above.
     const runNativeExplorerScan = async () => {
       try {
@@ -1245,12 +1245,12 @@ Deno.serve(async (req: Request) => {
           // 'swap' activity row, keyed by the same unprefixed tx hash.
           if (isKnownInternalContract(dep.fromAddr, KNOWN_INTERNAL_EXTRA)) continue
 
-          // Deterministic, race-free correlation check — same reasoning as the
+          // Deterministic, race-free correlation check - same reasoning as the
           // other three branches, see trackedFeatureCorrelation.ts's header.
           if (await findCorrelatedTrackedFeature(supabase, 'arc', dep.txHash)) continue
           if (await isUbClaimMint(supabase, walletAddress, dep.txHash, dep.amount)) continue
 
-          // Poll-with-delay (not a single check) — see existsActivityForTxHash.
+          // Poll-with-delay (not a single check) - see existsActivityForTxHash.
           // Now a third layer of defense, same as the other branches.
           if (await existsActivityForTxHash(supabase, walletAddress, dep.txHash)) continue
 

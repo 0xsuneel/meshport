@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <!-- ── Theme bootstrap — MUST run before the <style> block below is
+    <!-- ── Theme bootstrap - MUST run before the <style> block below is
          parsed so `html[data-theme]` is already set for the very first
          paint (no flash of the wrong theme). Mirrors the resolution logic
          in src/store/themeStore.ts: explicit user choice (persisted by
          zustand under the same localStorage key) wins; otherwise falls
-         back to the OS/browser's prefers-color-scheme. Plain vanilla JS —
+         back to the OS/browser's prefers-color-scheme. Plain vanilla JS -
          runs long before the React bundle loads. -->
     <script src="/boot.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,13 +16,13 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <!-- Two variants so the OS status bar / browser chrome tint matches
-         whichever theme actually resolved — see the header colors in
+         whichever theme actually resolved - see the header colors in
          src/index.css (--header). -->
     <meta name="theme-color" content="#F5F6F8" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0B0E11" media="(prefers-color-scheme: dark)" />
     <!-- Lets native browser chrome (scrollbars, overscroll glow, form
          controls, autofill) render as light or dark to match whichever
-         theme is active — MeshPort now supports both, driven by
+         theme is active - MeshPort now supports both, driven by
          data-theme above rather than a single pinned value. -->
     <meta name="color-scheme" content="light dark" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -31,7 +31,7 @@
     <meta name="apple-mobile-web-app-title" content="MeshPort" />
     <meta name="description" content="USDC Payments, Made Simple" />
 
-    <!-- Open Graph — controls the rich preview card shown when this link is
+    <!-- Open Graph - controls the rich preview card shown when this link is
          shared in WhatsApp, iMessage, Telegram, Slack, etc. Without these,
          a shared link just shows as bare text with no card at all.
 
@@ -40,7 +40,7 @@
          by its bare filename. Discord, Telegram, Google Images, etc. each
          cache a link's preview image keyed by this exact URL and can sit
          on that cache for days to weeks even after the file on disk
-         changes — a plain filename never looks "new" to them, so stale
+         changes - a plain filename never looks "new" to them, so stale
          previews silently persist (see the MeshPort logo/tagline mixup
          history: two outdated versions were still showing on different
          platforms long after the current one shipped). Bumping the query
@@ -49,21 +49,21 @@
          anyone shared this link. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="MeshPort" />
-    <meta property="og:title" content="MeshPort — USDC Payments, Made Simple" />
-    <meta property="og:description" content="Fast, free stablecoin payments. No wallet address needed — just a username." />
+    <meta property="og:title" content="MeshPort - USDC Payments, Made Simple" />
+    <meta property="og:description" content="Fast, free stablecoin payments. No wallet address needed - just a username." />
     <meta property="og:image" content="https://meshport.xyz/og-default.png?v=3" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:url" content="https://meshport.xyz" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="MeshPort — USDC Payments, Made Simple" />
-    <meta name="twitter:description" content="Fast, free stablecoin payments. No wallet address needed — just a username." />
+    <meta name="twitter:title" content="MeshPort - USDC Payments, Made Simple" />
+    <meta name="twitter:description" content="Fast, free stablecoin payments. No wallet address needed - just a username." />
     <meta name="twitter:image" content="https://meshport.xyz/og-default.png?v=3" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>MeshPort</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      /* html (not just body) is painted first on refresh — without this,
+      /* html (not just body) is painted first on refresh - without this,
          the browser paints its own light/dark default before any CSS
          loads, producing a flash of the wrong color. The data-theme
          attribute is already set by the bootstrap script above by the
@@ -73,10 +73,10 @@
       html[data-theme="dark"], html[data-theme="dark"] body { background: #0B0E11; }
       /* App open: the page itself is the launch-screen teal from its very
          first frame (set by boot.js, removed with the splash). The phone's
-         launch screen closes on the first paint — if that frame was the
+         launch screen closes on the first paint - if that frame was the
          dark/light page instead of the splash, it flashed in between. */
       html.mp-opening, html.mp-opening body { background: #0F5C57 !important; }
-      /* App open: exactly the phone's launch screen — same logo size and
+      /* App open: exactly the phone's launch screen - same logo size and
          place, no text (measured from a screen recording: the launch tile is
          ~107px, centred on the whole screen). */
       html.mp-opening #splash .tile { width: 107px; height: 107px; border-radius: 29px; transform: translateY(calc(-1 * var(--mp-splash-lift, 0px))); }
@@ -102,7 +102,7 @@
         transition: opacity 0.25s ease;
       }
       #splash.splash-hide { opacity: 0; pointer-events: none; }
-      /* The logo and name go at once; only the background fades — otherwise
+      /* The logo and name go at once; only the background fades - otherwise
          they ghost over the first screen (two logos / two titles). */
       #splash.splash-hide .tile, #splash.splash-hide .txt { visibility: hidden; }
       /* White logo tile (104px = the size Android's launch screen draws the
@@ -114,7 +114,7 @@
       #splash .txt { position: absolute; left: 0; right: 0; top: calc(50% + 52px + 20px); text-align: center; }
       #splash .name { font-size: 24px; font-weight: 700; letter-spacing: -0.4px; }
       #splash .tag { margin-top: 6px; font-size: 13px; color: #A9D9CF; }
-      /* Animated logo (Pulse) — same as MeshLoader.tsx. */
+      /* Animated logo (Pulse) - same as MeshLoader.tsx. */
       #splash .mark .n, #splash .mark .hub { transform-box: fill-box; transform-origin: center; }
       /* App open: still, like the phone's launch screen it continues; the
          pulse starts only if loading takes a while (boot.js). */
@@ -127,7 +127,7 @@
       @keyframes mplPop { 0%,60%,100% { transform: scale(1); } 22% { transform: scale(1.3); } }
       @keyframes mplBreathe { 0%,100% { transform: scale(1); } 50% { transform: scale(.86); } }
       @media (prefers-reduced-motion: reduce) { #splash .mark .n, #splash .mark .hub { animation: none; } }
-      /* Refresh (this tab already opened the app): no teal brand screen —
+      /* Refresh (this tab already opened the app): no teal brand screen -
          just the normal page background, and a small logo only if loading
          takes more than a moment. html.mp-refresh is set by the script below. */
       html.mp-refresh #splash { background: #F5F6F8; color: #0F5C57; }

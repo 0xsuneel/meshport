@@ -11,7 +11,7 @@ import { verifyMessage } from 'viem'
  * PATCH any user's display_name/avatar_url just by knowing (or guessing)
  * their id or wallet_address. Since this app has wallet-only users with no
  * Supabase Auth session (see the existing comment on the fetch-based headers
- * below), a normal Supabase-JWT check isn't available here — the only real
+ * below), a normal Supabase-JWT check isn't available here - the only real
  * proof of identity this app has is a signature from the wallet's own
  * private key, the same key every send/claim/swap on this wallet already
  * signs with (see src/lib/arcService.ts's use of viem's
@@ -32,12 +32,12 @@ import { verifyMessage } from 'viem'
  * private key and send { walletAddress, timestamp, signature, displayName,
  * avatarUrl } instead of { id, walletAddress, displayName, avatarUrl }. See
  * the accompanying ProfileSubPages_signing_snippet.ts for the exact client
- * change — it needs to match however this app already retrieves the
+ * change - it needs to match however this app already retrieves the
  * signing key for a send (the same pattern PaySendPage.tsx uses), which
  * this patch can't see from api/profile.ts alone.
  */
 
-// ── GET — fetch a user's public profile by wallet address ──────────────────
+// ── GET - fetch a user's public profile by wallet address ──────────────────
 // Unchanged: this was never the flagged issue (a public display_name/avatar
 // lookup by address is expected to be public), and locking it down further
 // wasn't asked for here.
@@ -50,7 +50,7 @@ async function handleGetProfile(req: VercelRequest, res: VercelResponse) {
 
   // Mode 1: single wallet address
   if (typeof wallet === 'string') {
-    // Exactly one well-formed address — never a pattern. (An unchecked value
+    // Exactly one well-formed address - never a pattern. (An unchecked value
     // used to go straight into an `ilike` filter: `?wallet=*` listed every user.)
     if (!/^0x[0-9a-fA-F]{40}$/.test(wallet)) return res.status(400).json({ error: 'invalid wallet' })
     // M-4 FIX: use eq (strict equality, index-safe) now that the address is
@@ -64,14 +64,14 @@ async function handleGetProfile(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(await r.json())
   }
 
-  // Mode 2: by username (for payment recipient lookup — replaces direct
+  // Mode 2: by username (for payment recipient lookup - replaces direct
   // supabase.from('users').eq('username',name) calls in PaySendPage.tsx
   // and ChatPage.tsx so the client never needs the anon key for user lookups)
   if (typeof username === 'string') {
     const clean = username.replace(/\.arc$/i, '').toLowerCase().trim()
     if (!clean || clean.length > 60 || !/^[a-z0-9_.-]+$/.test(clean)) return res.status(400).json({ error: 'invalid username' })
     // Exact match, not ilike: `_` is a LIKE wildcard, so `a_c` would resolve
-    // to user `abc` — the wrong payment recipient. Usernames are stored
+    // to user `abc` - the wrong payment recipient. Usernames are stored
     // lowercase, and `clean` is lowercased above.
     const r = await fetch(
       `${supabaseUrl}/rest/v1/users?username=eq.${encodeURIComponent(clean)}&select=id,wallet_address,avatar_url,display_name,username&limit=1`,
@@ -80,7 +80,7 @@ async function handleGetProfile(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(await r.json())
   }
 
-  // Mode 3: bulk wallet-address lookup — comma-separated list of 0x addresses
+  // Mode 3: bulk wallet-address lookup - comma-separated list of 0x addresses
   // Replaces supabase.from('users').or('wallet_address.ilike.0x…,…') calls
   // in HomePage.tsx and DesktopHeader.tsx so those pages never touch the anon key.
   if (typeof wallets === 'string') {
@@ -100,7 +100,7 @@ async function handleGetProfile(req: VercelRequest, res: VercelResponse) {
 
 // ── Signature verification ──────────────────────────────────────────────────
 // 5-minute window bounds replay of a captured signature without needing a
-// server-side nonce table — a captured signature is only ever valid for the
+// server-side nonce table - a captured signature is only ever valid for the
 // exact (walletAddress, displayName, avatarUrl) triple it was signed over,
 // for 5 minutes, and only ever lets someone re-apply the SAME update, not an
 // arbitrary one.
@@ -150,7 +150,7 @@ async function verifyProfileUpdateSignature(
   }
 }
 
-// ── POST — update (or upsert) a user's profile ──────────────────────────────
+// ── POST - update (or upsert) a user's profile ──────────────────────────────
 async function handleUpdateProfile(req: VercelRequest, res: VercelResponse) {
   try {
     const { walletAddress, timestamp, signature, displayName, avatarUrl } = req.body ?? {}
@@ -160,7 +160,7 @@ async function handleUpdateProfile(req: VercelRequest, res: VercelResponse) {
       String(walletAddress), Number(timestamp), String(signature ?? ''), displayName, avatarUrl,
     )
     if (!verification.ok) {
-      console.warn('[profile/update] rejected — signature check failed:', verification.reason, 'wallet:', String(walletAddress).slice(0, 12))
+      console.warn('[profile/update] rejected - signature check failed:', verification.reason, 'wallet:', String(walletAddress).slice(0, 12))
       return res.status(401).json({ error: `Unauthorized: ${verification.reason}` })
     }
 
@@ -173,7 +173,7 @@ async function handleUpdateProfile(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'Missing SUPABASE_URL or key env var' })
     }
 
-    // Use fetch-based HTTP calls directly — avoids WebSocket issue entirely
+    // Use fetch-based HTTP calls directly - avoids WebSocket issue entirely
     const headers = {
       'apikey': key,
       'Authorization': `Bearer ${key}`,
@@ -188,7 +188,7 @@ async function handleUpdateProfile(req: VercelRequest, res: VercelResponse) {
     const addr = String(walletAddress).toLowerCase()
     console.log('[profile/update] verified update, fields:', Object.keys(updates).join(','))
 
-    // Find by wallet address — the ONLY identity this request has actually
+    // Find by wallet address - the ONLY identity this request has actually
     // proven ownership of. (The old "match by id first" path is gone: id
     // never proved ownership even before this fix.)
     // M-4 FIX: use eq (strict equality, index-safe). addr is already
@@ -210,7 +210,7 @@ async function handleUpdateProfile(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'Profile update failed' })
     }
 
-    // Not found — upsert. New id is derived from the VERIFIED wallet
+    // Not found - upsert. New id is derived from the VERIFIED wallet
     // address, not client-supplied, so it can't be used to collide with or
     // impersonate an existing user row.
     const newId = `w_${addr.slice(2, 18)}`

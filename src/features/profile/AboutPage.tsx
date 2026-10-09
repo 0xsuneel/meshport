@@ -5,16 +5,16 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 
 // ── About MeshPort ─────────────────────────────────────────────────────────────
 // Linked from Profile → Support → About MeshPort. What MeshPort is and why it
-// exists — the feature-by-feature walkthrough lives in FeatureGuidePage.tsx.
+// exists - the feature-by-feature walkthrough lives in FeatureGuidePage.tsx.
 
 const PILLARS = [
   {
     icon: AtSign, title: 'Pay a name, not an address',
-    body: 'Every account gets a .arc username. Pay sunil.arc instead of a 42-character address — or scan a QR, or share a payment link that works even for people without the app.',
+    body: 'Every account gets a .arc username. Pay sunil.arc instead of a 42-character address - or scan a QR, or share a payment link that works even for people without the app.',
   },
   {
     icon: MessageCircle, title: 'Chat and pay in one place',
-    body: 'Message friends and send money in the same conversation. Chats, photos and files are end-to-end encrypted — only you and the other person can read them.',
+    body: 'Message friends and send money in the same conversation. Chats, photos and files are end-to-end encrypted - only you and the other person can read them.',
   },
   {
     icon: Globe2, title: 'One balance, every chain',
@@ -22,7 +22,7 @@ const PILLARS = [
   },
   {
     icon: KeyRound, title: 'Yours alone',
-    body: 'Every wallet is self-custodial — even when you sign in with Google or email. The key is made on your phone and protected by your passkey and Recovery QR. MeshPort never holds it.',
+    body: 'Every wallet is self-custodial - even when you sign in with Google or email. The key is made on your phone and protected by your passkey and Recovery QR. MeshPort never holds it.',
   },
 ]
 
@@ -57,7 +57,7 @@ export function AboutPage() {
             Sending money should feel like sending a message.
           </p>
           <p className="text-sm text-text-secondary leading-relaxed">
-            MeshPort is a payments app for digital dollars. Pick a person, type an amount, confirm — and it
+            MeshPort is a payments app for digital dollars. Pick a person, type an amount, confirm - and it
             arrives in about a second, any day, any hour. No wallet addresses to copy, no gas tokens to buy,
             no exchange to sign up for, and no seed phrase you’re forced to write down.
           </p>
@@ -85,8 +85,8 @@ export function AboutPage() {
         <div className="bg-surface border border-border rounded-3xl p-5 space-y-3">
           <p className="text-sm font-semibold text-text-primary">Built on Arc</p>
           <p className="text-sm text-text-secondary leading-relaxed">
-            MeshPort runs on <span className="text-text-primary font-medium">Arc</span>, a blockchain from Circle — the
-            company behind USDC — designed for stablecoin payments, where USDC itself pays the network fee. You hold
+            MeshPort runs on <span className="text-text-primary font-medium">Arc</span>, a blockchain from Circle - the
+            company behind USDC - designed for stablecoin payments, where USDC itself pays the network fee. You hold
             and send <span className="text-text-primary font-medium">USDC</span> and <span className="text-text-primary font-medium">EURC</span>
             {' '}(digital dollars and euros) and can swap into <span className="text-text-primary font-medium">cirBTC</span>.
             Every payment settles on a public ledger, so it’s final and verifiable by anyone.
@@ -100,7 +100,7 @@ export function AboutPage() {
         <div className="bg-surface border border-warning/20 rounded-3xl p-5">
           <p className="text-sm text-warning font-semibold mb-1">Currently on Arc Testnet</p>
           <p className="text-sm text-text-secondary leading-relaxed">
-            Everything works, but with test funds that have no real-world value — so you can try the whole
+            Everything works, but with test funds that have no real-world value - so you can try the whole
             experience without risk before MeshPort moves to real money.
           </p>
         </div>

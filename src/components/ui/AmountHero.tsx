@@ -1,10 +1,10 @@
 import { amountFontSize } from '@/lib/amountFontSize'
 
 /**
- * Big amount entry used on Receive (Request payment, Merchant QR) — the same
+ * Big amount entry used on Receive (Request payment, Merchant QR) - the same
  * look as Chat pay's amount: a "$" the same size and weight as the number,
- * faded until something is typed, a monospace number (so its width — and the
- * centring — is exact), and the token name small beside it.
+ * faded until something is typed, a monospace number (so its width - and the
+ * centring - is exact), and the token name small beside it.
  */
 export function AmountHero({ value, onChange, symbol = '$', token = 'USDC', autoFocus, ariaLabel = 'Amount in USDC', maxDecimals = 6, base = 40 }: {
   value: string

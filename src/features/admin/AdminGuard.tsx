@@ -27,7 +27,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
         setAdminSession(session.user.email ?? '')
         setStatus('allowed')
       } else {
-        // A logged-in MeshPort user without admin rights — send them home,
+        // A logged-in MeshPort user without admin rights - send them home,
         // never show any admin UI.
         clearAdminSession()
         setStatus('not-admin')

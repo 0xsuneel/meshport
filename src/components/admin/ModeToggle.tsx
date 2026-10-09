@@ -3,16 +3,16 @@
 // Global "Normal Mode / Admin Panel" switch. Renders as a small floating
 // circular button in a corner of the screen, on top of whichever mode is
 // currently showing (mounted once in AppLayout for normal mode, once in
-// AdminLayout for admin mode — see the bottom of this file for why two
+// AdminLayout for admin mode - see the bottom of this file for why two
 // mount points). Tapping the circle opens a small popup with both mode
 // options; the circle itself stays draggable to anywhere on screen exactly
 // as before.
 //
 // VISIBILITY: only ever renders for someone already authenticated as an
-// admin in THIS browser (useAdminStore().isAdminAuthenticated — the same
+// admin in THIS browser (useAdminStore().isAdminAuthenticated - the same
 // flag AdminGuard checks, set the moment /adminsun/login's email+OTP
 // check succeeds). A regular user who has never logged into the admin
-// panel in this browser never sees this toggle at all — there is nothing
+// panel in this browser never sees this toggle at all - there is nothing
 // on-screen hinting an admin mode exists for them. This is the actual
 // "only admin account can see it" requirement; ADMIN_PATH (see
 // lib/adminPath.ts) separately keeps the URL itself from being guessable,
@@ -36,7 +36,7 @@ function loadPos(): { x: number; y: number } | null {
     if (!raw) return null
     const parsed = JSON.parse(raw)
     if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') return parsed
-  } catch { /* ignore — falls back to default corner position */ }
+  } catch { /* ignore - falls back to default corner position */ }
   return null
 }
 
@@ -52,7 +52,7 @@ export function ModeToggle() {
   const { isAdminAuthenticated } = useAdminStore()
 
   // Position is stored in localStorage (not component state alone) so it
-  // survives switching between the two mount points — AppLayout's copy and
+  // survives switching between the two mount points - AppLayout's copy and
   // AdminLayout's copy are technically different component instances, but
   // both read/write the same key, so wherever you drag it in Normal mode
   // is exactly where it'll be when you land in Admin mode, and vice versa.
@@ -97,11 +97,11 @@ export function ModeToggle() {
   const onPointerUp = () => {
     dragging.current = false
     if (moved.current && pos) {
-      try { localStorage.setItem(POS_KEY, JSON.stringify(pos)) } catch { /* storage unavailable — position just won't persist across reloads */ }
+      try { localStorage.setItem(POS_KEY, JSON.stringify(pos)) } catch { /* storage unavailable - position just won't persist across reloads */ }
       setTimeout(() => { moved.current = false }, 0)
       return
     }
-    // A genuine tap (no drag movement) — toggle the popup.
+    // A genuine tap (no drag movement) - toggle the popup.
     setExpanded(v => !v)
     setTimeout(() => { moved.current = false }, 0)
   }
@@ -193,7 +193,7 @@ export function ModeToggle() {
           touchAction: 'none',
         }}
         role="button"
-        aria-label="Switch between normal app and admin panel — tap to open, drag to move"
+        aria-label="Switch between normal app and admin panel - tap to open, drag to move"
         aria-expanded={expanded}
       >
         <CurrentIcon size={20} />

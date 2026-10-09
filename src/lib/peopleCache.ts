@@ -4,7 +4,7 @@ import type { DbUser } from '@/lib/supabase'
 // screens show them the instant they open and refresh quietly in the
 // background, instead of an empty screen while the network catches up.
 // Kept in memory and in localStorage (per user), so it also works right
-// after a reload. Only public profile fields are stored — email is dropped.
+// after a reload. Only public profile fields are stored - email is dropped.
 const mem = new Map<string, unknown>()
 const storageKey = (scope: string, uid: string) => `meshport_people_${scope}_${uid}`
 

@@ -89,7 +89,7 @@ export function BottomNav() {
   useEffect(() => {
     if (!user?.id) return
     // Single count query across all of this user's conversations, instead of
-    // one round-trip per conversation — faster resync, which matters because
+    // one round-trip per conversation - faster resync, which matters because
     // it's now called on every relevant insert/update (see below).
     const fetchUnread = async () => {
       try {
@@ -107,13 +107,13 @@ export function BottomNav() {
     }
     fetchUnread()
     // BUG FIX: this used to open a bare `supabase.channel(...).subscribe()`
-    // directly, with no reconnect logic of its own — unlike every other
+    // directly, with no reconnect logic of its own - unlike every other
     // realtime subscription in this app (ChatListPage, the open-thread
     // channel, P2P's list subscriptions), which all go through
     // subscribeWithRetry specifically because a dropped websocket
     // (backgrounded tab for a while, a brief network blip) otherwise just
     // dies silently with nothing to bring it back. Since this one lives in
-    // BottomNav — mounted app-wide, for the whole session — a drop here
+    // BottomNav - mounted app-wide, for the whole session - a drop here
     // meant the unread badge could go stale indefinitely, on every screen,
     // until a full app reload. Routing through the same proven helper gives
     // it the same backoff-and-retry plus tab-visibility/network-regain
@@ -138,7 +138,7 @@ export function BottomNav() {
     return () => { cancelled = true; unsubscribe?.(); window.removeEventListener('meshport:session-bound', fetchUnread) }
   }, [user?.id])
 
-  // Tab root paths — back button on any of these goes to Home (or exits if already Home)
+  // Tab root paths - back button on any of these goes to Home (or exits if already Home)
   const TAB_ROOTS = ['/', '/chat', '/scanner', '/rewards', '/activity']
 
   useEffect(() => {
@@ -150,10 +150,10 @@ export function BottomNav() {
 
     const handlePop = () => {
       if (location.pathname === '/') {
-        // Already on Home — let browser handle (exit app)
+        // Already on Home - let browser handle (exit app)
         return
       }
-      // On any other tab — go to Home with replace
+      // On any other tab - go to Home with replace
       navigate('/', { replace: true })
       // Re-push dummy state so next back press is also intercepted
       window.history.pushState({ meshportTab: true }, '')
@@ -172,7 +172,7 @@ export function BottomNav() {
       maxWidth: 680, margin: '0 auto',
       boxSizing: 'border-box',
     }}>
-      {/* Standard bottom nav bar — flush to the screen edges/bottom */}
+      {/* Standard bottom nav bar - flush to the screen edges/bottom */}
       <div style={{
         background: 'var(--surface)',
         borderTop: '1px solid var(--border)',

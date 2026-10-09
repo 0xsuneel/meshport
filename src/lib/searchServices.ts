@@ -1,7 +1,7 @@
-// Shared "Services" list for people+services search — used by both Home's
+// Shared "Services" list for people+services search - used by both Home's
 // own mobile search overlay and DesktopHeader's search dropdown, so the two
 // surfaces can never drift apart on which real routes are searchable.
-// Real routes that actually exist in this app (see src/App.tsx) — Services
+// Real routes that actually exist in this app (see src/App.tsx) - Services
 // results only ever point to real screens, nothing invented.
 export const SERVICES = [
   { label: 'Pay',              path: '/pay',            keywords: ['pay', 'send', 'transfer', 'pay someone'] },

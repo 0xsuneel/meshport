@@ -1,4 +1,4 @@
-// motion.ts — the ONE motion system for the whole app.
+// motion.ts - the ONE motion system for the whole app.
 //
 // Every animated surface imports its values from here, so the same kind of
 // thing always moves the same way:
@@ -9,19 +9,19 @@
 //   In-page steps ......... same slide as pages (forward → from right,
 //                           back → from left), e.g. Pay's amount → review.
 //   Bottom sheets ......... slide up from the bottom on one curve, dimmed
-//                           backdrop fades — every sheet, PIN sheet and the
+//                           backdrop fades - every sheet, PIN sheet and the
 //                           amount keypad.
 //   Centered popups ....... fade + gentle scale-in (dialogs, confirms).
 //   Toasts ................ drop in from the top, fade out.
 //   Errors ................ fade in with a small drop (and wrap inside the
-//                           screen — see .mp-alert in index.css).
+//                           screen - see .mp-alert in index.css).
 //   Desktop pages ......... fade + a few px of rise (no sliding in a
 //                           sidebar layout).
 import type { Transition } from 'framer-motion'
 
 export type NavDirection = 'forward' | 'back'
 
-/** iOS-style deceleration — fast start, long soft landing. */
+/** iOS-style deceleration - fast start, long soft landing. */
 export const EASE_OUT: [number, number, number, number] = [0.32, 0.72, 0, 1]
 
 // ── Pages & steps ───────────────────────────────────────────────────────────
@@ -37,7 +37,7 @@ export function pageSlide(direction: NavDirection) {
 
 /**
  * Variants for a screen that's part of a browsable, back-able step sequence
- * (Pay's search → amount → review, a claim flow's chain → amount, …) —
+ * (Pay's search → amount → review, a claim flow's chain → amount, …) -
  * identical to a page opening, plus an exit for AnimatePresence.
  */
 export function slideStepVariants(direction: NavDirection) {
@@ -50,7 +50,7 @@ export function slideStepVariants(direction: NavDirection) {
   }
 }
 
-// Kept names (older call sites) — now the same system.
+// Kept names (older call sites) - now the same system.
 export const MOBILE_SLIDE_X = 96
 export const MOBILE_SLIDE_TRANSITION: Transition = PAGE_TRANSITION
 
@@ -63,7 +63,7 @@ export const DESKTOP_FADE_TRANSITION: Transition = { duration: 0.2, ease: EASE_O
 
 // ── Bottom sheets (incl. PIN sheets and the amount keypad) ─────────────────
 // A tween, not a spring: the old spring (damping 32 / stiffness 300) was just
-// under-damped, so every sheet overshot its resting place and settled back —
+// under-damped, so every sheet overshot its resting place and settled back -
 // a small rubber-band bounce. This lands once, iOS-style, and stays.
 export const SHEET_SPRING: Transition = { duration: 0.38, ease: EASE_OUT }
 /** Sheets leave a little quicker than they arrive (ease-in, like the OS). */
@@ -86,7 +86,7 @@ export const SHEET_BACKDROP = {
  *  and on a spring the opacity overshoots and dips back, which reads as a blink. */
 // The card starts 85% solid and is fully solid within ~5 frames, so the page
 // behind barely shows through it (a full fade from 0 left the page's text
-// visible inside the white card — a flicker on light pages), and it grows
+// visible inside the white card - a flicker on light pages), and it grows
 // into place on a longer, soft ease-out, so it opens as a smooth pop rather
 // than appearing at once. Only the dim fades behind it (PopupDim).
 const POPUP_FADE: Transition = { duration: 0.08, ease: 'linear' }

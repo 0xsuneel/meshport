@@ -32,29 +32,29 @@ export interface StuckReleaseDecision {
 
 export function classifyStuckRelease(p: StuckReleaseProbe): StuckReleaseDecision {
   if (p.onChainReleased === null) {
-    return { verdict: 'investigate', reason: 'Could not read the contract tradeReleased flag — refusing to guess.' }
+    return { verdict: 'investigate', reason: 'Could not read the contract tradeReleased flag - refusing to guess.' }
   }
   if (p.onChainReleased) {
-    return { verdict: 'finalize', reason: 'Contract reports tradeReleased=true — the buyer was paid; finalizing the record.' }
+    return { verdict: 'finalize', reason: 'Contract reports tradeReleased=true - the buyer was paid; finalizing the record.' }
   }
   if (p.escrowRemaining === null) {
-    return { verdict: 'investigate', reason: 'Release did not happen, but the escrow balance could not be read — refusing to guess.' }
+    return { verdict: 'investigate', reason: 'Release did not happen, but the escrow balance could not be read - refusing to guess.' }
   }
   if (p.escrowRemaining >= p.amountUsdc) {
-    return { verdict: 'restore', reason: `Release did not happen and ${p.escrowRemaining} USDC is still escrowed — returning the trade to payment_sent so it can be retried.` }
+    return { verdict: 'restore', reason: `Release did not happen and ${p.escrowRemaining} USDC is still escrowed - returning the trade to payment_sent so it can be retried.` }
   }
   if (p.escrowRemaining > 0) {
-    return { verdict: 'investigate', reason: `Escrow holds ${p.escrowRemaining} USDC but the trade owes ${p.amountUsdc} — partial funds, needs a human.` }
+    return { verdict: 'investigate', reason: `Escrow holds ${p.escrowRemaining} USDC but the trade owes ${p.amountUsdc} - partial funds, needs a human.` }
   }
   if (p.everDeposited) {
-    return { verdict: 'investigate', reason: 'Escrow was funded at some point but now holds nothing and this trade was never released — unexplained; needs a human.' }
+    return { verdict: 'investigate', reason: 'Escrow was funded at some point but now holds nothing and this trade was never released - unexplained; needs a human.' }
   }
-  return { verdict: 'cancel', reason: 'No escrow was ever deposited, so the release could never have succeeded — cancelling and unlocking the offer.' }
+  return { verdict: 'cancel', reason: 'No escrow was ever deposited, so the release could never have succeeded - cancelling and unlocking the offer.' }
 }
 
 export const STUCK_RELEASE_GRACE_MS = 5 * 60 * 1000
 
-// ── Activation boundary — mirror of the canonical file, parity-enforced ──────
+// ── Activation boundary - mirror of the canonical file, parity-enforced ──────
 // Fails closed: no cutoff configured means process NOTHING. See the canonical
 // file for the full reasoning (two real trades were under human review when this
 // was written and must not be swept on first run).
@@ -78,20 +78,20 @@ export interface ReconcileEligibilityInput {
 
 export function isEligibleForReconcile(i: ReconcileEligibilityInput): { eligible: boolean; reason: string } {
   if (i.cutoffMs === null) {
-    return { eligible: false, reason: 'Reconciler dormant — no activation cutoff configured.' }
+    return { eligible: false, reason: 'Reconciler dormant - no activation cutoff configured.' }
   }
   if (i.skipTradeIds?.includes(i.tradeId)) {
-    return { eligible: false, reason: 'Trade is on the explicit skip list — quarantined for manual review.' }
+    return { eligible: false, reason: 'Trade is on the explicit skip list - quarantined for manual review.' }
   }
   const createdMs = Date.parse(i.createdAtIso)
   if (!Number.isFinite(createdMs)) {
-    return { eligible: false, reason: 'Trade created_at is unparseable — refusing to act on it.' }
+    return { eligible: false, reason: 'Trade created_at is unparseable - refusing to act on it.' }
   }
   if (createdMs <= i.cutoffMs) {
-    return { eligible: false, reason: 'Trade predates the activation cutoff — historical, left for manual review.' }
+    return { eligible: false, reason: 'Trade predates the activation cutoff - historical, left for manual review.' }
   }
   if (createdMs > i.nowMs - i.graceMs) {
-    return { eligible: false, reason: 'Trade is still inside the grace window — a release may yet be in flight.' }
+    return { eligible: false, reason: 'Trade is still inside the grace window - a release may yet be in flight.' }
   }
   return { eligible: true, reason: 'Created after activation and past the grace window.' }
 }

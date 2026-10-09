@@ -1,12 +1,12 @@
 /**
- * blockchain/cache.ts — TTL cache + in-flight request deduplication
+ * blockchain/cache.ts - TTL cache + in-flight request deduplication
  *
  * Phase 1 of docs/BLOCKCHAIN_ARCHITECTURE_PROPOSAL.md (§13, §12).
  *
  * ── The problem this solves ─────────────────────────────────────────────────
  * Today Home, Multichain Hub and Claim Funds each call the balance readers
  * independently, on their own timers. The only thing preventing triple RPC
- * traffic is balanceCache.ts's 4s TTL happening to overlap — and that cache has
+ * traffic is balanceCache.ts's 4s TTL happening to overlap - and that cache has
  * two defects the proposal documents: it keys by token WITHOUT the wallet
  * address (so a wallet switch inside the window returns the previous wallet's
  * balance), and it has no in-flight tracking (so three simultaneous callers on
@@ -25,7 +25,7 @@
  * background; past `staleMs` it's discarded and the caller waits. This is what
  * makes navigation feel instant without going stale-forever.
  *
- * No external dependency — deliberately not react-query. @tanstack/react-query
+ * No external dependency - deliberately not react-query. @tanstack/react-query
  * IS in package.json but is not currently used for blockchain reads anywhere in
  * the app, and the store layer needs to be readable from non-React code
  * (SyncCoordinator, the Realtime handler, write paths). Adding a React-coupled
@@ -58,7 +58,7 @@ const inflight = new Map<string, Promise<unknown>>()
  * The promise is removed from the map as soon as it settles, so a later call
  * starts fresh work rather than re-reading a resolved promise.
  *
- * Every join is counted — those counts are the evidence for the migration's
+ * Every join is counted - those counts are the evidence for the migration's
  * "fewer RPC requests" claim, so they're recorded where the saving actually
  * happens rather than estimated afterwards.
  */
@@ -86,26 +86,26 @@ export function isInflight(key: string): boolean {
   return inflight.has(key)
 }
 
-// ── Scoped sessionStorage persistence — 'external:' keys ONLY ─────────────
+// ── Scoped sessionStorage persistence - 'external:' keys ONLY ─────────────
 // BUG FIX (2026-09-21): the aggregate external-chain scan (the single most
-// expensive read in the app — see externalBalanceReader.ts's own
+// expensive read in the app - see externalBalanceReader.ts's own
 // CACHE_TTL_MS comment, "raised from 20s after a real Alchemy 429
 // incident") is cached here with a 90s TTL, but `entries` is an in-memory
-// Map — a full browser page reload starts a fresh JS runtime, wiping it,
+// Map - a full browser page reload starts a fresh JS runtime, wiping it,
 // so every reload paid for a brand-new 21-chain scan regardless of how
 // recently one had just finished. Persisting ONLY 'external:'-prefixed
-// entries to sessionStorage (not localStorage — deliberately scoped to
+// entries to sessionStorage (not localStorage - deliberately scoped to
 // this tab's session, not indefinite) closes that gap: a reload within
 // the 90s window now rehydrates from sessionStorage instead of hitting
 // the network again. Every other cache consumer (Arc balance, claims,
-// activity, etc.) is completely unaffected — this prefix check is the
+// activity, etc.) is completely unaffected - this prefix check is the
 // entire scope of the change.
 const SESSION_PREFIX = 'bc-cache:'
 function persistToSession(key: string, value: unknown, storedAt: number): void {
   if (!key.startsWith('external:')) return
   try {
     sessionStorage.setItem(SESSION_PREFIX + key, JSON.stringify({ value, storedAt }))
-  } catch { /* private browsing / quota exceeded — cache still works in-memory */ }
+  } catch { /* private browsing / quota exceeded - cache still works in-memory */ }
 }
 function readFromSession<T>(key: string): { value: T; storedAt: number } | null {
   if (!key.startsWith('external:')) return null
@@ -121,7 +121,7 @@ function readFromSession<T>(key: string): { value: T; storedAt: number } | null 
 export function peek<T>(key: string): { value: T; ageMs: number } | null {
   const e = entries.get(key) as Entry<T> | undefined
   if (e) return { value: e.value, ageMs: Date.now() - e.storedAt }
-  // In-memory miss — for external: keys only, this is most likely a fresh
+  // In-memory miss - for external: keys only, this is most likely a fresh
   // page load rather than a genuine cold cache, so check sessionStorage
   // before treating it as a real miss.
   const fromSession = readFromSession<T>(key)
@@ -172,13 +172,13 @@ export async function swr<T>(
 }
 
 /**
- * Bypass the TTL and re-read from the network — for an explicit user-initiated
+ * Bypass the TTL and re-read from the network - for an explicit user-initiated
  * refresh, or a confirmed chain event.
  *
  * Still goes through dedupe() on purpose. If a refresh is already in flight for
  * this key, joining it returns equally-current data for free; issuing a second
  * identical request would not. So "force a fetch" means "don't trust the cached
- * value", not "always open a new socket" — a distinction that matters when the
+ * value", not "always open a new socket" - a distinction that matters when the
  * user taps refresh twice.
  */
 export async function refresh<T>(key: string, fn: () => Promise<T>): Promise<T> {
@@ -208,7 +208,7 @@ export function invalidatePrefix(prefix: string): number {
     if (k.startsWith(prefix)) { entries.delete(k); n++ }
   }
   // Same prefix drop for the sessionStorage-persisted copies (external:
-  // keys only — see persistToSession) so an invalidation, including the
+  // keys only - see persistToSession) so an invalidation, including the
   // manual-refresh bypass in refreshScope({kind:'external'}), can't be
   // undone by a page reload rehydrating the stale value it just cleared.
   if (prefix.startsWith('external:') || 'external:'.startsWith(prefix)) {

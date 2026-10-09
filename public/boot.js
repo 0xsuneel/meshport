@@ -36,7 +36,7 @@
       // The phone's own launch screen (manifest: teal + still logo) hands over
       // to #splash. Keep them identical so they read as one screen: the same
       // teal status bar (a theme-color that wins over index.html's per-theme
-      // ones; App.tsx removes it with the splash) and a still logo — it only
+      // ones; App.tsx removes it with the splash) and a still logo - it only
       // starts pulsing if loading takes a while.
       try {
         if (!document.documentElement.classList.contains('mp-refresh')) {
@@ -65,9 +65,9 @@
       } catch (e) {}
 
 // ── Splash watchdog ──
-      // ── Splash watchdog — pure vanilla JS, runs independently of the React
+      // ── Splash watchdog - pure vanilla JS, runs independently of the React
       // bundle ever loading at all. If the app hasn't mounted (and removed
-      // #splash) within 10s, something is genuinely stuck — most likely a
+      // #splash) within 10s, something is genuinely stuck - most likely a
       // stale cached index.html referencing a main bundle filename that's
       // since been replaced by a newer deploy, so the <script type="module">
       // tag below 404s silently with no error surfaced anywhere. Without

@@ -52,7 +52,7 @@ export async function updateSettingValue(feature: string, value: string): Promis
   return { error: null }
 }
 
-// ─── Realtime subscription — pushes live toggle changes to every client ─────
+// ─── Realtime subscription - pushes live toggle changes to every client ─────
 export function subscribeToSettings(onChange: () => void) {
   const channel = supabase
     .channel('app_settings_changes')
@@ -95,18 +95,18 @@ export async function getCurrentAdminEmail(): Promise<string | null> {
 // ─── Change password (email OTP verified) ────────────────────────────────────
 // Three-step flow, all requiring the admin to already be signed in (this is
 // a "change my own password" feature, not an account-recovery one):
-//   1. sendAdminPasswordChangeOtp — emails a 6-digit code to the admin's own
+//   1. sendAdminPasswordChangeOtp - emails a 6-digit code to the admin's own
 //      address on file (never a user-supplied address, so this can't be used
 //      to send a code anywhere but the account's own verified inbox).
-//   2. verifyAdminPasswordChangeOtp — confirms that code. Supabase treats a
+//   2. verifyAdminPasswordChangeOtp - confirms that code. Supabase treats a
 //      correct verifyOtp call as re-proof-of-identity and refreshes the
 //      session, which is what makes step 3 allowed to proceed.
-//   3. updateAdminPassword — only callable after step 2 succeeded in this
+//   3. updateAdminPassword - only callable after step 2 succeeded in this
 //      session; sets the new password via supabase.auth.updateUser.
 export async function sendAdminPasswordChangeOtp(): Promise<{ error: string | null }> {
   const email = await getCurrentAdminEmail()
   if (!email) return { error: 'You must be signed in as an admin to change your password.' }
-  // shouldCreateUser: false — this must be an existing admin account, never
+  // shouldCreateUser: false - this must be an existing admin account, never
   // silently creates a new auth user from an email typed elsewhere.
   const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } })
   if (error) return { error: error.message }
@@ -178,19 +178,19 @@ export async function fetchAdminAnalytics(): Promise<AdminAnalytics> {
     supabase.from('users').select('id', { count: 'exact', head: true }),
     supabase.from('users').select('id', { count: 'exact', head: true }).gte('created_at', todayIso),
 
-    // Distinct-transaction count, NOT a raw row count — see the
+    // Distinct-transaction count, NOT a raw row count - see the
     // admin_transaction_count() SQL function (migration:
     // admin_transaction_count_dedup) for why a plain count(*) on
     // `activity` overcounts: every in-app peer-to-peer Send writes BOTH a
     // 'send' row and a 'receive' row for the same underlying transfer
-    // (see ActivityService.ts's Activity.send/receive — 'send_<hash>' vs
+    // (see ActivityService.ts's Activity.send/receive - 'send_<hash>' vs
     // 'recv_<hash>'), so a raw count double-counts every such transfer.
     // Confirmed directly against production data: 323 raw rows was
     // actually 280 distinct transactions (43 transfers counted twice).
     supabase.rpc('admin_transaction_count', { since_ts: null }),
     supabase.from('bulk_payments').select('*', { count: 'exact', head: true }),
 
-    // Claims live in their own dedicated table (claims), not activity —
+    // Claims live in their own dedicated table (claims), not activity -
     // see claimService.ts / claim-worker. Counting every attempted claim
     // row here, not just completed ones, to match "Total Multichain
     // Claims" as a genuine activity count rather than a success rate.
@@ -206,14 +206,14 @@ export async function fetchAdminAnalytics(): Promise<AdminAnalytics> {
       .eq('activity_type', 'swap').gte('created_at', todayIso),
 
     // "Today" scope for the two stats that previously had no *Today
-    // counterpart at all — Total Transactions and Bulk Payments — so the
+    // counterpart at all - Total Transactions and Bulk Payments - so the
     // Analytics screen can show "total + N today" consistently across
     // every card instead of only some of them. Transactions-today uses
     // the same deduped function, scoped by created_at.
     supabase.rpc('admin_transaction_count', { since_ts: todayIso }),
     supabase.from('bulk_payments').select('*', { count: 'exact', head: true }).gte('created_at', todayIso),
 
-    // Active-users source data — every activity row already has both
+    // Active-users source data - every activity row already has both
     // sides of the transfer (wallet_address = this user, counterparty_
     // address = the other party where applicable), and claims has its own
     // wallet_address. Using both keeps this consistent with how "active"

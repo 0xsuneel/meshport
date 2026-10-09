@@ -1,9 +1,9 @@
 /**
- * blockchain/cursorMath.ts — pure block-cursor + confirmation logic
+ * blockchain/cursorMath.ts - pure block-cursor + confirmation logic
  *
  * Phase 3. The math behind durable cursors and reorg safety, kept as pure
  * functions with no I/O so it can be unit-tested without a network or
- * database — the same reasoning as cursorMath.test.ts existing at all.
+ * database - the same reasoning as cursorMath.test.ts existing at all.
  *
  * TESTNET ONLY, but the logic is chain-agnostic (it only reasons about
  * block numbers and hashes, which work identically on every EVM chain).
@@ -22,7 +22,7 @@ export interface ScanWindow {
 /**
  * The safe frontier: the highest block that has crossed confirmation depth.
  * Only blocks at or below this are treated as final. Everything above it is
- * tentative — the indexer may publish 'pending' events for it but must never
+ * tentative - the indexer may publish 'pending' events for it but must never
  * treat them as confirmed, and must be prepared to retract them on a reorg.
  */
 export function safeFrontier(head: number, confirmationDepth: number): number {
@@ -39,7 +39,7 @@ export function safeFrontier(head: number, confirmationDepth: number): number {
  *     previous pass just finished cannot double-publish. It also self-heals a
  *     cursor that advanced past a block whose events were never written.
  *  2. maxBlocks caps one pass so a very stale cursor (long downtime) cannot
- *     make a single invocation run unboundedly long — it catches up over
+ *     make a single invocation run unboundedly long - it catches up over
  *     several passes. Same intent as deposit-scan-all's per-pass caps.
  *  3. toBlock never exceeds head. Never scan into the future.
  */
@@ -100,7 +100,7 @@ export function chunkRange(from: number, to: number, chunkSize: number): Array<[
  * This is the single most important correctness rule in the whole indexer, and
  * it is copied deliberately from deposit-scan-all's `safeUpTo` behaviour
  * rather than reinvented. If chunks [100-199] and [300-399] succeed but
- * [200-299] fails on every endpoint, the cursor MUST stop at 199 — advancing
+ * [200-299] fails on every endpoint, the cursor MUST stop at 199 - advancing
  * to 399 because "most of it worked" would silently skip blocks 200-299
  * forever, and no later pass would ever revisit them. A missed deposit that
  * nothing retries is exactly the class of bug that erodes trust in a payments

@@ -1,4 +1,4 @@
-// bind-session — links the caller's Supabase session to their MeshPort
+// bind-session - links the caller's Supabase session to their MeshPort
 // account, but only with PROOF: a signature from the account's own wallet.
 //
 // Why: every access rule (chats, messages, merchant data) trusts

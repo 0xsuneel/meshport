@@ -16,7 +16,7 @@ function computeIsStandalone() {
 // chrome at all) vs. a regular browser tab (address bar + toolbar always
 // present). Only really relevant on iOS: `window.visualViewport` reliably
 // tracks the on-screen keyboard there, but is known to NOT reliably track
-// the browser's own persistent toolbar the way it does the keyboard — so
+// the browser's own persistent toolbar the way it does the keyboard - so
 // bottom sheets can't fully rely on measuring it away (see
 // useVisibleViewportHeight). This flag lets sheets add a fixed safety
 // buffer ONLY when that un-measurable browser chrome can actually be

@@ -2,7 +2,7 @@
  * MeshPort's animated logo ("Pulse"): each outer ring pops in turn while
  * the hub breathes. Everything stays at full strength (no fading), so the
  * logo never looks dim. Used as the app's loading indicator. Stroke uses currentColor,
- * so the colour comes from `color` (default: --mesh-loader — brand teal on light, mint on dark).
+ * so the colour comes from `color` (default: --mesh-loader - brand teal on light, mint on dark).
  */
 const LINES: [number, number, number, number][] = [
   [84.0, 84.9, 70.7, 72.3], [116.2, 85.2, 136.4, 66.8], [120.7, 107.5, 141.5, 115.0],

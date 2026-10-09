@@ -40,24 +40,24 @@ const FILTERS: Array<{ key: 'all' | StuckKind; label: string }> = [
 ]
 
 const STATE_TEXT: Record<string, string> = {
-  already_minted: 'Funds already arrived — the record is now marked completed.',
+  already_minted: 'Funds already arrived - the record is now marked completed.',
   waiting_attestation: 'Circle has not attested this burn yet. It finishes on its own.',
-  ready_relay: 'Ready — the MeshPort relayer can mint this on Arc.',
-  ready_self_mint: 'Ready — the MeshPort relayer can mint this on the destination.',
-  forwarder_only: 'Locked to Circle’s forwarder — only Circle can finish it. Nothing to do but wait.',
+  ready_relay: 'Ready - the MeshPort relayer can mint this on Arc.',
+  ready_self_mint: 'Ready - the MeshPort relayer can mint this on the destination.',
+  forwarder_only: 'Locked to Circle’s forwarder - only Circle can finish it. Nothing to do but wait.',
   needs_reattest: 'The attestation expired. Request a new one, then check again.',
   no_message: 'Circle has no record of this burn.',
   unsupported_chain: 'This chain is not supported for recovery.',
-  relay_queued: 'Queued — the MeshPort relayer will mint on Arc within a few minutes.',
+  relay_queued: 'Queued - the MeshPort relayer will mint on Arc within a few minutes.',
   reattest_requested: 'New attestation requested. Check again in a few minutes.',
   reattest_failed: 'Circle rejected the re-attestation request. Try again later.',
-  requeued: 'Resubmitted — ub-claim-worker will retry it within a minute.',
+  requeued: 'Resubmitted - ub-claim-worker will retry it within a minute.',
   notified: 'The user was notified in the app.',
 }
 
 const chainName = (c?: string | null) =>
-  !c ? '—' : c === 'Arc_Testnet' ? 'Arc' : c.replace(/_(Sepolia|Testnet|Fuji|Apothem|Amoy_Testnet)$/, '').replace(/_/g, ' ')
-const short = (a?: string | null, n = 6) => (!a ? '—' : a.length > 2 * n + 2 ? `${a.slice(0, n)}…${a.slice(-4)}` : a)
+  !c ? '-' : c === 'Arc_Testnet' ? 'Arc' : c.replace(/_(Sepolia|Testnet|Fuji|Apothem|Amoy_Testnet)$/, '').replace(/_/g, ' ')
+const short = (a?: string | null, n = 6) => (!a ? '-' : a.length > 2 * n + 2 ? `${a.slice(0, n)}…${a.slice(-4)}` : a)
 const usd = (n: number) => `${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`
 function ago(iso: string) {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
@@ -181,7 +181,7 @@ function Detail({ item, onClose, onChanged }: {
         <Field label="Wallet" locked><CopyText value={item.wallet} /></Field>
         <Field label="From chain" locked>{chainName(item.from)}</Field>
         <Field label="Destination chain" locked>{chainName(item.to)}</Field>
-        <Field label="Destination address" locked>{item.destinationAddress ? <CopyText value={item.destinationAddress} /> : '—'}</Field>
+        <Field label="Destination address" locked>{item.destinationAddress ? <CopyText value={item.destinationAddress} /> : '-'}</Field>
         {item.txHash && (
           <Field label={item.kind === 'claim' ? 'Burn tx' : item.kind === 'ub_withdrawal' ? 'Withdrawal tx' : 'Deposit / burn tx'}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -245,7 +245,7 @@ function Detail({ item, onClose, onChanged }: {
         )}
         {item.kind === 'ub_claim' && (
           <ActionButton primary icon={<RotateCcw size={14} />} disabled={!!busy}
-            onClick={() => run('requeue', `Resubmit the user's signed claim to Circle? It mints to ${short(item.wallet)} on Arc — the same wallet the user signed for.`, () => adminRequeueUbClaim(item.id), true)}>
+            onClick={() => run('requeue', `Resubmit the user's signed claim to Circle? It mints to ${short(item.wallet)} on Arc - the same wallet the user signed for.`, () => adminRequeueUbClaim(item.id), true)}>
             {busy === 'requeue' ? 'Resubmitting…' : 'Resubmit to Circle'}
           </ActionButton>
         )}
@@ -361,7 +361,7 @@ export function StuckFundsPage() {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 320px' }}>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            Cross-chain moves that didn’t finish, across all users. Users can finish every one of these themselves in Recover —
+            Cross-chain moves that didn’t finish, across all users. Users can finish every one of these themselves in Recover -
             use this page when they can’t. Destinations are locked and every action is logged.
           </div>
         </div>
@@ -376,7 +376,7 @@ export function StuckFundsPage() {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {tile('Stuck moves', String(counts.all ?? 0), `${usersAffected} user${usersAffected === 1 ? '' : 's'} affected`, (counts.all ?? 0) > 0 ? 'var(--warning)' : 'var(--success)')}
         {tile('USDC not yet delivered', usd(totalUsd), 'Excludes 7-day withdrawals')}
-        {tile('Waiting for users', String(counts.ub_transfer ?? 0), 'UB transfers — user must choose')}
+        {tile('Waiting for users', String(counts.ub_transfer ?? 0), 'UB transfers - user must choose')}
       </div>
 
       {/* Filters + search */}

@@ -2,7 +2,7 @@ import { Buffer } from 'buffer'
 if (typeof window !== 'undefined') (window as any).Buffer = Buffer
 
 
-// Suppress Circle SDK telemetry CORS errors — these are internal Circle logging
+// Suppress Circle SDK telemetry CORS errors - these are internal Circle logging
 // calls that fail in localhost due to CORS. They don't affect functionality.
 const _origFetch = window.fetch.bind(window)
 window.fetch = function(input: RequestInfo | URL, init?: RequestInit) {
@@ -47,7 +47,7 @@ clearLegacyData()
 
 // Lock on a fresh launch BEFORE the first render (see the long comment on
 // this rule in App.tsx). Doing it in an effect let Home paint first and
-// then swap to the lock screen — opening from the home screen showed a flash
+// then swap to the lock screen - opening from the home screen showed a flash
 // of Home before the fingerprint prompt. The persisted auth store hydrates
 // synchronously from localStorage, so it can be decided right here.
 {

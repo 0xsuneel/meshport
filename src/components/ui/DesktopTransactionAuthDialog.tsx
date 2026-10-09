@@ -1,16 +1,16 @@
 // DesktopTransactionAuthDialog.tsx
-// Desktop-only PIN-entry dialog — deliberately NOT the same generic shell
+// Desktop-only PIN-entry dialog - deliberately NOT the same generic shell
 // as DesktopDialogFrame (used everywhere else: token pickers, chain
 // pickers, history details, confirmations). This one is reserved for the
 // single moment across the app that actually authorizes money movement,
 // so it gets its own visual weight: a lock badge, a standardized amount +
 // destination summary above the keypad, and an accent-tinted border/glow.
 // Every caller keeps its existing PinKeypad + error text completely
-// unchanged — this is only the chrome around it, swapped in on the
+// unchanged - this is only the chrome around it, swapped in on the
 // isDesktop branch exactly like DesktopDialogFrame was, mobile untouched.
 //
 // Rendered into document.body (like DesktopDialogFrame) so a transformed
-// ancestor — e.g. the Multichain Hub's embedded flows — can't become its
+// ancestor - e.g. the Multichain Hub's embedded flows - can't become its
 // containing block: it always centres on the screen.
 import { motion } from 'framer-motion'
 import { PopupDim } from './PopupDim'
@@ -24,7 +24,7 @@ export function DesktopTransactionAuthDialog({
 }: {
   onClose: () => void
   title: string
-  // Optional — not every "authorize" moment is a dollar figure (P2P has
+  // Optional - not every "authorize" moment is a dollar figure (P2P has
   // plain confirmations like "Confirm Cancel"/"Confirm Changes" sharing
   // this same dialog). When omitted, the big tabular-number line is
   // skipped and subLabel alone carries the description.
@@ -45,7 +45,7 @@ export function DesktopTransactionAuthDialog({
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       }}
     >
-      {/* A plain dim, no backdrop blur — see usePopupOpen. Only the dim fades (PopupDim). */}
+      {/* A plain dim, no backdrop blur - see usePopupOpen. Only the dim fades (PopupDim). */}
       <PopupDim background="rgba(0,0,0,0.6)" />
       <motion.div
         onClick={e => e.stopPropagation()}
@@ -60,7 +60,7 @@ export function DesktopTransactionAuthDialog({
         }}
       >
         <div style={{ padding: '28px 28px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          {/* Lock badge — spring-scales in just after the panel itself for a
+          {/* Lock badge - spring-scales in just after the panel itself for a
               light staggered reveal rather than everything landing at once. */}
           <motion.div
             initial={{ scale: 0.5, opacity: 0 }}
@@ -81,7 +81,7 @@ export function DesktopTransactionAuthDialog({
 
           <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{title}</h2>
 
-          {/* Standardized transaction summary — every caller now shows the
+          {/* Standardized transaction summary - every caller now shows the
               same amount + destination presentation here, instead of each
               page inventing its own text sentence. */}
           {amountLabel && (

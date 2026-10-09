@@ -5,7 +5,7 @@
  * Edge functions deploy from supabase/functions/ and cannot import from src/, so
  * the two runtimes physically cannot share one file. That leaves a duplicated
  * rule, and a duplicated money-handling rule that can silently drift is a worse
- * failure mode than either copy simply being wrong — a divergence would show up
+ * failure mode than either copy simply being wrong - a divergence would show up
  * as "the cron cancelled a trade the browser would have restored".
  *
  * So this file imports BOTH implementations and runs them across the exhaustive
@@ -40,7 +40,7 @@ function matrix(): StuckReleaseProbe[] {
   return out
 }
 
-describe('stuck-release policy parity — client vs server', () => {
+describe('stuck-release policy parity - client vs server', () => {
   const cases = matrix()
 
   it('covers a non-trivial matrix', () => {
@@ -76,7 +76,7 @@ describe('stuck-release policy parity — client vs server', () => {
   })
 })
 
-describe('stuck-release policy — safety invariants hold in BOTH copies', () => {
+describe('stuck-release policy - safety invariants hold in BOTH copies', () => {
   const cases = matrix()
 
   for (const [label, policy] of [['client', clientPolicy], ['server', serverPolicy]] as const) {
@@ -121,7 +121,7 @@ describe('stuck-release policy — safety invariants hold in BOTH copies', () =>
 
 // ── The two real production trades, as fixtures ──────────────────────────────
 
-describe('stuck-release policy — the two real stuck trades', () => {
+describe('stuck-release policy - the two real stuck trades', () => {
   // Verified on Arc: tradeReleased=false, offer 77a75512 holds 23 USDC on
   // P2PMeshportEscrow, deposit 0xe53cee42 exists.
   const trade568baca0: StuckReleaseProbe = {
@@ -143,7 +143,7 @@ describe('stuck-release policy — the two real stuck trades', () => {
     expect(serverPolicy(tradeFb0de45a).verdict).toBe('cancel')
   })
 
-  it('neither becomes cancel if the chain read fails — the funds stay protected', () => {
+  it('neither becomes cancel if the chain read fails - the funds stay protected', () => {
     for (const t of [trade568baca0, tradeFb0de45a]) {
       const blind = { ...t, onChainReleased: null as boolean | null }
       expect(clientPolicy(blind).verdict).toBe('investigate')

@@ -11,7 +11,7 @@ const GROUPS = [
       { icon: AtSign, title: 'Username Payments', desc: 'Send USDC using a .arc username instead of copying a long wallet address.' },
       { icon: QrCode, title: 'Receive & QR', desc: 'Create a payment request and let another user pay directly into your wallet.' },
       { icon: MessageCircle, title: 'Chat Payments', desc: 'Send payments directly inside conversations.' },
-      { icon: Banknote, title: 'Bulk Payments', desc: 'Send USDC to multiple recipients in one flow — payroll, contributors, or group payouts.' },
+      { icon: Banknote, title: 'Bulk Payments', desc: 'Send USDC to multiple recipients in one flow - payroll, contributors, or group payouts.' },
     ],
   },
   {
@@ -40,7 +40,7 @@ export function FeaturesGrid() {
           Built for how people actually pay
         </h2>
         <p className="mt-4 text-[15.5px] leading-relaxed text-text-secondary">
-          A payment app first — with the tools to move, swap, and trade USDC when you need them.
+          A payment app first - with the tools to move, swap, and trade USDC when you need them.
         </p>
       </Reveal>
 

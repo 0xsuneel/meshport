@@ -19,7 +19,7 @@ type ReceiptProps = ComponentProps<typeof SuccessReceipt>
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 
 // While a receipt is open, every backdrop-filter underneath (sticky page
-// headers, cards, the bottom nav…) is switched off — see usePopupOpen.
+// headers, cards, the bottom nav…) is switched off - see usePopupOpen.
 // The popup's own 68% dim covers the page, so nothing visible is lost.
 
 export function ReceiptPopup({ onClose, onPrimary, ...receipt }: Omit<ReceiptProps, 'onPrimary' | 'revealed'> & {

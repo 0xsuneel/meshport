@@ -44,13 +44,13 @@ export const useSettingsStore = create<SettingsStore>()((set, get) => ({
 
   refresh: async () => {
     const settings = await fetchAllSettings()
-    if (Object.keys(settings).length === 0) return // failed — keep what we have
+    if (Object.keys(settings).length === 0) return // failed - keep what we have
     fetched = true
     writeCache(settings)
     set({ settings, loaded: true })
   },
 
-  // Subscribes once for the lifetime of the app — every admin toggle change
+  // Subscribes once for the lifetime of the app - every admin toggle change
   // is reflected live across every connected client, no redeploy needed.
   startRealtime: () => {
     if (realtimeStarted) return () => {}

@@ -1,5 +1,5 @@
 /**
- * bulkPayIntentService.ts — client for BulkPay's transaction_intent/attempt
+ * bulkPayIntentService.ts - client for BulkPay's transaction_intent/attempt
  * lifecycle (docs/BULKPAY_TRANSACTION_INTENT_IMPLEMENTATION.md).
  *
  * Mirrors claimService.ts's own shape: this file POSTs to the
@@ -45,7 +45,7 @@ export async function createBulkPayIntent(params: {
   try {
     await ensureAnonSession()
     const { data, error } = await invokeLinked('bulkpay-intent', params as Record<string, unknown>)
-    // BUG FIX: see describeFunctionsError.ts — same class of bug traced live
+    // BUG FIX: see describeFunctionsError.ts - same class of bug traced live
     // from a Swap failure ("Edge Function returned a non-2xx status code"
     // shown instead of the real validation reason).
     if (error) return { success: false, error: await describeFunctionsError(error, 'Failed to create BulkPay intent') }

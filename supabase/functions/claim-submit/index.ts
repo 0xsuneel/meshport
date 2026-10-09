@@ -8,7 +8,7 @@
 // This is the ONLY write path into `claims`. It inserts the row with the
 // starting status ('submitted'), then hands off to claim-worker via a
 // fire-and-forget invocation (EdgeRuntime.waitUntil keeps it alive after the
-// response is sent). From this point on, processing is 100% server-side —
+// response is sent). From this point on, processing is 100% server-side -
 // the browser tab can be closed and the claim still completes.
 
 import { callerWallet } from '../_shared/callerWallet.ts'
@@ -16,7 +16,7 @@ import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts'
 import { getArcNativeBalance } from '../_shared/chains.ts'
 
-// Same reasoning as claim-worker/index.ts's getServiceRoleKey — legacy name
+// Same reasoning as claim-worker/index.ts's getServiceRoleKey - legacy name
 // tried first (currently verified working), new SUPABASE_SECRET_KEYS format
 // only as a fallback, clear error instead of a silent crash if neither is set.
 function getServiceRoleKey(): string {
@@ -35,7 +35,7 @@ function getServiceRoleKey(): string {
   }
 
   throw new Error(
-    'No Supabase service role key found — checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS. ' +
+    'No Supabase service role key found - checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS. ' +
     'Set one of these as a project secret.'
   )
 }
@@ -106,7 +106,7 @@ Deno.serve(async (req: Request) => {
     .maybeSingle()
 
   if (existingErr) {
-    // Don't silently proceed as if no duplicate exists — that's how a
+    // Don't silently proceed as if no duplicate exists - that's how a
     // rejected/erroring read gets misread as "safe to insert" and could
     // double-submit a claim for the same burn tx.
     console.error('[claim-submit] idempotency check failed:', existingErr.message)
@@ -116,7 +116,7 @@ Deno.serve(async (req: Request) => {
   let claimId: string
 
   if (existing) {
-    // Idempotent: same burn tx submitted twice (e.g. client retry) — don't duplicate.
+    // Idempotent: same burn tx submitted twice (e.g. client retry) - don't duplicate.
     claimId = existing.id
   } else {
     const { data: inserted, error } = await supabase
@@ -134,13 +134,13 @@ Deno.serve(async (req: Request) => {
       .single()
 
     if (error?.code === '23505') {
-      // Lost a race with a concurrent request for the same tx_hash — the
+      // Lost a race with a concurrent request for the same tx_hash - the
       // SELECT-then-INSERT above isn't atomic, so two near-simultaneous
       // submitClaim() calls (e.g. the original in-flight request racing
       // AppLayout's pending-submit retry after a reload) can both pass the
       // "not found" check before either INSERT commits. The DB's unique
       // index on tx_hash correctly blocks the second physical row from
-      // being created — but until now this branch treated that as a hard
+      // being created - but until now this branch treated that as a hard
       // failure instead of what it actually is: a successful, idempotent
       // outcome that just needs to look up what the winning request
       // created. Only self-heals via the client's retry loop on next app
@@ -166,10 +166,10 @@ Deno.serve(async (req: Request) => {
   // client) will still pick the claim up within ~1 minute.
   //
   // IMPORTANT: previously this used `.catch(() => {})`, which swallowed ANY
-  // failure of this kick completely silently — no log, no trace anywhere.
+  // failure of this kick completely silently - no log, no trace anywhere.
   // If this kick was ever failing (cold start timeout, auth issue, network
   // blip), every single claim would silently fall back to the much slower
-  // ~60s cron cadence with zero visibility into why — which would look
+  // ~60s cron cadence with zero visibility into why - which would look
   // exactly like "status updates lag behind" reports, especially next to a
   // client-side balance-poll notification that fires independently and much
   // faster. Log failures now so this is actually diagnosable going forward.
@@ -186,7 +186,7 @@ Deno.serve(async (req: Request) => {
     console.error(`[claim-submit] fast-path kick for ${claimId} failed:`, e?.message ?? e)
   })
 
-  // @ts-ignore — EdgeRuntime is available in the Supabase Edge Functions runtime
+  // @ts-ignore - EdgeRuntime is available in the Supabase Edge Functions runtime
   if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
     // @ts-ignore
     EdgeRuntime.waitUntil(kickWorker)

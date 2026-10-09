@@ -3,7 +3,7 @@
  *
  * WHAT THIS PROTECTS
  * A P2P activity row asserts that USDC moved. Without a tx_hash there is nothing
- * to verify it against, and the row is also structurally undedupable — every
+ * to verify it against, and the row is also structurally undedupable - every
  * unique index on `activity` is over (tx_hash, wallet_address), and Postgres
  * treats NULLs as distinct, so each hashless insert is an unguarded new row.
  * Production proof: one wallet held 45 hashless rows, including six copies each
@@ -17,7 +17,7 @@
  * action itself: the offer is still created, the top-up still lands, the trade
  * still completes. Only the unverifiable feed entry is withheld.
  *
- * Honor-system mode is the case that reaches the guard without a hash — with
+ * Honor-system mode is the case that reaches the guard without a hash - with
  * VITE_P2P_ESCROW_CONTRACT unset, HonorSystemFallbackEscrowProvider returns
  * `{ success: true }` and no txHash, because nothing was locked on-chain.
  */
@@ -38,7 +38,7 @@ vi.mock('@/lib/chatService', () => ({
   subscribeWithRetry: vi.fn(() => () => {}),
 }))
 
-// Configurable escrow provider — `depositTxHash = undefined` models honor-system
+// Configurable escrow provider - `depositTxHash = undefined` models honor-system
 // mode (success, but nothing actually moved on-chain).
 const escrow = {
   depositTxHash: undefined as string | undefined,
@@ -116,7 +116,7 @@ afterEach(() => { vi.unstubAllGlobals() })
 
 // ── The choke point itself ───────────────────────────────────────────────────
 
-describe('saveP2PActivity — the guard every P2P write routes through', () => {
+describe('saveP2PActivity - the guard every P2P write routes through', () => {
   it('refuses to write when txHash is undefined', async () => {
     const ok = await saveP2PActivity({
       walletAddress: WALLET, activityType: 'p2p_sell_order', amount: 100,
@@ -176,7 +176,7 @@ describe('saveP2PActivity — the guard every P2P write routes through', () => {
 
 // ── Live path: createOffer (the path that produced the ghost sell orders) ────
 
-describe('createOffer — offer still created, unverifiable row withheld', () => {
+describe('createOffer - offer still created, unverifiable row withheld', () => {
   it('honor-system deposit (no hash): offer IS created, NO activity row', async () => {
     escrow.depositTxHash = undefined
 
@@ -226,7 +226,7 @@ describe('createOffer — offer still created, unverifiable row withheld', () =>
 
 // ── Live path: topUpOfferEscrow (the 3 legitimate top-ups) ──────────────────
 
-describe('topUpOfferEscrow — top-up still applied, unverifiable row withheld', () => {
+describe('topUpOfferEscrow - top-up still applied, unverifiable row withheld', () => {
   it('honor-system top-up (no hash): top-up SUCCEEDS, NO activity row', async () => {
     escrow.depositTxHash = undefined
 
@@ -265,7 +265,7 @@ describe('topUpOfferEscrow — top-up still applied, unverifiable row withheld',
     expect(saveActivity).toHaveBeenCalledTimes(3)
     expect(p2pWrites().map(w => w.txHash)).toEqual(hashes)
     expect(p2pWrites().map(w => w.amount)).toEqual(amounts)
-    // Same offer, same type, same kind — distinguished ONLY by tx_hash.
+    // Same offer, same type, same kind - distinguished ONLY by tx_hash.
     expect(new Set(p2pWrites().map(w => w.metadata.offerId)).size).toBe(1)
     expect(new Set(p2pWrites().map(w => w.metadata.kind))).toEqual(new Set(['offer_topped_up']))
     expect(new Set(p2pWrites().map(w => w.txHash)).size).toBe(3)
@@ -284,7 +284,7 @@ describe('topUpOfferEscrow — top-up still applied, unverifiable row withheld',
 
 // ── Source assertion: covers ALL ten live paths at once ─────────────────────
 
-describe('p2pService source — no P2P write may bypass the guard', () => {
+describe('p2pService source - no P2P write may bypass the guard', () => {
   const src = readFileSync(resolve(process.cwd(), 'src/lib/p2pService.ts'), 'utf8')
 
   it('has no direct saveActivity() call carrying a p2p_* activityType', () => {
@@ -306,7 +306,7 @@ describe('p2pService source — no P2P write may bypass the guard', () => {
     expect(sites.length).toBeGreaterThanOrEqual(10)
   })
 
-  it('calls the raw saveActivity exactly once — inside the guard', () => {
+  it('calls the raw saveActivity exactly once - inside the guard', () => {
     // Matches the real call expression only. A bare `saveActivity()` in prose
     // does not qualify, so doc comments cannot skew this count.
     const raw = src.match(/saveActivity\(params\)/g) ?? []

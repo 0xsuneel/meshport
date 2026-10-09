@@ -5,9 +5,9 @@
 // ── Why this exists ─────────────────────────────────────────────────────────
 // Releasing escrowed USDC is two steps: the app claims the trade
 // ('payment_sent' -> 'released') so no second caller can release the same
-// funds, then it moves the money on-chain. If the process dies in between —
+// funds, then it moves the money on-chain. If the process dies in between -
 // the tab is closed, the connection drops, the compensating write is
-// rejected — the trade is left saying 'released' with released_at NULL and
+// rejected - the trade is left saying 'released' with released_at NULL and
 // no transaction, and its offer stays pinned by locked_by_trade_id forever.
 // releaseTrade() now compensates on every path it can reach, but it cannot
 // compensate for code that never runs.
@@ -24,7 +24,7 @@
 // clears p2p_offers.locked_by_trade_id. The escrow contract is read-only here
 // (eth_call), and the decision is made by the shared policy in
 // _shared/stuckReleasePolicy.ts, whose rule is that "unknown" is never
-// treated as "zero" — every unreadable probe yields 'investigate', which
+// treated as "zero" - every unreadable probe yields 'investigate', which
 // changes nothing and leaves the trade for a human.
 //
 // ── Conventions ─────────────────────────────────────────────────────────────
@@ -65,13 +65,13 @@ function getServiceRoleKey(): string {
       console.error('[p2p-release-reconcile] SUPABASE_SECRET_KEYS present but failed to parse:', e instanceof Error ? e.message : e)
     }
   }
-  throw new Error('No Supabase service role key found — checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS.')
+  throw new Error('No Supabase service role key found - checked SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SECRET_KEYS.')
 }
 
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_KEY = getServiceRoleKey()
 
-// Authenticated-only Arc endpoints — same list and same reasoning as
+// Authenticated-only Arc endpoints - same list and same reasoning as
 // claim-recovery-scan: no public gateways, so a scan can never silently fall
 // through to an unauthenticated node with different data or rate limits.
 const DRPC_KEY = Deno.env.get('DRPC_KEY') ?? ''
@@ -95,23 +95,23 @@ const ESCROW_CONTRACTS_LEGACY = (Deno.env.get('P2P_ESCROW_CONTRACTS_LEGACY') ?? 
 const USDC_DECIMALS = 18   // native USDC on Arc
 
 // ── V2 selectors (the CURRENT contract, P2PMeshportEscrowV2.sol) ───────────
-// tradeReleased(bytes32) does NOT exist on V2 — that boolean mapping was
+// tradeReleased(bytes32) does NOT exist on V2 - that boolean mapping was
 // replaced by the full Trade struct. getTrade(bytes32) is read instead, and
 // this reconciler derives "was it released" from the trade's `state` field
 // (index 4 of the 9-word tuple: offerKey, seller, buyer, amount, state,
 // investigatedApproveRelease, frozenBy, investigatedBy, resolvedBy).
 // State 4 = Released (buyer paid, either via normal release() or an
-// admin-resolved dispute); anything else determinable is NOT a release —
+// admin-resolved dispute); anything else determinable is NOT a release -
 // including state 5 (Refunded), which sent funds back to the seller instead,
 // the opposite of what classifyStuckRelease's 'finalize' verdict means.
 const SELECTOR_GET_TRADE_V2   = '0xa3b13799'  // getTrade(bytes32)
 const TRADE_STATE_RELEASED_V2 = 4
-const SELECTOR_GET_REMAINING  = '0x9cb589ac'  // getRemaining(bytes32) — signature unchanged from legacy, still valid on V2
+const SELECTOR_GET_REMAINING  = '0x9cb589ac'  // getRemaining(bytes32) - signature unchanged from legacy, still valid on V2
 
 // ── Legacy selectors (any address in P2P_ESCROW_CONTRACTS_LEGACY) ──────────
 // Pre-hardening contracts (P2PMeshportEscrow.sol and earlier) DO have a
 // plain `mapping(bytes32 => bool) public tradeReleased`, and their offerKey
-// was NOT seller-bound (see escrowKeyLegacy below) — both genuinely
+// was NOT seller-bound (see escrowKeyLegacy below) - both genuinely
 // different shapes from V2, which is exactly why this reconciler must not
 // use one selector/key scheme for every configured contract address.
 const SELECTOR_TRADE_RELEASED_LEGACY = '0x8deade26'  // tradeReleased(bytes32)
@@ -124,14 +124,14 @@ const SELECTOR_TRADE_RELEASED_LEGACY = '0x8deade26'  // tradeReleased(bytes32)
 // to the moment they activate, and it is echoed in every response.
 const RECONCILE_AFTER_RAW = Deno.env.get('P2P_RECONCILE_AFTER') ?? ''
 // Independent second guard: individually quarantined trade ids, comma separated.
-// Belt and braces — a trade named here is skipped even if the timestamp is set
+// Belt and braces - a trade named here is skipped even if the timestamp is set
 // wrongly.
 const SKIP_TRADE_IDS = (Deno.env.get('P2P_RECONCILE_SKIP_TRADE_IDS') ?? '')
   .split(',').map(s => s.trim()).filter(Boolean)
 // Optional shared secret, checked in addition to Supabase's own JWT
 // verification (which is on by default for edge functions). Defence in depth:
 // if verify_jwt were ever disabled by mistake, this still refuses anonymous
-// callers. Never hardcode it — read from project secrets only.
+// callers. Never hardcode it - read from project secrets only.
 const RECONCILE_SECRET = Deno.env.get('P2P_RECONCILE_SECRET') ?? ''
 
 async function rpcCallSingle(url: string, method: string, params: unknown[]): Promise<any> {
@@ -161,11 +161,11 @@ async function ethCall(to: string, data: string): Promise<string | null> {
 }
 
 /**
- * offerKey for the CURRENT (V2) contract — seller-bound, matching
+ * offerKey for the CURRENT (V2) contract - seller-bound, matching
  * offerKeyFor() in src/lib/p2pEscrowContract.ts exactly:
  * keccak256(abi.encode(string, address)). Required for sell-offer trades
  * (the offer's own bucket); buy-offer trades use tradeKeyPlain instead
- * (their bucket is keyed by the trade's own id, never seller-bound — see
+ * (their bucket is keyed by the trade's own id, never seller-bound - see
  * depositForTrade's own reasoning in p2pProviders.ts, unchanged by the V2
  * hardening).
  */
@@ -177,20 +177,20 @@ async function offerKeyV2(offerId: string, sellerWallet: string): Promise<string
   ))
 }
 
-/** tradeKey — unchanged by the V2 hardening on either contract generation: plain keccak256(toHex(id)), never seller-bound. Used for V2 getTrade() lookups and for buy-offer trade-keyed escrow buckets on either contract generation. */
+/** tradeKey - unchanged by the V2 hardening on either contract generation: plain keccak256(toHex(id)), never seller-bound. Used for V2 getTrade() lookups and for buy-offer trade-keyed escrow buckets on either contract generation. */
 async function tradeKeyPlain(id: string): Promise<string> {
   const { keccak256, toHex } = await import('npm:viem@2')
   return keccak256(toHex(id))
 }
 
-/** offerKey for a LEGACY (pre-hardening) contract — plain keccak256(toHex(id)), NOT seller-bound. This is deliberately the same computation as tradeKeyPlain; kept as a separate name so call sites read correctly regardless of which one two identical implementations happen to share. */
+/** offerKey for a LEGACY (pre-hardening) contract - plain keccak256(toHex(id)), NOT seller-bound. This is deliberately the same computation as tradeKeyPlain; kept as a separate name so call sites read correctly regardless of which one two identical implementations happen to share. */
 const offerKeyLegacy = tradeKeyPlain
 
 /**
  * Did this trade's release happen on-chain? Checks the CURRENT (V2)
  * contract via getTrade()'s state field, and every LEGACY contract via its
- * old tradeReleased() mapping — each with ITS OWN correct selector/key
- * shape, never mixed. Returns null if NO contract could be read — never
+ * old tradeReleased() mapping - each with ITS OWN correct selector/key
+ * shape, never mixed. Returns null if NO contract could be read - never
  * false-on-error, because "unknown" must not become "not released".
  */
 async function probeTradeReleased(tradeId: string): Promise<boolean | null> {
@@ -201,14 +201,14 @@ async function probeTradeReleased(tradeId: string): Promise<boolean | null> {
     const raw = await ethCall(ESCROW_CONTRACT, SELECTOR_GET_TRADE_V2 + key).catch(() => null)
     if (raw !== null && raw.length >= 2 + 64 * 5) {
       anyAnswered = true
-      // Word index 4 (0-based) of the ABI-encoded tuple — offerKey(0),
+      // Word index 4 (0-based) of the ABI-encoded tuple - offerKey(0),
       // seller(1), buyer(2), amount(3), state(4).
       const hex = raw.slice(2)
       const stateWord = hex.slice(4 * 64, 4 * 64 + 64)
       const state = Number(BigInt('0x' + stateWord))
       if (state === TRADE_STATE_RELEASED_V2) return true
       // Any other determinable state (Active/Frozen/Investigated/Refunded/
-      // None) is definitively NOT "buyer was paid via release" — but don't
+      // None) is definitively NOT "buyer was paid via release" - but don't
       // return false yet, a legacy contract might still say true for an
       // older trade this reconciler also needs to check.
     }
@@ -228,7 +228,7 @@ async function probeTradeReleased(tradeId: string): Promise<boolean | null> {
 /**
  * Escrow still held under this trade's bucket, summed across the current
  * and every legacy contract. `sellerWallet` is required for sell-offer
- * trades on the CURRENT contract (seller-bound key) — pass '' for
+ * trades on the CURRENT contract (seller-bound key) - pass '' for
  * buy-offer trades, where the bucket is the trade's own plain key on every
  * contract generation. Returns null if none could be read.
  */
@@ -261,7 +261,7 @@ async function probeEscrowRemaining(tradeId: string, offerId: string, isBuyOffer
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-  // Scheduled job only — the pg_cron caller's secret, never a user session.
+  // Scheduled job only - the pg_cron caller's secret, never a user session.
   if (!isCronOrLegacyServiceCaller(req)) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } })
 
   // Auth. Supabase verifies the JWT ahead of this handler by default (the cron
@@ -284,13 +284,13 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json().catch(() => ({}))
     dryRun = body?.dryRun === true
-  } catch { /* no body — normal cron invocation */ }
+  } catch { /* no body - normal cron invocation */ }
 
   const cutoffMs = parseActivationCutoff(RECONCILE_AFTER_RAW)
   if (cutoffMs === null) {
     // Dormant by design. Scheduling the cron without setting the cutoff must do
     // nothing at all rather than sweep historical trades.
-    console.warn('[p2p-release-reconcile] DORMANT — P2P_RECONCILE_AFTER is not set; no trades will be touched.')
+    console.warn('[p2p-release-reconcile] DORMANT - P2P_RECONCILE_AFTER is not set; no trades will be touched.')
     return json({
       ok: true, dormant: true, reason: 'P2P_RECONCILE_AFTER is not set',
       scanned: 0, eligible: 0, outcomes: [], ms: Date.now() - started,
@@ -327,14 +327,14 @@ Deno.serve(async (req: Request) => {
 
   for (const t of stuck) {
     // Re-apply the SAME pure gate the client uses, even though SQL already
-    // bounded the query — the skip list lives here, and a single shared gate
+    // bounded the query - the skip list lives here, and a single shared gate
     // means the two paths cannot diverge on what is in scope.
     const gate = isEligibleForReconcile({
       tradeId: t.id, createdAtIso: String(t.created_at),
       cutoffMs, graceMs: STUCK_RELEASE_GRACE_MS, nowMs, skipTradeIds: SKIP_TRADE_IDS,
     })
     if (!gate.eligible) {
-      console.log('[p2p-release-reconcile]', t.id, 'SKIPPED —', gate.reason)
+      console.log('[p2p-release-reconcile]', t.id, 'SKIPPED -', gate.reason)
       outcomes.push({ tradeId: t.id, verdict: 'skipped', reason: gate.reason, applied: false })
       continue
     }
@@ -372,17 +372,17 @@ Deno.serve(async (req: Request) => {
         const { error: e2 } = await supabase.from('p2p_trades')
           .update({ status: 'payment_sent' }).eq('id', t.id)
         applied = !e2
-        // Offer stays locked on purpose — the trade is live again.
+        // Offer stays locked on purpose - the trade is live again.
       } else if (verdict === 'cancel') {
         const { error: e3 } = await supabase.from('p2p_trades')
-          .update({ status: 'cancelled', cancel_reason: 'Escrow was never funded — release could not be completed' })
+          .update({ status: 'cancelled', cancel_reason: 'Escrow was never funded - release could not be completed' })
           .eq('id', t.id)
         applied = !e3
         if (applied) await supabase.from('p2p_offers').update({ locked_by_trade_id: null }).eq('id', t.offer_id)
       }
     }
 
-    console.log('[p2p-release-reconcile]', t.id, verdict, dryRun ? '(dry run)' : applied ? 'applied' : 'not applied', '—', reason)
+    console.log('[p2p-release-reconcile]', t.id, verdict, dryRun ? '(dry run)' : applied ? 'applied' : 'not applied', '-', reason)
     outcomes.push({
       tradeId: t.id, offerId: t.offer_id, amountUsdc, verdict, reason, applied,
       probe: { onChainReleased, escrowRemaining, everDeposited },

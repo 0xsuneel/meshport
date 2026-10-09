@@ -7,14 +7,14 @@ import { useAuthStore, useUIStore } from '@/store'
 import { isBiometricSupported, registerBiometric, biometricLabel, recordBiometricOfferSkip } from '@/lib/biometric'
 
 /**
- * Shown right after a passcode is confirmed — for new signups (create/
+ * Shown right after a passcode is confirmed - for new signups (create/
  * import/social), for a returning login on a browser with no local
  * biometric registered yet (see PasscodeSetup.tsx's returning=1 flow and
  * PasscodeLockPage's unlock handler), and reused again from Settings'
  * "Confirm Passcode" sheet when the user turns the toggle on manually.
  * One single place that actually asks "enable biometric?", rather than
  * each entry point building its own version of this and drifting apart.
- * Always skippable — Skip is exactly as prominent as Enable.
+ * Always skippable - Skip is exactly as prominent as Enable.
  *
  * Navigated to with the caller's own return destination passed through
  * router state (`next`), so this slots into whatever flow triggered it
@@ -30,7 +30,7 @@ export function EnableBiometricPage() {
   const [working, setWorking] = useState(false)
 
   const nextPath: string = (location.state as any)?.next ?? '/'
-  // Read once on mount (memory only — see biometricHandoff.ts).
+  // Read once on mount (memory only - see biometricHandoff.ts).
   const [rawPasscode] = useState(() => takeBiometricPasscode())
   useEffect(() => () => clearBiometricPasscode(), [])
   const label = biometricLabel()
@@ -40,7 +40,7 @@ export function EnableBiometricPage() {
     isBiometricSupported().then(setSupported)
   }, [])
 
-  // Device genuinely doesn't support it — skip straight through rather
+  // Device genuinely doesn't support it - skip straight through rather
   // than showing a screen for a capability that isn't there. Checked async
   // on mount, so this only fires after we actually know one way or the
   // other, not optimistically.
@@ -55,7 +55,7 @@ export function EnableBiometricPage() {
     setWorking(true)
     const ok = await registerBiometric(walletAddress, rawPasscode, user?.displayName || user?.username || 'MeshPort user')
     // If the user already tapped Skip while this was still in flight (a
-    // real possibility — this call can hang for the full WebAuthn timeout,
+    // real possibility - this call can hang for the full WebAuthn timeout,
     // or longer if something OS/browser-level goes wrong, e.g. a browser's
     // own password-manager sync failing mid-flow), don't act on a result
     // that's arriving after they've already moved on. They're on a
@@ -68,13 +68,13 @@ export function EnableBiometricPage() {
       useAuthStore.getState().setBiometricEnabled(true)
       showToastMessage(`${label} enabled`, 'success')
     } else {
-      // Cancelled the OS prompt, or genuinely failed — either way this is a
+      // Cancelled the OS prompt, or genuinely failed - either way this is a
       // normal, expected outcome, not an error state. Just continue on;
       // they can always turn it on later from Settings. Treated the same
-      // as an explicit Skip for the 24h unlock-offer cooldown below — a
+      // as an explicit Skip for the 24h unlock-offer cooldown below - a
       // cancelled OS prompt is a "not now" just as much as tapping Skip.
       if (walletAddress) recordBiometricOfferSkip(walletAddress)
-      showToastMessage(`${label} not enabled — you can turn it on later in Settings`, 'info')
+      showToastMessage(`${label} not enabled - you can turn it on later in Settings`, 'info')
     }
     navigate(nextPath, { replace: true })
   }

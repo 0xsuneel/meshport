@@ -23,7 +23,7 @@ export const ARC_TESTNET = {
 export const USDC_CONTRACT = ARC_TOKENS.USDC.contract
 export const USDC_DECIMALS = ARC_TOKENS.USDC.decimals
 
-// Arc docs: chain config for sendTransaction — decimals: 18 (native USDC wei).
+// Arc docs: chain config for sendTransaction - decimals: 18 (native USDC wei).
 // Exported so p2pEscrowContract.ts can reuse it directly rather than
 // duplicating the constant.
 export const ARC_CHAIN_INLINE = REGISTRY_ARC_CHAIN_INLINE
@@ -32,7 +32,7 @@ export const ARC_CHAIN_INLINE = REGISTRY_ARC_CHAIN_INLINE
 // sendEURC/sendCirBTC used to build viem's `parseUnits` input with plain
 // `params.amount.toString()`. `params.amount` is a JS `number`, and
 // `Number.prototype.toString()` switches to EXPONENTIAL notation for any
-// magnitude below 1e-6 — e.g. `(0.00000001).toString()` is `'1e-8'`, not
+// magnitude below 1e-6 - e.g. `(0.00000001).toString()` is `'1e-8'`, not
 // `'0.00000001'`. viem's `parseUnits` only accepts a plain decimal string and
 // throws exactly this error on exponential notation, so sending a small-but-
 // entirely-valid cirBTC amount like 0.00000001 (well above its 8-decimal
@@ -48,7 +48,7 @@ export function toPlainDecimalString(amount: number, decimals: number): string {
   return amount.toLocaleString('en-US', { useGrouping: false, maximumFractionDigits: decimals })
 }
 
-// ─── Get USDC balance — Arc docs: use eth_getBalance (18-decimal native wei) ──
+// ─── Get USDC balance - Arc docs: use eth_getBalance (18-decimal native wei) ──
 /** Like getUSDCBalance, but a failed read throws instead of looking like 0 (offline must never show $0). */
 export async function readUSDCBalanceOrThrow(address: string): Promise<number> {
   const json = await arcRpcJson({
@@ -83,7 +83,7 @@ export interface SendResult {
 
 // ─── Pre-broadcast preflight, startable early ────────────────────────────────
 // Everything a send needs before it can sign: the server-reserved
-// intent/attempt/nonce (pay-intent Edge Function — the slowest leg), the gas
+// intent/attempt/nonce (pay-intent Edge Function - the slowest leg), the gas
 // estimate, and (native USDC only) the balance check. None of it needs the
 // private key, so callers start it the moment the PIN is complete via
 // preparePayment(), overlapping the server round trip with passcode
@@ -91,8 +91,8 @@ export interface SendResult {
 // of paying for it after them. The send function then picks the result up
 // by idempotency key and only has to sign + broadcast.
 //
-// Only started once the PIN is entered — never when the PIN screen merely
-// opens — so an abandoned preflight is rare, and even then harmless: a wrong
+// Only started once the PIN is entered - never when the PIN screen merely
+// opens - so an abandoned preflight is rare, and even then harmless: a wrong
 // PIN retries the SAME payment with the SAME idempotency key, which
 // pay-intent answers with the same reservation (idempotent_replay).
 type PayToken = 'USDC' | 'EURC' | 'cirBTC'
@@ -169,7 +169,7 @@ export function preparePayment(params: { token: PayToken; from: string; to: stri
     const promise = runPreflight(params.token, sender, destination, params.amount, params.idempotencyKey, params.recipientUsername)
     promise.catch(() => { /* surfaced (or retried fresh) by the send that consumes it */ })
     preflights.set(params.idempotencyKey, { sig, at: Date.now(), promise })
-  } catch { /* purely an optimization — the send runs its own preflight */ }
+  } catch { /* purely an optimization - the send runs its own preflight */ }
 }
 
 /** The send's preflight: the early one if it matches exactly, else a fresh one. */
@@ -181,19 +181,19 @@ async function getPreflight(token: PayToken, sender: `0x${string}`, destination:
     try {
       const result = await early.promise
       if (result.intent.success || result.intent.existingTxHash) return result
-    } catch { /* fall through to a fresh run — same key, so pay-intent replays the same reservation */ }
+    } catch { /* fall through to a fresh run - same key, so pay-intent replays the same reservation */ }
   }
   return runPreflight(token, sender, destination, amount, idempotencyKey, recipientUsername)
 }
 
 // ─── Confirmation before success ─────────────────────────────────────────────
 // Sends used to return 'success' the instant they broadcast, so a payment
-// that then reverted — or never got mined at all — still showed a success
+// that then reverted - or never got mined at all - still showed a success
 // screen. Arc finalizes in under a second, and with 250ms polling the wait
 // costs about that much, so sends now wait for the real receipt:
 //   receipt ok        → 'success'
 //   receipt reverted  → 'failed'   (broadcast happened, but nothing moved)
-//   no receipt yet    → 'pending'  (SUBMITTED_UNKNOWN: never shown as failed —
+//   no receipt yet    → 'pending'  (SUBMITTED_UNKNOWN: never shown as failed -
 //                                    it may still land, and a retry could
 //                                    double-pay; callers keep watching it)
 export const CONFIRM_TIMEOUT_MS = 10_000
@@ -201,7 +201,7 @@ export const CONFIRM_TIMEOUT_MS = 10_000
 // Polls eth_getTransactionReceipt directly. viem's waitForTransactionReceipt
 // makes ~5–7 sequential round trips per wait (receipt, blockNumber watch,
 // getTransaction replacement check with backoff, receipt again, wait for the
-// next block…) — on Arc, where the receipt exists within ~1s, that machinery
+// next block…) - on Arc, where the receipt exists within ~1s, that machinery
 // was most of the post-send wait. One cheap call every 200ms instead; the
 // receipt (and its status) is still always checked.
 const RECEIPT_POLL_MS = 200
@@ -213,7 +213,7 @@ export async function waitForConfirmation(txHash: string, timeoutMs = CONFIRM_TI
     try {
       const receipt = await publicClient.getTransactionReceipt({ hash: txHash as `0x${string}` })
       if (receipt) return { state: receipt.status === 'reverted' ? 'failed' : 'success', blockNumber: receipt.blockNumber?.toString() }
-    } catch { /* not mined yet (TransactionReceiptNotFoundError) or RPC hiccup — keep polling */ }
+    } catch { /* not mined yet (TransactionReceiptNotFoundError) or RPC hiccup - keep polling */ }
     await new Promise(r => setTimeout(r, RECEIPT_POLL_MS))
   }
   // Timeout is not evidence the transaction failed.
@@ -226,7 +226,7 @@ export async function waitForConfirmation(txHash: string, timeoutMs = CONFIRM_TI
  * sendUSDC/sendEURC can return the instant a transaction is genuinely
  * submitted (a real signed transaction with a real hash, already broadcast)
  * instead of making the whole UI sit and wait for full confirmation before
- * showing ANY feedback — that wait (nonce fetch + gas estimate + send +
+ * showing ANY feedback - that wait (nonce fetch + gas estimate + send +
  * polling for the receipt) was the actual, measurable source of "slow to
  * execute" after entering a passcode. A submitted transaction with valid
  * signature/nonce/gas succeeds the vast majority of the time; catching the
@@ -241,7 +241,7 @@ export function confirmTransactionInBackground(
 ): void {
   // PERF FIX: pollingInterval defaults to viem's built-in 4000ms when
   // unset. waitForTransactionReceipt's first check happens right after
-  // broadcast — before Arc has even produced the next block — so without
+  // broadcast - before Arc has even produced the next block - so without
   // an explicit fast interval, every wait effectively costs a full ~4s
   // regardless of Arc's real sub-second finality (the receipt is usually
   // ready well before the SECOND poll tick, but nothing checks again until
@@ -254,7 +254,7 @@ export function confirmTransactionInBackground(
     })
     .catch(e => {
       console.error('[arcService] background confirmation failed for', txHash, e instanceof Error ? e.message : e)
-      // Deliberately does NOT call onSettled with success:false here — a
+      // Deliberately does NOT call onSettled with success:false here - a
       // confirmation-check failure (RPC hiccup, timeout) is not the same
       // fact as the transaction itself having reverted, and treating it
       // that way would incorrectly flip a genuinely successful payment to
@@ -263,7 +263,7 @@ export function confirmTransactionInBackground(
     })
 }
 
-// ─── Send USDC — exact Arc docs pattern ──────────────────────────────────────
+// ─── Send USDC - exact Arc docs pattern ──────────────────────────────────────
 /** Last check before signing: a real amount and a real recipient. */
 function assertSendable(to: string, amount: number) {
   if (!(Number.isFinite(amount) && amount > 0)) throw new Error('Enter an amount greater than 0')
@@ -297,7 +297,7 @@ export async function sendUSDC(params: {
   const amount6dec = BigInt(Math.round(params.amount * 1_000_000))
   const amount18dec = amount6dec * (10n ** 12n)  // exact Arc docs formula
 
-  // Arc docs Step 3: Create clients — walletClient WITHOUT chain (chain passed
+  // Arc docs Step 3: Create clients - walletClient WITHOUT chain (chain passed
   // inline). Gas estimation now lives in the shared preflight above.
   const walletClient = createWalletClient({
     account,
@@ -308,7 +308,7 @@ export async function sendUSDC(params: {
 
   // PERF FIX ("slow payments"): the balance check, server-side intent/nonce
   // reservation, and gas estimate are three independent network round trips
-  // — none needs another's result — that used to run strictly sequentially.
+  // - none needs another's result - that used to run strictly sequentially.
   // Arc's own finality is sub-second (see CONFIRM_TIMEOUT_MS below), so the
   // actual on-chain send was never the slow part; three back-to-back RPC/
   // server hops before the transaction was even broadcast was. Running them
@@ -316,7 +316,7 @@ export async function sendUSDC(params: {
   //
   // Safe to create the pay intent before the balance check resolves:
   // getUSDCBalance() never throws (catches internally, returns 0 on
-  // failure — see its own definition), and an intent that turns out to
+  // failure - see its own definition), and an intent that turns out to
   // belong to a too-small balance is exactly the same "created but never
   // broadcast" shape payNonceRecovery.ts/payReconcile.ts already handle for
   // any other pre-broadcast failure (e.g. estimateGas throwing) in the
@@ -336,10 +336,10 @@ export async function sendUSDC(params: {
   // RESILIENCE FIX (2026-09-17, explicit product requirement: Pay must
   // still work correctly on a bad/flaky connection, not just fail): if the
   // caller passed the SAME idempotencyKey as a previous attempt (see
-  // PaySendPage.tsx's own idempotencyKeyRef — reused across retries of the
+  // PaySendPage.tsx's own idempotencyKeyRef - reused across retries of the
   // identical payment) AND that previous attempt already broadcast, the
   // server returns the real tx_hash here rather than a nonce. Signing and
-  // broadcasting AGAIN in that case would be a genuine double-send — the
+  // broadcasting AGAIN in that case would be a genuine double-send - the
   // whole reason a client-computed nonce was removed earlier (see the
   // comment below). Instead, resume by returning success directly with the
   // ALREADY-real hash. No new signature, no new broadcast, no risk.
@@ -354,10 +354,10 @@ export async function sendUSDC(params: {
   }
   // ── One Pay operation = one transaction_intent + one transaction_attempt,
   // created server-side BEFORE any broadcast, with the nonce reserved
-  // server-side too (docs/PAY_TRANSACTION_INTENT_IMPLEMENTATION.md) — the
+  // server-side too (docs/PAY_TRANSACTION_INTENT_IMPLEMENTATION.md) - the
   // same architecture already production-validated for BulkPay. This
   // function no longer computes its own nonce via
-  // publicClient.getTransactionCount at all — a client-computed nonce is
+  // publicClient.getTransactionCount at all - a client-computed nonce is
   // exactly the value a lost broadcast response leaves nothing to
   // reconcile against.
   if (!intentResult.success || !intentResult.attemptId || typeof intentResult.nonce !== 'number') {
@@ -369,12 +369,12 @@ export async function sendUSDC(params: {
   // Cast: viem's sendTransaction overload resolution (in the installed
   // viem/typescript combination) spuriously demands an EIP-4844 `kzg`
   // field for a plain EIP-1559 transfer like this one. Runtime behavior
-  // is unaffected — this is purely a type-level viem overload issue.
+  // is unaffected - this is purely a type-level viem overload issue.
   //
-  // Server-issued nonce (above) — NEVER a client-computed
+  // Server-issued nonce (above) - NEVER a client-computed
   // publicClient.getTransactionCount call, and no client-side retry with a
   // freshly self-computed nonce either (that was exactly as much
-  // "frontend independently decides the nonce" as the original fetch —
+  // "frontend independently decides the nonce" as the original fetch -
   // removed for the same reason). A real broadcast failure here is
   // surfaced to the caller and, if the transaction may still have reached
   // the network, resolved by the same UNKNOWN/nonce-recovery mechanism
@@ -390,12 +390,12 @@ export async function sendUSDC(params: {
   } as unknown as Parameters<typeof walletClient.sendTransaction>[0])
 
   // Persist the real tx_hash server-side IMMEDIATELY, before waiting for
-  // any receipt — fire-and-forget: markPayAttemptSubmitted never throws,
+  // any receipt - fire-and-forget: markPayAttemptSubmitted never throws,
   // and its own failure must never block or fail an already-broadcast,
   // already-real payment.
   void markPayAttemptSubmitted(attemptId, txHash).catch(() => { /* best-effort */ })
 
-  // BUG FIX (2026-09-03) — this used to return immediately after
+  // BUG FIX (2026-09-03) - this used to return immediately after
   // broadcasting, before any confirmation at all. A blocking wait (bounded
   // by CONFIRM_TIMEOUT_MS) was added so "success" meant "confirmed
   // on-chain," not just "broadcast."
@@ -409,7 +409,7 @@ export async function sendUSDC(params: {
   return {
     txHash,
     explorerUrl: `${ARC_TESTNET.explorerUrl}/tx/${txHash}`,
-    // Real confirmation, not optimistic — see waitForConfirmation above.
+    // Real confirmation, not optimistic - see waitForConfirmation above.
     ...(await waitForConfirmation(txHash)),
     senderAddress,
     recipientAddress: destination,
@@ -422,7 +422,7 @@ export function isValidAddress(address: string): boolean {
 }
 
 // ─── Estimate fee ─────────────────────────────────────────────────────────────
-// BUG FIX (2026-09-17): this used to hardcode 21,000 gas units — correct for
+// BUG FIX (2026-09-17): this used to hardcode 21,000 gas units - correct for
 // a native USDC send, but silently wrong for EURC/cirBTC, which are ERC-20
 // `transfer()` calls. Arc's own docs (docs.arc.io/integrate/exchanges/
 // withdrawals) are explicit: "A native USDC send uses approximately 21,000
@@ -445,7 +445,7 @@ export async function estimateTransferFee(_amount = 0, isErc20 = false): Promise
   }
 }
 
-// ─── EURC/cirBTC contracts — from the shared token registry ────────────────
+// ─── EURC/cirBTC contracts - from the shared token registry ────────────────
 export const EURC_CONTRACT = ARC_TOKENS.EURC.contract
 export const CIRBTC_CONTRACT = ARC_TOKENS.cirBTC.contract
 
@@ -489,21 +489,21 @@ export async function sendEURC(params: {
     transport: arcTransport(),
   })
 
-  // Server-reserved intent/attempt/nonce — same as sendUSDC above, see its
+  // Server-reserved intent/attempt/nonce - same as sendUSDC above, see its
   // own comment for the full reasoning. expectedTo for confirmation is
   // EURC_CONTRACT here (an ERC20 transfer's real destination), not the
-  // recipient — payConfirmation.ts computes this correctly from
+  // recipient - payConfirmation.ts computes this correctly from
   // token_address, which is why it's sent below.
   //
   // PERF FIX ("slow payments"): intent creation and gas estimation are
-  // independent round trips — same fix as sendUSDC above, see its own
+  // independent round trips - same fix as sendUSDC above, see its own
   // comment for the full reasoning.
   // Usually already resolved: started at PIN entry via preparePayment().
   const { markPayAttemptSubmitted } = await import('./payIntentService')
   const { intent: intentResult, gas: gasEstimate } = await getPreflight(
     'EURC', senderAddress, destination, params.amount, params.idempotencyKey ?? crypto.randomUUID(), params.recipientUsername)
   // RESILIENCE FIX (2026-09-17): see sendUSDC's own comment above for the
-  // full reasoning — resume from an already-broadcast retry instead of
+  // full reasoning - resume from an already-broadcast retry instead of
   // signing/broadcasting a second time.
   if (intentResult.existingTxHash) {
     return {
@@ -520,7 +520,7 @@ export async function sendEURC(params: {
   const attemptId = intentResult.attemptId
   const serverNonce = intentResult.nonce
 
-  // Cast: see comment on the sendTransaction call above — viem's
+  // Cast: see comment on the sendTransaction call above - viem's
   // overload resolution spuriously demands an EIP-4844 `kzg` field here
   // too. Runtime behavior is unaffected.
   const txHash = await walletClient.sendTransaction({
@@ -544,7 +544,7 @@ export async function sendEURC(params: {
   return {
     txHash,
     explorerUrl: `${ARC_TESTNET.explorerUrl}/tx/${txHash}`,
-    // Real confirmation, not optimistic — see waitForConfirmation above.
+    // Real confirmation, not optimistic - see waitForConfirmation above.
     ...(await waitForConfirmation(txHash)),
     senderAddress,
     recipientAddress: destination,
@@ -578,13 +578,13 @@ export async function getCirBtcBalance(address: string): Promise<number> {
 }
 
 // ─── Send cirBTC (ERC-20 transfer) ───────────────────────────────────────────
-// Byte-for-byte the same shape as sendEURC above — server-reserved
+// Byte-for-byte the same shape as sendEURC above - server-reserved
 // intent/attempt/nonce, parallelized intent-creation + gas-estimate, real
-// on-chain confirmation before returning 'success' — just pointed at
+// on-chain confirmation before returning 'success' - just pointed at
 // CIRBTC_CONTRACT with 8 decimals instead of EURC_CONTRACT's 6. This
 // function did not exist before: PaySendPage.tsx's send-routing ternary
 // checked for `arcMod.sendCirBTC` and, finding it undefined, silently fell
-// through to sendUSDC — meaning a cirBTC send would have actually broadcast
+// through to sendUSDC - meaning a cirBTC send would have actually broadcast
 // a native USDC transfer (wrong asset, wrong decimals) while still logging
 // the Activity row as 'cirBTC'. See sendEURC's own comments for the full
 // reasoning behind each piece below; identical here.
@@ -625,15 +625,15 @@ export async function sendCirBTC(params: {
     transport: arcTransport(),
   })
 
-  // Server-reserved intent/attempt/nonce — same as sendUSDC/sendEURC above.
+  // Server-reserved intent/attempt/nonce - same as sendUSDC/sendEURC above.
   // PERF: intent creation and gas estimation run concurrently, same fix as
-  // sendUSDC/sendEURC — see sendUSDC's own comment for the full reasoning.
+  // sendUSDC/sendEURC - see sendUSDC's own comment for the full reasoning.
   // Usually already resolved: started at PIN entry via preparePayment().
   const { markPayAttemptSubmitted } = await import('./payIntentService')
   const { intent: intentResult, gas: gasEstimate } = await getPreflight(
     'cirBTC', senderAddress, destination, params.amount, params.idempotencyKey ?? crypto.randomUUID(), params.recipientUsername)
   // RESILIENCE FIX (2026-09-17): see sendUSDC's own comment above for the
-  // full reasoning — resume from an already-broadcast retry instead of
+  // full reasoning - resume from an already-broadcast retry instead of
   // signing/broadcasting a second time.
   if (intentResult.existingTxHash) {
     return {
@@ -650,9 +650,9 @@ export async function sendCirBTC(params: {
   const attemptId = intentResult.attemptId
   const serverNonce = intentResult.nonce
 
-  // Cast: see comment on sendUSDC's sendTransaction call above — viem's
+  // Cast: see comment on sendUSDC's sendTransaction call above - viem's
   // overload resolution spuriously demands an EIP-4844 `kzg` field here too.
-  // MAINNET FIX: same inline chain duplication bug as sendEURC — replaced
+  // MAINNET FIX: same inline chain duplication bug as sendEURC - replaced
   // with ARC_CHAIN_INLINE (env-driven, matches sendUSDC and now sendEURC).
   const txHash = await walletClient.sendTransaction({
     to: CIRBTC_CONTRACT,
@@ -667,11 +667,11 @@ export async function sendCirBTC(params: {
   void markPayAttemptSubmitted(attemptId, txHash).catch(() => { /* best-effort */ })
 
   // PERF FIX (2026-09-17, explicit product decision): reverted back to
-  // optimistic return — see sendUSDC's own comment for the full reasoning.
+  // optimistic return - see sendUSDC's own comment for the full reasoning.
   return {
     txHash,
     explorerUrl: `${ARC_TESTNET.explorerUrl}/tx/${txHash}`,
-    // Real confirmation, not optimistic — see waitForConfirmation above.
+    // Real confirmation, not optimistic - see waitForConfirmation above.
     ...(await waitForConfirmation(txHash)),
     senderAddress,
     recipientAddress: destination,

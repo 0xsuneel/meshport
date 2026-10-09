@@ -13,7 +13,7 @@ const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) =
 //                              and completes any that are ready; sends any
 //                              Unified Balance left on other chains to Arc
 // Every action checks the chain first, so a transfer that already arrived is
-// simply marked completed — nothing can be minted twice.
+// simply marked completed - nothing can be minted twice.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -27,18 +27,18 @@ const card: React.CSSProperties = { background: 'var(--surface)', border: '1px s
 const btn: React.CSSProperties = { padding: '10px 14px', borderRadius: 12, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 
 const STATE_TEXT: Record<CctpDiagnosis['state'], string> = {
-  already_minted: 'Funds already arrived — marked completed.',
+  already_minted: 'Funds already arrived - marked completed.',
   waiting_attestation: 'Circle has not attested this burn yet. It will finish on its own.',
-  ready_relay: 'Ready — MeshPort can finish this on Arc (no gas needed).',
-  ready_self_mint: 'Ready — MeshPort can finish the mint on the destination (no gas needed).',
+  ready_relay: 'Ready - MeshPort can finish this on Arc (no gas needed).',
+  ready_self_mint: 'Ready - MeshPort can finish the mint on the destination (no gas needed).',
   forwarder_only: "Only Circle's forwarder can finish this one. It usually completes on its own.",
   needs_reattest: 'The attestation expired. Request a new one, then check again.',
   no_message: 'Circle has no record of this burn.',
   unsupported_chain: 'This chain is not supported for recovery.',
-  relay_queued: 'Queued — MeshPort will mint on Arc within a few minutes.',
+  relay_queued: 'Queued - MeshPort will mint on Arc within a few minutes.',
   reattest_requested: 'New attestation requested. Check again in a few minutes.',
   reattest_failed: 'Could not request a new attestation. Try again later.',
-  reattest_pending: 'Still processing — Circle is issuing a new attestation. Check again in a few minutes.',
+  reattest_pending: 'Still processing - Circle is issuing a new attestation. Check again in a few minutes.',
 }
 
 function fmtEta(ms: number): string {
@@ -91,7 +91,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
           const [{ AppKit }, { getUnifiedBalances, UB_MIN_SWEEP }] = await Promise.all([import('@circle-fin/app-kit'), import('@/lib/ubClaim')])
           const kit = new AppKit({ disableErrorReporting: true } as any)
           const rows = await getUnifiedBalances(kit, walletAddress)
-          // Dust (below UB_MIN_SWEEP per chain) is never listed — it stays in
+          // Dust (below UB_MIN_SWEEP per chain) is never listed - it stays in
           // the Unified Balance as the safety margin for the next spend.
           setUbHeld(rows.filter(r => r.chain !== ARC_CHAIN_KEY && (r.confirmed >= UB_MIN_SWEEP || r.pending >= UB_MIN_SWEEP)))
           setUbDust([])
@@ -106,7 +106,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
             })
             // Keep every open stuck transfer visible. While Circle still holds
             // the amount for the failed delivery (its attestation, ~10 min),
-            // the Arc balance reads low — show it, just without buttons.
+            // the Arc balance reads low - show it, just without buttons.
             setUbStuck(stuck)
           } catch { setUbStuck([]) }
         } catch { setUbHeld([]); setUbDust([]); setUbStuck([]) }
@@ -147,7 +147,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
     try {
       const { checkAndCompleteUBRecoveries } = await import('@/lib/ubFundRecovery')
       const r = await checkAndCompleteUBRecoveries({ walletAddress: walletAddress!, privateKey: await getKey() })
-      if (r.notReadyEtaMs != null) setResult(p => ({ ...p, ub: { error: `Not ready yet — Circle unlocks it on-chain in about ${fmtEta(r.notReadyEtaMs!)}.` } }))
+      if (r.notReadyEtaMs != null) setResult(p => ({ ...p, ub: { error: `Not ready yet - Circle unlocks it on-chain in about ${fmtEta(r.notReadyEtaMs!)}.` } }))
       else if (r.error) setResult(p => ({ ...p, ub: { error: r.error } }))
       else if (r.completed > 0) setResult(p => ({ ...p, ub: {} }))
       await load()
@@ -199,8 +199,8 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
   }
   const dustTotal = ubDust.reduce((s, d) => s + d.amount, 0)
 
-  // Trustless last resort: Circle's 7-day on-chain withdrawal. Needs nobody —
-  // not MeshPort, not Circle's API — only the user's own wallet. Started only
+  // Trustless last resort: Circle's 7-day on-chain withdrawal. Needs nobody -
+  // not MeshPort, not Circle's API - only the user's own wallet. Started only
   // when the user taps it; completes by itself on the next app open after 7 days.
   const withdrawTrustless = async (key: string, p: { chain: string; amount: number; label: string; replaceRowId?: string }) => {
     const where = p.chain === ARC_CHAIN_KEY ? 'your Arc wallet' : `your wallet on ${p.chain.replace(/_/g, ' ')}`
@@ -212,7 +212,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
         walletAddress: walletAddress!, privateKey: await getKey(), amount: p.amount.toFixed(6),
         destinationChainLabel: p.label, chain: p.chain, replaceRowId: p.replaceRowId, throwOnError: true,
       })
-      setResult(r => ({ ...r, [key]: { diag: { state: 'already_minted', detail: `Withdrawal started — ${p.amount.toFixed(2)} USDC returns to ${where} in 7 days.` } } }))
+      setResult(r => ({ ...r, [key]: { diag: { state: 'already_minted', detail: `Withdrawal started - ${p.amount.toFixed(2)} USDC returns to ${where} in 7 days.` } } }))
       setTimeout(() => { void load() }, 1500)
     } catch (e) {
       setResult(r => ({ ...r, [key]: { error: e instanceof Error ? e.message : String(e) } }))
@@ -291,7 +291,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
 
             {lockedByMeshPort && (
               <div style={{ fontSize: 13, marginTop: 10, color: 'var(--text-secondary)' }}>
-                MeshPort is already {running!.kind === 'reattest' ? 'getting a new attestation for' : 'finishing'} this — no action needed.
+                MeshPort is already {running!.kind === 'reattest' ? 'getting a new attestation for' : 'finishing'} this - no action needed.
               </div>
             )}
             {shownState && !lockedByMeshPort && (
@@ -326,7 +326,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
         // After a failed forwarder delivery Circle keeps the delivered amount
         // reserved until that delivery expires, so the Arc balance reads low.
         // Acting on the remainder then would send only the fee allowance and
-        // close the row, stranding the rest when it's released — so hold the
+        // close the row, stranding the rest when it's released - so hold the
         // buttons back until it's released (or, failing that, for a day).
         const held = Math.max(0, t.amount - t.available)
         const holding = held > Math.max(0.5, t.amount * 0.05)
@@ -354,7 +354,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
             {r?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger)' }}>{r.error}</div>}
             {(holding || t.available < 0.1) ? (
               <div style={{ fontSize: 13, marginTop: 10, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                Circle is still holding {held.toFixed(2)} USDC for the delivery that failed. It isn't lost — it comes
+                Circle is still holding {held.toFixed(2)} USDC for the delivery that failed. It isn't lost - it comes
                 back to your Unified Balance once that delivery expires. Tap Refresh later, then choose where to send it.
               </div>
             ) : (
@@ -437,7 +437,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
           ))}
           {ubChain && ubChain.withdrawing > ub.reduce((t, u) => t + u.amount, 0) + 0.01 && (
             <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 6 }}>
-              {ubChain.withdrawing.toFixed(2)} USDC in total is being withdrawn — all of it comes back to your Arc wallet together.
+              {ubChain.withdrawing.toFixed(2)} USDC in total is being withdrawn - all of it comes back to your Arc wallet together.
             </div>
           )}
           {result.ub?.error && <div role="alert" style={{ fontSize: 13, marginTop: 8, color: 'var(--danger)' }}>{result.ub.error}</div>}
@@ -452,7 +452,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
   )
 }
 
-/** Standalone route (/multichain-recovery) — same panel with a header. */
+/** Standalone route (/multichain-recovery) - same panel with a header. */
 export function MultichainRecoveryPage() {
   // Its own scroll area: the app shell clips anything taller than the screen.
   return (

@@ -1,8 +1,8 @@
 /**
- * blockchain/types.ts — shared types for the blockchain layer
+ * blockchain/types.ts - shared types for the blockchain layer
  *
  * Phase 1 of docs/BLOCKCHAIN_ARCHITECTURE_PROPOSAL.md. Pure type declarations
- * plus small pure helpers — no runtime behavior, no imports from the app.
+ * plus small pure helpers - no runtime behavior, no imports from the app.
  *
  * TESTNET ONLY: these types describe MeshPort's existing Arc Testnet / Circle
  * Testnet setup. Nothing here assumes or enables mainnet.
@@ -17,7 +17,7 @@ export type AssetSymbol = string
 /** Lowercased 0x wallet address. Always normalize before using as a key. */
 export type WalletAddress = string
 
-// ARC_CHAIN_ID / isArc live in ./chains alongside the registry itself — they're
+// ARC_CHAIN_ID / isArc live in ./chains alongside the registry itself - they're
 // re-exported here so consumers importing only types still get them, without a
 // second definition of the same constant.
 export { ARC_CHAIN_ID, isArc } from './chains'
@@ -28,7 +28,7 @@ export function normalizeAddress(addr: string | null | undefined): WalletAddress
 }
 
 /**
- * Cache key for one balance. Address is included deliberately — the legacy
+ * Cache key for one balance. Address is included deliberately - the legacy
  * balanceCache.ts keyed only by token, so a wallet switch inside its 4s TTL
  * window could return the previous wallet's balance (bottleneck B6 in the
  * proposal). Including the wallet here makes that class of bug impossible
@@ -70,7 +70,7 @@ export interface PendingTx {
 
 /**
  * What the server-side indexer publishes and the client reacts to. Mirrors the
- * chain_events table introduced in Phase 3 — declared here so Phases 1-2 can
+ * chain_events table introduced in Phase 3 - declared here so Phases 1-2 can
  * be written against the final shape without waiting for the migration.
  */
 export type ChainEventKind =
@@ -98,7 +98,7 @@ export interface ChainEvent {
 /**
  * Scoped refresh request. There is deliberately no bare "refresh everything"
  * verb other than `all`, which is reserved for launch / login / wallet-import /
- * explicit manual refresh — see §19 of the proposal.
+ * explicit manual refresh - see §19 of the proposal.
  */
 export type RefreshScope =
   | { kind: 'asset';    wallet: string; chain: ChainId; asset: AssetSymbol }
@@ -109,7 +109,7 @@ export type RefreshScope =
   | { kind: 'history';  wallet: string }
   | { kind: 'all';      wallet: string }
 
-/** Why a refresh happened — carried through for telemetry and debugging. */
+/** Why a refresh happened - carried through for telemetry and debugging. */
 export type RefreshTrigger =
   | 'launch' | 'login' | 'wallet-change' | 'wallet-import'
   | 'chain-event' | 'tx-confirmed' | 'claim-completed' | 'bridge-completed'

@@ -13,7 +13,7 @@ export function resolveTheme(mode: ThemeMode): ResolvedTheme {
 }
 
 // Same attribute the inline bootstrap script in index.html sets
-// synchronously before first paint — this just keeps it correct for the
+// synchronously before first paint - this just keeps it correct for the
 // lifetime of the app (manual toggle, or the OS theme changing mid-session).
 function applyTheme(mode: ThemeMode) {
   if (typeof document === 'undefined') return
@@ -21,7 +21,7 @@ function applyTheme(mode: ThemeMode) {
   document.documentElement.setAttribute('data-theme', resolved)
   document.documentElement.style.colorScheme = resolved
   // Status bar (and the app's card in Recent apps) in the page's own colour,
-  // like a native app — not a teal band above a light/dark page.
+  // like a native app - not a teal band above a light/dark page.
   document.getElementById('mp-theme-color')?.setAttribute('content', resolved === 'dark' ? '#0B0E11' : '#F5F6F8')
 }
 

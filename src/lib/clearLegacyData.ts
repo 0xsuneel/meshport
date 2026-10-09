@@ -16,11 +16,11 @@ export function clearLegacyData(): void {
     'meshport-contacts',          // Old contacts with mock data
     'meshport-contacts-v2',       // May also have mock contacts
     'meshport-contacts-v3',       // Old global (non-wallet-scoped) contacts store
-    // The generic wallet fallback key — data written here by the old async
+    // The generic wallet fallback key - data written here by the old async
     // rehydration race. Safe to remove: per-wallet keys are meshport-wallet-v2-<addr>
     'meshport-wallet-v2',
-    // Wallet-specific transaction stores — transactions now come from ArcScan
-    // These keys follow pattern meshport-wallet-v2-0x<addr> — cleared on startup
+    // Wallet-specific transaction stores - transactions now come from ArcScan
+    // These keys follow pattern meshport-wallet-v2-0x<addr> - cleared on startup
     // (dynamic keys can't be listed here; we scan and clear them below)
     // Old global notification key (replaced by per-wallet meshport-notifications-v3-<addr>)
     'meshport-notifications-v3',

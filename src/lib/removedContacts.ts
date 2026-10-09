@@ -7,7 +7,7 @@
 // callers can tell whether a payment happened before or after the removal.
 // Without the timestamp, any code that "re-allows a contact because they once
 // paid us" (see HomePage's incoming-payment handling) ends up re-allowing
-// EVERY removed contact who has ever transacted with you at all — which
+// EVERY removed contact who has ever transacted with you at all - which
 // silently undid "Remove contact" the next time the app scanned payment
 // history, since almost everyone you'd remove has a past payment on record.
 
@@ -62,7 +62,7 @@ export function removeFromRemovedContacts(myWallet: string | null, userId: strin
  * after they were removed. `activityAtISO` is the timestamp of the payment
  * (or other activity) that would justify re-allowing them. If the contact
  * isn't currently removed, or the activity predates the removal, this is a
- * no-op — so scanning old history never resurrects an intentional removal.
+ * no-op - so scanning old history never resurrects an intentional removal.
  */
 export function unblockIfNewerActivity(myWallet: string | null, userId: string, activityAtISO: string | null | undefined) {
   try {

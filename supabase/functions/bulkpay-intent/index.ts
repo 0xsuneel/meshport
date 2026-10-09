@@ -161,11 +161,11 @@ Deno.serve(async (req: Request) => {
   const repo = makeLiveIntentRepository(supabase)
 
   // ── action=markSubmitted: persist a real, client-observed tx_hash the
-  // instant it's known, BEFORE the client waits for a receipt — closes
+  // instant it's known, BEFORE the client waits for a receipt - closes
   // docs/BULKPAY_TRANSACTION_INTENT_MIGRATION_AUDIT.md §1's traced bug at
   // the server-persistence layer, not just the in-memory one already fixed
   // directly in BulkPayoutPage.tsx. Kept on this SAME deployed function
-  // rather than a new one — same "prefer reuse" precedent already used for
+  // rather than a new one - same "prefer reuse" precedent already used for
   // blockchain-indexer's multiple modes.
   if (b.action === 'markSubmitted') {
     const attemptId = typeof b.attemptId === 'string' ? b.attemptId : ''

@@ -1,13 +1,13 @@
 // supabase/functions/blockchain-indexer/scanner.test.ts
 //
 // Phase 3 tests for the chain-observation scanner: event decoding, the
-// event-identity fix (log_index/wallet_address in the emitted event shape —
+// event-identity fix (log_index/wallet_address in the emitted event shape -
 // see docs/PHASE_3_INDEXER_AUDIT.md §6/§7 for the production bug this
 // guards against), and RPC retry/failure behavior via the RpcDeps injection
 // seam (no real network calls). Run with:
 //   deno test supabase/functions/blockchain-indexer/scanner.test.ts
 //
-// Zero external imports — see cursorMath.test.ts's header for why.
+// Zero external imports - see cursorMath.test.ts's header for why.
 import { scanRange, getHead, rpcCallRace, RpcHttpError, RETRYABLE_STATUSES } from './scanner.ts'
 import type { RpcDeps } from './scanner.ts'
 
@@ -78,7 +78,7 @@ Deno.test('scanRange: a BulkPay-shaped tx (one tx, 3 Transfer logs to 3 differen
         }))
       }
       // scanRange always runs the native block scan too, regardless of
-      // token config — must answer it, or the whole range is (correctly,
+      // token config - must answer it, or the whole range is (correctly,
       // per safeAdvance) held back as unverified and every event gets
       // filtered out by the final safeUpTo cut, which is not what this test
       // is checking. An empty transactions array is a genuine "nothing
@@ -100,7 +100,7 @@ Deno.test('scanRange: a BulkPay-shaped tx (one tx, 3 Transfer logs to 3 differen
 
   // This is the concrete property that makes the chain_events dedup index
   // fix correct: all 3 events share (event_type, chain_id, tx_hash,
-  // block_number) — the OLD index's full key — but are still 3 GENUINELY
+  // block_number) - the OLD index's full key - but are still 3 GENUINELY
   // DIFFERENT events. Only log_index (+ wallet_address) tells them apart.
   const oldIndexKeys = outcome.events.map(e => `${e.event_type}:${e.chain_id}:${e.tx_hash}:${e.block_number}`)
   assert(new Set(oldIndexKeys).size === 1, 'sanity check: all 3 events must collide under the OLD (pre-fix) index key')
@@ -122,7 +122,7 @@ Deno.test('scanRange: SAME recipient receiving TWO separate Transfer logs in ONE
   const fetchImpl = fakeRpc({
     [RPC_URL]: (method) => {
       if (method === 'eth_getLogs') {
-        // Two separate transfer() calls to the SAME wallet in the same tx —
+        // Two separate transfer() calls to the SAME wallet in the same tx -
         // e.g. a contract that pays out in two installments within one
         // transaction. Real, distinct on-chain events, not a duplicate.
         return [0, 1].map(i => ({
@@ -146,7 +146,7 @@ Deno.test('scanRange: SAME recipient receiving TWO separate Transfer logs in ONE
   assertEquals(outcome.events.length, 2, 'two separate Transfer logs to the same wallet must produce two events, not be collapsed into one')
   const logIndices = outcome.events.map(e => e.log_index).sort()
   assertEquals(logIndices, [0, 1])
-  // Both events share every field EXCEPT log_index — this is exactly the
+  // Both events share every field EXCEPT log_index - this is exactly the
   // case the chain_events dedup index fix depends on: without log_index in
   // the identity, these two legitimate events would collide and one would
   // be silently dropped at the database layer.
@@ -158,7 +158,7 @@ Deno.test('scanRange: SAME recipient receiving TWO separate Transfer logs in ONE
 Deno.test('scanRange: native top-level transfer has log_index null (no log exists), still captures block_hash/transaction_index for free', async () => {
   // A benign token is included so the ERC-20 log-scan loop actually runs
   // once (producing a real, successful chunk result) rather than leaving
-  // logResults empty — safeAdvance(from, []) resolves to `from - 1` by
+  // logResults empty - safeAdvance(from, []) resolves to `from - 1` by
   // design (an unscanned range must never read as a verified one), which
   // would otherwise hold safeUpTo below this test's block and filter out
   // the very event being tested for reasons unrelated to what this test
@@ -193,7 +193,7 @@ Deno.test('scanRange: native top-level transfer has log_index null (no log exist
   assertEquals(e.transaction_index, 3)
 })
 
-Deno.test('scanRange: a mid-range chunk failure holds safeUpTo BELOW the failure — never skips it', async () => {
+Deno.test('scanRange: a mid-range chunk failure holds safeUpTo BELOW the failure - never skips it', async () => {
   const tokenContract = '0xTokenContract'
   const chain = { id: 'arc', rpcs: [RPC_URL], nativeTransferLogContract: null, tokens: [{ symbol: 'EURC', contract: tokenContract, decimals: 6 }] }
   const knownWallets = new Set([WALLET1])
@@ -212,7 +212,7 @@ Deno.test('scanRange: a mid-range chunk failure holds safeUpTo BELOW the failure
   })
 
   const outcome = await scanRange(chain, 100, 103, knownWallets, { fetchImpl, ...noSleep })
-  // Must stop strictly below 101 — the failed block — regardless of 102/103
+  // Must stop strictly below 101 - the failed block - regardless of 102/103
   // having succeeded independently in their own concurrent batch slot.
   assert(outcome.safeUpTo < 101, `expected safeUpTo < 101 (the failed block), got ${outcome.safeUpTo}`)
 })
@@ -230,7 +230,7 @@ Deno.test('rpcCallRace: retries a 429 and succeeds on a later attempt, without e
   assert(calls === 3, `expected exactly 3 attempts, got ${calls}`)
 })
 
-Deno.test('rpcCallRace: a deterministic 400 fails fast — no retry ladder burned on a non-retryable error', async () => {
+Deno.test('rpcCallRace: a deterministic 400 fails fast - no retry ladder burned on a non-retryable error', async () => {
   let calls = 0
   const fetchImpl = (async () => {
     calls++
@@ -241,10 +241,10 @@ Deno.test('rpcCallRace: a deterministic 400 fails fast — no retry ladder burne
     () => rpcCallRace([RPC_URL], 'eth_blockNumber', [], { fetchImpl, ...noSleep }),
     'expected rpcCallRace to reject on a deterministic 400',
   )
-  assertEquals(calls, 1, 'a 400 is not retryable — must fail on the first attempt, not retry')
+  assertEquals(calls, 1, 'a 400 is not retryable - must fail on the first attempt, not retry')
 })
 
-Deno.test('rpcCallRace: exhausting the retry ladder on a retryable status still throws (cursor safety — caller must see failure)', async () => {
+Deno.test('rpcCallRace: exhausting the retry ladder on a retryable status still throws (cursor safety - caller must see failure)', async () => {
   const fetchImpl = (async () => new Response('server error', { status: 503 })) as unknown as typeof fetch
   await assertRejects(
     () => rpcCallRace([RPC_URL], 'eth_blockNumber', [], { fetchImpl, ...noSleep }),

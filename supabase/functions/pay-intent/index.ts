@@ -210,7 +210,7 @@ Deno.serve(async (req: Request) => {
       // sent, before this write actually lands.
       const { backgroundTransition, ...body } = result
       backgroundTransition.catch(() => { /* transitionIntentToSubmitted logs its own failures */ })
-      // @ts-ignore — EdgeRuntime is available in the Supabase Edge Functions runtime
+      // @ts-ignore - EdgeRuntime is available in the Supabase Edge Functions runtime
       if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
         // @ts-ignore
         EdgeRuntime.waitUntil(backgroundTransition)

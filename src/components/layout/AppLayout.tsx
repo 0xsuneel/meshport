@@ -38,8 +38,8 @@ function isNoNavRoute(pathname: string) {
 // NOTE: the old BridgeProgressBanner (a global floating "Claiming... Tap to
 // view progress" pill driven by the client-side `backgroundBridge` job
 // tracker) has been removed. It duplicated the server-backed "Processing
-// Claims" section on the Multichain Hub, and — being tied to `backgroundBridge`'s
-// in-memory job list — stopped reflecting reality the moment the tab that
+// Claims" section on the Multichain Hub, and - being tied to `backgroundBridge`'s
+// in-memory job list - stopped reflecting reality the moment the tab that
 // started the claim was closed, which is exactly the bug this feature fixes.
 // The Hub's "Processing Claims" list (Supabase Realtime) is now the single
 // source of truth for in-flight claims across the whole app.
@@ -68,7 +68,7 @@ export function AppLayout() {
   const navHidden = useUIStore(s => s.navHidden)
   const walletAddress = useAuthStore(s => s.walletAddress)
   const userId = useAuthStore(s => s.user?.id)
-  // Real, currently-visible viewport height — see the hook's own comment.
+  // Real, currently-visible viewport height - see the hook's own comment.
   // Drives the mobile shell's actual pixel height below, replacing the old
   // fixed+inset:0-only approach (see that block's own updated comment).
   const visibleHeight = useVisibleViewportHeight()
@@ -93,15 +93,15 @@ export function AppLayout() {
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [userId, bindKey])
 
-  // ── Phase 4 shadow observation — DELIBERATELY INERT ────────────────────────
+  // ── Phase 4 shadow observation - DELIBERATELY INERT ────────────────────────
   // Subscribes to the BlockchainIndexer's `chain_events` AND to `activity`
   // INSERTs, feeding both into SyncCoordinator (Phase 6). No longer inert: this
   // is now the primary event-driven refresh path. The Alchemy WebSocket that
-  // previously shared this role was removed once Phase 5/6 superseded it — see
+  // previously shared this role was removed once Phase 5/6 superseded it - see
   // the note where its effect used to live, further down this file.
   //
   // Mounted here rather than inside a page because the measurement needs to
-  // span the whole session — a page-scoped subscription would only observe
+  // span the whole session - a page-scoped subscription would only observe
   // events while that one route happened to be open, which is precisely the
   // sampling bias that would make the shadow report look clean.
   useEffect(() => {
@@ -111,7 +111,7 @@ export function AppLayout() {
   }, [walletAddress])
 
   // ── Real-time external deposit watcher (Arc eth_subscribe(logs)) ──────────
-  // Session-wide, one WebSocket for every route — NOT scoped to the Activity
+  // Session-wide, one WebSocket for every route - NOT scoped to the Activity
   // page. On a confirmed external deposit it refreshes the Activity list
   // (via getRecentArcDeposits + the 'meshport:arc-deposit' event), the Home
   // balance (HomePage listens to the same event), and fires the "Received
@@ -125,7 +125,7 @@ export function AppLayout() {
     return () => arcDepositWatcher.stop()
   }, [walletAddress])
 
-  // ── PHASE 6 — resume policy (proposal §19) ────────────────────────────────
+  // ── PHASE 6 - resume policy (proposal §19) ────────────────────────────────
   // On return to the foreground, refresh only what the elapsed absence
   // justifies: nothing under 5 min, {arc}+{claims} at 5 min, plus {external}
   // at 10 min. SyncCoordinator owns the policy; this effect only measures how
@@ -133,7 +133,7 @@ export function AppLayout() {
   //
   // Additive on purpose: the visibilitychange listeners below are untouched, so
   // the existing deposit/claim-recovery triggers behave exactly as before. This
-  // one performs no network work of its own — it invalidates cache scopes and
+  // one performs no network work of its own - it invalidates cache scopes and
   // lets the normal read paths refill them.
   useEffect(() => {
     if (!walletAddress) return
@@ -155,14 +155,14 @@ export function AppLayout() {
   }, [walletAddress])
 
   // ── Recover claims whose burn confirmed but the app never got a chance to
-  // record it — the SDK's own bridge.burn event (which is what triggers the
+  // record it - the SDK's own bridge.burn event (which is what triggers the
   // durable claims-row write) requires the tab to still be open when the
   // burn is detected as confirmed; if the tab closes before that, nothing
   // client-side ever runs. Scans Arc directly for incoming mints to this
-  // wallet with no matching `claims` row — see claim-recovery-scan/index.ts
+  // wallet with no matching `claims` row - see claim-recovery-scan/index.ts
   // for why this scans Arc rather than every source chain.
   //
-  // Runs on mount AND whenever the tab becomes visible again — not mount
+  // Runs on mount AND whenever the tab becomes visible again - not mount
   // alone. Resuming an already-open tab/PWA (switching apps and back) never
   // remounts this component, so a mount-only trigger would silently never
   // re-run for that very common case, even though that's exactly when
@@ -194,13 +194,13 @@ export function AppLayout() {
           if (recoveredHashes.length === 0) return
           console.log(`[claim-recovery-scan] recovered ${recoveredHashes.length} item(s)`)
 
-          // Claims are intentionally NOT notified here — see the long
+          // Claims are intentionally NOT notified here - see the long
           // comment further below on notifyUnnotifiedCompletions, which is
           // the single source of truth for claim notifications specifically.
           // Direct-transfer receives (EURC/cirBTC/USDC sent straight to this
           // wallet's address, bypassing the chat-message system entirely)
           // are a different activity_type and have no equivalent tracking
-          // column — so they DO get notified here, keyed by the SAME row id
+          // column - so they DO get notified here, keyed by the SAME row id
           // HomePage.tsx's fireIfReceived() uses. Safe from repeat
           // notifications the same way claims are: the scan's own "already
           // tracked" check means a given transfer only ever appears in
@@ -226,13 +226,13 @@ export function AppLayout() {
           //
           // NOTIF ID (2026-09-06, /investigate): every external-deposit
           // notifier now keys on the transaction hash, not the activity row
-          // id — `ext_recv_tx_<clean-lowercased-hash>`. The three notifiers
+          // id - `ext_recv_tx_<clean-lowercased-hash>`. The three notifiers
           // that can each observe one external deposit are:
           //   - this claim-recovery-scan handler,
           //   - HomePage.tsx's fireIfReceived() (live subscription + catch-up),
           //   - lib/arcDepositWatcher.ts (real-time Arc log watcher).
           // The watcher fires BEFORE any Supabase row exists, so it has no
-          // `row.id` to key on — a tx-hash id is the only value all three can
+          // `row.id` to key on - a tx-hash id is the only value all three can
           // agree on. It is also strictly safer than the old `row.id` key: if
           // more than one activity row ever exists for a single deposit
           // (activity-consumer + deposit-scan-all + this scan racing), those
@@ -249,7 +249,7 @@ export function AppLayout() {
             }
           }
         })
-        .catch(() => { /* best-effort — will retry on next trigger */ })
+        .catch(() => { /* best-effort - will retry on next trigger */ })
     }
 
     runScan()
@@ -260,18 +260,18 @@ export function AppLayout() {
 
   // ── Set up E2E chat encryption keys ─────────────────────────────────────
   // Generates this device's key pair (if it doesn't have one yet) and makes
-  // sure the matching public key is uploaded to `users.chat_public_key` (signed by the wallet, `chat_key_sig`) —
+  // sure the matching public key is uploaded to `users.chat_public_key` (signed by the wallet, `chat_key_sig`) -
   // see chatCrypto.ts's own header for the full design. Runs once per
   // session as soon as both walletAddress and the real user id are known;
   // safe to call every mount, it's a no-op after the first successful
   // upload. Nothing else in the chat send/receive path blocks on this
-  // finishing — every encrypt/decrypt call already falls back to plaintext
+  // finishing - every encrypt/decrypt call already falls back to plaintext
   // on its own if a key isn't ready yet (see getConversationKey), so a slow
   // or failed key setup here degrades to "chat works exactly like before
   // this feature existed" rather than breaking anything.
   const chatUserId = useAuthStore(s => s.user?.id)
   // Bumped when this session was just linked to the account (see
-  // syncAuthUidToProfile) — anything that loaded before the link reloads.
+  // syncAuthUidToProfile) - anything that loaded before the link reloads.
   const [boundTick, setBoundTick] = useState(0)
   useEffect(() => {
     const on = () => setBoundTick(t => t + 1)
@@ -287,7 +287,7 @@ export function AppLayout() {
     if (!walletAddress || !chatUserId) return
     import('@/lib/chatCrypto').then(({ ensureChatKeysReady }) =>
       ensureChatKeysReady(walletAddress, chatUserId)
-    ).catch(() => { /* best-effort — retried on the next unlock / session bind */ })
+    ).catch(() => { /* best-effort - retried on the next unlock / session bind */ })
   }, [walletAddress, chatUserId, boundTick, walletUnlocked])
 
   // Messages this user sent before the recipient had a chat key are sealed
@@ -314,11 +314,11 @@ export function AppLayout() {
   }, [chatUserId, boundTick])
 
   // ── Complete any Unified Balance fund recoveries whose 7-day window has
-  // passed — see lib/ubFundRecovery.ts for the full design. Same trigger
+  // passed - see lib/ubFundRecovery.ts for the full design. Same trigger
   // pattern as the claim-recovery-scan above (mount + tab refocus) and for
   // the same reason: this is what makes the recovery "automatic" from the
   // user's side without needing a server that holds their key. Needs
-  // privateKey, not just walletAddress — removeFund() is a signed
+  // privateKey, not just walletAddress - removeFund() is a signed
   // transaction from the original depositing wallet, so this can only run
   // while the wallet is actually unlocked in this session.
   const privateKey = useAuthStore(s => s.privateKey)
@@ -327,7 +327,7 @@ export function AppLayout() {
     const runCheck = () => {
       import('@/lib/ubFundRecovery').then(({ checkAndCompleteUBRecoveries }) =>
         checkAndCompleteUBRecoveries({ walletAddress, privateKey })
-      ).catch(() => { /* best-effort — will retry on next trigger */ })
+      ).catch(() => { /* best-effort - will retry on next trigger */ })
     }
     runCheck()
     const onVisible = () => { if (document.visibilityState === 'visible') runCheck() }
@@ -336,7 +336,7 @@ export function AppLayout() {
   }, [walletAddress, privateKey])
 
   // ── Auto-finish Unified Balance claims (Bring Funds via UB) ────────────────
-  // Sweeps confirmed Unified Balance on other chains into the Arc wallet —
+  // Sweeps confirmed Unified Balance on other chains into the Arc wallet -
   // see autoFinishUbClaims in lib/ubClaim.ts. Runs on open, on refocus and
   // every 90s while visible, so a claim left mid-way (page closed, phone
   // locked during the 15-min finality wait) still lands on Arc by itself.
@@ -344,13 +344,13 @@ export function AppLayout() {
     if (!walletAddress || !privateKey) return
     const run = () => {
       if (document.visibilityState !== 'visible') return
-      // Very slow network: sending now could time out mid-way — the next
+      // Very slow network: sending now could time out mid-way - the next
       // tick (or the network getting better) finishes it.
       if (isSlowNetwork()) return
       import('@/lib/ubClaim').then(async ({ autoFinishUbClaims }) => {
         // Merchants too: this only finishes money already in the Ledger
         // (Unified Balance). Customer payments sitting in the wallet on other
-        // chains wait for the merchant's Claim All — nothing collects them.
+        // chains wait for the merchant's Claim All - nothing collects them.
         const n = await autoFinishUbClaims({ walletAddress, privateKey })
         if (n > 0) {
           try {
@@ -358,7 +358,7 @@ export function AppLayout() {
             useWalletStore.getState().setBalance?.(await readUSDCBalanceOrThrow(walletAddress))
           } catch { /* next balance poll picks it up */ }
         }
-      }).catch(() => { /* best-effort — retries on next trigger */ })
+      }).catch(() => { /* best-effort - retries on next trigger */ })
     }
     run()
     const iv = setInterval(run, 90_000)
@@ -370,7 +370,7 @@ export function AppLayout() {
 
   // ── Keep retrying wallet key restoration in the background ─────────────────
   // restorePrivateKey() (see lib/restoreWallet.ts) already retries a failed
-  // attempt 3 times internally, spanning ~4.5s — but once THAT is exhausted,
+  // attempt 3 times internally, spanning ~4.5s - but once THAT is exhausted,
   // nothing tried again until the user noticed the recovery banner and
   // manually tapped "Try Again". For social-auto (Google/Email) accounts
   // specifically, restoring the key is a genuine server round-trip (there's
@@ -378,34 +378,34 @@ export function AppLayout() {
   // connection could leave the wallet permanently "not recovered" for the
   // rest of the session with no further attempt ever made. This keeps
   // trying every 20s for as long as walletAddress exists but privateKey
-  // doesn't — stops immediately once it succeeds (the interval callback's
+  // doesn't - stops immediately once it succeeds (the interval callback's
   // own live check does this, nothing else needed beyond unmount cleanup).
   //
-  // BUG FIX (2026-09-03) — this loop used to run for EVERY walletSource, not
+  // BUG FIX (2026-09-03) - this loop used to run for EVERY walletSource, not
   // just social-auto. For a create/import-seed wallet, restorePrivateKey()'s
   // mnemonic-derive step is local and instant and either succeeds on the
   // very first internal attempt or won't ever succeed by retrying the exact
-  // same inputs again — so this loop firing every 20s did nothing useful
+  // same inputs again - so this loop firing every 20s did nothing useful
   // there. For import-privkey specifically it was actively harmful: that
   // wallet source has NO mnemonic, so restorePrivateKey() can only succeed
   // via the LOCAL encrypted key + the user's passcode (see restoreWallet.ts
-  // step 3) — but this loop calls restorePrivateKey() with no passcode
+  // step 3) - but this loop calls restorePrivateKey() with no passcode
   // argument, which can never supply one. Every 20s it would therefore fail
   // exactly the same way, set walletRecoveryNeeded back to true, and
   // re-trigger WalletRecoveryBanner's "Still restoring your wallet…" state
-  // — forever, on every session where the passcode hasn't been re-entered
-  // yet — even though nothing was actually "still restoring": it needed the
+  // - forever, on every session where the passcode hasn't been re-entered
+  // yet - even though nothing was actually "still restoring": it needed the
   // user's passcode, not another silent retry. That is the direct cause of
   // reports of the recovery banner staying up indefinitely for imported
   // wallets. Scoped to social-auto only, matching what this effect's own
   // comment above already says it exists for.
   const walletSource = useAuthStore(s => s.walletSource)
-  // Restore right away after a reload too — not only on the 20s retry below.
+  // Restore right away after a reload too - not only on the 20s retry below.
   // The wallet key lives in memory only, so every reload (Android reloads
   // background tabs often) drops it; until it's back, chat can't unlock
   // encrypted messages and shows them locked. Social accounts restore from
   // the server; other wallets from this tab's session cache (silent: if that
-  // needs the passcode, the normal unlock flow asks — no banner from here).
+  // needs the passcode, the normal unlock flow asks - no banner from here).
   const navigateApp = useNavigate()
   useEffect(() => {
     if (!walletAddress || useAuthStore.getState().privateKey) return
@@ -422,9 +422,9 @@ export function AppLayout() {
     if (!walletAddress || privateKey || walletSource !== 'social-auto') return
     const interval = setInterval(() => {
       const { walletAddress: addr, privateKey: key, walletSource: src } = useAuthStore.getState()
-      if (!addr || key || src !== 'social-auto') return // already restored (or logged out, or not social-auto) — nothing to do
+      if (!addr || key || src !== 'social-auto') return // already restored (or logged out, or not social-auto) - nothing to do
       import('@/lib/restoreWallet').then(({ restorePrivateKey, needsSocialUnlock }) => {
-        if (needsSocialUnlock()) return // only a tap (passkey / QR) can open it — nothing to retry
+        if (needsSocialUnlock()) return // only a tap (passkey / QR) can open it - nothing to retry
         return restorePrivateKey()
       }).catch(() => {})
     }, 20000)
@@ -436,7 +436,7 @@ export function AppLayout() {
   // the user sets one up before using the app.
   const loginTypeApp = useAuthStore(s => s.loginType)
   const isSocialWallet = loginTypeApp === 'social' && walletSource === 'social-auto' && !!walletAddress
-  // Whether this account is known to have a passkey / Recovery QR — known at
+  // Whether this account is known to have a passkey / Recovery QR - known at
   // once on this device after the first check, so returning visits don't wait.
   const [securedOk, setSecuredOk] = useState(() => !userId || knownSecured(userId))
   useEffect(() => { if (userId && knownSecured(userId)) setSecuredOk(true) }, [userId])
@@ -452,11 +452,11 @@ export function AppLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSocialWallet, privateKey, userId])
   // Google / email account whose wallet isn't open yet (or not yet secured):
-  // show no app page at all — not even Home — until it's unlocked with the
+  // show no app page at all - not even Home - until it's unlocked with the
   // passkey / Recovery QR (or opened from this device's copy on a reload).
   const holdForWallet = isSocialWallet && (!privateKey || !securedOk)
 
-  // ── Real-time deposit detection — REMOVED, superseded by Phase 5/6 ─────────
+  // ── Real-time deposit detection - REMOVED, superseded by Phase 5/6 ─────────
   // This used to open a persistent Alchemy WebSocket to Arc
   // (lib/realtimeDeposits.ts, now deleted) and, on every new block, fetch that
   // block over HTTP to look for transactions addressed to this wallet.
@@ -478,20 +478,20 @@ export function AppLayout() {
   //
   // It was also the app's single largest Alchemy consumer: one
   // eth_getBlockByNumber(full=true) per ~2s block, per open tab, whether or not
-  // a deposit occurred — plus unbounded reconnect handshakes that did not
+  // a deposit occurred - plus unbounded reconnect handshakes that did not
   // special-case 429. That load was a primary contributor to the 2026-08-18
   // account-wide Alchemy 429s.
   //
   // NOT replaced with another WebSocket: Supabase Realtime already carries
   // chain_events and activity on a separate connection and credential.
   //
-  // useActivity.ts's 'meshport:onchain-activity' listener is deliberately KEPT —
+  // useActivity.ts's 'meshport:onchain-activity' listener is deliberately KEPT -
   // HomePage still dispatches that event when the polled Arc balance increases.
 
-  // ── P2P marketplace notifications — server-driven, cross-device ───────────
+  // ── P2P marketplace notifications - server-driven, cross-device ───────────
   // See lib/p2pNotifications.ts: seeds the bell/notification-center with any
   // trade events that happened while this device was offline, then keeps it
-  // live via Realtime. Keyed on the app's own user id (not walletAddress) —
+  // live via Realtime. Keyed on the app's own user id (not walletAddress) -
   // notifications.user_id matches p2p_trades.buyer_id/seller_id, which are
   // app user ids, so this needs to re-subscribe on user change too, not just
   // wallet change (a social-auth account could switch users without its
@@ -501,13 +501,13 @@ export function AppLayout() {
     return startP2PNotifications(userId)
   }, [userId])
 
-  // ── Ongoing P2P trades count — ONE driver for the shared store ──────────
+  // ── Ongoing P2P trades count - ONE driver for the shared store ──────────
   // See useP2PTradesCountStore's own comment in store/index.ts for the full
   // incident writeup: this used to be three independent copies of this
   // same fetch+subscribe logic (HomePage, P2PPage, DesktopSidebar), which
   // crashed the app on desktop from a Realtime channel name collision.
   // This is now the only place that calls subscribeToMyTrades for this
-  // purpose — every consumer just reads useP2PTradesCountStore(s =>
+  // purpose - every consumer just reads useP2PTradesCountStore(s =>
   // s.ongoingCount).
   const setOngoingP2PCount = useP2PTradesCountStore(s => s.setOngoingCount)
   useEffect(() => {
@@ -525,27 +525,27 @@ export function AppLayout() {
   // ── Notify for claims that completed but were never told to the user ────
   // Distinct gap from the recovery scan above: that scan only fires a
   // notification at the MOMENT it first discovers a claim. Once recorded,
-  // future scans correctly skip it (that's what prevents duplicates) — but
+  // future scans correctly skip it (that's what prevents duplicates) - but
   // that also means a claim recovered before this notification code was
   // even deployed, or one that completed through the normal claim-worker
   // path while this tab happened to be closed, would otherwise sit there
   // completed forever with no notification ever sent. This check is
-  // independent of HOW a claim reached 'completed' — it just looks for
+  // independent of HOW a claim reached 'completed' - it just looks for
   // anything completed with no notification sent yet, notifies once, and
   // marks it durably server-side (claims.user_notified_at) so it can never
   // fire twice, even across different devices or after clearing browser
-  // data — deliberately not using localStorage for this.
+  // data - deliberately not using localStorage for this.
   useEffect(() => {
     if (!walletAddress) return
 
     const notifyUnnotifiedCompletions = async () => {
       // Previously did a direct client-side SELECT then UPDATE against
-      // `claims` — but RLS (correctly, by design) only allows the owning
+      // `claims` - but RLS (correctly, by design) only allows the owning
       // wallet to READ its own rows, with writes reserved for the
       // server-side edge functions. The client's UPDATE was silently
       // affecting zero rows every time, which the old race-safety check
       // misread as "another concurrent call already handled this," so it
-      // skipped the notification too — meaning nothing ever got marked AND
+      // skipped the notification too - meaning nothing ever got marked AND
       // most notifications never fired. This single atomic RPC call does
       // the fetch-and-mark as one server-side statement, genuinely
       // bypassing that restriction the correct way instead of fighting it
@@ -558,7 +558,7 @@ export function AppLayout() {
         // Prefer the actual net amount that arrived (post CCTP/relay fee)
         // over the gross claimed amount, same as the live-path notifier in
         // MultichainClaimPage.tsx already does (c.arrivedAmount ?? c.amount)
-        // — this RPC previously only returned `amount`, so there was
+        // - this RPC previously only returned `amount`, so there was
         // nothing correct to prefer here, which is why a claim completed
         // while the user wasn't watching showed the wrong (gross) figure
         // in its push notification even though Activity always showed the
@@ -573,11 +573,11 @@ export function AppLayout() {
     return () => document.removeEventListener('visibilitychange', onVisible2)
   }, [walletAddress])
 
-  // ── DESKTOP (≥1024px): SaaS-dashboard shell — persistent sidebar+header
+  // ── DESKTOP (≥1024px): SaaS-dashboard shell - persistent sidebar+header
   // regardless of route (unlike mobile's noNavRoutes, which hides chrome for
   // full-screen sub-flows). Outlet/PageTransition/WalletRecoveryBanner/Toast/
   // ModeToggle are the exact same elements as the mobile branch below, just
-  // re-parented into different chrome — no logic duplicated.
+  // re-parented into different chrome - no logic duplicated.
   if (isDesktop) {
     return (
       <div style={{ position: 'fixed', inset: 0, background: 'var(--bg)', color: 'var(--text-primary)', display: 'flex' }}>
@@ -585,18 +585,18 @@ export function AppLayout() {
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           <DesktopHeader />
           {/* display:flex + minHeight:0 here is what actually makes
-              PageTransition's own `flex:1` below take effect — without a
+              PageTransition's own `flex:1` below take effect - without a
               flex container as its direct parent, that flex:1 is inert and
               PageTransition (and everything inside it) sizes to its
               content instead of the available viewport height. That let
               this div's overflowY:auto catch content that a page's OWN
-              internal scroll container (every page already has one — see
+              internal scroll container (every page already has one - see
               e.g. HomePage/ChatListPage's own overflow-y-auto root) was
               supposed to own instead, which is what made a nested split
               view like Chat's (list + conversation side by side) scroll
               the whole outer shell rather than just the panel under the
               cursor, and broke position:sticky headers inside it (sticky
-              only works relative to ITS OWN nearest scrolling ancestor —
+              only works relative to ITS OWN nearest scrolling ancestor -
               if the wrong ancestor was the one actually scrolling, the
               header just scrolled away with everything else). */}
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -620,17 +620,17 @@ export function AppLayout() {
   // measured pixels from window.visualViewport), not `inset:0` alone and
   // not a `dvh` unit. Two earlier approaches both fell short:
   //  - `height:100dvh` was inconsistent once launched from an Android
-  //    home-screen shortcut (standalone display mode) — some
+  //    home-screen shortcut (standalone display mode) - some
   //    devices/WebViews under- or over-counted the system gesture-nav bar.
   //  - `position:fixed;inset:0` (the previous fix here) sidesteps that,
   //    but on iPhone (Safari/Chrome) it resolves against the LAYOUT
   //    viewport, which does not shrink when the browser's own address bar
-  //    / tab bar chrome is on-screen — that chrome is a native overlay
+  //    / tab bar chrome is on-screen - that chrome is a native overlay
   //    drawn on top of the page, not carved out of it. Every "slides up
   //    from below" sheet/page nested in here (Sheet.tsx, AmountKeypad, the
   //    Home Actions sheet, passcode sheets, etc.) inherits its bottom
   //    edge from this shell's height, so they'd all render with their
-  //    lowest content landing under that chrome instead of above it —
+  //    lowest content landing under that chrome instead of above it -
   //    "navigation shows over my sheet", but only ever on iPhone, because
   //    Android already resizes its layout viewport instead of overlaying.
   // Measuring the real visible height in JS (the same VisualViewport API
@@ -677,7 +677,7 @@ export function AppLayout() {
 
 
 // Shown only when this wallet's saved key is tied to this browser (see
-// security.ts "Device binding") but the browser has lost that tie — its site
+// security.ts "Device binding") but the browser has lost that tie - its site
 // data was partly cleared. The wallet itself is fine on-chain; it just has
 // to be restored here from the recovery phrase or private key.
 function DeviceKeyNotice() {
@@ -702,7 +702,7 @@ function DeviceKeyNotice() {
       background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--warning) 45%, var(--border))', borderRadius: 16, padding: '12px 14px', boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }}>
       <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)' }}>Restore your wallet on this device</p>
       <p style={{ margin: '4px 0 10px', fontSize: 12.5, color: 'var(--text-secondary)' }}>
-        This browser's saved copy of your wallet can't be opened any more (its site data was partly cleared). Your funds are safe — enter your recovery phrase or private key to use this wallet here again.
+        This browser's saved copy of your wallet can't be opened any more (its site data was partly cleared). Your funds are safe - enter your recovery phrase or private key to use this wallet here again.
       </p>
       <button onClick={() => navigate('/auth/import-wallet')}
         style={{ border: 'none', borderRadius: 12, padding: '9px 14px', fontSize: 13, fontWeight: 700, color: '#fff', background: 'var(--brand)', cursor: 'pointer' }}>

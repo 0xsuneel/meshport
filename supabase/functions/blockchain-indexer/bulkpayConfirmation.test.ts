@@ -118,7 +118,7 @@ Deno.test('10. the correct, real BulkPay transaction is accepted end to end', as
   assertEquals(updateRepo.confirmed, ['attempt-1'])
 })
 
-Deno.test('the real block number from the receipt is captured and passed to markConfirmed — not left null', async () => {
+Deno.test('the real block number from the receipt is captured and passed to markConfirmed - not left null', async () => {
   const verifier = makeVerifier(REAL_TX, { status: '0x1', blockNumber: '0x37daf32' })
   const capturedBlockNumbers: number[] = []
   const updateRepo = makeUpdateRepo()
@@ -130,7 +130,7 @@ Deno.test('the real block number from the receipt is captured and passed to mark
   assertEquals(capturedBlockNumbers, [58568498]) // 0x37daf32 decoded
 })
 
-Deno.test('confirming an attempt also transitions its parent intent SUBMITTED -> CONFIRMED — prevents deriveDisplayState from showing "SUBMITTED" forever', async () => {
+Deno.test('confirming an attempt also transitions its parent intent SUBMITTED -> CONFIRMED - prevents deriveDisplayState from showing "SUBMITTED" forever', async () => {
   const verifier = makeVerifier(REAL_TX, { status: '0x1', blockNumber: '0x37daf32' })
   const updateRepo = makeUpdateRepo()
   await sweepSubmittedAttempts([attempt({ intentId: 'intent-xyz' })], verifier, updateRepo.repo)
@@ -144,7 +144,7 @@ Deno.test('reverting an attempt also transitions its parent intent SUBMITTED -> 
   assertEquals(updateRepo.intentTransitions, [{ intentId: 'intent-xyz', to: 'FAILED' }])
 })
 
-Deno.test('a mismatch does NOT transition the intent — the intent stays SUBMITTED while nonce-recovery resolves the underlying attempt', async () => {
+Deno.test('a mismatch does NOT transition the intent - the intent stays SUBMITTED while nonce-recovery resolves the underlying attempt', async () => {
   const verifier = makeVerifier({ ...REAL_TX, to: '0xADifferentContract' }, { status: '0x1', blockNumber: '0x37daf32' })
   const updateRepo = makeUpdateRepo()
   await sweepSubmittedAttempts([attempt()], verifier, updateRepo.repo)
@@ -169,12 +169,12 @@ Deno.test('12. confirmation targets exactly one transaction_attempt regardless o
   assertEquals(updateRepo.confirmed.length, 1)
 })
 
-Deno.test('13. this module has no chain_events/log_index concept at all — structurally attempt-scoped only', () => {
+Deno.test('13. this module has no chain_events/log_index concept at all - structurally attempt-scoped only', () => {
   const keys = Object.keys(attempt())
   assert(!keys.includes('logIndex') && !keys.includes('chainEvents'))
 })
 
-Deno.test('14. this module has no broadcast capability anywhere — structurally cannot rebroadcast', async () => {
+Deno.test('14. this module has no broadcast capability anywhere - structurally cannot rebroadcast', async () => {
   const verifier = makeVerifier(null, null)
   const updateRepo = makeUpdateRepo()
   await sweepSubmittedAttempts([attempt()], verifier, updateRepo.repo)

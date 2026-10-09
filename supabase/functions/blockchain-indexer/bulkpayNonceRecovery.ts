@@ -99,13 +99,13 @@ export async function recoverAttemptByNonce(
 
 // ── Orchestration ────────────────────────────────────────────────────────
 
-/** The DB write boundary for applying a recovery outcome — separate from BlockFetcher (read-only RPC). */
+/** The DB write boundary for applying a recovery outcome - separate from BlockFetcher (read-only RPC). */
 export interface AttemptUpdateRepository {
-  /** Sets tx_hash + status='SUBMITTED' on the attempt — from this point on, the SAME confirmation/reconciliation machinery already built for Case 1 takes over (unchanged by this module). */
+  /** Sets tx_hash + status='SUBMITTED' on the attempt - from this point on, the SAME confirmation/reconciliation machinery already built for Case 1 takes over (unchanged by this module). */
   markSubmitted(attemptId: string, txHash: string): Promise<void>
-  /** Sets status='REPLACED' — the original BulkPay payment never happened; a new, explicit intent is required to retry, never automatic. */
+  /** Sets status='REPLACED' - the original BulkPay payment never happened; a new, explicit intent is required to retry, never automatic. */
   markReplaced(attemptId: string, replacementTxHash: string): Promise<void>
-  /** Transitions the parent transaction_intent SUBMITTED -> FAILED once its attempt is confirmed REPLACED — the original operation genuinely never happened, so its intent must reflect that terminal outcome too, not stay stuck at SUBMITTED. */
+  /** Transitions the parent transaction_intent SUBMITTED -> FAILED once its attempt is confirmed REPLACED - the original operation genuinely never happened, so its intent must reflect that terminal outcome too, not stay stuck at SUBMITTED. */
   transitionIntentToFailed(intentId: string): Promise<void>
 }
 
@@ -118,13 +118,13 @@ export interface NonceRecoveryResult {
 /**
  * Sweeps unresolved attempts (found via findUnresolvedAttempts, Case 2's
  * signal) and attempts nonce-based recovery for each. Never broadcasts
- * anything. An attempt with `not_found` is left untouched — the caller's
+ * anything. An attempt with `not_found` is left untouched - the caller's
  * own longer bound (docs/BULKPAY_BROADCAST_RESPONSE_LOSS_AUDIT.md §9's
  * "longer, final bound") decides when to give up and converge to DROPPED,
  * a decision deliberately NOT made inside this sweep itself (kept simple,
  * matching runBulkpayReconciliation's own "give up cleanly, don't retry
  * forever" reasoning, but the final-DROPPED transition is left to a
- * separate, explicit step — not resolved in this pass, see the
+ * separate, explicit step - not resolved in this pass, see the
  * implementation report's "remaining known gaps").
  */
 export async function sweepUnresolvedAttempts(
@@ -151,7 +151,7 @@ export async function sweepUnresolvedAttempts(
         results.push({ attemptId: attempt.id, outcome: 'not_found' })
       }
     } catch (e) {
-      // One attempt's failure must not abort the sweep — same resilience
+      // One attempt's failure must not abort the sweep - same resilience
       // discipline as runBulkpayReconciliation's per-row try/catch.
       console.error(`[bulkpay-nonce-recovery] attempt ${attempt.id} failed:`, e instanceof Error ? e.message : e)
       results.push({ attemptId: attempt.id, outcome: 'not_found' })

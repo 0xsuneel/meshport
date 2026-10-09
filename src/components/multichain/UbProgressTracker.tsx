@@ -1,5 +1,5 @@
 /**
- * UbProgressTracker.tsx — Track Progress for a Unified Balance claim, same
+ * UbProgressTracker.tsx - Track Progress for a Unified Balance claim, same
  * look as the CCTP ClaimProgressTracker. Used by the Bring Funds claim screen
  * and by Hub Activity (tap a processing UB claim).
  */
@@ -12,7 +12,7 @@ export type UbTrackerProgress = {
   txHash?: string
 }
 
-// Track Progress for a Unified Balance claim — same look and step names as
+// Track Progress for a Unified Balance claim - same look and step names as
 // the CCTP ClaimProgressTracker (Bridging → Verifying → Settling →
 // Completed), driven by the live UB stage instead of a claims row:
 //   Bridging  = deposit into Unified Balance on the source chain
@@ -23,7 +23,7 @@ export type UbTrackerProgress = {
 // Track Progress screen (CCTP claim, CCTP transfer, Unified Balance) uses
 // this one component, so they all read and move the same way.
 //
-// `loading`: the status isn't known yet — every step stays neutral instead
+// `loading`: the status isn't known yet - every step stays neutral instead
 // of guessing "step 1 in progress" and then jumping. Once it's known, the
 // finished steps' checkmarks draw in top to bottom.
 export function UbProgressTracker({ progress, chainLabel, steps: customSteps, safeNote, loading = false, note }: {

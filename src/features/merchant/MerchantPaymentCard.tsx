@@ -2,7 +2,7 @@
 // /paylink/r/<code> link (or an older /pay/r/<code> one). Chat stays messaging; the card reads the live status
 // of the linked request (the Ledger is the financial record).
 //
-// Everything happens inside the conversation — no separate page:
+// Everything happens inside the conversation - no separate page:
 //   • Customer taps "Pay invoice" → the chat's own pay sheet opens with the
 //     bill's amount and short bill number (see ChatPage's BILL_PAY_EVENT).
 //   • Once paid, the customer's payment appears in chat as a reply to this
@@ -25,7 +25,7 @@ const CHAIN_LABEL: Record<string, string> = {
 
 /**
  * The card as far as the chat message itself tells us (order number, amount,
- * items, note) — drawn at once so the bubble is never empty while the live
+ * items, note) - drawn at once so the bubble is never empty while the live
  * status loads (or if loading fails on a weak connection).
  *   🧾 Bill · Order #ORD-100008 · $20.6 USDC\nShoes × 1, Shirt × 1\nnote\nlink
  *   💸 Payment request · Order #ORD-100010 · $5.3 USDC\nnote\nlink
@@ -239,7 +239,7 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
         ...(isBill && v.items?.length
           ? v.items.map(i => ({
               label: `${i.name} × ${Number(i.qty)}`,
-              value: Number.isFinite(Number(i.total ?? i.qty * i.price)) ? `$${formatAmount(Number(i.total ?? i.qty * i.price))}` : '—',
+              value: Number.isFinite(Number(i.total ?? i.qty * i.price)) ? `$${formatAmount(Number(i.total ?? i.qty * i.price))}` : '-',
             }))
           : []),
         ...(v.note ? [{ label: 'Note', value: v.note }] : []),

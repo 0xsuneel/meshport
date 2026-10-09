@@ -15,8 +15,8 @@
 // deposit. This closes that gap.
 //
 // ── Why it does NOT replace deposit-scan-all yet ────────────────────────────
-// Both producers now converge on the SAME activity identity —
-// tx_hash = 'recv_<hash>' with the unique index on (tx_hash, wallet_address) —
+// Both producers now converge on the SAME activity identity -
+// tx_hash = 'recv_<hash>' with the unique index on (tx_hash, wallet_address) -
 // so whichever sees a deposit first wins and the other's upsert is ignored.
 // That makes them safely redundant, not competing, which is exactly what a
 // cutover needs: run both, prove this one matches, then retire the old one.
@@ -26,7 +26,7 @@
 // There is deliberately no cursor table. "Unprocessed" is derived from the data
 // itself: an event needs crediting iff no activity row exists for its
 // (recv_<hash>, wallet). That is naturally restart-safe, safe under concurrent
-// invocations, and impossible to desynchronise — a cursor could skip an event if
+// invocations, and impossible to desynchronise - a cursor could skip an event if
 // it advanced past a row whose insert later failed. The lookback window bounds
 // the scan so history is never re-read in full.
 //
@@ -62,7 +62,7 @@ const ARC_EXPLORER = 'https://testnet.arcscan.app'
 /**
  * How far back to look for uncredited events.
  *
- * Bounded so a pass is O(recent) rather than O(history) — chain_events retention
+ * Bounded so a pass is O(recent) rather than O(history) - chain_events retention
  * is 14 days, and this stays far inside it. Two hours is many multiples of the
  * indexer's every-2-minutes cadence, so an event cannot age out unprocessed even
  * after a long consumer outage; if one ever did, deposit-scan-all's own
@@ -214,7 +214,7 @@ async function runPass(supabase: SupabaseClient) {
       .from('activity')
       .upsert(toInsert, { onConflict: 'tx_hash,wallet_address', ignoreDuplicates: true })
     if (insErr) {
-      // Do NOT count these as credited — the next pass retries them, and the
+      // Do NOT count these as credited - the next pass retries them, and the
       // unique index means a retry cannot double-credit.
       console.error('[activity-consumer] activity upsert failed:', insErr.message)
       logEvent('insert_failed', { attempted: toInsert.length, error: insErr.message })
@@ -231,7 +231,7 @@ async function runPass(supabase: SupabaseClient) {
 Deno.serve(async (req: Request) => {
   const pre = handleOptions(req)
   if (pre) return pre
-  // Scheduled job only — the pg_cron caller's secret, never a user session.
+  // Scheduled job only - the pg_cron caller's secret, never a user session.
   if (!isCronOrLegacyServiceCaller(req)) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } })
 
   const supabase = createClient(

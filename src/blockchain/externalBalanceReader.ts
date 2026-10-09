@@ -1,5 +1,5 @@
 /**
- * blockchain/externalBalanceReader.ts — external-chain scan for BlockchainManager
+ * blockchain/externalBalanceReader.ts - external-chain scan for BlockchainManager
  *
  * Phase 2. Migration target for externalChainBalances.scanAllChainBalances.
  * The legacy function is UNTOUCHED and remains the live path until pages are
@@ -15,20 +15,20 @@
  *    call but must not be persisted)
  *
  * ── Two live bugs fixed here (see Phase 2 findings) ─────────────────────────
- * FINDING 1 — settings-ignoring cache. The legacy cache is keyed by wallet
+ * FINDING 1 - settings-ignoring cache. The legacy cache is keyed by wallet
  * address alone with a 20s TTL, so toggling a chain in the admin panel had no
  * effect for up to 20s: the pre-toggle result kept being served, including to
  * pages opened after the change. The cache key here folds in a signature of
  * the enabled-chain set, so changing the settings changes the key and the
  * next read is a genuine miss. No TTL tuning required.
  *
- * FINDING 2 — cross-wallet in-flight race. The legacy module holds ONE
+ * FINDING 2 - cross-wallet in-flight race. The legacy module holds ONE
  * module-level `inFlight` promise shared across every wallet, while its cache
  * is address-keyed. If wallet B asks while wallet A's scan is still running,
  * `if (inFlight) return inFlight` hands B *A's balances*. Reachable by a
  * wallet switch mid-scan, and more likely once every page reads one shared
  * value. Keying in-flight state by wallet+settings removes the race by
- * construction — that is exactly what cache.dedupe() does with a scoped key.
+ * construction - that is exactly what cache.dedupe() does with a scoped key.
  *
  * TESTNET ONLY.
  */
@@ -50,7 +50,7 @@ export interface ExternalBalancesResult {
 }
 
 /**
- * How long a completed external scan stays servable — the `external:` prefix
+ * How long a completed external scan stays servable - the `external:` prefix
  * ONLY. Nothing else in the app uses this constant.
  *
  * ── Why 90s, raised from 20s (Alchemy 429 incident, 2026-08-18) ────────────
@@ -58,7 +58,7 @@ export interface ExternalBalancesResult {
  * every `visibilitychange`: HomePage (readExternalTotal), MultichainPage and
  * MultichainClaimPage (readExternalBalances). At a 20s TTL every one of those
  * triggers missed the cache, so each became a real network scan across all
- * enabled chains — six of which resolve to *.g.alchemy.com on a single shared
+ * enabled chains - six of which resolve to *.g.alchemy.com on a single shared
  * account key. Alchemy rate-limits per ACCOUNT, not per endpoint, which is why
  * eth-sepolia, base-sepolia, arb-sepolia and unichain-sepolia all returned 429
  * simultaneously rather than one at a time.
@@ -71,7 +71,7 @@ export interface ExternalBalancesResult {
  *
  * Staleness is bounded, not unbounded: Phase 6's SyncCoordinator invalidates
  * `{kind:'external'}` on a real balance_changed event, and refreshScope's
- * invalidatePrefix('external:<wallet>:') deletes the entry outright — peek()
+ * invalidatePrefix('external:<wallet>:') deletes the entry outright - peek()
  * then misses and the next read goes to the network. So a real external credit
  * still refreshes immediately; only the *speculative polling* is slowed down.
  * A manual pull-to-refresh ({kind:'all'}) clears it too.
@@ -81,7 +81,7 @@ const BALANCE_OF_SELECTOR = '0x70a08231'
 
 // Scan speed. Chains used to go in batches of 5 with a 400ms pause, each batch
 // waiting for its slowest chain, and each chain tried its RPCs one by one with
-// a 6s timeout — one dead endpoint stalled the whole scan for seconds. Now
+// a 6s timeout - one dead endpoint stalled the whole scan for seconds. Now
 // up to SCAN_CONCURRENCY chains run at once with no barriers (still well
 // under any rate limit: one eth_call per chain), and a slow endpoint gets a
 // fallback after HEDGE_MS.
@@ -113,7 +113,7 @@ function settingsSignature(settings: SettingsMap, settingsLoaded: boolean): stri
  * authoritatively-confirmed numeric chain id (see chains.ts), and the legacy
  * behaviour of "try each endpoint, return 0 if all fail" is what the Hub and
  * Claim pages already depend on. Preserving it exactly is worth more here
- * than routing through a shared client — Phase 6 revisits this when all
+ * than routing through a shared client - Phase 6 revisits this when all
  * chains move behind the proxy.
  */
 export async function readChainUSDCBalance(chainId: string, walletAddress: string): Promise<number> {
@@ -198,7 +198,7 @@ function emitScanProgress(detail: { wallet: string; chainId: string; phase: 'sta
   try { window.dispatchEvent(new CustomEvent(EXTERNAL_SCAN_PROGRESS_EVENT, { detail })) } catch { /* */ }
 }
 
-/** Runs `fn` over `items` with at most `limit` in flight — no batch barriers. */
+/** Runs `fn` over `items` with at most `limit` in flight - no batch barriers. */
 async function pooledMap<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length)
   let i = 0

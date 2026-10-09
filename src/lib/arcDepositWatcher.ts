@@ -1,7 +1,7 @@
 // lib/arcDepositWatcher.ts
 //
 // Real-time, client-side detection of EXTERNAL incoming transfers to the
-// connected wallet — native USDC, EURC and cirBTC — via Arc's
+// connected wallet - native USDC, EURC and cirBTC - via Arc's
 // `eth_subscribe("logs")` WebSocket stream, with an `eth_getLogs` catch-up
 // on every (re)connect so a dropped socket never loses a deposit.
 //
@@ -10,17 +10,17 @@
 // once from AppLayout for the whole session, so the live subscription exists
 // on every route, not only on /activity. When it sees a confirmed external
 // deposit it does three things so the UI updates with no page refresh:
-//   1. remembers it in a module buffer (getRecentArcDeposits) — useActivity
+//   1. remembers it in a module buffer (getRecentArcDeposits) - useActivity
 //      re-reads this on mount and on the event below, so a row that showed
 //      once stays shown even after ActivityPage remounts and reloads;
 //   2. dispatches `meshport:arc-deposit` (detail carries the tx) and the
-//      legacy `meshport:onchain-activity` — HomePage listens to the former
+//      legacy `meshport:onchain-activity` - HomePage listens to the former
 //      and refreshes the balance for that token immediately;
 //   3. fires the in-app "Received from" notification immediately, keyed on
 //      `ext_recv_tx_<hash>` so the delayed server path (HomePage's
 //      subscribeToActivity -> fireIfReceived, now using the same id)
 //      DEDUPES against it instead of double-notifying.
-// It still writes NOTHING to Supabase — the server pipeline
+// It still writes NOTHING to Supabase - the server pipeline
 // (blockchain-indexer -> chain_events -> activity-consumer, plus
 // deposit-scan-all) remains the durable, cross-device persistence path and
 // the reconciliation backstop, alongside onchainReceivedActivity.ts's 60s
@@ -41,26 +41,26 @@
 // subscriptions, a bounded catch-up query, and deterministic reconnect
 // behaviour that is trivial to unit-test. A raw client is ~1 file with no
 // provider stack, and it does NOT reintroduce the removed Alchemy
-// full-block-download watcher (lib/realtimeDeposits.ts) — it only ever asks
+// full-block-download watcher (lib/realtimeDeposits.ts) - it only ever asks
 // for Transfer logs already filtered, server-side, to this one wallet.
 //
 // ── Arc facts this relies on (Arc docs: "Index Arc Events") ─────────────────
-//   * wss://rpc.testnet.arc.io — public, keyless (same host family already in
+//   * wss://rpc.testnet.arc.io - public, keyless (same host family already in
 //     api/arc-rpc.js's HTTP fallback list). `eth_subscribe` is WebSocket-only.
 //   * Native USDC movements ALL emit a standard Transfer log from the system
 //     emitter 0xffff…fffe, 18 decimals (EIP-7708). This covers plain native
-//     sends AND wrapper-routed (0x3600) ones — the gap the REST `?filter=to`
+//     sends AND wrapper-routed (0x3600) ones - the gap the REST `?filter=to`
 //     path is structurally blind to.
 //   * EURC / cirBTC are ordinary ERC-20s emitting Transfer from their own
 //     contracts (6 / 8 decimals).
 //   * Deterministic finality: a log delivered over the socket is in a mined,
-//     permanent block — no reorg handling, status is always 'confirmed'.
+//     permanent block - no reorg handling, status is always 'confirmed'.
 
 import type { OnchainReceivedTx } from './onchainReceivedActivity'
 import { KNOWN_INTERNAL_CONTRACTS } from './onchainReceivedActivity'
 import { isSlowNetwork, whenNetworkOk } from './connectivity'
 
-// keccak256("Transfer(address,address,uint256)") — same constant as the
+// keccak256("Transfer(address,address,uint256)") - same constant as the
 // server's decodeTransferLog.ts / scanner.ts and the Arc docs.
 export const TRANSFER_TOPIC0 =
   '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
@@ -73,7 +73,7 @@ export const ARC_WS_URL = 'wss://rpc.testnet.arc.io'
 /**
  * The three log streams a deposit can arrive on. Addresses/decimals are
  * inlined (not imported from the chain registry) to keep this module
- * dependency-free and trivially testable — the exact same
+ * dependency-free and trivially testable - the exact same
  * "immutable public constant, safe to duplicate" reasoning
  * decodeTransferLog.ts already applies to these values server-side.
  */
@@ -85,7 +85,7 @@ export interface WatchedStream {
 }
 
 export const WATCHED_STREAMS: readonly WatchedStream[] = [
-  // Native USDC system emitter (EIP-7708) — 18 decimals.
+  // Native USDC system emitter (EIP-7708) - 18 decimals.
   { address: '0xfffffffffffffffffffffffffffffffffffffffe', tokenSymbol: 'USDC', decimals: 18 },
   // EURC ERC-20.
   { address: '0x89b50855aa3be2f677cd6303cec089b5f319d72a', tokenSymbol: 'EURC', decimals: 6 },
@@ -121,7 +121,7 @@ export interface DecodedDepositLog {
 /**
  * Decode one raw log (from `eth_getLogs` or an `eth_subscription`
  * notification) as a Transfer for `stream`. Returns null for anything it
- * cannot safely interpret — wrong topic0, missing recipient, unparseable or
+ * cannot safely interpret - wrong topic0, missing recipient, unparseable or
  * non-positive amount, malformed shape. Never throws: one bad frame on the
  * socket must not kill the watcher.
  */
@@ -195,8 +195,8 @@ export type DepositClassification =
  *   - recipient must be this wallet (the topic filter already scopes it, but
  *     a catch-up query or a loose filter could still surface others)
  *   - sender != recipient (self-transfer moves no net value)
- *   - sender != zero address (a mint — CCTP claim territory, owned elsewhere)
- *   - sender not a known internal contract (Kit Adapter / Multicall3 / CCTP —
+ *   - sender != zero address (a mint - CCTP claim territory, owned elsewhere)
+ *   - sender not a known internal contract (Kit Adapter / Multicall3 / CCTP -
  *     i.e. a swap or bridge OUTPUT leg, already surfaced under its own type)
  *   - amount > 0
  */
@@ -225,7 +225,7 @@ export function decodedToOnchainTx(
     tokenSymbol: decoded.tokenSymbol,
     amount: decoded.amount,
     // A log delivered by the node is already in a mined block, and Arc has
-    // deterministic finality — there is no "pending" state to represent.
+    // deterministic finality - there is no "pending" state to represent.
     status: 'confirmed',
     timestamp: timestampIso,
   }
@@ -279,18 +279,18 @@ export interface ArcDepositWatcher {
 }
 
 const RECONNECT_BACKOFF_MS = [1_000, 2_000, 5_000, 10_000, 15_000] as const
-/** Catch-up query chunk size — small because the filter is scoped to one wallet. */
+/** Catch-up query chunk size - small because the filter is scoped to one wallet. */
 const CATCHUP_CHUNK_BLOCKS = 2_000
 /** Ceiling on a single catch-up span. Beyond this the server pipeline owns recovery. */
 const CATCHUP_MAX_SPAN_BLOCKS = 100_000
 const SEEN_LOG_MAX = 500
-/** Heartbeat cadence — only ticks while the tab is visible. */
+/** Heartbeat cadence - only ticks while the tab is visible. */
 const HEARTBEAT_MS = 30_000
 /** No inbound frame for this long (visible tab) => probe the socket. */
 const STALE_MS = 60_000
 /** Probe unanswered for this long => the socket is dead, reconnect. */
 const PROBE_TIMEOUT_MS = 10_000
-/** WebSocket.OPEN — hard-coded so it works with an injected fake ctor too. */
+/** WebSocket.OPEN - hard-coded so it works with an injected fake ctor too. */
 const WS_OPEN = 1
 
 function cursorKey(wallet: string): string {
@@ -380,7 +380,7 @@ export function createArcDepositWatcher(opts: {
     if (block <= lastProcessedBlock) return
     lastProcessedBlock = block
     if (!storage) return
-    try { storage.setItem(cursorKey(wallet), String(block)) } catch { /* private mode / quota — cursor is best-effort */ }
+    try { storage.setItem(cursorKey(wallet), String(block)) } catch { /* private mode / quota - cursor is best-effort */ }
   }
 
   function rememberLog(key: string): boolean {
@@ -456,7 +456,7 @@ export function createArcDepositWatcher(opts: {
    * Bounded `eth_getLogs` sweep from the persisted cursor to head, so a
    * reconnect (or a fresh mount that already has a cursor) never loses a
    * deposit the socket was down for. On a brand-new session (no cursor) this
-   * just pins the cursor to head — it deliberately does NOT backfill history,
+   * just pins the cursor to head - it deliberately does NOT backfill history,
    * that is fetchActivity()/onchainReceivedActivity.ts's job.
    */
   // Very slow network: the catch-up (log scans) waits until it's better, so
@@ -471,7 +471,7 @@ export function createArcDepositWatcher(opts: {
     try {
       head = await getHeadBlock()
     } catch (e) {
-      log('catch-up head lookup failed — proceeding to live subscription only', e)
+      log('catch-up head lookup failed - proceeding to live subscription only', e)
       return
     }
 
@@ -483,11 +483,11 @@ export function createArcDepositWatcher(opts: {
     if (from > head) return
 
     // If we somehow fell absurdly far behind (tab asleep for many hours), do
-    // not try to sweep it all from a browser — cover the most recent span and
+    // not try to sweep it all from a browser - cover the most recent span and
     // let the server pipeline reconcile the rest.
     if (head - from > CATCHUP_MAX_SPAN_BLOCKS) {
       const skipTo = head - CATCHUP_MAX_SPAN_BLOCKS
-      log(`catch-up span ${head - from} blocks exceeds cap — skipping to ${skipTo}, server pipeline covers the gap`)
+      log(`catch-up span ${head - from} blocks exceeds cap - skipping to ${skipTo}, server pipeline covers the gap`)
       from = skipTo
       persistCursor(skipTo - 1)
     }
@@ -504,12 +504,12 @@ export function createArcDepositWatcher(opts: {
             if (tx) collected.push(tx)
           }
         }
-        // Whole chunk scanned across all three streams — safe to advance.
+        // Whole chunk scanned across all three streams - safe to advance.
         persistCursor(chunkTo)
       } catch (e) {
         // Leave the cursor at the last fully-scanned block so the next
         // reconnect retries this range rather than skipping it.
-        log(`catch-up chunk ${chunkFrom}-${chunkTo} failed — will retry on next reconnect`, e)
+        log(`catch-up chunk ${chunkFrom}-${chunkTo} failed - will retry on next reconnect`, e)
         break
       }
     }
@@ -542,7 +542,7 @@ export function createArcDepositWatcher(opts: {
     const delay = RECONNECT_BACKOFF_MS[Math.min(reconnectAttempt, RECONNECT_BACKOFF_MS.length - 1)]
     reconnectAttempt++
     stats.reconnects++
-    log(`socket down — reconnecting in ${delay}ms (attempt ${reconnectAttempt})`)
+    log(`socket down - reconnecting in ${delay}ms (attempt ${reconnectAttempt})`)
     reconnectTimer = setTimeoutFn(() => {
       reconnectTimer = null
       if (!stopped) void connect()
@@ -550,7 +550,7 @@ export function createArcDepositWatcher(opts: {
   }
 
   function onMessage(evt: MessageEvent) {
-    // ANY inbound frame proves the socket is alive — clears a pending probe
+    // ANY inbound frame proves the socket is alive - clears a pending probe
     // and resets the staleness clock the heartbeat watches.
     lastMessageAt = now()
     probeAt = null
@@ -559,7 +559,7 @@ export function createArcDepositWatcher(opts: {
     try {
       msg = typeof evt.data === 'string' ? JSON.parse(evt.data) : JSON.parse(String(evt.data))
     } catch {
-      return // malformed frame — ignore
+      return // malformed frame - ignore
     }
 
     // eth_subscribe ack: { id, result: "<subId>" }
@@ -586,7 +586,7 @@ export function createArcDepositWatcher(opts: {
     }
   }
 
-  /** Immediate reconnect — drops any backoff wait. Used on wake / dead-probe. */
+  /** Immediate reconnect - drops any backoff wait. Used on wake / dead-probe. */
   function forceReconnect() {
     if (stopped) return
     if (reconnectTimer != null) { clearTimeoutFn(reconnectTimer); reconnectTimer = null }
@@ -600,7 +600,7 @@ export function createArcDepositWatcher(opts: {
       ws.send(JSON.stringify({ jsonrpc: '2.0', id: rpcId++, method: 'eth_blockNumber', params: [] }))
       probeAt = now()
     } catch (e) {
-      log('probe send failed — reconnecting', e)
+      log('probe send failed - reconnecting', e)
       forceReconnect()
     }
   }
@@ -613,7 +613,7 @@ export function createArcDepositWatcher(opts: {
       return
     }
     if (probeAt !== null && now() - probeAt > PROBE_TIMEOUT_MS) {
-      log('probe unanswered — socket is dead, reconnecting')
+      log('probe unanswered - socket is dead, reconnecting')
       forceReconnect()
       return
     }
@@ -624,10 +624,10 @@ export function createArcDepositWatcher(opts: {
   function onWake() {
     if (stopped || isHidden()) return
     if (!ws || ws.readyState !== WS_OPEN) {
-      forceReconnect() // dead or never-opened — reconnect (which runs catch-up)
+      forceReconnect() // dead or never-opened - reconnect (which runs catch-up)
       return
     }
-    // Socket still looks open after a freeze — reconcile the gap without
+    // Socket still looks open after a freeze - reconcile the gap without
     // tearing it down. catchUp() is cursor-guarded and dedup-guarded, so a
     // redundant call is cheap and safe.
     void catchUp()
@@ -644,7 +644,7 @@ export function createArcDepositWatcher(opts: {
     if (stopped) return
 
     if (!WS) {
-      log('no WebSocket implementation available — real-time layer disabled (REST fallback still active)')
+      log('no WebSocket implementation available - real-time layer disabled (REST fallback still active)')
       return
     }
 
@@ -749,7 +749,7 @@ export function createArcDepositWatcher(opts: {
 // until the ~2-4 min server row lands). Keyed by tx hash; capped so a long
 // session cannot grow it without bound.
 //
-// ── BUG FIX — the buffer used to be in-memory ONLY ──────────────────────────
+// ── BUG FIX - the buffer used to be in-memory ONLY ──────────────────────────
 // That made it survive an in-app remount (ActivityPage unmounting/mounting
 // while the SPA stays loaded) but NOT an actual browser refresh: a hard
 // reload wipes this module's state entirely, same as any other JS variable.
@@ -760,7 +760,7 @@ export function createArcDepositWatcher(opts: {
 // later": the socket sees the deposit and buffers it (instant); the
 // refresh wipes the buffer AND the block cursor has already advanced past
 // that deposit's block, so catch-up correctly does NOT re-report it
-// (avoiding a duplicate) — but nothing re-populates the buffer either, so
+// (avoiding a duplicate) - but nothing re-populates the buffer either, so
 // the row vanishes from the merge until either ArcScan's REST index
 // catches up (can lag a live socket log by a bit) or the durable Supabase
 // row lands from the server pipeline (~2-4 min), at which point it
@@ -793,13 +793,13 @@ function persistBuffer(wallet: string | null): void {
       at: recentDepositAt.get(key) ?? Date.now(),
     }))
     storage.setItem(bufferKey(wallet), JSON.stringify(entries))
-  } catch { /* private mode / quota — buffer persistence is best-effort, same as the cursor */ }
+  } catch { /* private mode / quota - buffer persistence is best-effort, same as the cursor */ }
 }
 
 /**
  * Restore `wallet`'s buffer from localStorage into the in-memory maps.
- * Called once when the watcher (re)starts for a wallet — see
- * ArcDepositWatcherController.start() — so a hard refresh doesn't lose a
+ * Called once when the watcher (re)starts for a wallet - see
+ * ArcDepositWatcherController.start() - so a hard refresh doesn't lose a
  * deposit that was already buffered before the page reloaded.
  */
 export function hydrateRecentDeposits(wallet: string): void {
@@ -820,7 +820,7 @@ export function hydrateRecentDeposits(wallet: string): void {
       recentDeposits.set(key, tx)
       recentDepositAt.set(key, entry.at)
     }
-  } catch { /* corrupt or absent entry — leave the buffer empty for this wallet, not a crash */ }
+  } catch { /* corrupt or absent entry - leave the buffer empty for this wallet, not a crash */ }
 }
 
 function rememberDeposit(wallet: string | null, tx: OnchainReceivedTx): void {
@@ -855,7 +855,7 @@ export function getRecentArcDeposits(): OnchainReceivedTx[] {
 
 /**
  * Test/lifecycle: drop everything (called on wallet change / logout).
- * Pass the wallet being torn down so its persisted buffer is cleared too —
+ * Pass the wallet being torn down so its persisted buffer is cleared too -
  * otherwise a wallet switch could hydrate the NEXT wallet's session with
  * the PREVIOUS wallet's buffered deposits if the two ever shared a key
  * (they don't, keys are per-wallet, but clearing on stop keeps a stale
@@ -880,7 +880,7 @@ export function clearRecentArcDeposits(wallet?: string | null): void {
 // later collapses to one notification, whichever path is first.
 
 /** Deposits older than this are left to HomePage's catch-up scan (which honours
- *  the notifications_cleared_at watermark) — so reopening a long-closed tab
+ *  the notifications_cleared_at watermark) - so reopening a long-closed tab
  *  does not replay a burst of stale "Received from" alerts. */
 const NOTIFY_MAX_AGE_MS = 5 * 60_000
 
@@ -920,7 +920,7 @@ async function fireDepositNotification(tx: OnchainReceivedTx): Promise<void> {
 
 /**
  * Invalidate the balance/history caches for a deposit, through the SAME
- * Phase-6 coordinator a real Supabase `activity` INSERT goes through — just
+ * Phase-6 coordinator a real Supabase `activity` INSERT goes through - just
  * ~3 min earlier. This is what makes the balance fresh on EVERY route, not
  * only on Home: an off-route deposit still drops the cached Arc balance, so
  * the next `readArcBalance` (HomePage mount, or its 30s poll) refetches
@@ -968,7 +968,7 @@ function handleDeposits(txs: OnchainReceivedTx[], source: 'live' | 'catchup'): v
       // Legacy event: useActivity's ArcScan-merge path and any other listener
       // already wired to it get nudged too.
       window.dispatchEvent(new CustomEvent('meshport:onchain-activity'))
-    } catch { /* CustomEvent unavailable — buffer + the calls below still run */ }
+    } catch { /* CustomEvent unavailable - buffer + the calls below still run */ }
     if (wallet) void invalidateCachesFor(wallet, tx)
     void fireDepositNotification(tx)
   }
@@ -985,7 +985,7 @@ class ArcDepositWatcherController {
 
   /**
    * Start (or re-target) the watcher for `walletAddress`. Idempotent per
-   * wallet. `deps` is a test seam only — production callers pass just the
+   * wallet. `deps` is a test seam only - production callers pass just the
    * address and get the real WebSocket / RPC / timers.
    */
   start(walletAddress: string | null | undefined, deps?: ArcDepositWatcherDeps): void {

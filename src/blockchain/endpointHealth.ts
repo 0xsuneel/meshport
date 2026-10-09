@@ -1,18 +1,18 @@
 /**
- * blockchain/endpointHealth.ts — live per-endpoint health scoring
+ * blockchain/endpointHealth.ts - live per-endpoint health scoring
  *
  * ── Where this comes from ───────────────────────────────────────────────────
  * This is a direct port of the scoring/quarantine logic that already runs in
  * production inside api/arc-rpc.js (the Arc proxy). That implementation has
- * been proven against real incidents — a deprecated Polygon endpoint, an
- * unreliable HyperEVM node, Arc RPC rate limits — but it only ever protected
+ * been proven against real incidents - a deprecated Polygon endpoint, an
+ * unreliable HyperEVM node, Arc RPC rate limits - but it only ever protected
  * Arc, because it lives inside one serverless route. The 21 external chains
  * the browser talks to directly had no equivalent: a flaky endpoint was
  * retried on every single call, forever.
  *
  * Extracting the algorithm here lets ProviderManager apply the same protection
  * to every chain, without changing how api/arc-rpc.js itself behaves (that
- * file is untouched — it keeps its own copy until Phase 6 unifies the proxy).
+ * file is untouched - it keeps its own copy until Phase 6 unifies the proxy).
  *
  * ── Behavior, unchanged from the original ───────────────────────────────────
  *  - success rate dominates ranking; latency is a capped secondary penalty, so
@@ -23,7 +23,7 @@
  *  - if EVERY endpoint is quarantined, fail open and try them all anyway rather
  *    than erroring out on stale quarantine state
  *
- * State is in-memory and per-tab. It resets on reload — acceptable for the same
+ * State is in-memory and per-tab. It resets on reload - acceptable for the same
  * reason it is in the proxy: the health picture is relearned within a few calls.
  */
 import type { EndpointHealth } from './types'
@@ -116,7 +116,7 @@ export function healthSnapshot(urls: readonly string[]): EndpointHealth[] {
   })
 }
 
-/** Test/diagnostic helper — clears all learned health state. */
+/** Test/diagnostic helper - clears all learned health state. */
 export function resetHealth(): void {
   stats.clear()
 }

@@ -11,7 +11,7 @@ interface SheetProps {
   fullHeight?: boolean
   /**
    * Kept for existing callers. Every Sheet now opens as a centred popup on
-   * all screen sizes — only the amount and passcode keypads still slide up
+   * all screen sizes - only the amount and passcode keypads still slide up
    * from the bottom (they don't use this component).
    */
   variant?: 'bottom' | 'center'

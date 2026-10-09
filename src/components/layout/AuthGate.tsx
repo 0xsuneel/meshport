@@ -15,7 +15,7 @@ export function AuthGate() {
     </div>
   )
 
-  // Not authenticated — show auth flow
+  // Not authenticated - show auth flow
   if (!isAuthenticated) {
     return withToast(<LoginPage />)
   }
@@ -25,6 +25,6 @@ export function AuthGate() {
     return withToast(<WalletSetupPage />)
   }
 
-  // Fully authenticated with wallet — show app
+  // Fully authenticated with wallet - show app
   return <Outlet />
 }

@@ -216,7 +216,7 @@ export async function createBulkPayIntent(
 // ── Post-broadcast tx_hash persistence (Phase 3 of the frontend integration) ──
 //
 // Called by the client IMMEDIATELY after sendTransaction returns, BEFORE
-// waitForTransactionReceipt — the exact ordering fix already made once,
+// waitForTransactionReceipt - the exact ordering fix already made once,
 // directly in BulkPayoutPage.tsx's own local bulkTxHash variable, now
 // extended to also persist server-side so the attempt survives a lost
 // process (tab close, network loss) the same local-variable fix alone
@@ -229,11 +229,11 @@ export type MarkSubmittedOutcome =
 /**
  * Persists a real, client-observed tx_hash onto an existing attempt,
  * transitioning it to SUBMITTED. This is the ONLY new server-side write
- * this integration adds beyond intent/attempt creation — everything after
+ * this integration adds beyond intent/attempt creation - everything after
  * this point (CONFIRMING/CONFIRMED/REVERTED/UNKNOWN) is the existing state
  * machine, unmodified. Does not verify the tx_hash against a real receipt
  * itself (that remains the existing confirmation/reconciliation
- * machinery's job) — this function's only responsibility is making sure a
+ * machinery's job) - this function's only responsibility is making sure a
  * real, client-known hash is never lost, exactly closing the bug traced in
  * docs/BULKPAY_TRANSACTION_INTENT_MIGRATION_AUDIT.md §1.
  */

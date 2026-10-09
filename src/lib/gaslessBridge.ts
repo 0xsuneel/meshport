@@ -4,7 +4,7 @@
 // MeshPortBridgeRouter (contracts/MeshPortBridgeRouter.sol):
 //
 //   1. ask /api/bridge-relay for a quote (MeshPort fee + CCTP maxFee)
-//   2. sign ONE USDC ReceiveWithAuthorization locally — the wallet key never
+//   2. sign ONE USDC ReceiveWithAuthorization locally - the wallet key never
 //      leaves the device, and the user needs no gas on the source chain
 //   3. /api/bridge-relay submits it; in one transaction the router pulls the
 //      USDC, pays MeshPort's fee, and burns the rest with Circle's
@@ -12,7 +12,7 @@
 //   4. the returned burn hash goes to the normal tracking (lib/cctpTracker)
 //
 // SECURITY: what gets signed is built HERE from values compiled into the app
-// — the router and USDC addresses, the chain id, Arc's domain, the user's
+// - the router and USDC addresses, the chain id, Arc's domain, the user's
 // own address as recipient and Circle's forwarding hook. Only the fee and
 // maxFee come from the server, and both are capped below. A wrong or
 // malicious server can therefore at most make the signature useless, never
@@ -81,7 +81,7 @@ export interface BridgeParams {
   salt: Hex
 }
 
-/** Same hash as MeshPortBridgeRouter.bridgeNonce() — the EIP-3009 nonce the user signs. */
+/** Same hash as MeshPortBridgeRouter.bridgeNonce() - the EIP-3009 nonce the user signs. */
 export function bridgeNonce(p: BridgeParams, chainId: number, router: Hex): Hex {
   return keccak256(encodeAbiParameters(
     [
@@ -103,8 +103,8 @@ export interface BridgeQuote {
 export function checkQuote(q: BridgeQuote, amount: bigint): { fee: bigint; maxFee: bigint } {
   const fee = BigInt(q.fee), maxFee = BigInt(q.maxFee)
   if (fee < 0n || maxFee < 0n) throw new Error('Invalid quote')
-  if (fee > MAX_FEE_ABS || Number(fee) > Number(amount) * MAX_FEE_SHARE) throw new Error('Network fee is unusually high right now — try again later')
-  if (Number(maxFee) > Number(amount) * MAX_CCTP_SHARE) throw new Error('Bridge fee is unusually high right now — try again later')
+  if (fee > MAX_FEE_ABS || Number(fee) > Number(amount) * MAX_FEE_SHARE) throw new Error('Network fee is unusually high right now - try again later')
+  if (Number(maxFee) > Number(amount) * MAX_CCTP_SHARE) throw new Error('Bridge fee is unusually high right now - try again later')
   if (maxFee >= amount) throw new Error('Amount too small to cover the bridge fee')
   return { fee, maxFee }
 }
@@ -126,7 +126,7 @@ async function fetchCheckedQuote(chainId: string, total: bigint): Promise<{ quot
 /**
  * The fees a gasless bridge of `amountUsdc` will charge, in USDC: `networkFee`
  * is MeshPort's (the relayer's source-chain gas), `bridgeFee` is the most
- * Circle can take on mint (usually a little less). Read-only — signs nothing.
+ * Circle can take on mint (usually a little less). Read-only - signs nothing.
  */
 export async function quoteGaslessBridge(chainId: string, amountUsdc: number): Promise<{ networkFee: number; bridgeFee: number }> {
   if (!gaslessRouter(chainId)) throw new Error('Gasless bridging is not available for this chain')
@@ -196,7 +196,7 @@ export async function bringFundsGasless(p: {
   })
   const out = await rr.json().catch(() => null) as { txHash?: Hex; error?: string; pending?: boolean } | null
   if (!rr.ok || !out?.txHash) throw new Error(out?.error || 'Relayer did not accept the transfer')
-  // The relayer gave up waiting for the receipt (slow chain) — wait for it
+  // The relayer gave up waiting for the receipt (slow chain) - wait for it
   // here, so "Burned" is only shown once the burn has really confirmed.
   if (out.pending) {
     p.onStatus?.('Confirming…')
@@ -204,8 +204,8 @@ export async function bringFundsGasless(p: {
     try {
       const { getClient } = await import('@/blockchain/ProviderManager')
       receipt = await getClient(p.chainId as any).waitForTransactionReceipt({ hash: out.txHash, timeout: 180_000 })
-    } catch { /* RPC trouble — the claim worker still tracks this burn */ }
-    if (receipt?.status === 'reverted') throw new Error('The transfer failed on-chain — nothing was moved')
+    } catch { /* RPC trouble - the claim worker still tracks this burn */ }
+    if (receipt?.status === 'reverted') throw new Error('The transfer failed on-chain - nothing was moved')
   }
   return { txHash: out.txHash, fee: Number(fee) / 1e6, maxFee: Number(maxFee) / 1e6 }
 }

@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { sendPushToUser, sendPushToAll, resolveAdminFromToken, resolveUserFromToken } from './_lib/push'
 import { timingSafeEqual } from 'crypto'
 
-// Only real browser push services may be stored as endpoints — the server
+// Only real browser push services may be stored as endpoints - the server
 // POSTs to every saved endpoint, so an arbitrary URL would be a blind SSRF.
 const PUSH_HOSTS = /(^|\.)(fcm\.googleapis\.com|android\.googleapis\.com|push\.services\.mozilla\.com|notify\.windows\.com|push\.apple\.com)$/i
 function isPushEndpoint(u: unknown): boolean {
@@ -26,13 +26,13 @@ const SERVICE_KEY = (
   ''
 ).trim()
 
-// ── action=subscribe — save a device's Web Push subscription ────────────────
+// ── action=subscribe - save a device's Web Push subscription ────────────────
 //
 // Fixed (/cso audit): this accepted a client-supplied userId with no check
 // at all, then wrote it with the service key (bypasses RLS). Anyone could
 // POST { userId: <victim>, subscription: { endpoint: <attacker's own> } }
 // and every push meant for that victim (payment received, trade updates,
-// dispute resolutions — real transaction content) would also be delivered
+// dispute resolutions - real transaction content) would also be delivered
 // to the attacker's device from then on. Same fix as handleSend below:
 // require the caller's own session to resolve to this exact userId.
 async function handleSubscribe(req: VercelRequest, res: VercelResponse) {
@@ -94,13 +94,13 @@ async function handleSubscribe(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// ── action=unsubscribe — remove a device's Web Push subscription ───────────
+// ── action=unsubscribe - remove a device's Web Push subscription ───────────
 // SECURITY/PRIVACY FIX: no server-side path existed to remove a
 // subscription row at all, and logout() never called anything to detach
 // one. Since push_subscriptions is keyed by the BROWSER's own endpoint
 // (device/service-worker level, not tied to any app-level "logged in"
 // concept), a subscription created while User A was logged in stayed
-// bound to User A's user_id indefinitely — including after User A logged
+// bound to User A's user_id indefinitely - including after User A logged
 // out. If User B then used the same device/browser and never happened to
 // re-trigger enablePushNotifications themselves, any push meant for User
 // A (payment received, trade update, etc.) would still be delivered to
@@ -112,7 +112,7 @@ async function handleUnsubscribe(req: VercelRequest, res: VercelResponse) {
   if (!SERVICE_KEY) return res.status(500).json({ error: 'Server misconfigured' })
 
   // The subscription's auth secret (known only to the browser that owns it)
-  // must match too — knowing an endpoint URL alone can't delete it.
+  // must match too - knowing an endpoint URL alone can't delete it.
   const { endpoint, auth } = req.body || {}
   if (typeof endpoint !== 'string' || !endpoint || typeof auth !== 'string' || !auth) return res.status(400).json({ error: 'Missing endpoint' })
 
@@ -139,7 +139,7 @@ async function handleUnsubscribe(req: VercelRequest, res: VercelResponse) {
 
 
 // Requires the caller's own session token to resolve to this exact userId
-// (see resolveUserFromToken) — otherwise this was a fully open endpoint:
+// (see resolveUserFromToken) - otherwise this was a fully open endpoint:
 // any client could POST an arbitrary userId + title/body and push a real
 // OS notification to that account's device, with nothing to stop pushing
 // to someone else's account.
@@ -168,15 +168,15 @@ async function handleSend(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// ── action=send-internal — server-to-server, shared-secret authorized ───────
+// ── action=send-internal - server-to-server, shared-secret authorized ───────
 // action=send requires a per-user session token, which is correct for
-// browser clients pushing to their own account — but trusted backend
+// browser clients pushing to their own account - but trusted backend
 // infrastructure (a Supabase edge function running on a schedule, with no
 // user ever "logged in" to attach a token from) has no session to offer.
 // This is for exactly that case: e.g. a background scan that detects
 // newly-claimable funds on an external chain and wants to notify the
 // affected user, with no browser tab involved at all. Authorized by a
-// shared secret instead — set PUSH_INTERNAL_SECRET in Vercel env vars and
+// shared secret instead - set PUSH_INTERNAL_SECRET in Vercel env vars and
 // have the calling server pass the same value, never exposed to any client.
 async function handleSendInternal(req: VercelRequest, res: VercelResponse) {
   const secret = (process.env.PUSH_INTERNAL_SECRET || '').trim()
@@ -200,7 +200,7 @@ async function handleSendInternal(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// ── action=broadcast — admin-only, notify every user ────────────────────────
+// ── action=broadcast - admin-only, notify every user ────────────────────────
 async function handleBroadcast(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers['authorization'] || ''
   const accessToken = Array.isArray(authHeader)
@@ -222,12 +222,12 @@ async function handleBroadcast(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // DELETE — removes a broadcast record. Genuinely removes it everywhere
+  // DELETE - removes a broadcast record. Genuinely removes it everywhere
   // the app still reads it from (this admin page's "Recent Broadcasts"
-  // list, AND the in-app feed every user sees — both read live from this
+  // list, AND the in-app feed every user sees - both read live from this
   // exact same admin_broadcasts table, see handleFeed above). What this
   // CANNOT do, and no server-side code ever could: recall the raw OS push
-  // notification that already appeared on someone's device — Web Push has
+  // notification that already appeared on someone's device - Web Push has
   // no channel for a server to reach back into a device's notification
   // tray/lock screen after delivery. That's a hard platform limitation,
   // not a gap this endpoint failed to close.
@@ -283,7 +283,7 @@ async function handleBroadcast(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// ── action=feed — public, read-only broadcast history for the in-app ───────
+// ── action=feed - public, read-only broadcast history for the in-app ───────
 // Notifications page. No admin auth required (this is intentionally public:
 // it only exposes title/body/created_at, the same content already pushed to
 // everyone). Lets the app show admin broadcasts inline even for users who

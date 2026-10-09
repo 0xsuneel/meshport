@@ -2,12 +2,12 @@ import { KeyRound, Fingerprint, QrCode, ShieldOff, MessageCircle, BadgeCheck } f
 import { Reveal, RevealGroup, staggerItem } from './Reveal'
 import { motion } from 'framer-motion'
 
-// How a MeshPort wallet stays yours — every sign-in method ends in the same
+// How a MeshPort wallet stays yours - every sign-in method ends in the same
 // place: a key made on your device that MeshPort never receives.
 const POINTS = [
-  { icon: KeyRound, title: 'Made on your device', desc: 'Your wallet key is generated in your browser. Create, import or sign in with Google or email — the key is never sent to MeshPort.' },
+  { icon: KeyRound, title: 'Made on your device', desc: 'Your wallet key is generated in your browser. Create, import or sign in with Google or email - the key is never sent to MeshPort.' },
   { icon: Fingerprint, title: 'Unlock with a passkey', desc: 'Google and email accounts unlock with Face ID, fingerprint or your device PIN, on any device your passkey syncs to.' },
-  { icon: QrCode, title: 'Recovery QR you keep', desc: 'A backup sealed with a password only you know. Scan it on a new phone to get your wallet back — useless to anyone without the password.' },
+  { icon: QrCode, title: 'Recovery QR you keep', desc: 'A backup sealed with a password only you know. Scan it on a new phone to get your wallet back - useless to anyone without the password.' },
   { icon: ShieldOff, title: 'Nothing to hand over', desc: 'MeshPort stores no private keys, no recovery passwords and no seed phrases. It can’t move your funds, and neither can anyone who breaks into it.' },
 ]
 
@@ -32,7 +32,7 @@ export function SelfCustody() {
           Your keys. Your money. Your messages.
         </h2>
         <p className="mt-4 text-[15.5px] leading-relaxed text-text-secondary">
-          Every MeshPort wallet is self-custodial — including the ones you open with Google or an email code. The key is made on your device, protected by your passkey and a Recovery QR only you can open, and never stored by MeshPort.
+          Every MeshPort wallet is self-custodial - including the ones you open with Google or an email code. The key is made on your device, protected by your passkey and a Recovery QR only you can open, and never stored by MeshPort.
         </p>
       </Reveal>
 

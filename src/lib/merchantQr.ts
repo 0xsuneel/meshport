@@ -1,4 +1,4 @@
-// Merchant QR — a payment QR any wallet understands (MetaMask, OKX, Rabby,
+// Merchant QR - a payment QR any wallet understands (MetaMask, OKX, Rabby,
 // Trust, Coinbase Wallet…): EIP-681 carries the NETWORK and the AMOUNT, so
 // the scanner opens its send screen on the right chain with the amount filled
 // in. The chains are the ones MeshPort watches for merchant payments (the
@@ -44,7 +44,7 @@ export const MERCHANT_QR_CHAINS: MerchantQrChain[] = [
 
 /**
  * Merchant QR networks: the other chains (Arc is in the MeshPort QR) that
- * have MeshPort's gasless CCTP router — merchants collect over CCTP only.
+ * have MeshPort's gasless CCTP router - merchants collect over CCTP only.
  * (If no router is configured, e.g. a local build, the full list is kept.)
  */
 const QR_EXTERNAL_ALL = MERCHANT_QR_CHAINS.filter(c => !c.native)
@@ -54,7 +54,7 @@ export const MERCHANT_QR_EXTERNAL: MerchantQrChain[] = QR_EXTERNAL_CCTP.length ?
 export const merchantQrChain = (id: string): MerchantQrChain => MERCHANT_QR_CHAINS.find(c => c.id === id) ?? MERCHANT_QR_CHAINS[0]
 
 /**
- * EIP-681 payment URI for `amount` USDC to `to` on `chainId` — the standard
+ * EIP-681 payment URI for `amount` USDC to `to` on `chainId` - the standard
  * wallets read (Trust, OKX, Coinbase Wallet, MetaMask, Rainbow…):
  *   Arc (native USDC):  ethereum:<to>@<chainId>?value=<amount × 10^18>
  *   ERC-20 USDC:        ethereum:<usdc>@<chainId>/transfer?address=<to>&uint256=<amount × 10^6>
@@ -81,7 +81,7 @@ export const MERCHANT_QR_NETWORK_NAME: Record<string, string> = {
 
 /**
  * MeshPort QR for a payment request: ONLY address + amount + network (no
- * link — wallets like OKX would show it). Any wallet fills the payment in;
+ * link - wallets like OKX would show it). Any wallet fills the payment in;
  * MeshPort's scanner finds the open order for that address and amount
  * (merchant-pay `find`) and opens it with amount and order fixed.
  */

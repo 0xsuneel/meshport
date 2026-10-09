@@ -1,7 +1,7 @@
 // src/lib/chainExplorers.ts
 //
 // Canonical per-chain block-explorer base URLs, sourced directly from
-// @circle-fin/bridge-kit's own shipped chain definitions (chains.mjs) —
+// @circle-fin/bridge-kit's own shipped chain definitions (chains.mjs) -
 // installed and inspected directly, not guessed or found via web search.
 //
 // This app previously had FOUR independent, hand-maintained copies of this
@@ -9,20 +9,20 @@
 // features/activity/ActivityPage.tsx, and an ad-hoc claim-side usage) that
 // had drifted out of sync with each other AND with the SDK's own values:
 //   - Optimism Sepolia: 3 of the 4 copies used 'sepolia-optimism.etherscan.io'
-//     — the real domain is 'sepolia-optimistic.etherscan.io'.
+//     - the real domain is 'sepolia-optimistic.etherscan.io'.
 //   - HyperEVM Testnet: multiple different URLs across the app
 //     (app.hyperliquid-testnet.xyz/explorer, testnet.purrsec.com). Confirmed
 //     directly against a real transaction that explore-testnet.hyperpc.app
-//     is the one that actually resolves correctly — the SDK-sourced value
+//     is the one that actually resolves correctly - the SDK-sourced value
 //     used here previously did not, despite matching bridge-kit's own data.
-//   - Unichain Sepolia: all copies pointed at sepolia.uniscan.xyz — the SDK's
+//   - Unichain Sepolia: all copies pointed at sepolia.uniscan.xyz - the SDK's
 //     real explorer is unichain-sepolia.blockscout.com.
-//   - Avalanche Fuji: all copies used snowtrace.io — SDK's canonical value
+//   - Avalanche Fuji: all copies used snowtrace.io - SDK's canonical value
 //     is subnets-test.avax.network/c-chain.
 //   - Injective Testnet: right domain, but every copy used the generic
-//     `/tx/{hash}` path — Injective's real path segment is `/transaction/`.
+//     `/tx/{hash}` path - Injective's real path segment is `/transaction/`.
 // A hash paired with a wrong base URL is just as broken a link as a wrong
-// hash — this file exists so there's exactly one place to fix, not four.
+// hash - this file exists so there's exactly one place to fix, not four.
 //
 // Import EXPLORER_BASE / ARC_EXPLORER and build links with explorerTxUrl()
 // rather than hand-rolling `${base}/tx/${hash}` at each call site.
@@ -30,7 +30,7 @@
 // MAINNET FIX: ARC_EXPLORER was hardcoded to the testnet explorer URL,
 // meaning every "View on ArcScan" link in the app (swap receipts, transfer
 // success cards, activity rows) pointed at testnet.arcscan.app even on a
-// mainnet deployment — so a real mainnet tx would open a blank "not found"
+// mainnet deployment - so a real mainnet tx would open a blank "not found"
 // page. Derived from VITE_NETWORK_ENV: mainnet uses arcscan.app,
 // testnet (and anything else) uses testnet.arcscan.app, same convention
 // ARC_CHAIN_KEY uses across ubClaim.ts/swapService.ts/ubFundRecovery.ts.
@@ -50,11 +50,11 @@ export const EXPLORER_BASE: Record<string, string> = {
   Optimism_Sepolia:     'https://sepolia-optimistic.etherscan.io',
   Polygon_Amoy_Testnet: 'https://amoy.polygonscan.com',
   // Claims key `source_chain` using this app's OLDER internal chain id
-  // (Polygon_Sepolia — see supabase/functions/_shared/chains.ts and
+  // (Polygon_Sepolia - see supabase/functions/_shared/chains.ts and
   // MultichainClaimPage.tsx's CHAIN_CONFIG), while transfers key it via
   // chain.sdk (Polygon_Amoy_Testnet, the real Circle SDK id). Same chain,
   // two different naming conventions already in use elsewhere in this
-  // codebase — alias both here rather than have one silently miss.
+  // codebase - alias both here rather than have one silently miss.
   Polygon_Sepolia:      'https://amoy.polygonscan.com',
   Avalanche_Fuji:       'https://subnets-test.avax.network/c-chain',
   HyperEVM_Testnet:     'https://explore-testnet.hyperpc.app',
@@ -76,7 +76,7 @@ export const EXPLORER_BASE: Record<string, string> = {
 }
 
 // A small number of chains use a different URL path segment for
-// transactions than the near-universal `/tx/{hash}` — each verified against
+// transactions than the near-universal `/tx/{hash}` - each verified against
 // the SDK's own explorerUrl template for that chain, not assumed.
 const TX_PATH_OVERRIDE: Record<string, string> = {
   Injective_Testnet: 'transaction',

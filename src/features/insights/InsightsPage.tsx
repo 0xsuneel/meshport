@@ -287,10 +287,10 @@ export function InsightsPage() {
     // Net flow
     const netFlow = recvVol - sentVol
 
-    // Active contacts — unique counterparties this period
+    // Active contacts - unique counterparties this period
     // toUsername/fromUsername live inside metadata, not as top-level fields
     // on ActivityRecord (confirmed against ActivityService.ts and the
-    // working reference implementation in ActivityPage.tsx) — checking
+    // working reference implementation in ActivityPage.tsx) - checking
     // t.toUsername directly was always undefined, so this never populated.
     const contactSet = new Set<string>()
     curr.forEach(t => {
@@ -311,14 +311,14 @@ export function InsightsPage() {
     const contactCounts: Record<string, number> = {}
     curr.forEach(t => {
       const meta = (t as any).metadata || {}
-      // Only count .arc usernames — skip raw wallet addresses
+      // Only count .arc usernames - skip raw wallet addresses
       const toName   = meta.toUsername   || ''
       const fromName = meta.fromUsername || ''
       if (toName   && !toName.startsWith('0x'))   contactCounts[toName]   = (contactCounts[toName]   || 0) + 1
       if (fromName && !fromName.startsWith('0x'))  contactCounts[fromName] = (contactCounts[fromName] || 0) + 1
     })
     const mostActiveContact = Object.entries(contactCounts)
-      .sort((a, b) => b[1] - a[1])[0]?.[0] || user?.username || '—'
+      .sort((a, b) => b[1] - a[1])[0]?.[0] || user?.username || '-'
 
     // Multichain usage - bridge=sent, deposit=sent to UB, claim=received
     const mcTxs = curr.filter(t => ['bridge','deposit','claim'].includes((t as any).activityType))
@@ -328,11 +328,11 @@ export function InsightsPage() {
     const mcRecvVol  = mcReceived.reduce((s: number, t: any) => s + (t.amount || 0), 0)
     const chainCounts: Record<string, number> = {}
     // Placeholder destination labels that don't represent a real external
-    // chain (Arc itself, or the internal Unified Balance ledger) — these
+    // chain (Arc itself, or the internal Unified Balance ledger) - these
     // must never be counted as "chain usage" in the breakdown below. Real
     // claim records store 'Arc_Testnet' (underscore) and deposit records
     // store 'Unified Balance' (see ActivityService.ts), not 'Arc Testnet'
-    // (space) — the old check only matched the space variant, so claims and
+    // (space) - the old check only matched the space variant, so claims and
     // deposits were leaking in as fake "chains" named Arc_Testnet / Unified
     // Balance in the top-chains list.
     const NON_EXTERNAL_CHAIN_LABELS = new Set(['Arc Testnet', 'Arc_Testnet', 'Unified Balance', 'Unknown'])
@@ -465,7 +465,7 @@ export function InsightsPage() {
         tooltip: counts[maxIdx] > 0 ? { label: `Week ${maxIdx + 1}`, value: counts[maxIdx] } : null }
     }
 
-    // monthly — last 12 months
+    // monthly - last 12 months
     const counts = Array(12).fill(0)
     all.forEach(tx => {
       const d = new Date(tx.createdAt || tx.timestamp)
@@ -635,7 +635,7 @@ export function InsightsPage() {
                   }}>
                     {(stats.mostActiveContact[0] || 'U').toUpperCase()}
                   </div>
-                  {/* One line with an ellipsis — breaking mid-name ("tester.ar / c") on narrow phones read as a typo. */}
+                  {/* One line with an ellipsis - breaking mid-name ("tester.ar / c") on narrow phones read as a typo. */}
                   <span style={{ minWidth: 0, fontSize: 12, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {stats.mostActiveContact.replace(/\.arc$/, '')}.arc
                   </span>

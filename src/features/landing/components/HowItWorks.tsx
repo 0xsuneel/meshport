@@ -22,7 +22,7 @@ export function HowItWorks() {
       </Reveal>
 
       <div className="relative mt-16">
-        {/* Connecting line — desktop only, animates in on scroll */}
+        {/* Connecting line - desktop only, animates in on scroll */}
         <div className="absolute left-0 right-0 top-6 hidden h-px lg:block" style={{ background: 'var(--border)' }}>
           <motion.div
             initial={{ scaleX: 0 }}

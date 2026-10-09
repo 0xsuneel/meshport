@@ -1,7 +1,7 @@
 import { MeshLoader } from './MeshLoader'
 
 /**
- * Full-screen loading state — the animated MeshPort logo (Pulse).
+ * Full-screen loading state - the animated MeshPort logo (Pulse).
  *
  * Used wherever the app would otherwise briefly render nothing (e.g. while
  * waiting on an auth/profile check on refresh). Uses CSS vars (--bg,

@@ -1,5 +1,5 @@
 /**
- * ContactsStore — lightweight local cache only.
+ * ContactsStore - lightweight local cache only.
  * Source of truth is Supabase (loaded in ContactsPage).
  * Storage key is wallet-scoped to prevent contact leakage between wallets.
  */

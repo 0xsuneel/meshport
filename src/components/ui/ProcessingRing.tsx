@@ -1,7 +1,7 @@
 // The one "payment in progress" loader used on every payment screen, so a
 // payment always looks the same while it's on its way: the animated MeshPort
 // logo (MeshLoader), or at tiny sizes a soft brand ring with a sweeping arc.
-// Pure CSS animation (see .mp-proc-* in index.css) — runs on the compositor
+// Pure CSS animation (see .mp-proc-* in index.css) - runs on the compositor
 // and keeps spinning smoothly even while the page is busy signing/sending.
 import { MeshLoader } from './MeshLoader'
 

@@ -1,5 +1,5 @@
 /**
- * TrackDetails.tsx — collapsible "View details" panel under Track Progress
+ * TrackDetails.tsx - collapsible "View details" panel under Track Progress
  * (CCTP and Unified Balance claims). Collapsed by default so the screen
  * stays the same compact size as the tracker; tapping "View details"
  * slides the rows open.

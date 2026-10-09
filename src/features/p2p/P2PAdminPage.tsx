@@ -1,7 +1,7 @@
 // features/p2p/P2PAdminPage.tsx
 //
 // P2P Admin console. Gated at the route level in App.tsx (see the
-// AdminGuard/isAdmin pattern already used for the rest of /admin/*) — this
+// AdminGuard/isAdmin pattern already used for the rest of /admin/*) - this
 // component itself does not re-check admin status, matching every other
 // admin screen in this codebase.
 
@@ -40,7 +40,7 @@ const COLORS = {
   text: 'var(--text-primary)', muted: 'var(--text-secondary)', border: 'var(--border)',
 }
 
-// One consistent header treatment for every major section on this page —
+// One consistent header treatment for every major section on this page -
 // previously only "Offers" had an icon + title + live dot; "Escrow
 // Controls" and "Active Trades" were unlabeled blocks that just started
 // with a button or a plain paragraph, making the page read as one long
@@ -65,7 +65,7 @@ export function P2PAdminPage() {
   const [banTarget, setBanTarget] = useState<string | null>(null)
   const [banReason, setBanReason] = useState('')
   const [disputeTarget, setDisputeTarget] = useState<P2PTrade | null>(null)
-  // Dispute chat viewer — lets an admin see the buyer/seller conversation,
+  // Dispute chat viewer - lets an admin see the buyer/seller conversation,
   // including any payment-proof screenshot, before deciding who to favor.
   // Previously "Resolve Dispute" only opened a blind note field with no
   // way to actually see what either side said or attached.
@@ -79,15 +79,15 @@ export function P2PAdminPage() {
   const [p2pToggling, setP2PToggling] = useState(false)
   const [offers, setOffers] = useState<P2POffer[]>([])
   const [offersLoading, setOffersLoading] = useState(true)
-  // How much of each offer is actually still tradeable right now — max_amount
+  // How much of each offer is actually still tradeable right now - max_amount
   // minus whatever's already been consumed by completed trades against it.
   // Not the same as escrowBalance (total ever deposited) or maxAmount (the
-  // advertised ceiling) — this is the number a real buyer/seller would see
+  // advertised ceiling) - this is the number a real buyer/seller would see
   // as "available", so it's what the admin view should show too.
   const [remainingByOffer, setRemainingByOffer] = useState<Map<string, number>>(new Map())
   const [offerTab, setOfferTab] = useState<'all' | 'buy' | 'sell'>('all')
   const [cancellingOfferIds, setCancellingOfferIds] = useState<Set<string>>(new Set())
-  // Live on-chain freeze state per offer — see adminFetchOfferFrozen's own
+  // Live on-chain freeze state per offer - see adminFetchOfferFrozen's own
   // comment on why this has to be read from the contract rather than a DB
   // column (p2p_offers has no admin_frozen field; the on-chain call IS the
   // whole action for offer-level freeze).
@@ -97,7 +97,7 @@ export function P2PAdminPage() {
   useEffect(() => { adminFetchEscrowPaused().then(setEscrowPaused) }, [])
   useEffect(() => { loadSettings() }, [loadSettings])
 
-  // Defaults to enabled if the row hasn't loaded yet or doesn't exist —
+  // Defaults to enabled if the row hasn't loaded yet or doesn't exist -
   // same "fail open" convention useSettingsStore.isEnabled() already uses
   // everywhere else, so a slow network never silently locks P2P out for
   // everyone before the admin even gets a chance to see the real state.
@@ -112,7 +112,7 @@ export function P2PAdminPage() {
     if (error) {
       showToastMessage(`Could not update: ${error}`, 'error')
     } else {
-      showToastMessage(next ? 'P2P marketplace enabled.' : 'P2P marketplace disabled — new offers/trades are blocked; existing trades can still be completed.', 'success')
+      showToastMessage(next ? 'P2P marketplace enabled.' : 'P2P marketplace disabled - new offers/trades are blocked; existing trades can still be completed.', 'success')
       useSettingsStore.setState((s) => ({
         settings: { ...s.settings, p2p_enabled: { ...(s.settings['p2p_enabled'] ?? { id: '', feature: 'p2p_enabled', category: 'p2p', label: 'P2P Marketplace', value: null, updated_at: new Date().toISOString() }), enabled: next } },
       }))
@@ -129,7 +129,7 @@ export function P2PAdminPage() {
   }
 
   useEffect(() => {
-    // A fresh dispute target means fresh reason/note/chat fields — never
+    // A fresh dispute target means fresh reason/note/chat fields - never
     // carry stale text from one trade's review into another's.
     setFreezeReason(''); setInvestigateReason(''); setResolveNote(''); setAdminChatInput('')
     if (!disputeTarget) { setDisputeMessages([]); return }
@@ -142,7 +142,7 @@ export function P2PAdminPage() {
   const load = async () => { setLoading(true); setTrades(await adminFetchAllActiveTrades()); setLoading(false) }
   useEffect(() => { load() }, [])
 
-  // Live updates — mirrors the Offers panel's own subscribeToAllOffers just
+  // Live updates - mirrors the Offers panel's own subscribeToAllOffers just
   // below: a payment marked sent, a release, a dispute, or a brand-new
   // trade should appear here instantly, and survive a tab switch, instead
   // of only ever refreshing on a manual reload.
@@ -162,7 +162,7 @@ export function P2PAdminPage() {
     const consumed = await fetchOfferConsumedAmounts(rows.map(o => o.id))
     setRemainingByOffer(new Map(rows.map(o => [o.id, offerRemainingAmount(o, consumed.get(o.id) ?? 0)])))
     // Only sell offers can ever be frozen (nothing's escrowed for a buy
-    // offer) — skip the on-chain read for the rest.
+    // offer) - skip the on-chain read for the rest.
     const sellOffers = rows.filter(o => o.offerType === 'sell')
     const frozenFlags = await Promise.all(sellOffers.map(o => adminFetchOfferFrozen(o)))
     setFrozenByOffer(new Map(sellOffers.map((o, i) => [o.id, frozenFlags[i]])))
@@ -235,19 +235,19 @@ export function P2PAdminPage() {
     showToastMessage('User banned from P2P marketplace', 'success')
   }
 
-  // ── Connected wallet — shared by EVERY privileged action on this page ──
+  // ── Connected wallet - shared by EVERY privileged action on this page ──
   // ROOT-CAUSE FIX: Emergency Pause, per-trade Freeze/Unfreeze, and
   // per-offer Freeze/Unfreeze used to sign with whatever wallet is logged
-  // into this dashboard's own MeshPort session (useAuthStore) — that's why
+  // into this dashboard's own MeshPort session (useAuthStore) - that's why
   // "Wallet not unlocked in this session" / "session's wallet isn't a
   // Pauser" banners used to exist here. Pauser/Investigator/Admin are
   // genuinely separate wallets from whoever is logged into this dashboard
-  // (see the contract's own file header on separation of duties) — so
+  // (see the contract's own file header on separation of duties) - so
   // that key was almost never actually a Pauser, and those actions
   // silently reverted on-chain (or did nothing at all if the session
   // wallet had no key). Every privileged action on this page now signs
-  // through the SAME connected browser wallet (MetaMask etc.) instead —
-  // one connect, reused for Pause/Freeze/dispute resolution — with live
+  // through the SAME connected browser wallet (MetaMask etc.) instead -
+  // one connect, reused for Pause/Freeze/dispute resolution - with live
   // role badges so it's obvious up front what this connected address can
   // actually do, instead of finding out via a revert.
   const [connectedWallet, setConnectedWallet] = useState<string | null>(null)
@@ -274,7 +274,7 @@ export function P2PAdminPage() {
     else showToastMessage('Wallet connection was rejected or failed.', 'error')
   }
 
-  // Lets whoever's using this console switch wallets — e.g. the Pauser
+  // Lets whoever's using this console switch wallets - e.g. the Pauser
   // connected the wrong account, or the browser is being handed to the
   // Investigator next without a full page reload. Each dispute stage's
   // own success handler already clears this automatically; this is the
@@ -284,13 +284,13 @@ export function P2PAdminPage() {
     setConnectedWallet(null)
   }
 
-  // ── Dispute resolution — real on-chain Pauser -> Investigator -> Admin
+  // ── Dispute resolution - real on-chain Pauser -> Investigator -> Admin
   // flow, all signed through the same connectedWallet above.
   const [disputeOnChain, setDisputeOnChain] = useState<OnChainTrade | null>(null)
   const [freezing, setFreezing] = useState(false)
   const [investigating, setInvestigating] = useState(false)
-  // Required reason text for each escalation step — Pauser forwarding to
-  // Investigator, and Investigator forwarding to Admin — so the next tier
+  // Required reason text for each escalation step - Pauser forwarding to
+  // Investigator, and Investigator forwarding to Admin - so the next tier
   // sees WHY this trade was escalated, not just that it was. Recorded as a
   // system message in the trade chat by adminFreezeDisputeViaWallet /
   // adminInvestigateDisputeViaWallet. Separate from resolveNote (Admin's
@@ -307,7 +307,7 @@ export function P2PAdminPage() {
     getTradeOnChain(disputeTarget.id).then(setDisputeOnChain)
   }, [disputeTarget])
 
-  // Proactive independence checks — mirrors what the contract itself
+  // Proactive independence checks - mirrors what the contract itself
   // enforces (investigate() reverts if msg.sender === frozenBy;
   // adminResolve() reverts if msg.sender === frozenBy or investigatedBy)
   // so the buttons below can be disabled BEFORE wasting a signature and
@@ -337,7 +337,7 @@ export function P2PAdminPage() {
     if (result.success) {
       setFreezeReason('')
       // ROOT-CAUSE FIX: without this, the Pauser's own wallet stayed
-      // "Connected" for the Investigate step too — the UI would show a
+      // "Connected" for the Investigate step too - the UI would show a
       // "wrong role, will revert" warning instead of clearly asking the
       // NEXT person (a genuinely different wallet) to connect. Clearing it
       // here is what actually makes the modal say "Investigator needs to
@@ -356,7 +356,7 @@ export function P2PAdminPage() {
     showToastMessage(result.message, result.success ? 'success' : 'error')
     if (result.success) {
       setInvestigateReason('')
-      // Same fix as doFreezeDispute — clear the Investigator's wallet so
+      // Same fix as doFreezeDispute - clear the Investigator's wallet so
       // the modal cleanly asks for Admin next, rather than showing a
       // stale "wrong role" warning under the Investigator's own address.
       setConnectedWallet(null)
@@ -398,11 +398,11 @@ export function P2PAdminPage() {
       <div style={{ padding: '0 16px', marginBottom: 10 }}>
         {/* ROOT-CAUSE FIX: Emergency Pause, trade Freeze/Unfreeze, and offer
             Freeze/Unfreeze used to sign with this dashboard's own MeshPort
-            session key — which is essentially never a Pauser (a genuinely
+            session key - which is essentially never a Pauser (a genuinely
             separate wallet by design, see the contract's own file header on
             separation of duties), so those actions silently reverted or did
             nothing. This card is the ONE wallet connection every privileged
-            action on this whole page now shares — Pause, per-trade Freeze,
+            action on this whole page now shares - Pause, per-trade Freeze,
             per-offer Freeze, and every step of dispute resolution below. */}
         <div style={{ marginBottom: 10, padding: 12, borderRadius: 12, background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
           {connectedWallet ? (
@@ -429,7 +429,7 @@ export function P2PAdminPage() {
               </div>
               {!connectedWalletIsPauser && (
                 <p style={{ fontSize: 11, color: COLORS.warning, margin: '6px 0 0', lineHeight: 1.4 }}>
-                  Not a Pauser — Emergency Pause and Freeze/Unfreeze (trades, offers) will revert. Disconnect and connect the Pauser's own wallet, or grant this one Pauser via the Role Managers panel below.
+                  Not a Pauser - Emergency Pause and Freeze/Unfreeze (trades, offers) will revert. Disconnect and connect the Pauser's own wallet, or grant this one Pauser via the Role Managers panel below.
                 </p>
               )}
             </div>
@@ -453,10 +453,10 @@ export function P2PAdminPage() {
           }}
         >
           {escrowPaused ? <PlayCircle size={16} /> : <PauseCircle size={16} />}
-          {pauseToggling ? 'Updating…' : escrowPaused ? 'Escrow Paused — Tap to Resume' : 'Emergency Pause Escrow'}
+          {pauseToggling ? 'Updating…' : escrowPaused ? 'Escrow Paused - Tap to Resume' : 'Emergency Pause Escrow'}
         </button>
         {/*
-          Two different controls, two different scopes — worth keeping
+          Two different controls, two different scopes - worth keeping
           visually distinct so an admin doesn't reach for the wrong one:
           - Emergency Pause Escrow (above) = hard stop, contract-level. Blocks
             deposits/releases/refunds for EVERYONE, including trades already
@@ -478,7 +478,7 @@ export function P2PAdminPage() {
           }}
         >
           <Power size={16} />
-          {p2pToggling ? 'Updating…' : !settingsLoaded ? 'Loading…' : p2pEnabled ? 'P2P Marketplace Enabled — Tap to Disable' : 'P2P Marketplace Disabled — Tap to Enable'}
+          {p2pToggling ? 'Updating…' : !settingsLoaded ? 'Loading…' : p2pEnabled ? 'P2P Marketplace Enabled - Tap to Disable' : 'P2P Marketplace Disabled - Tap to Enable'}
         </button>
       </div>
 
@@ -519,7 +519,7 @@ export function P2PAdminPage() {
               <button
                 onClick={() => doCancel(t)}
                 disabled={cancellingIds.has(t.id)}
-                title={(t.status === 'payment_sent' || t.offerType === 'buy') && !t.adminFrozen && t.disputeStatus !== 'open' ? 'Freeze or open a dispute first — the counterparty already fulfilled their obligation' : undefined}
+                title={(t.status === 'payment_sent' || t.offerType === 'buy') && !t.adminFrozen && t.disputeStatus !== 'open' ? 'Freeze or open a dispute first - the counterparty already fulfilled their obligation' : undefined}
                 style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.error, fontSize: 11.5, fontWeight: 600, opacity: cancellingIds.has(t.id) ? 0.6 : 1 }}
               >
                 <XCircle size={12} /> {cancellingIds.has(t.id) ? 'Cancelling…' : 'Cancel Trade'}
@@ -538,7 +538,7 @@ export function P2PAdminPage() {
         ))}
       </div>
 
-      {/* ── OFFERS — live, all statuses, both types ─────────────────────────── */}
+      {/* ── OFFERS - live, all statuses, both types ─────────────────────────── */}
       <div style={{ borderTop: `1px solid ${COLORS.border}`, marginTop: 8 }}>
         <SectionHeader icon={<Tag size={16} color={COLORS.text} />} title="Offers" live />
       </div>
@@ -602,7 +602,7 @@ export function P2PAdminPage() {
                   <button
                     onClick={() => doCancelOffer(o)}
                     disabled={o.status !== 'active' || cancellingOfferIds.has(o.id)}
-                    title={o.lockedByTradeId ? 'This offer has an active trade — cancel that trade first' : (remainingByOffer.get(o.id) ?? 0) > 0 ? 'This offer still holds escrow — only the seller\'s own wallet can withdraw it on P2PMeshportEscrowV2; Freeze Offer instead to block new trades' : undefined}
+                    title={o.lockedByTradeId ? 'This offer has an active trade - cancel that trade first' : (remainingByOffer.get(o.id) ?? 0) > 0 ? 'This offer still holds escrow - only the seller\'s own wallet can withdraw it on P2PMeshportEscrowV2; Freeze Offer instead to block new trades' : undefined}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10,
                       border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.error, fontSize: 11.5, fontWeight: 600,
@@ -691,7 +691,7 @@ export function P2PAdminPage() {
               })}
             </div>
 
-            {/* Admin can talk directly to both parties at any point in the dispute — e.g. asking for proof of payment. Sent as a clearly-labeled Admin message (see the chat renderer above), not a plain system log line. */}
+            {/* Admin can talk directly to both parties at any point in the dispute - e.g. asking for proof of payment. Sent as a clearly-labeled Admin message (see the chat renderer above), not a plain system log line. */}
             <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
               <input value={adminChatInput} onChange={e => setAdminChatInput(e.target.value)} placeholder="Message both parties (e.g. ask for proof of payment)…"
                 onKeyDown={e => { if (e.key === 'Enter') doSendAdminMessage() }}
@@ -702,14 +702,14 @@ export function P2PAdminPage() {
               </button>
             </div>
 
-            {/* ── Real on-chain dispute resolution — Pauser forwards to Investigator, Investigator forwards to Admin, each a genuinely different connected wallet with a required reason ── */}
+            {/* ── Real on-chain dispute resolution - Pauser forwards to Investigator, Investigator forwards to Admin, each a genuinely different connected wallet with a required reason ── */}
             <div style={{ background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12, marginBottom: 12 }}>
               <p style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
-                On-chain resolution — {disputeOnChain?.state ?? (disputeTarget.adminFrozen ? 'Frozen' : 'Active')}
+                On-chain resolution - {disputeOnChain?.state ?? (disputeTarget.adminFrozen ? 'Frozen' : 'Active')}
               </p>
 
               {!disputeOnChain?.state ? (
-                <p style={{ fontSize: 12, color: COLORS.warning }}>Could not read this trade's on-chain state — make sure it's registered on-chain before continuing.</p>
+                <p style={{ fontSize: 12, color: COLORS.warning }}>Could not read this trade's on-chain state - make sure it's registered on-chain before continuing.</p>
               ) : (
                 <>
                   {connectedWallet ? (
@@ -723,19 +723,19 @@ export function P2PAdminPage() {
                         </button>
                       </div>
                       {(disputeOnChain.state === 'Active' || disputeOnChain.state === 'None') && !connectedWalletIsPauser && (
-                        <p style={{ fontSize: 11, color: COLORS.warning, marginTop: 2 }}>This wallet doesn't hold the Pauser role — the transaction will revert. Tap "Switch wallet" and connect the Pauser's own wallet.</p>
+                        <p style={{ fontSize: 11, color: COLORS.warning, marginTop: 2 }}>This wallet doesn't hold the Pauser role - the transaction will revert. Tap "Switch wallet" and connect the Pauser's own wallet.</p>
                       )}
                       {disputeOnChain.state === 'Frozen' && !connectedWalletIsInvestigator && (
-                        <p style={{ fontSize: 11, color: COLORS.warning, marginTop: 2 }}>This wallet doesn't hold the Investigator role — the transaction will revert. Tap "Switch wallet" and connect a DIFFERENT wallet holding the Investigator role.</p>
+                        <p style={{ fontSize: 11, color: COLORS.warning, marginTop: 2 }}>This wallet doesn't hold the Investigator role - the transaction will revert. Tap "Switch wallet" and connect a DIFFERENT wallet holding the Investigator role.</p>
                       )}
                       {disputeOnChain.state === 'Frozen' && connectedWalletIsInvestigator && sameAsFreezer && (
-                        <p style={{ fontSize: 11, color: COLORS.warning, marginTop: 2 }}>This is the SAME wallet that froze this trade — the contract requires a different Investigator. Tap "Switch wallet".</p>
+                        <p style={{ fontSize: 11, color: COLORS.warning, marginTop: 2 }}>This is the SAME wallet that froze this trade - the contract requires a different Investigator. Tap "Switch wallet".</p>
                       )}
                       {disputeOnChain.state === 'Investigated' && !connectedWalletIsAdmin && (
-                        <p style={{ fontSize: 11, color: COLORS.warning, marginTop: 2 }}>This wallet isn't the contract's Admin — the transaction will revert. Tap "Switch wallet" and connect the Admin wallet.</p>
+                        <p style={{ fontSize: 11, color: COLORS.warning, marginTop: 2 }}>This wallet isn't the contract's Admin - the transaction will revert. Tap "Switch wallet" and connect the Admin wallet.</p>
                       )}
                       {disputeOnChain.state === 'Investigated' && connectedWalletIsAdmin && (sameAsFreezer || sameAsInvestigator) && (
-                        <p style={{ fontSize: 11, color: COLORS.warning, marginTop: 2 }}>Admin must be different from whoever froze AND whoever investigated this trade — this wallet already acted on it. Tap "Switch wallet".</p>
+                        <p style={{ fontSize: 11, color: COLORS.warning, marginTop: 2 }}>Admin must be different from whoever froze AND whoever investigated this trade - this wallet already acted on it. Tap "Switch wallet".</p>
                       )}
                     </div>
                   ) : (
@@ -747,7 +747,7 @@ export function P2PAdminPage() {
                   {(disputeOnChain.state === 'Active' || disputeOnChain.state === 'None') && (
                     <>
                       <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 8 }}>
-                        Step 1: Pauser review. Freeze this trade and forward it to an Investigator — a reason is required so the Investigator knows why it was escalated.
+                        Step 1: Pauser review. Freeze this trade and forward it to an Investigator - a reason is required so the Investigator knows why it was escalated.
                       </p>
                       <textarea value={freezeReason} onChange={e => setFreezeReason(e.target.value)} placeholder="Reason for freezing / forwarding to Investigator…" rows={2}
                         style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 9, fontSize: 12.5, marginBottom: 8, boxSizing: 'border-box', fontFamily: 'inherit' }} />
@@ -762,7 +762,7 @@ export function P2PAdminPage() {
                     <>
                       <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 8 }}>
                         Step 2: Investigate. Connected wallet must hold the Investigator role and be
-                        different from whoever froze this trade — the contract itself enforces this.
+                        different from whoever froze this trade - the contract itself enforces this.
                         A reason is required so Admin knows why this was forwarded.
                       </p>
                       <textarea value={investigateReason} onChange={e => setInvestigateReason(e.target.value)} placeholder="Reason for this recommendation…" rows={2}
@@ -805,7 +805,7 @@ export function P2PAdminPage() {
 
                   {disputeOnChain.state === 'Cancelled' && (
                     <p style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.muted }}>
-                      This trade was cancelled by its own seller (cancelTrade) before this dispute needed resolving — nothing left to freeze, investigate, or resolve.
+                      This trade was cancelled by its own seller (cancelTrade) before this dispute needed resolving - nothing left to freeze, investigate, or resolve.
                     </p>
                   )}
                 </>

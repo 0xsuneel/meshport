@@ -21,7 +21,7 @@ export function useHideOnScroll(ref: RefObject<HTMLElement>, keepVisible = false
       let next = current
       if (top < 24) next = false
       else if (delta > 8) next = true
-      // Near the bottom the list's height changes can nudge the scroll back —
+      // Near the bottom the list's height changes can nudge the scroll back -
       // only a real scroll up shows the box there.
       else if (delta < -8 && el.scrollHeight - el.clientHeight - top > 30) next = false
       if (next !== current) {

@@ -3,11 +3,11 @@ import { classifyProxyConnectionFailure } from './swapProxyErrors'
 
 // Regression guard for "swap shows failed even though the transaction
 // completed": a dropped connection to /api/swap-proxy (client AbortController
-// firing, or fetch() itself throwing — e.g. Vercel's function execution
+// firing, or fetch() itself throwing - e.g. Vercel's function execution
 // limit killing the request mid-swap) can happen AFTER kit.swap() already
 // broadcast on-chain. The thrown error's message text already said "it may
 // still complete... to avoid a double spend", but the `.isUncertain` flag
-// SwapPage's executeSwap catch actually reads was never set — so every
+// SwapPage's executeSwap catch actually reads was never set - so every
 // connection failure during a swap landed on the hard "Swap Failed" screen
 // (and wrote a false 'failed' Activity row) regardless of what the message
 // said.
@@ -26,7 +26,7 @@ describe('classifyProxyConnectionFailure', () => {
     expect(isUncertain).toBe(true)
   })
 
-  it('does NOT mark an estimate-action failure as uncertain — nothing broadcasts during a quote', () => {
+  it('does NOT mark an estimate-action failure as uncertain - nothing broadcasts during a quote', () => {
     const abortErr = Object.assign(new Error('aborted'), { name: 'AbortError' })
     const networkErr = new TypeError('Failed to fetch')
     expect(classifyProxyConnectionFailure('estimate', abortErr).isUncertain).toBe(false)

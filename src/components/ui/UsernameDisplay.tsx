@@ -18,7 +18,7 @@ const sizeMap = {
 
 /**
  * Renders   sunil.arc ✅   everywhere in MeshPort.
- * Accepts: "sunil", "sunil.arc", "@sunil", "rahul.arc" — normalises all.
+ * Accepts: "sunil", "sunil.arc", "@sunil", "rahul.arc" - normalises all.
  * For non-MeshPort names (e.g. "Merchant Store"), shows as-is with badge.
  */
 export function UsernameDisplay({

@@ -30,17 +30,17 @@ function toMeshPortUser(u: DbUser): MeshPortUser {
   }
 }
 
-// ─── Register (called after username claim — actual save is in upsertUserProfile)
+// ─── Register (called after username claim - actual save is in upsertUserProfile)
 export async function registerUsername(params: {
   username: string
   walletAddress: string
   displayName: string
   email?: string
 }): Promise<void> {
-  // Nothing to do here — upsertUserProfile in ClaimUsernamePage handles Supabase save
+  // Nothing to do here - upsertUserProfile in ClaimUsernamePage handles Supabase save
 }
 
-// ─── Search — always Supabase, no cache ──────────────────────────────────────
+// ─── Search - always Supabase, no cache ──────────────────────────────────────
 export async function searchMeshPortUsersAsync(
   query: string,
   excludeUserId?: string
@@ -49,7 +49,7 @@ export async function searchMeshPortUsersAsync(
   return results.map(toMeshPortUser)
 }
 
-// Sync stub — returns empty, async version always used
+// Sync stub - returns empty, async version always used
 export function searchMeshPortUsers(_query: string): MeshPortUser[] {
   return []
 }

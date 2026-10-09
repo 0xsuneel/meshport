@@ -51,7 +51,7 @@ export function MaintenancePage() {
             <div>
               <p style={{ margin: 0, fontWeight: 700, color: 'var(--text-primary)', fontSize: 15 }}>Maintenance Mode</p>
               <p style={{ margin: '2px 0 0', fontSize: 12, color: enabled ? 'var(--warning)' : 'var(--text-secondary)', fontWeight: 600 }}>
-                {enabled ? 'ON — app is locked for all users' : 'OFF — app is live'}
+                {enabled ? 'ON - app is locked for all users' : 'OFF - app is live'}
               </p>
             </div>
           </div>

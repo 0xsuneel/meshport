@@ -1,13 +1,13 @@
 /**
- * blockchain/ProviderManager.ts — one provider per chain, for the whole app
+ * blockchain/ProviderManager.ts - one provider per chain, for the whole app
  *
  * Phase 1 of docs/BLOCKCHAIN_ARCHITECTURE_PROPOSAL.md (§6).
  *
  * ── What it replaces ────────────────────────────────────────────────────────
  * The audit found nine separate provider-construction strategies for Arc alone,
  * spread across arcService.ts, chain.ts, externalChainBalances.ts,
- * realtimeDeposits.ts (since removed — Phase 5/6 superseded it), the Multichain
- * pages and rewards.ts — with three module
+ * realtimeDeposits.ts (since removed - Phase 5/6 superseded it), the Multichain
+ * pages and rewards.ts - with three module
  * caches that never share an instance. Each construction re-does discovery and
  * keeps its own connection. This module is the single place a provider is built.
  *
@@ -31,7 +31,7 @@
  *
  * ── Batching is deliberately NOT enabled yet ────────────────────────────────
  * viem's `batch: { multicall: true }` requires chain.contracts.multicall3, which
- * is not configured for Arc or for the 21 external chains — enabling it would
+ * is not configured for Arc or for the 21 external chains - enabling it would
  * make reads throw ChainDoesNotSupportContract. JSON-RPC array batching is also
  * off, because Arc traffic flows through our own /api/arc-rpc proxy, which
  * forwards a single JSON-RPC body and has not been verified against array
@@ -56,7 +56,7 @@ import type { ChainId } from './types'
 /**
  * Endpoints for a chain, health-ordered with quarantined ones EXCLUDED.
  *
- * For one-shot calls (rpcCall), which re-evaluate health on every invocation —
+ * For one-shot calls (rpcCall), which re-evaluate health on every invocation -
  * so an endpoint that recovers is picked up on the very next call.
  */
 export function endpointsFor(chain: ChainId): string[] {
@@ -70,7 +70,7 @@ export function endpointsFor(chain: ChainId): string[] {
  * matters: those clients are cached for the lifetime of the tab, and their
  * transport list is fixed at construction. Handing them a quarantine-filtered
  * list would permanently exclude any endpoint that happened to be quarantined
- * at that moment — even hours later, after it recovered — silently shrinking
+ * at that moment - even hours later, after it recovered - silently shrinking
  * the failover pool for the whole session. Quarantine is meant to be a
  * seconds-to-minutes backoff, not a life sentence.
  *
@@ -101,7 +101,7 @@ function chainIdFor(chain: ChainId): number | undefined {
  * Six chains have no verified id (see the block comment in chains.ts);
  * undefined lets viem operate chain-agnostically, which is fine for reads and
  * matches what the Multichain pages already do. Never substitute a placeholder
- * id — a wrong id is far worse than an absent one.
+ * id - a wrong id is far worse than an absent one.
  */
 function viemChainFor(chain: ChainId, rpcs: string[]): Chain | undefined {
   if (isArc(chain)) {
@@ -133,7 +133,7 @@ function instrumentedHttp(url: string, chain: ChainId) {
   return http(url, {
     timeout: 10_000,
     // viem's own retry is disabled: fallback() below already handles failover,
-    // and layering two retry policies multiplies requests during an outage —
+    // and layering two retry policies multiplies requests during an outage -
     // exactly the amplification this migration is meant to remove.
     retryCount: 0,
     onFetchRequest() { countRequest(chain, 'rpc') },
@@ -145,7 +145,7 @@ function instrumentedHttp(url: string, chain: ChainId) {
  * rather than written as the bare `PublicClient` interface: viem's generics make
  * the returned object structurally narrower than that interface, so annotating
  * it as `PublicClient` forces a cast that TypeScript rejects outright
- * (TS2352 — the two types don't sufficiently overlap, because getBlock's return
+ * (TS2352 - the two types don't sufficiently overlap, because getBlock's return
  * shape differs). Inferring the type keeps full method typing with no cast.
  */
 type ArcPublicClient = ReturnType<typeof createPublicClient>
@@ -153,7 +153,7 @@ type ArcPublicClient = ReturnType<typeof createPublicClient>
 const viemClients = new Map<ChainId, ArcPublicClient>()
 
 /**
- * The app's read client for a chain. One instance per chain, cached — connection
+ * The app's read client for a chain. One instance per chain, cached - connection
  * reuse only pays off if the client is shared, which is precisely what the old
  * per-call construction prevented.
  */
@@ -161,7 +161,7 @@ export function getClient(chain: ChainId): ArcPublicClient {
   const cached = viemClients.get(chain)
   if (cached) return cached
 
-  // Full pool, health-ORDERED but not health-FILTERED — see allEndpointsFor.
+  // Full pool, health-ORDERED but not health-FILTERED - see allEndpointsFor.
   const rpcs = orderEndpoints(allEndpointsFor(chain))
   const client = createPublicClient({
     chain: viemChainFor(chain, rpcs),
@@ -180,7 +180,7 @@ const ethersProviders = new Map<ChainId, Promise<EthersProvider>>()
  * ethers provider for the Circle AppKit adapter paths, which cannot take a viem
  * client. Async because ethers is code-split.
  *
- * The PROMISE is cached, not the resolved value — so concurrent callers during
+ * The PROMISE is cached, not the resolved value - so concurrent callers during
  * the first load share one import and one construction rather than racing to
  * build duplicates, which is the very problem this class is here to remove.
  */
@@ -190,7 +190,7 @@ export function getEthersProvider(chain: ChainId): Promise<EthersProvider> {
 
   const p = (async () => {
     const { JsonRpcProvider, FallbackProvider } = await import('ethers')
-    // Full pool here too — same reasoning as getClient: this provider is cached
+    // Full pool here too - same reasoning as getClient: this provider is cached
     // for the session, so it must not inherit a momentary quarantine.
     const rpcs = orderEndpoints(allEndpointsFor(chain))
     const id = chainIdFor(chain)
@@ -205,7 +205,7 @@ export function getEthersProvider(chain: ChainId): Promise<EthersProvider> {
     if (rpcs.length === 1) {
       return new JsonRpcProvider(rpcs[0], network as any, opts as any)
     }
-    // quorum: 1 — this is failover, not multi-node consensus.
+    // quorum: 1 - this is failover, not multi-node consensus.
     return new FallbackProvider(
       rpcs.map((url, i) => ({
         provider: new JsonRpcProvider(url, network as any, opts as any),
@@ -226,7 +226,7 @@ export function getEthersProvider(chain: ChainId): Promise<EthersProvider> {
  * Resolves with the first fulfilled promise; rejects only if all reject.
  *
  * Hand-rolled instead of Promise.any because this project targets ES2020
- * (see tsconfig lib) and Promise.any is ES2021 — using it would fail typecheck
+ * (see tsconfig lib) and Promise.any is ES2021 - using it would fail typecheck
  * and, depending on the browser floor, fail at runtime on older mobile Safari.
  */
 function firstSuccess<T>(makers: Array<() => Promise<T>>): Promise<T> {
@@ -255,7 +255,7 @@ function firstSuccess<T>(makers: Array<() => Promise<T>>): Promise<T> {
  * in one round trip, and a degraded one loses the race rather than blocking, so
  * there's no sequential-timeout tax.
  *
- * Safe for reads and for eth_sendRawTransaction alike — broadcasting the same
+ * Safe for reads and for eth_sendRawTransaction alike - broadcasting the same
  * signed transaction to several nodes is a standard pattern and the network
  * dedupes it (same reasoning as the proxy's own comment).
  */
@@ -305,7 +305,7 @@ export async function probeChain(chain: ChainId): Promise<number | null> {
 
 /**
  * Drops cached instances so the next call rebuilds with current health order and
- * a fresh connection. For a confirmed network change or a manual reset — NOT for
+ * a fresh connection. For a confirmed network change or a manual reset - NOT for
  * routine failover, which fallback() already handles without discarding.
  */
 export function resetProviders(chain?: ChainId): void {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { progressFromIris, CCTP_DOMAINS } from './cctpTracker'
 
-describe('progressFromIris — CCTP progress read from Circle', () => {
+describe('progressFromIris - CCTP progress read from Circle', () => {
   it('no Iris record yet → still burning', () => {
     expect(progressFromIris(null).stage).toBe('burning')
   })

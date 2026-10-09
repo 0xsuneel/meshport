@@ -55,7 +55,7 @@ async function recentChainEvents(supabase: SupabaseClient, since: string): Promi
     .select('wallet_address, tx_hash, event_type, block_number, status, created_at, metadata')
     .in('event_type', ['deposit_detected', 'transfer_detected'])
     // Phase 3 Fix 4: only confirmed events are a like-for-like comparison
-    // against activity (always confirmed, credited rows) — a 'pending' event
+    // against activity (always confirmed, credited rows) - a 'pending' event
     // can still be reorged away, and a 'reorged' one is explicitly not real.
     // Previously this query had NO status filter at all (found during the
     // Phase 3 forensic audit, docs/PHASE_3_REAL_STATE_AUDIT.md §12 item 1).
@@ -77,7 +77,7 @@ async function recentWorkerDeposits(supabase: SupabaseClient, since: string): Pr
   // tx_hash='recv_<hash>'. Phase 3 Fix 3 also fetches swap/bulk/p2p_purchase/
   // p2p_refund rows (unprefixed tx_hash) in the SAME query, so compareDeposits
   // can classify an indexer event that matches one of THOSE as
-  // ACCOUNTED_FOR_OTHER_ACTIVITY instead of a false indexer_only — see
+  // ACCOUNTED_FOR_OTHER_ACTIVITY instead of a false indexer_only - see
   // docs/PHASE_3_REAL_STATE_AUDIT.md §7/§8 for the live-traced evidence this
   // was built from. Previously this query only ever selected activity_type
   // = 'receive'.
@@ -142,7 +142,7 @@ async function persistReport(
       externalExcluded: r.externalExcluded ?? 0,
       // Same rationale for the Circle Kit/CCTP internal-contract exclusion.
       internalExcluded: r.internalExcluded ?? 0,
-      // Phase 3 Fix 3 — the refined classification, persisted in full so a
+      // Phase 3 Fix 3 - the refined classification, persisted in full so a
       // historical report row shows the same breakdown the live response
       // does, not just the raw pre-Fix-3 counts.
       accountedForOtherActivity: r.accountedForOtherActivity,
@@ -169,7 +169,7 @@ async function persistReport(
  * that were never MeshPort wallets. Confirmed live: 0x70e3fb28…af8e has two
  * activity rows and appears nowhere else in the database.
  *
- * NOT `wallet_vault` either: it holds 8 rows against users' 9 — a strict subset,
+ * NOT `wallet_vault` either: it holds 8 rows against users' 9 - a strict subset,
  * so it would wrongly exclude a real registered wallet.
  *
  * Returns null on error rather than an empty set. An empty set would filter
@@ -235,9 +235,9 @@ export async function runCompare(
     indexerOnlyKeys: r.indexerOnlyKeys,
     externalExcluded: r.externalExcluded ?? 0,
     internalExcluded: r.internalExcluded ?? 0,
-    // Phase 3 Fix 3. TRUE_INDEXER_ONLY is the metric that matters — see
+    // Phase 3 Fix 3. TRUE_INDEXER_ONLY is the metric that matters - see
     // docs/PHASE_3_REAL_STATE_AUDIT.md's final verdict and
-    // docs/PHASE_3_FIXES_APPLIED.md — not the raw indexerOnly above.
+    // docs/PHASE_3_FIXES_APPLIED.md - not the raw indexerOnly above.
     accountedForOtherActivity: r.accountedForOtherActivity,
     accountedForOtherActivityKeys: r.accountedForOtherActivityKeys,
     trueIndexerOnly: r.trueIndexerOnly,

@@ -4,13 +4,13 @@
 // sometimes" bug: fetchActivity's "load more" pagination used a raw
 // numeric `offset`, which silently drifts whenever a row is inserted (a
 // new transaction lands) while the user is actively scrolling through
-// history — "position 20" means a genuinely different row once something
+// history - "position 20" means a genuinely different row once something
 // new lands above it, so the next page could re-show an already-seen row
 // or skip one entirely, with nothing to catch the skip case.
 //
 // Fix: an optional cursor (cursorCreatedAt + cursorId, anchored to the
 // last-loaded row's own values) replaces the raw offset for "load more"
-// calls — "everything strictly before this exact (created_at, id) pair,
+// calls - "everything strictly before this exact (created_at, id) pair,
 // in the same created_at.desc,id.desc order" is unaffected by anything
 // inserted or removed elsewhere in the list. These tests pin the exact
 // query string produced in both the offset (first page) and cursor
@@ -21,7 +21,7 @@ import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 
 // ActivityService.ts transitively imports the real Supabase client
 // (lib/supabase.ts), which throws immediately at module-load time if
-// VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY aren't set — not set by
+// VITE_SUPABASE_URL/VITE_SUPABASE_ANON_KEY aren't set - not set by
 // default in this Node-only test environment. Stubbing them before the
 // dynamic import (rather than a static top-level import) avoids that
 // crash without needing every test file that touches this module to
@@ -49,7 +49,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('fetchActivity — cursor-based pagination', () => {
+describe('fetchActivity - cursor-based pagination', () => {
   it('first page (no cursor) still uses offset=0, unchanged from before', async () => {
     const fetchMock = mockFetchOnce([])
     await fetchActivity('0xabc', { limit: 20, offset: 0 })
@@ -70,7 +70,7 @@ describe('fetchActivity — cursor-based pagination', () => {
     const calledUrl = fetchMock.mock.calls[0][0] as string
     // The exact PostgREST composite-cursor shape: strictly older created_at,
     // OR the same created_at with a strictly smaller id (the tiebreak the
-    // ORDER BY itself uses) — matches Supabase's own documented
+    // ORDER BY itself uses) - matches Supabase's own documented
     // .or('a,and(b,c)') pattern.
     expect(calledUrl).toMatch(/&or=\(created_at\.lt\.[^,]+,and\(created_at\.eq\.[^,]+,id\.lt\.[^)]+\)\)/)
     expect(calledUrl).not.toMatch(/&offset=\d/)
@@ -85,9 +85,9 @@ describe('fetchActivity — cursor-based pagination', () => {
   })
 })
 
-describe('useActivity cursor advancement — isolated algorithm (mirrors useActivity.ts load())', () => {
+describe('useActivity cursor advancement - isolated algorithm (mirrors useActivity.ts load())', () => {
   // The hook itself can't be mounted here (Node-only vitest config, no
-  // jsdom — see useActivity.raceGuard.test.ts's own comment on this
+  // jsdom - see useActivity.raceGuard.test.ts's own comment on this
   // convention), so this pins the exact cursor-advancement logic in
   // isolation, the same way that file pins the request-race-guard logic.
   interface Row { id: string; createdAt: string }
@@ -124,11 +124,11 @@ describe('useActivity cursor advancement — isolated algorithm (mirrors useActi
     ]
     const cursorAfterPage1 = advanceCursor(null, page1)
 
-    // A NEW transaction (row21) lands, inserted above everything —
+    // A NEW transaction (row21) lands, inserted above everything -
     // exactly the scenario that broke raw offset-based pagination:
     // offset=2 would now point somewhere different than it did a moment
     // ago. The cursor, anchored to row19's own values, is untouched by
-    // this insertion — "load more" still correctly means "everything
+    // this insertion - "load more" still correctly means "everything
     // strictly older than row19," regardless of what showed up above it.
     expect(cursorAfterPage1).toEqual({ createdAt: '2026-09-08T14:19:00Z', id: 'row19' })
   })

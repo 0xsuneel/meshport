@@ -22,7 +22,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-/** In-memory localStorage — node has none, and this module depends on it. */
+/** In-memory localStorage - node has none, and this module depends on it. */
 function installLocalStorage() {
   const store = new Map<string, string>()
   vi.stubGlobal('localStorage', {
@@ -69,7 +69,7 @@ describe('mnemonic encryption (encryptMnemonic/decryptMnemonic)', () => {
   it('uses the exact same crypto as the private key path (encryptMnemonic === encryptPrivateKey)', () => {
     // Deliberate design choice, not an implementation detail worth hiding:
     // the mnemonic is exactly as sensitive as the private key (arguably more
-    // so — it regenerates the key), so it gets the exact same, already-
+    // so - it regenerates the key), so it gets the exact same, already-
     // reviewed encryption, not a parallel implementation that could drift.
     expect(encryptMnemonic).toBe(encryptPrivateKey)
     expect(decryptMnemonic).toBe(decryptPrivateKey)

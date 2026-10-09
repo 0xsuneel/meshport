@@ -1,8 +1,8 @@
 /**
- * useActivity — React hook for the activity feed.
+ * useActivity - React hook for the activity feed.
  *
  * ── Update: recent RECEIVED transactions now come directly from the chain ──
- * Deep pagination (loadMore) still reads from Supabase — that index is
+ * Deep pagination (loadMore) still reads from Supabase - that index is
  * itself populated FROM the blockchain by deposit-scan-all, not mock or
  * stale data, and re-architecting pagination entirely around the
  * explorer's own cursor would risk the infinite-scroll performance this
@@ -10,7 +10,7 @@
  * layer (see lib/onchainReceivedActivity.ts) now reads directly from
  * ArcScan, merged into `records`, refreshed via polling (60s), on
  * foreground-return, and immediately on the 'meshport:onchain-activity'
- * event — dispatched by HomePage when the polled Arc balance increases. That
+ * event - dispatched by HomePage when the polled Arc balance increases. That
  * event used to also come from an Alchemy WebSocket (lib/realtimeDeposits.ts),
  * which was removed once Phase 5/6 superseded it; the listener below is
  * deliberately kept because HomePage still dispatches it.
@@ -40,7 +40,7 @@ import { getRecentArcDeposits } from '@/lib/arcDepositWatcher'
 
 const PAGE_SIZE = 100
 /**
- * PHASE 6 — lengthened from 12s to 60s, NOT removed.
+ * PHASE 6 - lengthened from 12s to 60s, NOT removed.
  *
  * `deposit_detected` / `transfer_detected` now invalidate the `history` scope
  * through SyncCoordinator (see blockchain/SyncCoordinator.ts), so a real
@@ -48,7 +48,7 @@ const PAGE_SIZE = 100
  * retained as the fallback for the cases the event stream cannot cover:
  *   - Realtime disconnected / tab throttled in the background
  *   - an activity row written by a path that emits no chain_event
- *     (p2p, swap, bulk — all worker/client-written)
+ *     (p2p, swap, bulk - all worker/client-written)
  *   - SYNC_COORDINATOR_ENABLED flipped off as the Phase 6 rollback
  * Deleting it would make those cases silently stale, which is why the spec
  * says reduce-then-verify rather than remove.
@@ -76,8 +76,8 @@ function onchainTxToActivityRecord(walletAddress: string, tx: OnchainReceivedTx)
  * The pure state reducer behind mergeOnchainReceived below.
  *
  * Lifted out of the setRecords callback it used to live inside so the merge
- * semantics — which records survive, which get deduped, what order they come
- * back in — are directly testable without mounting the hook. The hook itself
+ * semantics - which records survive, which get deduped, what order they come
+ * back in - are directly testable without mounting the hook. The hook itself
  * is unchanged in behaviour: it still calls exactly this, once per merge.
  *
  * Contract: every record in `prev` appears in the output (nothing is ever
@@ -92,12 +92,12 @@ export function mergeOnchainIntoRecords(
   const merged = new Map<string, ActivityRecord>()
   // Existing records first, so a Supabase-sourced row (which may carry
   // richer metadata, e.g. a resolved sender username) wins over the
-  // synthetic on-chain one for the SAME transaction — the on-chain
+  // synthetic on-chain one for the SAME transaction - the on-chain
   // layer's job is to make sure the transaction is VISIBLE at all,
   // immediately; once Supabase's own copy exists, that becomes the
   // canonical version, same tx either way (deduped by hash, not id).
   //
-  // FIX 1 — rows with NO txHash used to be skipped here, and because the
+  // FIX 1 - rows with NO txHash used to be skipped here, and because the
   // return value REPLACES the whole list they were silently dropped from
   // state on every merge. 45 of one wallet's 466 rows had tx_hash = NULL
   // (28 p2p_sell_order, 17 p2p_refund), so every refresh erased them until
@@ -105,16 +105,16 @@ export function mergeOnchainIntoRecords(
   //
   // The `id:` prefix keeps the two keyspaces disjoint: a tx hash is always
   // 0x-prefixed hex, so it can never collide with an `id:<uuid>` key, and a
-  // row that HAS a txHash is still keyed by hash alone — so hash-dedup
+  // row that HAS a txHash is still keyed by hash alone - so hash-dedup
   // against the on-chain layer below behaves exactly as before.
   //
-  // FIX 3 (2026-09-02) — a self-bulk-payout (paying yourself as one of your
+  // FIX 3 (2026-09-02) - a self-bulk-payout (paying yourself as one of your
   // own batch's recipients) writes TWO rows sharing the exact same
-  // activityType ('bulk') AND the exact same stripped on-chain hash — a
+  // activityType ('bulk') AND the exact same stripped on-chain hash - a
   // sent-summary leg and a received leg, distinguished only by
   // metadata.direction. Keying purely by hash (as this map always had)
   // meant the SECOND of those two `prev` rows silently overwrote the
-  // first right here, before onchainTxs were even considered — a direct
+  // first right here, before onchainTxs were even considered - a direct
   // violation of this function's own "every record in prev appears in the
   // output" contract, and the real cause behind reports of a self-paid /
   // self-received bulk row intermittently vanishing from history. Every
@@ -122,7 +122,7 @@ export function mergeOnchainIntoRecords(
   // synthetic onchain 'receive' vs a stored 'receive') already has either
   // a different activityType or no conflicting direction, so folding
   // direction into the key only ever disambiguates the bulk self-pay case
-  // — it does not change dedup behavior for anything else, including every
+  // - it does not change dedup behavior for anything else, including every
   // case pinned by the tests below.
   const keyFor = (r: { txHash?: string | null; id: string; activityType: string; metadata?: any }) =>
     r.txHash ? `${r.activityType}:${r.txHash.toLowerCase()}:${r.metadata?.direction || ''}` : `id:${r.id}`
@@ -141,7 +141,7 @@ export function mergeOnchainIntoRecords(
     if (!merged.has(txKey)) {
       merged.set(txKey, onchainTxToActivityRecord(walletAddress, tx))
     } else {
-      // Already known (e.g. Supabase caught up since the last poll) —
+      // Already known (e.g. Supabase caught up since the last poll) -
       // but if the on-chain read now shows 'confirmed' where the
       // existing record was still 'pending', reflect that transition
       // immediately rather than waiting on Supabase's own update.
@@ -151,7 +151,7 @@ export function mergeOnchainIntoRecords(
       }
     }
   }
-  // FIX 2 — Map.values() yields INSERTION order, not chronological order, so
+  // FIX 2 - Map.values() yields INSERTION order, not chronological order, so
   // a freshly-merged on-chain row landed last no matter how recent it was.
   // Combined with ActivityPage's TODAY/YESTERDAY/THIS WEEK grouping that put
   // a brand-new deposit below older entries or in the wrong day group, which
@@ -159,7 +159,7 @@ export function mergeOnchainIntoRecords(
   // fetchActivity already returns created_at DESC; this restores that
   // invariant after merging so the list is always newest-first.
   //
-  // Secondary tiebreak on `id` — same reasoning as ActivityPage.tsx's own
+  // Secondary tiebreak on `id` - same reasoning as ActivityPage.tsx's own
   // sort and ActivityService.ts's `order=created_at.desc,id.desc` query:
   // two rows can genuinely tie at createdAt's millisecond resolution (a
   // bulk payout's sent + received legs, written back-to-back), and without
@@ -202,11 +202,11 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
   const [search,      setSearch]      = useState('')
   // FIX: was a raw numeric offset, which silently drifts whenever a row is
   // inserted (a new transaction lands) while the user is actively
-  // scrolling — see FetchOptions' own comment on cursorCreatedAt/cursorId
+  // scrolling - see FetchOptions' own comment on cursorCreatedAt/cursorId
   // for the full reasoning. Anchoring "load more" to the actual last-seen
   // row instead of a position number makes pagination immune to that
   // entirely. offsetRef is kept only as the reset-to-0 case's `offset`
-  // param (semantically identical to cursor omitted — "start from the
+  // param (semantically identical to cursor omitted - "start from the
   // very top" needs no anchor either way).
   const offsetRef = useRef(0)
   const cursorRef = useRef<{ createdAt: string; id: string } | null>(null)
@@ -214,7 +214,7 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
   // can tell, once it resolves, whether it's still the most recent request
   // in flight. Without this, a slow "all" response landing after a fast
   // "swap" filter switch would silently overwrite the newer, correct
-  // results with the stale ones — a genuine, previously-unmitigated race
+  // results with the stale ones - a genuine, previously-unmitigated race
   // between filter/search/wallet changes and network latency. Cheap
   // sequence-number guard, same idea as an AbortController but doesn't
   // require fetchActivity/Supabase's client to support cancellation.
@@ -242,12 +242,12 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
       const meta: NonNullable<FetchOptions['meta']> = {}
       const data = await fetchActivity(walletAddress, { ...opts, meta })
       // A newer load() (filter change, search change, wallet switch, or
-      // another loadMore) started while this one was in flight — its
+      // another loadMore) started while this one was in flight - its
       // result is stale by definition and must not be applied, no matter
       // which one actually resolves first.
       if (myRequestId !== requestIdRef.current) return
       // A failed request must not wipe the list or end pagination.
-      if (meta.failed) throw new Error('Could not load activity — pull to refresh')
+      if (meta.failed) throw new Error('Could not load activity - pull to refresh')
       setError('')
 
       let addedCount = data.length
@@ -256,7 +256,7 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
         // the Activity page's Refresh button all route here). Re-apply the
         // real-time watcher's buffered deposits so a just-arrived Receive
         // that the Supabase row hasn't caught up to (still 2-4 min out)
-        // isn't wiped by the reload — the "history disappears when I hit
+        // isn't wiped by the reload - the "history disappears when I hit
         // Refresh, then comes back later" bug. mergeOnchainIntoRecords
         // dedupes by hash, so once the real row lands this is a no-op.
         const buffered = getRecentArcDeposits()
@@ -275,7 +275,7 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
       setHasMore(rawCount === PAGE_SIZE)
       offsetRef.current = (reset ? 0 : offsetRef.current) + rawCount
       // Advance the cursor to the OLDEST row in this page (data is
-      // created_at.desc,id.desc — so the last element is the oldest) —
+      // created_at.desc,id.desc - so the last element is the oldest) -
       // that's the correct anchor for the NEXT "load more" call. Left
       // null (not advanced) when this page came back empty or the
       // cursor's own required fields are missing, so a malformed/partial
@@ -288,14 +288,14 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
       // Use addedCount (post-dedup), not the raw page size, so `total`
       // doesn't drift upward when a realtime insert during active
       // pagination causes this page's window to overlap the previous one
-      // by one row (see the realtime-subscription effect below) — that
+      // by one row (see the realtime-subscription effect below) - that
       // overlap is filtered out of `records` above and must be filtered
       // out of the displayed total too.
       setTotal(t => reset ? data.length : t + addedCount)
     } catch (e: any) {
       if (myRequestId !== requestIdRef.current) return
       setError(e.message ?? 'Failed to load activity')
-      // A failed load-more stops paging until a refresh — otherwise the
+      // A failed load-more stops paging until a refresh - otherwise the
       // always-visible bottom marker retries it in a tight loop.
       if (!reset) setHasMore(false)
     } finally {
@@ -312,7 +312,7 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
     const PENDING_HIDDEN = ['bridge', 'claim', 'withdraw']
     const unsub = subscribeToActivity(walletAddress, (newRecord) => {
       // The main list excludes pending multichain rows (fetchActivity's
-      // default) — realtime must not sneak them in either.
+      // default) - realtime must not sneak them in either.
       if (PENDING_HIDDEN.includes(newRecord.activityType) && newRecord.status === 'pending') return
       if (recordsRef.current.some(r => r.id === newRecord.id)) return
       setRecords(prev => prev.some(r => r.id === newRecord.id) ? prev : [newRecord, ...prev])
@@ -321,7 +321,7 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
       setRecords(prev => {
         const i = prev.findIndex(r => r.id === updated.id)
         if (i === -1) {
-          // A pending multichain row that just completed — now it belongs in the list.
+          // A pending multichain row that just completed - now it belongs in the list.
           if (PENDING_HIDDEN.includes(updated.activityType) && updated.status !== 'pending') return [updated, ...prev]
           return prev
         }
@@ -333,7 +333,7 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
 
   // ── Direct on-chain received layer ──────────────────────────────────────────
   // Merges bounded, recent on-chain-sourced received transactions into
-  // `records` — see file header and lib/onchainReceivedActivity.ts for the
+  // `records` - see file header and lib/onchainReceivedActivity.ts for the
   // full reasoning. Runs independently of the Supabase pagination above;
   // never touches offsetRef or hasMore. The merge itself is
   // mergeOnchainIntoRecords above.
@@ -346,7 +346,7 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
 
   useEffect(() => {
     if (!walletAddress) return
-    mergeOnchainReceived() // instant check on mount — the actual fix for "doesn't appear immediately"
+    mergeOnchainReceived() // instant check on mount - the actual fix for "doesn't appear immediately"
 
     const poll = setInterval(mergeOnchainReceived, ONCHAIN_POLL_MS)
 
@@ -354,7 +354,7 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
     document.addEventListener('visibilitychange', onVisible)
 
     // The existing WebSocket listener (AppLayout.tsx) already detects
-    // real-time chain activity and dispatches this event — reusing it here
+    // real-time chain activity and dispatches this event - reusing it here
     // as the "real-time blockchain event subscription" trigger rather than
     // opening a second, redundant connection just for this page.
     const onChainActivity = () => mergeOnchainReceived()
@@ -369,7 +369,7 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
 
   // ── Real-time on-chain deposit layer (fed by the session-wide watcher) ─────
   // The Arc eth_subscribe(logs) watcher runs once for the whole session in
-  // AppLayout (see lib/arcDepositWatcher.ts), not here — so it keeps working
+  // AppLayout (see lib/arcDepositWatcher.ts), not here - so it keeps working
   // on every route, not only while this page is mounted. It drops each
   // confirmed external deposit into a module buffer and dispatches
   // 'meshport:arc-deposit'. This effect merges that buffer through the exact

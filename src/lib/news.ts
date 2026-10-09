@@ -1,4 +1,4 @@
-// ── News — Home "News" box, /news list, /news/:id short article ─────────────
+// ── News - Home "News" box, /news list, /news/:id short article ─────────────
 // Stories live in public.news_items: Arc and Circle blog posts, Circle
 // developer updates (CCTP / Gateway release notes, App Kit / Bridge Kit
 // releases), Arc network notices (filled every 30 minutes by the news-sync edge function)

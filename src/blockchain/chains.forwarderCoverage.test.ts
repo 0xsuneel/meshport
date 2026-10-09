@@ -7,7 +7,7 @@ import { FORWARDER_SUPPORTED_SDK_CHAINS, chainSupportsForwarder } from './chains
 // src/lib/backgroundBridge.ts), the same way MultichainTransferPage.tsx
 // already does for Send. Morph_Testnet, Pharos_Testnet and Injective_Testnet
 // are the 3 of 21 claim-eligible chains NOT on Circle's Forwarding Service
-// allow-list — if they were ever silently added back to this set without
+// allow-list - if they were ever silently added back to this set without
 // actually being forwarder-eligible, or removed while genuinely eligible,
 // that's the exact class of drift that broke Plume on Send before it was
 // added here. Lock in the known-false set explicitly.

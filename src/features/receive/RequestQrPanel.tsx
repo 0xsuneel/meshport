@@ -2,7 +2,7 @@
 // Amount + note + expiry (+ customer for merchants) → a payment request with a
 // unique order number. The QR, the copied link and the shared link all carry
 // the order: /paylink/r/<code>?order=ORD-…  Scanned in MeshPort (or opened), the
-// payer's amount and order number are fixed — they can't be edited.
+// payer's amount and order number are fixed - they can't be edited.
 // The QR is the order link: MeshPort's scanner opens the order; a wallet
 // app's scanner (MetaMask, OKX, Trust, Coinbase…) opens it in the wallet's
 // browser, which adds Arc Testnet and fills in address, amount and network.
@@ -48,7 +48,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
   const [busy, setBusy] = useState(false)
   const [order, setOrder] = useState<MerchantIntent | null>(null)
   // Username (optional): looked up only when the FULL name is typed
-  // ("sunil.arc") — exact match, no partial suggestions.
+  // ("sunil.arc") - exact match, no partial suggestions.
   const walletAddress = useAuthStore(s => s.walletAddress)
   const [match, setMatch] = useState<{ state: 'idle' | 'checking' | 'found' | 'notfound' | 'self'; user?: { id: string; username: string; display_name?: string | null; avatar_url?: string | null } }>({ state: 'idle' })
   useEffect(() => {
@@ -101,7 +101,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
           navigate(`/chat/${convId}`, { state: { autoSend: paymentRequestMessage(it, formatAmount(it.amount)) } })
           return
         }
-        showToastMessage(`Order #${orderLabel(it)} created — couldn't open the chat`, 'error')
+        showToastMessage(`Order #${orderLabel(it)} created - couldn't open the chat`, 'error')
       }
       setLive(null); setOrder(it)
     } catch (e) {
@@ -202,7 +202,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
           </div>
           {!paid && !closed && (
             <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.45, maxWidth: 300 }}>
-              Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) — the amount and order number are fixed; wallets get Arc, the address and the amount filled in.
+              Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) - the amount and order number are fixed; wallets get Arc, the address and the amount filled in.
             </div>
           )}
         </div>

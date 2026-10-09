@@ -15,7 +15,7 @@ const STATUS_STYLE: Record<SupportTicket['status'], { label: string; bg: string;
 }
 
 // `embedded`/`onClose` mirror NotificationsPage's own popup treatment
-// (see ProfileSubPages.tsx) — DesktopHeader now opens this the same way
+// (see ProfileSubPages.tsx) - DesktopHeader now opens this the same way
 // it opens the notifications bell, as a dialog over whatever page the
 // person is on, instead of a full-page navigation to /help-support.
 // Mobile is untouched: it still only ever reaches this via the real route.
@@ -70,10 +70,10 @@ export function HelpSupportPage({ embedded, onClose }: { embedded?: boolean; onC
       message:       message.trim(),
     })
     setSubmitting(false)
-    if (!res.success) { showToast(res.error || 'Could not submit — try again'); return }
+    if (!res.success) { showToast(res.error || 'Could not submit - try again'); return }
     setMessage('')
     setSubject(SUBJECTS[0])
-    showToast('Ticket submitted — we\u2019ll get back to you here')
+    showToast('Ticket submitted - we\u2019ll get back to you here')
     loadTickets()
   }
 
@@ -137,7 +137,7 @@ export function HelpSupportPage({ embedded, onClose }: { embedded?: boolean; onC
             <div className="text-center py-8 text-sm text-text-secondary">Loading…</div>
           ) : tickets.length === 0 ? (
             <div className="bg-surface border border-border rounded-3xl p-6 text-center">
-              <p className="text-sm text-text-secondary">No tickets yet — anything you submit above will show up here.</p>
+              <p className="text-sm text-text-secondary">No tickets yet - anything you submit above will show up here.</p>
             </div>
           ) : (
             <div className="space-y-3">

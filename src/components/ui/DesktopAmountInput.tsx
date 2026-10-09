@@ -2,7 +2,7 @@ import { amountFontSize } from '@/lib/amountFontSize'
 
 // Desktop amount entry, same look as Swap's "You pay" box: a plain bordered
 // box with the digits centred, "$" pinned to the left and a Max pill in the
-// top-right corner. Typed straight in with the keyboard — no keypad sheet.
+// top-right corner. Typed straight in with the keyboard - no keypad sheet.
 export function DesktopAmountInput({ value, onChange, onMax, ariaLabel, invalid = false, autoFocus = true }: {
   value: string
   /** Raw text as typed; the caller sanitizes it. */

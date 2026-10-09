@@ -5,7 +5,7 @@ import { useAdminStore } from '@/store/adminStore'
 export function MaintenanceGate({ children }: { children: React.ReactNode }) {
   const { enabled, message } = useMaintenanceMode()
   // Same flag ModeToggle uses to decide whether to show the Admin/Normal
-  // switch at all — true only after a real email+OTP admin login in this
+  // switch at all - true only after a real email+OTP admin login in this
   // browser (see AdminLoginPage / useAdminStore). Bypassing maintenance
   // for admins is what actually lets them explore and test the live app
   // while it's down for everyone else, instead of just seeing the same

@@ -6,10 +6,10 @@
 // The device already did the only steps that need the user's key:
 //   1. deposited USDC into Gateway on the source chain, and
 //   2. signed the Gateway burn intent (recipient = the user's own Arc wallet)
-//      — stored as ub_claim_intents.transfer_body.
+//      - stored as ub_claim_intents.transfer_body.
 // This worker (pg_cron, every minute) waits until Gateway shows the deposit
 // as confirmed, submits the signed intent to POST /v1/transfer with
-// enableForwarder=true (Circle's forwarder mints on Arc — no relayer gas),
+// enableForwarder=true (Circle's forwarder mints on Arc - no relayer gas),
 // then polls GET /v1/transfer/{id} and writes the Activity row.
 //
 // A signed intent can only ever move the user's own Gateway balance to the

@@ -1,6 +1,6 @@
 // Forward selected messages to up to 5 chats (WhatsApp-style). Each copy is
-// re-encrypted for its new chat — photos and files are decrypted with this
-// chat's key and uploaded again with the other chat's key — and carries a
+// re-encrypted for its new chat - photos and files are decrypted with this
+// chat's key and uploaded again with the other chat's key - and carries a
 // "Forwarded" label. Payments and payment records are never forwarded.
 import { useEffect, useMemo, useState } from 'react'
 import { SHEET_SPRING, SHEET_BACKDROP } from '@/lib/motion'

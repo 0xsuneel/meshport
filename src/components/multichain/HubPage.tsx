@@ -2,11 +2,11 @@ import { type ReactNode } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 
-// Multichain Hub (phone) — the Transfer and Bring screens open as full pages
+// Multichain Hub (phone) - the Transfer and Bring screens open as full pages
 // that slide in from the right with the same timing, curve, parallax and dim
 // as every other page in the app (see PageTransition). A second page can
 // open on top of the first: the one underneath shifts left and dims behind a
-// plain black veil (an opacity fade — never a CSS filter, which Android
+// plain black veil (an opacity fade - never a CSS filter, which Android
 // re-rasterises every frame and shows as flicker).
 const EASE = [0.32, 0.72, 0, 1] as const
 const OPEN_S = 0.3

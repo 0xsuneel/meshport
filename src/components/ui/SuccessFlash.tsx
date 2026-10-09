@@ -12,7 +12,7 @@ import { usePopupOpen } from '@/hooks/usePopupOpen'
 //   2. the white circle springs in and the tick draws itself
 //   3. soft "ding" + a short buzz
 //   4. the title rises in
-// Sizes of the white circle and the icon are fixed — the screens' traveling
+// Sizes of the white circle and the icon are fixed - the screens' traveling
 // checkmark measures this circle (checkRef) to fly into the receipt.
 export const SUCCESS_CIRCLE = 82.08
 export const SUCCESS_ICON = 37.62

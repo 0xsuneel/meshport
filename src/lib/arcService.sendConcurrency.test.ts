@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // Regression guard for "facing slow payments happening": sendUSDC/sendEURC
 // used to run three independent pre-broadcast network round trips strictly
-// sequentially — balance check, server-side pay-intent/nonce reservation,
-// and gas estimate — none of which depends on another's result. This test
+// sequentially - balance check, server-side pay-intent/nonce reservation,
+// and gas estimate - none of which depends on another's result. This test
 // proves they now run concurrently (Promise.all), not sequentially, by
 // recording the order in which each mocked call STARTS vs FINISHES: with
 // real concurrency all three starts land before any finish (each mock
@@ -42,7 +42,7 @@ vi.mock('./arc', async () => {
   return {
     ...actual,
     arcRpcJson: (_body: unknown, _timeout?: number) =>
-      // Backs getUSDCBalance — the most ticks, so if the code were
+      // Backs getUSDCBalance - the most ticks, so if the code were
       // sequential and balance ran first, everything else would visibly
       // wait behind it.
       delayed('balance', 3, { result: '0x3635c9adc5dea00000' }), // 1000e18
@@ -92,11 +92,11 @@ describe('sendUSDC / sendEURC pre-broadcast concurrency', () => {
 
     const starts = timeline.filter(e => e.startsWith('start:'))
     const firstEnd = timeline.findIndex(e => e.startsWith('end:'))
-    // All three calls must have been kicked off before any of them finishes —
+    // All three calls must have been kicked off before any of them finishes -
     // that's only possible if they were launched concurrently (Promise.all),
     // not one at a time.
     expect(starts).toEqual(['start:balance', 'start:intent', 'start:gas'])
-    expect(firstEnd).toBe(3) // the 4th timeline entry — after all 3 starts
+    expect(firstEnd).toBe(3) // the 4th timeline entry - after all 3 starts
   })
 
   it('sendEURC starts intent/gas together instead of one after another', async () => {

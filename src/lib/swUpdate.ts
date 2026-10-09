@@ -1,6 +1,6 @@
 // ── App updates: switch versions only when it's safe ───────────────────────
 // A new version downloads in the background and waits (see sw.ts). It takes
-// over — with one quick reload — only:
+// over - with one quick reload - only:
 //   • when the app is opened (behind the opening screen), or
 //   • when the app is about to reload anyway (back after a long time away).
 // Never while someone is using a screen, so an update can't break it.

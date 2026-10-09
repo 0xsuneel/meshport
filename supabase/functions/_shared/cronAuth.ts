@@ -10,15 +10,15 @@
 //
 // A JWT-decode-without-verify check (read the `role` claim out of the
 // payload, trust it) is only safe WHILE verify_jwt=true already verified the
-// signature upstream — the moment verify_jwt is off, that becomes forgeable:
+// signature upstream - the moment verify_jwt is off, that becomes forgeable:
 // anyone can send a JWT-shaped string with `role: service_role` in the
 // payload and no valid signature at all. This does a plain constant-time
-// STRING comparison against known-good secret values instead — forging a
+// STRING comparison against known-good secret values instead - forging a
 // match requires knowing the actual secret, not just crafting a shape.
 //
 // Accepts EITHER the new dedicated CRON_SECRET (edge function secret, not a
 // SUPABASE_*-prefixed name since those are reserved) OR the legacy
-// SUPABASE_SERVICE_ROLE_KEY (Supabase-managed, auto-injected) — both accepted
+// SUPABASE_SERVICE_ROLE_KEY (Supabase-managed, auto-injected) - both accepted
 // simultaneously during the no-gap cutover. Legacy acceptance is removed only
 // after a full day of clean cron runs confirms every job has cut over to
 // CRON_SECRET.
@@ -33,7 +33,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 // NOTE: on this project, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') inside a
 // running edge function is CONFIRMED (branch-tested) to NOT be the same
 // value as the legacy JWT the pg_cron jobs currently send via the
-// `claim_worker_service_key` vault secret — they're two different
+// `claim_worker_service_key` vault secret - they're two different
 // credentials. LEGACY_CRON_SECRET (below) is a temporary edge function
 // secret set to mirror the vault secret's CURRENT value for the duration of
 // the no-gap cutover, then removed once the vault value is updated to
