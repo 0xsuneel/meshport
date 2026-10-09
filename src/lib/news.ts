@@ -6,6 +6,7 @@
 // "Read full article" opens `url` on the original site.
 
 import { supabase } from './supabase'
+import { bootPart } from './homeBootstrap'
 
 export type NewsSource = 'arc' | 'circle' | 'circle_dev' | 'arc_status' | 'meshport'
 
@@ -74,7 +75,9 @@ export function readCachedHomeNews(): NewsItem[] {
 
 /** Latest stories for the Home box. Network notices only appear while live. */
 export async function fetchHomeNews(limit = 4): Promise<NewsItem[]> {
-  const { data, error } = await supabase.from('news_items').select(COLUMNS)
+  // App start: the startup call (lib/homeBootstrap.ts) carries the newest 10 = limit 4 + 6.
+  const boot = limit === 4 ? await bootPart('news', 'fetchHomeNews') : undefined
+  const { data, error } = boot ? { data: boot, error: null } : await supabase.from('news_items').select(COLUMNS)
     .eq('hidden', false).order('published_at', { ascending: false }).limit(limit + 6)
   if (error) { console.warn('[news] home:', error.message); return readCachedHomeNews() }
   const items = ((data ?? []) as NewsItem[])

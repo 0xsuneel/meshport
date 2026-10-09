@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { primeHomeBootstrap } from '@/lib/homeBootstrap'
 import { preloadScanner } from '@/lib/scannerPrewarm'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { BottomNav } from './BottomNav'
@@ -510,6 +511,8 @@ export function AppLayout() {
   // purpose - every consumer just reads useP2PTradesCountStore(s =>
   // s.ongoingCount).
   const setOngoingP2PCount = useP2PTradesCountStore(s => s.setOngoingCount)
+  // Start the one startup call (lib/homeBootstrap.ts) before the readers ask.
+  useEffect(() => { if (userId) primeHomeBootstrap() }, [userId])
   useEffect(() => {
     if (!userId) { setOngoingP2PCount(0); return }
     let cancelled = false

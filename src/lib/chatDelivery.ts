@@ -3,11 +3,14 @@
 // stay the job of the open conversation (markRead).
 import { supabase } from './supabase'
 import { subscribeWithRetry } from './chatService'
+import { bootPart } from './homeBootstrap'
 
 let myConvIds = new Set<string>()
 
 async function loadMyConversations(userId: string): Promise<string[]> {
-  const { data } = await supabase.from('conversations').select('id')
+  // App start: from the one startup call (lib/homeBootstrap.ts).
+  const boot = await bootPart('conversations', 'chatDelivery', { userId })
+  const { data } = boot ? { data: boot } : await supabase.from('conversations').select('id')
     .or(`participant_a.eq.${userId},participant_b.eq.${userId}`)
   const ids = (data ?? []).map((c: any) => String(c.id))
   myConvIds = new Set(ids)

@@ -64,16 +64,28 @@ export async function fetchRecentContacts(
 
   const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
   const SUPA_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
-  const { authHeaders } = await import('./chatService')
-  const headers = await authHeaders()
   const myAddr = walletAddress.toLowerCase()
 
-  // Fetch sent + received in parallel - same as Home Avatar Recent
-  const [sentRes, recvRes] = await Promise.all([
-    fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.send&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at`, { headers }),
-    fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.receive&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at`, { headers }),
-  ])
-  const [sentRows, recvRows] = await Promise.all([sentRes.json(), recvRes.json()])
+  // App start: both lists come from the one startup call (lib/homeBootstrap.ts,
+  // 20 each). Otherwise sent + received in parallel - same as Home Avatar Recent.
+  let sentRows: any, recvRows: any
+  if (activityLimit === 20) {
+    const { bootPart } = await import('./homeBootstrap')
+    const [s, r] = await Promise.all([
+      bootPart('recent_sent', 'recentContacts', { wallet: myAddr }),
+      bootPart('recent_received', 'recentContacts', { wallet: myAddr }),
+    ])
+    if (s && r) { sentRows = s; recvRows = r }
+  }
+  if (!sentRows) {
+    const { authHeaders } = await import('./chatService')
+    const headers = await authHeaders()
+    const [sentRes, recvRes] = await Promise.all([
+      fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.send&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at`, { headers }),
+      fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.receive&order=created_at.desc&limit=${activityLimit}&select=counterparty_address,amount,created_at`, { headers }),
+    ])
+    ;[sentRows, recvRows] = await Promise.all([sentRes.json(), recvRes.json()])
+  }
 
   const rows = [...(Array.isArray(sentRows) ? sentRows : []), ...(Array.isArray(recvRows) ? recvRows : [])]
     .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
