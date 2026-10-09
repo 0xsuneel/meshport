@@ -68,7 +68,7 @@ export function LandingNav() {
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-4 min-[375px]:px-5 sm:px-8">
         <a href="#top" className="flex min-w-0 items-center gap-2.5" aria-label="MeshPort home">
           <img src="/favicon.svg" alt="MeshPort" className="h-8 w-8 flex-shrink-0 rounded-lg" style={{ boxShadow: 'var(--shadow-1)' }} />
-          <span className="hidden text-[17px] font-extrabold tracking-tight text-text-primary min-[360px]:inline">MeshPort</span>
+          <span className="hidden min-w-0 truncate text-[17px] font-extrabold tracking-tight text-text-primary min-[360px]:inline">MeshPort</span>
         </a>
 
         <nav className="hidden items-center gap-8 lg:flex" aria-label="Primary">

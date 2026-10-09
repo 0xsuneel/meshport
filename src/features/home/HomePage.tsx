@@ -1662,17 +1662,20 @@ function MultichainHubCard({
     return digitCount >= 9 ? 13 : digitCount >= 8 ? 15 : digitCount >= 7 ? 17 : digitCount >= 6 ? 20 : digitCount >= 5 ? 23 : 26
   }
   // Whole part large, cents smaller + lighter (same treatment as the balance card).
-  const renderStat = (n: number, size: number) => {
+  const renderStat = (n: number, _size: number | string) => {
     const [whole, dec] = fmt(n).split('.')
     return (
       <>
         {whole}
-        {dec ? <span style={{ fontSize: Math.round(size * 0.68), fontWeight: 700, opacity: 0.75, letterSpacing: 0 }}>.{dec}</span> : null}
+        {dec ? <span style={{ fontSize: '0.68em', fontWeight: 700, opacity: 0.75, letterSpacing: 0 }}>.{dec}</span> : null}
       </>
     )
   }
-  const transferFontSize = statFontSize(arcAvailable)
-  const claimFontSize = statFontSize(claimAvailable)
+  // Money is never cut off: on narrow phones (320px) the figure also shrinks
+  // to fit its half of the card (≈ 50vw - 52px; ~0.62em per character).
+  const fitStat = (n: number) => `min(${statFontSize(n)}px, calc((50vw - 52px) / ${(('$' + fmt(n)).length * 0.62).toFixed(2)}))`
+  const transferFontSize = fitStat(arcAvailable)
+  const claimFontSize = fitStat(claimAvailable)
   // Safety net kept regardless of card size - a line can never silently
   // wrap into a 3rd/4th line and inflate the card's height; it just
   // truncates with "…" if it doesn't fit.
@@ -3973,8 +3976,8 @@ export function HomePage() {
                       showToastMessage(ok ? 'Username copied' : 'Could not copy username', ok ? 'success' : 'error')
                       setTimeout(() => setHandleCopied(false), 1500)
                     }}
-                    style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-                    <span style={{ fontSize: 11.5, color: 'var(--link)', fontFamily: 'monospace' }}>{arcHandle}</span>
+                    style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, background: 'none', border: 'none', padding: 0, cursor: 'pointer', maxWidth: '100%', minWidth: 0 }}>
+                    <span style={{ fontSize: 11.5, color: 'var(--link)', fontFamily: 'monospace', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{arcHandle}</span>
                     {handleCopied
                       ? <Check className="w-3 h-3 text-success flex-shrink-0" />
                       : <Copy className="w-3 h-3 text-link/60 flex-shrink-0" />}
@@ -4092,7 +4095,7 @@ export function HomePage() {
             right. Mobile keeps its original flat stacking order below
             (flex-col) - only the lg:col/row-start placement below reorders
             things visually at desktop width; DOM order is untouched. */}
-        <div className="flex flex-col gap-[18px] lg:grid lg:grid-cols-1 xl:grid-cols-[2.7fr_1.15fr] lg:gap-4 lg:items-start lg:flex-1 lg:min-h-0 lg:min-w-0">
+        <div className="flex flex-col gap-[18px] lg:grid lg:grid-cols-1 xl:grid-cols-[2.7fr_1.15fr] lg:gap-4 lg:items-start lg:flex-1 lg:min-h-0 lg:min-w-0 lg:pt-4 min-[1800px]:max-w-[1680px] min-[1800px]:mx-auto min-[1800px]:w-full">
         {/* ── COLUMNS 1+2 WRAPPER - column 2 (Quick Actions/Recent Activity)
              needs to match column 1's bottom edge, NOT the grid row's full
              height (which is set by whichever column is tallest - column 3

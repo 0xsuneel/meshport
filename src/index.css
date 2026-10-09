@@ -372,7 +372,9 @@
   cursor: pointer; flex-shrink: 0;
   background: transparent;
   border: none;
-  padding: 0;
+  /* 40px tap area around the 20px arrow, without moving it (negative margin). */
+  padding: 10px;
+  margin: -10px;
   -webkit-tap-highlight-color: transparent;
   transition: opacity 0.15s;
 }

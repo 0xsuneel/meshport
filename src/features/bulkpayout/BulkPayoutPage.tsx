@@ -771,7 +771,7 @@ export function BulkPayoutPage() {
                   value={rowUsername}
                   onChange={e => { setRowUsername(e.target.value); setRowPending(null); setRowSelected(false) }}
                   placeholder="username.arc or 0x address"
-                  className="flex-1 bg-transparent text-base text-text-primary placeholder-text-muted focus:outline-none"
+                  className="flex-1 min-w-0 bg-transparent text-base text-text-primary placeholder-text-muted focus:outline-none"
                 />
               </div>
             )}
