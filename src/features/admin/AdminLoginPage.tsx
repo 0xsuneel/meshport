@@ -54,14 +54,14 @@ export function AdminLoginPage() {
               background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)',
               borderRadius: 14, padding: '12px 14px',
             }}>
-              <Mail size={16} color="var(--text-secondary)" />
+              <Mail size={16} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="owner@meshport.app"
                 autoComplete="username"
-                style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 14 }}
+                style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 14 }}
               />
             </div>
           </div>
@@ -73,16 +73,16 @@ export function AdminLoginPage() {
               background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)',
               borderRadius: 14, padding: '12px 14px',
             }}>
-              <Lock size={16} color="var(--text-secondary)" />
+              <Lock size={16} color="var(--text-secondary)" style={{ flexShrink: 0 }} />
               <input
                 type={showPw ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 autoComplete="current-password"
-                style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 14 }}
+                style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: 14 }}
               />
-              <button type="button" onClick={() => setShowPw((v) => !v)} style={{ background: 'none', border: 'none', display: 'flex' }}>
+              <button type="button" onClick={() => setShowPw((v) => !v)} style={{ background: 'none', border: 'none', display: 'flex', flexShrink: 0, padding: 8, margin: -8 }}>
                 {showPw ? <EyeOff size={16} color="var(--text-secondary)" /> : <Eye size={16} color="var(--text-secondary)" />}
               </button>
             </div>

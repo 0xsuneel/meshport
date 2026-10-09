@@ -365,7 +365,12 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
   // Wraps onto a second line on narrow phones rather than being cut off
   // ("AVAILABLE TO T…" at 320–360px).
   const label: React.CSSProperties = { fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', lineHeight: 1.3, color: 'rgba(255,255,255,0.72)', textTransform: 'uppercase', overflowWrap: 'normal', wordBreak: 'normal' }
-  const amount = (n: number): React.CSSProperties => ({ fontSize: amountSize(n), fontWeight: 800, letterSpacing: '-0.4px', lineHeight: 1.15, color: '#fff', ...line })
+  // Money is never cut off: on narrow phones the figure shrinks to fit its
+  // half of the card (≈ 50vw - 40px wide; ~0.6em per character) instead.
+  const amount = (n: number): React.CSSProperties => {
+    const chars = `$${formatAmount(n)}`.length
+    return { fontSize: `min(${amountSize(n)}px, calc((50vw - 40px) / ${(chars * 0.6).toFixed(2)}))`, fontWeight: 800, letterSpacing: '-0.4px', lineHeight: 1.15, color: '#fff', whiteSpace: 'nowrap' }
+  }
   const sub: React.CSSProperties = { fontSize: 11, color: 'rgba(255,255,255,0.78)', ...line }
   const logo = (overlap: boolean): React.CSSProperties => ({
     width: 22, height: 22, borderRadius: '50%', background: '#fff', border: '2px solid var(--brand)',
@@ -918,7 +923,7 @@ export function MultichainPage() {
         <div style={inPanel ? { padding: 12 } : undefined}>
 
           {/* Tabs */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
             {(['all', 'pending', 'success', 'failed'] as TabType[]).map(t => (
               <button key={t} onClick={() => setTab(t)} style={{
                 padding: '6px 14px', borderRadius: 20,
@@ -1284,7 +1289,9 @@ export function MultichainPage() {
                         )}
                       </div>
                     </div>
-                    <span style={{ fontSize: 16, fontWeight: 800, color: has ? 'var(--text-primary)' : 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                    {/* The name keeps at least ~40% of the row; a long amount shrinks
+                        (and its USDC wraps under it) instead of squeezing the name. */}
+                    <span style={{ fontSize: 'min(16px, 4.2vw)', fontWeight: 800, color: has ? 'var(--text-primary)' : 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', flexShrink: 1, minWidth: 0, maxWidth: '58%', textAlign: 'right', overflowWrap: 'anywhere' }}>
                       {has ? formatAmount(c.balance) : '0'} USDC
                     </span>
                   </button>

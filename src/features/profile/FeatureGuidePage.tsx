@@ -67,7 +67,7 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
                 <div className="self-center sm:self-start flex-shrink-0 flex gap-2">
                   {[f.image, ...(f.more ?? [])].map(img => (
                     <button key={img} onClick={() => setZoom({ title: f.title, image: img })} aria-label={`Enlarge ${f.title} screen`}
-                      className="w-[150px] rounded-2xl overflow-hidden border border-border bg-bg shadow-elevation-1">
+                      className="w-[min(150px,calc(50vw-36px))] rounded-2xl overflow-hidden border border-border bg-bg shadow-elevation-1">
                       <img src={`/guide/${img}.jpg`} alt={`${f.title} screen`} width={390} height={780}
                         loading="lazy" decoding="async" className="block w-full aspect-[1/2] object-cover object-top" />
                     </button>
