@@ -1699,11 +1699,7 @@ function MultichainHubCard({
         </span>
         <span style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--accent)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="#fff" strokeWidth="1.5">
-            <circle cx="9" cy="9" r="8"/>
-            <ellipse cx="9" cy="9" rx="4" ry="8"/>
-            <line x1="1" y1="9" x2="17" y2="9"/>
-          </svg>
+          <ActionIcon name="hub" size={18} />
         </span>
       </div>
 
