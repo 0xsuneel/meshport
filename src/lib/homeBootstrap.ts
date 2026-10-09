@@ -2,7 +2,8 @@
 // Opening the app used to send ~15 separate Supabase reads for the first
 // screen (settings, notifications, P2P trades, conversations ×3, unread
 // chats, cleared watermark ×2, recent contacts ×2, waiting chat messages,
-// news). On a weak connection each one paid its own round trip.
+// news, and 2 more per chat for Home's missed-payment check). On a weak
+// connection each one paid its own round trip.
 //
 // `home_bootstrap` (supabase/migrations/20261009140000_home_bootstrap.sql)
 // returns all of them in one call, under the same RLS as the separate reads.
@@ -23,6 +24,8 @@ export type HomeBoot = {
   cleared_at?: string | null
   conversations?: { id: string; participant_a: string; participant_b: string }[]
   unread_chats?: number
+  /** Home's missed-payment check: per chat, the other person's last 20 payment messages since cleared_at. */
+  chat_payments?: { other_id: string; msgs: any[]; sender: { username?: string; display_name?: string; wallet_address?: string } | null }[]
   waiting_messages?: { id: string; conversation_id: string; content: string }[]
   notifications?: any[]
   trades?: any[]

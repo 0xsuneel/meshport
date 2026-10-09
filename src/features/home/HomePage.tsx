@@ -2963,27 +2963,35 @@ export function HomePage() {
         }
         const sinceFilter = since ? `&created_at=gt.${encodeURIComponent(since)}` : ''
 
-        const bootConvs = await bootPart('conversations', 'home-pay-catchup', { userId: user.id })
-        let convs: any[]
-        if (bootConvs) convs = bootConvs.slice(0, 100)
-        else {
+        // Per chat: the other person's recent payment messages + who they
+        // are. At app start all chats come in the one startup call
+        // (lib/homeBootstrap.ts, chat_payments); otherwise 2 reads per chat.
+        type ChatPayments = { otherId: string; msgs: any[]; sender: { username?: string; display_name?: string; wallet_address?: string } | null }
+        const bootPays = await bootPart('chat_payments', 'home-pay-catchup', { userId: user.id })
+        const chats: ChatPayments[] = []
+        if (bootPays) {
+          for (const p of bootPays) if (p?.other_id && p.msgs?.length) chats.push({ otherId: p.other_id, msgs: p.msgs, sender: p.sender ?? null })
+        } else {
           const convRes = await fetch(
             `${SUPA_URL}/rest/v1/conversations?or=(participant_a.eq.${user.id},participant_b.eq.${user.id})&select=id,participant_a,participant_b&limit=100`,
             { headers }
           )
-          convs = convRes.ok ? await convRes.json() : []
+          const convs: any[] = convRes.ok ? await convRes.json() : []
+          for (const c of convs) {
+            const otherId = c.participant_a === user.id ? c.participant_b : c.participant_a
+            if (!otherId) continue
+            const msgRes = await fetch(
+              `${SUPA_URL}/rest/v1/messages?conversation_id=eq.${c.id}&type=eq.payment_sent&sender_id=eq.${otherId}&select=*&order=created_at.desc&limit=20${sinceFilter}`,
+              { headers }
+            )
+            const msgs: any[] = msgRes.ok ? await msgRes.json() : []
+            if (!msgs.length) continue
+            const { data: sender } = await supabase.from('users')
+              .select('username,display_name,wallet_address').eq('id', otherId).maybeSingle()
+            chats.push({ otherId, msgs, sender })
+          }
         }
-        for (const c of convs) {
-          const otherId = c.participant_a === user.id ? c.participant_b : c.participant_a
-          if (!otherId) continue
-          const msgRes = await fetch(
-            `${SUPA_URL}/rest/v1/messages?conversation_id=eq.${c.id}&type=eq.payment_sent&sender_id=eq.${otherId}&select=*&order=created_at.desc&limit=20${sinceFilter}`,
-            { headers }
-          )
-          const msgs: any[] = msgRes.ok ? await msgRes.json() : []
-          if (!msgs.length) continue
-          const { data: sender } = await supabase.from('users')
-            .select('username,display_name,wallet_address').eq('id', otherId).maybeSingle()
+        for (const { otherId, msgs, sender } of chats) {
           // Only re-allow (and re-save as a contact) if this person's most
           // recent payment happened AFTER they were removed. `msgs` is already
           // ordered newest-first. Without this check, this scan ran on every
