@@ -34,7 +34,8 @@ function delayed<T>(label: string, ticks: number, value: T): Promise<T> {
 }
 
 vi.mock('viem/accounts', () => ({
-  privateKeyToAccount: () => ({ address: '0x1111111111111111111111111111111111111111' }),
+  // Signing is local now (relaySend); any hex stands in for the signed bytes.
+  privateKeyToAccount: () => ({ address: '0x1111111111111111111111111111111111111111', signTransaction: async () => '0x02abc0' }),
 }))
 
 vi.mock('./arc', async () => {
@@ -95,7 +96,9 @@ describe('sendUSDC / sendEURC pre-broadcast concurrency', () => {
     // All three calls must have been kicked off before any of them finishes -
     // that's only possible if they were launched concurrently (Promise.all),
     // not one at a time.
-    expect(starts).toEqual(['start:balance', 'start:intent', 'start:gas'])
+    // (Later arc calls - the send itself via relaySend - come after; only the
+    // pre-broadcast leg is under test.)
+    expect(starts.slice(0, 3)).toEqual(['start:balance', 'start:intent', 'start:gas'])
     expect(firstEnd).toBe(3) // the 4th timeline entry - after all 3 starts
   })
 

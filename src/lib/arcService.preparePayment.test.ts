@@ -16,7 +16,8 @@ const sendTransaction = vi.fn(async (_args: unknown) =>
   '0xabc0000000000000000000000000000000000000000000000000000000000000')
 
 vi.mock('viem/accounts', () => ({
-  privateKeyToAccount: () => ({ address: SENDER }),
+  // Signing is local now (relaySend): the spy records what gets signed.
+  privateKeyToAccount: () => ({ address: SENDER, signTransaction: async (args: unknown) => { await sendTransaction(args); return '0x02abc0' } }),
 }))
 
 vi.mock('./arc', async () => {
@@ -51,7 +52,7 @@ describe('preparePayment', () => {
     expect(createPayIntent).toHaveBeenCalledTimes(1)
     expect(sendTransaction).toHaveBeenCalledTimes(1)
     expect((sendTransaction.mock.calls[0][0] as { nonce: number }).nonce).toBe(7)
-    expect(res.txHash).toMatch(/^0xabc/)
+    expect(res.txHash).toMatch(/^0x[0-9a-f]{64}$/) // keccak of the signed bytes, known before sending
   })
 
   it('ignores an early preflight made for different payment details', async () => {

@@ -2,8 +2,8 @@
  * Arc Blockchain Service
  * Implemented exactly per Arc docs: https://docs.arc.io/integrate/exchanges/withdrawals
  */
-import { createPublicClient, createWalletClient, parseUnits, encodeFunctionData, parseGwei, getAddress, isAddress } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
+import { createPublicClient, parseUnits, encodeFunctionData, parseGwei, getAddress, isAddress, keccak256 } from 'viem'
+import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts'
 import { arcTransport, arcRpcJson } from './arc'
 import { ARC, ARC_TOKENS, ARC_CHAIN_INLINE as REGISTRY_ARC_CHAIN_INLINE } from '@/blockchain/chains'
 import { isSlowNetwork } from './connectivity'
@@ -263,6 +263,72 @@ export function confirmTransactionInBackground(
     })
 }
 
+
+// ─── Send through the server (OKX-style) ────────────────────────────────────
+// The phone signs the payment itself (the key never leaves it) and already
+// knows the transaction hash before anything is sent. One request then hands
+// the signed bytes to /api/arc-rpc, which broadcasts to every Arc node at once
+// and waits for the receipt on the server's fast connection - instead of the
+// phone doing chainId + send + receipt polling over a weak link.
+// Anything unclear (old server, lost answer) falls back to sending it directly
+// as before; a payment that may have gone out is reported 'pending', never
+// 'failed' (SUBMITTED_UNKNOWN - Architecture rule 5).
+const RELAY_METHOD = 'meshport_sendRawTransactionAndWait'
+const RELAY_REJECTED = -32003
+const ALREADY_SENT = /already known|known transaction|already imported|nonce too low|replacement transaction underpriced/i
+
+async function relaySend(
+  account: PrivateKeyAccount,
+  tx: { to: `0x${string}`; value?: bigint; data?: `0x${string}`; gas: bigint; nonce: number },
+  onSent: (hash: `0x${string}`) => void,
+): Promise<{ txHash: `0x${string}`; state: SendResult['state']; blockNumber?: string }> {
+  const raw = await account.signTransaction({
+    type: 'eip1559',
+    chainId: ARC_CHAIN_INLINE.id,
+    to: tx.to,
+    value: tx.value ?? 0n,
+    data: tx.data,
+    gas: tx.gas,
+    nonce: tx.nonce,
+    maxFeePerGas: parseGwei('25'),
+    maxPriorityFeePerGas: parseGwei('1'),
+  })
+  const txHash = keccak256(raw)
+
+  let relayed: { hash?: string; status?: string; blockNumber?: string; broadcast?: string } | null = null
+  try {
+    const json = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: RELAY_METHOD, params: [raw, txHash, 8000] }, isSlowNetwork() ? 40_000 : 20_000)
+    relayed = json?.result ?? null
+  } catch (e: any) {
+    // Every node that answered refused it: nothing was sent.
+    if (e && typeof e === 'object' && e.code === RELAY_REJECTED) throw new Error(e.message || 'Transaction rejected')
+    // Otherwise unknown (lost answer / older server): handled below.
+  }
+  if (relayed?.hash && relayed.broadcast !== 'unknown') {
+    onSent(txHash)
+    if (relayed.status === 'success' || relayed.status === 'failed') {
+      return { txHash, state: relayed.status, blockNumber: relayed.blockNumber ? BigInt(relayed.blockNumber).toString() : undefined }
+    }
+    // Sent, no receipt within the server's wait: one short look, then pending.
+    return { txHash, ...(await waitForConfirmation(txHash, 3_000)) }
+  }
+
+  // Fallback: send it directly through the proxy, as before. Re-sending the
+  // identical signed bytes is harmless ("already known").
+  try {
+    await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_sendRawTransaction', params: [raw] })
+    onSent(txHash)
+  } catch (e: any) {
+    const msg = String(e?.message ?? '')
+    if (ALREADY_SENT.test(msg)) onSent(txHash)
+    // A JSON-RPC rejection from the node: not sent.
+    else if (e && typeof e === 'object' && typeof e.code === 'number') throw new Error(msg || 'Transaction rejected')
+    // A network failure: it may or may not be out - keep watching it.
+    else return { txHash, state: 'pending' }
+  }
+  return { txHash, ...(await waitForConfirmation(txHash)) }
+}
+
 // ─── Send USDC - exact Arc docs pattern ──────────────────────────────────────
 /** Last check before signing: a real amount and a real recipient. */
 function assertSendable(to: string, amount: number) {
@@ -297,12 +363,8 @@ export async function sendUSDC(params: {
   const amount6dec = BigInt(Math.round(params.amount * 1_000_000))
   const amount18dec = amount6dec * (10n ** 12n)  // exact Arc docs formula
 
-  // Arc docs Step 3: Create clients - walletClient WITHOUT chain (chain passed
-  // inline). Gas estimation now lives in the shared preflight above.
-  const walletClient = createWalletClient({
-    account,
-    transport: arcTransport(),
-  })
+  // Gas estimation lives in the shared preflight; signing happens locally in
+  // relaySend (no wallet client / RPC round trips needed to sign).
 
   const { markPayAttemptSubmitted } = await import('./payIntentService')
 
@@ -379,21 +441,13 @@ export async function sendUSDC(params: {
   // surfaced to the caller and, if the transaction may still have reached
   // the network, resolved by the same UNKNOWN/nonce-recovery mechanism
   // BulkPay already uses (payNonceRecovery.ts).
-  const txHash = await walletClient.sendTransaction({
-    to: destination,
-    value: amount18dec,
-    gas: (gasEstimate * 120n) / 100n,
-    maxFeePerGas: parseGwei('25'),
-    maxPriorityFeePerGas: parseGwei('1'),
-    chain: ARC_CHAIN_INLINE,
-    nonce: serverNonce,
-  } as unknown as Parameters<typeof walletClient.sendTransaction>[0])
-
-  // Persist the real tx_hash server-side IMMEDIATELY, before waiting for
-  // any receipt - fire-and-forget: markPayAttemptSubmitted never throws,
-  // and its own failure must never block or fail an already-broadcast,
-  // already-real payment.
-  void markPayAttemptSubmitted(attemptId, txHash).catch(() => { /* best-effort */ })
+  // Signed here, sent and confirmed by the server in one request (relaySend);
+  // the real tx_hash is persisted server-side as soon as it's out -
+  // fire-and-forget: markPayAttemptSubmitted never throws, and its own
+  // failure must never block or fail an already-broadcast payment.
+  const sent = await relaySend(account, { to: destination, value: amount18dec, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce },
+    h => { void markPayAttemptSubmitted(attemptId, h).catch(() => { /* best-effort */ }) })
+  const txHash = sent.txHash
 
   // BUG FIX (2026-09-03) - this used to return immediately after
   // broadcasting, before any confirmation at all. A blocking wait (bounded
@@ -405,12 +459,13 @@ export async function sendUSDC(params: {
   // a success screen. Restored to a real, bounded wait (2026-09-28, product
   // decision): with 250ms polling it costs ~Arc's sub-second finality, and
   // the pre-broadcast leg is now overlapped with PIN entry (preparePayment).
-  // Callers branch on state: 'success' / 'failed' / 'pending'.
+  // Callers branch on state: 'success' / 'failed' / 'pending'. relaySend
+  // already waited for the real receipt (server-side).
   return {
     txHash,
     explorerUrl: `${ARC_TESTNET.explorerUrl}/tx/${txHash}`,
-    // Real confirmation, not optimistic - see waitForConfirmation above.
-    ...(await waitForConfirmation(txHash)),
+    state: sent.state,
+    blockNumber: sent.blockNumber,
     senderAddress,
     recipientAddress: destination,
   }
@@ -484,11 +539,6 @@ export async function sendEURC(params: {
     args: [destination, amountWei],
   })
 
-  const walletClient = createWalletClient({
-    account,
-    transport: arcTransport(),
-  })
-
   // Server-reserved intent/attempt/nonce - same as sendUSDC above, see its
   // own comment for the full reasoning. expectedTo for confirmation is
   // EURC_CONTRACT here (an ERC20 transfer's real destination), not the
@@ -523,29 +573,18 @@ export async function sendEURC(params: {
   // Cast: see comment on the sendTransaction call above - viem's
   // overload resolution spuriously demands an EIP-4844 `kzg` field here
   // too. Runtime behavior is unaffected.
-  const txHash = await walletClient.sendTransaction({
-    to: EURC_CONTRACT,
-    data,
-    gas: (gasEstimate * 120n) / 100n,
-    maxFeePerGas: parseGwei('25'),
-    maxPriorityFeePerGas: parseGwei('1'),
-    nonce: serverNonce,
-    // MAINNET FIX: sendEURC previously duplicated the chain definition inline
-    // instead of importing ARC_CHAIN_INLINE. The inline copy hardcoded the
-    // testnet chain id/name directly, so EURC sends would silently broadcast
-    // as "wrong chain" on mainnet. ARC_CHAIN_INLINE is already env-driven via
-    // blockchain/chains.ts (same fix sendUSDC already benefits from by using
-    // it there). This bug only affected EURC; USDC used ARC_CHAIN_INLINE.
-    chain: ARC_CHAIN_INLINE,
-  } as unknown as Parameters<typeof walletClient.sendTransaction>[0])
-
-  void markPayAttemptSubmitted(attemptId, txHash).catch(() => { /* best-effort */ })
+  // Signed here, sent and confirmed by the server in one request - see
+  // relaySend (and sendUSDC's comments).
+  const sent = await relaySend(account, { to: EURC_CONTRACT as `0x${string}`, data: data as `0x${string}`, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce },
+    h => { void markPayAttemptSubmitted(attemptId, h).catch(() => { /* best-effort */ }) })
+  const txHash = sent.txHash
 
   return {
     txHash,
     explorerUrl: `${ARC_TESTNET.explorerUrl}/tx/${txHash}`,
-    // Real confirmation, not optimistic - see waitForConfirmation above.
-    ...(await waitForConfirmation(txHash)),
+    // Real receipt, already waited for by relaySend.
+    state: sent.state,
+    blockNumber: sent.blockNumber,
     senderAddress,
     recipientAddress: destination,
   }
@@ -620,11 +659,6 @@ export async function sendCirBTC(params: {
     args: [destination, amountWei],
   })
 
-  const walletClient = createWalletClient({
-    account,
-    transport: arcTransport(),
-  })
-
   // Server-reserved intent/attempt/nonce - same as sendUSDC/sendEURC above.
   // PERF: intent creation and gas estimation run concurrently, same fix as
   // sendUSDC/sendEURC - see sendUSDC's own comment for the full reasoning.
@@ -654,25 +688,20 @@ export async function sendCirBTC(params: {
   // overload resolution spuriously demands an EIP-4844 `kzg` field here too.
   // MAINNET FIX: same inline chain duplication bug as sendEURC - replaced
   // with ARC_CHAIN_INLINE (env-driven, matches sendUSDC and now sendEURC).
-  const txHash = await walletClient.sendTransaction({
-    to: CIRBTC_CONTRACT,
-    data,
-    gas: (gasEstimate * 120n) / 100n,
-    maxFeePerGas: parseGwei('25'),
-    maxPriorityFeePerGas: parseGwei('1'),
-    nonce: serverNonce,
-    chain: ARC_CHAIN_INLINE,
-  } as unknown as Parameters<typeof walletClient.sendTransaction>[0])
-
-  void markPayAttemptSubmitted(attemptId, txHash).catch(() => { /* best-effort */ })
+  // Signed here, sent and confirmed by the server in one request - see
+  // relaySend (and sendUSDC's comments).
+  const sent = await relaySend(account, { to: CIRBTC_CONTRACT as `0x${string}`, data: data as `0x${string}`, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce },
+    h => { void markPayAttemptSubmitted(attemptId, h).catch(() => { /* best-effort */ }) })
+  const txHash = sent.txHash
 
   // PERF FIX (2026-09-17, explicit product decision): reverted back to
   // optimistic return - see sendUSDC's own comment for the full reasoning.
   return {
     txHash,
     explorerUrl: `${ARC_TESTNET.explorerUrl}/tx/${txHash}`,
-    // Real confirmation, not optimistic - see waitForConfirmation above.
-    ...(await waitForConfirmation(txHash)),
+    // Real receipt, already waited for by relaySend.
+    state: sent.state,
+    blockNumber: sent.blockNumber,
     senderAddress,
     recipientAddress: destination,
   }
