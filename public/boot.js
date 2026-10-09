@@ -16,6 +16,12 @@
             : mode;
           document.documentElement.setAttribute('data-theme', resolved);
           document.documentElement.style.colorScheme = resolved;
+          // Status bar in the page colour (themeStore.ts keeps it in step).
+          // A theme-color without media wins over index.html's per-system ones.
+          var mtc = document.createElement('meta');
+          mtc.name = 'theme-color'; mtc.id = 'mp-theme-color';
+          mtc.content = resolved === 'dark' ? '#0B0E11' : '#F5F6F8';
+          document.head.insertBefore(mtc, document.head.firstChild);
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'dark');
         }
