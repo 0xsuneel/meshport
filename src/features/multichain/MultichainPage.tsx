@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { ActionIcon } from '@/components/ui/ActionIcon'
 import { CHAIN_LOGO_FILE, chainLogoSrc } from '@/lib/chainLogos'
 import { RecoveryPanel } from './MultichainRecoveryPage'
 // Transfer and claim forms render inline under the Hub's tabs (no page change).
@@ -1032,23 +1033,19 @@ export function MultichainPage() {
                   <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
                     background: isFailed ? 'color-mix(in srgb, var(--danger) 10%, transparent)' : isPending ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : isClaim ? 'color-mix(in srgb, var(--success) 10%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                      {isPending ? (
-                        <>
-                          <circle cx="8" cy="8" r="6.2" stroke="var(--warning)" strokeWidth="1.4"/>
-                          <path d="M8 4.6V8l2.4 1.4" stroke="var(--warning)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                        </>
-                      ) : isFailed ? (
-                        <>
-                          <circle cx="8" cy="8" r="6.2" stroke="var(--danger)" strokeWidth="1.4"/>
-                          <path d="M6.2 6.2l3.6 3.6M9.8 6.2l-3.6 3.6" stroke="var(--danger)" strokeWidth="1.4" strokeLinecap="round"/>
-                        </>
-                      ) : isClaim ? (
-                        <path d="M8 2v9M5 8l3 3 3-3M2 13h12" stroke="var(--success)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                      ) : (
-                        <path d="M2 8h12M10 5l3 3-3 3" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                      )}
-                    </svg>
+                    {/* Same icon family as the action buttons and Activity. */}
+                    {isPending ? (
+                      <ActionIcon name="clock" size={18} color="var(--warning)" />
+                    ) : isFailed ? (
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="6.2" stroke="var(--danger)" strokeWidth="1.4"/>
+                        <path d="M6.2 6.2l3.6 3.6M9.8 6.2l-3.6 3.6" stroke="var(--danger)" strokeWidth="1.4" strokeLinecap="round"/>
+                      </svg>
+                    ) : isClaim ? (
+                      <ActionIcon name="receive" size={18} color="var(--success)" />
+                    ) : (
+                      <ActionIcon name="hub" size={18} color="var(--brand-text)" />
+                    )}
                   </div>
 
                   {/* Details */}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { ActionIcon } from '@/components/ui/ActionIcon'
 import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
@@ -203,16 +204,15 @@ function SwapHistoryItem({ r, onOpen, isFirst }: { r: SwapRecord; onOpen: () => 
       <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
         background: isFailed ? 'color-mix(in srgb, var(--danger) 10%, transparent)' : 'color-mix(in srgb, var(--success) 10%, transparent)',
         display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          {isFailed ? (
-            <>
-              <circle cx="8" cy="8" r="6.2" stroke="var(--danger)" strokeWidth="1.4"/>
-              <path d="M6.2 6.2l3.6 3.6M9.8 6.2l-3.6 3.6" stroke="var(--danger)" strokeWidth="1.4" strokeLinecap="round"/>
-            </>
-          ) : (
-            <path d="M2 8h5l1.5-3 2 6L12 8h2" stroke="var(--success)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-          )}
-        </svg>
+        {isFailed ? (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6.2" stroke="var(--danger)" strokeWidth="1.4"/>
+            <path d="M6.2 6.2l3.6 3.6M9.8 6.2l-3.6 3.6" stroke="var(--danger)" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+        ) : (
+          // Same Swap icon as the action buttons.
+          <ActionIcon name="swap" size={18} color="var(--success)" />
+        )}
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
