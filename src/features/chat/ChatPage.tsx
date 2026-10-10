@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
+import { reachCheck, STRANGER_PAY_BLOCKED, cachedPrivacy, fetchMyPrivacy, saveMyPrivacy, fetchMyRequestIds, type ChatPrivacy } from '@/lib/privacy'
 import { TokenLogo } from '@/components/ui/TokenLogo'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { PopupOpen } from '@/hooks/usePopupOpen'
@@ -36,6 +37,7 @@ import {
   fetchConversations,
   fetchContactsDbStrict,
   searchUsersDb,
+  addContactDb,
   invalidateConversationsCache,
   type DbConversation,
   type DbUser,
@@ -471,7 +473,17 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   const [searchOpen, setSearchOpen] = useState(false)
   // All / Unread / Archived. Archived chats are the hidden ones (hideChat):
   // nothing is deleted, and new activity brings one back to All by itself.
-  const [listTab, setListTab] = useState<'all' | 'unread' | 'archived'>('all')
+  const [listTab, setListTab] = useState<'all' | 'unread' | 'requests' | 'archived'>('all')
+  // Chat privacy (your profile picture): who can message you, payments from
+  // strangers. With "Contacts only", strangers' chats sit in Requests.
+  const [privacy, setPrivacy] = useState<ChatPrivacy>(() => cachedPrivacy(user?.id))
+  const [showPrivacy, setShowPrivacy] = useState(false)
+  const [requestIds, setRequestIds] = useState<Set<string>>(() => new Set())
+  const isMerchantList = useMerchant().isMerchant
+  useEffect(() => {
+    if (!user?.id) return
+    fetchMyPrivacy(user.id).then(setPrivacy).catch(() => {})
+  }, [user?.id])
   const [archivedConvs, setArchivedConvs] = useState<DbConversation[]>([])
   const isDesktopList = useMediaQuery('(min-width: 980px)')
   const [conversations, setConversations] = useState<DbConversation[]>(_cachedConversations)
@@ -755,6 +767,32 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   }
   const isArchived = (conv: DbConversation) => archivedConvs.some(c => c.id === conv.id)
 
+  // Message requests: chats from people you don't know (server decides).
+  const requestsOn = privacy.msgPrivacy === 'contacts' && !isMerchantList
+  const convKey = conversations.map(c => c.id).join(',')
+  useEffect(() => {
+    if (!requestsOn) { setRequestIds(new Set()); return }
+    let cancelled = false
+    fetchMyRequestIds().then(ids => { if (!cancelled) setRequestIds(ids) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [requestsOn, convKey])
+  useEffect(() => { if (!requestsOn && listTab === 'requests') setListTab('all') }, [requestsOn, listTab])
+  const isRequest = (conv: DbConversation) => requestIds.has(conv.id)
+  // Accept: save them as a contact - the chat moves to All.
+  const acceptRequest = (conv: DbConversation) => {
+    const otherId = conv.other_user?.id
+    setRequestIds(prev => { const n = new Set(prev); n.delete(conv.id); return n })
+    setContextConv(null)
+    if (user?.id && otherId) addContactDb(user.id, otherId).catch(() => {})
+  }
+  const changePrivacy = async (patch: Partial<ChatPrivacy>) => {
+    if (!user?.id) return
+    const before = privacy
+    setPrivacy(p => ({ ...p, ...patch }))
+    try { setPrivacy(await saveMyPrivacy(user.id, patch)) }
+    catch { setPrivacy(before); useUIStore.getState().showToastMessage("Couldn't save - try again", 'error') }
+  }
+
   // Long press handlers
   const startLongPress = (conv: DbConversation) => {
     if (longPressTimer.current) return  // already started, don't double-fire
@@ -827,12 +865,15 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     )
   }
 
-  const unreadChats = conversations.filter(c => (c.unread_count || 0) > 0).length
+  const mainConvs = requestIds.size ? conversations.filter(c => !requestIds.has(c.id)) : conversations
+  const requestConvs = requestIds.size ? conversations.filter(c => requestIds.has(c.id)) : []
+  const unreadChats = mainConvs.filter(c => (c.unread_count || 0) > 0).length
   // New messages waiting in archived chats ("+3" on the Archived chip).
   const archivedUnread = archivedConvs.reduce((n, c) => n + (c.unread_count || 0), 0)
   const tabList = listTab === 'archived' ? archivedConvs
-    : listTab === 'unread' ? conversations.filter(c => (c.unread_count || 0) > 0)
-    : conversations
+    : listTab === 'requests' ? requestConvs
+    : listTab === 'unread' ? mainConvs.filter(c => (c.unread_count || 0) > 0)
+    : mainConvs
   // Search covers every chat (archived too) and people: your contacts
   // without a chat yet, plus anyone found by their full username.arc.
   const searchQ = search.trim().toLowerCase().replace(/^@/, '')
@@ -855,7 +896,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         style={{ borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
         {/* Your profile · Chats · search */}
         <div className="header-row justify-between" style={{ marginBottom: 12 }}>
-          <button onClick={() => navigate('/profile')} aria-label="Profile" className="rounded-full flex-shrink-0"
+          <button onClick={() => setShowPrivacy(true)} aria-label="Chat privacy" className="rounded-full flex-shrink-0"
             style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}>
             <Avatar name={user?.displayName || user?.username || 'Me'} src={user?.avatar ?? undefined} size="sm" className="!w-9 !h-9" />
           </button>
@@ -875,12 +916,12 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         )}
 
         {/* All · Unread · Archived (hidden while searching - search covers all) */}
-        {!searchQ && <div className="flex gap-2" role="tablist" aria-label="Chat filter">
-          {([['all', 'All'], ['unread', 'Unread'], ['archived', 'Archived']] as const).map(([id, label]) => {
+        {!searchQ && <div className={`flex ${requestsOn ? 'gap-1.5' : 'gap-2'}`} role="tablist" aria-label="Chat filter">
+          {(([['all', 'All'], ['unread', 'Unread'], ...(requestsOn ? [['requests', 'Requests']] : []), ['archived', 'Archived']]) as ['all' | 'unread' | 'requests' | 'archived', string][]).map(([id, label]) => {
             const on = listTab === id
             return (
               <button key={id} role="tab" aria-selected={on} onClick={() => setListTab(id)}
-                className="flex-1 rounded-full flex items-center justify-center gap-1.5 text-[14px] transition-colors"
+                className={`flex-1 min-w-0 rounded-full flex items-center justify-center gap-1 ${requestsOn ? 'text-[12.5px]' : 'text-[14px]'} transition-colors`}
                 style={{ height: 36, fontWeight: on ? 700 : 600, cursor: 'pointer',
                   background: on ? 'color-mix(in srgb, var(--brand) 25%, transparent)' : 'transparent',
                   border: `1px solid ${on ? 'var(--brand)' : 'var(--border)'}`,
@@ -888,6 +929,10 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                 {label}
                 {id === 'archived' && archivedUnread > 0 && (
                   <span className="text-[12px] font-bold" style={{ color: 'var(--brand-text)' }}>+{archivedUnread > 99 ? '99' : archivedUnread}</span>
+                )}
+                {id === 'requests' && requestConvs.length > 0 && (
+                  <span className="rounded-full text-[11px] font-bold text-white inline-flex items-center justify-center"
+                    style={{ minWidth: 18, height: 18, padding: '0 5px', background: 'var(--brand)' }}>{requestConvs.length}</span>
                 )}
                 {id === 'unread' && unreadChats > 0 && (
                   <span className="rounded-full text-[11px] font-bold text-white inline-flex items-center justify-center"
@@ -901,10 +946,10 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
 
       {loading ? (
         <SkeletonRows count={8} />
-      ) : filtered.length === 0 && peopleMatches.length === 0 && (listTab !== 'all' || searchQ || archivedConvs.length > 0) ? (
+      ) : filtered.length === 0 && peopleMatches.length === 0 && (listTab !== 'all' || searchQ || archivedConvs.length > 0 || requestConvs.length > 0) ? (
         <div className="text-center py-16 px-5">
           <p className="text-text-secondary font-medium">
-            {searchQ ? 'No chats or people found' : listTab === 'unread' ? 'No unread chats' : listTab === 'archived' ? 'No archived chats' : 'All your chats are archived'}
+            {searchQ ? 'No chats or people found' : listTab === 'unread' ? 'No unread chats' : listTab === 'archived' ? 'No archived chats' : listTab === 'requests' ? 'No message requests' : requestConvs.length > 0 ? 'No chats here - see Requests' : 'All your chats are archived'}
           </p>
           {searchQ && !searchQ.endsWith('.arc') && (
             <p className="text-text-muted text-sm mt-1">Type a full username.arc to find someone new</p>
@@ -927,6 +972,11 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         </div>
       ) : (
         <div className="pb-4">
+          {listTab === 'requests' && !searchQ && (
+            <p className="px-4 pt-3 pb-1 text-[12.5px] text-text-secondary">
+              People you don't know yet. Long-press a chat to accept them - it moves to All.
+            </p>
+          )}
           {searchQ && filtered.length > 0 && (
             <p className="px-4 pt-3 pb-1 text-[12px] font-bold uppercase tracking-wide text-text-secondary">Chats</p>
           )}
@@ -1026,6 +1076,67 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         </div>
       )}
 
+      {/* ── Chat privacy (your profile picture, top left) ── */}
+      <Sheet isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} title="Chat privacy">
+        <div className="px-5 pb-5 space-y-5">
+          <div className="flex items-center gap-3">
+            <Avatar name={user?.displayName || user?.username || 'Me'} src={user?.avatar ?? undefined} size="md" />
+            <div className="min-w-0">
+              <p className="text-[15px] font-bold text-text-primary truncate">{user?.displayName || (user?.username || '').replace(/\.arc$/, '')}</p>
+              <p className="text-[13px] text-link">{(user?.username || '').replace(/\.arc$/, '')}.arc</p>
+            </div>
+          </div>
+          {isMerchantList ? (
+            <p className="text-[13px] text-text-secondary rounded-2xl px-4 py-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+              Merchant accounts accept messages and payments from everyone, so customers can always reach you.
+            </p>
+          ) : (<>
+            {([
+              { title: 'Who can message me', key: 'msgPrivacy' as const, options: [
+                { v: 'everyone', label: 'Everyone', hint: 'Anyone on MeshPort can start a chat with you.' },
+                { v: 'contacts', label: 'Contacts only', hint: "Chats from people you don't know go to Requests, without alerts." },
+              ] },
+              { title: 'Payments from strangers', key: 'strangerPayments' as const, options: [
+                { v: 'allow', label: 'Allow', hint: 'Anyone can pay you.' },
+                { v: 'block', label: 'Block', hint: "MeshPort won't let people you don't know pay you. Payments sent from outside MeshPort still arrive (nobody can stop a blockchain transfer), just without an alert." },
+              ] },
+            ]).map(group => (
+              <div key={group.key}>
+                <p className="text-[12px] font-bold uppercase tracking-wide text-text-secondary mb-2">{group.title}</p>
+                <div role="radiogroup" aria-label={group.title} className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                  {group.options.map((o, i) => {
+                    const on = (privacy as any)[group.key] === o.v
+                    return (
+                      <button key={o.v} role="radio" aria-checked={on}
+                        onClick={() => changePrivacy({ [group.key]: o.v } as Partial<ChatPrivacy>)}
+                        className="w-full flex items-start gap-3 px-4 py-3 text-left"
+                        style={{ borderTop: i ? '1px solid var(--border)' : 'none', background: 'none', cursor: 'pointer' }}>
+                        <span className="mt-0.5 flex-shrink-0 rounded-full flex items-center justify-center"
+                          style={{ width: 20, height: 20, border: `2px solid ${on ? 'var(--brand)' : 'var(--border)'}` }}>
+                          {on && <span className="rounded-full" style={{ width: 10, height: 10, background: 'var(--brand)' }} />}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block text-[15px] font-semibold text-text-primary">{o.label}</span>
+                          <span className="block text-[12.5px] text-text-secondary mt-0.5">{o.hint}</span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+            <p className="text-[12px] text-text-muted">
+              People you know = your contacts, or anyone you've messaged or paid yourself.
+            </p>
+          </>)}
+          <button onClick={() => { setShowPrivacy(false); navigate('/profile') }}
+            className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-[15px] font-semibold text-text-primary"
+            style={{ background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
+            All settings <span aria-hidden className="text-text-secondary">›</span>
+          </button>
+        </div>
+      </Sheet>
+
       {/* ── Profile Sheet (from chat list avatar tap) ── */}
       <AnimatePresence>
         {profileConv && (() => {
@@ -1096,6 +1207,14 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                   <p className="text-sm text-link">{(contextConv.other_user?.username || '').replace(/\.arc$/, '')}.arc</p>
                 </div>
               </div>
+              {isRequest(contextConv) && (
+                <button onClick={() => acceptRequest(contextConv)}
+                  className="w-full flex items-center gap-3 px-5 py-4 mb-2.5 rounded-2xl font-semibold text-white active:scale-95 transition-transform"
+                  style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
+                  <UserPlus className="w-5 h-5" />
+                  Accept · add to contacts
+                </button>
+              )}
               {isArchived(contextConv) ? (
                 <button onClick={() => unarchiveConv(contextConv)}
                   className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl font-semibold active:scale-95 transition-transform"
@@ -2104,6 +2223,15 @@ export function ChatConversationPage() {
     return deleted.size ? _initMsgs.filter(m => !deleted.has(m.id)) : _initMsgs
   })
   const [otherUser, setOtherUser] = useState<any>(_findCachedOtherUser)
+  // Chat privacy: they may only accept payments from their contacts.
+  const [payBlockedByPrivacy, setPayBlockedByPrivacy] = useState(false)
+  useEffect(() => {
+    setPayBlockedByPrivacy(false)
+    if (!otherUser?.id) return
+    let cancelled = false
+    reachCheck(otherUser.id).then(r => { if (!cancelled) setPayBlockedByPrivacy(!r.canPay) })
+    return () => { cancelled = true }
+  }, [otherUser?.id])
   // Remember this chat's header identity on the device, so reopening it -
   // even after a reload or from a notification - paints the name and avatar
   // on the very first frame instead of a bare ".arc" that fills in later.
@@ -3493,6 +3621,7 @@ export function ChatConversationPage() {
   }
 
   const handlePay = () => {
+    if (payBlockedByPrivacy) { showToastMessage(STRANGER_PAY_BLOCKED(`${(otherUser?.username || '').replace(/\.arc$/, '')}.arc`), 'error'); return }
     if (idChanged) { showToastMessage(`Confirm ${otherUser?.display_name || otherUser?.username || 'this contact'}'s new security info before paying`, 'error'); return }
     if (!otherUser?.username || !otherUser?.wallet_address) { showToastMessage('Recipient wallet not available', 'error'); return }
     setPayAmount(''); setPayToken('USDC'); setPayNote(''); setPayError(''); setPayTxHash('')
@@ -3654,6 +3783,14 @@ export function ChatConversationPage() {
         chatPayInFlightRef.current = false
         return
       }
+    }
+
+    // Chat privacy preflight: they may only accept payments from contacts.
+    // Nothing has been signed or sent yet.
+    if (otherUser?.id && !(await reachCheck(otherUser.id)).canPay) {
+      setPayError(STRANGER_PAY_BLOCKED(`${(otherUser.username || '').replace(/\.arc$/, '')}.arc`))
+      setPayStep('confirm'); chatPayInFlightRef.current = false
+      return
     }
 
     setPayError(''); setPayPending(false); setPayStep('processing')

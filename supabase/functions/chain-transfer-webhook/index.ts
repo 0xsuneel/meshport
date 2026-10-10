@@ -374,6 +374,12 @@ async function notifyExternalReceive(
   supabase: SupabaseClient, userId: string, txHash: string, amount: number, fromAddress: string, tokenSymbol: string,
 ): Promise<boolean> {
   if (!PUSH_INTERNAL_SECRET) { console.warn('[chain-transfer-webhook] PUSH_INTERNAL_SECRET not set - no receive push'); return false }
+  // "Payments from strangers: Block" (chat privacy): the receive is recorded
+  // as usual, just without an alert from someone the user doesn't know.
+  try {
+    const { data: quiet } = await supabase.rpc('chat_quiet_from', { recipient: userId, from_wallet: fromAddress })
+    if (quiet === true) { console.log('[chain-transfer-webhook] receive push skipped: stranger payment'); return true }
+  } catch { /* check failed: alert as before */ }
   try {
     const sender = await findUserByWallet(supabase, fromAddress)
     const from = sender?.username
