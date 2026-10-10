@@ -309,9 +309,11 @@ function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
   } = deriveActivityRow(record)
 
   // Same icons as the action buttons (Pay, Receive, Swap, P2P, Bulk Pay,
-  // Multichain Hub). Anything else keeps the plain arrow below.
+  // Multichain Hub, Rewards). Anything else keeps the plain arrow below.
   const rowIcon: ActionIconName | null =
       (isP2PSellOrder || isP2PRefund || isP2PPurchase) ? 'p2p'
+    // Rewards points claimed to USDC (older rows only carry the sender name).
+    : isReceive && (metadata.receiveKind === 'reward_claim' || !!SYSTEM_LABELS[metadata.fromUsername]) ? 'rewards'
     : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'receive'
     : isSwap     ? 'swap'
     : isBulk     ? 'bulk'
