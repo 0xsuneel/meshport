@@ -2840,129 +2840,145 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       <span style={{ flexShrink: 0, whiteSpace: 'nowrap', fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(balance)} USDC</span>
     </div>
   )
+  // From Arc → To the picked chain. Tapping To opens the chain picker.
+  const chainNetwork = chain.testnet.startsWith(chain.name) ? (chain.testnet.slice(chain.name.length).trim() || 'Testnet') : chain.testnet
   const formDestination = (
-    <div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Destination Chain</div>
-      <button onClick={() => setShowChainPicker(true)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 16, cursor: 'pointer',
-        background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)', textAlign: 'left' }}>
-        <ChainLogoImg id={chain.id} size={30}/>
-        <span style={{ flex: 1, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>{chain.testnet}</span>
-        <ChevronDown className="w-4 h-4" style={{ color: 'var(--text-secondary)' }}/>
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 44px minmax(0, 1fr)', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px 10px', borderRadius: 20, minWidth: 0,
+        background: 'color-mix(in srgb, var(--brand) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
+        <img src="/logos/chains/arc.svg" alt="" width={40} height={40} style={{ borderRadius: '50%' }}/>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>From</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>Arc Testnet</span>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{formatAmount(balance)} USDC</span>
+      </div>
+      <div aria-hidden="true" style={{ width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'color-mix(in srgb, var(--brand) 14%, transparent)', color: 'var(--brand-text)' }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <button onClick={() => setShowChainPicker(true)} aria-label={`To ${chain.testnet} - choose another chain`}
+        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px 10px', borderRadius: 20, cursor: 'pointer', minWidth: 0,
+          background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
+        <ChainLogoImg id={chain.id} size={40}/>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>To</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 16, fontWeight: 700, maxWidth: '100%' }}>
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chain.name}</span>
+          <ChevronDown className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)', flexShrink: 0 }}/>
+        </span>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chainNetwork}</span>
       </button>
     </div>
   )
+  // Route: a two-way switch (only when both are possible), with one line on
+  // how the chosen one works.
+  const routeSwitchable = availableMechanisms.length > 1
   const formRoute = (
     <div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Transfer Route</div>
-      <div style={{ display: 'flex', gap: 10 }}>
-        {([
-          { id: 'ub' as const,   name: 'Unified Balance', text: 'Gateway · ~60s', on: effectiveUb,
-            icon: <path d="M13 2L4 14h7l-1 8 9-12h-7z"/> },
-          { id: 'cctp' as const, name: 'CCTP',            text: 'Burn-mint · 20–90s', on: !effectiveUb,
-            icon: <path d="M4 8h14l-3-3M20 16H6l3 3"/> },
-        ]).filter(r => availableMechanisms.length > 1 || r.on).map(r => (
-          <button key={r.id} onClick={() => { if (availableMechanisms.length > 1) setSelectedRoute(r.id) }}
-            style={{ flex: 1, minWidth: 0, height: 68, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10,
-              textAlign: 'left', padding: '0 12px', borderRadius: 16, cursor: availableMechanisms.length > 1 ? 'pointer' : 'default',
-              background: r.on ? 'color-mix(in srgb, var(--brand) 14%, transparent)' : 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-              border: r.on ? '1.5px solid var(--brand)' : '1px solid var(--border)' }}>
-            <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: r.on ? 'color-mix(in srgb, var(--brand) 22%, transparent)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={r.on ? 'var(--brand-text)' : 'var(--text-secondary)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
-            </span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: r.on ? 'var(--brand-text)' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
-              <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.text}</span>
-            </span>
-          </button>
-        ))}
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>How should it travel?</div>
+      {routeSwitchable && (
+        <div role="radiogroup" aria-label="Route" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4, padding: 4, borderRadius: 16,
+          background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
+          {([['ub', 'Unified Balance', effectiveUb], ['cctp', 'CCTP', !effectiveUb]] as const).map(([id, name, on]) => (
+            <button key={id} role="radio" aria-checked={on} onClick={() => setSelectedRoute(id)}
+              style={{ height: 42, borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: on ? 700 : 600,
+                background: on ? 'var(--brand)' : 'transparent', color: on ? '#fff' : 'var(--text-secondary)' }}>
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: routeSwitchable ? 10 : 0, padding: '0 4px' }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+          {effectiveUb ? <path d="M13 2L4 14h7l-1 8 9-12h-7z"/> : <path d="M4 8h14l-3-3M20 16H6l3 3"/>}
+        </svg>
+        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: 'var(--text-secondary)' }}>
+          {effectiveUb
+            ? <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Unified Balance · Gateway · ~60s.</b> Sent through Circle Gateway; the recipient gets native USDC on {chain.name}.</>
+            : <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>CCTP · Burn-mint · 20–90s.</b> Circle burns the USDC on Arc and mints the same amount on {chain.name}.</>}
+        </p>
       </div>
     </div>
   )
   const formRecipient = (
     <div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Recipient Address</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 14px', borderRadius: 16,
+      <label htmlFor="mt-recipient" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Send to</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 16px', borderRadius: 16,
         background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
         border: addrHint.type === 'ok' ? '1px solid color-mix(in srgb, var(--success) 45%, transparent)'
           : addrHint.type === 'error' ? '1px solid color-mix(in srgb, var(--danger) 45%, transparent)' : '1px solid var(--border)' }}>
-        <input
+        <input id="mt-recipient"
           className="flex-1 bg-transparent text-text-primary text-[15px] focus:outline-none font-mono placeholder-text-secondary"
-          style={{ minWidth: 0, padding: '8px 0' }}
-          placeholder="0x…"
+          style={{ minWidth: 0, height: 40, padding: 0 }}
+          placeholder={`0x… address on ${chain.name}`}
           value={address} onChange={e => handleAddressChange(e.target.value)}
           spellCheck={false} autoComplete="off"
         />
         <button onClick={() => { prewarmCamera(); navigate('/scanner?mode=wallet&returnTo=/multichain') }} aria-label="Scan QR"
-          className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+          className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
           style={{ background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-          <QrCode className="w-4 h-4 text-text-secondary"/>
+          <QrCode className="w-[18px] h-[18px] text-text-secondary"/>
         </button>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-        {senderAddress && (
-          <button onClick={() => handleAddressChange(senderAddress)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand-text)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, minHeight: 32 }}>
+        {senderAddress && address.toLowerCase() !== senderAddress.toLowerCase() && (
+          <button onClick={() => handleAddressChange(senderAddress)} style={{ height: 32, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand-text)' }}>
             Use my address
           </button>
         )}
         {addrHint.text && addrHint.type !== '' && (
-          <span style={{ marginLeft: 'auto', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4,
+          <span style={{ marginLeft: 'auto', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, textAlign: 'right',
             color: addrHint.type === 'ok' ? 'var(--success)' : addrHint.type === 'error' ? 'var(--danger)' : 'var(--warning)' }}>
             {/* A valid wallet address: say where the money lands, always
-                naming the chain currently picked below. */}
-            {addrHint.type === 'ok' && isEVMAddress(address) ? `You will receive USDC on ${chain.name}` : addrHint.text}
-            {addrHint.type === 'ok' && <CheckCircle className="w-3 h-3"/>}
+                naming the chain currently picked above. */}
+            {addrHint.type === 'ok' && <CheckCircle className="w-3 h-3 flex-shrink-0"/>}
+            {addrHint.type === 'ok' && isEVMAddress(address) ? `Receives USDC on ${chain.testnet}` : addrHint.text}
           </span>
         )}
       </div>
     </div>
   )
+  const setMaxAmount = () => {
+    // Static reserve: no live fee fetch until Review.
+    const maxAmount = Math.max(0, balance - feeReserveEstimate)
+    setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
+  }
+  const belowMin = numAmount > 0 && numAmount < MIN_AMOUNT
+  const feeLine = belowMin
+    ? <span style={{ fontWeight: 700, color: 'var(--danger)' }}>Minimum $3</span>
+    : <span>Fees about {trimTrailingZeros(feeReserveEstimate.toFixed(2))} USDC · exact fees on the next screen</span>
   const formAmount = (
-    <div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Amount (USDC)</div>
+    <div style={{ padding: '16px 18px', borderRadius: 22, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
+      border: `1.5px solid ${belowMin ? 'var(--danger)' : showAmountPad ? 'var(--brand)' : 'var(--border)'}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Amount (USDC)</span>
+        {!desktopInput && (
+          <button onClick={e => { e.stopPropagation(); setMaxAmount() }}
+            style={{ height: 30, padding: '0 12px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--brand-text)', whiteSpace: 'nowrap',
+              background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)' }}>
+            Max {formatAmount(Math.max(0, balance - feeReserveEstimate))}
+          </button>
+        )}
+      </div>
       {desktopInput ? (
-        <div ref={amountBoxRef}>
+        <div ref={amountBoxRef} style={{ marginTop: 8 }}>
           <DesktopAmountInput
             value={amount}
             onChange={v => setAmount(sanitizeMultichainAmount(v))}
-            onMax={() => {
-              // Same static reserve as the phone Max: no live fee fetch until Review.
-              const maxAmount = Math.max(0, balance - feeReserveEstimate)
-              setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
-            }}
-            invalid={numAmount > 0 && numAmount < MIN_AMOUNT}
+            onMax={setMaxAmount}
+            invalid={belowMin}
             ariaLabel="Amount in USDC"
           />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5 }}>
-            <span style={{ color: 'var(--text-secondary)' }}>Balance: {formatAmount(balance)} USDC</span>
-            {numAmount > 0 && numAmount < MIN_AMOUNT
-              ? <span style={{ fontWeight: 600, color: 'var(--danger)' }}>Minimum $3</span>
-              : <span style={{ color: 'var(--text-secondary)' }}>~{trimTrailingZeros(feeReserveEstimate.toFixed(2))} USDC fee reserved on Max</span>}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5, color: 'var(--text-secondary)' }}>
+            <span>Balance: {formatAmount(balance)} USDC</span>
+            {feeLine}
           </div>
         </div>
       ) : (
-        <div ref={amountBoxRef} onClick={() => setShowAmountPad(true)} style={{ padding: '14px 16px', borderRadius: 16, cursor: 'pointer',
-          background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1.15,
+        <div ref={amountBoxRef} onClick={() => setShowAmountPad(true)} style={{ cursor: 'pointer', marginTop: 8 }}>
+          <div style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-1.2px', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums',
             color: amount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>
-            {amount || '0.00'}
+            {amount || '0'}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>USDC</span>
-            {numAmount > 0 && numAmount < MIN_AMOUNT ? (
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--danger)' }}>Minimum $3</span>
-            ) : (
-              <button onClick={e => {
-                  e.stopPropagation()
-                  // Same static reserve as before: no live fee fetch until Review.
-                  const maxAmount = Math.max(0, balance - feeReserveEstimate)
-                  setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
-                }}
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand-text)' }}>
-                Max: {formatAmount(balance)} (−{trimTrailingZeros(feeReserveEstimate.toFixed(2))} est.)
-              </button>
-            )}
-          </div>
+          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-secondary)' }}>{feeLine}</div>
         </div>
       )}
     </div>
@@ -2973,20 +2989,24 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         <p className="text-xs text-warning">{gasWarning}</p>
       </div>
     ) : null
+  const reviewButton = (
+    <button disabled={!canContinue} onClick={handleContinue}
+      className="active:scale-[.98] transition-all"
+      style={{ width: '100%', height: 56, borderRadius: 18, fontSize: 16, fontWeight: 700, border: 'none', color: '#fff',
+        background: 'var(--brand)', cursor: canContinue ? 'pointer' : 'not-allowed', opacity: canContinue ? 1 : 0.45 }}>
+      {numAmount >= MIN_AMOUNT ? `Review ${formatAmount(numAmount)} USDC transfer` : 'Review'}
+    </button>
+  )
   const formActions = (
-<div style={{ display: 'flex', gap: 10 }}>
-      <button onClick={() => navigate('/multichain')}
-        className="active:scale-[.98] transition-all"
-        style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 600, cursor: 'pointer',
-          color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-        Cancel
-      </button>
-      <button disabled={!canContinue} onClick={handleContinue}
-        className="active:scale-[.98] transition-all disabled:opacity-40"
-        style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, border: 'none',
-          cursor: canContinue ? 'pointer' : 'not-allowed', color: '#fff', background: 'var(--brand)' }}>
-        Review
-      </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {reviewButton}
+      {/* Desktop's header has no back arrow - keep a quiet way back there. */}
+      {isDesktop && (
+        <button onClick={() => navigate('/multichain')}
+          style={{ height: 40, border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          Cancel
+        </button>
+      )}
     </div>
   )
 
@@ -3082,7 +3102,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               <motion.div animate={{ y: sheetMode ? 0 : -keypadLift }} initial={false} transition={KEYPAD_SPRING}
                 style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 22, padding: isDesktop ? 20 : 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {formTitle}
-                {formBalance}
+                {/* The From card below already shows the balance outside the Hub sheet. */}
+                {sheetMode && formBalance}
                 {sheetMode ? (
                   <button onClick={() => setFormSheet(1)}
                     className="active:scale-[.98] transition-all"
@@ -3092,9 +3113,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   </button>
                 ) : (<>
                   {formDestination}
-                  {formRoute}
                   {formRecipient}
                   {formAmount}
+                  {formRoute}
                   {formGasWarning}
                   {formActions}
                 </>)}
@@ -3583,31 +3604,16 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           header={
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 12px' }}>
               <HubPageBack onClick={() => setFormSheet(0)} />
-              <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Cross-Chain Transfer</span>
+              <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Transfer Funds</span>
             </div>
           }
-          footer={
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setFormSheet(0)}
-                className="active:scale-[.98] transition-all"
-                style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 600, cursor: 'pointer',
-                  color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-                Cancel
-              </button>
-              <button disabled={!canContinue} onClick={handleContinue}
-                className="active:scale-[.98] transition-all disabled:opacity-40"
-                style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, border: 'none',
-                  cursor: canContinue ? 'pointer' : 'not-allowed', color: '#fff', background: 'var(--brand)' }}>
-                Review
-              </button>
-            </div>
-          }>
+          footer={reviewButton}>
           {/* Moves up with the amount keypad so the amount stays in view. */}
           <motion.div animate={{ y: -keypadLift }} initial={false} transition={KEYPAD_SPRING}
-            style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {formDestination}
             {formRecipient}
             {formAmount}
-            {formDestination}
             {formRoute}
             {formGasWarning}
           </motion.div>
