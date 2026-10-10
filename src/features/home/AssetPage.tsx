@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useAuthStore, useWalletStore } from '@/store'
 import { formatAmount, trimTrailingZeros } from '@/lib/utils'
 import { activitySign, activityLabel, type ActivityRecord } from '@/lib/ActivityService'
-import { deriveActivityRow, activityRowIcon } from '@/features/activity/ActivityPage'
+import { deriveActivityRow, activityRowIcon, DetailSheet } from '@/features/activity/ActivityPage'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { loadAssetSlot } from '@/lib/assetSlot'
 import { fetchBtcPriceUsd } from '@/lib/btcPrice'
@@ -66,6 +66,8 @@ export function AssetPage() {
 
   const [history, setHistory] = useState<ActivityRecord[] | null>(null)
   const [btcPrice, setBtcPrice] = useState(0)
+  // The transaction whose details are open (shown here, over this page).
+  const [selected, setSelected] = useState<ActivityRecord | null>(null)
   const [hidden] = useState(() => { try { return localStorage.getItem('meshport_balance_hidden') === '1' } catch { return false } })
 
   useEffect(() => {
@@ -152,11 +154,11 @@ export function AssetPage() {
             <div style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>No {token} transactions yet</div>
           ) : history.map((item, i) => (
             <HistoryRow key={item.id || i} item={item} token={token}
-              // Tap a row → Activity, with that transaction opened.
-              onOpen={() => navigate('/activity', { state: { openActivity: item } })} />
+              onOpen={() => setSelected(item)} />
           ))}
         </div>
       </div>
+      {selected && <DetailSheet record={selected} onClose={() => setSelected(null)} />}
     </div>
   )
 }
