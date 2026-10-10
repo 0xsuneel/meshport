@@ -837,6 +837,19 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     const left = el.offsetLeft - row.offsetLeft, right = left + el.offsetWidth
     if (left < row.scrollLeft || right > row.scrollLeft + row.clientWidth) row.scrollTo({ left: Math.max(0, left - 20), behavior: 'smooth' })
   }, [selectedChain, formSheet])
+  // Recipient field grows to fit the address (one or two lines).
+  const recipientRef = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = recipientRef.current
+    if (!el) return
+    const fit = () => { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` }
+    fit()
+    // Re-fit when the field's width changes (not on our own height change).
+    let w = el.clientWidth
+    const ro = new ResizeObserver(() => { if (el.clientWidth !== w) { w = el.clientWidth; fit() } })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [address, formSheet, step])
   // A plain mouse wheel (vertical only) slides the chip row sideways while
   // the pointer is over it, so desktop users can reach every chain too.
   useEffect(() => {
@@ -2961,12 +2974,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
         border: addrHint.type === 'ok' ? '1px solid color-mix(in srgb, var(--success) 45%, transparent)'
           : addrHint.type === 'error' ? '1px solid color-mix(in srgb, var(--danger) 45%, transparent)' : '1px solid var(--border)' }}>
-        <input id="mt-recipient"
+        {/* Wraps onto a second line so the whole address stays readable. */}
+        <textarea id="mt-recipient" ref={recipientRef} rows={1}
           className="flex-1 bg-transparent text-text-primary text-[15px] focus:outline-none font-mono placeholder-text-secondary"
-          style={{ minWidth: 0, height: 40, padding: 0 }}
+          style={{ minWidth: 0, padding: '9px 0', lineHeight: '22px', resize: 'none', overflow: 'hidden', wordBreak: 'break-all', display: 'block' }}
           placeholder={`0x… address on ${chain.name}`}
-          value={address} onChange={e => handleAddressChange(e.target.value)}
-          spellCheck={false} autoComplete="off"
+          value={address} onChange={e => handleAddressChange(e.target.value.replace(/\s+/g, ''))}
+          onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
+          spellCheck={false} autoComplete="off" autoCapitalize="off" autoCorrect="off" enterKeyHint="done"
         />
         <button onClick={() => { prewarmCamera(); navigate('/scanner?mode=wallet&returnTo=/multichain') }} aria-label="Scan QR"
           className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
