@@ -3019,7 +3019,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const belowMin = numAmount > 0 && numAmount < MIN_AMOUNT
   const feeLine = belowMin
     ? <span style={{ fontWeight: 700, color: 'var(--danger)' }}>Minimum $3</span>
-    : <span>Fees about {trimTrailingZeros(feeReserveEstimate.toFixed(2))} USDC · exact fees on the next screen</span>
+    // feeReserveEstimate is only Max's safety margin, not a fee - real fees
+    // are priced on Review, so no number is shown here.
+    : <span>Exact fees are shown on the next screen</span>
   const formAmount = (
     <div style={{ padding: '16px 18px', borderRadius: 22, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
       border: `1.5px solid ${belowMin ? 'var(--danger)' : showAmountPad ? 'var(--brand)' : 'var(--border)'}` }}>
