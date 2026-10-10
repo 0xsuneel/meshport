@@ -223,6 +223,20 @@ export function cacheOtherUser(userId: string, userData: any) {
 // "something new came in after I hid this" - which used to leave a chat
 // permanently hidden even after a fresh payment/message came in, since the
 // live auto-restore subscription only fires while the Chats page is mounted.
+// Deleted chats (hold → Delete): out of every list and your contacts on this
+// device - nothing is deleted from the database. Any new message or payment
+// in the chat brings it back to All. Blocking is separate (a deleted chat
+// with someone you blocked stays in Chat privacy → Blocked).
+function deletedKey(addr: string | null) {
+  return addr ? `meshport_deleted_chats_${addr.toLowerCase()}` : 'meshport_deleted_chats_anon'
+}
+function getDeletedChatsMap(addr: string | null): Record<string, string> {
+  try { const v = JSON.parse(localStorage.getItem(deletedKey(addr)) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {} } catch { return {} }
+}
+function setDeletedChatsMap(addr: string | null, m: Record<string, string>) {
+  try { localStorage.setItem(deletedKey(addr), JSON.stringify(m)) } catch { /* private mode */ }
+}
+
 function getHiddenChatsMap(addr: string | null): Record<string, string> {
   try {
     const raw = JSON.parse(localStorage.getItem(hiddenKey(addr)) || '{}')
@@ -569,8 +583,19 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     // count. A payment either way (they pay me or I pay them, after it was
     // archived) brings it back to All automatically.
     let hiddenChanged = false
+    const deletedMap = getDeletedChatsMap(chatWalletAddr)
+    let deletedChanged = false
     const archived: DbConversation[] = []
     const filtered = convs.filter(c => {
+      // Deleted: gone until something new happens in the chat.
+      const deletedAt = deletedMap[c.id]
+      if (deletedAt) {
+        const newer = c.last_message_at && new Date(c.last_message_at).getTime() > new Date(deletedAt).getTime()
+        if (!newer) return false
+        delete deletedMap[c.id]; deletedChanged = true
+        const otherId = c.other_user?.id
+        if (otherId) import('@/lib/removedContacts').then(({ removeFromRemovedContacts }) => removeFromRemovedContacts(chatWalletAddr, otherId)).catch(() => {})
+      }
       const hiddenAt = hiddenMap[c.id]
       if (!hiddenAt) return true
       const paidSince = c.last_payment_at && new Date(c.last_payment_at).getTime() > new Date(hiddenAt).getTime()
@@ -580,6 +605,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     })
     setArchivedConvs(archived)
     if (hiddenChanged) localStorage.setItem(hiddenKey(chatWalletAddr), JSON.stringify(hiddenMap))
+    if (deletedChanged) setDeletedChatsMap(chatWalletAddr, deletedMap)
     // Save to module-level cache so next mount is instant
     _cachedConversations = filtered
     _cacheLoadedForUser  = user.id
@@ -622,6 +648,10 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload: any) => {
         const msg = payload.new
         if (!msg?.conversation_id) return
+        if (getDeletedChatsMap(chatWalletAddr)[msg.conversation_id]) {
+          // A deleted chat comes back with anything new (the reload restores it).
+          invalidateConversationsCache(); await loadConversations(); return
+        }
         const hidden = getHiddenChats(chatWalletAddr)
         if (!hidden.has(msg.conversation_id)) return
         if (msg.type === 'payment_sent' || msg.type === 'payment_received') unhideChat(msg.conversation_id, chatWalletAddr)
@@ -825,6 +855,26 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     }
     clearSelection()
   }
+  const deleteSelected = () => {
+    const convs = selectedConvs()
+    clearSelection()
+    if (!convs.length) return
+    const m = getDeletedChatsMap(chatWalletAddr)
+    const now = new Date().toISOString()
+    for (const c of convs) {
+      m[c.id] = now
+      unhideChat(c.id, chatWalletAddr) // not archived any more - deleted
+      const otherId = c.other_user?.id
+      if (otherId && otherId !== user?.id) import('@/lib/removedContacts').then(({ addRemovedContact }) => addRemovedContact(chatWalletAddr, otherId)).catch(() => {})
+    }
+    setDeletedChatsMap(chatWalletAddr, m)
+    const ids = new Set(convs.map(c => c.id))
+    setConversations(prev => { const next = prev.filter(c => !ids.has(c.id)); _cachedConversations = next; return next })
+    setArchivedConvs(prev => prev.filter(c => !ids.has(c.id)))
+    setSavedContacts(prev => prev.filter(p => !convs.some(c => c.other_user?.id === p.id)))
+    if (pinnedIds.some(id => ids.has(id))) savePins(pinnedIds.filter(id => !ids.has(id)))
+    useUIStore.getState().showToastMessage(convs.length === 1 ? 'Chat deleted' : `${convs.length} chats deleted`, 'success')
+  }
   const archiveSelected = () => { selectedConvs().forEach(c => archiveConv(c)); clearSelection() }
   const unarchiveSelected = () => { selectedConvs().forEach(c => unarchiveConv(c)); clearSelection() }
   const acceptSelected = () => { selectedConvs().forEach(c => acceptRequest(c)); clearSelection() }
@@ -973,6 +1023,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                     listTab === 'archived'
                       ? { label: 'Unarchive', icon: <ArchiveRestore className="w-[21px] h-[21px]" />, run: unarchiveSelected }
                       : { label: 'Archive', icon: <Archive className="w-[21px] h-[21px]" />, run: archiveSelected },
+                    { label: 'Delete', icon: <Trash2 className="w-[21px] h-[21px]" />, run: deleteSelected },
                     { label: 'Block', icon: <Ban className="w-[21px] h-[21px]" />, run: blockSelected, danger: true },
                   ]
               ).map(a => (
