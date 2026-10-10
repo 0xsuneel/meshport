@@ -36,7 +36,6 @@ import {
   supabase,
   fetchConversations,
   fetchContactsDbStrict,
-  addContactDb,
   searchUsersDb,
   invalidateConversationsCache,
   type DbConversation,
@@ -474,15 +473,11 @@ export function ChatListPage() {
   const [newChatSearch, setNewChatSearch] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [showNewChat, setShowNewChat] = useState(false)
-  const [showContacts, setShowContacts] = useState(false)
   // Last-known contacts show instantly (see peopleCache); the loader below refreshes them.
   const [savedContacts, setSavedContacts] = useState<DbUser[]>(() => readPeople<DbUser>('chat-contacts', user?.id) ?? [])
   const [contactsLoading, setContactsLoading] = useState(() => readPeople('chat-contacts', user?.id) === null)
   // The person whose chat is being opened (spinner on their row, blocks double taps).
   const [openingId, setOpeningId] = useState<string | null>(null)
-  const [addContactSearch, setAddContactSearch] = useState('')
-  const [addContactResults, setAddContactResults] = useState<any[]>([])
-  const [addContactSearching, setAddContactSearching] = useState(false)
   const [searching, setSearching] = useState(false)
 
   // Long-press context menu
@@ -639,17 +634,6 @@ export function ChatListPage() {
     return () => clearTimeout(timer)
   }, [newChatSearch, user?.id])
 
-  // Search for new contact by full username.arc
-  useEffect(() => {
-    const q = addContactSearch.trim()
-    if (!q || !q.toLowerCase().endsWith('.arc')) { setAddContactResults([]); return }
-    setAddContactSearching(true)
-    const timer = setTimeout(() => {
-      searchUsersDb(q, user?.id).then(r => { setAddContactResults(r); setAddContactSearching(false) }).catch(() => setAddContactSearching(false))
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [addContactSearch, user?.id])
-
   // Load contacts on mount - saved contacts + anyone with a conversation, merged & sorted A-Z, excluding removed.
   // Reuses the `conversations` state the main chat list already loads (and
   // keeps live via realtime) instead of calling fetchConversations again -
@@ -703,10 +687,8 @@ export function ChatListPage() {
     const open = (convId: string) => {
       unhideChat(convId, chatWalletAddr)
       if (typeof other !== 'string') cacheOtherUser(convId, other)
-      setShowContacts(false)
       setShowNewChat(false)
       setNewChatSearch(''); setSearchResults([])
-      setAddContactSearch(''); setAddContactResults([])
       navigate(`/chat/${convId}`)
     }
     if (existing) { open(existing.id); return }
@@ -720,26 +702,15 @@ export function ChatListPage() {
     }
   }
 
-  // Saves someone as a contact and opens their chat straight away - the save
-  // runs alongside, it doesn't hold up opening the conversation.
-  const addAndChat = (u: DbUser) => {
-    if (!user?.id) return
-    addContactDb(user.id, u.id).catch(() => {})
-    import('@/lib/removedContacts').then(({ removeFromRemovedContacts }) => removeFromRemovedContacts(chatWalletAddr, u.id)).catch(() => {})
-    setSavedContacts(prev => {
-      if (prev.some(c => c.id === u.id)) return prev
-      return [...prev, u].sort((a, b) => (a.display_name || a.username).localeCompare(b.display_name || b.username))
-    })
-    startChat(u)
-  }
-
-  const contactQuery = addContactSearch.trim().toLowerCase().replace(/^@/, '')
+  // New Chat: the search box filters all your contacts, and a full
+  // username.arc also finds someone new.
+  const contactQuery = newChatSearch.trim().toLowerCase().replace(/^@/, '')
   const visibleContacts = contactQuery
     ? savedContacts.filter(c =>
         (c.display_name || '').toLowerCase().includes(contactQuery.replace(/\.arc$/, '')) ||
         (c.username || '').toLowerCase().includes(contactQuery.replace(/\.arc$/, '')))
     : savedContacts
-  const newPeople = addContactResults.filter((u: DbUser) => !savedContacts.some(c => c.id === u.id))
+  const newPeople = searchResults.filter((u: DbUser) => !savedContacts.some(c => c.id === u.id))
 
   const handleRemoveFromChats = (conv: DbConversation) => {
     // Add other user to removed contacts blocklist
@@ -779,12 +750,6 @@ export function ChatListPage() {
         <div className="header-row justify-between" style={{ marginBottom: chatSearchHidden ? 0 : 16, transition: 'margin 0.25s ease' }}>
           <h1 className="text-xl font-bold text-text-primary">Chats</h1>
           <div className="flex items-center gap-2">
-            <motion.button whileTap={{ scale: 0.9 }}
-              onClick={() => setShowContacts(true)} aria-label="Contacts"
-              className="w-10 h-10 rounded-full flex items-center justify-center"
-              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-              <Users className="w-[18px] h-[18px] text-text-primary" />
-            </motion.button>
             <motion.button whileTap={{ scale: 0.9 }}
               onClick={() => setShowNewChat(true)} aria-label="New chat"
               className="w-10 h-10 rounded-full flex items-center justify-center"
@@ -907,47 +872,14 @@ export function ChatListPage() {
       {/* New Chat Sheet */}
       <Sheet isOpen={showNewChat} onClose={() => { setShowNewChat(false); setNewChatSearch(''); setSearchResults([]) }} title="New Chat" variant="center">
         <div className="px-5 pt-1 pb-5 space-y-4">
-          <SearchField autoFocus value={newChatSearch} onChange={setNewChatSearch} placeholder="Enter username.arc"
-            ariaLabel="Search by username"
+          <SearchField autoFocus value={newChatSearch} onChange={setNewChatSearch} placeholder="Search contacts or username.arc"
+            ariaLabel="Search contacts or a username"
             trailing={searching ? <Loader2 className="w-4 h-4 mr-2 animate-spin flex-shrink-0" style={{ color: 'var(--brand-text)' }} /> : undefined} />
-          {searchResults.length > 0 ? (
-            <PeopleCard title="Found">
-              {searchResults.map((u: DbUser, i: number) => (
-                <PersonRow key={u.id} person={u} first={i === 0} busy={openingId === u.id}
-                  action="Message" onClick={() => startChat(u)} />
-              ))}
-            </PeopleCard>
-          ) : newChatSearch.trim() && newChatSearch.trim().toLowerCase().endsWith('.arc') && !searching ? (
-            <p className="text-center text-sm text-text-secondary py-2">No one found for &ldquo;{newChatSearch.trim()}&rdquo;</p>
-          ) : (
-            <>
-              <UsernameHint />
-              {savedContacts.length > 0 && (
-                <PeopleCard title="Your contacts">
-                  {savedContacts.slice(0, 6).map((c, i) => (
-                    <PersonRow key={c.id} person={c} first={i === 0} busy={openingId === c.id}
-                      action="Message" onClick={() => startChat(c)} />
-                  ))}
-                </PeopleCard>
-              )}
-            </>
-          )}
-        </div>
-      </Sheet>
-
-      {/* ── Contacts Sheet ── */}
-      <Sheet isOpen={showContacts} onClose={() => { setShowContacts(false); setAddContactSearch(''); setAddContactResults([]) }} title="Contacts">
-        <div className="px-5 pb-6 space-y-4">
-          {/* One box: filters your contacts, and a full username.arc finds someone new to add */}
-          <SearchField value={addContactSearch} onChange={setAddContactSearch} placeholder="Search or add username.arc"
-            ariaLabel="Search contacts or add a username"
-            trailing={addContactSearching ? <Loader2 className="w-4 h-4 mr-2 animate-spin flex-shrink-0" style={{ color: 'var(--brand-text)' }} /> : undefined} />
-
           {newPeople.length > 0 && (
-            <PeopleCard title="Add to contacts">
+            <PeopleCard title="Found">
               {newPeople.map((u: DbUser, i: number) => (
                 <PersonRow key={u.id} person={u} first={i === 0} busy={openingId === u.id}
-                  action="Add" onClick={() => addAndChat(u)} />
+                  action="Message" onClick={() => startChat(u)} />
               ))}
             </PeopleCard>
           )}
@@ -956,7 +888,7 @@ export function ChatListPage() {
             <PeopleCard title="Your contacts" count={visibleContacts.length}>
               {visibleContacts.map((c, i) => (
                 <PersonRow key={c.id} person={c} first={i === 0} busy={openingId === c.id}
-                  onClick={() => startChat(c)} />
+                  action="Message" onClick={() => startChat(c)} />
               ))}
             </PeopleCard>
           ) : contactsLoading ? (
@@ -964,19 +896,22 @@ export function ChatListPage() {
               {[0, 1, 2, 3].map(i => <PersonRowSkeleton key={i} first={i === 0} />)}
             </PeopleCard>
           ) : contactQuery ? (
-            newPeople.length === 0 && !addContactSearching && (
+            newPeople.length === 0 && !searching && (
               contactQuery.endsWith('.arc')
-                ? <p className="text-center text-sm text-text-secondary py-2">No one found for &ldquo;{addContactSearch.trim()}&rdquo;</p>
+                ? <p className="text-center text-sm text-text-secondary py-2">No one found for &ldquo;{newChatSearch.trim()}&rdquo;</p>
                 : <UsernameHint />
             )
           ) : (
-            <div className="text-center py-8">
-              <div className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>
-                <Users className="w-6 h-6" style={{ color: 'var(--brand-text)' }} />
+            <>
+              <UsernameHint />
+              <div className="text-center py-6">
+                <div className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>
+                  <Users className="w-6 h-6" style={{ color: 'var(--brand-text)' }} />
+                </div>
+                <p className="text-sm font-semibold text-text-primary">No contacts yet</p>
+                <p className="text-xs text-text-secondary mt-1">Type someone's full username.arc above to message them</p>
               </div>
-              <p className="text-sm font-semibold text-text-primary">No contacts yet</p>
-              <p className="text-xs text-text-secondary mt-1">Type someone's full username.arc above to add them</p>
-            </div>
+            </>
           )}
         </div>
       </Sheet>
