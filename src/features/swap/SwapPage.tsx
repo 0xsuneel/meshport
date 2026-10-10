@@ -1479,13 +1479,9 @@ export function SwapPage() {
             </div>
             {isDesktop ? (
               <div style={{ marginTop: 12 }}>
-              // Reference design: the amount lives directly inside "You pay"
-              // as a plain bordered box with an overlaid Max pill - not
-              // AmountKeypad's own elevated/shadowed card (that chrome is
-              // right for pages with no box of their own, but Swap already
-              // has one here, so stacking AmountKeypad's card inside it
-              // doubled up the framing and threw off the spacing/sizing
-              // seen in the reference).
+              {/* The amount lives directly inside "You pay" as a plain
+                  bordered box with an overlaid Max pill - not AmountKeypad's
+                  own card, which would double up the framing here. */}
               <div style={{ position: 'relative' }}>
                 <div style={{
                   position: 'relative',
@@ -1495,7 +1491,7 @@ export function SwapPage() {
                   {/* $ pinned to a fixed left inset, not inline before the
                       input - keeps the digits truly centered in the box no
                       matter how many are typed (matches Pay's amount box). */}
-                  <span style={{ position: 'absolute', left: 20, fontSize: 34, fontWeight: 700, color: amountIn ? 'var(--text-primary)' : 'var(--text-muted)', pointerEvents: 'none' }}>$</span>
+                  <span style={{ position: 'absolute', left: 20, fontSize: 34, fontWeight: 700, color: amountIn ? 'var(--text-primary)' : 'var(--text-muted)', pointerEvents: 'none' }}>{swapTokenSymbolChar(tokenIn.id)}</span>
                   <input
                     type="text"
                     inputMode="decimal"
