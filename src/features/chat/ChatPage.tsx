@@ -4910,11 +4910,12 @@ export function ChatConversationPage() {
                   </div>
                 )}
 
-                {/* Quick amounts under the amount box. cirBTC shows dollar
-                    values ($10 = $10 worth of cirBTC at the current price). */}
+                {/* Quick amounts under the amount box, then Max (the whole
+                    balance). cirBTC shows dollar values ($10 = $10 worth of
+                    cirBTC at the current price). */}
                 {!isDesktop && !payLocked && (
                   <div className="grid grid-cols-4 gap-2">
-                    {[10, 30, 50, 100].map(v => {
+                    {[10, 30, 50].map(v => {
                       const isBtc = payToken === 'cirBTC'
                       const dec = chatPayTokenDecimals(payToken)
                       const amt = isBtc ? (btcUsd > 0 ? Math.round((v / btcUsd) * 10 ** dec) / 10 ** dec : 0) : v
@@ -4931,6 +4932,22 @@ export function ChatConversationPage() {
                         </button>
                       )
                     })}
+                    {(() => {
+                      const dec = chatPayTokenDecimals(payToken)
+                      // Rounded down so Max never asks for more than is there.
+                      const max = Math.floor(payTokenBalanceOf(payToken) * 10 ** dec) / 10 ** dec
+                      const on = max > 0 && parseFloat(payAmount || '0') === max
+                      return (
+                        <button disabled={max <= 0}
+                          onClick={() => { setPayAmount(trimTrailingZeros(max.toFixed(dec))); setPayError('') }}
+                          className="rounded-full text-[13px] font-bold active:scale-[.97] transition-transform"
+                          style={{ height: 34, opacity: max <= 0 ? 0.4 : 1, cursor: max <= 0 ? 'default' : 'pointer',
+                            background: on ? 'var(--brand)' : 'var(--surface)', color: on ? '#fff' : 'var(--brand-text)',
+                            border: on ? '1px solid var(--brand)' : '1px solid var(--border)' }}>
+                          Max
+                        </button>
+                      )
+                    })()}
                   </div>
                 )}
 
