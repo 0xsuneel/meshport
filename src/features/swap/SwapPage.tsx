@@ -43,9 +43,9 @@ const EURC_CONTRACT   = '0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a'
 const CIRBTC_CONTRACT = '0xf0C4a4CE82A5746AbAAd9425360Ab04fbBA432BF'
 
 const SWAP_TOKENS = [
-  { id: 'USDC',   label: 'USDC',   sub: 'USD Coin',      logo: 'https://assets.coingecko.com/coins/images/6319/small/usdc.png',       color: 'var(--usdc-icon)', decimals: 6,  contract: '' },
-  { id: 'EURC',   label: 'EURC',   sub: 'Euro Coin',     logo: 'https://assets.coingecko.com/coins/images/26045/small/euro-coin.png', color: 'var(--brand-text)', decimals: 6,  contract: EURC_CONTRACT },
-  { id: 'cirBTC', label: 'cirBTC', sub: 'Circle Bitcoin', logo: 'https://assets.coingecko.com/coins/images/1/small/bitcoin.png',       color: '#F7931A', decimals: 8,  contract: CIRBTC_CONTRACT },
+  { id: 'USDC',   label: 'USDC',   sub: 'USD Coin',      logo: '/logos/tokens/usdc.png',       color: 'var(--usdc-icon)', decimals: 6,  contract: '' },
+  { id: 'EURC',   label: 'EURC',   sub: 'Euro Coin',     logo: '/logos/tokens/eurc.png', color: 'var(--brand-text)', decimals: 6,  contract: EURC_CONTRACT },
+  { id: 'cirBTC', label: 'cirBTC', sub: 'Circle Bitcoin', logo: '/logos/tokens/cirbtc.png',       color: '#F7931A', decimals: 8,  contract: CIRBTC_CONTRACT },
 ]
 
 type Token = typeof SWAP_TOKENS[0]

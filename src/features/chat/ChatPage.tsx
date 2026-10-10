@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
+import { TokenLogo } from '@/components/ui/TokenLogo'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { PopupOpen } from '@/hooks/usePopupOpen'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SNACKBAR_MOTION, DIALOG_BACKDROP, SHEET_EXIT } from '@/lib/motion'
@@ -4850,7 +4851,7 @@ export function ChatConversationPage() {
                       <button onClick={() => setPayTokenMenu(v => !v)} aria-expanded={payTokenMenu}
                         className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
                         style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-                        <span style={{ width: 20, height: 20, borderRadius: '50%', background: chatPayTokenIconBg(payToken), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{chatPayTokenSymbolChar(payToken)}</span>
+                        <TokenLogo token={payToken} size={20} />
                         <span className="text-sm font-bold text-text-primary">{payToken}</span>
                         <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)', transform: payTokenMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
                       </button>
@@ -4858,7 +4859,7 @@ export function ChatConversationPage() {
                         {payTokenMenu && (
                           <TokenMenu selected={payToken} onClose={() => setPayTokenMenu(false)}
                             onSelect={id => { setPayToken(id as typeof payToken); setPayAmount(''); setPayError('') }}
-                            options={payTokenList.map(t => ({ id: t, label: t, icon: <span style={{ width: 22, height: 22, borderRadius: '50%', background: chatPayTokenIconBg(t), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{chatPayTokenSymbolChar(t)}</span> }))} />
+                            options={payTokenList.map(t => ({ id: t, label: t, icon: <TokenLogo token={t} size={22} /> }))} />
                         )}
                       </AnimatePresence>
                     </div>
@@ -4881,7 +4882,7 @@ export function ChatConversationPage() {
                           <button onClick={() => setPayTokenMenu(v => !v)} aria-expanded={payTokenMenu}
                             className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
                             style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-                            <span style={{ width: 20, height: 20, borderRadius: '50%', background: chatPayTokenIconBg(payToken), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{chatPayTokenSymbolChar(payToken)}</span>
+                            <TokenLogo token={payToken} size={20} />
                             <span className="text-sm font-bold text-text-primary">{payToken}</span>
                             <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)', transform: payTokenMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
                           </button>
@@ -4889,7 +4890,7 @@ export function ChatConversationPage() {
                             {payTokenMenu && (
                               <TokenMenu selected={payToken} onClose={() => setPayTokenMenu(false)}
                                 onSelect={id => { setPayToken(id as typeof payToken); setPayAmount(''); setPayError('') }}
-                                options={payTokenList.map(t => ({ id: t, label: t, icon: <span style={{ width: 22, height: 22, borderRadius: '50%', background: chatPayTokenIconBg(t), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{chatPayTokenSymbolChar(t)}</span> }))} />
+                                options={payTokenList.map(t => ({ id: t, label: t, icon: <TokenLogo token={t} size={22} /> }))} />
                             )}
                           </AnimatePresence>
                         </div>

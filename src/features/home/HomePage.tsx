@@ -4023,7 +4023,7 @@ export function HomePage() {
           )}
           <div style={{ background: 'var(--surface)', borderRadius: isDesktop ? 18 : 16, border: '1px solid var(--border)', overflow: 'hidden', boxShadow: isDesktop ? 'var(--shadow-1)' : undefined }}>
             <AssetRow
-              icon="https://assets.coingecko.com/coins/images/6319/small/usdc.png"
+              icon="/logos/tokens/usdc.png"
               fallbackColor="var(--usdc-icon)" fallbackChar="$"
               name="USDC" sub="USD Coin"
               cryptoAmount={`${fmt(balance)} USDC`}
@@ -4035,7 +4035,7 @@ export function HomePage() {
               border
             />
             <AssetRow
-              icon="https://assets.coingecko.com/coins/images/26045/small/euro-coin.png"
+              icon="/logos/tokens/eurc.png"
               fallbackColor="var(--usdc-icon)" fallbackChar="€"
               name="EURC" sub="Euro Coin"
               cryptoAmount={`${fmt(eurcBalance)} EURC`}
@@ -4047,7 +4047,7 @@ export function HomePage() {
               border
             />
             <AssetRow
-              icon="https://assets.coingecko.com/coins/images/1/small/bitcoin.png"
+              icon="/logos/tokens/cirbtc.png"
               fallbackColor="#F7931A" fallbackChar="₿"
               name="cirBTC" sub="Celo Bitcoin"
               cryptoAmount={`${cirBtcBalance > 0 ? trimTrailingZeros(cirBtcBalance < 0.0001 ? cirBtcBalance.toFixed(8) : cirBtcBalance.toFixed(6)) : '0'} cirBTC`}
