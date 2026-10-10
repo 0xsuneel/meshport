@@ -1519,15 +1519,15 @@ export function PaySendPage() {
               {!merchantPayCode && (
                 <div>
                   <label htmlFor="pay-note" className="text-[13px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Message</label>
-                  <div style={{ position: 'relative', marginTop: 8 }}>
-                    <textarea id="pay-note" value={note} maxLength={140} rows={3}
-                      onChange={e => setNote(e.target.value.replace(/\s*\n\s*/g, ' '))}
+                  <div style={{ position: 'relative', marginTop: 6 }}>
+                    <input id="pay-note" type="text" value={note} maxLength={140}
+                      onChange={e => setNote(e.target.value)}
                       onFocus={() => setShowAmountPad(false)}
-                      placeholder="Add a message (optional)"
+                      placeholder="Add a message (optional)" enterKeyHint="done"
                       className="w-full text-[15px] text-text-primary placeholder-text-secondary focus:outline-none"
-                      style={{ display: 'block', resize: 'none', height: 88, padding: '12px 14px 22px', borderRadius: 16, boxSizing: 'border-box',
-                        background: 'var(--surface)', border: '1px solid var(--border)', lineHeight: 1.4 }} />
-                    <span aria-hidden className="text-[11px]" style={{ position: 'absolute', right: 12, bottom: 8, color: 'var(--text-muted)' }}>{note.length}/140</span>
+                      style={{ display: 'block', height: 46, padding: '0 58px 0 14px', borderRadius: 14, boxSizing: 'border-box',
+                        background: 'var(--surface)', border: '1px solid var(--border)' }} />
+                    <span aria-hidden className="text-[11px]" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>{note.length}/140</span>
                   </div>
                 </div>
               )}
