@@ -234,6 +234,18 @@ export function BulkPayoutPage() {
   // One Multicall3 transaction pays everyone, so this is a flat single-tx gas
   // estimate rather than resolvedCount separate transaction fees.
   const estimatedFee   = resolvedCount > 0 ? 0.002 + resolvedCount * 0.0002 : 0
+  // More than the USDC balance (payout + network fee, both paid in USDC):
+  // warn on the summary and review, and keep Review Payout / Pay dimmed.
+  const bulkNeeded = totalAmount + estimatedFee
+  const bulkInsufficient = recipients.length > 0 && totalAmount > 0 && bulkNeeded > (Number(balance) || 0) + 1e-9
+  const insufficientNote = bulkInsufficient && (
+    <div role="alert" className="rounded-2xl p-3.5" style={{ background: 'color-mix(in srgb, var(--danger) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 20%, transparent)' }}>
+      <p className="text-sm font-semibold text-danger">Insufficient USDC balance</p>
+      <p className="text-xs text-text-secondary mt-0.5">
+        You have {formatAmount(Number(balance) || 0)} USDC. This payout needs {trimTrailingZeros(bulkNeeded.toFixed(4))} USDC including the network fee.
+      </p>
+    </div>
+  )
 
   // Live search for manual row - suppress when user already selected
   useEffect(() => {
@@ -1034,6 +1046,7 @@ export function BulkPayoutPage() {
   const summarySection = recipients.length > 0 && (
     <div className={isDesktop ? "bg-surface border border-border rounded-2xl p-3" : "bg-surface border border-border rounded-2xl p-4"}>
       <p className={isDesktop ? "text-sm font-semibold text-text-primary mb-2" : "text-sm font-semibold text-text-primary mb-3"}>3. Summary</p>
+      {insufficientNote && <div className="mb-3">{insufficientNote}</div>}
       <div className={isDesktop ? "grid grid-cols-2 gap-2 mb-2" : "grid grid-cols-2 gap-3 mb-3"}>
         {[
           { icon: <Users className="w-4 h-4 text-brand-text" />, label: 'Recipients', value: recipients.length.toString(), bg: 'bg-brand/10' },
@@ -1070,6 +1083,7 @@ export function BulkPayoutPage() {
 
   const reviewContent = (
     <>
+      {insufficientNote}
       <div className="bg-surface border border-border rounded-2xl p-4 space-y-2">
         <div className="flex justify-between"><span className="text-text-secondary text-sm">Recipients</span><span className="text-text-primary text-sm font-semibold">{resolvedCount}</span></div>
         <div className="flex justify-between"><span className="text-text-secondary text-sm">Total Amount</span><span className="text-success text-sm font-semibold">${formatAmount(totalAmount)} USDC</span></div>
@@ -1169,8 +1183,8 @@ export function BulkPayoutPage() {
           {resolving ? <><Loader2 className="w-4 h-4 animate-spin" /> Resolving...</> : `Resolve ${recipients.filter(r => r.status !== 'resolved').length} Pending`}
         </button>
       ) : (
-        <button onClick={() => setStep('review')}
-          className="flex-1 py-3.5 rounded-2xl text-white font-bold flex items-center justify-center gap-2"
+        <button onClick={() => { if (!bulkInsufficient) setStep('review') }} disabled={bulkInsufficient}
+          className="flex-1 py-3.5 rounded-2xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40"
           style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
           Review Payout <Send className="w-4 h-4" />
         </button>
@@ -1186,10 +1200,12 @@ export function BulkPayoutPage() {
         Back
       </button>
       <button onClick={() => {
+          if (bulkInsufficient) return
           if (storedPasscode) { setPassEntry(''); setPassError(''); setShowReviewPinSheet(true) }
           else executePayout()
         }}
-        className="flex-1 py-3.5 rounded-2xl text-white font-bold flex items-center justify-center gap-2"
+        disabled={bulkInsufficient}
+        className="flex-1 py-3.5 rounded-2xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40"
         style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
         Pay <Send className="w-4 h-4" />
       </button>
