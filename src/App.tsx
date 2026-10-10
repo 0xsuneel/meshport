@@ -37,6 +37,7 @@ const MultichainPage        = lazyRetry(() => import('./features/multichain/Mult
 const MultichainRecoveryPage = lazyRetry(() => import('./features/multichain/MultichainRecoveryPage').then(m => ({ default: m.MultichainRecoveryPage })), 'MultichainRecoveryPage')
 const ReceivePage           = lazyRetry(() => import('./features/receive/ReceivePage').then(m => ({ default: m.ReceivePage })), 'ReceivePage')
 const ScannerPage           = lazyRetry(() => import('./features/scanner/ScannerPage').then(m => ({ default: m.ScannerPage })), 'ScannerPage')
+const ChatPrivacyPage       = lazyRetry(() => import('./features/chat/ChatPrivacyPage').then(m => ({ default: m.ChatPrivacyPage })), 'ChatPrivacyPage')
 const ChatListPage          = lazyRetry(() => import('./features/chat/ChatPage').then(m => ({ default: m.ChatListPage })), 'ChatListPage')
 const ChatConversationPage  = lazyRetry(() => import('./features/chat/ChatPage').then(m => ({ default: m.ChatConversationPage })), 'ChatConversationPage')
 const ActivityPage          = lazyRetry(() => import('./features/activity/ActivityPage').then(m => ({ default: m.ActivityPage })), 'ActivityPage')
@@ -418,6 +419,7 @@ const router = createBrowserRouter([
         ],
       },
       { path: 'chat/new',                   element: <FeatureGate feature="chat_enabled"><ChatListPage newChat /></FeatureGate> },
+      { path: 'chat/privacy',               element: <FeatureGate feature="chat_enabled"><ChatPrivacyPage /></FeatureGate> },
       { path: 'activity',                   element: <ActivityPage /> },
       { path: 'insights',                   element: <InsightsPage /> },
       { path: 'pay',                        element: <FeatureGate feature="pay_send_enabled"><PaySendPage /></FeatureGate> },

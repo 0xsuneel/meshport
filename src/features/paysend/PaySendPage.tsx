@@ -42,7 +42,7 @@ import { ScreenPush } from '@/components/ui/ScreenPush'
 import { readPeople, writePeople } from '@/lib/peopleCache'
 import { SearchField } from '@/components/ui/SearchField'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
-import { reachCheck, STRANGER_PAY_BLOCKED } from '@/lib/privacy'
+import { reachCheck, STRANGER_PAY_BLOCKED, BLOCKED_YOU } from '@/lib/privacy'
 
 type Screen = 'search' | 'amount' | 'review'
 type Token = 'USDC' | 'EURC' | 'cirBTC'
@@ -270,15 +270,18 @@ export function PaySendPage() {
   // Checked as soon as they're picked (nothing can be reviewed or sent), and
   // again just before signing (runProcessing).
   const [payBlocked, setPayBlocked] = useState(false)
+  const [blockedMe, setBlockedMe] = useState(false) // they blocked me
   useEffect(() => {
-    setPayBlocked(false)
+    setPayBlocked(false); setBlockedMe(false)
     const rid = recipient?.id
     if (!rid || merchantPayCode) return
     let cancelled = false
-    reachCheck(rid).then(r => { if (!cancelled) setPayBlocked(!r.canPay) })
+    reachCheck(rid).then(r => { if (!cancelled) { setPayBlocked(!r.canPay); setBlockedMe(r.blocked) } })
     return () => { cancelled = true }
   }, [recipient?.id, merchantPayCode])
-  const payBlockedMessage = STRANGER_PAY_BLOCKED(recipient?.display || 'This person')
+  const payBlockedMessage = blockedMe
+    ? BLOCKED_YOU(recipient?.display || 'This person')
+    : STRANGER_PAY_BLOCKED(recipient?.display || 'This person')
 
   const returnConvId = locationState.conversationId || null
   const numAmount = parseFloat(amount) || 0
@@ -884,8 +887,13 @@ export function PaySendPage() {
     sendStartRef.current = performance.now()
     setTxError(''); setTxHash(''); setPayPending(false); setProcessStage('verifying')
     // Preflight: nothing has been signed or sent yet, so a refusal is final.
-    if (recipient.id && !merchantPayCode && !(await reachCheck(recipient.id)).canPay) {
-      setPayBlocked(true); setTxError(payBlockedMessage); setProcessStage('failed'); return
+    if (recipient.id && !merchantPayCode) {
+      const reach = await reachCheck(recipient.id)
+      if (!reach.canPay) {
+        setPayBlocked(true); setBlockedMe(reach.blocked)
+        setTxError(reach.blocked ? BLOCKED_YOU(recipient.display) : STRANGER_PAY_BLOCKED(recipient.display))
+        setProcessStage('failed'); return
+      }
     }
     setProcessStage('preparing')
 

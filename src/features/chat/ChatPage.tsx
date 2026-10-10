@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
-import { reachCheck, STRANGER_PAY_BLOCKED, cachedPrivacy, fetchMyPrivacy, saveMyPrivacy, fetchMyRequestIds, type ChatPrivacy } from '@/lib/privacy'
+import { reachCheck, STRANGER_PAY_BLOCKED, BLOCKED_YOU, cachedPrivacy, fetchMyPrivacy, fetchMyRequestIds, fetchBlocked, blockUser, unblockUser, type ChatPrivacy } from '@/lib/privacy'
+import { Ban } from 'lucide-react'
 import { TokenLogo } from '@/components/ui/TokenLogo'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { PopupOpen } from '@/hooks/usePopupOpen'
@@ -477,7 +478,6 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   // Chat privacy (your profile picture): who can message you, payments from
   // strangers. With "Contacts only", strangers' chats sit in Requests.
   const [privacy, setPrivacy] = useState<ChatPrivacy>(() => cachedPrivacy(user?.id))
-  const [showPrivacy, setShowPrivacy] = useState(false)
   const [requestIds, setRequestIds] = useState<Set<string>>(() => new Set())
   const isMerchantList = useMerchant().isMerchant
   useEffect(() => {
@@ -778,6 +778,25 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   }, [requestsOn, convKey])
   useEffect(() => { if (!requestsOn && listTab === 'requests') setListTab('all') }, [requestsOn, listTab])
   const isRequest = (conv: DbConversation) => requestIds.has(conv.id)
+  // People I blocked: out of every list (they're in Chat privacy → Blocked).
+  const [blockedIds, setBlockedIds] = useState<Set<string>>(() => new Set())
+  useEffect(() => {
+    if (!user?.id) return
+    let cancelled = false
+    fetchBlocked(user.id).then(list => { if (!cancelled) setBlockedIds(new Set(list.map(p => p.id))) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [user?.id, convKey])
+  const blockConv = async (conv: DbConversation) => {
+    const otherId = conv.other_user?.id
+    setContextConv(null)
+    if (!user?.id || !otherId) return
+    try {
+      await blockUser(user.id, otherId)
+      setBlockedIds(prev => new Set(prev).add(otherId))
+      setRequestIds(prev => { const n = new Set(prev); n.delete(conv.id); return n })
+      useUIStore.getState().showToastMessage(`${(conv.other_user?.username || '').replace(/\.arc$/, '')}.arc blocked`, 'success')
+    } catch { useUIStore.getState().showToastMessage("Couldn't block - try again", 'error') }
+  }
   // Accept: save them as a contact - the chat moves to All.
   const acceptRequest = (conv: DbConversation) => {
     const otherId = conv.other_user?.id
@@ -785,13 +804,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     setContextConv(null)
     if (user?.id && otherId) addContactDb(user.id, otherId).catch(() => {})
   }
-  const changePrivacy = async (patch: Partial<ChatPrivacy>) => {
-    if (!user?.id) return
-    const before = privacy
-    setPrivacy(p => ({ ...p, ...patch }))
-    try { setPrivacy(await saveMyPrivacy(user.id, patch)) }
-    catch { setPrivacy(before); useUIStore.getState().showToastMessage("Couldn't save - try again", 'error') }
-  }
+
 
   // Long press handlers
   const startLongPress = (conv: DbConversation) => {
@@ -865,12 +878,14 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     )
   }
 
-  const mainConvs = requestIds.size ? conversations.filter(c => !requestIds.has(c.id)) : conversations
-  const requestConvs = requestIds.size ? conversations.filter(c => requestIds.has(c.id)) : []
+  const notBlocked = (c: DbConversation) => !blockedIds.has(c.other_user?.id || '')
+  const mainConvs = conversations.filter(c => notBlocked(c) && !requestIds.has(c.id))
+  const requestConvs = requestIds.size ? conversations.filter(c => notBlocked(c) && requestIds.has(c.id)) : []
+  const archivedVisible = archivedConvs.filter(notBlocked)
   const unreadChats = mainConvs.filter(c => (c.unread_count || 0) > 0).length
   // New messages waiting in archived chats ("+3" on the Archived chip).
-  const archivedUnread = archivedConvs.reduce((n, c) => n + (c.unread_count || 0), 0)
-  const tabList = listTab === 'archived' ? archivedConvs
+  const archivedUnread = archivedConvs.filter(c => !blockedIds.has(c.other_user?.id || '')).reduce((n, c) => n + (c.unread_count || 0), 0)
+  const tabList = listTab === 'archived' ? archivedVisible
     : listTab === 'requests' ? requestConvs
     : listTab === 'unread' ? mainConvs.filter(c => (c.unread_count || 0) > 0)
     : mainConvs
@@ -881,7 +896,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   const matchesQ = (u?: { display_name?: string | null; username?: string | null } | null) =>
     !!u && ((u.display_name || '').toLowerCase().includes(nameQ) || (u.username || '').toLowerCase().includes(nameQ))
   const filtered = searchQ
-    ? [...conversations, ...archivedConvs].filter(c => matchesQ(c.other_user))
+    ? [...conversations, ...archivedConvs].filter(c => notBlocked(c) && matchesQ(c.other_user))
     : tabList
   const chattedIds = new Set([...conversations, ...archivedConvs].map(c => c.other_user?.id).filter(Boolean))
   const peopleMatches = searchQ
@@ -896,7 +911,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         style={{ borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
         {/* Your profile · Chats · search */}
         <div className="header-row justify-between" style={{ marginBottom: 12 }}>
-          <button onClick={() => setShowPrivacy(true)} aria-label="Chat privacy" className="rounded-full flex-shrink-0"
+          <button onClick={() => navigate('/chat/privacy')} aria-label="Chat privacy" className="rounded-full flex-shrink-0"
             style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}>
             <Avatar name={user?.displayName || user?.username || 'Me'} src={user?.avatar ?? undefined} size="sm" className="!w-9 !h-9" />
           </button>
@@ -946,10 +961,10 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
 
       {loading ? (
         <SkeletonRows count={8} />
-      ) : filtered.length === 0 && peopleMatches.length === 0 && (listTab !== 'all' || searchQ || archivedConvs.length > 0 || requestConvs.length > 0) ? (
+      ) : filtered.length === 0 && peopleMatches.length === 0 && (listTab !== 'all' || searchQ || archivedConvs.length > 0 || requestConvs.length > 0 || conversations.length > 0) ? (
         <div className="text-center py-16 px-5">
           <p className="text-text-secondary font-medium">
-            {searchQ ? 'No chats or people found' : listTab === 'unread' ? 'No unread chats' : listTab === 'archived' ? 'No archived chats' : listTab === 'requests' ? 'No message requests' : requestConvs.length > 0 ? 'No chats here - see Requests' : 'All your chats are archived'}
+            {searchQ ? 'No chats or people found' : listTab === 'unread' ? 'No unread chats' : listTab === 'archived' ? 'No archived chats' : listTab === 'requests' ? 'No message requests' : requestConvs.length > 0 ? 'No chats here - see Requests' : archivedVisible.length > 0 ? 'All your chats are archived' : 'No chats here'}
           </p>
           {searchQ && !searchQ.endsWith('.arc') && (
             <p className="text-text-muted text-sm mt-1">Type a full username.arc to find someone new</p>
@@ -1076,67 +1091,6 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         </div>
       )}
 
-      {/* ── Chat privacy (your profile picture, top left) ── */}
-      <Sheet isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} title="Chat privacy">
-        <div className="px-5 pb-5 space-y-5">
-          <div className="flex items-center gap-3">
-            <Avatar name={user?.displayName || user?.username || 'Me'} src={user?.avatar ?? undefined} size="md" />
-            <div className="min-w-0">
-              <p className="text-[15px] font-bold text-text-primary truncate">{user?.displayName || (user?.username || '').replace(/\.arc$/, '')}</p>
-              <p className="text-[13px] text-link">{(user?.username || '').replace(/\.arc$/, '')}.arc</p>
-            </div>
-          </div>
-          {isMerchantList ? (
-            <p className="text-[13px] text-text-secondary rounded-2xl px-4 py-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-              Merchant accounts accept messages and payments from everyone, so customers can always reach you.
-            </p>
-          ) : (<>
-            {([
-              { title: 'Who can message me', key: 'msgPrivacy' as const, options: [
-                { v: 'everyone', label: 'Everyone', hint: 'Anyone on MeshPort can start a chat with you.' },
-                { v: 'contacts', label: 'Contacts only', hint: "Chats from people you don't know go to Requests, without alerts." },
-              ] },
-              { title: 'Payments from strangers', key: 'strangerPayments' as const, options: [
-                { v: 'allow', label: 'Allow', hint: 'Anyone can pay you.' },
-                { v: 'block', label: 'Block', hint: "MeshPort won't let people you don't know pay you. Payments sent from outside MeshPort still arrive (nobody can stop a blockchain transfer), just without an alert." },
-              ] },
-            ]).map(group => (
-              <div key={group.key}>
-                <p className="text-[12px] font-bold uppercase tracking-wide text-text-secondary mb-2">{group.title}</p>
-                <div role="radiogroup" aria-label={group.title} className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                  {group.options.map((o, i) => {
-                    const on = (privacy as any)[group.key] === o.v
-                    return (
-                      <button key={o.v} role="radio" aria-checked={on}
-                        onClick={() => changePrivacy({ [group.key]: o.v } as Partial<ChatPrivacy>)}
-                        className="w-full flex items-start gap-3 px-4 py-3 text-left"
-                        style={{ borderTop: i ? '1px solid var(--border)' : 'none', background: 'none', cursor: 'pointer' }}>
-                        <span className="mt-0.5 flex-shrink-0 rounded-full flex items-center justify-center"
-                          style={{ width: 20, height: 20, border: `2px solid ${on ? 'var(--brand)' : 'var(--border)'}` }}>
-                          {on && <span className="rounded-full" style={{ width: 10, height: 10, background: 'var(--brand)' }} />}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block text-[15px] font-semibold text-text-primary">{o.label}</span>
-                          <span className="block text-[12.5px] text-text-secondary mt-0.5">{o.hint}</span>
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-            <p className="text-[12px] text-text-muted">
-              People you know = your contacts, or anyone you've messaged or paid yourself.
-            </p>
-          </>)}
-          <button onClick={() => { setShowPrivacy(false); navigate('/profile') }}
-            className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-[15px] font-semibold text-text-primary"
-            style={{ background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-            All settings <span aria-hidden className="text-text-secondary">›</span>
-          </button>
-        </div>
-      </Sheet>
-
       {/* ── Profile Sheet (from chat list avatar tap) ── */}
       <AnimatePresence>
         {profileConv && (() => {
@@ -1215,7 +1169,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                   Accept · add to contacts
                 </button>
               )}
-              {isArchived(contextConv) ? (
+              {isRequest(contextConv) ? null : isArchived(contextConv) ? (
                 <button onClick={() => unarchiveConv(contextConv)}
                   className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl font-semibold active:scale-95 transition-transform"
                   style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)', color: 'var(--brand-text)' }}>
@@ -1230,8 +1184,13 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                   Archive chat
                 </button>
               )}
+              <button onClick={() => blockConv(contextConv)}
+                className="w-full flex items-center gap-3 px-5 py-4 mt-2.5 bg-danger/10 border border-danger/20 rounded-2xl text-danger font-semibold active:scale-95 transition-transform">
+                <Ban className="w-5 h-5" />
+                Block
+              </button>
               <p className="text-center text-xs text-text-muted mt-3">
-                {isArchived(contextConv) ? 'Moves back to All.' : 'Moves to Archived. Nothing is deleted. It comes back to All when either of you pays.'}
+                {isRequest(contextConv) ? "Block: they can't message or pay you, and they're told you blocked them. Unblock any time in Chat privacy." : isArchived(contextConv) ? 'Moves back to All.' : 'Moves to Archived. Nothing is deleted. It comes back to All when either of you pays.'}
               </p>
               <button onClick={() => setContextConv(null)}
                 className="w-full mt-3 px-5 py-3.5 bg-surface/60 rounded-2xl text-text-secondary font-semibold active:scale-95 transition-transform">
@@ -2223,15 +2182,56 @@ export function ChatConversationPage() {
     return deleted.size ? _initMsgs.filter(m => !deleted.has(m.id)) : _initMsgs
   })
   const [otherUser, setOtherUser] = useState<any>(_findCachedOtherUser)
-  // Chat privacy: they may only accept payments from their contacts.
+  // Chat privacy: they may only accept payments from their contacts, or they
+  // blocked me. And on my side: this chat may be a message request (Accept /
+  // Block instead of the message box) or someone I blocked (Unblock).
   const [payBlockedByPrivacy, setPayBlockedByPrivacy] = useState(false)
+  const [chatGate, setChatGate] = useState<null | 'request' | 'iBlocked' | 'blockedMe'>(null)
+  const [gateBusy, setGateBusy] = useState(false)
   useEffect(() => {
-    setPayBlockedByPrivacy(false)
-    if (!otherUser?.id) return
+    setPayBlockedByPrivacy(false); setChatGate(null)
+    const otherId = otherUser?.id
+    if (!otherId || !user?.id || otherId === user.id) return
     let cancelled = false
-    reachCheck(otherUser.id).then(r => { if (!cancelled) setPayBlockedByPrivacy(!r.canPay) })
+    Promise.all([reachCheck(otherId), fetchBlocked(user.id).catch(() => []), fetchMyRequestIds().catch(() => new Set<string>())])
+      .then(([reach, blockedList, requests]) => {
+        if (cancelled) return
+        setPayBlockedByPrivacy(!reach.canPay)
+        setChatGate(blockedList.some(p => p.id === otherId) ? 'iBlocked'
+          : reach.blocked ? 'blockedMe'
+          : id && requests.has(id) ? 'request'
+          : null)
+      })
     return () => { cancelled = true }
-  }, [otherUser?.id])
+  }, [otherUser?.id, user?.id, id])
+  const otherHandle = `${(otherUser?.username || '').replace(/\.arc$/, '')}.arc`
+  const acceptChat = async () => {
+    if (!user?.id || !otherUser?.id || gateBusy) return
+    setGateBusy(true)
+    const { error } = await addContactDb(user.id, otherUser.id)
+    setGateBusy(false)
+    if (error) { showToastMessage("Couldn't accept - try again", 'error'); return }
+    invalidateConversationsCache()
+    setChatGate(null)
+  }
+  const blockChat = async () => {
+    if (!user?.id || !otherUser?.id || gateBusy) return
+    setGateBusy(true)
+    try {
+      await blockUser(user.id, otherUser.id)
+      invalidateConversationsCache()
+      showToastMessage(`${otherHandle} blocked`, 'success')
+      navigate('/chat')
+    } catch { showToastMessage("Couldn't block - try again", 'error') }
+    finally { setGateBusy(false) }
+  }
+  const unblockChat = async () => {
+    if (!user?.id || !otherUser?.id || gateBusy) return
+    setGateBusy(true)
+    try { await unblockUser(user.id, otherUser.id); invalidateConversationsCache(); setChatGate(null) }
+    catch { showToastMessage("Couldn't unblock - try again", 'error') }
+    finally { setGateBusy(false) }
+  }
   // Remember this chat's header identity on the device, so reopening it -
   // even after a reload or from a notification - paints the name and avatar
   // on the very first frame instead of a bare ".arc" that fills in later.
@@ -3621,7 +3621,9 @@ export function ChatConversationPage() {
   }
 
   const handlePay = () => {
-    if (payBlockedByPrivacy) { showToastMessage(STRANGER_PAY_BLOCKED(`${(otherUser?.username || '').replace(/\.arc$/, '')}.arc`), 'error'); return }
+    if (chatGate === 'blockedMe') { showToastMessage(BLOCKED_YOU(otherHandle), 'error'); return }
+    if (chatGate === 'iBlocked') { showToastMessage(`You blocked ${otherHandle} - unblock to pay them`, 'error'); return }
+    if (payBlockedByPrivacy) { showToastMessage(STRANGER_PAY_BLOCKED(otherHandle), 'error'); return }
     if (idChanged) { showToastMessage(`Confirm ${otherUser?.display_name || otherUser?.username || 'this contact'}'s new security info before paying`, 'error'); return }
     if (!otherUser?.username || !otherUser?.wallet_address) { showToastMessage('Recipient wallet not available', 'error'); return }
     setPayAmount(''); setPayToken('USDC'); setPayNote(''); setPayError(''); setPayTxHash('')
@@ -3787,8 +3789,9 @@ export function ChatConversationPage() {
 
     // Chat privacy preflight: they may only accept payments from contacts.
     // Nothing has been signed or sent yet.
-    if (otherUser?.id && !(await reachCheck(otherUser.id)).canPay) {
-      setPayError(STRANGER_PAY_BLOCKED(`${(otherUser.username || '').replace(/\.arc$/, '')}.arc`))
+    const reachNow = otherUser?.id ? await reachCheck(otherUser.id) : null
+    if (reachNow && !reachNow.canPay) {
+      setPayError(reachNow.blocked ? BLOCKED_YOU(otherHandle) : STRANGER_PAY_BLOCKED(otherHandle))
       setPayStep('confirm'); chatPayInFlightRef.current = false
       return
     }
@@ -4636,10 +4639,44 @@ export function ChatConversationPage() {
       </div>
       </div>
 
+      {/* Request / blocked: a bar in place of the message box */}
+      {chatGate && (
+        <div className="border-t border-border bg-bg flex-shrink-0 px-4 pt-3"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)' }}>
+          {chatGate === 'request' ? (<>
+            <p className="text-[13px] text-text-secondary text-center mb-3">
+              {otherHandle} isn't in your contacts. Accept to chat and get payments from them, or block them.
+            </p>
+            <div className="flex gap-2.5">
+              <button onClick={blockChat} disabled={gateBusy}
+                className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold bg-danger/10 border border-danger/20 text-danger active:scale-[.98] transition-transform">
+                <Ban className="w-4 h-4" /> Block
+              </button>
+              <button onClick={acceptChat} disabled={gateBusy}
+                className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-2xl font-semibold text-white active:scale-[.98] transition-transform"
+                style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
+                <UserPlus className="w-4 h-4" /> Accept
+              </button>
+            </div>
+          </>) : chatGate === 'iBlocked' ? (
+            <div className="flex items-center gap-3">
+              <p className="flex-1 text-[13px] text-text-secondary">You blocked {otherHandle}. They can't message or pay you.</p>
+              <button onClick={unblockChat} disabled={gateBusy}
+                className="px-4 py-2.5 rounded-full text-[13.5px] font-bold"
+                style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)', color: 'var(--brand-text)' }}>
+                Unblock
+              </button>
+            </div>
+          ) : (
+            <p className="text-[13px] text-center py-1.5" style={{ color: 'var(--danger)' }}>{BLOCKED_YOU(otherHandle)}</p>
+          )}
+        </div>
+      )}
+
       {/* Composer - sticky above home indicator */}
       {/* ── Message input bar ───────────────────────────────────────────────── */}
       <div className="border-t border-border bg-bg flex-shrink-0 relative"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)', display: chatGate ? 'none' : undefined }}>
         <AnimatePresence>
           {showJump && (
             <motion.button key="jump" type="button" aria-label={newBelow ? `Scroll to newest, ${newBelow} new` : 'Scroll to newest'}
