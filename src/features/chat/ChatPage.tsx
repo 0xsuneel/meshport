@@ -556,14 +556,14 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     const convs = applyReadOverrides(await fetchConversations(user.id))
     const hiddenMap = getHiddenChatsMap(chatWalletAddr)
     // An archived chat stays archived - new messages just add to its unread
-    // count. Only a payment from that person (after it was archived) brings
-    // it back to All automatically.
+    // count. A payment either way (they pay me or I pay them, after it was
+    // archived) brings it back to All automatically.
     let hiddenChanged = false
     const archived: DbConversation[] = []
     const filtered = convs.filter(c => {
       const hiddenAt = hiddenMap[c.id]
       if (!hiddenAt) return true
-      const paidSince = c.last_incoming_payment_at && new Date(c.last_incoming_payment_at).getTime() > new Date(hiddenAt).getTime()
+      const paidSince = c.last_payment_at && new Date(c.last_payment_at).getTime() > new Date(hiddenAt).getTime()
       if (paidSince) { delete hiddenMap[c.id]; hiddenChanged = true; return true }
       archived.push(c)
       return false
@@ -604,7 +604,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     return () => window.removeEventListener('meshport:session-bound', on)
   }, [loadConversations])
 
-  // A payment from someone whose chat is archived brings it back to All
+  // A payment (either way) in an archived chat brings it back to All
   // (other messages leave it archived; the list reload shows their count).
   useEffect(() => {
     if (!user?.id) return
@@ -614,9 +614,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         if (!msg?.conversation_id) return
         const hidden = getHiddenChats(chatWalletAddr)
         if (!hidden.has(msg.conversation_id)) return
-        const toMe = (msg.type === 'payment_sent' && msg.sender_id !== user.id) ||
-          (msg.type === 'payment_received' && msg.sender_id === user.id)
-        if (toMe) unhideChat(msg.conversation_id, chatWalletAddr)
+        if (msg.type === 'payment_sent' || msg.type === 'payment_received') unhideChat(msg.conversation_id, chatWalletAddr)
         invalidateConversationsCache()
         await loadConversations()
       })
@@ -1114,7 +1112,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                 </button>
               )}
               <p className="text-center text-xs text-text-muted mt-3">
-                {isArchived(contextConv) ? 'Moves back to All.' : 'Moves to Archived. Nothing is deleted. It comes back to All when they pay you.'}
+                {isArchived(contextConv) ? 'Moves back to All.' : 'Moves to Archived. Nothing is deleted. It comes back to All when either of you pays.'}
               </p>
               <button onClick={() => setContextConv(null)}
                 className="w-full mt-3 px-5 py-3.5 bg-surface/60 rounded-2xl text-text-secondary font-semibold active:scale-95 transition-transform">
