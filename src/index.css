@@ -598,3 +598,8 @@ html.mp-locking #root { visibility: hidden; }
   100% { background-color: transparent; }
 }
 .mp-last-opened { animation: mpLastOpened 1.6s ease-out; border-radius: 12px; }
+
+/* Typing caret after the amount while the phone keypad is open. */
+@keyframes mpCaretBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.mp-amount-caret { display: inline-block; width: 3px; height: 0.82em; margin-left: 4px; vertical-align: -0.06em; border-radius: 2px; background: var(--brand-text); animation: mpCaretBlink 1s steps(1) infinite; }
+@media (prefers-reduced-motion: reduce) { .mp-amount-caret { animation: none; } }

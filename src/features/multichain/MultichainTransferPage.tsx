@@ -815,7 +815,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // A temporary spacer at the bottom gives the page room to scroll that far.
   const amountBoxRef = useRef<HTMLDivElement>(null)
   // The form glides up with the keypad so the amount stays in view.
-  const keypadLift = useKeypadLift(showAmountPad, amountBoxRef, !isDesktop)
+  // Phone keypad open → focus mode: the other fields fold away so the amount
+  // sits right under the header, above the keys, on any screen height.
+  const amountFocus = showAmountPad && !desktopInput
+  const keypadLift = useKeypadLift(showAmountPad, amountBoxRef, !isDesktop && !amountFocus)
   const [selectedChain, setSelectedChain] = useState<ChainId>('eth')
   // Editing the address, amount or chain while the inline review is showing
   // hides it again - the fees shown must always match what's in the fields.
@@ -2991,6 +2994,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           <div style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-1.2px', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums',
             color: amount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>
             {amount || '0'}
+            {amountFocus && <span aria-hidden="true" className="mp-amount-caret"/>}
           </div>
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-secondary)' }}>{feeLine}</div>
         </div>
@@ -3003,6 +3007,27 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         <p className="text-xs text-warning">{gasWarning}</p>
       </div>
     ) : null
+  // Folds a form piece away while the amount is in focus.
+  const foldable = (node: React.ReactNode) => (
+    <motion.div initial={false} aria-hidden={amountFocus || undefined}
+      animate={amountFocus ? { height: 0, opacity: 0, marginBottom: -18 } : { height: 'auto', opacity: 1, marginBottom: 0 }}
+      transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+      style={{ overflow: amountFocus ? 'hidden' : 'visible', pointerEvents: amountFocus ? 'none' : undefined }}>
+      {node}
+    </motion.div>
+  )
+  // One line on where it goes, shown in place of the folded fields.
+  const amountFocusLine = (
+    <motion.div initial={false}
+      animate={amountFocus ? { height: 'auto', opacity: 1, marginBottom: 0 } : { height: 0, opacity: 0, marginBottom: -18 }}
+      transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }} style={{ overflow: 'hidden' }}>
+      <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.4, color: 'var(--text-secondary)' }}>
+        Sending to {isEVMAddress(address)
+          ? <b style={{ color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'ui-monospace, monospace' }}>{address.slice(0, 6)}…{address.slice(-6)}</b>
+          : null}{isEVMAddress(address) ? ' on ' : ''}<b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{chain.testnet}</b>
+      </p>
+    </motion.div>
+  )
   const reviewButton = (
     <button disabled={!canContinue} onClick={handleContinue}
       className="active:scale-[.98] transition-all"
@@ -3126,12 +3151,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     Transfer Funds
                   </button>
                 ) : (<>
-                  {formDestination}
-                  {formChainSelect}
-                  {formRecipient}
+                  {foldable(formDestination)}
+                  {foldable(formChainSelect)}
+                  {foldable(formRecipient)}
+                  {amountFocusLine}
                   {formAmount}
-                  {formRoute}
-                  {formGasWarning}
+                  {foldable(formRoute)}
+                  {formGasWarning && foldable(formGasWarning)}
                   {formActions}
                 </>)}
 
@@ -3626,12 +3652,13 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           {/* Moves up with the amount keypad so the amount stays in view. */}
           <motion.div animate={{ y: -keypadLift }} initial={false} transition={KEYPAD_SPRING}
             style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {formDestination}
-            {formChainSelect}
-            {formRecipient}
+            {foldable(formDestination)}
+            {foldable(formChainSelect)}
+            {foldable(formRecipient)}
+            {amountFocusLine}
             {formAmount}
-            {formRoute}
-            {formGasWarning}
+            {foldable(formRoute)}
+            {formGasWarning && foldable(formGasWarning)}
           </motion.div>
         </HubPage>
       )}
