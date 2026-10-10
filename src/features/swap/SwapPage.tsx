@@ -1685,7 +1685,7 @@ export function SwapPage() {
             className="space-y-3" style={{ position: 'relative', overflow: 'hidden', borderRadius: 24, padding: 2 }}>
 
             <p className="text-center text-sm font-bold text-text-primary" style={{ position: 'relative' }}>
-              {step === 'confirming' ? 'Review Swap' : 'Swapping…'}
+              {step === 'confirming' ? 'Review swap' : 'Swapping…'}
             </p>
 
             {/* Quote-changed notice - shown briefly when the background poll
@@ -1699,7 +1699,52 @@ export function SwapPage() {
               </div>
             )}
 
-            {/* Glass exchange card */}
+            {step === 'confirming' ? (
+              /* Review: the two amounts large and stacked, the guaranteed
+                 minimum spelled out, then one list of details. */
+              <>
+                <div className="flex flex-col items-center" style={{ position: 'relative', gap: 6, paddingTop: 8 }}>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>You pay</p>
+                  <div className="flex items-center" style={{ gap: 10 }}>
+                    <TLogo t={tokenIn} size={30}/>
+                    <span className="font-extrabold text-text-primary" style={{ fontSize: amountFontSize(amountIn, 36), letterSpacing: '-0.8px', lineHeight: 1.1 }}>
+                      {trimTrailingZeros(parseFloat(amountIn).toFixed(swapTokenDecimals(tokenIn.id)))} {tokenIn.id}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center" aria-hidden="true"
+                    style={{ width: 38, height: 38, borderRadius: '50%', border: '1px solid var(--border)', margin: '8px 0', color: 'var(--brand-text)' }}>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="5 12 12 19 19 12"/></svg>
+                  </div>
+                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>You receive about</p>
+                  <div className="flex items-center" style={{ gap: 10 }}>
+                    <TLogo t={tokenOut} size={30}/>
+                    <span className="font-extrabold" style={{ fontSize: amountFontSize(estimate?.estimatedOutput?.amount ?? '', 36), letterSpacing: '-0.8px', lineHeight: 1.1, color: 'var(--brand-text)' }}>
+                      {trimTrailingZeros(parseFloat(estimate?.estimatedOutput?.amount ?? '0').toFixed(swapTokenDecimals(tokenOut.id)))} {tokenOut.id}
+                    </span>
+                  </div>
+                  {parseFloat(estimate?.stopLimit?.amount ?? '0') > 0 && (
+                    <p className="text-[13px] text-center" style={{ color: 'var(--text-secondary)', marginTop: 4 }}>
+                      At least <strong className="font-semibold text-text-primary">{trimTrailingZeros(parseFloat(estimate!.stopLimit.amount).toFixed(swapTokenDecimals(tokenOut.id)))} {tokenOut.id}</strong>, or the swap is cancelled
+                    </p>
+                  )}
+                </div>
+
+                <div className="rounded-2xl" style={{ position: 'relative', marginTop: 20, padding: '4px 16px', background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                  {[
+                    ['Rate', `1 ${tokenIn.id} = ${estimate ? trimTrailingZeros((parseFloat(estimate.estimatedOutput.amount)/parseFloat(amountIn)).toFixed(tokenOut.id === 'cirBTC' ? 8 : 4)) : '-'} ${tokenOut.id}`],
+                    ['Price protection', `${slippage/100}% slippage`],
+                    ['Network fee', `~$${formatAmount(totalFees)}`],
+                    ['Network', 'Arc Testnet'],
+                  ].map(([l, v], i, rows) => (
+                    <div key={l} className="flex justify-between items-center" style={{ padding: '12px 0', borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                      <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{l}</span>
+                      <span className="text-sm font-semibold text-text-primary">{v}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+            /* Glass exchange card */
             <div className="rounded-2xl p-5" style={{
               position: 'relative',
               background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
@@ -1719,10 +1764,7 @@ export function SwapPage() {
 
                 <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
                   style={{ background: 'color-mix(in srgb, var(--brand) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-                  {step !== 'confirming'
-                    ? <ProcessingRing size={36} />
-                    : <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-                  }
+                  <ProcessingRing size={36} />
                 </div>
 
                 <div className="text-center">
@@ -1737,24 +1779,9 @@ export function SwapPage() {
                 </div>
               </div>
 
-              {step === 'confirming' ? (
-                /* Glass summary */
-                <div className="rounded-2xl mt-4 px-4 py-3" style={{ background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-                  {[
-                    ['Rate', `1 ${tokenIn.id} ≈ ${estimate ? trimTrailingZeros((parseFloat(estimate.estimatedOutput.amount)/parseFloat(amountIn)).toFixed(tokenOut.id === 'cirBTC' ? 8 : 4)) : '-'} ${tokenOut.id}`],
-                    ['Slippage', `${slippage/100}%`],
-                    ['Fee', `~$${formatAmount(totalFees)}`],
-                  ].map(([l, v]) => (
-                    <div key={l as string} className="flex justify-between items-center" style={{ padding: '5px 0' }}>
-                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{l}</span>
-                      <span className="text-xs font-semibold text-text-primary">{v}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-center mt-4" style={{ color: 'var(--text-secondary)' }}>Keep this page open · 15–30 sec</p>
-              )}
+              <p className="text-xs text-center mt-4" style={{ color: 'var(--text-secondary)' }}>Keep this page open · 15–30 sec</p>
             </div>
+            )}
 
             {step === 'confirming' && gasShortfall > 0 && (
               // Same shortfall the Max button and the passcode-time check
@@ -1773,18 +1800,18 @@ export function SwapPage() {
             )}
 
             {step === 'confirming' ? (
-              /* Back / Swap */
-              <div className="flex gap-2.5 pt-1" style={{ position: 'relative' }}>
-                <button onClick={() => { setStep('idle'); setError(''); setQuoteChangedNotice('') }}
-                  className="flex-1 py-3.5 rounded-2xl text-sm font-bold active:scale-[0.98] transition-transform"
-                  style={{ background:'color-mix(in srgb, var(--text-primary) 5%, transparent)', border:'1px solid var(--border)', color:'var(--text-secondary)' }}>
-                  Back
-                </button>
+              /* Confirm (full width), then a quiet way back to edit */
+              <div className="flex flex-col items-stretch" style={{ position: 'relative', gap: 6, paddingTop: 12 }}>
                 <button onClick={() => { setQuoteChangedNotice(''); setPassEntry(''); setPassError(''); setShowPasscodeSheet(true) }}
                   disabled={gasShortfall > 0 || !estimate}
-                  className="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white active:scale-[0.98] transition-transform disabled:opacity-40 disabled:active:scale-100"
-                  style={{ background:'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)', boxShadow: (gasShortfall > 0 || !estimate) ? 'none' : 'var(--shadow-2)' }}>
-                  Confirm Swap
+                  className="w-full rounded-2xl text-base font-bold text-white active:scale-[0.98] transition-transform disabled:opacity-40 disabled:active:scale-100"
+                  style={{ height: 56, background:'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)', boxShadow: (gasShortfall > 0 || !estimate) ? 'none' : 'var(--shadow-2)' }}>
+                  Confirm swap
+                </button>
+                <button onClick={() => { setStep('idle'); setError(''); setQuoteChangedNotice('') }}
+                  className="w-full text-sm font-semibold active:opacity-70"
+                  style={{ height: 44, color: 'var(--text-secondary)' }}>
+                  Edit swap
                 </button>
               </div>
             ) : (
