@@ -2855,16 +2855,30 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         background: 'color-mix(in srgb, var(--brand) 14%, transparent)', color: 'var(--brand-text)' }}>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </div>
-      <button onClick={() => setShowChainPicker(true)} aria-label={`To ${chain.testnet} - choose another chain`}
-        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px 10px', borderRadius: 20, cursor: 'pointer', minWidth: 0,
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px 10px', borderRadius: 20, minWidth: 0,
           background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
         <ChainLogoImg id={chain.id} size={40}/>
         <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>To</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 16, fontWeight: 700, maxWidth: '100%' }}>
-          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chain.name}</span>
-          <ChevronDown className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)', flexShrink: 0 }}/>
-        </span>
+        <span style={{ fontSize: 16, fontWeight: 700, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chain.name}</span>
         <span style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chainNetwork}</span>
+      </div>
+    </div>
+  )
+  // Its own field for picking where the USDC goes.
+  const formChainSelect = (
+    <div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Destination chain</div>
+      <button onClick={() => setShowChainPicker(true)} aria-label={`Destination chain: ${chain.testnet} - change`}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px 10px 14px', borderRadius: 16, cursor: 'pointer', textAlign: 'left',
+          background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
+        <ChainLogoImg id={chain.id} size={32}/>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chain.testnet}</span>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 1 }}>{chain.layer ? `${chain.layer} · ` : ''}arrives {chain.time}</span>
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, fontSize: 13, fontWeight: 600, color: 'var(--brand-text)' }}>
+          Change<ChevronDown className="w-4 h-4"/>
+        </span>
       </button>
     </div>
   )
@@ -3113,6 +3127,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   </button>
                 ) : (<>
                   {formDestination}
+                  {formChainSelect}
                   {formRecipient}
                   {formAmount}
                   {formRoute}
@@ -3612,6 +3627,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           <motion.div animate={{ y: -keypadLift }} initial={false} transition={KEYPAD_SPRING}
             style={{ padding: '4px 20px 12px', display: 'flex', flexDirection: 'column', gap: 18 }}>
             {formDestination}
+            {formChainSelect}
             {formRecipient}
             {formAmount}
             {formRoute}
