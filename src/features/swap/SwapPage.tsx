@@ -14,7 +14,7 @@ import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import type { SwapProgress } from '@/lib/swapService'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, ArrowUpDown, Settings, CheckCircle, XCircle, RefreshCw, ChevronDown, X, Clock, ChevronRight,
+  ArrowLeft, ArrowUpDown, Settings, CheckCircle, XCircle, RefreshCw, ChevronDown, Clock, ChevronRight,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
@@ -28,7 +28,6 @@ import { saveResumableOperation, getResumableOperation, clearResumableOperation 
 import { hasAnyActivityForTx } from '@/lib/ActivityService'
 import { amountFontSize } from '@/lib/amountFontSize'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { DesktopHistoryPanel, DesktopHistoryEmpty } from '@/components/ui/DesktopHistoryPanel'
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
@@ -140,54 +139,47 @@ function TLogo({ t, size=32 }: { t: Token; size?: number }) {
   )
 }
 
-function TokenPicker({ selected, exclude, onSelect, onClose, balances }: {
+// Token choice that floats down from the token pill itself: exactly the
+// pill's width, shown only while open, over the content below (nothing moves).
+// Tap outside or Esc closes it.
+function TokenDropdown({ selected, exclude, onSelect, onClose }: {
   selected: Token; exclude: Token; onSelect: (t: Token) => void; onClose: () => void
-  balances: Record<string, number>
 }) {
   const settings = useSettingsStore((s) => s.settings)
   const availableTokens = SWAP_TOKENS.filter(t => isCoinEnabled(settings, t.id))
-  const content = (
-    <>
-      <div className="flex items-center justify-between">
-        <p className="text-[19px] font-extrabold tracking-tight text-text-primary">Select token</p>
-        <button onClick={onClose} className="mp-popup-close" aria-label="Close">
-          <X className="w-[18px] h-[18px]" strokeWidth={2.4}/>
-        </button>
-      </div>
-      <div className="space-y-2">
-        {availableTokens.map(t => {
-          const isExcluded = t.id === exclude.id
-          const isSelected = t.id === selected.id
-          const bal        = balances[t.id] ?? 0
-          const balStr     = t.id === 'cirBTC' ? trimTrailingZeros(bal.toFixed(8)) : formatAmount(bal, 3)
-          return (
-            <button key={t.id} disabled={isExcluded} onClick={() => { onSelect(t); onClose() }}
-              className="w-full flex items-center gap-3 p-3 rounded-2xl transition-all disabled:opacity-30"
-              style={{ background: isSelected ? 'color-mix(in srgb, var(--brand) 15%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
-                border: isSelected ? '1px solid color-mix(in srgb, var(--brand) 40%, transparent)' : '1px solid transparent' }}>
-              <TLogo t={t} size={40}/>
-              <div className="flex-1 text-left">
-                <p className="text-sm font-bold text-text-primary">{t.label}</p>
-                <p className="text-xs text-text-secondary">{t.sub}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-semibold text-text-primary">{balStr}</p>
-                <p className="text-xs text-text-muted">{t.id}</p>
-              </div>
-              {isSelected && <div className="w-2 h-2 rounded-full bg-brand flex-shrink-0"/>}
-            </button>
-          )
-        })}
-      </div>
-      <p className="text-xs text-center text-text-muted pb-2">Arc Testnet only · USDC ↔ EURC ↔ cirBTC</p>
-    </>
-  )
-
-  return (
-    <DesktopDialogFrame onClose={onClose} maxWidth={420}>
-      <div className="p-6 space-y-4">{content}</div>
-    </DesktopDialogFrame>
-  )
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (<>
+    <div aria-hidden onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+    <motion.div role="listbox" aria-label="Choose token"
+      initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
+      style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 41, transformOrigin: 'top center',
+        display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {availableTokens.map(t => {
+        const on = t.id === selected.id
+        const off = t.id === exclude.id
+        return (
+          <button key={t.id} role="option" aria-selected={on} disabled={off}
+            onClick={() => { onSelect(t); onClose() }}
+            className="flex items-center gap-2 rounded-full active:opacity-70 transition-opacity"
+            // Solid background even when dimmed, so the card below never shows through.
+            style={{ height: 40, padding: '0 10px 0 6px', minWidth: 0, cursor: off ? 'default' : 'pointer',
+              background: on ? 'var(--brand)' : 'var(--surface)',
+              border: on ? '1px solid var(--brand)' : '1px solid var(--border)',
+              boxShadow: '0 8px 20px rgba(0,0,0,0.28)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, opacity: off ? 0.4 : 1 }}>
+              <TLogo t={t} size={26}/>
+              <span className="text-[15px] font-bold" style={{ color: on ? '#fff' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.id}</span>
+            </span>
+          </button>
+        )
+      })}
+    </motion.div>
+  </>)
 }
 
 function SwapHistoryItem({ r, onOpen, isFirst }: { r: SwapRecord; onOpen: () => void; isFirst?: boolean }) {
@@ -1469,13 +1461,21 @@ export function SwapPage() {
                   {showAmountPad && <span aria-hidden="true" className="animate-pulse" style={{ width: 2, height: 34, marginLeft: 3, background: 'var(--brand-text)' }}/>}
                 </button>
               ) : <span/>}
-              <button onClick={() => setPickerFor('in')}
-                className="flex items-center gap-2 rounded-full flex-shrink-0 active:opacity-70 transition-opacity"
-                style={{ height: 40, padding: '0 10px 0 6px', background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
-                <TLogo t={tokenIn} size={26}/>
-                <span className="text-[15px] font-bold text-text-primary">{tokenIn.id}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-text-secondary"/>
-              </button>
+              <div className="flex-shrink-0" style={{ position: 'relative', zIndex: pickerFor === 'in' ? 41 : undefined }}>
+                <button onClick={() => setPickerFor(v => v === 'in' ? null : 'in')} aria-expanded={pickerFor === 'in'}
+                  className="w-full flex items-center gap-2 rounded-full active:opacity-70 transition-opacity"
+                  style={{ height: 40, padding: '0 10px 0 6px', background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
+                  <TLogo t={tokenIn} size={26}/>
+                  <span className="text-[15px] font-bold text-text-primary">{tokenIn.id}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-text-secondary" style={{ transform: pickerFor === 'in' ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }}/>
+                </button>
+                <AnimatePresence>
+                  {pickerFor === 'in' && (
+                    <TokenDropdown selected={tokenIn} exclude={tokenOut} onClose={() => setPickerFor(null)}
+                      onSelect={t => { setTokenIn(t); setAmountIn(''); setEstimate(null) }} />
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
             {isDesktop ? (
               <div style={{ marginTop: 12 }}>
@@ -1613,13 +1613,21 @@ export function SwapPage() {
                   : <span className="font-extrabold" style={{ fontSize: 40, lineHeight: 1, color: 'var(--text-muted)' }}>0</span>
                 }
               </div>
-              <button onClick={() => setPickerFor('out')}
-                className="flex items-center gap-2 rounded-full flex-shrink-0 active:opacity-70 transition-opacity"
-                style={{ height: 40, padding: '0 10px 0 6px', background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
-                <TLogo t={tokenOut} size={26}/>
-                <span className="text-[15px] font-bold text-text-primary">{tokenOut.id}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-text-secondary"/>
-              </button>
+              <div className="flex-shrink-0" style={{ position: 'relative', zIndex: pickerFor === 'out' ? 41 : undefined }}>
+                <button onClick={() => setPickerFor(v => v === 'out' ? null : 'out')} aria-expanded={pickerFor === 'out'}
+                  className="w-full flex items-center gap-2 rounded-full active:opacity-70 transition-opacity"
+                  style={{ height: 40, padding: '0 10px 0 6px', background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
+                  <TLogo t={tokenOut} size={26}/>
+                  <span className="text-[15px] font-bold text-text-primary">{tokenOut.id}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-text-secondary" style={{ transform: pickerFor === 'out' ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }}/>
+                </button>
+                <AnimatePresence>
+                  {pickerFor === 'out' && (
+                    <TokenDropdown selected={tokenOut} exclude={tokenIn} onClose={() => setPickerFor(null)}
+                      onSelect={t => { setTokenOut(t); setEstimate(null) }} />
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
             {estimate && !(step === 'estimating' || liveQuoteLoading) && (
               <p className="text-[13px]" style={{ marginTop: 12, color: 'var(--text-muted)' }}>
@@ -2046,21 +2054,6 @@ export function SwapPage() {
       })()}
       </AnimatePresence>
 
-      {/* Token picker modal */}
-      <AnimatePresence>
-      {pickerFor && (
-        <TokenPicker
-          selected={pickerFor === 'in' ? tokenIn : tokenOut}
-          exclude={pickerFor === 'in' ? tokenOut : tokenIn}
-          balances={tokenBals}
-          onSelect={t => {
-            if (pickerFor === 'in') { setTokenIn(t); setAmountIn(''); setEstimate(null) }
-            else { setTokenOut(t); setEstimate(null) }
-          }}
-          onClose={() => setPickerFor(null)}
-        />
-      )}
-      </AnimatePresence>
 
       {/* History detail modal */}
       <AnimatePresence>
