@@ -60,7 +60,7 @@ export function formatNotifAmount(amount: number, tokenSymbol?: string): string 
 
 // Merchants: a customer's order payment gets ONE notification - the server's
 // "Payment received · order" (or "needs review") - not also the generic
-// "Received from". At the moment the deposit lands the order may not be
+// "Payment Received". At the moment the deposit lands the order may not be
 // linked yet (the watcher runs every minute), so skip the generic one when
 // the transfer is already linked to an order, or an open order is due this
 // amount (exactly or within 10% - those become "Payment received" or
@@ -108,8 +108,8 @@ export function notifyPaymentReceived({ amount, fromUsername, id, tokenSymbol, c
   unlessMerchantOrder(id, amount, tokenSymbol, () => useNotificationStore.getState().addNotification({
     id,
     type: 'payment_received',
-    title: 'Received from',
-    body: `${amountStr} Received from ${fromUsername.replace(/\.arc$/, '')}.arc`,
+    title: 'Payment Received',
+    body: `${amountStr} from ${fromUsername.replace(/\.arc$/, '')}.arc`,
     isRead: false,
     timestamp: createdAt,
   }))
@@ -129,8 +129,8 @@ export function notifyPaymentReceivedFromAddress({ amount, fromAddress, id, toke
   unlessMerchantOrder(id, amount, tokenSymbol || symbol, () => useNotificationStore.getState().addNotification({
     id,
     type: 'payment_received',
-    title: 'Received from',
-    body: `${amountStr} Received from ${short}`,
+    title: 'Payment Received',
+    body: `${amountStr} from ${short}`,
     isRead: false,
     timestamp: createdAt,
   }))
@@ -164,7 +164,7 @@ export function notifyBulkPaymentReceived({ amount, fromLabel, purpose, id, crea
   useNotificationStore.getState().addNotification({
     id,
     type: 'payment_received',
-    title: 'Received from',
+    title: 'Payment Received',
     body: purpose
       ? `You received ${formatNotifAmount(amount)} from ${fromLabel} - "${purpose}"`
       : `You received ${formatNotifAmount(amount)} from ${fromLabel} via bulk payout`,
