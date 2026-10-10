@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
 import { reachCheck, STRANGER_PAY_BLOCKED, BLOCKED_YOU, cachedPrivacy, fetchMyPrivacy, fetchMyRequestIds, fetchBlocked, blockUser, unblockUser, type ChatPrivacy } from '@/lib/privacy'
-import { Ban, Check, Pin, PinOff } from 'lucide-react'
+import { Ban, Check, Pin, PinOff, Plus } from 'lucide-react'
+import { ActionIcon } from '@/components/ui/ActionIcon'
 import { TokenLogo } from '@/components/ui/TokenLogo'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { PopupOpen } from '@/hooks/usePopupOpen'
@@ -2364,6 +2365,9 @@ export function ChatConversationPage() {
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showAttach, setShowAttach] = useState(false)
+  // + → Request: ask them for an amount (a payment-link card they can pay in-chat).
+  const [showRequest, setShowRequest] = useState(false)
+  const [reqAmount, setReqAmount] = useState('')
   const [attachMode, setAttachMode] = useState<'attachments' | 'bill'>('attachments')
   // Merchants: "Bill" in the attach menu - build a bill and send it here.
   const merchant = useMerchant()
@@ -4466,16 +4470,6 @@ export function ChatConversationPage() {
               title="Search in conversation" aria-label="Search in conversation">
               <Search className="w-4 h-4 text-text-primary" />
             </button>
-            <button onClick={handlePay} type="button"
-              className="text-white flex items-center gap-1.5 justify-center flex-shrink-0 active:scale-90 transition-transform"
-              title="Pay" aria-label="Pay"
-              style={{ height: '38px', width: '79px', borderRadius: '14px', padding: '0 11px', background: 'var(--brand)' }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M8 12h8M13 8l4 4-4 4"/>
-              </svg>
-              <span style={{ fontSize: '13px', fontWeight: 700, letterSpacing: '-0.2px' }}>Pay</span>
-            </button>
           </>
         )}
       </div>
@@ -4850,11 +4844,13 @@ export function ChatConversationPage() {
 
         {/* Input row - attach | textarea | send */}
         <div className="px-3 pt-2.5 pb-2 flex items-end gap-2">
-          {/* Attach button */}
+          {/* + : Pay, Request, Photo, Camera, File (and Bill for merchants) */}
           <button onClick={() => { setAttachMode('attachments'); setShowAttach(v => !v); messageInputRef.current?.blur() }} type="button"
-            aria-label="Attach" aria-expanded={showAttach && attachMode === 'attachments'}
-            className={`w-9 h-9 mb-1 rounded-full flex items-center justify-center active:bg-[rgb(var(--text-primary-rgb)/0.10)] flex-shrink-0 transition-colors ${showAttach && attachMode === 'attachments' ? 'text-brand-text' : 'text-text-secondary active:text-text-primary'}`}>
-            <Paperclip className="w-6 h-6" />
+            aria-label="More: pay, request, photo, file" aria-expanded={showAttach && attachMode === 'attachments'}
+            className="mb-[3px] rounded-full flex items-center justify-center flex-shrink-0 text-white active:scale-90 transition-transform"
+            style={{ width: 42, height: 42, background: 'var(--brand)' }}>
+            <Plus className="w-[22px] h-[22px]" strokeWidth={2.4}
+              style={{ transform: showAttach && attachMode === 'attachments' ? 'rotate(45deg)' : undefined, transition: 'transform 0.18s' }} />
           </button>
 
           {/* Text input box */}
@@ -4888,60 +4884,93 @@ export function ChatConversationPage() {
           </button>
         </div>
 
-        {/* Attach panel - opens right under the typing box in place of the
-            keyboard (WhatsApp-style): a grid of round buttons in the app's
-            brand colour. Order: Camera, Gallery, Document, File, Pay, Bill. */}
-        <AnimatePresence initial={false}>
-          {showAttach && attachMode === 'attachments' && (
-            <motion.div key="attach-panel"
-              initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-              style={{ overflow: 'hidden' }}>
-              <div className="grid grid-cols-4 gap-x-2 gap-y-4 px-4 pt-3 pb-5">
-                {[
-                  { key: 'camera',   label: 'Camera',   color: 'var(--brand-text)', icon: (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/>
-                    </svg>) },
-                  { key: 'gallery',  label: 'Gallery',  color: 'var(--brand-text)', icon: <Image className="w-6 h-6" /> },
-                  { key: 'document', label: 'Document', color: 'var(--brand-text)', icon: <FileText className="w-6 h-6" /> },
-                  { key: 'file',     label: 'File',     color: 'var(--brand-text)', icon: <File className="w-6 h-6" /> },
-                  { key: 'pay',      label: 'Pay',      color: 'var(--brand-text)', icon: (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6.5v11"/>
-                    </svg>) },
-                  ...(merchant.isMerchant ? [{ key: 'bill', label: 'Bill', color: 'var(--brand-text)', icon: <Receipt className="w-6 h-6" /> }] : []),
-                ].map(item => (
-                  <button key={item.key} type="button"
-                    onClick={() => {
-                      if (item.key === 'bill') { setAttachMode('bill'); return }
-                      setShowAttach(false)
-                      if (item.key === 'pay') { handlePay(); return }
-                      const input = fileInputRef.current
-                      if (!input) return
-                      pickModeRef.current = item.key === 'gallery' || item.key === 'camera' ? 'image' : item.key === 'document' ? 'document' : 'file'
-                      input.accept = item.key === 'gallery' || item.key === 'camera' ? 'image/*'
-                        : item.key === 'document' ? 'application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt' : '*/*'
-                      // Camera opens the phone camera directly; everything else the picker.
-                      if (item.key === 'camera') input.setAttribute('capture', 'environment'); else input.removeAttribute('capture')
-                      input.value = ''
-                      input.click()
-                    }}
-                    className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform">
-                    <span className="w-[58px] h-[58px] rounded-full flex items-center justify-center"
-                      style={{ color: item.color, background: `color-mix(in srgb, ${item.color} 14%, transparent)`, border: `1px solid color-mix(in srgb, ${item.color} 28%, transparent)` }}>
-                      {item.icon}
-                    </span>
-                    <span className="text-[12px] text-text-primary">{item.label}</span>
-                  </button>
-                ))}
-              </div>
+        {/* + menu - floats up from the + button (Pay first). */}
+        <AnimatePresence>
+          {showAttach && attachMode === 'attachments' && (<>
+            <div aria-hidden onClick={() => setShowAttach(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+            <motion.div key="plus-menu" role="menu" aria-label="Pay, request or attach"
+              initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }}
+              transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
+              style={{ position: 'absolute', left: 12, bottom: 'calc(100% + 6px)', zIndex: 41, width: 230, transformOrigin: 'bottom left',
+                padding: 6, borderRadius: 20, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 14px 32px rgba(0,0,0,0.38)' }}>
+              {[
+                { key: 'pay',     label: 'Pay',     tint: 'var(--brand)',     icon: <ActionIcon name="pay" size={18} /> },
+                { key: 'request', label: 'Request', tint: 'var(--usdc-icon)', icon: <ActionIcon name="receive" size={18} /> },
+                { key: 'gallery', label: 'Photo',   tint: '#7B61FF',          icon: <Image className="w-[18px] h-[18px] text-white" /> },
+                { key: 'camera',  label: 'Camera',  tint: '#E9967A',          icon: (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/>
+                  </svg>) },
+                { key: 'file',    label: 'File',    tint: '#4C9AFF',          icon: <File className="w-[18px] h-[18px] text-white" /> },
+                ...(merchant.isMerchant ? [{ key: 'bill', label: 'Bill', tint: '#F7931A', icon: <Receipt className="w-[18px] h-[18px] text-white" /> }] : []),
+              ].map(item => (
+                <button key={item.key} type="button" role="menuitem"
+                  onClick={() => {
+                    if (item.key === 'bill') { setAttachMode('bill'); return }
+                    setShowAttach(false)
+                    if (item.key === 'pay') { handlePay(); return }
+                    if (item.key === 'request') { setReqAmount(''); setShowRequest(true); return }
+                    const input = fileInputRef.current
+                    if (!input) return
+                    pickModeRef.current = item.key === 'gallery' || item.key === 'camera' ? 'image' : 'file'
+                    input.accept = item.key === 'gallery' || item.key === 'camera' ? 'image/*' : '*/*'
+                    // Camera opens the phone camera directly; everything else the picker.
+                    if (item.key === 'camera') input.setAttribute('capture', 'environment'); else input.removeAttribute('capture')
+                    input.value = ''
+                    input.click()
+                  }}
+                  className="w-full flex items-center gap-3 px-2.5 py-2 rounded-2xl text-left active:scale-[.98] transition-transform"
+                  style={{ background: item.key === 'pay' ? 'color-mix(in srgb, var(--brand) 14%, transparent)' : 'transparent', border: 'none', cursor: 'pointer' }}>
+                  <span className="rounded-full flex items-center justify-center flex-shrink-0" style={{ width: 36, height: 36, background: item.tint }}>{item.icon}</span>
+                  <span className="text-[15px] font-semibold text-text-primary">{item.label}</span>
+                </button>
+              ))}
             </motion.div>
-          )}
+          </>)}
         </AnimatePresence>
       </div>
 
       <input ref={fileInputRef} type="file" multiple className="hidden" accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt" onChange={handleFileUpload} />
+
+      {/* Request: sends your payment link with the amount - it shows as a card
+          with a Pay button on their side (paid right here in the chat). */}
+      <Sheet isOpen={showRequest} onClose={() => setShowRequest(false)} title={`Request from ${recipientClean}.arc`}>
+        {(() => {
+          const me = (user?.username || '').replace(/\.arc$/, '')
+          const n = parseFloat(reqAmount) || 0
+          const valid = n > 0 && /^\d+(\.\d{1,6})?$/.test(reqAmount)
+          return (
+            <div className="px-5 pb-5 space-y-4">
+              <div className="rounded-2xl px-4 py-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-[32px] font-bold text-text-muted">$</span>
+                  <input autoFocus inputMode="decimal" value={reqAmount} placeholder="0" aria-label="Amount to request in USDC"
+                    onChange={e => setReqAmount(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/^(\d*\.\d{0,6}).*$/, '$1'))}
+                    className="flex-1 min-w-0 bg-transparent text-[32px] font-bold text-text-primary outline-none" style={{ border: 'none' }} />
+                  <span className="text-sm font-semibold text-text-secondary">USDC</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {[5, 10, 20, 50].map(v => (
+                  <button key={v} type="button" onClick={() => setReqAmount(String(v))}
+                    className="rounded-full text-[13px] font-bold" style={{ height: 34, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>${v}</button>
+                ))}
+              </div>
+              <button type="button" disabled={!valid || !me}
+                onClick={async () => {
+                  const amt = trimTrailingZeros(n.toFixed(6))
+                  setShowRequest(false)
+                  await handleSend(`Requesting ${amt} USDC\nhttps://meshport.xyz/paylink/${me}?amount=${amt}`)
+                }}
+                className="w-full py-3.5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40"
+                style={{ background: 'var(--brand)' }}>
+                {valid ? `Request $${trimTrailingZeros(n.toFixed(6))}` : 'Request'}
+              </button>
+              <p className="text-xs text-text-secondary text-center">They'll see a card with a Pay button for this amount.</p>
+            </div>
+          )
+        })()}
+      </Sheet>
 
       <Sheet isOpen={showAttach && attachMode === 'bill'} onClose={() => { setShowAttach(false); setAttachMode('attachments') }} title="New bill">
         {merchant.isMerchant && (
