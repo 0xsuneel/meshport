@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -104,13 +105,11 @@ export function HubPage({ open, level = 0, behind = false, header, footer, child
   )
 }
 
-/** The app's usual back arrow for a HubPage's top bar. */
+/** The app's usual back arrow (same as every page header) for a HubPage's top bar. */
 export function HubPageBack({ onClick, label = 'Back' }: { onClick: () => void; label?: string }) {
   return (
-    <button onClick={onClick} aria-label={label} className="back-btn" style={{ width: 28, height: 28, color: 'var(--text-primary)' }}>
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M15 18l-6-6 6-6"/>
-      </svg>
+    <button onClick={onClick} aria-label={label} className="back-btn">
+      <ArrowLeft className="w-5 h-5 text-text-primary" />
     </button>
   )
 }

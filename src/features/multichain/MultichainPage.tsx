@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { ActionIcon } from '@/components/ui/ActionIcon'
 import { CHAIN_LOGO_FILE, chainLogoSrc } from '@/lib/chainLogos'
 import { RecoveryPanel } from './MultichainRecoveryPage'
@@ -1103,10 +1104,8 @@ export function MultichainPage() {
         paddingLeft: 20, paddingRight: 20, minHeight: 44, boxSizing: 'border-box',
         display: 'flex', alignItems: 'center', gap: 12 }}>
         {!isDesktop && (
-          <button onClick={() => navigate('/')} className="back-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M15 6L9 12l6 6" stroke="var(--text-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+          <button onClick={() => navigate('/')} className="back-btn" aria-label="Back">
+            <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
         )}
         <div style={{ flex: 1 }}>
