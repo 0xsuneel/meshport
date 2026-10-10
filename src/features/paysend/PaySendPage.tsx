@@ -1525,8 +1525,10 @@ export function PaySendPage() {
                   error={amountErrorMessage}
                 />
               )}
-              {amountErrorMessage && isDesktop && (
-                <p className="text-xs text-center" style={{ color: 'var(--danger)' }}>{amountErrorMessage}</p>
+              {/* Too much: shown here too once the keypad (which shows it while
+                  open) is closed, so it's never just a dimmed Review button. */}
+              {amountErrorMessage && (isDesktop || !showAmountPad) && (
+                <p role="alert" className="text-[13px] font-semibold text-center" style={{ color: 'var(--danger)' }}>{amountErrorMessage}</p>
               )}
 
               {/* Available balance (+ Max on desktop, where AmountKeypad's
@@ -1534,7 +1536,7 @@ export function PaySendPage() {
               <div className="flex items-center justify-between px-1">
                 <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Available Balance</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-text-primary">{formatAmount(activeBalance, tokenDisplayDecimals(token))} {token}</span>
+                  <span className="text-sm font-semibold" style={{ color: amountExceedsBalance ? 'var(--danger)' : 'var(--text-primary)' }}>{formatAmount(activeBalance, tokenDisplayDecimals(token))} {token}</span>
                   {isDesktop && activeBalance > 0 && !merchantPayCode && (
                     <button
                       onClick={() => {
