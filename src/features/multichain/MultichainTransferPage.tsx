@@ -32,7 +32,6 @@ import { gatewaySelfMintsTo, forwarderMintRetry } from '@/lib/ubClaim'
 import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { DesktopAmountInput } from '@/components/ui/DesktopAmountInput'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
@@ -828,10 +827,35 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // MeshPort always uses Fast transfer - no user-facing speed selector anymore.
   const selectedSpeed: SpeedId = 'fast'
   const [showAllChains,    setShowAllChains]    = useState(false)
-  const [showChainPicker,  setShowChainPicker]  = useState(false)
-  const pendingChainRef = useRef<ChainId | null>(null)
-  // The chain picker lists every chain's logo; fetch and decode them while
-  // the form is open so the sheet opens complete instead of logos popping in.
+  // Destination chip row: keep the selected chain's chip in view (it can sit
+  // off-screen when the chain was restored or set from elsewhere).
+  const chipRowRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const row = chipRowRef.current
+    const el = row?.querySelector<HTMLElement>('[aria-checked="true"]')
+    if (!row || !el) return
+    const left = el.offsetLeft - row.offsetLeft, right = left + el.offsetWidth
+    if (left < row.scrollLeft || right > row.scrollLeft + row.clientWidth) row.scrollTo({ left: Math.max(0, left - 20), behavior: 'smooth' })
+  }, [selectedChain, formSheet])
+  // A plain mouse wheel (vertical only) slides the chip row sideways while
+  // the pointer is over it, so desktop users can reach every chain too.
+  useEffect(() => {
+    const row = chipRowRef.current
+    if (!row) return
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+      const max = row.scrollWidth - row.clientWidth
+      if (max <= 0) return
+      const next = Math.min(max, Math.max(0, row.scrollLeft + e.deltaY))
+      if (next === row.scrollLeft) return
+      e.preventDefault()
+      row.scrollLeft = next
+    }
+    row.addEventListener('wheel', onWheel, { passive: false })
+    return () => row.removeEventListener('wheel', onWheel)
+  }, [formSheet, step])
+  // The destination chip row shows every chain's logo; fetch and decode them
+  // while the form is open so the chips appear complete instead of popping in.
   useEffect(() => {
     for (const url of new Set(Object.values(CHAIN_LOGOS))) {
       const img = new Image()
@@ -2867,22 +2891,37 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       </div>
     </div>
   )
-  // Its own field for picking where the USDC goes.
+  // Destination chain: every enabled chain as a chip in one sliding row on
+  // the form - slide and tap to switch, no pop-up or separate page.
+  const pickChain = (id: ChainId) => {
+    if (id !== selectedChain) {
+      setSelectedChain(id)
+      if (address) handleAddressChange(address)
+    }
+  }
   const formChainSelect = (
     <div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Destination chain</div>
-      <button onClick={() => setShowChainPicker(true)} aria-label={`Destination chain: ${chain.testnet} - change`}
-        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px 10px 14px', borderRadius: 16, cursor: 'pointer', textAlign: 'left',
-          background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-        <ChainLogoImg id={chain.id} size={32}/>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chain.testnet}</span>
-          <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 1 }}>{chain.layer ? `${chain.layer} · ` : ''}arrives {chain.time}</span>
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, fontSize: 13, fontWeight: 600, color: 'var(--brand-text)' }}>
-          Change<ChevronDown className="w-4 h-4"/>
-        </span>
-      </button>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Destination chain</span>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chain.testnet} · arrives {chain.time}</span>
+      </div>
+      <div ref={chipRowRef} role="radiogroup" aria-label="Destination chain"
+        style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none', ...(sheetMode ? { margin: '0 -20px', padding: '0 20px 2px' } : { paddingBottom: 2 }) }}>
+        {ENABLED_CHAINS.map(c => {
+          const on = c.id === chain.id
+          return (
+            <button key={c.id} role="radio" aria-checked={on} onClick={() => pickChain(c.id as ChainId)}
+              className="active:scale-[.97] transition-transform"
+              style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, height: 44, padding: '0 14px 0 8px', borderRadius: 999, cursor: 'pointer',
+                fontSize: 14, fontWeight: on ? 700 : 600, whiteSpace: 'nowrap',
+                background: on ? 'var(--brand)' : 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
+                color: on ? '#fff' : 'var(--text-primary)', border: on ? '1px solid var(--brand)' : '1px solid var(--border)' }}>
+              <ChainLogoImg id={c.id} size={28}/>
+              {c.name}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
   // Route: a two-way switch (only when both are possible), with one line on
@@ -3848,71 +3887,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       })()}
       </AnimatePresence>
 
-      {/* ── Chain Picker Sheet / Dialog ── */}
-      {/* The picked chain is applied once the popup has gone: switching it
-          while the card animates out re-laid the whole form underneath
-          (route, fees), which flickered through the closing popup. */}
-      <AnimatePresence onExitComplete={() => {
-        const id = pendingChainRef.current
-        pendingChainRef.current = null
-        if (id && id !== selectedChain) {
-          setSelectedChain(id)
-          if (address) handleAddressChange(address)
-        }
-      }}>
-      {showChainPicker && (() => {
-        const chainHeader = (
-          <div className="flex items-center justify-between px-5 pt-5 pb-3">
-            <p className="text-[19px] font-extrabold tracking-tight text-text-primary">Select Chain</p>
-            <button onClick={() => setShowChainPicker(false)} className="mp-popup-close" aria-label="Close">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                <path d="M18 6L6 18M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-        )
-        const chainList = (
-          <div className="overflow-y-auto" style={{ maxHeight: '60vh', overscrollBehavior: 'contain' }}>
-            {ENABLED_CHAINS.map((ch) => {
-              const isSelected = selectedChain === ch.id
-              return (
-                <button key={ch.id}
-                  onClick={() => {
-                    pendingChainRef.current = ch.id as ChainId
-                    setShowChainPicker(false)
-                  }}
-                  className="w-full flex items-center gap-3 px-5 py-3.5 active:bg-text-primary/5 transition-colors"
-                  style={{
-                    background: isSelected ? 'color-mix(in srgb, var(--brand) 10%, transparent)' : 'transparent',
-                  }}>
-                  <ChainLogoImg id={ch.id} size={38}/>
-                  <div className="flex-1 text-left min-w-0">
-                    <p className="text-sm font-semibold text-text-primary">{ch.name}</p>
-                    <p className="text-xs mt-0.5" style={{color:'var(--text-secondary)'}}>{ch.time} · {ch.gasToken}</p>
-                  </div>
-                  {isSelected && (
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{ background: 'var(--brand)' }}
-                      >
-                      <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
-                        <path d="M1 3.5l2.5 2.5 4.5-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        )
-
-        return (
-          <DesktopDialogFrame onClose={() => setShowChainPicker(false)} maxWidth={440}>
-            {chainHeader}
-            {chainList}
-          </DesktopDialogFrame>
-        )
-      })()}
-      </AnimatePresence>
     </div>
   )
 
