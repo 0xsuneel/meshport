@@ -3,7 +3,6 @@ import { TokenLogo } from '@/components/ui/TokenLogo'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { PopupOpen } from '@/hooks/usePopupOpen'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SNACKBAR_MOTION, DIALOG_BACKDROP, SHEET_EXIT } from '@/lib/motion'
-import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
 import { _plainByContent, plainTextOf, messagePreview, parseMedia, isDecryptFailure, splitCaption } from './chatMessageText'
 import { ARC_EXPLORER, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { ChatForwardSheet } from './ChatForwardSheet'
@@ -14,7 +13,7 @@ import { PinKeypad } from '@/components/ui/PinKeypad'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { SearchField } from '@/components/ui/SearchField'
 import { readPeople, writePeople } from '@/lib/peopleCache'
-import { Search, Send, ArrowLeft, CheckCheck, Paperclip, Image, FileText, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, SquarePen, Trash2, ArrowDownToLine, Users, UserPlus, Globe, Clock, Receipt } from 'lucide-react'
+import { Search, Send, ArrowLeft, CheckCheck, Paperclip, Image, FileText, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, Trash2, Archive, ArchiveRestore, MessageCirclePlus, ArrowDownToLine, Users, UserPlus, Globe, Clock, Receipt } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PopupDim } from '@/components/ui/PopupDim'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -468,8 +467,13 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   const [search, setSearch] = useState('')
   // Search box tucks away while scrolling down the chat list, back on scroll up.
   const chatListScrollRef = useRef<HTMLDivElement>(null)
-  const [chatSearchFocused, setChatSearchFocused] = useState(false)
-  const chatSearchHidden = useHideOnScroll(chatListScrollRef, chatSearchFocused || !!search)
+  // Search opens from the header's search icon.
+  const [searchOpen, setSearchOpen] = useState(false)
+  // All / Unread / Archived. Archived chats are the hidden ones (hideChat):
+  // nothing is deleted, and new activity brings one back to All by itself.
+  const [listTab, setListTab] = useState<'all' | 'unread' | 'archived'>('all')
+  const [archivedConvs, setArchivedConvs] = useState<DbConversation[]>([])
+  const isDesktopList = useMediaQuery('(min-width: 980px)')
   const [conversations, setConversations] = useState<DbConversation[]>(_cachedConversations)
   const [loading, setLoading] = useState(_cachedConversations.length === 0)
   const [newChatSearch, setNewChatSearch] = useState('')
@@ -557,13 +561,16 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     // this is what makes a payment from a previously-removed contact show up
     // in Chats even if this page wasn't open when it arrived.
     let hiddenChanged = false
+    const archived: DbConversation[] = []
     const filtered = convs.filter(c => {
       const hiddenAt = hiddenMap[c.id]
       if (!hiddenAt) return true
       const isNewer = c.last_message_at && new Date(c.last_message_at).getTime() > new Date(hiddenAt).getTime()
       if (isNewer) { delete hiddenMap[c.id]; hiddenChanged = true; return true }
+      archived.push(c)
       return false
     })
+    setArchivedConvs(archived)
     if (hiddenChanged) localStorage.setItem(hiddenKey(chatWalletAddr), JSON.stringify(hiddenMap))
     // Save to module-level cache so next mount is instant
     _cachedConversations = filtered
@@ -713,18 +720,31 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     : savedContacts
   const newPeople = searchResults.filter((u: DbUser) => !savedContacts.some(c => c.id === u.id))
 
-  const handleRemoveFromChats = (conv: DbConversation) => {
-    // Add other user to removed contacts blocklist
-    const otherId = conv.other_user?.id
-    if (otherId && chatWalletAddr) {
-      import('@/lib/removedContacts').then(({ addRemovedContact }) => {
-        addRemovedContact(chatWalletAddr, otherId)
-      })
-    }
+  // Archive: moves the chat to Archived. Nothing is deleted, the person
+  // stays in your contacts, and a new message brings it back to All.
+  const archiveConv = (conv: DbConversation) => {
     hideChat(conv.id, chatWalletAddr)
-    setConversations(prev => prev.filter(c => c.id !== conv.id))
+    setConversations(prev => { const next = prev.filter(c => c.id !== conv.id); _cachedConversations = next; return next })
+    setArchivedConvs(prev => prev.some(c => c.id === conv.id) ? prev : [conv, ...prev])
     setContextConv(null)
   }
+  const unarchiveConv = (conv: DbConversation) => {
+    unhideChat(conv.id, chatWalletAddr)
+    // Chats archived as "Remove contact" before also come back to contacts.
+    const otherId = conv.other_user?.id
+    if (otherId && chatWalletAddr) {
+      import('@/lib/removedContacts').then(({ removeFromRemovedContacts }) => removeFromRemovedContacts(chatWalletAddr, otherId)).catch(() => {})
+    }
+    setArchivedConvs(prev => prev.filter(c => c.id !== conv.id))
+    setConversations(prev => {
+      const next = [...prev.filter(c => c.id !== conv.id), conv]
+        .sort((x, y) => new Date(y.last_message_at).getTime() - new Date(x.last_message_at).getTime())
+      _cachedConversations = next
+      return next
+    })
+    setContextConv(null)
+  }
+  const isArchived = (conv: DbConversation) => archivedConvs.some(c => c.id === conv.id)
 
   // Long press handlers
   const startLongPress = (conv: DbConversation) => {
@@ -798,39 +818,76 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     )
   }
 
+  const unreadChats = conversations.filter(c => (c.unread_count || 0) > 0).length
+  const tabList = listTab === 'archived' ? archivedConvs
+    : listTab === 'unread' ? conversations.filter(c => (c.unread_count || 0) > 0)
+    : conversations
   const filtered = search
-    ? conversations.filter(c =>
+    ? tabList.filter(c =>
         (c.other_user?.display_name || '').toLowerCase().includes(search.toLowerCase()) ||
         (c.other_user?.username || '').toLowerCase().includes(search.toLowerCase())
       )
-    : conversations
+    : tabList
 
   return (
+    <div className="flex-1 min-h-0 relative flex flex-col bg-bg">
     <div ref={chatListScrollRef} className="flex-1 overflow-y-auto bg-bg">
-      <div className="sticky top-0 z-20 bg-bg/95 backdrop-blur-md px-5 pt-header pb-3">
-        <div className="header-row justify-between" style={{ marginBottom: chatSearchHidden ? 0 : 16, transition: 'margin 0.25s ease' }}>
-          <h1 className="text-xl font-bold text-text-primary">Chats</h1>
-          <div className="flex items-center gap-2">
-            <motion.button whileTap={{ scale: 0.9 }}
-              onClick={() => navigate('/chat/new')} aria-label="New chat"
-              className="w-10 h-10 rounded-full flex items-center justify-center"
-              style={{ background: 'var(--brand)', boxShadow: 'var(--shadow-1)' }}>
-              <SquarePen className="w-[17px] h-[17px]" style={{ color: '#fff' }} />
-            </motion.button>
-          </div>
+      <div className="sticky top-0 z-20 bg-bg/95 backdrop-blur-md px-4 pt-header pb-3"
+        style={{ borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
+        {/* Your profile · Chats · search */}
+        <div className="header-row justify-between" style={{ marginBottom: 12 }}>
+          <button onClick={() => navigate('/profile')} aria-label="Profile" className="rounded-full flex-shrink-0"
+            style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}>
+            <Avatar name={user?.displayName || user?.username || 'Me'} src={user?.avatar ?? undefined} size="sm" className="!w-9 !h-9" />
+          </button>
+          <h1 className="text-xl font-bold text-text-primary" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>Chats</h1>
+          <motion.button whileTap={{ scale: 0.9 }} aria-label={searchOpen ? 'Close search' : 'Search chats'}
+            onClick={() => { if (searchOpen) setSearch(''); setSearchOpen(o => !o) }}
+            className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+            style={{ background: searchOpen ? 'var(--surface)' : 'transparent', border: 'none' }}>
+            {searchOpen ? <X className="w-5 h-5 text-text-primary" /> : <Search className="w-[21px] h-[21px] text-text-primary" />}
+          </motion.button>
         </div>
 
-        {/* Search bar */}
-        <div style={collapseStyle(chatSearchHidden, 56)}>
-        <SearchField value={search} onChange={setSearch} placeholder="Search chats"
-          onFocus={() => setChatSearchFocused(true)} onBlur={() => setChatSearchFocused(false)} />
+        {searchOpen && (
+          <div style={{ marginBottom: 12 }}>
+            <SearchField autoFocus value={search} onChange={setSearch} placeholder="Search chats" />
+          </div>
+        )}
+
+        {/* All · Unread · Archived */}
+        <div className="flex gap-2" role="tablist" aria-label="Chat filter">
+          {([['all', 'All'], ['unread', 'Unread'], ['archived', 'Archived']] as const).map(([id, label]) => {
+            const on = listTab === id
+            return (
+              <button key={id} role="tab" aria-selected={on} onClick={() => setListTab(id)}
+                className="flex-1 rounded-full flex items-center justify-center gap-1.5 text-[14px] transition-colors"
+                style={{ height: 36, fontWeight: on ? 700 : 600, cursor: 'pointer',
+                  background: on ? 'color-mix(in srgb, var(--brand) 25%, transparent)' : 'transparent',
+                  border: `1px solid ${on ? 'var(--brand)' : 'var(--border)'}`,
+                  color: on ? 'var(--brand-text)' : 'var(--text-secondary)' }}>
+                {label}
+                {id === 'unread' && unreadChats > 0 && (
+                  <span className="rounded-full text-[11px] font-bold text-white inline-flex items-center justify-center"
+                    style={{ minWidth: 18, height: 18, padding: '0 5px', background: 'var(--brand)' }}>{unreadChats > 99 ? '99+' : unreadChats}</span>
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
 
-
-
       {loading ? (
         <SkeletonRows count={8} />
+      ) : filtered.length === 0 && (listTab !== 'all' || search || archivedConvs.length > 0) ? (
+        <div className="text-center py-16 px-5">
+          <p className="text-text-secondary font-medium">
+            {search ? 'No chats found' : listTab === 'unread' ? 'No unread chats' : listTab === 'archived' ? 'No archived chats' : 'All your chats are archived'}
+          </p>
+          {!search && listTab === 'archived' && (
+            <p className="text-text-muted text-sm mt-1">Long-press a chat to archive it</p>
+          )}
+        </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 px-5">
           <div className="w-16 h-16 bg-surface rounded-full flex items-center justify-center mx-auto mb-4">
@@ -890,7 +947,8 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                 }}
                 onTouchEnd={(e) => { cancelLongPress() }}
                 onTouchCancel={cancelLongPress}
-                onContextMenu={e => e.preventDefault()}
+                // Touch: long-press (above). Mouse: right-click opens the same menu.
+                onContextMenu={e => { e.preventDefault(); if (!('ontouchstart' in window)) setContextConv(conv) }}
                 className="flex items-center gap-3 px-4 py-3 w-full active:bg-[rgb(var(--text-primary-rgb)/0.05)] transition-colors"
                 style={{ borderBottom: idx < filtered.length-1 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'none' }}>
                 {/* Avatar - tap to open profile */}
@@ -964,16 +1022,22 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                     </div>
                     <span className="text-[15px] font-semibold text-text-primary">Message</span>
                   </button>
-                  {/* Remove contact */}
-                  <button
-                    onClick={() => { setProfileConv(null); handleRemoveFromChats(profileConv) }}
-                    className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
-                    style={{ background:'color-mix(in srgb, var(--danger) 6%, transparent)', border:'1px solid color-mix(in srgb, var(--danger) 15%, transparent)' }}>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--danger) 12%, transparent)' }}>
-                      <Trash2 className="w-4 h-4 text-danger" />
-                    </div>
-                    <span className="text-[15px] font-semibold text-danger">Remove Contact</span>
-                  </button>
+                  {/* Archive / Unarchive (nothing is deleted) */}
+                  {(() => {
+                    const archived = isArchived(profileConv)
+                    const Icon = archived ? ArchiveRestore : Archive
+                    return (
+                      <button
+                        onClick={() => { setProfileConv(null); archived ? unarchiveConv(profileConv) : archiveConv(profileConv) }}
+                        className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
+                        style={{ background:'color-mix(in srgb, var(--brand) 10%, transparent)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
+                        <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--brand) 20%, transparent)' }}>
+                          <Icon className="w-4 h-4 text-brand-text" />
+                        </div>
+                        <span className="text-[15px] font-semibold text-brand-text">{archived ? 'Unarchive chat' : 'Archive chat'}</span>
+                      </button>
+                    )
+                  })()}
                 </div>
               </div>
             </DesktopDialogFrame>
@@ -994,13 +1058,24 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                   <p className="text-sm text-link">{(contextConv.other_user?.username || '').replace(/\.arc$/, '')}.arc</p>
                 </div>
               </div>
-              <button
-                onClick={() => handleRemoveFromChats(contextConv)}
-                className="w-full flex items-center gap-3 px-5 py-4 bg-danger/10 border border-danger/20 rounded-2xl text-danger font-semibold active:scale-95 transition-transform">
-                <Trash2 className="w-5 h-5" />
-                Remove from Contacts
-              </button>
-              <p className="text-center text-xs text-text-muted mt-3">History is preserved. It will reappear if you message again.</p>
+              {isArchived(contextConv) ? (
+                <button onClick={() => unarchiveConv(contextConv)}
+                  className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl font-semibold active:scale-95 transition-transform"
+                  style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)', color: 'var(--brand-text)' }}>
+                  <ArchiveRestore className="w-5 h-5" />
+                  Unarchive chat
+                </button>
+              ) : (
+                <button onClick={() => archiveConv(contextConv)}
+                  className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl font-semibold active:scale-95 transition-transform"
+                  style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)', color: 'var(--brand-text)' }}>
+                  <Archive className="w-5 h-5" />
+                  Archive chat
+                </button>
+              )}
+              <p className="text-center text-xs text-text-muted mt-3">
+                {isArchived(contextConv) ? 'Moves back to All.' : 'Moves to Archived. Nothing is deleted. It comes back to All when they message you.'}
+              </p>
               <button onClick={() => setContextConv(null)}
                 className="w-full mt-3 px-5 py-3.5 bg-surface/60 rounded-2xl text-text-secondary font-semibold active:scale-95 transition-transform">
                 Cancel
@@ -1009,6 +1084,15 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
           </DesktopDialogFrame>
         )}
       </AnimatePresence>
+    </div>
+
+    {/* New chat - floats above the bottom navigation */}
+    <motion.button whileTap={{ scale: 0.92 }} onClick={() => navigate('/chat/new')} aria-label="New chat"
+      className="rounded-full flex items-center justify-center"
+      style={{ position: 'absolute', right: 18, bottom: isDesktopList ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 92px)', zIndex: 25,
+        width: 58, height: 58, background: 'var(--brand)', border: 'none', cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,0.35)' }}>
+      <MessageCirclePlus className="w-[27px] h-[27px]" style={{ color: '#fff' }} strokeWidth={2} />
+    </motion.button>
     </div>
   )
 }
@@ -4644,28 +4728,39 @@ export function ChatConversationPage() {
                   <span className="text-[15px] font-semibold text-text-primary">Transaction History</span>
                 </button>
 
-                {/* Remove contact */}
-                <button
-                  onClick={() => {
-                    setShowProfile(false)
-                    if (conversationId) {
-                      const addr = useAuthStore.getState().walletAddress
-                      hideChat(conversationId, addr)
-                      if (otherUser?.id && addr) {
-                        import('@/lib/removedContacts').then(({ addRemovedContact }) => {
-                          addRemovedContact(addr, otherUser.id)
-                        })
-                      }
-                      navigate('/chat')
-                    }
-                  }}
-                  className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
-                  style={{ background:'color-mix(in srgb, var(--danger) 6%, transparent)', border:'1px solid color-mix(in srgb, var(--danger) 15%, transparent)' }}>
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--danger) 12%, transparent)' }}>
-                    <Trash2 className="w-4 h-4 text-danger" />
-                  </div>
-                  <span className="text-[15px] font-semibold text-danger">Remove Contact</span>
-                </button>
+                {/* Archive / Unarchive (nothing is deleted; a new message
+                    brings an archived chat back to All) */}
+                {(() => {
+                  const addr = useAuthStore.getState().walletAddress
+                  const archived = !!(conversationId && getHiddenChatsMap(addr)[conversationId])
+                  const Icon = archived ? ArchiveRestore : Archive
+                  return (
+                    <button
+                      onClick={() => {
+                        setShowProfile(false)
+                        if (!conversationId) return
+                        if (archived) {
+                          unhideChat(conversationId, addr)
+                          if (otherUser?.id && addr) {
+                            import('@/lib/removedContacts').then(({ removeFromRemovedContacts }) => removeFromRemovedContacts(addr, otherUser.id)).catch(() => {})
+                          }
+                          invalidateConversationsCache()
+                          useUIStore.getState().showToastMessage('Chat moved back to All', 'success')
+                        } else {
+                          hideChat(conversationId, addr)
+                          invalidateConversationsCache()
+                          navigate('/chat')
+                        }
+                      }}
+                      className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
+                      style={{ background:'color-mix(in srgb, var(--brand) 10%, transparent)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--brand) 20%, transparent)' }}>
+                        <Icon className="w-4 h-4 text-brand-text" />
+                      </div>
+                      <span className="text-[15px] font-semibold text-brand-text">{archived ? 'Unarchive chat' : 'Archive chat'}</span>
+                    </button>
+                  )
+                })()}
               </div>
             </>
           )
