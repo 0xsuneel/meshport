@@ -589,3 +589,12 @@ html.popup-open #root *::after {
 /* Locking on return from the background: the app is hidden until the lock
    screen mounts (App.tsx adds the class, PasscodeLockPage removes it). */
 html.mp-locking #root { visibility: hidden; }
+
+/* "This is the one you just opened": a list row flashes the brand tint and
+   fades back, when you come back to Updates from an article or close a
+   transaction in Activity. Overrides the row's own background while it runs. */
+@keyframes mpLastOpened {
+  0%, 35% { background-color: color-mix(in srgb, var(--brand) 16%, transparent); }
+  100% { background-color: transparent; }
+}
+.mp-last-opened { animation: mpLastOpened 1.6s ease-out; border-radius: 12px; }

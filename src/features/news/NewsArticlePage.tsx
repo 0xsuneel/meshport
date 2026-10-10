@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useUIStore } from '@/store'
 import { copyToClipboard } from '@/lib/utils'
-import { fetchNewsItem, newsHost, NEWS_SOURCE_LABEL, type NewsItem } from '@/lib/news'
+import { fetchNewsItem, markNewsRead, newsHost, NEWS_SOURCE_LABEL, type NewsItem } from '@/lib/news'
 import { NewsCover, newsMeta } from './NewsPage'
 
 // /news/:id - the short article: cover, headline, summary and the opening
@@ -21,7 +21,7 @@ export function NewsArticlePage() {
   useEffect(() => {
     let cancelled = false
     setState('loading')
-    fetchNewsItem(id).then(it => { if (!cancelled) { setItem(it); setState(it ? 'ready' : 'missing') } })
+    fetchNewsItem(id).then(it => { if (!cancelled) { setItem(it); setState(it ? 'ready' : 'missing'); if (it) markNewsRead(it.id) } })
     return () => { cancelled = true }
   }, [id])
 
