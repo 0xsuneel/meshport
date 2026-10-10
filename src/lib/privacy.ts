@@ -82,12 +82,32 @@ export async function fetchBlocked(userId: string): Promise<BlockedPerson[]> {
   return ids.map(id => byId.get(id)).filter(Boolean) as BlockedPerson[]
 }
 
+// Wallets I've blocked → when (ms). Activity shows a payment from one of
+// them after that moment as a bare address, without their username (it can
+// only have come from outside MeshPort - see ActivityService.fetchActivity).
+let _blockedWallets: { uid: string; at: number; map: Map<string, number> } | null = null
+export function clearBlockedCache() { _blockedWallets = null }
+export async function blockedWalletMap(userId: string): Promise<Map<string, number>> {
+  if (_blockedWallets && _blockedWallets.uid === userId && Date.now() - _blockedWallets.at < 60_000) return _blockedWallets.map
+  const map = new Map<string, number>()
+  const { data } = await supabase.from('chat_blocks').select('blocked_id, created_at').eq('owner_id', userId)
+  if (data?.length) {
+    const when = new Map(data.map((r: any) => [r.blocked_id, new Date(r.created_at).getTime()]))
+    const { data: users } = await supabase.from('users').select('id, wallet_address').in('id', [...when.keys()])
+    for (const u of users ?? []) if (u.wallet_address) map.set(String(u.wallet_address).toLowerCase(), when.get(u.id) ?? 0)
+  }
+  _blockedWallets = { uid: userId, at: Date.now(), map }
+  return map
+}
+
 export async function blockUser(userId: string, otherId: string): Promise<void> {
+  clearBlockedCache()
   const { error } = await supabase.from('chat_blocks').upsert({ owner_id: userId, blocked_id: otherId }, { onConflict: 'owner_id,blocked_id', ignoreDuplicates: true })
   if (error) throw error
 }
 
 export async function unblockUser(userId: string, otherId: string): Promise<void> {
+  clearBlockedCache()
   const { error } = await supabase.from('chat_blocks').delete().eq('owner_id', userId).eq('blocked_id', otherId)
   if (error) throw error
 }

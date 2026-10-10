@@ -15,6 +15,8 @@ const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) =
  */
 
 import { supabase } from './supabase'
+import { blockedWalletMap } from './privacy'
+import { useAuthStore } from '@/store'
 import { searchUsersPartialDb } from './supabase'
 import { ARC_EXPLORER, explorerTxUrl } from './chainExplorers'
 import { subscribeWithRetry } from './chatService'
@@ -692,7 +694,32 @@ export interface FetchOptions {
   meta?: { rawCount?: number; lastRaw?: { createdAt: string; id: string }; failed?: boolean }
 }
 
+// Someone I blocked who pays me from outside MeshPort (their wallet imported
+// into OKX / MetaMask): show the payment by address only, not their username.
+// Unblock and their name shows again. Payments from before the block keep it.
+async function hideBlockedSenders(records: ActivityRecord[]): Promise<ActivityRecord[]> {
+  const uid = useAuthStore.getState().user?.id
+  if (!uid || !records.some(r => r.activityType === 'receive')) return records
+  const blocked = await blockedWalletMap(uid).catch(() => null)
+  if (!blocked?.size) return records
+  return records.map(r => {
+    if (r.activityType !== 'receive' || !r.counterpartyAddress) return r
+    const since = blocked.get(r.counterpartyAddress.toLowerCase())
+    if (since === undefined || new Date(r.createdAt || 0).getTime() < since) return r
+    const meta = { ...((r as any).metadata || {}) }
+    delete meta.fromUsername
+    return { ...r, metadata: { ...meta, senderHidden: true } } as ActivityRecord
+  })
+}
+
 export async function fetchActivity(
+  walletAddress: string,
+  opts: FetchOptions = {},
+): Promise<ActivityRecord[]> {
+  return hideBlockedSenders(await fetchActivityRaw(walletAddress, opts))
+}
+
+async function fetchActivityRaw(
   walletAddress: string,
   opts: FetchOptions = {},
 ): Promise<ActivityRecord[]> {
