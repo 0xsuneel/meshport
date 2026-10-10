@@ -269,6 +269,13 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
   if (!['text', 'payment_sent'].includes(type)) return res.status(400).json({ error: 'Bad message type' })
   if (typeof content !== 'string' || content.length > 20000) return res.status(400).json({ error: 'Bad content' })
   if (!PAY_TOKENS[tokenSymbol]) return res.status(400).json({ error: 'Bad token' })
+  // Blocked by the other person (chat privacy): no messages. A payment card is
+  // still recorded - the money already moved on-chain - but sends no alert.
+  if (type === 'text') {
+    const blocked = await supaFetch('/rpc/chat_blocked_in', 'POST', { conv: conversationId, sender: senderId })
+      .then(r => r.ok && r.data === true).catch(() => false)
+    if (blocked) return res.status(403).json({ error: 'blocked', message: 'This person has blocked you.' })
+  }
 
   // Payment cards need a real on-chain payment between the two participants.
   // Wallets always come from the database - never from the request body.

@@ -58,14 +58,41 @@ export async function saveMyPrivacy(userId: string, patch: Partial<ChatPrivacy>)
  * payments from their contacts - nothing should be sent. Fails open (a
  * network error never blocks a payment to someone who allows everyone).
  */
-export async function reachCheck(recipientId: string): Promise<{ canPay: boolean; toRequests: boolean }> {
+export async function reachCheck(recipientId: string): Promise<{ canPay: boolean; toRequests: boolean; blocked: boolean }> {
   try {
     const { data, error } = await supabase.rpc('chat_reach_check', { recipient: recipientId })
     const row = Array.isArray(data) ? data[0] : data
-    if (error || !row) return { canPay: true, toRequests: false }
-    return { canPay: row.can_pay !== false, toRequests: row.to_requests === true }
-  } catch { return { canPay: true, toRequests: false } }
+    if (error || !row) return { canPay: true, toRequests: false, blocked: false }
+    return { canPay: row.can_pay !== false, toRequests: row.to_requests === true, blocked: row.blocked === true }
+  } catch { return { canPay: true, toRequests: false, blocked: false } }
 }
+
+// ── Blocking (chat_blocks: yours only) ─────────────────────────────────────
+// A blocked person can't message you (the database refuses it) or pay you
+// in MeshPort ("<you> has blocked you"), and anything that still arrives
+// from them comes without an alert.
+export type BlockedPerson = { id: string; username: string; display_name: string | null; avatar_url: string | null }
+
+export async function fetchBlocked(userId: string): Promise<BlockedPerson[]> {
+  const { data, error } = await supabase.from('chat_blocks').select('blocked_id, created_at').eq('owner_id', userId).order('created_at', { ascending: false })
+  if (error || !data?.length) return []
+  const ids = data.map((r: any) => r.blocked_id)
+  const { data: users } = await supabase.from('users').select('id, username, display_name, avatar_url').in('id', ids)
+  const byId = new Map((users ?? []).map((u: any) => [u.id, u]))
+  return ids.map(id => byId.get(id)).filter(Boolean) as BlockedPerson[]
+}
+
+export async function blockUser(userId: string, otherId: string): Promise<void> {
+  const { error } = await supabase.from('chat_blocks').upsert({ owner_id: userId, blocked_id: otherId }, { onConflict: 'owner_id,blocked_id', ignoreDuplicates: true })
+  if (error) throw error
+}
+
+export async function unblockUser(userId: string, otherId: string): Promise<void> {
+  const { error } = await supabase.from('chat_blocks').delete().eq('owner_id', userId).eq('blocked_id', otherId)
+  if (error) throw error
+}
+
+export const BLOCKED_YOU = (name: string) => `${name} has blocked you. You can't message or pay them.`
 
 /** My chats that are message requests (empty unless I chose Contacts only). */
 export async function fetchMyRequestIds(): Promise<Set<string>> {
