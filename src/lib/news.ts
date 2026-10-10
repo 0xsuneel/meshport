@@ -108,6 +108,20 @@ export async function fetchLiveStatusNotices(): Promise<NewsItem[]> {
   return ((data ?? []) as NewsItem[]).filter(i => isLiveStatusNotice(i))
 }
 
+// Stories the user has opened on this phone - their titles show dimmer in
+// the Updates list, like visited links. Newest last, capped.
+const READ_KEY = 'mp_news_read_v1'
+export function readNewsIds(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(READ_KEY) || '[]') as string[]) } catch { return new Set() }
+}
+export function markNewsRead(id: string): void {
+  try {
+    const ids = [...readNewsIds()].filter(x => x !== id)
+    ids.push(id)
+    localStorage.setItem(READ_KEY, JSON.stringify(ids.slice(-300)))
+  } catch { /* private mode */ }
+}
+
 export async function fetchNewsItem(id: string): Promise<NewsItem | null> {
   const cached = readCachedHomeNews().find(i => i.id === id)
   const { data, error } = await supabase.from('news_items').select(COLUMNS).eq('id', id).maybeSingle()

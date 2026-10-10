@@ -3,7 +3,7 @@ import { useNavigate, useNavigationType, useSearchParams } from 'react-router-do
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { NewsArt } from './NewsArt'
 import {
-  fetchNewsPage, fetchLiveStatusNotices, newsDate, NEWS_PAGE_SIZE, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT,
+  fetchNewsPage, fetchLiveStatusNotices, newsDate, readNewsIds, NEWS_PAGE_SIZE, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT,
   type NewsItem, type NewsSource,
 } from '@/lib/news'
 
@@ -25,6 +25,8 @@ const FILTERS: { key: NewsSource | null; label: string }[] = [
 type ListCache = { items: NewsItem[]; more: boolean; scrollTop: number }
 const listCache = new Map<string, ListCache>()
 let liveCache: NewsItem[] = []
+// The story last opened from this list - highlighted when you come back.
+let lastOpenedId: string | null = null
 const cacheKey = (f: NewsSource | null) => f ?? 'all'
 
 export function newsMeta(it: NewsItem, withSource = true): string {
@@ -64,6 +66,10 @@ export function NewsPage() {
   const [error, setError] = useState<string | null>(null)
   const reqId = useRef(0)
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Back from an article: that story flashes, so you can see which one it was.
+  const [flashId] = useState(() => (returning ? lastOpenedId : null))
+  const [readIds] = useState(readNewsIds)
+  const openStory = (id: string) => { lastOpenedId = id; navigate(`/news/${id}`) }
 
   // `quiet`: refresh what's already on screen without loading placeholders.
   const load = useCallback(async (reset: boolean, quiet = false) => {
@@ -113,6 +119,8 @@ export function NewsPage() {
   // Back from an article: same place in the list, before the first paint.
   useLayoutEffect(() => {
     if (returning && cached && scrollRef.current) scrollRef.current.scrollTop = cached.scrollTop
+    // ...and make sure the story you opened is on screen.
+    if (flashId) scrollRef.current?.querySelector(`[data-news-id="${CSS.escape(flashId)}"]`)?.scrollIntoView({ block: 'nearest' })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Loads the next page as the end of the list scrolls into view.
@@ -161,7 +169,7 @@ export function NewsPage() {
 
       <div style={{ padding: '6px 20px 0' }}>
         {showLive.map(it => (
-          <button key={it.id} onClick={() => navigate(`/news/${it.id}`)}
+          <button key={it.id} data-news-id={it.id} className={it.id === flashId ? 'mp-last-opened' : undefined} onClick={() => openStory(it.id)}
             style={{ width: '100%', display: 'flex', gap: 10, alignItems: 'flex-start', textAlign: 'left', cursor: 'pointer', marginBottom: 10,
               background: 'color-mix(in srgb, #F59E0B 12%, var(--surface))', border: '1px solid color-mix(in srgb, #F59E0B 40%, transparent)',
               borderRadius: 14, padding: '10px 12px', color: 'var(--text-primary)' }}>
@@ -178,13 +186,13 @@ export function NewsPage() {
         ))}
 
         {items.filter(it => !showLive.some(l => l.id === it.id)).map(it => (
-          <button key={it.id} onClick={() => navigate(`/news/${it.id}`)}
+          <button key={it.id} data-news-id={it.id} className={it.id === flashId ? 'mp-last-opened' : undefined} onClick={() => openStory(it.id)}
             style={{ width: '100%', display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left', cursor: 'pointer',
               background: 'none', border: 'none', borderBottom: '1px solid var(--border)', padding: '12px 0', color: 'var(--text-primary)' }}>
             {/* Same shape as the covers (1200×630), so their own title text isn't cut off at the sides. */}
             <NewsCover item={it} style={{ width: 112, aspectRatio: '1200 / 630', borderRadius: 10, flex: 'none' }} />
             <span style={{ minWidth: 0, flex: 1 }}>
-              <span style={{ fontSize: 14, fontWeight: 650, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{it.title}</span>
+              <span style={{ fontSize: 14, fontWeight: 650, lineHeight: 1.35, color: readIds.has(it.id) ? 'var(--text-secondary)' : undefined, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{it.title}</span>
               <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{newsMeta(it)}</span>
             </span>
           </button>

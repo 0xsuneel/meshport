@@ -295,8 +295,10 @@ export function deriveActivityRow(record: ActivityRecord) {
 }
 
 // ── Single row - hub style ─────────────────────────────────────────────────────
-function ActivityRow({ record, isFirst, isLast, onSelect }: {
+function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
   record: ActivityRecord; isFirst: boolean; isLast: boolean; onSelect: () => void
+  /** The row whose details were just closed - flashes once. */
+  flash?: boolean
 }) {
   const {
     metadata, amount, tokenSymbol, createdAt,
@@ -306,7 +308,7 @@ function ActivityRow({ record, isFirst, isLast, onSelect }: {
   } = deriveActivityRow(record)
 
   return (
-    <div onClick={onSelect} style={{
+    <div onClick={onSelect} data-activity-id={record.id} className={flash ? 'mp-last-opened' : undefined} style={{
       // A clean list: no card or divider lines, rows sit on the page.
       display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px',
       cursor: 'pointer',
@@ -730,6 +732,15 @@ export function ActivityPage() {
     if ((location.state as any)?.openActivity) window.history.replaceState({ ...window.history.state, usr: null }, '')
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  // The transaction whose details were just closed: its row flashes and is
+  // kept on screen, so you can see which one you were looking at. Cleared
+  // while a detail is open, so the same row flashes again next time.
+  const [flashId, setFlashId] = useState<string | null>(null)
+  const openDetail = (item: ActivityRecord) => { setFlashId(null); setSelected(item) }
+  const closeDetail = () => { setFlashId(selected?.id ?? null); setSelected(null) }
+  useEffect(() => {
+    if (flashId) listScrollRef.current?.querySelector(`[data-activity-id="${CSS.escape(flashId)}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [flashId])
   const [filterOpen, setFilterOpen] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   // Search box tucks away while scrolling down the list, back on scroll up.
@@ -877,7 +888,7 @@ export function ActivityPage() {
                 {group.items.map((item, i, arr) => (
                   <ActivityRow key={item.id} record={item}
                     isFirst={i === 0} isLast={i === arr.length - 1}
-                    onSelect={() => setSelected(item)} />
+                    onSelect={() => openDetail(item)} flash={item.id === flashId} />
                 ))}
               </div>
             </div>
@@ -901,7 +912,7 @@ export function ActivityPage() {
                     {group.items.map(item => {
                       const row = deriveActivityRow(item)
                       return (
-                        <tr key={item.id} onClick={() => setSelected(item)} className="desktop-table-row"
+                        <tr key={item.id} data-activity-id={item.id} onClick={() => openDetail(item)} className={`desktop-table-row${item.id === flashId ? ' mp-last-opened' : ''}`}
                           style={{ cursor: 'pointer', borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)', background: 'var(--dt-hover-bg, transparent)', transition: 'background-color 150ms ease' }}>
                           <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{row.title}</td>
                           <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)', fontFamily: row.counterpartyLabel && !row.isSwap ? 'monospace' : undefined }}>{row.subtitle || '-'}</td>
@@ -933,7 +944,7 @@ export function ActivityPage() {
       </div>
 
       <AnimatePresence>
-        {selected && <DetailSheet key="detail" record={selected} onClose={() => setSelected(null)} />}
+        {selected && <DetailSheet key="detail" record={selected} onClose={closeDetail} />}
       </AnimatePresence>
       <AnimatePresence>
         {filterOpen && (
