@@ -39,6 +39,16 @@ window.addEventListener('vite:preloadError', (e) => {
   recoverFromStaleBuild()
 })
 window.setTimeout(markBuildHealthy, 15_000)
+// The ?_v=… an update reload adds is only for the service worker's handling of
+// that one page load (sw.ts) - take it out of the address bar straight away so
+// the app never shows meshport.xyz/?_v=123… instead of the normal address.
+try {
+  const u = new URL(window.location.href)
+  if (u.searchParams.has('_v')) {
+    u.searchParams.delete('_v')
+    window.history.replaceState(window.history.state, '', u.pathname + u.search + u.hash)
+  }
+} catch { /* ignore */ }
 import './store/themeStore'
 import { useAuthStore } from './store'
 
