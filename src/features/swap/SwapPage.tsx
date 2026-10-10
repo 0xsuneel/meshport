@@ -1427,7 +1427,7 @@ export function SwapPage() {
           }}>
             <div className="flex items-center justify-between">
               <p className="text-[13px] text-text-secondary">You pay</p>
-              <p className="text-[13px] text-text-secondary">Balance {fmtBal(tokenIn.id, inBalance)}</p>
+              <p className="text-[13px]" style={{ color: parseFloat(amountIn || '0') > inBalance ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: parseFloat(amountIn || '0') > inBalance ? 600 : undefined }}>Balance {fmtBal(tokenIn.id, inBalance)}</p>
             </div>
             <div className="flex items-center justify-between gap-3" style={{ marginTop: 12 }}>
               {/* Mobile only - desktop types into the box below. */}
@@ -1560,6 +1560,9 @@ export function SwapPage() {
                 // fills in the full balance. Same `gasNeeded` figure the
                 // pre-flight check and warning banner below already use.
                 feeReserve={tokenIn.id === 'USDC' ? gasNeeded : 0}
+                // Shown in the keypad while it's open (the banner below takes
+                // over once it's closed).
+                error={parseFloat(amountIn || '0') > inBalance ? `Insufficient ${tokenIn.id} balance` : undefined}
               />
             )}
           </div>
