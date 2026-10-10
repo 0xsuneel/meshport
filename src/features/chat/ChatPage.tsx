@@ -4833,8 +4833,9 @@ export function ChatConversationPage() {
                   </div>
                 )}
 
-                {/* Token: one pill; the list floats down from it (same as Swap and Pay). */}
-                {!payLocked && (
+                {/* Token: one pill; the list floats down from it (same as Swap and Pay).
+                    Phone: the pill sits inside the amount box below instead. */}
+                {!payLocked && isDesktop && (
                   <div className="flex items-center justify-between">
                     <span className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>Pay with</span>
                     <div style={{ position: 'relative', zIndex: payTokenMenu ? 41 : undefined }}>
@@ -4862,22 +4863,41 @@ export function ChatConversationPage() {
                     amount box instead of this static display duplicated
                     above a second, separate live input. */}
                 {!isDesktop && (
+                  // Token on the left; symbol + amount on the right with the balance under it.
                   <div className="rounded-2xl" style={{ background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)', padding: '12px 16px' }}>
-                    <div className="flex items-baseline justify-center gap-1 mb-1"
-                      onClick={() => { if (!payLocked) setShowAmountPad(v => !v) }}
-                      style={{ cursor: payLocked ? 'default' : 'pointer' }}>
-                      <span style={{ fontSize: 36, fontWeight: 700, lineHeight: 1, color: payAmount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 20%, transparent)' }}>{chatPayTokenSymbolChar(payToken)}</span>
-                      {/* BUG FIX: was a single 28/36 binary step tuned for
-                          ~2-decimal USDC/EURC amounts -- an 8-decimal
-                          cirBTC amount (up to 10+ chars) could still
-                          overflow this row at 28px. Graduated shrink
-                          instead. */}
-                      <span style={{ fontSize: amountFontSize(payAmount, 36), fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1, minWidth: '1ch', fontFamily: 'monospace' }}>{payAmount || '0'}</span>
-                      <span style={{ fontSize: 13, color: 'var(--text-muted)', marginLeft: 4 }}>{payToken}</span>
+                    <div className="flex items-center justify-between gap-3">
+                      {payLocked ? (
+                        <span className="text-sm font-bold text-text-primary">{payToken}</span>
+                      ) : (
+                        <div style={{ position: 'relative', zIndex: payTokenMenu ? 41 : undefined }}>
+                          <button onClick={() => setPayTokenMenu(v => !v)} aria-expanded={payTokenMenu}
+                            className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
+                            style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
+                            <span style={{ width: 20, height: 20, borderRadius: '50%', background: chatPayTokenIconBg(payToken), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{chatPayTokenSymbolChar(payToken)}</span>
+                            <span className="text-sm font-bold text-text-primary">{payToken}</span>
+                            <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)', transform: payTokenMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
+                          </button>
+                          <AnimatePresence>
+                            {payTokenMenu && (
+                              <TokenMenu selected={payToken} onClose={() => setPayTokenMenu(false)}
+                                onSelect={id => { setPayToken(id as typeof payToken); setPayAmount(''); setPayError('') }}
+                                options={payTokenList.map(t => ({ id: t, label: t, icon: <span style={{ width: 22, height: 22, borderRadius: '50%', background: chatPayTokenIconBg(t), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{chatPayTokenSymbolChar(t)}</span> }))} />
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )}
+                      <div className="min-w-0 text-right" onClick={() => { if (!payLocked) setShowAmountPad(v => !v) }}
+                        style={{ cursor: payLocked ? 'default' : 'pointer', flex: 1 }}>
+                        <div className="flex items-baseline justify-end gap-0.5">
+                          <span style={{ fontSize: amountFontSize(payAmount, 34), fontWeight: 700, lineHeight: 1.05, color: 'var(--text-muted)' }}>{chatPayTokenSymbolChar(payToken)}</span>
+                          <span style={{ fontSize: amountFontSize(payAmount, 34), fontWeight: 700, lineHeight: 1.05, minWidth: '1ch', fontVariantNumeric: 'tabular-nums',
+                            color: payAmount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>{payAmount || '0'}</span>
+                        </div>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)', marginTop: 4 }}>
+                          Balance {chatPayTokenSymbolChar(payToken)}{formatAmount(payTokenBalanceOf(payToken), chatPayTokenDecimals(payToken))}
+                        </p>
+                      </div>
                     </div>
-                    <p className="text-center text-xs" style={{ color: 'var(--text-muted)' }}>
-                      Balance {chatPayTokenSymbolChar(payToken)}{formatAmount(payTokenBalanceOf(payToken), chatPayTokenDecimals(payToken))}
-                    </p>
                   </div>
                 )}
 
