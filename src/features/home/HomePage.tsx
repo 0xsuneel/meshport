@@ -1,4 +1,5 @@
 import { useHubLabel, useMerchant } from '@/lib/merchant'
+import { fetchBtcPriceUsd } from '@/lib/btcPrice'
 import { handBiometricPasscode } from '@/lib/biometricHandoff'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { isUbChain } from '@/lib/ubChains'
@@ -3390,47 +3391,8 @@ export function HomePage() {
     }
 
     const fetchPortfolio = async () => {
-      const fetchBtcPrice = async (): Promise<number> => {
-        // Try multiple sources in order - CoinGecko often rate-limits free tier
-        const sources = [
-          async () => {
-            const r = await fetch(
-              'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd',
-              { signal: AbortSignal.timeout(5000) }
-            )
-            if (!r.ok) throw new Error(`CoinGecko ${r.status}`)
-            const p = (await r.json())?.bitcoin?.usd
-            if (!p) throw new Error('No price')
-            return p as number
-          },
-          async () => {
-            // Binance public API - no auth needed
-            const r = await fetch(
-              'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT',
-              { signal: AbortSignal.timeout(5000) }
-            )
-            if (!r.ok) throw new Error(`Binance ${r.status}`)
-            const p = parseFloat((await r.json())?.price ?? '0')
-            if (!p) throw new Error('No price')
-            return p
-          },
-          async () => {
-            // CoinCap - reliable fallback
-            const r = await fetch(
-              'https://api.coincap.io/v2/assets/bitcoin',
-              { signal: AbortSignal.timeout(5000) }
-            )
-            if (!r.ok) throw new Error(`CoinCap ${r.status}`)
-            const p = parseFloat((await r.json())?.data?.priceUsd ?? '0')
-            if (!p) throw new Error('No price')
-            return p
-          },
-        ]
-        for (const source of sources) {
-          try { return await source() } catch { /* try next */ }
-        }
-        return 0
-      }
+      // Shared with Chat Pay's cirBTC quick amounts (see lib/btcPrice).
+      const fetchBtcPrice = fetchBtcPriceUsd
       // Desktop-only - the Assets table's real "Change (24h)" column. One
       // batched CoinGecko call for all three tokens' real 24h % change; no
       // Binance/CoinCap fallback for the % itself (neither exposes it as
