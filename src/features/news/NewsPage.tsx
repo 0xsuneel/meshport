@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { NewsArt } from './NewsArt'
@@ -145,9 +146,7 @@ export function NewsPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44 }}>
           {!isDesktop && (
             <button onClick={() => navigate('/')} className="back-btn" aria-label="Back">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path d="M15 6L9 12l6 6" stroke="var(--text-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+              <ArrowLeft className="w-5 h-5 text-text-primary" />
             </button>
           )}
           <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px' }}>Updates</div>

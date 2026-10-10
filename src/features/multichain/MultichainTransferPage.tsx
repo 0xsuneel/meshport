@@ -3797,37 +3797,44 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
               {/* Fee rows */}
               <div className="rounded-2xl overflow-hidden" style={{background:'var(--surface)', border:'1px solid var(--border)'}}>
-                {feeEstimate.loading ? (
-                  <div className="flex items-center gap-2 px-4 py-4 text-xs" style={{color:'var(--text-secondary)'}}>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin"/> Fetching fees…
-                  </div>
-                ) : (
-                  <>
-                    {[
-                      ['You Send', `${formatAmount(numAmount)} USDC`, 'var(--text-primary)'],
-                      // UB/Gateway doesn't bridge (no lock-and-mint) - this
-                      // field holds the Gateway protocol fee there, not a
-                      // bridge fee, so it needs its own label or it
-                      // contradicts the "Circle Gateway" caption right below
-                      // this list. CCTP keeps its original "Bridge Fee" label
-                      // and value untouched.
-                      ...(feeEstimate.bridgeFee > 0 ? [[chain.ub ? 'Protocol Fee' : 'Bridge Fee', `${trimTrailingZeros(feeEstimate.bridgeFee.toFixed(4))} USDC`, 'var(--warning)']] : []),
-                      ...(feeEstimate.forwarderFee > 0 ? [['Forwarder Fee', `${trimTrailingZeros(feeEstimate.forwarderFee.toFixed(4))} USDC`, 'var(--warning)']] : []),
-                      ['Network Gas', feeEstimate.networkFee > 0 ? `${trimTrailingZeros(feeEstimate.networkFee.toFixed(4))} USDC` : '~$0.01', 'var(--success)'],
-                      ['Est. Time', '<30s', 'var(--accent)'],
-                    ].map(([label, value, color], i) => (
-                      <div key={label as string} className="flex justify-between items-center px-3 py-2">
-                        <span className="text-sm" style={{color:'var(--text-secondary)'}}>{label}</span>
-                        <span className="text-sm font-semibold" style={{color: color as string}}>{value}</span>
+                {/* While fees load, the same rows show with placeholder bars
+                    (not a one-line "Fetching fees…" box) so the card is already
+                    full size and nothing jumps when the numbers arrive. */}
+                {(() => {
+                  const loading = feeEstimate.loading
+                  const bar = (w: number) => (
+                    <span aria-hidden className="animate-pulse" style={{ display: 'inline-block', width: w, height: 12, borderRadius: 6,
+                      background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
+                  )
+                  const rows: Array<[string, string | null, string]> = [
+                    ['You Send', `${formatAmount(numAmount)} USDC`, 'var(--text-primary)'],
+                    // UB/Gateway doesn't bridge (no lock-and-mint) - this
+                    // field holds the Gateway protocol fee there, not a
+                    // bridge fee, so it needs its own label or it
+                    // contradicts the "Circle Gateway" caption right below
+                    // this list. CCTP keeps its original "Bridge Fee" label
+                    // and value untouched.
+                    ...((loading || feeEstimate.bridgeFee > 0) ? [[chain.ub ? 'Protocol Fee' : 'Bridge Fee', loading ? null : `${trimTrailingZeros(feeEstimate.bridgeFee.toFixed(4))} USDC`, 'var(--warning)'] as [string, string | null, string]] : []),
+                    ...((loading ? chain.ub : feeEstimate.forwarderFee > 0) ? [['Forwarder Fee', loading ? null : `${trimTrailingZeros(feeEstimate.forwarderFee.toFixed(4))} USDC`, 'var(--warning)'] as [string, string | null, string]] : []),
+                    ['Network Gas', loading ? null : feeEstimate.networkFee > 0 ? `${trimTrailingZeros(feeEstimate.networkFee.toFixed(4))} USDC` : '~$0.01', 'var(--success)'],
+                    ['Est. Time', '<30s', 'var(--accent)'],
+                  ]
+                  return (
+                    <>
+                      {rows.map(([label, value, color]) => (
+                        <div key={label} className="flex justify-between items-center px-3 py-2">
+                          <span className="text-sm" style={{color:'var(--text-secondary)'}}>{label}</span>
+                          {value === null ? bar(78) : <span className="text-sm font-semibold" style={{color}}>{value}</span>}
+                        </div>
+                      ))}
+                      <div className="flex justify-between items-center px-3 py-2.5 mt-1"
+                        style={{background:'color-mix(in srgb, var(--brand) 8%, transparent)', borderRadius: 14}}>
+                        <span className="text-sm font-bold text-text-primary">Receiver Gets</span>
+                        {loading ? bar(92) : <span className="text-sm font-bold" style={{color:'var(--success)'}}>{trimTrailingZeros(feeEstimate.receiverGets.toFixed(4))} USDC</span>}
                       </div>
-                    ))}
-                    <div className="flex justify-between items-center px-3 py-2.5 mt-1"
-                      style={{background:'color-mix(in srgb, var(--brand) 8%, transparent)', borderRadius: 14}}>
-                      <span className="text-sm font-bold text-text-primary">Receiver Gets</span>
-                      <span className="text-sm font-bold" style={{color:'var(--success)'}}>{trimTrailingZeros(feeEstimate.receiverGets.toFixed(4))} USDC</span>
-                    </div>
-                  </>
-                )}
+                    </>
+                  )
+                })()}
               </div>
 
               <p className="text-xs text-center px-4" style={{color:'var(--text-secondary)'}}>{chain.ub ? 'Circle Gateway · recipient receives native USDC' : 'Circle CCTP v2 · recipient receives native USDC'}</p>

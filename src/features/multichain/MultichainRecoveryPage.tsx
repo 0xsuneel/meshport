@@ -15,6 +15,7 @@ const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) =
 // Every action checks the chain first, so a transfer that already arrived is
 // simply marked completed - nothing can be minted twice.
 
+import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store'
@@ -247,7 +248,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
       ? { padding: 20, maxWidth: 640, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }
       : { display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {showHeader && <button onClick={() => navigate('/multichain')} style={{ ...btn, padding: '6px 10px' }} aria-label="Back">←</button>}
+        {showHeader && <button onClick={() => navigate('/multichain')} className="back-btn" aria-label="Back"><ArrowLeft className="w-5 h-5 text-text-primary" /></button>}
         {showHeader
           ? <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>Recover funds</h1>
           : <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{loading ? 'Checking your moves…' : `${items.length + ub.length + ubHeld.length + ubStuck.length + (ubDust.length ? 1 : 0)} to review`}</span>}

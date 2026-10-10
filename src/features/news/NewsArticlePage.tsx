@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useUIStore } from '@/store'
 import { copyToClipboard } from '@/lib/utils'
@@ -54,7 +55,8 @@ export function NewsArticlePage() {
           style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top, 0px) + 14px)', left: 14, width: 38, height: 38, borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
             background: 'rgba(0,0,0,0.42)', border: 'none', backdropFilter: 'blur(8px)' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 6L9 12l6 6" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          {/* Same arrow as every back button; the dark circle keeps it readable over the photo. */}
+          <ArrowLeft className="w-5 h-5" style={{ color: '#fff' }} />
         </button>
       </div>
 
