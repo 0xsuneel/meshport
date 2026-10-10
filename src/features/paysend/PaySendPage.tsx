@@ -1,12 +1,13 @@
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
+import { TokenMenu } from '@/components/ui/TokenMenu'
 import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import {
-  ChevronRight, ArrowLeft, Wallet, Check,
-  AlertCircle, Loader2, CheckCircle2, QrCode, X,
+  ChevronRight, ArrowLeft, Wallet,
+  AlertCircle, Loader2, CheckCircle2, QrCode,
 } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { slideStepVariants, MOBILE_SLIDE_TRANSITION } from '@/lib/motion'
@@ -27,7 +28,6 @@ import { fetchRecentContacts } from '@/lib/recentContacts'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { hasAnyActivityForTx } from '@/lib/ActivityService'
-import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
@@ -1403,20 +1403,34 @@ export function PaySendPage() {
                     </span>
                   </div>
                 )}
-                <button onClick={e => { e.stopPropagation(); if (!merchantPayCode) setShowTokenPicker(true) }}
-                  className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full flex-shrink-0 active:opacity-70"
-                  style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-                  {/* BUG FIX: this badge hardcoded the USDC "$" glyph +
-                      color regardless of which token was actually selected
-                      -- picking EURC or cirBTC still showed a blue "$"
-                      circle here. Now matches the same per-token
-                      symbol/color the other token badges on this page
-                      already use (see the receive-summary and token-list
-                      badges below). */}
-                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ background: token === 'USDC' ? 'var(--usdc-icon)' : token === 'EURC' ? 'var(--brand)' : '#F7931A' }}>{tokenSymbolChar(token)}</div>
-                  <span className="text-sm font-bold text-text-primary">{token}</span>
-                  {!merchantPayCode && <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>}
-                </button>
+                <div className="flex-shrink-0" style={{ position: 'relative', zIndex: showTokenPicker ? 41 : undefined }}>
+                  <button onClick={e => { e.stopPropagation(); if (!merchantPayCode) setShowTokenPicker(v => !v) }}
+                    aria-expanded={showTokenPicker} className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full flex-shrink-0 active:opacity-70"
+                    style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
+                    {/* BUG FIX: this badge hardcoded the USDC "$" glyph +
+                        color regardless of which token was actually selected
+                        -- picking EURC or cirBTC still showed a blue "$"
+                        circle here. Now matches the same per-token
+                        symbol/color the other token badges on this page
+                        already use (see the receive-summary and token-list
+                        badges below). */}
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0" style={{ background: token === 'USDC' ? 'var(--usdc-icon)' : token === 'EURC' ? 'var(--brand)' : '#F7931A' }}>{tokenSymbolChar(token)}</div>
+                    <span className="text-sm font-bold text-text-primary">{token}</span>
+                    {!merchantPayCode && <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)', transform: showTokenPicker ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>}
+                  </button>
+                  <AnimatePresence>
+                    {showTokenPicker && (
+                      <TokenMenu selected={token} onClose={() => setShowTokenPicker(false)}
+                        onSelect={id => { setToken(id as Token); setAmount('') }}
+                        options={(['USDC', 'EURC'] as Token[]).concat(cirbtcBalance !== null ? ['cirBTC' as Token] : [])
+                          .filter(t => isCoinEnabled(settingsMap, t)).map(t => ({
+                            id: t, label: t,
+                            icon: <span className="w-[22px] h-[22px] rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                              style={{ background: t === 'USDC' ? 'var(--usdc-icon)' : t === 'EURC' ? 'var(--brand)' : '#F7931A' }}>{tokenSymbolChar(t)}</span>,
+                          }))} />
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
 
               {isDesktop ? (
@@ -1856,53 +1870,6 @@ export function PaySendPage() {
         ))}
       </AnimatePresence>
 
-      {/* ══════════════ TOKEN PICKER SHEET / DIALOG ══════════════ */}
-      <AnimatePresence>
-        {showTokenPicker && (() => {
-          const tokenList = (['USDC', 'EURC'] as Token[]).concat(cirbtcBalance !== null ? ['cirBTC' as Token] : [])
-            .filter(t => isCoinEnabled(settingsMap, t)).map(t => {
-            const bal = t === 'USDC' ? balance : t === 'EURC' ? eurcBalance : (cirbtcBalance ?? 0)
-            const icon = t === 'USDC' ? 'var(--usdc-icon)' : t === 'EURC' ? 'var(--brand)' : '#F7931A'
-            const sym = t === 'USDC' ? '$' : t === 'EURC' ? '€' : '₿'
-            return (
-              <button key={t}
-                className="w-full flex items-center gap-4 px-5 py-4 active:bg-text-primary/5 transition-colors"
-                onClick={() => { setToken(t); setAmount(''); setShowTokenPicker(false) }}>
-                <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 text-base font-bold text-white" style={{ background: icon }}>{sym}</div>
-                <div className="flex-1 text-left">
-                  <p className="text-base font-bold text-text-primary">{t}</p>
-                  <p className="text-xs text-text-secondary mt-0.5">Arc Testnet</p>
-                </div>
-                <div className="text-right mr-2">
-                  <p className="text-sm font-bold text-text-primary">{formatAmount(bal, tokenDisplayDecimals(t))}</p>
-                  <p className="text-xs text-text-secondary">{t}</p>
-                </div>
-                {token === t && (
-                  <div className="w-5 h-5 rounded-full bg-brand flex items-center justify-center flex-shrink-0">
-                    <Check className="w-3 h-3 text-white" strokeWidth={3} />
-                  </div>
-                )}
-              </button>
-            )
-          })
-
-          return (
-            <DesktopDialogFrame onClose={() => setShowTokenPicker(false)} maxWidth={400}>
-              <div className="px-5 pb-3 pt-5 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-[19px] font-extrabold tracking-tight text-text-primary">Select Asset</p>
-                  <p className="text-xs text-text-secondary mt-0.5">Choose token to send</p>
-                </div>
-                <button onClick={() => setShowTokenPicker(false)} className="mp-popup-close" aria-label="Close">
-                  <X className="w-[18px] h-[18px]" strokeWidth={2.4} />
-                </button>
-              </div>
-              {tokenList}
-              <div className="h-2" />
-            </DesktopDialogFrame>
-          )
-        })()}
-      </AnimatePresence>
     </div>
   )
 

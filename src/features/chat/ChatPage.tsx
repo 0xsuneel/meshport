@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
+import { TokenMenu } from '@/components/ui/TokenMenu'
 import { PopupOpen } from '@/hooks/usePopupOpen'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SNACKBAR_MOTION, DIALOG_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
@@ -2463,6 +2464,7 @@ export function ChatConversationPage() {
 
   const [showAmountPad, setShowAmountPad] = useState(false)
   const [payToken, setPayToken] = useState<'USDC' | 'EURC' | 'cirBTC'>('USDC')
+  const [payTokenMenu, setPayTokenMenu] = useState(false)
   // Set when the pay sheet was opened from a bill / payment-request card:
   // amount + token are fixed and the payment is linked to that bill.
   // number = the order number (ORD-…); older requests fall back to the code.
@@ -4831,26 +4833,28 @@ export function ChatConversationPage() {
                   </div>
                 )}
 
-                {!payLocked && <div className="flex gap-2">
-                  {payTokenList.map(t => (
-                    <button key={t} onClick={() => { setPayToken(t); setPayAmount(''); setPayError('') }}
-                      className="flex-1 flex items-center justify-center gap-2 py-2 rounded-2xl transition-all"
-                      style={{
-                        background: payToken === t ? 'var(--brand)' : 'var(--surface)',
-                        border: payToken === t ? '1px solid var(--brand)' : '1px solid var(--border)',
-                        color: payToken === t ? '#fff' : 'var(--text-secondary)',
-                        fontWeight: payToken === t ? 700 : 500, fontSize: 13,
-                      }}>
-                      <span style={{ width: 18, height: 18, borderRadius: '50%',
-                        background: chatPayTokenIconBg(t),
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 9, fontWeight: 700, color: '#fff' }}>
-                        {chatPayTokenSymbolChar(t)}
-                      </span>
-                      {t}
-                    </button>
-                  ))}
-                </div>}
+                {/* Token: one pill; the list floats down from it (same as Swap and Pay). */}
+                {!payLocked && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>Pay with</span>
+                    <div style={{ position: 'relative', zIndex: payTokenMenu ? 41 : undefined }}>
+                      <button onClick={() => setPayTokenMenu(v => !v)} aria-expanded={payTokenMenu}
+                        className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
+                        style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
+                        <span style={{ width: 20, height: 20, borderRadius: '50%', background: chatPayTokenIconBg(payToken), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{chatPayTokenSymbolChar(payToken)}</span>
+                        <span className="text-sm font-bold text-text-primary">{payToken}</span>
+                        <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)', transform: payTokenMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
+                      </button>
+                      <AnimatePresence>
+                        {payTokenMenu && (
+                          <TokenMenu selected={payToken} onClose={() => setPayTokenMenu(false)}
+                            onSelect={id => { setPayToken(id as typeof payToken); setPayAmount(''); setPayError('') }}
+                            options={payTokenList.map(t => ({ id: t, label: t, icon: <span style={{ width: 22, height: 22, borderRadius: '50%', background: chatPayTokenIconBg(t), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{chatPayTokenSymbolChar(t)}</span> }))} />
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  </div>
+                )}
 
                 {/* Amount - mobile taps to reveal the keypad below (unchanged).
                     Desktop uses the same bare-box + overlaid Max pill +

@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
+import { TokenMenu } from '@/components/ui/TokenMenu'
 import { ActionIcon } from '@/components/ui/ActionIcon'
 import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
@@ -139,46 +140,17 @@ function TLogo({ t, size=32 }: { t: Token; size?: number }) {
   )
 }
 
-// Token choice that floats down from the token pill itself: exactly the
-// pill's width, shown only while open, over the content below (nothing moves).
-// Tap outside or Esc closes it.
+// Swap's token list, floating from the token pill (see TokenMenu).
 function TokenDropdown({ selected, exclude, onSelect, onClose }: {
   selected: Token; exclude: Token; onSelect: (t: Token) => void; onClose: () => void
 }) {
   const settings = useSettingsStore((s) => s.settings)
   const availableTokens = SWAP_TOKENS.filter(t => isCoinEnabled(settings, t.id))
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-  return (<>
-    <div aria-hidden onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-    <motion.div role="listbox" aria-label="Choose token"
-      initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
-      // One shared background behind all the tokens.
-      style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 41, transformOrigin: 'top center',
-        display: 'flex', flexDirection: 'column', gap: 2, padding: 4, borderRadius: 22,
-        background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 12px 28px rgba(0,0,0,0.3)' }}>
-      {availableTokens.map(t => {
-        const on = t.id === selected.id
-        const off = t.id === exclude.id
-        return (
-          <button key={t.id} role="option" aria-selected={on} disabled={off}
-            onClick={() => { onSelect(t); onClose() }}
-            className="flex items-center gap-2 rounded-full active:opacity-70 transition-opacity"
-            style={{ height: 38, padding: '0 8px 0 4px', minWidth: 0, cursor: off ? 'default' : 'pointer',
-              background: on ? 'var(--brand)' : 'transparent', border: 'none' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, opacity: off ? 0.4 : 1 }}>
-              <TLogo t={t} size={26}/>
-              <span className="text-[15px] font-bold" style={{ color: on ? '#fff' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.id}</span>
-            </span>
-          </button>
-        )
-      })}
-    </motion.div>
-  </>)
+  return (
+    <TokenMenu selected={selected.id} onClose={onClose}
+      options={availableTokens.map(t => ({ id: t.id, label: t.id, icon: <TLogo t={t} size={26}/>, disabled: t.id === exclude.id }))}
+      onSelect={id => { const t = availableTokens.find(x => x.id === id); if (t) onSelect(t) }} />
+  )
 }
 
 function SwapHistoryItem({ r, onOpen, isFirst }: { r: SwapRecord; onOpen: () => void; isFirst?: boolean }) {
