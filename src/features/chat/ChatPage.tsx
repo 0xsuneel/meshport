@@ -3709,6 +3709,22 @@ export function ChatConversationPage() {
   const paymentHistory = messages.filter(m => m.type === 'payment_sent').slice().reverse()
   const [historyReceipt, setHistoryReceipt] = useState<any | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  // Transaction History is a page too (over the chat, or over Contact info);
+  // Back - the arrow or the phone's - closes just it.
+  const openHistory = () => {
+    setShowHistory(true)
+    try { window.history.pushState({ ...(window.history.state || {}), mpChatHistory: true }, '') } catch { /* ignore */ }
+  }
+  const closeHistory = () => {
+    if ((window.history.state as any)?.mpChatHistory) window.history.back()
+    else setShowHistory(false)
+  }
+  useEffect(() => {
+    if (!showHistory) return
+    const onPop = () => { if (!(window.history.state as any)?.mpChatHistory) setShowHistory(false) }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [showHistory])
   // Opened from the Chats list avatar: show Contact info straight away, and
   // Back goes back to the list (not to the chat underneath).
   const infoFromList = useRef(!!(location.state as any)?.openInfo)
@@ -3735,7 +3751,8 @@ export function ChatConversationPage() {
   }, [])
   useEffect(() => {
     if (!showProfile) return
-    const onPop = () => { if (!(window.history.state as any)?.mpChatInfo) setShowProfile(false) }
+    // Opened from the list there's no entry of its own: Back leaves the page.
+    const onPop = () => { if (!infoFromList.current && !(window.history.state as any)?.mpChatInfo && !(window.history.state as any)?.mpChatHistory) setShowProfile(false) }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [showProfile])
@@ -4940,7 +4957,7 @@ export function ChatConversationPage() {
 
                 {/* Transaction history */}
                 <button
-                  onClick={() => { infoToChat(); setShowHistory(true) }}
+                  onClick={openHistory}
                   className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
                   style={{ background:'color-mix(in srgb, var(--text-primary) 4%, transparent)', border:'1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)' }}>
                   <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--text-primary) 8%, transparent)' }}>
@@ -5034,12 +5051,14 @@ export function ChatConversationPage() {
       <AnimatePresence>
         {showHistory && (() => {
           const historyHeader = (
-            <div className="px-5 pt-5 pb-3 flex items-center justify-between gap-3 border-b border-border">
+            <div className="header-row px-5 pt-header pb-3 flex-shrink-0 border-b border-border" style={{ gap: 12 }}>
+              <button onClick={closeHistory} className="back-btn" aria-label="Back">
+                <ArrowLeft className="w-5 h-5 text-text-primary" />
+              </button>
               <div className="min-w-0">
-                <h2 className="text-[19px] font-extrabold tracking-tight text-text-primary">Transaction History</h2>
+                <h1 className="text-xl font-bold text-text-primary">Transaction History</h1>
                 <p className="text-xs text-text-secondary">With {recipientClean}.arc</p>
               </div>
-              <button onClick={() => setShowHistory(false)} className="mp-popup-close" aria-label="Close"><X className="w-[18px] h-[18px]" strokeWidth={2.4} /></button>
             </div>
           )
           const historyBody = (
@@ -5081,12 +5100,15 @@ export function ChatConversationPage() {
             </>
           )
           return (
-            <DesktopDialogFrame onClose={() => setShowHistory(false)} maxWidth={460}>
-              <div className="flex flex-col max-h-[80vh]">
-                {historyHeader}
+            <motion.div key="chat-history" role="dialog" aria-label="Transaction History"
+              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ duration: 0.24, ease: [0.32, 0.72, 0, 1] }}
+              className="bg-bg"
+              style={{ position: 'fixed', inset: 0, zIndex: 61, display: 'flex', flexDirection: 'column' }}>
+              {historyHeader}
+              <div className="flex-1 min-h-0 flex flex-col" style={{ width: '100%', maxWidth: 560, margin: '0 auto' }}>
                 {historyBody}
               </div>
-            </DesktopDialogFrame>
+            </motion.div>
           )
         })()}
       </AnimatePresence>
