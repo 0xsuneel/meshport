@@ -121,6 +121,23 @@ let _swapBroadcast = false
 let _swapHash: string | null = null
 let _swapConfirmed = false
 let _swapReceipt: any = null
+// Set as soon as a swap transaction is SENT to the RPC (before any reply), with
+// its hash taken from the signed transaction itself. A send whose reply was
+// lost (timeout, network blip) may still have reached the chain - this is how
+// the error path below finds out what really happened.
+let _swapSendAttempted = false
+
+function noteSwapSends(reqs: any[], Transaction: any) {
+  for (const req of reqs) {
+    try {
+      if (req?.method !== 'eth_sendRawTransaction') continue
+      const tx = Transaction.from(req.params[0])
+      if (String(tx.data || '').slice(0, 10).toLowerCase() === APPROVE_SELECTOR) continue
+      _swapSendAttempted = true
+      if (tx.hash) _swapHash = String(tx.hash).toLowerCase()
+    } catch { /* bookkeeping only */ }
+  }
+}
 
 function reportSwapProgress(reqs: any[], results: any[], Transaction: any) {
   const emit = _onSwapProgress ?? (() => {})
@@ -159,6 +176,7 @@ function buildArcForwardProvider(JsonRpcProvider: any, Transaction: any) {
     }
     async _send(payload: any) {
       const isBatch = Array.isArray(payload)
+      noteSwapSends(isBatch ? payload : [payload], Transaction)
       try {
         const res = await fetch('/api/arc-rpc', {
           method: 'POST',
@@ -356,6 +374,28 @@ export async function estimateSwapLocal(params: {
   }
 }
 
+// After kit.swap() throws: what actually happened to the swap transaction?
+//   'not-sent'  - no swap transaction was ever sent: nothing was swapped.
+//   'confirmed' - Arc confirmed it (status 1): the swap went through.
+//   'reverted'  - Arc confirmed it failed (status 0): nothing was swapped.
+//   'unknown'   - sent, but Arc has no receipt after ~30s (SUBMITTED_UNKNOWN -
+//                 never reported as failed, it may still confirm).
+async function settleSwapTx(): Promise<{ kind: 'not-sent' | 'unknown' } | { kind: 'confirmed' | 'reverted'; hash: string; receipt: any }> {
+  if (!_swapSendAttempted || !_swapHash) return { kind: _swapSendAttempted ? 'unknown' : 'not-sent' }
+  const hash = _swapHash
+  if (_swapConfirmed && _swapReceipt) return { kind: 'confirmed', hash, receipt: _swapReceipt }
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    try {
+      const j = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionReceipt', params: [hash] })
+      const r = j?.result
+      if (r) return { kind: r.status === '0x1' ? 'confirmed' : 'reverted', hash, receipt: r }
+    } catch { /* keep trying until the deadline */ }
+    await new Promise(res => setTimeout(res, 1500))
+  }
+  return { kind: 'unknown' }
+}
+
 type ExecuteSwapParams = {
   privateKey: string
   walletAddress: string
@@ -368,7 +408,7 @@ type ExecuteSwapParams = {
 export async function executeSwapLocal(params: ExecuteSwapParams): Promise<{ txHash: string; amountOut: string; explorerUrl: string }> {
   _onSwapProgress = params.onProgress ?? null
   _confirmedHashes = new Set()
-  _swapBroadcast = false
+  _swapBroadcast = false; _swapSendAttempted = false
   _swapHash = null; _swapConfirmed = false; _swapReceipt = null
   try {
     return await runSwap(params)
@@ -415,6 +455,25 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
   } catch (e1: any) {
     const { raw: raw1, userMessage: msg1, isLiquidity, isUncertain } = extractError(e1, sdkMods)
     console.warn('[Swap] attempt 1 failed:', msg1)
+
+    // Ask Arc about the swap transaction itself before telling the user
+    // anything: a lost RPC reply must not read as "couldn't confirm" when the
+    // swap actually went through (or was never sent at all).
+    const settled = await settleSwapTx()
+    if (settled.kind === 'confirmed') {
+      const amountOut = amountOutFromReceipt(settled.receipt, params.tokenOut, params.walletAddress)
+      console.warn('[Swap] kit.swap threw but the swap confirmed on Arc:', settled.hash)
+      await finish(settled.hash, parseFloat(amountOut || '0') || 0)
+      return { txHash: settled.hash, amountOut, explorerUrl: `${ARC_EXPLORER}/tx/${settled.hash}` }
+    }
+    if (settled.kind === 'reverted') {
+      throw Object.assign(new Error('The swap was rejected on Arc (the price or liquidity moved) - nothing was swapped. Please try again.'),
+        { isLiquidity: false, rawError: raw1.slice(0, 200), isUncertain: false })
+    }
+    if (settled.kind === 'not-sent' && isUncertain) {
+      throw Object.assign(new Error("The swap didn't go through - nothing was swapped. Please try again."),
+        { isLiquidity: false, rawError: raw1.slice(0, 200), isUncertain: false })
+    }
 
     const possibleHash = extractPossibleTxHash(e1)
     if (possibleHash) {
