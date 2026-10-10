@@ -26,7 +26,7 @@ import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
-import {formatAmount} from '@/lib/utils'
+import {formatAmount, trimTrailingZeros} from '@/lib/utils'
 import { amountFontSize } from '@/lib/amountFontSize'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isCoinEnabled } from '@/lib/featureFilters'
@@ -2465,6 +2465,14 @@ export function ChatConversationPage() {
   const [showAmountPad, setShowAmountPad] = useState(false)
   const [payToken, setPayToken] = useState<'USDC' | 'EURC' | 'cirBTC'>('USDC')
   const [payTokenMenu, setPayTokenMenu] = useState(false)
+  // BTC price for cirBTC quick amounts ($10 / $30 / ... worth of cirBTC).
+  const [btcUsd, setBtcUsd] = useState(0)
+  useEffect(() => {
+    if (payToken !== 'cirBTC') return
+    let alive = true
+    import('@/lib/btcPrice').then(m => m.fetchBtcPriceUsd()).then(p => { if (alive) setBtcUsd(p) }).catch(() => {})
+    return () => { alive = false }
+  }, [payToken])
   // Set when the pay sheet was opened from a bill / payment-request card:
   // amount + token are fixed and the payment is linked to that bill.
   // number = the order number (ORD-…); older requests fall back to the code.
@@ -4898,6 +4906,30 @@ export function ChatConversationPage() {
                         </p>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* Quick amounts under the amount box. cirBTC shows dollar
+                    values ($10 = $10 worth of cirBTC at the current price). */}
+                {!isDesktop && !payLocked && (
+                  <div className="grid grid-cols-4 gap-2">
+                    {[10, 30, 50, 100].map(v => {
+                      const isBtc = payToken === 'cirBTC'
+                      const dec = chatPayTokenDecimals(payToken)
+                      const amt = isBtc ? (btcUsd > 0 ? Math.round((v / btcUsd) * 10 ** dec) / 10 ** dec : 0) : v
+                      const over = amt <= 0 || amt > payTokenBalanceOf(payToken)
+                      const on = amt > 0 && parseFloat(payAmount || '0') === amt
+                      return (
+                        <button key={v} disabled={over}
+                          onClick={() => { setPayAmount(trimTrailingZeros(amt.toFixed(dec))); setPayError('') }}
+                          className="rounded-full text-[13px] font-bold active:scale-[.97] transition-transform"
+                          style={{ height: 34, opacity: over ? 0.4 : 1, cursor: over ? 'default' : 'pointer',
+                            background: on ? 'var(--brand)' : 'var(--surface)', color: on ? '#fff' : 'var(--text-primary)',
+                            border: on ? '1px solid var(--brand)' : '1px solid var(--border)' }}>
+                          {isBtc ? '$' : chatPayTokenSymbolChar(payToken)}{v}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
 
