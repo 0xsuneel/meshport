@@ -330,10 +330,13 @@ function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
       {/* Icon */}
       <div style={{
         width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-        background: (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'color-mix(in srgb, var(--success) 10%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
+        background: isPending ? 'color-mix(in srgb, var(--warning) 12%, transparent)' : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'color-mix(in srgb, var(--success) 10%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
       }}>
-        {rowIcon ? (
+        {isPending ? (
+          // Still processing: a clock from the same icon family, in the status colour.
+          <ActionIcon name="clock" size={18} color="var(--warning)" />
+        ) : rowIcon ? (
           <ActionIcon name={rowIcon} size={18}
             color={(isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'var(--success)' : 'var(--brand-text)'} />
         ) : (
