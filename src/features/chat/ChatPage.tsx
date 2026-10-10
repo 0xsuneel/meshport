@@ -2368,6 +2368,7 @@ export function ChatConversationPage() {
   // + → Request: ask them for an amount (a payment-link card they can pay in-chat).
   const [showRequest, setShowRequest] = useState(false)
   const [reqAmount, setReqAmount] = useState('')
+  const [reqToken, setReqToken] = useState<'USDC' | 'EURC' | 'cirBTC'>('USDC')
   const [attachMode, setAttachMode] = useState<'attachments' | 'bill'>('attachments')
   // Merchants: "Bill" in the attach menu - build a bill and send it here.
   const merchant = useMerchant()
@@ -3731,7 +3732,7 @@ export function ChatConversationPage() {
       d.handled = true
       handlePayRef.current()
       setLinkPay({ username: d.username, amount: d.amount })
-      setPayToken('USDC')
+      setPayToken(d.token ?? 'USDC')
       if (d.amount) { setPayAmount(d.amount); setShowAmountPad(false) }
     }
     window.addEventListener(PAY_LINK_EVENT, onPayLink)
@@ -4909,7 +4910,7 @@ export function ChatConversationPage() {
                     if (item.key === 'bill') { setAttachMode('bill'); return }
                     setShowAttach(false)
                     if (item.key === 'pay') { handlePay(); return }
-                    if (item.key === 'request') { setReqAmount(''); setShowRequest(true); return }
+                    if (item.key === 'request') { setReqAmount(''); setReqToken('USDC'); setShowRequest(true); return }
                     const input = fileInputRef.current
                     if (!input) return
                     pickModeRef.current = item.key === 'gallery' || item.key === 'camera' ? 'image' : 'file'
@@ -4938,33 +4939,49 @@ export function ChatConversationPage() {
         {(() => {
           const me = (user?.username || '').replace(/\.arc$/, '')
           const n = parseFloat(reqAmount) || 0
-          const valid = n > 0 && /^\d+(\.\d{1,6})?$/.test(reqAmount)
+          const dec = reqToken === 'cirBTC' ? 8 : 6
+          const valid = n > 0 && new RegExp(`^\\d+(\\.\\d{1,${dec}})?$`).test(reqAmount)
+          const sym = reqToken === 'EURC' ? '€' : reqToken === 'cirBTC' ? '₿' : '$'
+          const amtStr = trimTrailingZeros(n.toFixed(dec))
           return (
             <div className="px-5 pb-5 space-y-4">
+              {/* Token to request */}
+              <div className="flex gap-2" role="radiogroup" aria-label="Token to request">
+                {(['USDC', 'EURC', 'cirBTC'] as const).map(t => {
+                  const on = reqToken === t
+                  return (
+                    <button key={t} type="button" role="radio" aria-checked={on} onClick={() => { setReqToken(t); setReqAmount('') }}
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-full text-[14px] font-bold"
+                      style={{ height: 40, background: on ? 'color-mix(in srgb, var(--brand) 25%, transparent)' : 'var(--surface)',
+                        border: `1px solid ${on ? 'var(--brand)' : 'var(--border)'}`, color: on ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                      <TokenLogo token={t} size={20} />{t}
+                    </button>
+                  )
+                })}
+              </div>
               <div className="rounded-2xl px-4 py-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                 <div className="flex items-baseline gap-1">
-                  <span className="text-[32px] font-bold text-text-muted">$</span>
+                  <span className="text-[32px] font-bold text-text-muted">{sym}</span>
                   <input autoFocus inputMode="decimal" value={reqAmount} placeholder="0" aria-label="Amount to request in USDC"
-                    onChange={e => setReqAmount(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/^(\d*\.\d{0,6}).*$/, '$1'))}
+                    onChange={e => setReqAmount(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(reqToken === 'cirBTC' ? /^(\d*\.\d{0,8}).*$/ : /^(\d*\.\d{0,6}).*$/, '$1'))}
                     className="flex-1 min-w-0 bg-transparent text-[32px] font-bold text-text-primary outline-none" style={{ border: 'none' }} />
-                  <span className="text-sm font-semibold text-text-secondary">USDC</span>
+                  <span className="text-sm font-semibold text-text-secondary">{reqToken}</span>
                 </div>
               </div>
               <div className="grid grid-cols-4 gap-2">
-                {[5, 10, 20, 50].map(v => (
-                  <button key={v} type="button" onClick={() => setReqAmount(String(v))}
-                    className="rounded-full text-[13px] font-bold" style={{ height: 34, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>${v}</button>
+                {(reqToken === 'cirBTC' ? ['0.0001', '0.0005', '0.001', '0.005'] : ['5', '10', '20', '50']).map(v => (
+                  <button key={v} type="button" onClick={() => setReqAmount(v)}
+                    className="rounded-full text-[13px] font-bold" style={{ height: 34, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>{reqToken === 'cirBTC' ? v : `${sym}${v}`}</button>
                 ))}
               </div>
               <button type="button" disabled={!valid || !me}
                 onClick={async () => {
-                  const amt = trimTrailingZeros(n.toFixed(6))
                   setShowRequest(false)
-                  await handleSend(`Requesting ${amt} USDC\nhttps://meshport.xyz/paylink/${me}?amount=${amt}`)
+                  await handleSend(`Requesting ${amtStr} ${reqToken}\nhttps://meshport.xyz/paylink/${me}?amount=${amtStr}${reqToken === 'USDC' ? '' : `&token=${reqToken}`}`)
                 }}
                 className="w-full py-3.5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40"
                 style={{ background: 'var(--brand)' }}>
-                {valid ? `Request $${trimTrailingZeros(n.toFixed(6))}` : 'Request'}
+                {valid ? `Request ${reqToken === 'cirBTC' ? `${amtStr} cirBTC` : `${sym}${amtStr}`}` : 'Request'}
               </button>
               <p className="text-xs text-text-secondary text-center">They'll see a card with a Pay button for this amount.</p>
             </div>
