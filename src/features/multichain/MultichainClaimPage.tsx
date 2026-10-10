@@ -64,7 +64,7 @@ import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFi
 import { readExternalBalances, refreshScope, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
 import { fetchCctpProgress } from '@/lib/cctpTracker'
 import { ARC_RPCS } from '@/lib/arc'
-import { UB_CLAIM_CHAINS, runUbClaim, ubClaimEta } from '@/lib/ubClaim'
+import { UB_CLAIM_CHAINS, runUbClaim, ubClaimEta, estimateUbClaimFee } from '@/lib/ubClaim'
 import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
@@ -1434,6 +1434,35 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const cctpAvailable = !!selected && isGaslessBridgeAvailable(selected)
   const effectiveRoute: 'cctp' | 'ub' = !ubAvailable ? 'cctp' : !cctpAvailable ? 'ub' : claimRoute
   const reviewEnabled = claimAmt >= MIN_CLAIM_AMOUNT && claimAmt <= (selectedChain?.claimable ?? 0) && (effectiveRoute === 'ub' || estimateReady)
+  // Unified Balance route: Circle Gateway's fee quote for this exact claim
+  // (read-only, signs nothing), fetched ~600ms after the amount settles.
+  const [ubFee, setUbFee] = useState<{ forKey: string; loading: boolean; error: string; needsUnlock: boolean
+    gatewayFee: number; forwarderFee: number; otherFee: number; total: number; receiveAtLeast: number }>(
+    { forKey: '', loading: false, error: '', needsUnlock: false, gatewayFee: 0, forwarderFee: 0, otherFee: 0, total: 0, receiveAtLeast: 0 })
+  const ubFeeKey = `${selected}|${claimAmt}`
+  useEffect(() => {
+    if (step !== 'select' || !selected || effectiveRoute !== 'ub' || claimAmt < MIN_CLAIM_AMOUNT) return
+    let cancelled = false
+    setUbFee(prev => ({ ...prev, loading: true, error: '', needsUnlock: false, forKey: ubFeeKey }))
+    const t = setTimeout(async () => {
+      try {
+        const { privateKey, walletAddress } = useAuthStore.getState()
+        // Never prompts here: without an unlocked key the fees are shown on the next screen.
+        if (!privateKey || !walletAddress) { if (!cancelled) setUbFee(prev => ({ ...prev, loading: false, needsUnlock: true })); return }
+        const { AppKit, createEthersAdapterFromPrivateKey } = sdkRef.current ?? await loadSdk()
+        const kit = new AppKit({ disableErrorReporting: true } as any)
+        const adapter = await buildAdapter(createEthersAdapterFromPrivateKey, privateKey)
+        const r = await estimateUbClaimFee({ kit, adapter, walletAddr: walletAddress, fromChain: selectedSdkId, amount: claimAmt })
+        if (!cancelled) setUbFee({ ...r, forKey: ubFeeKey, loading: false, error: '', needsUnlock: false })
+      } catch (e: any) {
+        console.warn('[bring] Unified Balance fee estimate failed', e)
+        // Raw SDK errors are long and technical - keep the card readable.
+        if (!cancelled) setUbFee(prev => ({ ...prev, loading: false, error: /too small/i.test(e?.message ?? '') ? 'Amount too small to cover the fee' : "Couldn't load fees - shown on the next screen" }))
+      }
+    }, 600)
+    return () => { cancelled = true; clearTimeout(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, selected, effectiveRoute, claimAmt, selectedSdkId])
   // BUG FIX (live report): previously showed the raw, fee-less amount here
   // the instant it was typed while the fee row below still said
   // "Estimating…" -- two numbers appearing at different times, one of
@@ -1444,7 +1473,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const claimReceiveLabel = !showClaimEstimateRow
     ? `$${formatAmount(claimAmt)} on Arc`
     : estimateReady
-    ? `at least $${formatAmount(feeEstimate.receiverGets)} on Arc`
+    ? `At least $${formatAmount(feeEstimate.receiverGets)} on Arc`
     : 'Calculating…'
   const feeRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 11, color: COLORS.muted, fontVariantNumeric: 'tabular-nums' }
   const fmtFee = (n: number) => `$${trimTrailingZeros(n.toFixed(4))} USDC`
@@ -1469,12 +1498,44 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               </div>
               <div style={feeRowStyle}>
                 <span>Circle bridge fee</span>
-                <span>up to {fmtFee(feeEstimate.bridgeFee)}</span>
+                <span>Up to {fmtFee(feeEstimate.bridgeFee)}</span>
               </div>
               <div style={{ ...feeRowStyle, color: COLORS.text, fontWeight: 600 }}>
                 <span>Total fees</span>
-                <span>up to {fmtFee(feeEstimate.totalFee)}</span>
+                <span>Up to {fmtFee(feeEstimate.totalFee)}</span>
               </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+
+  const ubFeeLive = ubFee.forKey === ubFeeKey && !ubFee.loading
+  const ubSummaryCard = (
+    <div style={{ width: '100%', marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 12, color: COLORS.muted }}>You will receive</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>
+          {!showClaimEstimateRow ? `$${formatAmount(claimAmt)} on Arc`
+            : ubFeeLive && !ubFee.error && !ubFee.needsUnlock ? `At least $${formatAmount(ubFee.receiveAtLeast)} on Arc`
+            : ubFeeLive ? 'Shown on the next screen' : 'Calculating…'}
+        </span>
+      </div>
+      {showClaimEstimateRow && (
+        <div style={{ marginTop: 6, paddingTop: 6, borderTop: `1px solid ${COLORS.border}`, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {!ubFeeLive ? (
+            <div style={feeRowStyle}><span>Fees</span><span>Calculating…</span></div>
+          ) : ubFee.needsUnlock ? (
+            <div style={feeRowStyle}><span>Fees</span><span>Shown on the next screen</span></div>
+          ) : ubFee.error ? (
+            <div style={{ ...feeRowStyle, color: COLORS.error }}><span>Fees</span><span style={{ textAlign: 'right' }}>{ubFee.error}</span></div>
+          ) : (
+            <>
+              <div style={feeRowStyle}><span>Circle Gateway fee</span><span>{fmtFee(ubFee.gatewayFee)}</span></div>
+              {ubFee.forwarderFee > 0 && <div style={feeRowStyle}><span>Forwarding fee</span><span>{fmtFee(ubFee.forwarderFee)}</span></div>}
+              {ubFee.otherFee > 0 && <div style={feeRowStyle}><span>Other fees</span><span>{fmtFee(ubFee.otherFee)}</span></div>}
+              <div style={{ ...feeRowStyle, color: COLORS.text, fontWeight: 600 }}><span>Total fees</span><span>Up to {fmtFee(ubFee.total)}</span></div>
             </>
           )}
         </div>
@@ -1863,7 +1924,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 {!desktopInput && !amountConfirmed && !keypadOpen && !claimAmt && (
                   <p style={{ fontSize: 12, color: COLORS.muted, margin: '6px 0 0' }}>Tap the amount to enter a value</p>
                 )}
-                {effectiveRoute === 'cctp' && receiveSummaryCard}
+                {effectiveRoute === 'cctp' ? receiveSummaryCard : ubSummaryCard}
               </div>
 
               {/* Route: a two-way switch, with one line on how the chosen one works */}
@@ -1890,7 +1951,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   </svg>
                   <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: COLORS.muted }}>
                     {effectiveRoute === 'ub'
-                      ? <><b style={{ color: COLORS.text, fontWeight: 600 }}>Unified Balance · Gateway · {ubClaimEta(selectedSdkId).replace('minutes', 'min').replace('minute', 'min')}.</b> Your USDC goes into your Unified Balance, then to your Arc wallet. Circle's Gateway fee is taken when it's sent to Arc. If you leave before it finishes, finish it from Multichain Hub → Recover.</>
+                      ? <><b style={{ color: COLORS.text, fontWeight: 600 }}>Unified Balance · Gateway · {(e => e.charAt(0).toUpperCase() + e.slice(1))(ubClaimEta(selectedSdkId).replace('minutes', 'min').replace('minute', 'min'))}.</b> Your USDC goes into your Unified Balance, then to your Arc wallet. Circle's Gateway fee is taken when it's sent to Arc. If you leave before it finishes, finish it from Multichain Hub → Recover.</>
                       : <><b style={{ color: COLORS.text, fontWeight: 600 }}>CCTP · Gasless · one signature.</b> Circle burns your USDC on {getMeta(selectedChain.chainId).label} and mints the same amount on Arc.</>}
                   </p>
                 </div>
