@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
 import { reachCheck, STRANGER_PAY_BLOCKED, BLOCKED_YOU, cachedPrivacy, fetchMyPrivacy, fetchMyRequestIds, fetchBlocked, blockUser, unblockUser, type ChatPrivacy } from '@/lib/privacy'
-import { Ban } from 'lucide-react'
+import { Ban, Check, Pin, PinOff } from 'lucide-react'
 import { TokenLogo } from '@/components/ui/TokenLogo'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { PopupOpen } from '@/hooks/usePopupOpen'
@@ -498,7 +498,6 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   const [searching, setSearching] = useState(false)
 
   // Long-press context menu
-  const [contextConv, setContextConv] = useState<DbConversation | null>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Profile sheet
   const [profileConv, setProfileConv] = useState<DbConversation | null>(null)
@@ -747,7 +746,6 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     hideChat(conv.id, chatWalletAddr)
     setConversations(prev => { const next = prev.filter(c => c.id !== conv.id); _cachedConversations = next; return next })
     setArchivedConvs(prev => prev.some(c => c.id === conv.id) ? prev : [conv, ...prev])
-    setContextConv(null)
   }
   const unarchiveConv = (conv: DbConversation) => {
     unhideChat(conv.id, chatWalletAddr)
@@ -763,7 +761,6 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
       _cachedConversations = next
       return next
     })
-    setContextConv(null)
   }
   const isArchived = (conv: DbConversation) => archivedConvs.some(c => c.id === conv.id)
 
@@ -786,33 +783,79 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     fetchBlocked(user.id).then(list => { if (!cancelled) setBlockedIds(new Set(list.map(p => p.id))) }).catch(() => {})
     return () => { cancelled = true }
   }, [user?.id, convKey])
-  const blockConv = async (conv: DbConversation) => {
-    const otherId = conv.other_user?.id
-    setContextConv(null)
-    if (!user?.id || !otherId) return
-    try {
-      await blockUser(user.id, otherId)
-      setBlockedIds(prev => new Set(prev).add(otherId))
-      setRequestIds(prev => { const n = new Set(prev); n.delete(conv.id); return n })
-      useUIStore.getState().showToastMessage(`${(conv.other_user?.username || '').replace(/\.arc$/, '')}.arc blocked`, 'success')
-    } catch { useUIStore.getState().showToastMessage("Couldn't block - try again", 'error') }
-  }
+
   // Accept: save them as a contact - the chat moves to All.
   const acceptRequest = (conv: DbConversation) => {
     const otherId = conv.other_user?.id
     setRequestIds(prev => { const n = new Set(prev); n.delete(conv.id); return n })
-    setContextConv(null)
     if (user?.id && otherId) addContactDb(user.id, otherId).catch(() => {})
   }
 
+
+  // Hold a chat to select it (WhatsApp-style): the header turns into an
+  // action bar - Pin, Archive / Unarchive, Block (requests: Accept, Block).
+  // While selecting, a tap adds / removes a chat.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const selecting = selectedIds.size > 0
+  const swallowClick = useRef(false)
+  const toggleSelect = (convId: string) => setSelectedIds(prev => {
+    const n = new Set(prev); if (n.has(convId)) n.delete(convId); else n.add(convId); return n
+  })
+  const clearSelection = () => setSelectedIds(new Set())
+  useEffect(() => { clearSelection() }, [listTab])
+
+  // Pinned chats (this device): on top of All, up to 3.
+  const pinKey = `meshport_pinned_chats_${(chatWalletAddr || 'anon').toLowerCase()}`
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => {
+    try { const v = JSON.parse(localStorage.getItem(pinKey) || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
+  })
+  const savePins = (ids: string[]) => {
+    setPinnedIds(ids)
+    try { localStorage.setItem(pinKey, JSON.stringify(ids)) } catch { /* private mode */ }
+  }
+
+  const selectedConvs = () => [...conversations, ...archivedConvs].filter(c => selectedIds.has(c.id))
+  const allSelectedPinned = selecting && [...selectedIds].every(id => pinnedIds.includes(id))
+  const pinSelected = () => {
+    const ids = [...selectedIds]
+    if (allSelectedPinned) savePins(pinnedIds.filter(id => !selectedIds.has(id)))
+    else {
+      const next = [...pinnedIds, ...ids.filter(id => !pinnedIds.includes(id))]
+      if (next.length > 3) { useUIStore.getState().showToastMessage('You can pin up to 3 chats', 'error'); return }
+      savePins(next)
+    }
+    clearSelection()
+  }
+  const archiveSelected = () => { selectedConvs().forEach(c => archiveConv(c)); clearSelection() }
+  const unarchiveSelected = () => { selectedConvs().forEach(c => unarchiveConv(c)); clearSelection() }
+  const acceptSelected = () => { selectedConvs().forEach(c => acceptRequest(c)); clearSelection() }
+  const blockSelected = async () => {
+    const convs = selectedConvs()
+    clearSelection()
+    if (!user?.id) return
+    const done: string[] = []
+    for (const c of convs) {
+      const otherId = c.other_user?.id
+      if (!otherId || otherId === user.id) continue
+      try { await blockUser(user.id, otherId); done.push(otherId) } catch { /* reported below */ }
+    }
+    if (done.length) {
+      setBlockedIds(prev => { const n = new Set(prev); done.forEach(id => n.add(id)); return n })
+      setRequestIds(prev => { const n = new Set(prev); convs.forEach(c => n.delete(c.id)); return n })
+      useUIStore.getState().showToastMessage(done.length === 1 ? `${(convs.find(c => c.other_user?.id === done[0])?.other_user?.username || '').replace(/\.arc$/, '')}.arc blocked` : `${done.length} people blocked`, 'success')
+    }
+    if (done.length < convs.length) useUIStore.getState().showToastMessage("Couldn't block - try again", 'error')
+  }
 
   // Long press handlers
   const startLongPress = (conv: DbConversation) => {
     if (longPressTimer.current) return  // already started, don't double-fire
     longPressTimer.current = setTimeout(() => {
       longPressTimer.current = null
-      setContextConv(conv)
-    }, 600)
+      swallowClick.current = true // the finger lifting must not open the chat
+      try { navigator.vibrate?.(15) } catch { /* not supported */ }
+      toggleSelect(conv.id)
+    }, 500)
   }
   const cancelLongPress = () => {
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
@@ -888,6 +931,8 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   const tabList = listTab === 'archived' ? archivedVisible
     : listTab === 'requests' ? requestConvs
     : listTab === 'unread' ? mainConvs.filter(c => (c.unread_count || 0) > 0)
+    : pinnedIds.length ? [...pinnedIds.map(id => mainConvs.find(c => c.id === id)).filter((c): c is DbConversation => !!c),
+        ...mainConvs.filter(c => !pinnedIds.includes(c.id))]
     : mainConvs
   // Search covers every chat (archived too) and people: your contacts
   // without a chat yet, plus anyone found by their full username.arc.
@@ -909,7 +954,38 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     <div ref={chatListScrollRef} className="flex-1 overflow-y-auto bg-bg">
       <div className="sticky top-0 z-20 bg-bg/95 backdrop-blur-md px-4 pt-header pb-3"
         style={{ borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-        {/* Your profile · Chats · search */}
+        {/* Selecting (hold a chat): back · count · actions */}
+        {selecting ? (
+          <div className="header-row justify-between" style={{ marginBottom: 12 }}>
+            <div className="flex items-center gap-3">
+              <button onClick={clearSelection} className="back-btn" aria-label="Cancel selection">
+                <ArrowLeft className="w-5 h-5 text-text-primary" />
+              </button>
+              <span className="text-xl font-bold text-text-primary">{selectedIds.size}</span>
+            </div>
+            <div className="flex items-center gap-1">
+              {(listTab === 'requests'
+                ? [
+                    { label: 'Accept', icon: <UserPlus className="w-[21px] h-[21px]" />, run: acceptSelected },
+                    { label: 'Block', icon: <Ban className="w-[21px] h-[21px]" />, run: blockSelected, danger: true },
+                  ]
+                : [
+                    { label: allSelectedPinned ? 'Unpin' : 'Pin', icon: allSelectedPinned ? <PinOff className="w-[21px] h-[21px]" /> : <Pin className="w-[21px] h-[21px]" />, run: pinSelected },
+                    listTab === 'archived'
+                      ? { label: 'Unarchive', icon: <ArchiveRestore className="w-[21px] h-[21px]" />, run: unarchiveSelected }
+                      : { label: 'Archive', icon: <Archive className="w-[21px] h-[21px]" />, run: archiveSelected },
+                    { label: 'Block', icon: <Ban className="w-[21px] h-[21px]" />, run: blockSelected, danger: true },
+                  ]
+              ).map(a => (
+                <motion.button key={a.label} whileTap={{ scale: 0.88 }} onClick={a.run} aria-label={a.label} title={a.label}
+                  className="w-10 h-10 rounded-full flex items-center justify-center"
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: (a as any).danger ? 'var(--danger)' : 'var(--text-primary)' }}>
+                  {a.icon}
+                </motion.button>
+              ))}
+            </div>
+          </div>
+        ) : (
         <div className="header-row justify-between" style={{ marginBottom: 12 }}>
           <button onClick={() => navigate('/chat/privacy')} aria-label="Chat privacy" className="rounded-full flex-shrink-0"
             style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}>
@@ -923,6 +999,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
             {searchOpen ? <X className="w-5 h-5 text-text-primary" /> : <Search className="w-[21px] h-[21px] text-text-primary" />}
           </motion.button>
         </div>
+        )}
 
         {searchOpen && (
           <div style={{ marginBottom: 12 }}>
@@ -989,7 +1066,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         <div className="pb-4">
           {listTab === 'requests' && !searchQ && (
             <p className="px-4 pt-3 pb-1 text-[12.5px] text-text-secondary">
-              People you don't know yet. Long-press a chat to accept them - it moves to All.
+              People you don't know yet. Hold a chat to accept or block them - accepted chats move to All.
             </p>
           )}
           {searchQ && filtered.length > 0 && (
@@ -1032,7 +1109,11 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
               // resort) - removing it entirely guarantees the cards never
               // animate on their own, only the conversation panel changes.
               <button key={conv.id}
-                onClick={() => navigate(`/chat/${conv.id}`)}
+                onClick={() => {
+                  if (swallowClick.current) { swallowClick.current = false; return }
+                  if (selecting) { toggleSelect(conv.id); return }
+                  navigate(`/chat/${conv.id}`)
+                }}
                 onMouseEnter={() => { if (!_cachedMessages[conv.id]) loadMessages(conv.id).then(msgs => { if (msgs.length) _cachedMessages[conv.id] = msgs }).catch(() => {}) }}
                 onTouchStart={(e) => {
                   if (!_cachedMessages[conv.id]) loadMessages(conv.id).then(msgs => { if (msgs.length) _cachedMessages[conv.id] = msgs }).catch(() => {})
@@ -1041,13 +1122,20 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                 onTouchEnd={(e) => { cancelLongPress() }}
                 onTouchCancel={cancelLongPress}
                 // Touch: long-press (above). Mouse: right-click opens the same menu.
-                onContextMenu={e => { e.preventDefault(); if (!('ontouchstart' in window)) setContextConv(conv) }}
+                onContextMenu={e => { e.preventDefault(); if (!('ontouchstart' in window)) toggleSelect(conv.id) }}
                 className="flex items-center gap-3 px-4 py-3 w-full active:bg-[rgb(var(--text-primary-rgb)/0.05)] transition-colors"
-                style={{ borderBottom: idx < filtered.length-1 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'none' }}>
-                {/* Avatar - tap to open profile */}
+                style={{ borderBottom: idx < filtered.length-1 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'none',
+                  background: selectedIds.has(conv.id) ? 'color-mix(in srgb, var(--brand) 22%, transparent)' : undefined }}>
+                {/* Avatar - tap to open profile (while selecting: select) */}
                 <div className="relative flex-shrink-0"
-                  onClick={e => { e.stopPropagation(); setProfileConv(conv) }}>
+                  onClick={e => { if (selecting) return; e.stopPropagation(); setProfileConv(conv) }}>
                   <Avatar name={name} src={conv.other_user?.avatar_url} size="lg" className="!w-[52px] !h-[52px]" />
+                  {selectedIds.has(conv.id) && (
+                    <span className="absolute rounded-full flex items-center justify-center"
+                      style={{ right: -2, bottom: -2, width: 22, height: 22, background: 'var(--success)', border: '2px solid var(--bg)' }}>
+                      <Check className="w-3 h-3 text-white" strokeWidth={3.5} />
+                    </span>
+                  )}
                 </div>
                 <div className="flex-1 min-w-0 text-left">
                   {/* Row 1: name + time */}
@@ -1061,7 +1149,10 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                         </span>
                       )}
                     </div>
-                    <p className={`text-[12px] flex-shrink-0 ${unread > 0 ? 'text-success font-semibold' : 'text-text-secondary'}`}>{timeLabel}</p>
+                    <span className="flex items-center gap-1.5 flex-shrink-0">
+                      {pinnedIds.includes(conv.id) && listTab === 'all' && !searchQ && <Pin className="w-3.5 h-3.5 text-text-secondary" style={{ transform: 'rotate(45deg)' }} aria-label="Pinned" />}
+                      <p className={`text-[12px] ${unread > 0 ? 'text-success font-semibold' : 'text-text-secondary'}`}>{timeLabel}</p>
+                    </span>
                   </div>
                   {/* Row 2: last message + unread badge */}
                   <div className="flex items-center justify-between gap-2 mt-0.5">
@@ -1148,58 +1239,6 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         })()}
       </AnimatePresence>
 
-      {/* Long-press context menu */}
-      <AnimatePresence>
-        {contextConv && (
-          <DesktopDialogFrame onClose={() => setContextConv(null)} maxWidth={420}>
-            <div className="px-5 pt-5 pb-5">
-              {/* Contact preview */}
-              <div className="flex items-center gap-3 mb-5 px-1">
-                <Avatar name={contextConv.other_user?.display_name || 'User'} src={contextConv.other_user?.avatar_url} size="md" />
-                <div className="min-w-0">
-                  <p className="text-base font-bold text-text-primary truncate">{contextConv.other_user?.display_name || 'Unknown'}</p>
-                  <p className="text-sm text-link">{(contextConv.other_user?.username || '').replace(/\.arc$/, '')}.arc</p>
-                </div>
-              </div>
-              {isRequest(contextConv) && (
-                <button onClick={() => acceptRequest(contextConv)}
-                  className="w-full flex items-center gap-3 px-5 py-4 mb-2.5 rounded-2xl font-semibold text-white active:scale-95 transition-transform"
-                  style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
-                  <UserPlus className="w-5 h-5" />
-                  Accept · add to contacts
-                </button>
-              )}
-              {isRequest(contextConv) ? null : isArchived(contextConv) ? (
-                <button onClick={() => unarchiveConv(contextConv)}
-                  className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl font-semibold active:scale-95 transition-transform"
-                  style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)', color: 'var(--brand-text)' }}>
-                  <ArchiveRestore className="w-5 h-5" />
-                  Unarchive chat
-                </button>
-              ) : (
-                <button onClick={() => archiveConv(contextConv)}
-                  className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl font-semibold active:scale-95 transition-transform"
-                  style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)', color: 'var(--brand-text)' }}>
-                  <Archive className="w-5 h-5" />
-                  Archive chat
-                </button>
-              )}
-              <button onClick={() => blockConv(contextConv)}
-                className="w-full flex items-center gap-3 px-5 py-4 mt-2.5 bg-danger/10 border border-danger/20 rounded-2xl text-danger font-semibold active:scale-95 transition-transform">
-                <Ban className="w-5 h-5" />
-                Block
-              </button>
-              <p className="text-center text-xs text-text-muted mt-3">
-                {isRequest(contextConv) ? "Block: they can't message or pay you, and they're told you blocked them. Unblock any time in Chat privacy." : isArchived(contextConv) ? 'Moves back to All.' : 'Moves to Archived. Nothing is deleted. It comes back to All when either of you pays.'}
-              </p>
-              <button onClick={() => setContextConv(null)}
-                className="w-full mt-3 px-5 py-3.5 bg-surface/60 rounded-2xl text-text-secondary font-semibold active:scale-95 transition-transform">
-                Cancel
-              </button>
-            </div>
-          </DesktopDialogFrame>
-        )}
-      </AnimatePresence>
     </div>
 
     {/* New chat - floats above the bottom navigation */}
