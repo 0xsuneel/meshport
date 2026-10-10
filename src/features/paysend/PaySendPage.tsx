@@ -156,6 +156,8 @@ export function PaySendPage() {
   // Amount screen
   const [amount, setAmount] = useState(() => initialRecipient ? (searchParams.get('amount') || '') : '')
   const [showAmountPad, setShowAmountPad] = useState(false)
+  // Optional message the payer adds on the amount page (saved with the payment).
+  const [note, setNote] = useState('')
   const [amountError, setAmountError] = useState('')
   const [token, setToken] = useState<Token>('USDC')
   const settingsLoadedFlag = useSettingsStore((s) => s.loaded)
@@ -199,13 +201,8 @@ export function PaySendPage() {
   // Paying a merchant payment request (/pay/r/<code>): the tx is handed to
   // the server for on-chain verification, then we return to the request.
   const merchantPayCode = searchParams.get('merchantPay')
-  // Arriving on the amount screen with nothing entered yet: open the number
-  // pad straight away. It used to wait for a tap on the "$0", leaving a bare
-  // screen with no keypad and no button to continue.
-  useEffect(() => {
-    if (screen === 'amount' && !isDesktop && !merchantPayCode && !amount) setShowAmountPad(true)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen])
+  // The number pad opens only when the amount is tapped (not on arrival), so
+  // the message box and the Review button below it stay in view.
   // Merchant payment: order number + amount come from the request and
   // can't be edited; the payment is confirmed against both.
   const [merchantOrderNumber, setMerchantOrderNumber] = useState<string | null>(() => searchParams.get('order'))
@@ -728,13 +725,13 @@ export function PaySendPage() {
     // whatever you'd typed for the last person was still sitting there.
     // Clearing here means every fresh recipient selection starts blank,
     // matching what you'd expect from Venmo/Cash App/etc.
-    setAmount(''); setAmountError('')
+    setAmount(''); setAmountError(''); setNote('')
     setQuery(''); setResults([]); goForward('amount')
   }
 
   const pickRecipient = (r: Recipient) => {
     setRecipient(r)
-    setAmount(''); setAmountError('')
+    setAmount(''); setAmountError(''); setNote('')
     goForward('amount')
   }
 
@@ -746,7 +743,7 @@ export function PaySendPage() {
     const r: Recipient = profile
       ? { id: profile.id, display: profile.username?.endsWith('.arc') ? profile.username : profile.username + '.arc', displayName: profile.display_name, walletAddress: profile.wallet_address, isUsername: true, avatarUrl: profile.avatar_url, enteredViaAddress: true }
       : { display: shortenAddress(addr), displayName: 'External Wallet', walletAddress: addr, isUsername: false, enteredViaAddress: true }
-    setRecipient(r); setPasteMode(false); setPasteValue(''); setAmount(''); setAmountError(''); goForward('amount')
+    setRecipient(r); setPasteMode(false); setPasteValue(''); setAmount(''); setAmountError(''); setNote(''); goForward('amount')
   }
 
   const goBack = () => {
@@ -943,7 +940,7 @@ export function PaySendPage() {
 
       if (result.txHash) {
         const { Activity, updateActivityStatus } = await import('@/lib/ActivityService')
-        Activity.send({ walletAddress: result.senderAddress, txHash: result.txHash, amount: numAmount, tokenSymbol: token, toAddress: result.recipientAddress, fee: estimatedFee, toUsername: recipient?.isUsername ? recipient.display : undefined }).catch(() => {})
+        Activity.send({ walletAddress: result.senderAddress, txHash: result.txHash, amount: numAmount, tokenSymbol: token, toAddress: result.recipientAddress, fee: estimatedFee, toUsername: recipient?.isUsername ? recipient.display : undefined, note: note.trim() || undefined }).catch(() => {})
 
         // Write the RECEIVE-side row directly, right here, in the same
         // processing event as the confirmed on-chain transfer - instead of
@@ -971,6 +968,7 @@ export function PaySendPage() {
           tokenSymbol:   token,
           fromAddress:   result.senderAddress,
           fromUsername:  user?.username || undefined,
+          note:          note.trim() || undefined,
           receiveKind:   'p2p_payment',
         }).catch(() => {})
 
@@ -1482,12 +1480,8 @@ export function PaySendPage() {
                   // against the same fee-safe ceiling.
                   feeReserve={feeReserve}
                   onClose={() => setShowAmountPad(false)}
-                  doneLabel="Review"
-                  onDone={() => {
-                    if (!amount || numAmount <= 0 || amountInvalid) return
-                    setShowAmountPad(false)
-                    goForward('review')
-                  }}
+                  doneLabel="Done"
+                  onDone={() => setShowAmountPad(false)}
                   error={amountErrorMessage}
                 />
               )}
@@ -1520,6 +1514,23 @@ export function PaySendPage() {
                   )}
                 </div>
               </div>
+
+              {/* Message - optional, saved with the payment. */}
+              {!merchantPayCode && (
+                <div>
+                  <label htmlFor="pay-note" className="text-[13px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Message</label>
+                  <div style={{ position: 'relative', marginTop: 8 }}>
+                    <textarea id="pay-note" value={note} maxLength={140} rows={3}
+                      onChange={e => setNote(e.target.value.replace(/\s*\n\s*/g, ' '))}
+                      onFocus={() => setShowAmountPad(false)}
+                      placeholder="Add a message (optional)"
+                      className="w-full text-[15px] text-text-primary placeholder-text-secondary focus:outline-none"
+                      style={{ display: 'block', resize: 'none', height: 88, padding: '12px 14px 22px', borderRadius: 16, boxSizing: 'border-box',
+                        background: 'var(--surface)', border: '1px solid var(--border)', lineHeight: 1.4 }} />
+                    <span aria-hidden className="text-[11px]" style={{ position: 'absolute', right: 12, bottom: 8, color: 'var(--text-muted)' }}>{note.length}/140</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Back + Preview footer - the keypad sheet has its own "Review"
@@ -1533,30 +1544,25 @@ export function PaySendPage() {
                 own, so the footer stays visible there unconditionally
                 once an amount exists, instead of waiting for a sheet to
                 close that no longer exists on desktop. */}
-            {(isDesktop || !showAmountPad) && numAmount > 0 && (
-              <div className="flex-shrink-0 px-5 flex items-center gap-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + 16px)', paddingTop: 8 }}>
-                <button onClick={goBack}
-                  className="px-6 py-4 rounded-2xl text-[15px] font-bold text-text-primary active:scale-[.98] flex-shrink-0"
-                  style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', border: '1px solid var(--border)' }}>
-                  Back
-                </button>
-                <button
-                  onClick={() => {
-                    if (!amount || numAmount <= 0 || amountInvalid || recipientUnverified) return
-                    goForward('review')
-                  }}
-                  disabled={amountInvalid || recipientUnverified}
-                  className="flex-1 py-4 rounded-2xl text-[15px] font-bold text-text-primary active:scale-[.98]"
-                  style={{
-                    background: numAmount > 0 && !amountInvalid ? 'var(--brand)' : 'var(--border)',
-                    border: numAmount > 0 && !amountInvalid ? '1px solid color-mix(in srgb, black 12%, transparent)' : 'none',
-                    color: numAmount > 0 && !amountInvalid ? '#FFFFFF' : 'var(--text-secondary)',
-                    opacity: numAmount > 0 && !amountInvalid ? 1 : 0.5,
-                  }}>
-                  Preview
-                </button>
-              </div>
-            )}
+            {(isDesktop || !showAmountPad) && (() => {
+              const ready = numAmount > 0 && !amountInvalid && !recipientUnverified
+              return (
+                <div className="flex-shrink-0 px-5" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + 16px)', paddingTop: 8 }}>
+                  <button
+                    onClick={() => { if (ready) goForward('review') }}
+                    disabled={!ready}
+                    className="w-full py-4 rounded-2xl text-[15px] font-bold active:scale-[.98]"
+                    style={{
+                      background: ready ? 'var(--brand)' : 'var(--border)',
+                      border: ready ? '1px solid color-mix(in srgb, black 12%, transparent)' : 'none',
+                      color: ready ? '#FFFFFF' : 'var(--text-secondary)',
+                      opacity: ready ? 1 : 0.5,
+                    }}>
+                    Review
+                  </button>
+                </div>
+              )
+            })()}
           </motion.div>
         )}
 
