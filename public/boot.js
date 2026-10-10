@@ -76,6 +76,7 @@
       try {
         if (sessionStorage.getItem('mp_updating')) {
           sessionStorage.removeItem('mp_updating');
+          document.documentElement.classList.add('mp-updating'); // logo pulses (index.html)
           document.addEventListener('DOMContentLoaded', function () {
             var sp = document.getElementById('splash');
             if (!sp || sp.querySelector('.upd')) return;

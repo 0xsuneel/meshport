@@ -1424,8 +1424,9 @@ export function SwapPage() {
             <div className="flex items-center justify-between gap-3" style={{ marginTop: 12 }}>
               {/* Mobile only - desktop types into the box below. */}
               {!isDesktop ? (
+                // The whole space left of the token pill opens the keypad, not just the digits.
                 <button onClick={() => setShowAmountPad(v => !v)} aria-label={`Amount in ${tokenIn.id}`}
-                  className="min-w-0 flex items-center text-left" style={{ height: 44 }}>
+                  className="min-w-0 flex-1 flex items-center text-left" style={{ height: 44 }}>
                   <span className="font-extrabold" style={{ fontSize: amountFontSize(amountIn, 40), lineHeight: 1, letterSpacing: '-1px', color: amountIn ? 'var(--text-primary)' : 'var(--text-muted)' }}>
                     {amountIn || '0'}
                   </span>
@@ -1506,8 +1507,9 @@ export function SwapPage() {
               </div>
               </div>
             ) : (
-              <div className="flex items-center justify-between" style={{ marginTop: 12 }}>
-                <span className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
+              <div className="flex items-center justify-between gap-3" style={{ marginTop: 12 }}>
+                {/* Tapping the value line under the amount opens the keypad too. */}
+                <span onClick={() => setShowAmountPad(v => !v)} className="text-[13px] flex-1 min-w-0 flex items-center" style={{ color: 'var(--text-muted)', minHeight: 30, cursor: 'pointer' }}>
                   {swapTokenSymbolChar(tokenIn.id)}{formatAmount(parseFloat(amountIn || '0'), swapTokenDecimals(tokenIn.id))}
                 </span>
                 {inBalance > 0 && (
