@@ -1448,44 +1448,37 @@ export function SwapPage() {
         </div>
         )}
         {isActive && (
-        <div className="rounded-2xl overflow-hidden"
-          style={{ background:'var(--surface)', border:'1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
-
-          {/* Pay section */}
-          <div className="p-4 space-y-3">
+        <div style={{ position: 'relative' }}>
+          {/* You pay - outlined while the number pad is open */}
+          <div className="rounded-3xl" style={{
+            padding: '16px 18px 14px', background: 'var(--surface)',
+            border: showAmountPad && !isDesktop ? '1.5px solid color-mix(in srgb, var(--brand-text) 55%, transparent)' : '1px solid var(--border)',
+          }}>
             <div className="flex items-center justify-between">
-              <p className="text-sm text-text-secondary">You pay</p>
-              <div className="px-3 py-1.5 rounded-full" style={{ background:'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-                <span className="text-xs font-medium text-text-secondary">Balance: {fmtBal(tokenIn.id, inBalance)}</span>
-              </div>
+              <p className="text-[13px] text-text-secondary">You pay</p>
+              <p className="text-[13px] text-text-secondary">Balance {fmtBal(tokenIn.id, inBalance)}</p>
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <button onClick={() => setPickerFor('in')}
-                className="flex items-center gap-2.5 active:opacity-70 transition-opacity flex-shrink-0">
-                <TLogo t={tokenIn} size={36}/>
-                <div className="text-left">
-                  <div className="flex items-center gap-1">
-                    <span className="text-lg font-bold text-text-primary">{tokenIn.id}</span>
-                    <ChevronDown className="w-4 h-4 text-text-secondary"/>
-                  </div>
-                  <p className="text-xs text-text-secondary">{tokenIn.sub}</p>
-                </div>
-              </button>
-              {/* Mobile only - desktop's live amount input is the always-
-                  open AmountKeypad card right below instead of a tap-to-
-                  reveal display. */}
-              {!isDesktop && (
-                <div className="min-w-0 text-right" onClick={() => setShowAmountPad(v => !v)} style={{ cursor: 'pointer' }}>
-                  <span className="font-bold text-text-primary" style={{ fontSize: `${amountFontSize(amountIn, 34)}px`, lineHeight: 1 }}>
-                    {amountIn || '0.00'}
+            <div className="flex items-center justify-between gap-3" style={{ marginTop: 12 }}>
+              {/* Mobile only - desktop types into the box below. */}
+              {!isDesktop ? (
+                <button onClick={() => setShowAmountPad(v => !v)} aria-label={`Amount in ${tokenIn.id}`}
+                  className="min-w-0 flex items-center text-left" style={{ height: 44 }}>
+                  <span className="font-extrabold" style={{ fontSize: amountFontSize(amountIn, 40), lineHeight: 1, letterSpacing: '-1px', color: amountIn ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                    {amountIn || '0'}
                   </span>
-                  <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
-                    {swapTokenSymbolChar(tokenIn.id)}{formatAmount(parseFloat(amountIn || '0'), swapTokenDecimals(tokenIn.id))}
-                  </p>
-                </div>
-              )}
+                  {showAmountPad && <span aria-hidden="true" className="animate-pulse" style={{ width: 2, height: 34, marginLeft: 3, background: 'var(--brand-text)' }}/>}
+                </button>
+              ) : <span/>}
+              <button onClick={() => setPickerFor('in')}
+                className="flex items-center gap-2 rounded-full flex-shrink-0 active:opacity-70 transition-opacity"
+                style={{ height: 40, padding: '0 10px 0 6px', background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
+                <TLogo t={tokenIn} size={26}/>
+                <span className="text-[15px] font-bold text-text-primary">{tokenIn.id}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-text-secondary"/>
+              </button>
             </div>
             {isDesktop ? (
+              <div style={{ marginTop: 12 }}>
               // Reference design: the amount lives directly inside "You pay"
               // as a plain bordered box with an overlaid Max pill - not
               // AmountKeypad's own elevated/shadowed card (that chrome is
@@ -1544,7 +1537,36 @@ export function SwapPage() {
                   </button>
                 )}
               </div>
+              </div>
             ) : (
+              <div className="flex items-center justify-between" style={{ marginTop: 12 }}>
+                <span className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
+                  {swapTokenSymbolChar(tokenIn.id)}{formatAmount(parseFloat(amountIn || '0'), swapTokenDecimals(tokenIn.id))}
+                </span>
+                {inBalance > 0 && (
+                  <div className="flex gap-1.5">
+                    {([['50%', 0.5], ['Max', 1]] as const).map(([label, part]) => (
+                      <button key={label}
+                        onClick={() => {
+                          // Same fee-safe ceiling as Max everywhere else: a
+                          // USDC swap pays Arc's gas out of this balance.
+                          const decimals = swapTokenDecimals(tokenIn.id)
+                          const maxSendable = Math.max(0, inBalance - (tokenIn.id === 'USDC' ? gasNeeded : 0))
+                          setAmountIn(parseFloat(Math.min(inBalance * part, maxSendable).toFixed(decimals)).toString())
+                          setEstimate(null)
+                        }}
+                        className="rounded-full text-xs active:opacity-70"
+                        style={label === 'Max'
+                          ? { height: 30, padding: '0 12px', fontWeight: 700, color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)' }
+                          : { height: 30, padding: '0 12px', fontWeight: 600, color: 'var(--text-secondary)', background: 'transparent', border: '1px solid var(--border)' }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {!isDesktop && (
               <AmountKeypad
                 open={showAmountPad}
                 value={amountIn}
@@ -1565,74 +1587,62 @@ export function SwapPage() {
             )}
           </div>
 
-          {/* Simple divider + centered flip button */}
-          <div className="relative flex items-center" style={{ margin: '0 16px' }}>
-            <div className="flex-1" style={{ height: 1, background: 'var(--border)' }}/>
-            <button onClick={flip}
-              className="active:scale-90 transition-transform flex-shrink-0"
+          {/* Swap direction - sits over the gap between the two cards */}
+          <div style={{ position: 'relative', height: 6 }}>
+            <button onClick={flip} aria-label="Swap direction"
+              className="active:scale-90 transition-transform"
               style={{
-                width: 40, height: 40, borderRadius: '50%', margin: '0 -1px',
-                background: 'var(--surface)', border: '1px solid var(--border)',
+                position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', zIndex: 1,
+                width: 44, height: 44, borderRadius: 14, background: 'var(--surface)', border: '4px solid var(--bg)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
               <ArrowUpDown className="w-4 h-4" style={{ color: 'var(--brand-text)' }}/>
             </button>
-            <div className="flex-1" style={{ height: 1, background: 'var(--border)' }}/>
           </div>
 
-          {/* Receive section */}
-          <div className="p-4 space-y-3">
+          {/* You receive */}
+          <div className="rounded-3xl" style={{ padding: '16px 18px', background: 'color-mix(in srgb, var(--brand) 5%, var(--surface))', border: '1px solid var(--border)' }}>
             <div className="flex items-center justify-between">
-              <p className="text-sm text-text-secondary">You receive</p>
-              <div className="px-3 py-1.5 rounded-full" style={{ background:'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-                <span className="text-xs font-medium text-text-secondary">Balance: {fmtBal(tokenOut.id, outBalance)}</span>
-              </div>
+              <p className="text-[13px] text-text-secondary">You receive</p>
+              <p className="text-[13px] text-text-secondary">Balance {fmtBal(tokenOut.id, outBalance)}</p>
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <button onClick={() => setPickerFor('out')}
-                className="flex items-center gap-2.5 active:opacity-70 transition-opacity flex-shrink-0">
-                <TLogo t={tokenOut} size={36}/>
-                <div className="text-left">
-                  <div className="flex items-center gap-1">
-                    <span className="text-lg font-bold text-text-primary">{tokenOut.id}</span>
-                    <ChevronDown className="w-4 h-4 text-text-secondary"/>
-                  </div>
-                  <p className="text-xs text-text-secondary">{tokenOut.sub}</p>
-                </div>
-              </button>
-              <div className="min-w-0 text-right">
+            <div className="flex items-center justify-between gap-3" style={{ marginTop: 12 }}>
+              <div className="min-w-0 flex items-center" style={{ height: 44 }}>
                 {(step === 'estimating' || liveQuoteLoading)
-                  ? <div className="flex justify-end"><RefreshCw className="w-5 h-5 text-[var(--brand)] animate-spin"/></div>
+                  ? <RefreshCw className="w-5 h-5 text-[var(--brand)] animate-spin"/>
                   : estimate
-                  ? <>
-                      <p className="font-bold text-text-primary" style={{ fontSize: estimate.estimatedOutput.amount.length > 8 ? '26px' : '34px', lineHeight: 1 }}>
-                        {trimTrailingZeros(parseFloat(estimate.estimatedOutput.amount).toFixed(swapTokenDecimals(tokenOut.id)))}
-                      </p>
-                      <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
-                        {swapTokenSymbolChar(tokenOut.id)}{formatAmount(parseFloat(estimate.estimatedOutput.amount), swapTokenDecimals(tokenOut.id))}
-                      </p>
-                    </>
-                  : <p className="text-text-muted font-bold" style={{ fontSize:'34px' }}>0</p>
+                  ? <span className="font-extrabold" style={{ fontSize: amountFontSize(estimate.estimatedOutput.amount, 40), lineHeight: 1, letterSpacing: '-1px', color: 'var(--brand-text)' }}>
+                      {trimTrailingZeros(parseFloat(estimate.estimatedOutput.amount).toFixed(swapTokenDecimals(tokenOut.id)))}
+                    </span>
+                  : <span className="font-extrabold" style={{ fontSize: 40, lineHeight: 1, color: 'var(--text-muted)' }}>0</span>
                 }
               </div>
+              <button onClick={() => setPickerFor('out')}
+                className="flex items-center gap-2 rounded-full flex-shrink-0 active:opacity-70 transition-opacity"
+                style={{ height: 40, padding: '0 10px 0 6px', background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
+                <TLogo t={tokenOut} size={26}/>
+                <span className="text-[15px] font-bold text-text-primary">{tokenOut.id}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-text-secondary"/>
+              </button>
             </div>
+            {estimate && !(step === 'estimating' || liveQuoteLoading) && (
+              <p className="text-[13px]" style={{ marginTop: 12, color: 'var(--text-muted)' }}>
+                {swapTokenSymbolChar(tokenOut.id)}{formatAmount(parseFloat(estimate.estimatedOutput.amount), swapTokenDecimals(tokenOut.id))}
+              </p>
+            )}
           </div>
         </div>
         )}
 
-        {/* Rate card - separate from the pay/receive card, matching reference */}
+        {/* Rate and fee, one quiet line under the cards */}
         {isActive && estimate && (
-          <div className="rounded-2xl px-4 py-3.5 flex items-center justify-between"
-            style={{ background:'var(--surface)', border:'1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
-            <span className="text-sm font-bold text-text-primary">Rate</span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm text-text-secondary">
-                1 {tokenIn.id} ≈ {trimTrailingZeros((parseFloat(estimate.estimatedOutput.amount)/parseFloat(amountIn)).toFixed(
-                  tokenOut.id === 'cirBTC' ? 8 : 4
-                ))} {tokenOut.id}
-              </span>
-              <RefreshCw className="w-3.5 h-3.5 text-text-secondary"/>
-            </div>
+          <div className="flex items-center justify-between text-[13px]" style={{ padding: '0 6px', color: 'var(--text-secondary)' }}>
+            <span>
+              1 {tokenIn.id} = {trimTrailingZeros((parseFloat(estimate.estimatedOutput.amount)/parseFloat(amountIn)).toFixed(
+                tokenOut.id === 'cirBTC' ? 8 : 4
+              ))} {tokenOut.id}
+            </span>
+            <span>Fee ~${formatAmount(totalFees)}</span>
           </div>
         )}
 
