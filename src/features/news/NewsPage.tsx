@@ -188,7 +188,7 @@ export function NewsPage() {
         {items.filter(it => !showLive.some(l => l.id === it.id)).map(it => (
           <button key={it.id} data-news-id={it.id} className={it.id === flashId ? 'mp-last-opened' : undefined} onClick={() => openStory(it.id)}
             style={{ width: '100%', display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left', cursor: 'pointer',
-              background: 'none', border: 'none', borderBottom: '1px solid var(--border)', padding: '12px 0', color: 'var(--text-primary)' }}>
+              background: 'none', border: 'none', padding: '10px 0', color: 'var(--text-primary)' }}>
             {/* Same shape as the covers (1200×630), so their own title text isn't cut off at the sides. */}
             <NewsCover item={it} style={{ width: 112, aspectRatio: '1200 / 630', borderRadius: 10, flex: 'none' }} />
             <span style={{ minWidth: 0, flex: 1 }}>
@@ -199,7 +199,7 @@ export function NewsPage() {
         ))}
 
         {loading && Array.from({ length: items.length ? 2 : 6 }, (_, i) => (
-          <div key={`s${i}`} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
+          <div key={`s${i}`} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0' }}>
             <div style={{ width: 112, aspectRatio: '1200 / 630', borderRadius: 10, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
             <div style={{ flex: 1 }}>
               <div style={{ width: '90%', height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', marginBottom: 8 }} />
