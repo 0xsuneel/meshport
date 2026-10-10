@@ -459,7 +459,9 @@ function UsernameHint() {
   )
 }
 
-export function ChatListPage() {
+// newChat: the New Chat page (/chat/new) - same data as the list (contacts,
+// existing conversations), shown as its own page.
+export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   const navigate = useNavigate()
   const user          = useAuthStore(s => s.user)
   const chatWalletAddr = useAuthStore(s => s.walletAddress)
@@ -472,7 +474,6 @@ export function ChatListPage() {
   const [loading, setLoading] = useState(_cachedConversations.length === 0)
   const [newChatSearch, setNewChatSearch] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
-  const [showNewChat, setShowNewChat] = useState(false)
   // Last-known contacts show instantly (see peopleCache); the loader below refreshes them.
   const [savedContacts, setSavedContacts] = useState<DbUser[]>(() => readPeople<DbUser>('chat-contacts', user?.id) ?? [])
   const [contactsLoading, setContactsLoading] = useState(() => readPeople('chat-contacts', user?.id) === null)
@@ -687,9 +688,9 @@ export function ChatListPage() {
     const open = (convId: string) => {
       unhideChat(convId, chatWalletAddr)
       if (typeof other !== 'string') cacheOtherUser(convId, other)
-      setShowNewChat(false)
       setNewChatSearch(''); setSearchResults([])
-      navigate(`/chat/${convId}`)
+      // From New Chat, Back from the chat returns to the Chats list.
+      navigate(`/chat/${convId}`, newChat ? { replace: true } : undefined)
     }
     if (existing) { open(existing.id); return }
     setOpeningId(otherId)
@@ -737,6 +738,66 @@ export function ChatListPage() {
     if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null }
   }
 
+  if (newChat) {
+    return (
+      <div className="flex-1 overflow-y-auto bg-bg" style={{ paddingBottom: 90 }}>
+        <div className="sticky top-0 z-20 bg-bg/95 backdrop-blur-md px-5 pt-header pb-3">
+          <div className="header-row" style={{ gap: 12 }}>
+            <button onClick={() => navigate(-1)} className="back-btn" aria-label="Back">
+              <ArrowLeft className="w-5 h-5 text-text-primary" />
+            </button>
+            <h1 className="text-xl font-bold text-text-primary">New Chat</h1>
+          </div>
+        </div>
+        <div style={{ maxWidth: 560, margin: '0 auto' }}>
+        <div className="px-5 pt-1 pb-5 space-y-4">
+          <SearchField value={newChatSearch} onChange={setNewChatSearch} placeholder="Search contacts or username.arc"
+            ariaLabel="Search contacts or a username"
+            trailing={searching ? <Loader2 className="w-4 h-4 mr-2 animate-spin flex-shrink-0" style={{ color: 'var(--brand-text)' }} /> : undefined} />
+          {newPeople.length > 0 && (
+            <PeopleCard title="Found">
+              {newPeople.map((u: DbUser, i: number) => (
+                <PersonRow key={u.id} person={u} first={i === 0} busy={openingId === u.id}
+                  action="Message" onClick={() => startChat(u)} />
+              ))}
+            </PeopleCard>
+          )}
+
+          {visibleContacts.length > 0 ? (
+            <PeopleCard title="Your contacts" count={visibleContacts.length}>
+              {visibleContacts.map((c, i) => (
+                <PersonRow key={c.id} person={c} first={i === 0} busy={openingId === c.id}
+                  action="Message" onClick={() => startChat(c)} />
+              ))}
+            </PeopleCard>
+          ) : contactsLoading ? (
+            <PeopleCard title="Your contacts">
+              {[0, 1, 2, 3].map(i => <PersonRowSkeleton key={i} first={i === 0} />)}
+            </PeopleCard>
+          ) : contactQuery ? (
+            newPeople.length === 0 && !searching && (
+              contactQuery.endsWith('.arc')
+                ? <p className="text-center text-sm text-text-secondary py-2">No one found for &ldquo;{newChatSearch.trim()}&rdquo;</p>
+                : <UsernameHint />
+            )
+          ) : (
+            <>
+              <UsernameHint />
+              <div className="text-center py-6">
+                <div className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>
+                  <Users className="w-6 h-6" style={{ color: 'var(--brand-text)' }} />
+                </div>
+                <p className="text-sm font-semibold text-text-primary">No contacts yet</p>
+                <p className="text-xs text-text-secondary mt-1">Type someone's full username.arc above to message them</p>
+              </div>
+            </>
+          )}
+        </div>
+        </div>
+      </div>
+    )
+  }
+
   const filtered = search
     ? conversations.filter(c =>
         (c.other_user?.display_name || '').toLowerCase().includes(search.toLowerCase()) ||
@@ -751,7 +812,7 @@ export function ChatListPage() {
           <h1 className="text-xl font-bold text-text-primary">Chats</h1>
           <div className="flex items-center gap-2">
             <motion.button whileTap={{ scale: 0.9 }}
-              onClick={() => setShowNewChat(true)} aria-label="New chat"
+              onClick={() => navigate('/chat/new')} aria-label="New chat"
               className="w-10 h-10 rounded-full flex items-center justify-center"
               style={{ background: 'var(--brand)', boxShadow: 'var(--shadow-1)' }}>
               <SquarePen className="w-[17px] h-[17px]" style={{ color: '#fff' }} />
@@ -777,7 +838,7 @@ export function ChatListPage() {
           </div>
           <p className="text-text-secondary font-medium">No conversations yet</p>
           <p className="text-text-muted text-sm mt-1">Start a new conversation below</p>
-          <button onClick={() => setShowNewChat(true)}
+          <button onClick={() => navigate('/chat/new')}
             className="mt-4 px-4 py-2 btn-primary text-sm px-4 py-2 rounded-2xl">
             New Chat
           </button>
@@ -868,53 +929,6 @@ export function ChatListPage() {
           })}
         </div>
       )}
-
-      {/* New Chat Sheet */}
-      <Sheet isOpen={showNewChat} onClose={() => { setShowNewChat(false); setNewChatSearch(''); setSearchResults([]) }} title="New Chat" variant="center">
-        <div className="px-5 pt-1 pb-5 space-y-4">
-          <SearchField autoFocus value={newChatSearch} onChange={setNewChatSearch} placeholder="Search contacts or username.arc"
-            ariaLabel="Search contacts or a username"
-            trailing={searching ? <Loader2 className="w-4 h-4 mr-2 animate-spin flex-shrink-0" style={{ color: 'var(--brand-text)' }} /> : undefined} />
-          {newPeople.length > 0 && (
-            <PeopleCard title="Found">
-              {newPeople.map((u: DbUser, i: number) => (
-                <PersonRow key={u.id} person={u} first={i === 0} busy={openingId === u.id}
-                  action="Message" onClick={() => startChat(u)} />
-              ))}
-            </PeopleCard>
-          )}
-
-          {visibleContacts.length > 0 ? (
-            <PeopleCard title="Your contacts" count={visibleContacts.length}>
-              {visibleContacts.map((c, i) => (
-                <PersonRow key={c.id} person={c} first={i === 0} busy={openingId === c.id}
-                  action="Message" onClick={() => startChat(c)} />
-              ))}
-            </PeopleCard>
-          ) : contactsLoading ? (
-            <PeopleCard title="Your contacts">
-              {[0, 1, 2, 3].map(i => <PersonRowSkeleton key={i} first={i === 0} />)}
-            </PeopleCard>
-          ) : contactQuery ? (
-            newPeople.length === 0 && !searching && (
-              contactQuery.endsWith('.arc')
-                ? <p className="text-center text-sm text-text-secondary py-2">No one found for &ldquo;{newChatSearch.trim()}&rdquo;</p>
-                : <UsernameHint />
-            )
-          ) : (
-            <>
-              <UsernameHint />
-              <div className="text-center py-6">
-                <div className="w-14 h-14 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>
-                  <Users className="w-6 h-6" style={{ color: 'var(--brand-text)' }} />
-                </div>
-                <p className="text-sm font-semibold text-text-primary">No contacts yet</p>
-                <p className="text-xs text-text-secondary mt-1">Type someone's full username.arc above to message them</p>
-              </div>
-            </>
-          )}
-        </div>
-      </Sheet>
 
       {/* ── Profile Sheet (from chat list avatar tap) ── */}
       <AnimatePresence>
