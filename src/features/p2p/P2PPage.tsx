@@ -867,6 +867,8 @@ export function P2POfferDetailPage() {
   const [rating, setRating] = useState<{ avg: number; count: number } | null>(null)
   const [reputation, setReputation] = useState<UserReputation | null>(null)
   const [amount, setAmount] = useState('')
+  // Selling into a buy offer deposits that USDC to escrow: check the balance.
+  const usdcBalanceForSell = Number(useWalletStore(st => st.balance)) || 0
   const [accepting, setAccepting] = useState(false)
   const [showPasscodeSheet, setShowPasscodeSheet] = useState(false)
   const [passEntry, setPassEntry] = useState('')
@@ -977,6 +979,10 @@ export function P2POfferDetailPage() {
   )
 
   const amt = parseFloat(amount) || 0
+  const effMax = remainingAmt != null ? Math.min(offer.maxAmount, remainingAmt) : offer.maxAmount
+  // Selling into a buy offer: the USDC (plus a little gas) must be in the wallet.
+  const sellShort = offer.offerType === 'buy' && amt > Math.max(0, usdcBalanceForSell - 0.01)
+  const outOfLimit = amt > 0 && (amt < offer.minAmount || amt > effMax)
   const fiatTotal = Math.round(amt * offer.pricePerUsdc * 100) / 100
 
   return (
@@ -1055,15 +1061,25 @@ export function P2POfferDetailPage() {
               <input type="number" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)}
                 placeholder={`${offer.minAmount} – ${remainingAmt != null ? Math.min(offer.maxAmount, remainingAmt) : offer.maxAmount}`}
                 style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: '14px', fontSize: 18, fontWeight: 700, outline: 'none', boxSizing: 'border-box' }} />
-              {amt > 0 && (
+              {offer.offerType === 'buy' && (
+                <p style={{ fontSize: 12.5, marginTop: 6, fontWeight: 600, color: sellShort ? 'var(--danger)' : COLORS.muted }}>
+                  {sellShort ? 'Insufficient balance · ' : 'Balance '}{trimTrailingZeros(usdcBalanceForSell.toFixed(2))} USDC
+                </p>
+              )}
+              {outOfLimit && !sellShort && (
+                <p style={{ fontSize: 12.5, marginTop: 6, fontWeight: 600, color: 'var(--danger)' }}>
+                  Enter between {offer.minAmount} and {trimTrailingZeros(effMax.toFixed(2))} USDC
+                </p>
+              )}
+              {amt > 0 && !sellShort && !outOfLimit && (
                 <p style={{ fontSize: 13, color: 'var(--accent-text)', marginTop: 8 }}>You'll {offer.offerType === 'sell' ? 'pay' : 'receive'} ≈ {currencySymbol(offer.currency)}{fiatTotal}</p>
               )}
             </div>
 
-            <button onClick={accept} disabled={accepting || !amount} style={{
+            <button onClick={accept} disabled={accepting || !amount || sellShort || outOfLimit} style={{
               padding: '15px 0', borderRadius: 14, border: '1px solid color-mix(in srgb, black 12%, transparent)', cursor: 'pointer',
               background: COLORS.primary, color: '#fff', fontSize: 14.5, fontWeight: 700,
-              opacity: (accepting || !amount) ? 0.6 : 1,
+              opacity: (accepting || !amount || sellShort || outOfLimit) ? 0.45 : 1,
             }}>{accepting ? 'Starting trade…' : offer.offerType === 'sell' ? 'Buy USDC' : 'Sell USDC'}</button>
           </>
         )}
