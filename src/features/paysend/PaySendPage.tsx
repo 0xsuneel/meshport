@@ -159,7 +159,12 @@ export function PaySendPage() {
   // Optional message the payer adds on the amount page (saved with the payment).
   const [note, setNote] = useState('')
   const [amountError, setAmountError] = useState('')
-  const [token, setToken] = useState<Token>('USDC')
+  // ?token= - opened from a token's own page (Home → Assets), so the amount
+  // screen starts on that token.
+  const [token, setToken] = useState<Token>(() => {
+    const t = searchParams.get('token')
+    return t === 'EURC' || t === 'cirBTC' ? t : 'USDC'
+  })
   const settingsLoadedFlag = useSettingsStore((s) => s.loaded)
   useEffect(() => {
     if (!settingsLoadedFlag) return

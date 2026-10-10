@@ -295,6 +295,22 @@ export function deriveActivityRow(record: ActivityRecord) {
   }
 }
 
+// Same icons as the action buttons (Pay, Receive, Swap, P2P, Bulk Pay,
+// Multichain Hub, Rewards). null: the row keeps a plain arrow.
+export function activityRowIcon(record: ActivityRecord): ActionIconName | null {
+  const { metadata, isClaim, isTransfer, isSend, isReceive, isSwap, isBulk, isBulkReceived,
+    isP2PSellOrder, isP2PRefund, isP2PPurchase, isP2PCredit } = deriveActivityRow(record)
+  return (isP2PSellOrder || isP2PRefund || isP2PPurchase) ? 'p2p'
+    // Rewards points claimed to USDC (older rows only carry the sender name).
+    : isReceive && (metadata.receiveKind === 'reward_claim' || !!SYSTEM_LABELS[metadata.fromUsername]) ? 'rewards'
+    : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'receive'
+    : isSwap     ? 'swap'
+    : isBulk     ? 'bulk'
+    : isTransfer ? 'hub'
+    : isSend     ? 'pay'
+    : null
+}
+
 // ── Single row - hub style ─────────────────────────────────────────────────────
 function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
   record: ActivityRecord; isFirst: boolean; isLast: boolean; onSelect: () => void
@@ -308,18 +324,7 @@ function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
     statusColor, statusLabel, chain, subtitle, title, amountColor, amountPrefix, counterpartyLabel,
   } = deriveActivityRow(record)
 
-  // Same icons as the action buttons (Pay, Receive, Swap, P2P, Bulk Pay,
-  // Multichain Hub, Rewards). Anything else keeps the plain arrow below.
-  const rowIcon: ActionIconName | null =
-      (isP2PSellOrder || isP2PRefund || isP2PPurchase) ? 'p2p'
-    // Rewards points claimed to USDC (older rows only carry the sender name).
-    : isReceive && (metadata.receiveKind === 'reward_claim' || !!SYSTEM_LABELS[metadata.fromUsername]) ? 'rewards'
-    : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'receive'
-    : isSwap     ? 'swap'
-    : isBulk     ? 'bulk'
-    : isTransfer ? 'hub'
-    : isSend     ? 'pay'
-    : null
+  const rowIcon = activityRowIcon(record)
 
   return (
     <div onClick={onSelect} data-activity-id={record.id} className={flash ? 'mp-last-opened' : undefined} style={{

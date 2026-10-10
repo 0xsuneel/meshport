@@ -1,5 +1,6 @@
 import { useHubLabel, useMerchant } from '@/lib/merchant'
 import { fetchBtcPriceUsd } from '@/lib/btcPrice'
+import { loadAssetSlot, saveAssetSlot } from '@/lib/assetSlot'
 import { handBiometricPasscode } from '@/lib/biometricHandoff'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { isUbChain } from '@/lib/ubChains'
@@ -13,7 +14,7 @@ import { parseUnits } from 'viem'
 import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
-import { formatAmount, copyToClipboard, timeAgo, trimTrailingZeros } from '@/lib/utils'
+import { copyToClipboard, timeAgo, trimTrailingZeros } from '@/lib/utils'
 import { readArcBalanceOrThrow, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT, EXTERNAL_SCAN_PROGRESS_EVENT } from '@/blockchain/BlockchainManager'
 import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpinner'
 import { notifyPaymentReceived, notifyPaymentReceivedFromAddress, notifyBulkPaymentReceived } from '@/lib/notifications'
@@ -28,7 +29,7 @@ import { BALANCES_STALE_EVENT } from '@/lib/balanceRefresh'
 import { onReconnect, useReconnectCount, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { fetchRecentContacts, recentInitial, recentShortName, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
 import { useSettingsStore } from '@/store/settingsStore'
-import { activityLabel, activitySign, type ActivityType, type ActivityRecord } from '@/lib/ActivityService'
+import { activityLabel, activitySign, type ActivityRecord } from '@/lib/ActivityService'
 // Reused so the desktop "Recent Activity" panel shows the exact same
 // title wording as the Activity page itself (Paid to / Received from /
 // Claimed from / Transfer to / P2P Sell Order Cancelled, including
@@ -602,173 +603,6 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
         }}>
         <div style={{ width: 36, height: 4, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)', margin: '4px auto 14px' }} />
         {content}
-      </motion.div>
-    </>,
-    document.body,
-  )
-}
-
-// ── Asset History Sheet ───────────────────────────────────────────────────────
-function AssetSheet({ token, history, onClose, onOpen }: { token: string; history: any[]; onClose: () => void; onOpen: (item: any) => void }) {
-  const isDesktop = useMediaQuery('(min-width: 980px)')
-  // Phone: a full bottom sheet - hide the bottom navigation while it's up.
-  const setNavHidden = useUIStore(s => s.setNavHidden)
-  useEffect(() => {
-    if (isDesktop) return
-    setNavHidden(true)
-    return () => setNavHidden(false)
-  }, [isDesktop, setNavHidden])
-  const headerRow = (
-    <div style={{ padding: '16px 20px',
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-      <span style={{ fontSize: 17, fontWeight: 700 }}>{token} History</span>
-      <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: '50%',
-        background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', border: 'none', color: 'var(--text-secondary)',
-        cursor: 'pointer', fontSize: 18, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-    </div>
-  )
-  const listBody = (
-        <div style={{ overflowY: 'auto', flex: 1 }}>
-          {history.length === 0 ? (
-            <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>No {token} transactions yet</div>
-          ) : history.map((item: any, i: number) => {
-            const type: ActivityType = item.activityType
-            const meta = item.metadata || {}
-            const direction = meta.direction as string | undefined
-
-            // Swaps are stored as ONE activity row tagged with the INPUT
-            // side's token/amount (amount = amountIn, tokenSymbol = tokenIn;
-            // see ActivityService.saveActivity.swap). This sheet shows one
-            // token's history at a time, so a swap needs to be re-signed and
-            // re-amounted per which side `token` (the sheet's asset) was:
-            // the side sent (tokenIn, so '-' and amountIn) or the side
-            // received (tokenOut, so '+' and amountOut). Without this,
-            // every swap row showed a neutral gray sign and always the
-            // input-side amount - wrong number entirely when viewing the
-            // output token's sheet (e.g. opening EURC's history for a
-            // USDC->EURC swap showed "10.00 EURC" instead of "+9.40 EURC").
-            let sign: '+' | '-' | '↔' = activitySign(type, direction)
-            let displayAmount = item.amount
-            if (type === 'swap') {
-              if (token === meta.tokenOut) {
-                sign = '+'
-                displayAmount = meta.amountOut ?? item.amount
-              } else {
-                sign = '-'
-                displayAmount = meta.amountIn ?? item.amount
-              }
-            }
-            const isSent = sign === '-'
-            const color = sign === '+' ? 'var(--success)' : sign === '-' ? 'var(--danger)' : 'var(--text-secondary)'
-
-            const formatAddr = (addr?: string) => addr ? addr.slice(0, 6) + '...' + addr.slice(-6) : ''
-            const formatChain = (c?: string) => c ? c.replace(/_/g, ' ') : ''
-
-            // Title/subtitle - reuse the exact same derivation as the
-            // Activity page (Paid to / Received from / Claimed from /
-            // Transfer to / P2P Sell Order Cancelled, including self-
-            // transfer "Self") for every type it models, so this sheet can
-            // never drift from the Activity page's wording again.
-            // 'deposit' isn't modeled by deriveActivityRow (a pre-existing
-            // gap on the Activity page itself, not something introduced
-            // here) - kept on its prior wording below so this change
-            // doesn't regress a type nobody asked to change. Any other
-            // genuinely unhandled type falls back the same way it already
-            // did before this change.
-            const derived = deriveActivityRow(item)
-            let title = derived.title
-            let subtitle = derived.subtitle
-            if (type === 'deposit') {
-              title = activityLabel(type)
-              subtitle = `From ${formatChain(item.sourceChain)}`
-            } else if (!['send','receive','swap','bulk','bridge','claim','p2p_sell_order','p2p_refund','p2p_purchase'].includes(type)) {
-              title = activityLabel(type)
-              subtitle = formatAddr(item.counterpartyAddress) || type
-            }
-
-            const rawDate = item.createdAt || item.updatedAt
-            const d = rawDate ? new Date(rawDate) : null
-            const dateStr = d && !isNaN(d.getTime())
-              ? `${d.toLocaleDateString()} · ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-              : ''
-
-            // BUG FIX: cirBTC amounts are often tiny fractions (e.g.
-            // 0.000067), and so can USDC/EURC ones on this testnet
-            // (chat-pay/dust amounts) - the default 2-decimal formatAmount()
-            // rounds any of these straight to "0.00" (then "0" once
-            // trimmed), hiding a real, nonzero amount. Apply the same
-            // magnitude-based precision tiers regardless of token, not just
-            // for cirBTC.
-            const amtNum = Number(displayAmount) || 0
-            const amtAbs = Math.abs(amtNum)
-            const amountStr = amtAbs !== 0 && amtAbs < 0.01
-              ? trimTrailingZeros(amtAbs < 0.0001 ? amtNum.toFixed(8) : amtNum.toFixed(6))
-              : formatAmount(amtNum)
-
-            return (
-              <button key={item.id || i} onClick={() => onOpen(item)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '13px 20px', textAlign: 'left',
-                  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', font: 'inherit' }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                  background: isSent ? 'color-mix(in srgb, var(--danger) 10%, transparent)' : 'color-mix(in srgb, var(--success) 10%, transparent)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    {isSent
-                      ? <><path d="M2 12L12 2" stroke="var(--danger)" strokeWidth="1.5" strokeLinecap="round"/><path d="M12 2H6M12 2V8" stroke="var(--danger)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></>
-                      : <><path d="M12 2L2 12" stroke="var(--success)" strokeWidth="1.5" strokeLinecap="round"/><path d="M2 12H8M2 12V6" stroke="var(--success)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></>}
-                  </svg>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{title}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {subtitle}
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color }}>
-                    {sign}{amountStr} {token}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
-                    {dateStr || '-'}
-                  </div>
-                </div>
-              </button>
-            )
-          })}
-        </div>
-  )
-
-  if (isDesktop) {
-    return (
-      <DesktopDialogFrame onClose={onClose} maxWidth={440}>
-        <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '70vh' }}>
-          {headerRow}
-          {listBody}
-        </div>
-      </DesktopDialogFrame>
-    )
-  }
-  // Phone: slides up from the bottom (same sheet as the More actions), over
-  // where the navigation was. Portaled for the same iOS stacking reason.
-  return createPortal(
-    <>
-      <motion.div key="asset-backdrop"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SHEET_BACKDROP.transition}
-        onClick={onClose}
-        style={{ position: 'fixed', inset: 0, maxWidth: 430, margin: '0 auto', zIndex: 9990, background: 'rgba(0,0,0,0.32)' }} />
-      <motion.div key="asset-sheet" role="dialog" aria-modal="true" aria-label={`${token} history`}
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT} transition={SHEET_SPRING}
-        style={{
-          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 9991,
-          maxWidth: 430, margin: '0 auto', maxHeight: '82dvh',
-          display: 'flex', flexDirection: 'column',
-          background: 'var(--surface)', borderRadius: '28px 28px 0 0',
-          borderTop: '1px solid var(--border)', boxShadow: 'var(--shadow-3)',
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)', margin: '10px auto 0', flexShrink: 0 }} />
-        {headerRow}
-        {listBody}
       </motion.div>
     </>,
     document.body,
@@ -2301,22 +2135,6 @@ function FeatureBanner({ height, onOpen }: { height: number; onOpen: (path: stri
   )
 }
 
-// Last EURC/cirBTC amounts per wallet, for instant first paint (USDC's lives
-// in the wallet store). Testnet balances only - nothing sensitive.
-type AssetSlot = { eurc: number; cirbtc: number }
-const assetSlotKey = (addr: string | null) => addr ? `meshport_assets_${addr.toLowerCase()}` : null
-function loadAssetSlot(addr: string | null): AssetSlot {
-  const k = assetSlotKey(addr)
-  try {
-    const v = k ? JSON.parse(localStorage.getItem(k) || 'null') : null
-    return { eurc: typeof v?.eurc === 'number' ? v.eurc : 0, cirbtc: typeof v?.cirbtc === 'number' ? v.cirbtc : 0 }
-  } catch { return { eurc: 0, cirbtc: 0 } }
-}
-function saveAssetSlot(addr: string | null, patch: Partial<AssetSlot>) {
-  const k = assetSlotKey(addr)
-  if (!k) return
-  try { localStorage.setItem(k, JSON.stringify({ ...loadAssetSlot(addr), ...patch })) } catch {}
-}
 
 export function HomePage() {
   const navigate = useNavigate()
@@ -2736,7 +2554,6 @@ export function HomePage() {
   // React's per-frame re-render fighting Framer's per-frame drag update on
   // the same frame budget if the animation happened to fire mid-swipe.
 
-  const [assetSheet,   setAssetSheet]   = useState<'USDC'|'EURC'|'cirBTC'|null>(null)
   // Desktop's Recent Activity panel - tapping a row used to navigate away to
   // /activity entirely (same as "View all"), so there was no way to see a
   // single transaction's detail without leaving Home. Reuses ActivityPage's
@@ -2760,7 +2577,6 @@ export function HomePage() {
   // afterward to ever finish. This ref lets us use the header's actual
   // rendered bottom edge (stable on-screen since it's sticky) instead.
   const stickyHeaderRef = useRef<HTMLDivElement>(null)
-  const [assetHistory, setAssetHistory] = useState<any[]>([])
 
   // CHANGE 1: More sheet state
   const [showMore, setShowMore] = useState(false)
@@ -3639,42 +3455,6 @@ export function HomePage() {
   const shortAddr = walletAddress ? walletAddress.slice(0, 6) + '...' + walletAddress.slice(-6) : ''
   const arcHandle = (username || '').replace(/\.arc$/, '') + '.arc'
 
-  const openAssetHistory = async (token: 'USDC'|'EURC'|'cirBTC') => {
-    setAssetSheet(token)
-    if (!walletAddress) return
-    try {
-      const { fetchActivity } = await import('@/lib/ActivityService')
-      if (token === 'USDC') {
-        const records = await fetchActivity(walletAddress, { limit: 100 })
-        const usdcTypes = new Set(['send', 'receive', 'claim', 'bridge', 'deposit', 'bulk'])
-        const usdcNonSwap = records.filter(r => usdcTypes.has(r.activityType) && (r.tokenSymbol || 'USDC') === 'USDC')
-        // Swaps are fetched separately (fetchActivity's default type filter
-        // doesn't cover 'swap' the way the non-swap types above do) and
-        // merged in - a USDC->EURC swap moves USDC too, so it belongs in
-        // USDC's history same as EURC's. AssetSheet itself figures out
-        // which side (in/out) applies to the token being viewed.
-        const swapRecords = await fetchActivity(walletAddress, { activityType: 'swap', limit: 100 })
-        const usdcSwaps = swapRecords.filter(r => r.metadata?.tokenIn === 'USDC' || r.metadata?.tokenOut === 'USDC')
-        setAssetHistory([...usdcNonSwap, ...usdcSwaps].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()))
-      } else {
-        // Was swap-only before - a direct receive of EURC/cirBTC (not via
-        // a swap) never showed up here at all, which is exactly why
-        // cirBTC's history could appear completely empty for a wallet
-        // that had only ever received it directly. Now matches USDC's own
-        // logic: direct activity for this specific token, merged with any
-        // swaps that moved it.
-        const directTypes = new Set(['send', 'receive', 'claim', 'bridge', 'deposit', 'bulk'])
-        const records = await fetchActivity(walletAddress, { limit: 100 })
-        const directForToken = records.filter(r => directTypes.has(r.activityType) && r.tokenSymbol === token)
-
-        const swapRecords = await fetchActivity(walletAddress, { activityType: 'swap', limit: 100 })
-        const swapsForToken = swapRecords.filter(r => r.metadata?.tokenIn === token || r.metadata?.tokenOut === token)
-
-        setAssetHistory([...directForToken, ...swapsForToken].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()))
-      }
-    } catch { setAssetHistory([]) }
-  }
-
   // ── Desktop-only: Insights column + Recent Activity + Balance trend ────────
   // Skipped entirely on mobile (none of these widgets render there) so no
   // extra network round-trip happens on the phone-shell experience. Fetches
@@ -4249,7 +4029,7 @@ export function HomePage() {
               cryptoAmount={`${fmt(balance)} USDC`}
               usdValue={`$${fmt(balance)}`}
               usdColor="var(--brand-text)"
-              onClick={() => openAssetHistory('USDC')}
+              onClick={() => navigate('/asset/USDC')}
               hidden={balanceHidden}
               changePct={isDesktop ? assetChange24h.USDC : undefined}
               border
@@ -4261,7 +4041,7 @@ export function HomePage() {
               cryptoAmount={`${fmt(eurcBalance)} EURC`}
               usdValue={`$${fmt(eurcBalance * 1.08)}`}
               usdColor="var(--brand-text)"
-              onClick={() => openAssetHistory('EURC')}
+              onClick={() => navigate('/asset/EURC')}
               hidden={balanceHidden}
               changePct={isDesktop ? assetChange24h.EURC : undefined}
               border
@@ -4273,7 +4053,7 @@ export function HomePage() {
               cryptoAmount={`${cirBtcBalance > 0 ? trimTrailingZeros(cirBtcBalance < 0.0001 ? cirBtcBalance.toFixed(8) : cirBtcBalance.toFixed(6)) : '0'} cirBTC`}
               usdValue={cirBtcBalance > 0 && btcPrice === 0 ? "Fetching..." : `$${trimTrailingZeros((cirBtcBalance * btcPrice).toFixed(2)).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`}
               usdColor="var(--warning)"
-              onClick={() => openAssetHistory('cirBTC')}
+              onClick={() => navigate('/asset/cirBTC')}
               hidden={balanceHidden}
               changePct={isDesktop ? assetChange24h.cirBTC : undefined}
             />
@@ -4457,14 +4237,6 @@ export function HomePage() {
         />
       )}
 
-      {/* ── ASSET HISTORY SHEET ─────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {assetSheet && (
-          <AssetSheet key="asset-sheet" token={assetSheet} history={assetHistory} onClose={() => setAssetSheet(null)}
-            // Tap a row → Activity, with that transaction opened.
-            onOpen={item => { setAssetSheet(null); navigate('/activity', { state: { openActivity: item } }) }} />
-        )}
-      </AnimatePresence>
       {selectedActivity && (
         <DetailSheet record={selectedActivity} onClose={() => setSelectedActivity(null)} />
       )}

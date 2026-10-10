@@ -43,6 +43,7 @@ const ActivityPage          = lazyRetry(() => import('./features/activity/Activi
 const TransactionDetailPage = lazyRetry(() => import('./features/activity/TransactionDetail').then(m => ({ default: m.TransactionDetailPage })), 'TransactionDetailPage')
 const InsightsPage          = lazyRetry(() => import('./features/insights/InsightsRoute').then(m => ({ default: m.InsightsRoute })), 'InsightsPage')
 const RewardsPage           = lazyRetry(() => import('./features/rewards/RewardsPage').then(m => ({ default: m.RewardsPage })), 'RewardsPage')
+const AssetPage             = lazyRetry(() => import('./features/home/AssetPage').then(m => ({ default: m.AssetPage })), 'AssetPage')
 const RecentPaidPage        = lazyRetry(() => import('./features/recent/RecentPaidPage').then(m => ({ default: m.RecentPaidPage })), 'RecentPaidPage')
 const NewsPage              = lazyRetry(() => import('./features/news/NewsPage').then(m => ({ default: m.NewsPage })), 'NewsPage')
 const NewsArticlePage       = lazyRetry(() => import('./features/news/NewsArticlePage').then(m => ({ default: m.NewsArticlePage })), 'NewsArticlePage')
@@ -423,6 +424,7 @@ const router = createBrowserRouter([
       { path: 'receive',                    element: <FeatureGate feature="receive_enabled"><ReceivePage /></FeatureGate> },
       { path: 'rewards',                    element: <FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate> },
       { path: 'recent-paid',                element: <RecentPaidPage /> },
+      { path: 'asset/:token',               element: <AssetPage /> },
       { path: 'news',                       element: <NewsPage /> },
       { path: 'news/:id',                   element: <NewsArticlePage /> },
       { path: 'bulk-payout',                element: <FeatureGate feature="bulk_payments_enabled"><BulkPayoutPage /></FeatureGate> },
