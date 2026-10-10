@@ -237,6 +237,9 @@ export function BulkPayoutPage() {
   // More than the USDC balance (payout + network fee, both paid in USDC):
   // warn on the summary and review, and keep Review Payout / Pay dimmed.
   const bulkNeeded = totalAmount + estimatedFee
+  // What's left for the next recipient: balance minus everyone already added
+  // and the network fee with one more recipient (Max on the amount box).
+  const remainingForNext = Math.max(0, (Number(balance) || 0) - totalAmount - (0.002 + (recipients.length + 1) * 0.0002))
   const bulkInsufficient = recipients.length > 0 && totalAmount > 0 && bulkNeeded > (Number(balance) || 0) + 1e-9
   const insufficientNote = bulkInsufficient && (
     <div role="alert" className="rounded-2xl p-3.5" style={{ background: 'color-mix(in srgb, var(--danger) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 20%, transparent)' }}>
@@ -869,16 +872,20 @@ export function BulkPayoutPage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
                   <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>USDC</span>
-                  {balance > 0 && (
-                    <button onClick={e => { e.stopPropagation(); setRowAmount(trimTrailingZeros((Math.floor(balance * 100) / 100).toFixed(2))) }}
+                  {(parseFloat(rowAmount) || 0) > remainingForNext + 1e-9 ? (
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)' }}>
+                      Insufficient balance · Max {formatAmount(Math.floor(remainingForNext * 100) / 100)}
+                    </span>
+                  ) : balance > 0 && (
+                    <button onClick={e => { e.stopPropagation(); setRowAmount(trimTrailingZeros((Math.floor(remainingForNext * 100) / 100).toFixed(2))) }}
                       style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand-text)' }}>
-                      Max: {formatAmount(balance)}
+                      Max: {formatAmount(Math.floor(remainingForNext * 100) / 100)}
                     </button>
                   )}
                 </div>
               </div>
               <button onClick={() => { setShowBulkAmountPad(false); handleRowAdd() }}
-                disabled={!rowAmount || parseFloat(rowAmount) <= 0}
+                disabled={!rowAmount || parseFloat(rowAmount) <= 0 || parseFloat(rowAmount) > remainingForNext + 1e-9}
                 className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand-text rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition-all">
                 <Plus className="w-4 h-4" /> Add Recipient
               </button>
@@ -1360,7 +1367,7 @@ export function BulkPayoutPage() {
         open={showBulkAmountPad}
         value={rowAmount}
         onChange={v => setRowAmount(v)}
-        balance={balance}
+        balance={remainingForNext}
         token="USDC"
         quickAmounts={[10, 20, 50, 100]}
         // The amount box above already has its own Max, like Transfer.
