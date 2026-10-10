@@ -1998,6 +1998,16 @@ function MobileHeroCarousel({
   // row's position out from under an active gesture or animation.
   const heroGestureActive = useRef(false)
   const heroAnimationRef = useRef<{ stop: () => void } | null>(null)
+  // The row gets its own GPU layer ONLY while a finger is on it or it is
+  // settling - that is what the drag needs (see the style comment below).
+  // Kept permanently, the clipped layer was redrawn out of step with the
+  // page whenever Home slid in or out (opening a page from Home, coming
+  // back, switching tabs), so the two peek edges flickered on Android.
+  const heroRowRef = useRef<HTMLDivElement>(null)
+  const setHeroLayer = (on: boolean) => {
+    const el = heroRowRef.current
+    if (el) el.style.willChange = on ? 'transform' : ''
+  }
   useEffect(() => {
     if (heroGestureActive.current) return
     heroRowX.set(HERO_REST_X)
@@ -2063,12 +2073,13 @@ function MobileHeroCarousel({
     // same frame. Now that this component is isolated (see the file-level
     // comment above), that forced render only touches this small subtree.
     flushSync(() => { setHeroCardIndex(i => (i === 0 ? 1 : 0)) })
+    setHeroLayer(true)
     heroRowX.set(currentX - revealOffset)
     // Use one linear slide for the entire 3-card row. No spring/bounce.
     heroAnimationRef.current = animate(heroRowX, HERO_REST_X, {
       duration: 0.28,
       ease: 'easeOut',
-      onComplete: () => { heroAnimationRef.current = null; heroGestureActive.current = false },
+      onComplete: () => { heroAnimationRef.current = null; heroGestureActive.current = false; setHeroLayer(false) },
     })
   }
   const snapHeroBack = () => {
@@ -2076,7 +2087,7 @@ function MobileHeroCarousel({
     heroAnimationRef.current = animate(heroRowX, HERO_REST_X, {
       duration: 0.28,
       ease: 'easeOut',
-      onComplete: () => { heroAnimationRef.current = null; heroGestureActive.current = false },
+      onComplete: () => { heroAnimationRef.current = null; heroGestureActive.current = false; setHeroLayer(false) },
     })
   }
 
@@ -2102,32 +2113,25 @@ function MobileHeroCarousel({
            real content - not a placeholder - is what grows into view. ── */}
       <div ref={heroCarouselRef} style={{ width: '100%', overflow: 'hidden', position: 'relative' }}>
         <motion.div
+          ref={heroRowRef}
           drag="x"
           dragElastic={0}
           dragConstraints={{ left: HERO_REST_X - (CARD_W + PEEK_GAP), right: HERO_REST_X + (CARD_W + PEEK_GAP) }}
           dragMomentum={false}
-          onDragStart={() => { heroAnimationRef.current?.stop(); heroAnimationRef.current = null; heroGestureActive.current = true }}
+          onDragStart={() => { heroAnimationRef.current?.stop(); heroAnimationRef.current = null; heroGestureActive.current = true; setHeroLayer(true) }}
           style={{
             display: 'flex', alignItems: 'flex-start', x: heroRowX, touchAction: 'pan-y', cursor: 'grab',
-            // Promotes the row to its own GPU compositor layer, since
-            // rounded corners + overflow:hidden clipping on an element
+            // Rounded corners + overflow:hidden clipping on an element
             // being transformed every frame is a known mobile-Chrome
-            // repaint glitch. `z: 0` (a Framer Motion style prop, not raw
-            // CSS) rather than a manual `transform: translateZ(0)` -
-            // Framer computes the actual `transform` CSS property itself
-            // from x/y/z, so setting `z` through it (instead of fighting
-            // it with a raw transform) is what actually promotes this to
-            // its own layer. NOTE: this GPU hint stays on the ROW only -
-            // a previous attempt to ALSO give the individual slot divs
-            // their own static `transform` caused a worse bug (one edge
-            // going completely missing after a swipe, a known Chrome
-            // repaint-invalidation issue when a child has a static
-            // transform inside a parent whose transform is animated) -
-            // do not add per-slot transforms again.
-            z: 0,
-            willChange: 'transform',
-            WebkitBackfaceVisibility: 'hidden',
-            backfaceVisibility: 'hidden',
+            // repaint glitch, so the row is promoted to its own GPU layer
+            // (will-change) - but only WHILE it moves (setHeroLayer, on
+            // drag start / settle, off when the settle ends). A permanent
+            // layer (the old z:0 + will-change + backface-visibility here)
+            // made the peek edges flicker whenever the whole page slid.
+            // NOTE: no per-slot transforms either - giving the slot divs
+            // their own static `transform` caused one edge to go missing
+            // after a swipe (a Chrome repaint-invalidation issue when a
+            // child has a static transform inside an animated parent).
           }}
           onDragEnd={(_e, info) => {
             const threshold = CARD_W * 0.15
