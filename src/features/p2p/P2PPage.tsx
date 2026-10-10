@@ -107,8 +107,10 @@ export function Header({ title, onBack, right, hideDemoIconOnMobile }: { title: 
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '18px 16px 6px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
         {!isDesktop && (
-          <button onClick={onBack} aria-label="Back" style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer', flexShrink: 0 }}>
-            <ArrowLeft size={22} color={COLORS.text} />
+          <button onClick={onBack} aria-label="Back" className="back-btn"
+            // This header has 16px side padding (other pages 20px): line the arrow up with them.
+            style={{ marginLeft: -6 }}>
+            <ArrowLeft size={20} color={COLORS.text} />
           </button>
         )}
         <h1 style={{ fontSize: 20, fontWeight: 700, color: COLORS.text, margin: 0, letterSpacing: '-0.2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</h1>

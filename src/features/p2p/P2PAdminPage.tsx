@@ -387,8 +387,10 @@ export function P2PAdminPage() {
     <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: 40 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '18px 16px 6px' }}>
         {!isDesktop && (
-          <button onClick={() => ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0 ? navigate(-1) : navigate(`${ADMIN_PATH}/dashboard`, { replace: true })} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer' }}>
-            <ArrowLeft size={22} color={COLORS.text} />
+          <button onClick={() => ((window.history.state as { idx?: number } | null)?.idx ?? 0) > 0 ? navigate(-1) : navigate(`${ADMIN_PATH}/dashboard`, { replace: true })} className="back-btn" aria-label="Back"
+            // This header has 16px side padding (other pages 20px): line the arrow up with them.
+            style={{ marginLeft: -6 }}>
+            <ArrowLeft size={20} color={COLORS.text} />
           </button>
         )}
         <h1 style={{ fontSize: 20, fontWeight: 700, color: COLORS.text, margin: 0, letterSpacing: '-0.2px' }}>P2P Admin</h1>
