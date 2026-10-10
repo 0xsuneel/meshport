@@ -3,7 +3,8 @@
 // a card. Links shared before the rename (`<app>/pay/<username>`) still parse.
 // Merchant links (`/paylink/r/<code>`) are handled by merchantPay.codeFromLink.
 
-export type PersonalPayLink = { username: string; amount: string | null; url: string }
+// token: EURC / cirBTC when the link asks for that token (?token=), else USDC.
+export type PersonalPayLink = { username: string; amount: string | null; url: string; token?: 'USDC' | 'EURC' | 'cirBTC' }
 
 /** Chat → pay a personal payment link in-chat (ChatPage listens). */
 export const PAY_LINK_EVENT = 'meshport:pay-link'
@@ -21,11 +22,17 @@ export function parsePersonalPayLink(text: string): PersonalPayLink | null {
     const username = rawUser.toLowerCase().replace(/\.arc$/, '')
     if (username === 'r' || !isMeshPortHost(host)) continue
     let amount: string | null = null
+    let token: PersonalPayLink['token'] = 'USDC'
     if (query) {
-      const a = new URLSearchParams(query).get('amount')
-      if (a && /^\d+(\.\d{1,6})?$/.test(a) && Number(a) > 0) amount = a
+      const q = new URLSearchParams(query)
+      const t = q.get('token')
+      if (t === 'EURC' || t === 'cirBTC') token = t
+      const a = q.get('amount')
+      // cirBTC has 8 decimals, USDC / EURC 6.
+      const re = token === 'cirBTC' ? /^\d+(\.\d{1,8})?$/ : /^\d+(\.\d{1,6})?$/
+      if (a && re.test(a) && Number(a) > 0) amount = a
     }
-    return { username, amount, url }
+    return { username, amount, url, token }
   }
   return null
 }

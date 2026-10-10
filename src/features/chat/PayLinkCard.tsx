@@ -13,13 +13,21 @@ export function PayLinkCard({ link, isMine }: { link: PersonalPayLink; isMine: b
   const navigate = useNavigate()
   const myUsername = useAuthStore(s => (s.user as any)?.username as string | undefined)
   const own = !!myUsername && myUsername.toLowerCase().replace(/\.arc$/, '') === link.username
+  const token = link.token ?? 'USDC'
+  const sym = token === 'EURC' ? '€' : token === 'cirBTC' ? '' : '$'
+  const amountText = link.amount ? `${sym}${token === 'cirBTC' ? link.amount : formatAmount(Number(link.amount))}` : ''
   const pay = (e: React.MouseEvent) => {
     e.stopPropagation()
     // ChatPage handles it when the link belongs to the chat partner;
     // otherwise (nobody handled it) open the link's pay page.
     const ev = new CustomEvent(PAY_LINK_EVENT, { detail: { ...link, handled: false }, cancelable: true })
     window.dispatchEvent(ev)
-    if (!(ev.detail as any).handled) navigate(`/paylink/${link.username}${link.amount ? `?amount=${encodeURIComponent(link.amount)}` : ''}`)
+    if (!(ev.detail as any).handled) {
+      const q = new URLSearchParams()
+      if (link.amount) q.set('amount', link.amount)
+      if (token !== 'USDC') q.set('token', token)
+      navigate(`/paylink/${link.username}${q.toString() ? `?${q}` : ''}`)
+    }
   }
   // Same colour-band card as payments and bills (brand band for a link),
   // at the shared chat card width.
@@ -36,7 +44,7 @@ export function PayLinkCard({ link, isMine }: { link: PersonalPayLink; isMine: b
           <Link2 size={13} className="flex-shrink-0" /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Payment link · {link.username}.arc</span>
         </div>
         <div style={{ position: 'relative', fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px', lineHeight: 1.1, marginTop: 3 }}>
-          {link.amount ? <>${formatAmount(Number(link.amount))} <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.85 }}>USDC</span></> : 'Any amount'}
+          {link.amount ? <>{amountText} <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.85 }}>{token}</span></> : token === 'USDC' ? 'Any amount' : `Any amount · ${token}`}
         </div>
       </div>
       <div style={{ padding: '10px 13px 12px' }}>
@@ -46,7 +54,7 @@ export function PayLinkCard({ link, isMine }: { link: PersonalPayLink; isMine: b
         {!isMine && !own && (
           <button onClick={pay}
             style={{ width: '100%', marginTop: 8, padding: '9px 0', borderRadius: 10, border: 'none', background: 'var(--text-primary)', color: 'var(--surface)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>
-            {link.amount ? `Pay now · $${formatAmount(Number(link.amount))}` : 'Pay now'}
+            {link.amount ? `Pay now · ${amountText}${token === 'cirBTC' ? ' cirBTC' : ''}` : 'Pay now'}
           </button>
         )}
       </div>
