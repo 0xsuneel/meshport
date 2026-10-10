@@ -5437,6 +5437,11 @@ export function ChatConversationPage() {
 
                 {payError ? (
                   <p role="alert" className="text-sm text-danger text-center">{payError}</p>
+                ) : payInsufficient && payLocked ? (
+                  // Bill / payment-link amount is fixed - say what's missing.
+                  <p role="alert" className="text-sm text-danger text-center">
+                    Insufficient balance - this {billPay ? 'order' : 'request'} needs {formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} {payToken}, you have {formatAmount(payTokenBalanceOf(payToken), chatPayTokenDecimals(payToken))} {payToken}.
+                  </p>
                 ) : isDesktop && payInsufficient ? (
                   <p role="alert" className="text-sm text-danger text-center">Insufficient balance</p>
                 ) : null}
