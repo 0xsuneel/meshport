@@ -417,7 +417,14 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
         // responds, so an un-awaited push was usually cut off before it
         // reached the push service - the phone got nothing while the app
         // was closed. The sender's UI doesn't wait on this response.
-        try {
+        // "Payments from strangers: Block": the payment still lands (on-chain),
+        // but no alert from someone the recipient doesn't know.
+        const quiet = senderWallet
+          ? await supaFetch('/rpc/chat_quiet_from', 'POST', { recipient: recipientId, from_wallet: senderWallet })
+              .then(r => r.ok && r.data === true).catch(() => false)
+          : false
+        if (quiet) console.log('[chat/send] push skipped: recipient blocks stranger payments')
+        else try {
           const push = await Promise.race([
             sendPushToUser(recipientId, {
               title: 'Received',

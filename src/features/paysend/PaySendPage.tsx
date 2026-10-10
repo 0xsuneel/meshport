@@ -42,6 +42,7 @@ import { ScreenPush } from '@/components/ui/ScreenPush'
 import { readPeople, writePeople } from '@/lib/peopleCache'
 import { SearchField } from '@/components/ui/SearchField'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
+import { reachCheck, STRANGER_PAY_BLOCKED } from '@/lib/privacy'
 
 type Screen = 'search' | 'amount' | 'review'
 type Token = 'USDC' | 'EURC' | 'cirBTC'
@@ -265,6 +266,19 @@ export function PaySendPage() {
     return () => { cancelled = true }
   }, [recipient?.walletAddress, recipient?.verified, merchantPayCode])
   const recipientUnverified = recipient?.verified === false
+  // Chat privacy: the recipient may only accept payments from their contacts.
+  // Checked as soon as they're picked (nothing can be reviewed or sent), and
+  // again just before signing (runProcessing).
+  const [payBlocked, setPayBlocked] = useState(false)
+  useEffect(() => {
+    setPayBlocked(false)
+    const rid = recipient?.id
+    if (!rid || merchantPayCode) return
+    let cancelled = false
+    reachCheck(rid).then(r => { if (!cancelled) setPayBlocked(!r.canPay) })
+    return () => { cancelled = true }
+  }, [recipient?.id, merchantPayCode])
+  const payBlockedMessage = STRANGER_PAY_BLOCKED(recipient?.display || 'This person')
 
   const returnConvId = locationState.conversationId || null
   const numAmount = parseFloat(amount) || 0
@@ -869,6 +883,10 @@ export function PaySendPage() {
     if (!recipient || recipient.verified === false) return
     sendStartRef.current = performance.now()
     setTxError(''); setTxHash(''); setPayPending(false); setProcessStage('verifying')
+    // Preflight: nothing has been signed or sent yet, so a refusal is final.
+    if (recipient.id && !merchantPayCode && !(await reachCheck(recipient.id)).canPay) {
+      setPayBlocked(true); setTxError(payBlockedMessage); setProcessStage('failed'); return
+    }
     setProcessStage('preparing')
 
     let activePrivateKey = privateKey
@@ -1550,9 +1568,12 @@ export function PaySendPage() {
                 once an amount exists, instead of waiting for a sheet to
                 close that no longer exists on desktop. */}
             {(isDesktop || !showAmountPad) && (() => {
-              const ready = numAmount > 0 && !amountInvalid && !recipientUnverified
+              const ready = numAmount > 0 && !amountInvalid && !recipientUnverified && !payBlocked
               return (
                 <div className="flex-shrink-0 px-5" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + 16px)', paddingTop: 8 }}>
+                  {payBlocked && (
+                    <p role="alert" className="text-[13px] text-center mb-3" style={{ color: 'var(--danger)' }}>{payBlockedMessage}</p>
+                  )}
                   <button
                     onClick={() => { if (ready) goForward('review') }}
                     disabled={!ready}

@@ -11,7 +11,8 @@
  */
 
 import { useNotificationStore, useAuthStore } from '@/store'
-import { supabase } from './supabase'
+import { supabase, getUserByUsername } from './supabase'
+import { cachedPrivacy, quietFor } from './privacy'
 import { trimTrailingZeros } from './utils'
 import { isMerchantNow } from './merchant'
 import { hasRecentPaymentRequest } from './merchantPay'
@@ -95,6 +96,23 @@ function unlessMerchantOrder(id: string | undefined, amount: number, tokenSymbol
   isMerchantOrderPayment(id, amount, tokenSymbol).then(skip => { if (!skip) show() }).catch(() => show())
 }
 
+// "Payments from strangers: Block" (Chats → your profile picture): a payment
+// from someone you don't know still lands (nobody can refuse an on-chain
+// transfer), but without the alert. System senders (rewards) always alert;
+// a sender we can't resolve to a wallet alerts too.
+async function quietStranger(fromWallet?: string, fromUsername?: string): Promise<boolean> {
+  if (cachedPrivacy(useAuthStore.getState().user?.id).strangerPayments !== 'block') return false
+  let wallet = fromWallet && /^0x[0-9a-fA-F]{40}$/.test(fromWallet) ? fromWallet : null
+  if (!wallet && fromUsername && /^[a-z0-9_.-]+$/i.test(fromUsername)) {
+    wallet = (await getUserByUsername(fromUsername.replace(/\.arc$/i, '')).catch(() => null))?.wallet_address ?? null
+  }
+  return wallet ? quietFor(wallet) : false
+}
+function unlessQuiet(fromWallet: string | undefined, fromUsername: string | undefined, show: () => void) {
+  if (cachedPrivacy(useAuthStore.getState().user?.id).strangerPayments !== 'block') { show(); return }
+  quietStranger(fromWallet, fromUsername).then(q => { if (!q) show() }).catch(() => show())
+}
+
 export function notifyPaymentReceived({ amount, fromUsername, id, tokenSymbol, createdAt }: { amount: number; fromUsername: string; id?: string; tokenSymbol?: string; createdAt?: string }) {
   // BUG FIX: was .toFixed(6) for cirBTC, but cirBTC is an 8-decimal token
   // (same precision as real Bitcoin - see arcDepositWatcher.ts/arcService.ts/
@@ -105,14 +123,14 @@ export function notifyPaymentReceived({ amount, fromUsername, id, tokenSymbol, c
   // trimTrailingZeros then collapses down to "0.0" - the exact bug
   // reported: a real deposit showing as if it were zero.
   const amountStr = formatNotifAmount(amount, tokenSymbol)
-  unlessMerchantOrder(id, amount, tokenSymbol, () => useNotificationStore.getState().addNotification({
+  unlessMerchantOrder(id, amount, tokenSymbol, () => unlessQuiet(undefined, fromUsername, () => useNotificationStore.getState().addNotification({
     id,
     type: 'payment_received',
     title: 'Received',
     body: `${amountStr} from ${fromUsername.replace(/\.arc$/, '')}.arc`,
     isRead: false,
     timestamp: createdAt,
-  }))
+  })))
 }
 
 export function notifyPaymentReceivedFromAddress({ amount, fromAddress, id, tokenSymbol, createdAt }: { amount: number; fromAddress: string; id?: string; tokenSymbol?: string; createdAt?: string }) {
@@ -126,14 +144,14 @@ export function notifyPaymentReceivedFromAddress({ amount, fromAddress, id, toke
   const symbol = (tokenSymbol || 'USDC').toUpperCase()
   // Same cirBTC 8-decimal fix as notifyPaymentReceived above.
   const amountStr = formatNotifAmount(amount, tokenSymbol || symbol)
-  unlessMerchantOrder(id, amount, tokenSymbol || symbol, () => useNotificationStore.getState().addNotification({
+  unlessMerchantOrder(id, amount, tokenSymbol || symbol, () => unlessQuiet(fromAddress, undefined, () => useNotificationStore.getState().addNotification({
     id,
     type: 'payment_received',
     title: 'Received',
     body: `${amountStr} from ${short}`,
     isRead: false,
     timestamp: createdAt,
-  }))
+  })))
 }
 
 export function notifyMultichainPaymentReceived({ amount }: { amount: number }) {
