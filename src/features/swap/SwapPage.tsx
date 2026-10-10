@@ -1313,6 +1313,8 @@ export function SwapPage() {
   // someone tap Swap against a rate that hasn't shown up yet.
   // Which screen the swap is on, for the page-style push between them.
   const swapScreen = isActive ? 'form' : 'review'
+  // Leaving the amount page closes the slippage panel (it only lives there).
+  useEffect(() => { if (!isActive) setShowSettings(false) }, [isActive])
   const canReview = step === 'idle'
     && parseFloat(amountIn || '0') > 0
     && tokenIn.id !== tokenOut.id
@@ -1358,11 +1360,14 @@ export function SwapPage() {
             )}
             <h1 className="text-xl font-bold text-text-primary">Swap</h1>
           </div>
-          <button onClick={() => setShowSettings(s => !s)}
+          {/* Slippage settings: amount page only (not on review, swapping or the result). */}
+          {isActive && (
+          <button onClick={() => setShowSettings(s => !s)} aria-label="Slippage settings"
             className="w-9 h-9 rounded-2xl flex items-center justify-center active:scale-95"
             style={showSettings ? { background:'var(--brand)' } : { background:'var(--surface)', border:'1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
             <Settings className="w-4 h-4 text-text-secondary"/>
           </button>
+          )}
         </div>
       )}
 
@@ -1377,7 +1382,7 @@ export function SwapPage() {
 
         {/* Settings panel */}
         <AnimatePresence>
-        {showSettings && (
+        {showSettings && isActive && (
           <motion.div key="set" initial={{ height:0, opacity:0 }} animate={{ height:'auto', opacity:1 }}
             exit={{ height:0, opacity:0 }} className="overflow-hidden">
             <div className="p-4 rounded-2xl space-y-3" style={{ background:'var(--surface)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
