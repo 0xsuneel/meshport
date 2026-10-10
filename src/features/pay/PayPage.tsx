@@ -8,6 +8,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { WalletPayPanel } from './WalletPayPanel'
+import { TokenLogo } from '@/components/ui/TokenLogo'
 
 const APP_URL = 'https://meshport.xyz'
 
@@ -53,6 +54,11 @@ export function PayPage() {
   // type it in themselves; they only confirm and sign.
   const amountParam = searchParams.get('amount')
   const requestedAmount = amountParam && Number(amountParam) > 0 ? amountParam : null
+  // Optional `?token=EURC|cirBTC` - the token they asked to be paid in
+  // (Receive page). USDC otherwise.
+  const tokenParam = searchParams.get('token')
+  const token = tokenParam === 'EURC' || tokenParam === 'cirBTC' ? tokenParam : 'USDC'
+  const symbol = token === 'USDC' ? '$' : token === 'EURC' ? '€' : '₿'
 
   const clean = (username ?? '').toLowerCase().replace(/\.arc$/, '').trim()
   // A profile already looked up (e.g. coming back from /pay) shows at once
@@ -74,7 +80,7 @@ export function PayPage() {
   const handlePay = () => {
     const walletAddr = recipient?.wallet_address
     const toParam = `${clean}|${walletAddr}|${recipient?.display_name || clean}|${recipient?.avatar_url || ''}`
-    const sendUrl = `/pay?to=${encodeURIComponent(toParam)}${requestedAmount ? `&amount=${encodeURIComponent(requestedAmount)}` : ''}`
+    const sendUrl = `/pay?to=${encodeURIComponent(toParam)}${requestedAmount ? `&amount=${encodeURIComponent(requestedAmount)}` : ''}${token !== 'USDC' ? `&token=${token}` : ''}`
     if (isAuthenticated) {
       navigate(sendUrl, { state: { returnTo: '/payment-link' } })
     } else {
@@ -84,7 +90,7 @@ export function PayPage() {
   }
 
   const handleCopy = async () => {
-    const ok = await copyToClipboard(`${APP_URL}/paylink/${clean}`)
+    const ok = await copyToClipboard(`${APP_URL}/paylink/${clean}${token !== 'USDC' ? `?token=${token}` : ''}`)
     setCopied(true)
     showToastMessage(ok ? 'Payment link copied' : 'Could not copy link', ok ? 'success' : 'error')
     setTimeout(() => setCopied(false), 2000)
@@ -152,17 +158,24 @@ export function PayPage() {
             {requestedAmount ? (
               <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>is requesting</p>
             ) : (
-              <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>Send money to {displayName} on MeshPort</p>
+              <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>Send {token === 'USDC' ? 'money' : token} to {displayName} on MeshPort</p>
             )}
           </div>
           {requestedAmount && (
-            <p className="text-4xl font-extrabold text-text-primary">${requestedAmount}</p>
+            <p className="text-4xl font-extrabold text-text-primary">{token === 'cirBTC' ? `${requestedAmount} cirBTC` : `${symbol}${requestedAmount}`}</p>
+          )}
+          {token !== 'USDC' && (
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-bold text-text-primary"
+              style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
+              <TokenLogo token={token} size={18} /> Pay in {token}
+            </span>
           )}
         </div>
 
         {/* Scanned with a wallet app (opened in its browser) or no MeshPort
             account: pay from the wallet - Arc added if needed. */}
-        {!isAuthenticated && recipient.wallet_address && (
+        {/* (USDC only - the wallet-app send is a USDC transfer.) */}
+        {!isAuthenticated && recipient.wallet_address && token === 'USDC' && (
           <WalletPayPanel to={recipient.wallet_address} amount={requestedAmount ? Number(requestedAmount) : null} />
         )}
 
@@ -184,10 +197,10 @@ export function PayPage() {
           {/* Text */}
           <div className="flex-1 text-left">
             <p className="text-white font-extrabold text-[17px] leading-tight">
-              {!isAuthenticated ? 'Pay with MeshPort' : requestedAmount ? `Pay $${requestedAmount}` : `Pay ${clean}.arc`}
+              {!isAuthenticated ? 'Pay with MeshPort' : requestedAmount ? `Pay ${token === 'cirBTC' ? `${requestedAmount} cirBTC` : `${symbol}${requestedAmount}`}` : `Pay ${clean}.arc`}
             </p>
             <p className="text-xs font-medium mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              {requestedAmount ? `to ${clean}.arc` : 'Tap to enter amount'}
+              {requestedAmount ? `to ${clean}.arc` : token === 'USDC' ? 'Tap to enter amount' : `Tap to enter amount in ${token}`}
             </p>
           </div>
           {/* Arrow circle */}

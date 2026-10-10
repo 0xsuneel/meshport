@@ -41,6 +41,8 @@ export function ScannerPage() {
   // another phone landed on a normal, blank-amount Send screen instead of
   // one pre-filled with the requested amount.
   const [scannedAmount, setScannedAmount] = useState<string | null>(null)
+  // The token a Receive QR asks for (?token=EURC|cirBTC), carried into Pay.
+  const [scannedToken, setScannedToken] = useState<string | null>(null)
   const [resolving, setResolving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -237,6 +239,7 @@ export function ScannerPage() {
     setError(null)
     setResolvedUser(null)
     setScannedAmount(null)
+    setScannedToken(null)
 
     try {
       let value = raw.trim()
@@ -322,6 +325,8 @@ export function ScannerPage() {
           // scan still resolves the recipient normally either way.
           const amountParam = urlObj.searchParams.get('amount')
           if (amountParam && Number(amountParam) > 0) setScannedAmount(amountParam)
+          const tokenParam = urlObj.searchParams.get('token')
+          if (tokenParam === 'EURC' || tokenParam === 'cirBTC') setScannedToken(tokenParam)
           if (addrParam && isValidAddress(addrParam)) value = addrParam
           else if (toParam && isValidAddress(toParam)) value = toParam
           else if (pathUser && isValidAddress(pathUser)) value = pathUser
@@ -472,14 +477,14 @@ export function ScannerPage() {
       ? `${resolvedUser.username}|${resolvedUser.wallet_address}|${resolvedUser.display_name}|${resolvedUser.avatar_url || ''}`
       : resolvedUser.wallet_address
 
-    if (scannedAmount) {
+    if (scannedAmount || scannedToken) {
       // Route through the SAME `?to=&amount=` URL param path PayPage.tsx's
       // "Pay on Arc" links already use - PaySendPage already fully supports
       // it (parses `to` with the identical compound format, then applies
       // `amount` once the recipient resolves). The `sendRecipient` store
       // path below carries no amount slot at all, which is exactly why
       // this was previously lost.
-      navigate(`/pay?to=${encodeURIComponent(compound)}&amount=${encodeURIComponent(scannedAmount)}`, { state: { returnTo: '/' } })
+      navigate(`/pay?to=${encodeURIComponent(compound)}${scannedAmount ? `&amount=${encodeURIComponent(scannedAmount)}` : ''}${scannedToken ? `&token=${scannedToken}` : ''}`, { state: { returnTo: '/' } })
       return
     }
 
