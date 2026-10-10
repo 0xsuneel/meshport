@@ -1448,11 +1448,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     : 'Calculating…'
   const feeRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 11, color: COLORS.muted, fontVariantNumeric: 'tabular-nums' }
   const fmtFee = (n: number) => `$${trimTrailingZeros(n.toFixed(4))} USDC`
+  // Sits inside the amount card, under the amount it applies to.
   const receiveSummaryCard = (
-    <div style={{
-      width: '100%', background: COLORS.surfaceSecondary, border: `1px solid ${COLORS.border}`,
-      borderRadius: RADII.input, padding: `${SPACING.sm}px ${SPACING.md}px`, marginTop: SPACING.sm,
-    }}>
+    <div style={{ width: '100%', marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 12, color: COLORS.muted }}>You will receive</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{claimReceiveLabel}</span>
@@ -1773,38 +1771,56 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               exactly like Transfer does. */}
           <div style={{ flex: 1, minHeight: 0, overflowY: embedded ? 'visible' : 'auto', padding: `${SPACING.lg}px ${SPACING.lg}px`, paddingBottom: SPACING.xl }}>
             {/* Glides up with the keypad (same as Transfer) so the amount stays in view. */}
+            {/* Bring Funds (full page): From → To, the amount with its fees,
+                the route, then one Bring button. Glides up with the keypad
+                (same as Transfer) so the amount stays in view. */}
             <motion.div animate={{ y: -keypadLift }} initial={false} transition={KEYPAD_SPRING}
-              style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 22, padding: isDesktop ? 20 : 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              style={{ display: 'flex', flexDirection: 'column', gap: 18, minHeight: '100%' }}>
 
-              {/* Title */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 44, height: 44, borderRadius: 14, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: 'color-mix(in srgb, var(--brand) 16%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></svg>
+              {/* From → To. Tapping From goes back to pick another chain. */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 44px minmax(0, 1fr)', alignItems: 'center', gap: 8 }}>
+                <button onClick={e => { e.stopPropagation(); leaveAmountStep() }} aria-label={`From ${getMeta(selectedChain.chainId).label} - choose another chain`}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px 10px', borderRadius: 20, cursor: 'pointer',
+                    background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, minWidth: 0 }}>
+                  <ChainLogo chainId={selectedChain.chainId} size={40}/>
+                  <span style={{ fontSize: 12, color: COLORS.muted }}>From</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 16, fontWeight: 700, maxWidth: '100%' }}>
+                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getMeta(selectedChain.chainId).label}</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={COLORS.muted} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6"/></svg>
+                  </span>
+                  <span style={{ fontSize: 12, color: COLORS.muted, fontVariantNumeric: 'tabular-nums' }}>{formatAmount(selectedChain.claimable)} USDC</span>
+                </button>
+                <div aria-hidden="true" style={{ width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'color-mix(in srgb, var(--brand) 14%, transparent)', color: 'var(--brand-text)' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                 </div>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 19, fontWeight: 800, color: COLORS.text, letterSpacing: '-0.3px' }}>Bring Funds to Arc</div>
-                  <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 2 }}>Move USDC from any chain to Arc Testnet</div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px 10px', borderRadius: 20,
+                  background: 'color-mix(in srgb, var(--brand) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
+                  <img src="/logos/chains/arc.svg" alt="" width={40} height={40} style={{ borderRadius: '50%' }}/>
+                  <span style={{ fontSize: 12, color: COLORS.muted }}>To</span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: COLORS.text }}>Arc Testnet</span>
+                  <span style={{ fontSize: 12, color: COLORS.muted }}>Your wallet</span>
                 </div>
               </div>
 
-              {/* From */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderRadius: 16,
-                background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: `1px solid ${COLORS.border}` }}>
-                <ChainLogo chainId={selectedChain.chainId} size={32}/>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12, color: COLORS.muted }}>From</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getMeta(selectedChain.chainId).label}</div>
+              {/* Amount, with what arrives and the fees right under it */}
+              <div style={{ padding: '16px 18px', borderRadius: 22, background: COLORS.surface,
+                border: `1.5px solid ${keypadOpen ? COLORS.primary : error ? COLORS.error : COLORS.border}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 13, color: COLORS.muted }}>Amount (USDC)</span>
+                  {!desktopInput && (
+                    <button
+                      onClick={e => {
+                        e.stopPropagation()
+                        setClaimAmounts(prev => ({ ...prev, [selected!]: parseFloat(selectedChain.claimable.toFixed(2)).toString() }))
+                        setError('')
+                      }}
+                      style={{ height: 30, padding: '0 12px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--brand-text)',
+                        background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)' }}>
+                      Max {formatAmount(selectedChain.claimable)}
+                    </button>
+                  )}
                 </div>
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontSize: 12, color: COLORS.muted }}>Available</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.text, fontVariantNumeric: 'tabular-nums' }}>{formatAmount(selectedChain.claimable)} USDC</div>
-                </div>
-              </div>
-
-              {/* Amount */}
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 8 }}>Amount (USDC)</div>
                 {desktopInput ? (
                   <div ref={amountBoxRef}>
                     <DesktopAmountInput
@@ -1827,27 +1843,15 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 ) : (
                   <div ref={amountBoxRef}
                     onClick={e => { e.stopPropagation(); setAmountConfirmed(false); setKeypadOpen(true) }}
-                    style={{ padding: '14px 16px', borderRadius: 16, cursor: 'pointer',
-                      background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-                      border: `1.5px solid ${keypadOpen ? COLORS.primary : error ? COLORS.error : COLORS.border}` }}>
-                    <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums',
+                    style={{ cursor: 'pointer', marginTop: 6 }}>
+                    <div style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-1.2px', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums',
                       color: claimAmounts[selected!] ? COLORS.text : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>
-                      {claimAmounts[selected!] || '0.00'}
+                      {claimAmounts[selected!] || '0'}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
                       <span style={{ fontSize: 13, color: COLORS.muted }}>USDC</span>
-                      {claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT ? (
+                      {claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT && (
                         <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.error }}>Minimum ${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}</span>
-                      ) : (
-                        <button
-                          onClick={e => {
-                            e.stopPropagation()
-                            setClaimAmounts(prev => ({ ...prev, [selected!]: parseFloat(selectedChain.claimable.toFixed(2)).toString() }))
-                            setError('')
-                          }}
-                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: COLORS.primaryText }}>
-                          Max: {formatAmount(selectedChain.claimable)}
-                        </button>
                       )}
                     </div>
                   </div>
@@ -1855,65 +1859,43 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 {!desktopInput && !amountConfirmed && !keypadOpen && !claimAmt && (
                   <p style={{ fontSize: 12, color: COLORS.muted, margin: '6px 0 0' }}>Tap the amount to enter a value</p>
                 )}
+                {effectiveRoute === 'cctp' && receiveSummaryCard}
               </div>
 
-              {/* Route */}
+              {/* Route: a two-way switch, with one line on how the chosen one works */}
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 8 }}>Route</div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  {([
-                    { id: 'ub' as const,   name: 'Unified Balance', text: `Gateway · ${ubClaimEta(selectedSdkId).replace('minutes', 'min').replace('minute', 'min')}`, show: ubAvailable,
-                      icon: <path d="M13 2L4 14h7l-1 8 9-12h-7z"/> },
-                    { id: 'cctp' as const, name: 'CCTP',            text: 'Gasless · one signature', show: cctpAvailable,
-                      icon: <path d="M4 8h14l-3-3M20 16H6l3 3"/> },
-                  ]).filter(r => r.show).map(r => {
-                    const on = effectiveRoute === r.id
-                    return (
-                      <button key={r.id} onClick={() => setClaimRoute(r.id)}
-                        style={{ flex: 1, minWidth: 0, height: 68, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10,
-                          textAlign: 'left', padding: '0 12px', borderRadius: 16, cursor: 'pointer',
-                          background: on ? 'color-mix(in srgb, var(--brand) 14%, transparent)' : 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-                          border: on ? '1.5px solid var(--brand)' : `1px solid ${COLORS.border}` }}>
-                        <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: on ? 'color-mix(in srgb, var(--brand) 22%, transparent)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={on ? 'var(--brand-text)' : 'var(--text-secondary)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{r.icon}</svg>
-                        </span>
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: on ? 'var(--brand-text)' : COLORS.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</span>
-                          <span style={{ display: 'block', fontSize: 11.5, color: COLORS.muted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.text}</span>
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-                {effectiveRoute === 'ub' && (
-                  <div style={{ fontSize: 12, lineHeight: 1.45, color: COLORS.muted, marginTop: 8 }}>
-                    Your USDC goes into your Unified Balance, then to your Arc wallet. Circle's Gateway fee is taken when it's sent to Arc. If you leave before it finishes, finish it from Multichain Hub → Recover.
+                <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 8 }}>How should it travel?</div>
+                {ubAvailable && cctpAvailable && (
+                  <div role="radiogroup" aria-label="Route" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4, padding: 4, borderRadius: 16,
+                    background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
+                    {([['ub', 'Unified Balance'], ['cctp', 'CCTP']] as const).map(([id, name]) => {
+                      const on = effectiveRoute === id
+                      return (
+                        <button key={id} role="radio" aria-checked={on} onClick={() => setClaimRoute(id)}
+                          style={{ height: 42, borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: on ? 700 : 600,
+                            background: on ? 'var(--brand)' : 'transparent', color: on ? '#fff' : COLORS.muted }}>
+                          {name}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginTop: ubAvailable && cctpAvailable ? 10 : 0, padding: '0 4px' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
+                    {effectiveRoute === 'ub' ? <path d="M13 2L4 14h7l-1 8 9-12h-7z"/> : <path d="M4 8h14l-3-3M20 16H6l3 3"/>}
+                  </svg>
+                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: COLORS.muted }}>
+                    {effectiveRoute === 'ub'
+                      ? <><b style={{ color: COLORS.text, fontWeight: 600 }}>Unified Balance · Gateway · {ubClaimEta(selectedSdkId).replace('minutes', 'min').replace('minute', 'min')}.</b> Your USDC goes into your Unified Balance, then to your Arc wallet. Circle's Gateway fee is taken when it's sent to Arc. If you leave before it finishes, finish it from Multichain Hub → Recover.</>
+                      : <><b style={{ color: COLORS.text, fontWeight: 600 }}>CCTP · Gasless · one signature.</b> Circle burns your USDC on {getMeta(selectedChain.chainId).label} and mints the same amount on Arc.</>}
+                  </p>
+                </div>
               </div>
-
-              {/* Destination */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 16,
-                background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: `1px solid ${COLORS.border}` }}>
-                <span style={{ fontSize: 14, color: COLORS.muted }}>Destination</span>
-                <span style={{ fontSize: 15, fontWeight: 700, color: COLORS.text }}>Arc Testnet</span>
-              </div>
-
-              {/* Fee summary (unchanged) - CCTP only; the UB route's fee comes from Gateway at send time */}
-              {effectiveRoute === 'cctp' && receiveSummaryCard}
 
               {error && <p role="alert" style={{ fontSize: 13, color: COLORS.error, margin: 0, textAlign: 'center' }}>{error}</p>}
 
-              {/* Back / Bring */}
-              <div ref={actionsRef} style={{ display: 'flex', gap: 10, scrollMarginBottom: 16 }}>
-                <button
-                  onClick={e => { e.stopPropagation(); leaveAmountStep() }}
-                  className="active:scale-[.98] transition-all"
-                  style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 600, cursor: 'pointer',
-                    color: COLORS.muted, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: `1px solid ${COLORS.border}` }}>
-                  Back
-                </button>
+              {/* Bring - stays at the bottom of the screen while the page scrolls */}
+              <div ref={actionsRef} style={{ position: 'sticky', bottom: 0, zIndex: 2, marginTop: 'auto', paddingTop: 10, paddingBottom: 4, background: COLORS.bg, scrollMarginBottom: 16, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <button
                   onClick={e => {
                     e.stopPropagation()
@@ -1927,10 +1909,17 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   }}
                   disabled={!reviewEnabled}
                   className="active:scale-[.98] transition-all"
-                  style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, border: 'none', color: '#fff',
+                  style={{ width: '100%', height: 56, borderRadius: 18, fontSize: 16, fontWeight: 700, border: 'none', color: '#fff',
                     background: COLORS.primary, cursor: reviewEnabled ? 'pointer' : 'not-allowed', opacity: reviewEnabled ? 1 : 0.45 }}>
                   {claimAmt > 0 ? `Bring ${formatAmount(claimAmt)} USDC` : 'Bring'}
                 </button>
+                {/* Desktop's header has no back arrow - keep a quiet way back there. */}
+                {isDesktop && (
+                  <button onClick={e => { e.stopPropagation(); leaveAmountStep() }}
+                    style={{ height: 40, border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: COLORS.muted }}>
+                    Back
+                  </button>
+                )}
               </div>
             </motion.div>
           </div>
