@@ -10,6 +10,8 @@
 //     takes over quietly once the page is on the new version (no reload).
 // Never in the middle of something, so an update can't break it.
 
+import { meshLoaderSvgMarkup } from '@/components/ui/MeshLoader'
+
 const GUARD_KEY = 'mp_sw_update_at'
 const TARGET_KEY = 'mp_sw_update_to' // the version an update reload was meant to land on
 const MY_BUILD: string = typeof __MP_BUILD__ === 'string' ? __MP_BUILD__ : ''
@@ -218,9 +220,11 @@ export function watchForUpdates(): () => void {
  * "Updating MeshPort…" while the new version takes over: on the opening
  * screen when it's still up, otherwise a plain screen in the page colour.
  */
-function showUpdating(): void {
+export function showUpdating(): void {
   try {
     const text = 'Updating MeshPort…'
+    // The animated logo: on the opening screen its logo starts pulsing (index.html).
+    document.documentElement.classList.add('mp-updating')
     const splash = document.getElementById('splash')
     if (splash && !splash.classList.contains('splash-hide')) {
       if (splash.querySelector('.upd')) return
@@ -235,10 +239,15 @@ function showUpdating(): void {
     el.id = 'mp-updating'
     el.setAttribute('role', 'status')
     Object.assign(el.style, {
-      position: 'fixed', inset: '0', zIndex: '10001', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      position: 'fixed', inset: '0', zIndex: '10001', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '18px',
       background: 'var(--bg, #0B0E11)', color: 'var(--text-secondary, #9AA4AE)', font: '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     })
-    el.textContent = text
+    const logo = document.createElement('div')
+    const label = document.createElement('div')
+    label.textContent = text
+    el.append(logo, label)
     document.body.appendChild(el)
+    // Same animated MeshPort logo as the app's loaders (MeshLoader).
+    logo.innerHTML = meshLoaderSvgMarkup(64, 'var(--mesh-loader, #5CD6CB)')
   } catch { /* cosmetic only */ }
 }

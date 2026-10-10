@@ -126,6 +126,9 @@
          before it glides to the lock screen). Refreshes keep the pulse. */
       html:not(.mp-refresh) #splash .mark .n,
       html:not(.mp-refresh) #splash .mark .hub { animation-name: none !important; }
+      /* Updating (lib/swUpdate.ts, boot.js): the logo pulses while the new version loads. */
+      html.mp-updating:not(.mp-refresh) #splash .mark .n { animation-name: mplPop !important; }
+      html.mp-updating:not(.mp-refresh) #splash .mark .hub { animation-name: mplBreathe !important; }
       #splash .mark .n { animation: mplPop 1.8s ease-in-out infinite; }
       #splash .mark .s2 { animation-delay: .2s; } #splash .mark .s3 { animation-delay: .4s; }
       #splash .mark .s4 { animation-delay: .6s; } #splash .mark .s5 { animation-delay: .8s; }

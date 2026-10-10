@@ -35,3 +35,15 @@ export function MeshLoader({ size = 56, color = 'var(--mesh-loader)', label = 'L
     </svg>
   )
 }
+
+/** The same animated logo as plain SVG markup, for screens drawn outside React
+ *  (the "Updating MeshPort…" screen in lib/swUpdate.ts). Static strings only. */
+export function meshLoaderSvgMarkup(size: number, color: string): string {
+  const lines = LINES.map(([x1, y1, x2, y2], i) => `<line class="l s${i + 1}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`).join('')
+  const nodes = NODES.map(([cx, cy, r], i) => `<circle class="n s${i + 1}" cx="${cx}" cy="${cy}" r="${r}"/>`).join('')
+  return `<svg class="mpl" width="${size}" height="${size}" viewBox="28 35 140 140" role="img" aria-label="Updating" style="color:${color};overflow:visible;display:block">`
+    + `<style>${MESH_LOADER_CSS}</style>`
+    + `<g stroke="currentColor" stroke-width="10">${lines}</g>`
+    + `<g fill="none" stroke="currentColor" stroke-width="10">${nodes}</g>`
+    + `<circle class="hub" cx="100" cy="100" r="22" fill="none" stroke="currentColor" stroke-width="10"/></svg>`
+}
