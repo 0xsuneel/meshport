@@ -236,6 +236,8 @@ export interface DbConversation {
   last_message_at: string
   last_message_sender?: string | null
   last_message_type?: string | null
+  /** When the other person last paid me in this chat (recent messages only). */
+  last_incoming_payment_at?: string | null
   created_at: string
   other_user?: DbUser
   unread_count?: number
@@ -778,6 +780,12 @@ export async function fetchConversations(myId: string): Promise<DbConversation[]
       trueSender = conv.participant_a === trueSender ? conv.participant_b : conv.participant_a
     }
 
+    // A payment TO me: the payer's 'payment_sent' row, or my
+    // 'payment_received' row (sender_id is set to me - see above).
+    const incomingPayment = otherId !== myId ? lastMsgRows.find(m =>
+      (m.type === 'payment_sent' && m.sender_id === otherId) ||
+      (m.type === 'payment_received' && m.sender_id === myId)) : undefined
+
     const userWithFreshAvatar = otherUser && otherUser.avatar_url
       ? { ...otherUser, avatar_url: otherUser.avatar_url.split('?')[0] }
       : otherUser
@@ -790,6 +798,7 @@ export async function fetchConversations(myId: string): Promise<DbConversation[]
       last_message_at: trueLatest?.created_at ?? conv.last_message_at,
       last_message_sender: trueSender,
       last_message_type: previewMsg?.type ?? null,
+      last_incoming_payment_at: incomingPayment?.created_at ?? null,
     }
   })
 
