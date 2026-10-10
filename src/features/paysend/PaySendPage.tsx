@@ -1175,6 +1175,7 @@ export function PaySendPage() {
                 onChange={setQuery}
                 placeholder="Search username or paste 0x address"
                 ariaLabel="Search username or wallet address"
+                wrap
               />
               {isDesktop && (
                 <button onClick={() => { prewarmCamera(); navigate('/scanner?align=left') }} aria-label="Scan QR code"
