@@ -15,6 +15,7 @@ import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { SearchField } from '@/components/ui/SearchField'
 import { useMerchant, isMerchantClaim } from '@/lib/merchant'
 import { SkeletonCards } from '@/components/ui/Skeleton'
+import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 
 const FILTERS: { id: ActivityType | 'all' | 'p2p' | 'merchant'; label: string }[] = [
   { id: 'all',     label: 'All'       },
@@ -307,6 +308,17 @@ function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
     statusColor, statusLabel, chain, subtitle, title, amountColor, amountPrefix, counterpartyLabel,
   } = deriveActivityRow(record)
 
+  // Same icons as the action buttons (Pay, Receive, Swap, P2P, Bulk Pay,
+  // Multichain Hub). Anything else keeps the plain arrow below.
+  const rowIcon: ActionIconName | null =
+      (isP2PSellOrder || isP2PRefund || isP2PPurchase) ? 'p2p'
+    : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'receive'
+    : isSwap     ? 'swap'
+    : isBulk     ? 'bulk'
+    : isTransfer ? 'hub'
+    : isSend     ? 'pay'
+    : null
+
   return (
     <div onClick={onSelect} data-activity-id={record.id} className={flash ? 'mp-last-opened' : undefined} style={{
       // A clean list: no card or divider lines, rows sit on the page.
@@ -319,16 +331,14 @@ function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
         background: (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'color-mix(in srgb, var(--success) 10%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
       }}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          {(isClaim || isReceive || isBulkReceived || isP2PCredit)
-            ? <><path d="M8 2v9M5 8l3 3 3-3M2 13h12" stroke="var(--success)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></>
-            : isSwap
-            ? <><path d="M3 5h10M10 2l3 3-3 3M13 11H3M6 8l-3 3 3 3" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></>
-            : isBulk
-            ? <><circle cx="6" cy="5" r="2" stroke="var(--brand-text)" strokeWidth="1.4"/><path d="M2 13c0-2.2 1.8-4 4-4M9 7h5M9 10h5" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round"/></>
-            : <><path d="M2 8h12M10 5l3 3-3 3" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></>
-          }
-        </svg>
+        {rowIcon ? (
+          <ActionIcon name={rowIcon} size={18}
+            color={(isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'var(--success)' : 'var(--brand-text)'} />
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M2 8h12M10 5l3 3-3 3" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
         {isPending && (
           <div style={{
             position: 'absolute', inset: -2, borderRadius: '50%',
