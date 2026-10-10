@@ -19,7 +19,7 @@ import {
   ArrowLeft, ShieldAlert, ShieldCheck, TrendingUp, TrendingDown, Search, Filter, Plus,
   Clock, CheckCircle2, Star, Send, Paperclip, X as XIcon, Scale, History, Pencil, PlusCircle, Trash2,
 } from 'lucide-react'
-import { useAuthStore, useUIStore, useP2PTradesCountStore } from '@/store'
+import { useAuthStore, useUIStore, useP2PTradesCountStore, useWalletStore } from '@/store'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { useProcessingFlip, ProcessingFlipCard } from '@/components/ui/ProcessingFlipCard'
 import { useGlassPop, GlassPopCard } from '@/components/ui/GlassPopCard'
@@ -632,9 +632,13 @@ export function P2PCreateOfferPage() {
 
   const toggleMethod = (m: string) => setMethods(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
 
+  // Sell offers deposit the total to escrow up front (plus a little network
+  // gas, also paid in USDC on Arc): more than the balance can't be created.
+  const usdcBalance = Number(useWalletStore(s => s.balance)) || 0
+  const sellInsufficient = offerType === 'sell' && (parseFloat(totalAmount) || 0) > Math.max(0, usdcBalance - 0.01)
   const canSubmit = walletAddress && user?.id && price && parseFloat(price) > 0 &&
     parseFloat(minAmount) > 0 && parseFloat(maxAmount) >= parseFloat(minAmount) && methods.length > 0 &&
-    (offerType !== 'sell' || (parseFloat(totalAmount) > 0 && parseFloat(maxAmount) <= parseFloat(totalAmount)))
+    (offerType !== 'sell' || (parseFloat(totalAmount) > 0 && parseFloat(maxAmount) <= parseFloat(totalAmount) && !sellInsufficient))
 
   const { flipState, runFlip, dismissFlip } = useProcessingFlip()
 
@@ -747,7 +751,11 @@ export function P2PCreateOfferPage() {
             transition={{ duration: 0.24, ease: [0.32, 0.72, 0, 1] }}
             style={{ overflow: 'hidden' }}>
             <div style={labelStyle}>Total Amount to Sell (USDC)</div>
-            <input type="number" inputMode="decimal" value={totalAmount} onChange={e => setTotalAmount(e.target.value)} style={inputStyle} />
+            <input type="number" inputMode="decimal" value={totalAmount} onChange={e => setTotalAmount(e.target.value)}
+              style={{ ...inputStyle, ...(sellInsufficient ? { borderColor: 'var(--danger)' } : {}) }} />
+            <div style={{ fontSize: 12, marginTop: 6, fontWeight: 600, color: sellInsufficient ? 'var(--danger)' : COLORS.muted }}>
+              {sellInsufficient ? 'Insufficient balance · ' : 'Balance '}{trimTrailingZeros(usdcBalance.toFixed(2))} USDC
+            </div>
             <div style={{ fontSize: 11.5, color: COLORS.muted, marginTop: 6 }}>
               Deposited to escrow up front. Buyers can each take between your Min and Max below, across as many trades as it takes to sell all of it.
             </div>

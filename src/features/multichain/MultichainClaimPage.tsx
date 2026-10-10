@@ -1422,6 +1422,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // below - the reordered desktop pre-confirm position and the original
   // mobile/post-confirm position) ─────────────────────────────────────────
   const claimAmt = parseFloat(claimAmounts[selected ?? ''] ?? '0') || 0
+  // More than this chain has: warn, and don't show what "would" arrive.
+  const claimOver = !!selectedChain && claimAmt > selectedChain.claimable
   const claimEstimateIsLive = feeEstimate.forKey === `${selected}|${claimAmt}`
   const showClaimEstimateRow = claimAmt >= MIN_CLAIM_AMOUNT
   const estimateReady = showClaimEstimateRow && claimEstimateIsLive && !feeEstimate.loading && !feeEstimate.error
@@ -1870,7 +1872,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
               {/* Amount, with what arrives and the fees right under it */}
               <div style={{ padding: '16px 18px', borderRadius: 22, background: COLORS.surface,
-                border: `1.5px solid ${keypadOpen ? COLORS.primary : error ? COLORS.error : COLORS.border}` }}>
+                border: `1.5px solid ${claimOver || error ? COLORS.error : keypadOpen ? COLORS.primary : COLORS.border}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: 13, color: COLORS.muted }}>Amount (USDC)</span>
                   {!desktopInput && (
@@ -1895,12 +1897,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                         setClaimAmounts(prev => ({ ...prev, [selected!]: parseFloat(selectedChain.claimable.toFixed(2)).toString() }))
                         setError('')
                       }}
-                      invalid={!!error || (claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT)}
+                      invalid={!!error || claimOver || (claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT)}
                       ariaLabel="Amount in USDC"
                     />
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5 }}>
                       <span style={{ color: COLORS.muted }}>Available: {formatAmount(selectedChain.claimable)} USDC</span>
-                      {claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT && (
+                      {claimOver ? (
+                        <span style={{ fontWeight: 700, color: COLORS.error }}>Insufficient balance · Max {formatAmount(selectedChain.claimable)}</span>
+                      ) : claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT && (
                         <span style={{ fontWeight: 700, color: COLORS.error }}>Minimum ${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}</span>
                       )}
                     </div>
@@ -1915,7 +1919,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
                       <span style={{ fontSize: 13, color: COLORS.muted }}>USDC</span>
-                      {claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT && (
+                      {claimOver ? (
+                        <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.error }}>Insufficient balance · Max {formatAmount(selectedChain.claimable)}</span>
+                      ) : claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT && (
                         <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.error }}>Minimum ${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}</span>
                       )}
                     </div>
@@ -1924,7 +1930,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 {!desktopInput && !amountConfirmed && !keypadOpen && !claimAmt && (
                   <p style={{ fontSize: 12, color: COLORS.muted, margin: '6px 0 0' }}>Tap the amount to enter a value</p>
                 )}
-                {effectiveRoute === 'cctp' ? receiveSummaryCard : ubSummaryCard}
+                {!claimOver && (effectiveRoute === 'cctp' ? receiveSummaryCard : ubSummaryCard)}
               </div>
 
               {/* Route: a two-way switch, with one line on how the chosen one works */}
@@ -2001,7 +2007,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 quickAmounts={[10, 25, 50, 100]}
                 doneLabel="Done"
                 doneEnabled={true}
-                error={claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT ? `Minimum $${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}` : ''}
+                error={claimOver ? 'Insufficient balance' : claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT ? `Minimum $${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}` : ''}
                 onClose={() => setKeypadOpen(false)}
                 onDone={() => {
                   const amt = parseFloat(claimAmounts[selected!] ?? '0') || 0

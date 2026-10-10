@@ -3017,14 +3017,19 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     setAmount(trimTrailingZeros((Math.floor(maxAmount * 1e6) / 1e6).toFixed(6)))
   }
   const belowMin = numAmount > 0 && numAmount < MIN_AMOUNT
-  const feeLine = belowMin
+  // More than the Arc balance: say so (Review is already off - formValid).
+  const overBalance = numAmount > balance
+  const amountBad = belowMin || overBalance
+  const feeLine = overBalance
+    ? <span style={{ fontWeight: 700, color: 'var(--danger)' }}>Insufficient balance · Max {formatAmount(Math.max(0, balance - feeReserveEstimate))} USDC</span>
+    : belowMin
     ? <span style={{ fontWeight: 700, color: 'var(--danger)' }}>Minimum $3</span>
     // feeReserveEstimate is only Max's safety margin, not a fee - real fees
     // are priced on Review, so no number is shown here.
     : <span>Exact fees are shown on the next screen</span>
   const formAmount = (
     <div style={{ padding: '16px 18px', borderRadius: 22, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-      border: `1.5px solid ${belowMin ? 'var(--danger)' : showAmountPad ? 'var(--brand)' : 'var(--border)'}` }}>
+      border: `1.5px solid ${amountBad ? 'var(--danger)' : showAmountPad ? 'var(--brand)' : 'var(--border)'}` }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Amount (USDC)</span>
         {!desktopInput && (
@@ -3041,7 +3046,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             value={amount}
             onChange={v => setAmount(sanitizeMultichainAmount(v))}
             onMax={setMaxAmount}
-            invalid={belowMin}
+            invalid={amountBad}
             ariaLabel="Amount in USDC"
           />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5, color: 'var(--text-secondary)' }}>
@@ -3246,6 +3251,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     // above stays partially visible instead of being fully
                     // covered when the keypad opens.
                     showMax={false}
+                    error={numAmount > balance ? 'Insufficient balance' : undefined}
                     onClose={() => setShowAmountPad(false)}
                     onDone={() => setShowAmountPad(false)}
                   />
