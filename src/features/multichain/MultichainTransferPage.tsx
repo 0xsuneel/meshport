@@ -2880,27 +2880,31 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       <span style={{ flexShrink: 0, whiteSpace: 'nowrap', fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(balance)} USDC</span>
     </div>
   )
-  // From Arc → To the picked chain. Tapping To opens the chain picker.
   const chainNetwork = chain.testnet.startsWith(chain.name) ? (chain.testnet.slice(chain.name.length).trim() || 'Testnet') : chain.testnet
+  // From → To: two compact cards (logo beside the text) with an arrow between.
   const formDestination = (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 44px minmax(0, 1fr)', alignItems: 'center', gap: 8 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px 10px', borderRadius: 20, minWidth: 0,
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 28px minmax(0, 1fr)', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px', borderRadius: 16, minWidth: 0,
         background: 'color-mix(in srgb, var(--brand) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-        <img src="/logos/chains/arc.svg" alt="" width={40} height={40} style={{ borderRadius: '50%' }}/>
-        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>From</span>
-        <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>Arc Testnet</span>
-        <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{formatAmount(balance)} USDC</span>
+        <img src="/logos/chains/arc.svg" alt="" width={28} height={28} style={{ borderRadius: '50%', flexShrink: 0 }}/>
+        <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>From</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Arc Testnet</span>
+          <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatAmount(balance)} USDC</span>
+        </span>
       </div>
-      <div aria-hidden="true" style={{ width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      <div aria-hidden="true" style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'color-mix(in srgb, var(--brand) 14%, transparent)', color: 'var(--brand-text)' }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px 10px', borderRadius: 20, minWidth: 0,
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px', borderRadius: 16, minWidth: 0,
           background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
-        <ChainLogoImg id={chain.id} size={40}/>
-        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>To</span>
-        <span style={{ fontSize: 16, fontWeight: 700, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chain.name}</span>
-        <span style={{ fontSize: 12, color: 'var(--text-secondary)', maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chainNetwork}</span>
+        <ChainLogoImg id={chain.id} size={28}/>
+        <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>To</span>
+          <span style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chain.name}</span>
+          <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chainNetwork}</span>
+        </span>
       </div>
     </div>
   )

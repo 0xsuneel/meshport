@@ -1777,29 +1777,33 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             <motion.div animate={{ y: -keypadLift }} initial={false} transition={KEYPAD_SPRING}
               style={{ display: 'flex', flexDirection: 'column', gap: 18, minHeight: '100%' }}>
 
-              {/* From → To. Tapping From goes back to pick another chain. */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 44px minmax(0, 1fr)', alignItems: 'center', gap: 8 }}>
+              {/* From → To: two compact cards. Tapping From goes back to pick another chain. */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 28px minmax(0, 1fr)', alignItems: 'center', gap: 6 }}>
                 <button onClick={e => { e.stopPropagation(); leaveAmountStep() }} aria-label={`From ${getMeta(selectedChain.chainId).label} - choose another chain`}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px 10px', borderRadius: 20, cursor: 'pointer',
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px', borderRadius: 16, cursor: 'pointer', textAlign: 'left',
                     background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, minWidth: 0 }}>
-                  <ChainLogo chainId={selectedChain.chainId} size={40}/>
-                  <span style={{ fontSize: 12, color: COLORS.muted }}>From</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 16, fontWeight: 700, maxWidth: '100%' }}>
-                    <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getMeta(selectedChain.chainId).label}</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={COLORS.muted} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6"/></svg>
+                  <ChainLogo chainId={selectedChain.chainId} size={28}/>
+                  <span style={{ minWidth: 0, flex: 1, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+                    <span style={{ fontSize: 11, color: COLORS.muted }}>From</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 14, fontWeight: 700, minWidth: 0 }}>
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getMeta(selectedChain.chainId).label}</span>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={COLORS.muted} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M6 9l6 6 6-6"/></svg>
+                    </span>
+                    <span style={{ fontSize: 11.5, color: COLORS.muted, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatAmount(selectedChain.claimable)} USDC</span>
                   </span>
-                  <span style={{ fontSize: 12, color: COLORS.muted, fontVariantNumeric: 'tabular-nums' }}>{formatAmount(selectedChain.claimable)} USDC</span>
                 </button>
-                <div aria-hidden="true" style={{ width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                <div aria-hidden="true" style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
                   background: 'color-mix(in srgb, var(--brand) 14%, transparent)', color: 'var(--brand-text)' }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '16px 10px', borderRadius: 20,
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px', borderRadius: 16, minWidth: 0,
                   background: 'color-mix(in srgb, var(--brand) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-                  <img src="/logos/chains/arc.svg" alt="" width={40} height={40} style={{ borderRadius: '50%' }}/>
-                  <span style={{ fontSize: 12, color: COLORS.muted }}>To</span>
-                  <span style={{ fontSize: 16, fontWeight: 700, color: COLORS.text }}>Arc Testnet</span>
-                  <span style={{ fontSize: 12, color: COLORS.muted }}>Your wallet</span>
+                  <img src="/logos/chains/arc.svg" alt="" width={28} height={28} style={{ borderRadius: '50%', flexShrink: 0 }}/>
+                  <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+                    <span style={{ fontSize: 11, color: COLORS.muted }}>To</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Arc Testnet</span>
+                    <span style={{ fontSize: 11.5, color: COLORS.muted, whiteSpace: 'nowrap' }}>Your wallet</span>
+                  </span>
                 </div>
               </div>
 
