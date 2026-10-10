@@ -2740,6 +2740,8 @@ export function ChatConversationPage() {
     .filter(t => isCoinEnabled(chatSettingsMap, t))
   const payTokenBalanceOf = (t: ChatPayToken) =>
     t === 'USDC' ? balance : t === 'EURC' ? eurcBalance : (cirbtcBalance ?? 0)
+  // More than the balance of the chosen token: say so and keep Pay dimmed.
+  const payInsufficient = (parseFloat(payAmount) || 0) > payTokenBalanceOf(payToken) + 1e-12
   const [payNote, setPayNote] = useState('')
   const [payError, setPayError] = useState('')
   const [payTxHash, setPayTxHash] = useState('')
@@ -5243,9 +5245,20 @@ export function ChatConversationPage() {
                     amount box instead of this static display duplicated
                     above a second, separate live input. */}
                 {!isDesktop && (
-                  // Token on the left; symbol + amount on the right with the balance under it.
+                  // Amount on the left (balance under it); token picker on the right.
                   <div className="rounded-2xl" style={{ background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)', padding: '12px 16px' }}>
                     <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 text-left" onClick={() => { if (!payLocked) setShowAmountPad(v => !v) }}
+                        style={{ cursor: payLocked ? 'default' : 'pointer', flex: 1 }}>
+                        <div className="flex items-baseline gap-0.5">
+                          <span style={{ fontSize: amountFontSize(payAmount, 34), fontWeight: 700, lineHeight: 1.05, color: 'var(--text-muted)' }}>{chatPayTokenSymbolChar(payToken)}</span>
+                          <span style={{ fontSize: amountFontSize(payAmount, 34), fontWeight: 700, lineHeight: 1.05, minWidth: '1ch', fontVariantNumeric: 'tabular-nums',
+                            color: payAmount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>{payAmount || '0'}</span>
+                        </div>
+                        <p className="text-xs" style={{ color: payInsufficient ? 'var(--danger)' : 'var(--text-muted)', marginTop: 4, fontWeight: payInsufficient ? 600 : undefined }}>
+                          {payInsufficient ? 'Insufficient balance · ' : 'Balance '}{chatPayTokenSymbolChar(payToken)}{formatAmount(payTokenBalanceOf(payToken), chatPayTokenDecimals(payToken))}
+                        </p>
+                      </div>
                       {payLocked ? (
                         <span className="text-sm font-bold text-text-primary">{payToken}</span>
                       ) : (
@@ -5266,17 +5279,6 @@ export function ChatConversationPage() {
                           </AnimatePresence>
                         </div>
                       )}
-                      <div className="min-w-0 text-right" onClick={() => { if (!payLocked) setShowAmountPad(v => !v) }}
-                        style={{ cursor: payLocked ? 'default' : 'pointer', flex: 1 }}>
-                        <div className="flex items-baseline justify-end gap-0.5">
-                          <span style={{ fontSize: amountFontSize(payAmount, 34), fontWeight: 700, lineHeight: 1.05, color: 'var(--text-muted)' }}>{chatPayTokenSymbolChar(payToken)}</span>
-                          <span style={{ fontSize: amountFontSize(payAmount, 34), fontWeight: 700, lineHeight: 1.05, minWidth: '1ch', fontVariantNumeric: 'tabular-nums',
-                            color: payAmount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>{payAmount || '0'}</span>
-                        </div>
-                        <p className="text-xs" style={{ color: 'var(--text-muted)', marginTop: 4 }}>
-                          Balance {chatPayTokenSymbolChar(payToken)}{formatAmount(payTokenBalanceOf(payToken), chatPayTokenDecimals(payToken))}
-                        </p>
-                      </div>
                     </div>
                   </div>
                 )}
@@ -5433,9 +5435,11 @@ export function ChatConversationPage() {
                   </div>
                 )}
 
-                {payError && (
+                {payError ? (
                   <p role="alert" className="text-sm text-danger text-center">{payError}</p>
-                )}
+                ) : isDesktop && payInsufficient ? (
+                  <p role="alert" className="text-sm text-danger text-center">Insufficient balance</p>
+                ) : null}
 
                 {/* Cancel + Pay buttons */}
                 <div className="flex gap-3 pt-1">
@@ -5448,11 +5452,12 @@ export function ChatConversationPage() {
                     onClick={() => {
                       const n = parseFloat(payAmount)
                       if (!n || n <= 0) { setPayError('Enter a valid amount'); return }
+                      if (payInsufficient) { setPayError('Insufficient balance'); return }
                       setShowAmountPad(false)
                       setPayPassEntry('')
                       setPayStep('confirm')
                     }}
-                    disabled={!payAmount || parseFloat(payAmount) <= 0}
+                    disabled={!payAmount || parseFloat(payAmount) <= 0 || payInsufficient}
                     className="flex-1 py-3.5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40 active:scale-95 transition-transform"
                     style={{ background: 'var(--brand)' }}>
                     Pay

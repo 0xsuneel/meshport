@@ -270,12 +270,15 @@ describe('e2e:v2 per-message keys', async () => {
 
   it('never sends readable text: no recipient key yet → sealed for the sender only (e2e:q2)', async () => {
     const { WAITING_TEXT, isWaitingPayload } = await import('./chatCrypto')
-    const msg = await encryptText('hi', await makeChatKeys(alice.privateKey, null))
+    // A long, distinctive plaintext: a 2-letter one ('hi') turned up inside
+    // the random base64 ciphertext every so often and failed the check.
+    const secret = 'plain-text-must-never-appear-0451'
+    const msg = await encryptText(secret, await makeChatKeys(alice.privateKey, null))
     expect(msg.startsWith('e2e:q2:')).toBe(true)
     expect(isWaitingPayload(msg)).toBe(true)
-    expect(msg).not.toContain('hi')
+    expect(msg).not.toContain(secret)
     // Sender (any device) reads it; the recipient and anyone else cannot.
-    expect(await decryptText(msg, await aliceToBob())).toBe('hi')
+    expect(await decryptText(msg, await aliceToBob())).toBe(secret)
     expect(await decryptText(msg, await bobToAlice())).toBe(WAITING_TEXT)
     expect(await decryptText(msg, await makeChatKeys(eve.privateKey, alice.publicKey))).toBe(WAITING_TEXT)
   })
