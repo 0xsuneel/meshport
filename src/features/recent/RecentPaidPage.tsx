@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
@@ -95,9 +96,7 @@ export function RecentPaidPage() {
       }}>
         {!isDesktop && (
           <button onClick={() => navigate('/')} className="back-btn">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M15 6L9 12l6 6" stroke="var(--text-primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
         )}
         <div style={{ flex: 1 }}>

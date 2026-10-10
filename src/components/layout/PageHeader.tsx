@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, Bell } from 'lucide-react'
+import { ArrowLeft, Bell } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useNotificationStore } from '@/store'
 import { type ReactNode } from 'react'
@@ -25,7 +25,7 @@ export function PageHeader({ title, showBack = true, showNotifications = false, 
             onClick={() => navigate(-1)}
             className="back-btn"
           >
-            <ChevronLeft className="w-5 h-5 text-text-primary" />
+            <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
         )}
         <h1 className="text-xl font-bold text-text-primary">{title}</h1>

@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import { useNavigate, useSearchParams, Navigate } from 'react-router-dom'
-import { KeyRound, QrCode, Check, ChevronLeft, ChevronRight, Camera, Upload, Loader2, ShieldCheck, Download, Wallet, Mail, Copy } from 'lucide-react'
+import { KeyRound, QrCode, Check, ChevronRight, Camera, Upload, Loader2, ShieldCheck, Download, Wallet, Mail, Copy, ArrowLeft } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { Card } from '@/components/ui/Card'
 
@@ -90,7 +90,7 @@ export function SecureWalletPage() {
     <div className="flex flex-col h-full bg-bg px-6 py-safe overflow-y-auto">
       {manage && (
         <button onClick={() => navigate(-1)} aria-label="Back" className="mt-4 w-10 h-10 -ml-2 flex items-center justify-center rounded-full">
-          <ChevronLeft className="w-6 h-6 text-text-primary" />
+          <ArrowLeft className="w-5 h-5 text-text-primary" />
         </button>
       )}
       {/* Top-aligned so status badges / labels arriving never move the page. */}
@@ -195,7 +195,7 @@ function RecoveryQrCreator({ onBack, onDone }: { onBack: () => void; onDone: () 
   return (
     <div className="flex flex-col h-full bg-bg px-6 py-safe overflow-y-auto">
       <button onClick={onBack} aria-label="Back" className="mt-4 w-10 h-10 -ml-2 flex items-center justify-center rounded-full">
-        <ChevronLeft className="w-6 h-6 text-text-primary" />
+        <ArrowLeft className="w-5 h-5 text-text-primary" />
       </button>
       <div className="flex-1 flex flex-col gap-5 py-4">
         <div>
@@ -462,7 +462,7 @@ function QrScanner({ onResult, onCancel }: { onResult: (text: string) => void; o
     <div className="flex flex-col h-full bg-black">
       <div className="flex items-center px-4 py-3">
         <button onClick={onCancel} aria-label="Back" className="w-10 h-10 flex items-center justify-center rounded-full">
-          <ChevronLeft className="w-6 h-6 text-white" />
+          <ArrowLeft className="w-5 h-5 text-white" />
         </button>
         <p className="text-white font-semibold ml-1">Scan Recovery QR</p>
       </div>

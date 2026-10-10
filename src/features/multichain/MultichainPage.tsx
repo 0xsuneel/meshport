@@ -235,8 +235,8 @@ function HubUbTrackView({ item, onBack, onViewInHub, onHome }: {
   return (
     <div style={{ margin: '0 -12px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', padding: '16px' }}>
-        <button onClick={onBack} aria-label="Back" style={{ position: 'absolute', left: 16, background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-primary)', display: 'flex', alignItems: 'center' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        <button onClick={onBack} aria-label="Back" style={{ position: 'absolute', left: 18, background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-primary)', display: 'flex', alignItems: 'center' }}>
+          <ArrowLeft className="w-5 h-5 text-text-primary" />
         </button>
         <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Track Progress</span>
       </div>
@@ -316,8 +316,8 @@ function HubCctpTrackView({ item, onBack, onHome, onDone }: {
   return (
     <div style={{ margin: '0 -12px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', padding: '16px' }}>
-        <button onClick={onBack} aria-label="Back" style={{ position: 'absolute', left: 16, background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-primary)', display: 'flex', alignItems: 'center' }}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        <button onClick={onBack} aria-label="Back" style={{ position: 'absolute', left: 18, background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-primary)', display: 'flex', alignItems: 'center' }}>
+          <ArrowLeft className="w-5 h-5 text-text-primary" />
         </button>
         <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Track Progress</span>
       </div>
