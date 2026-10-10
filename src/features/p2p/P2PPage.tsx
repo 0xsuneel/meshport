@@ -67,26 +67,6 @@ const TRADE_WINDOW_OPTIONS: { label: string; minutes: number }[] = [
 ]
 
 // ── Shared bits ──────────────────────────────────────────────────────────────
-// Replaces the old "TESTNET DEMO" text pill in the header - same warning
-// icon, but just the icon (native title attribute carries the full
-// disclaimer as a hover tooltip) instead of a wide always-on label, so it
-// doesn't compete with the page title for space.
-function DemoIcon() {
-  return (
-    <div
-      title="No real fiat payments are processed. All currencies and payment methods are for demonstration purposes only."
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, flexShrink: 0,
-        background: 'color-mix(in srgb, var(--warning) 12%, transparent)',
-        border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)', borderRadius: '50%',
-        cursor: 'help',
-      }}
-    >
-      <ShieldAlert size={14} color={COLORS.warning} />
-    </div>
-  )
-}
-
 function DemoBanner() {
   return (
     <div style={{
@@ -101,7 +81,7 @@ function DemoBanner() {
   )
 }
 
-export function Header({ title, onBack, right, hideDemoIconOnMobile }: { title: string; onBack: () => void; right?: ReactNode; hideDemoIconOnMobile?: boolean }) {
+export function Header({ title, onBack, right }: { title: string; onBack: () => void; right?: ReactNode }) {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '18px 16px 6px' }}>
@@ -117,7 +97,6 @@ export function Header({ title, onBack, right, hideDemoIconOnMobile }: { title: 
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         {right}
-        {!(hideDemoIconOnMobile && !isDesktop) && <DemoIcon />}
       </div>
     </div>
   )
@@ -390,7 +369,7 @@ export function P2PHubPage() {
           next to the warning icon instead of only being a hover tooltip.
           Mobile is unchanged (icon-only + the DemoBanner below the tabs
           already carries this same text there). */}
-      <Header title="P2P Marketplace" onBack={() => navigate('/')} hideDemoIconOnMobile right={
+      <Header title="P2P Marketplace" onBack={() => navigate('/')} right={
         isDesktop ? (
           <span style={{ fontSize: 11.5, color: COLORS.warning, lineHeight: 1.35, display: 'inline-block', maxWidth: 380, textAlign: 'right' }}>
             No real fiat payments are processed. All currencies and payment methods are for demonstration purposes only.
