@@ -105,6 +105,11 @@ function timeAgo(ts: number): string {
 function swapTokenDecimals(id: string): number {
   return id === 'cirBTC' ? 8 : 3
 }
+// Currency sign for the line under each amount: it used to be "$" for every
+// token, so 18.4 EURC read as "$18.4" and 0.001 cirBTC as "$0.001".
+function swapTokenSymbolChar(id: string): string {
+  return id === 'USDC' ? '$' : id === 'EURC' ? '€' : '₿'
+}
 
 // Digit/decimal sanitizing for the desktop "You pay" native input (mirrors
 // AmountKeypad's own internal sanitizer, which isn't exported).
@@ -1475,7 +1480,7 @@ export function SwapPage() {
                     {amountIn || '0.00'}
                   </span>
                   <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
-                    ${formatAmount(parseFloat(amountIn || '0'))}
+                    {swapTokenSymbolChar(tokenIn.id)}{formatAmount(parseFloat(amountIn || '0'), swapTokenDecimals(tokenIn.id))}
                   </p>
                 </div>
               )}
@@ -1604,7 +1609,7 @@ export function SwapPage() {
                         {trimTrailingZeros(parseFloat(estimate.estimatedOutput.amount).toFixed(swapTokenDecimals(tokenOut.id)))}
                       </p>
                       <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 4 }}>
-                        ${formatAmount(parseFloat(estimate.estimatedOutput.amount))}
+                        {swapTokenSymbolChar(tokenOut.id)}{formatAmount(parseFloat(estimate.estimatedOutput.amount), swapTokenDecimals(tokenOut.id))}
                       </p>
                     </>
                   : <p className="text-text-muted font-bold" style={{ fontSize:'34px' }}>0</p>
