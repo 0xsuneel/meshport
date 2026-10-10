@@ -157,8 +157,10 @@ function TokenDropdown({ selected, exclude, onSelect, onClose }: {
     <motion.div role="listbox" aria-label="Choose token"
       initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
+      // One shared background behind all the tokens.
       style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 41, transformOrigin: 'top center',
-        display: 'flex', flexDirection: 'column', gap: 6 }}>
+        display: 'flex', flexDirection: 'column', gap: 2, padding: 4, borderRadius: 22,
+        background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 12px 28px rgba(0,0,0,0.3)' }}>
       {availableTokens.map(t => {
         const on = t.id === selected.id
         const off = t.id === exclude.id
@@ -166,11 +168,8 @@ function TokenDropdown({ selected, exclude, onSelect, onClose }: {
           <button key={t.id} role="option" aria-selected={on} disabled={off}
             onClick={() => { onSelect(t); onClose() }}
             className="flex items-center gap-2 rounded-full active:opacity-70 transition-opacity"
-            // Solid background even when dimmed, so the card below never shows through.
-            style={{ height: 40, padding: '0 10px 0 6px', minWidth: 0, cursor: off ? 'default' : 'pointer',
-              background: on ? 'var(--brand)' : 'var(--surface)',
-              border: on ? '1px solid var(--brand)' : '1px solid var(--border)',
-              boxShadow: '0 8px 20px rgba(0,0,0,0.28)' }}>
+            style={{ height: 38, padding: '0 8px 0 4px', minWidth: 0, cursor: off ? 'default' : 'pointer',
+              background: on ? 'var(--brand)' : 'transparent', border: 'none' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, opacity: off ? 0.4 : 1 }}>
               <TLogo t={t} size={26}/>
               <span className="text-[15px] font-bold" style={{ color: on ? '#fff' : 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.id}</span>
