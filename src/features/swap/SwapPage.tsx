@@ -13,7 +13,7 @@ import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { ScreenPush } from '@/components/ui/ScreenPush'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import type { SwapProgress } from '@/lib/swapService'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, ArrowUpDown, Settings, CheckCircle, XCircle, RefreshCw, ChevronDown, Clock, ChevronRight,
 } from 'lucide-react'
@@ -380,8 +380,11 @@ export function SwapPage() {
   const storedPasscode = useAuthStore(s => s.passcode)
   const { balance } = useWalletStore()
 
-  const [tokenIn,      setTokenIn]      = useState(SWAP_TOKENS[0])
-  const [tokenOut,     setTokenOut]     = useState(SWAP_TOKENS[1])
+  // ?from= - opened from a token's own page (Home → Assets): start on that
+  // token, swapping into USDC (or EURC when it's USDC).
+  const [searchParams] = useSearchParams()
+  const [tokenIn,      setTokenIn]      = useState(() => SWAP_TOKENS.find(t => t.id === searchParams.get('from')) ?? SWAP_TOKENS[0])
+  const [tokenOut,     setTokenOut]     = useState(() => searchParams.get('from') && searchParams.get('from') !== 'USDC' && SWAP_TOKENS.some(t => t.id === searchParams.get('from')) ? SWAP_TOKENS[0] : SWAP_TOKENS[1])
   const settingsMap = useSettingsStore((s) => s.settings)
   const settingsLoaded = useSettingsStore((s) => s.loaded)
   useEffect(() => {
