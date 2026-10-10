@@ -271,14 +271,22 @@ export function PaySendPage() {
   // again just before signing (runProcessing).
   const [payBlocked, setPayBlocked] = useState(false)
   const [blockedMe, setBlockedMe] = useState(false) // they blocked me
+  // The recipient's MeshPort account - also for a pasted / scanned wallet
+  // address, so the same rules apply as when they're picked by username.
+  const recipientAccountId = async (): Promise<string | null> => {
+    if (recipient?.id) return recipient.id
+    const addr = recipient?.walletAddress
+    if (!addr || !/^0x[0-9a-fA-F]{40}$/.test(addr)) return null
+    return (await getUserByWalletAddress(addr).catch(() => null))?.id ?? null
+  }
   useEffect(() => {
     setPayBlocked(false); setBlockedMe(false)
-    const rid = recipient?.id
-    if (!rid || merchantPayCode) return
+    if (!recipient || merchantPayCode) return
     let cancelled = false
-    reachCheck(rid).then(r => { if (!cancelled) { setPayBlocked(!r.canPay); setBlockedMe(r.blocked) } })
+    recipientAccountId().then(rid => rid ? reachCheck(rid) : null)
+      .then(r => { if (!cancelled && r) { setPayBlocked(!r.canPay); setBlockedMe(r.blocked) } })
     return () => { cancelled = true }
-  }, [recipient?.id, merchantPayCode])
+  }, [recipient?.id, recipient?.walletAddress, merchantPayCode])
   const payBlockedMessage = blockedMe
     ? BLOCKED_YOU(recipient?.display || 'This person')
     : STRANGER_PAY_BLOCKED(recipient?.display || 'This person')
@@ -887,8 +895,9 @@ export function PaySendPage() {
     sendStartRef.current = performance.now()
     setTxError(''); setTxHash(''); setPayPending(false); setProcessStage('verifying')
     // Preflight: nothing has been signed or sent yet, so a refusal is final.
-    if (recipient.id && !merchantPayCode) {
-      const reach = await reachCheck(recipient.id)
+    const reachId = merchantPayCode ? null : await recipientAccountId()
+    if (reachId) {
+      const reach = await reachCheck(reachId)
       if (!reach.canPay) {
         setPayBlocked(true); setBlockedMe(reach.blocked)
         setTxError(reach.blocked ? BLOCKED_YOU(recipient.display) : STRANGER_PAY_BLOCKED(recipient.display))
