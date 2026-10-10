@@ -555,18 +555,16 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     if (_cacheLoadedForUser !== user.id) setLoading(true)
     const convs = applyReadOverrides(await fetchConversations(user.id))
     const hiddenMap = getHiddenChatsMap(chatWalletAddr)
-    // A conversation stays hidden only if nothing has happened on it since it
-    // was hidden. If a payment or message landed afterwards (last_message_at
-    // is newer than the hide timestamp), surface it again automatically -
-    // this is what makes a payment from a previously-removed contact show up
-    // in Chats even if this page wasn't open when it arrived.
+    // An archived chat stays archived - new messages just add to its unread
+    // count. Only a payment from that person (after it was archived) brings
+    // it back to All automatically.
     let hiddenChanged = false
     const archived: DbConversation[] = []
     const filtered = convs.filter(c => {
       const hiddenAt = hiddenMap[c.id]
       if (!hiddenAt) return true
-      const isNewer = c.last_message_at && new Date(c.last_message_at).getTime() > new Date(hiddenAt).getTime()
-      if (isNewer) { delete hiddenMap[c.id]; hiddenChanged = true; return true }
+      const paidSince = c.last_incoming_payment_at && new Date(c.last_incoming_payment_at).getTime() > new Date(hiddenAt).getTime()
+      if (paidSince) { delete hiddenMap[c.id]; hiddenChanged = true; return true }
       archived.push(c)
       return false
     })
@@ -606,7 +604,8 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     return () => window.removeEventListener('meshport:session-bound', on)
   }, [loadConversations])
 
-  // When a new message arrives in a hidden chat, auto-restore it
+  // A payment from someone whose chat is archived brings it back to All
+  // (other messages leave it archived; the list reload shows their count).
   useEffect(() => {
     if (!user?.id) return
     const unsubscribe = subscribeWithRetry(supabase, 'chat-restore-' + user.id, channel => channel
@@ -614,12 +613,12 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         const msg = payload.new
         if (!msg?.conversation_id) return
         const hidden = getHiddenChats(chatWalletAddr)
-        if (hidden.has(msg.conversation_id)) {
-          // Fully restore the conversation - unhide and reload
-          unhideChat(msg.conversation_id, chatWalletAddr)
-          invalidateConversationsCache()
-          await loadConversations()
-        }
+        if (!hidden.has(msg.conversation_id)) return
+        const toMe = (msg.type === 'payment_sent' && msg.sender_id !== user.id) ||
+          (msg.type === 'payment_received' && msg.sender_id === user.id)
+        if (toMe) unhideChat(msg.conversation_id, chatWalletAddr)
+        invalidateConversationsCache()
+        await loadConversations()
       })
     )
     return unsubscribe
@@ -705,7 +704,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     const existing = conversations.find(c => c.other_user?.id === otherId)
       ?? _cachedConversations.find(c => c.other_user?.id === otherId)
     const open = (convId: string) => {
-      unhideChat(convId, chatWalletAddr)
+      // Opening an archived chat leaves it archived.
       if (typeof other !== 'string') cacheOtherUser(convId, other)
       setNewChatSearch(''); setSearchResults([])
       // From New Chat, Back from the chat returns to the Chats list.
@@ -831,6 +830,8 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   }
 
   const unreadChats = conversations.filter(c => (c.unread_count || 0) > 0).length
+  // New messages waiting in archived chats ("+3" on the Archived chip).
+  const archivedUnread = archivedConvs.reduce((n, c) => n + (c.unread_count || 0), 0)
   const tabList = listTab === 'archived' ? archivedConvs
     : listTab === 'unread' ? conversations.filter(c => (c.unread_count || 0) > 0)
     : conversations
@@ -887,6 +888,9 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                   border: `1px solid ${on ? 'var(--brand)' : 'var(--border)'}`,
                   color: on ? 'var(--brand-text)' : 'var(--text-secondary)' }}>
                 {label}
+                {id === 'archived' && archivedUnread > 0 && (
+                  <span className="text-[12px] font-bold" style={{ color: 'var(--brand-text)' }}>+{archivedUnread > 99 ? '99' : archivedUnread}</span>
+                )}
                 {id === 'unread' && unreadChats > 0 && (
                   <span className="rounded-full text-[11px] font-bold text-white inline-flex items-center justify-center"
                     style={{ minWidth: 18, height: 18, padding: '0 5px', background: 'var(--brand)' }}>{unreadChats > 99 ? '99+' : unreadChats}</span>
@@ -1110,7 +1114,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                 </button>
               )}
               <p className="text-center text-xs text-text-muted mt-3">
-                {isArchived(contextConv) ? 'Moves back to All.' : 'Moves to Archived. Nothing is deleted. It comes back to All when they message you.'}
+                {isArchived(contextConv) ? 'Moves back to All.' : 'Moves to Archived. Nothing is deleted. It comes back to All when they pay you.'}
               </p>
               <button onClick={() => setContextConv(null)}
                 className="w-full mt-3 px-5 py-3.5 bg-surface/60 rounded-2xl text-text-secondary font-semibold active:scale-95 transition-transform">
