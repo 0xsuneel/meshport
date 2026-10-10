@@ -145,6 +145,36 @@ export async function spendUnifiedToArc(params: {
   return spendUnifiedTo({ ...params, toChain: ARC_CHAIN_KEY, recipient: params.walletAddr })
 }
 
+/**
+ * Read-only fee preview for a Unified Balance claim of `amount` from
+ * `fromChain` to the user's own Arc wallet - the same estimateSpend() quote
+ * the claim itself uses (signs nothing). Every USDC fee comes out of the
+ * claimed amount, so the wallet receives at least `amount − total − margin`.
+ */
+export async function estimateUbClaimFee(params: {
+  kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number
+}): Promise<{ gatewayFee: number; forwarderFee: number; otherFee: number; total: number; receiveAtLeast: number }> {
+  const { kit, adapter, walletAddr, fromChain, amount } = params
+  const est: any = await kit.unifiedBalance.estimateSpend({
+    from: { adapter, allocations: [{ amount: amount.toFixed(6), chain: fromChain }] },
+    to: { chain: ARC_CHAIN_KEY, recipientAddress: walletAddr, useForwarder: true },
+    token: 'USDC',
+    amount: amount.toFixed(6),
+  })
+  let gatewayFee = 0, forwarderFee = 0, otherFee = 0
+  for (const f of est?.fees ?? []) {
+    if (f?.token && f.token !== 'USDC') continue
+    const a = Number(f?.amount ?? 0) || 0
+    if (f?.type === 'provider' || f?.type === 'gasFee') gatewayFee += a
+    else if (f?.type === 'forwarder') forwarderFee += a
+    else otherFee += a
+  }
+  let total = gatewayFee + forwarderFee + otherFee
+  // Same fallback as the claim: some quotes only carry a total.
+  if (!total) { otherFee = Number(est?.total ?? 0) || 0; total = otherFee }
+  return { gatewayFee, forwarderFee, otherFee, total, receiveAtLeast: Math.max(0, amount - total - SPEND_MARGIN) }
+}
+
 // Destinations where Circle's Gateway forwarder mint has been failing
 // on-chain ("Forwarder transfer failed: ON_CHAIN_FAILURE") - mint these
 // ourselves instead of waiting for the forwarder to fail first. Includes
