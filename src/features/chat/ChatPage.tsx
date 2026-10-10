@@ -500,7 +500,6 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   // Long-press context menu
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Profile sheet
-  const [profileConv, setProfileConv] = useState<DbConversation | null>(null)
 
   // Load conversations, filtering out hidden ones
   useEffect(() => {
@@ -1128,7 +1127,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                   background: selectedIds.has(conv.id) ? 'color-mix(in srgb, var(--brand) 22%, transparent)' : undefined }}>
                 {/* Avatar - tap to open profile (while selecting: select) */}
                 <div className="relative flex-shrink-0"
-                  onClick={e => { if (selecting) return; e.stopPropagation(); setProfileConv(conv) }}>
+                  onClick={e => { if (selecting) return; e.stopPropagation(); navigate(`/chat/${conv.id}`, { state: { openInfo: true } }) }}>
                   <Avatar name={name} src={conv.other_user?.avatar_url} size="lg" className="!w-[52px] !h-[52px]" />
                   {selectedIds.has(conv.id) && (
                     <span className="absolute rounded-full flex items-center justify-center"
@@ -1182,62 +1181,6 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         </div>
       )}
 
-      {/* ── Profile Sheet (from chat list avatar tap) ── */}
-      <AnimatePresence>
-        {profileConv && (() => {
-          const pName  = profileConv.other_user?.display_name || 'Unknown'
-          const pUname = (profileConv.other_user?.username || '').replace(/\.arc$/, '')
-          return (
-            <DesktopDialogFrame onClose={() => setProfileConv(null)} maxWidth={420}>
-              <div className="pb-6">
-                {/* Avatar + name */}
-                <div className="flex flex-col items-center pt-4 pb-5 px-6">
-                  <Avatar name={pName} src={profileConv.other_user?.avatar_url} size="xl" className="!w-[72px] !h-[72px] mb-3" />
-                  <p className="text-[18px] font-bold text-text-primary flex items-center gap-1.5">
-                    {pName}
-                    
-                  </p>
-                  <p className="text-[13px] text-link mt-0.5">{pUname}.arc</p>
-                  {profileConv.other_user?.wallet_address && (
-                    <p className="text-[11px] text-text-muted mt-1 font-mono">
-                      {profileConv.other_user.wallet_address.slice(0,6)}...{profileConv.other_user.wallet_address.slice(-6)}
-                    </p>
-                  )}
-                </div>
-                {/* Actions */}
-                <div className="px-5 space-y-2.5">
-                  {/* Message */}
-                  <button
-                    onClick={() => { setProfileConv(null); navigate(`/chat/${profileConv.id}`) }}
-                    className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
-                    style={{ background:'color-mix(in srgb, var(--brand) 10%, transparent)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--brand) 20%, transparent)' }}>
-                      <Send className="w-4 h-4 text-brand-text" />
-                    </div>
-                    <span className="text-[15px] font-semibold text-text-primary">Message</span>
-                  </button>
-                  {/* Archive / Unarchive (nothing is deleted) */}
-                  {(() => {
-                    const archived = isArchived(profileConv)
-                    const Icon = archived ? ArchiveRestore : Archive
-                    return (
-                      <button
-                        onClick={() => { setProfileConv(null); archived ? unarchiveConv(profileConv) : archiveConv(profileConv) }}
-                        className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
-                        style={{ background:'color-mix(in srgb, var(--brand) 10%, transparent)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
-                        <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--brand) 20%, transparent)' }}>
-                          <Icon className="w-4 h-4 text-brand-text" />
-                        </div>
-                        <span className="text-[15px] font-semibold text-brand-text">{archived ? 'Unarchive chat' : 'Archive chat'}</span>
-                      </button>
-                    )
-                  })()}
-                </div>
-              </div>
-            </DesktopDialogFrame>
-          )
-        })()}
-      </AnimatePresence>
 
     </div>
 
@@ -3766,7 +3709,10 @@ export function ChatConversationPage() {
   const paymentHistory = messages.filter(m => m.type === 'payment_sent').slice().reverse()
   const [historyReceipt, setHistoryReceipt] = useState<any | null>(null)
   const [showHistory, setShowHistory] = useState(false)
-  const [showProfile, setShowProfile] = useState(false)
+  // Opened from the Chats list avatar: show Contact info straight away, and
+  // Back goes back to the list (not to the chat underneath).
+  const infoFromList = useRef(!!(location.state as any)?.openInfo)
+  const [showProfile, setShowProfile] = useState(() => infoFromList.current)
   // Contact info is a page of its own (slides over the chat). It adds a
   // history entry so the phone's Back closes it, like any page.
   const openProfile = () => {
@@ -3774,9 +3720,19 @@ export function ChatConversationPage() {
     try { window.history.pushState({ ...(window.history.state || {}), mpChatInfo: true }, '') } catch { /* ignore */ }
   }
   const closeProfile = () => {
+    if (infoFromList.current) { infoFromList.current = false; navigate(-1); return }
     if ((window.history.state as any)?.mpChatInfo) window.history.back()
     else setShowProfile(false)
   }
+  // Pay / Transaction History from Contact info continue in this chat.
+  const infoToChat = () => {
+    if (infoFromList.current) { infoFromList.current = false; setShowProfile(false) }
+    else closeProfile()
+  }
+  // Drop the one-time "open info" flag so a refresh shows the chat.
+  useEffect(() => {
+    if ((location.state as any)?.openInfo) navigate(location.pathname, { replace: true, state: {} })
+  }, [])
   useEffect(() => {
     if (!showProfile) return
     const onPop = () => { if (!(window.history.state as any)?.mpChatInfo) setShowProfile(false) }
@@ -4971,7 +4927,7 @@ export function ChatConversationPage() {
               <div className="px-5 space-y-2.5">
                 {/* Pay */}
                 <button
-                  onClick={() => { closeProfile(); handlePay() }}
+                  onClick={() => { infoToChat(); handlePay() }}
                   className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
                   style={{ background:'color-mix(in srgb, var(--brand) 10%, transparent)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
                   <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--brand) 20%, transparent)' }}>
@@ -4984,7 +4940,7 @@ export function ChatConversationPage() {
 
                 {/* Transaction history */}
                 <button
-                  onClick={() => { closeProfile(); setShowHistory(true) }}
+                  onClick={() => { infoToChat(); setShowHistory(true) }}
                   className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
                   style={{ background:'color-mix(in srgb, var(--text-primary) 4%, transparent)', border:'1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)' }}>
                   <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--text-primary) 8%, transparent)' }}>
