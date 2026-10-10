@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useNavigate, useNavigationType, useSearchParams } from 'react-router-dom'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { NewsArt } from './NewsArt'
 import {
@@ -18,6 +18,14 @@ const FILTERS: { key: NewsSource | null; label: string }[] = [
   { key: 'meshport', label: 'MeshPort' },
   { key: 'arc_status', label: 'Network status' },
 ]
+
+// What the list looked like, per filter, for this app session: coming back
+// from an article (or any page) shows it straight away - same stories, same
+// scroll position - instead of reloading from the top. Kept in memory only.
+type ListCache = { items: NewsItem[]; more: boolean; scrollTop: number }
+const listCache = new Map<string, ListCache>()
+let liveCache: NewsItem[] = []
+const cacheKey = (f: NewsSource | null) => f ?? 'all'
 
 export function newsMeta(it: NewsItem, withSource = true): string {
   return [withSource ? NEWS_SOURCE_LABEL[it.source] : null, it.source === 'arc_status' ? it.status_label : it.topic, newsDate(it.published_at),
@@ -40,31 +48,72 @@ export function NewsCover({ item, style, children, variant = 'stack' }: { item: 
 export function NewsPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
-  const [filter, setFilter] = useState<NewsSource | null>(null)
-  const [items, setItems] = useState<NewsItem[]>([])
-  const [live, setLive] = useState<NewsItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [more, setMore] = useState(true)
+  // The filter lives in the address (/news?source=circle), so going back to
+  // this page - from an article, or with the phone's back gesture - lands on
+  // the same filter instead of "All".
+  const [params, setParams] = useSearchParams()
+  const rawSource = params.get('source')
+  const filter: NewsSource | null = FILTERS.some(f => f.key === rawSource) ? rawSource as NewsSource : null
+  const setFilter = (f: NewsSource | null) => setParams(f ? { source: f } : {}, { replace: true })
+  const returning = useNavigationType() === 'POP'
+  const cached = listCache.get(cacheKey(filter))
+  const [items, setItems] = useState<NewsItem[]>(() => cached?.items ?? [])
+  const [live, setLive] = useState<NewsItem[]>(liveCache)
+  const [loading, setLoading] = useState(!cached)
+  const [more, setMore] = useState(cached?.more ?? true)
   const [error, setError] = useState<string | null>(null)
   const reqId = useRef(0)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  const load = useCallback(async (reset: boolean) => {
+  // `quiet`: refresh what's already on screen without loading placeholders.
+  const load = useCallback(async (reset: boolean, quiet = false) => {
     const id = ++reqId.current
-    setLoading(true); setError(null)
+    if (!quiet) setLoading(true)
+    setError(null)
     try {
       const page = await fetchNewsPage({ source: filter, before: reset ? null : items[items.length - 1]?.published_at })
       if (id !== reqId.current) return
       setItems(prev => reset ? page : [...prev, ...page.filter(p => !prev.some(q => q.id === p.id))])
       setMore(page.length === NEWS_PAGE_SIZE)
     } catch (e) {
-      if (id === reqId.current) setError(e instanceof Error ? e.message : 'Could not load updates')
+      // A failed quiet refresh keeps the list that is already showing.
+      if (id === reqId.current && !quiet) setError(e instanceof Error ? e.message : 'Could not load updates')
     } finally {
       if (id === reqId.current) setLoading(false)
     }
   }, [filter, items])
 
-  useEffect(() => { setItems([]); setMore(true); load(true) }, [filter]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchLiveStatusNotices().then(setLive) }, [])
+  // First show: what was here before, if anything. Coming back (from an
+  // article) keeps it exactly as left; opening the page anew refreshes it
+  // quietly in the background.
+  useEffect(() => {
+    if (cached) { if (!returning) load(true, true) } else load(true)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // A different filter was picked: its own saved list, or a fresh load, from the top.
+  const shownFilter = useRef(filter)
+  useEffect(() => {
+    if (shownFilter.current === filter) return
+    shownFilter.current = filter
+    const c = listCache.get(cacheKey(filter))
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+    setItems(c?.items ?? []); setMore(c?.more ?? true)
+    load(true, !!c)
+  }, [filter]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchLiveStatusNotices().then(l => { liveCache = l; setLive(l) }) }, [])
+
+  // Remember the list and where it was scrolled to.
+  useEffect(() => {
+    const prev = listCache.get(cacheKey(filter))
+    if (items.length) listCache.set(cacheKey(filter), { items, more, scrollTop: prev?.scrollTop ?? 0 })
+  }, [items, more, filter])
+  const onScroll = () => {
+    const c = listCache.get(cacheKey(filter))
+    if (c && scrollRef.current) c.scrollTop = scrollRef.current.scrollTop
+  }
+  // Back from an article: same place in the list, before the first paint.
+  useLayoutEffect(() => {
+    if (returning && cached && scrollRef.current) scrollRef.current.scrollTop = cached.scrollTop
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Loads the next page as the end of the list scrolls into view.
   const sentinel = useRef<HTMLDivElement>(null)
@@ -79,7 +128,7 @@ export function NewsPage() {
   const showLive = (filter === null || filter === 'arc_status') ? live : []
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 90 }}>
+    <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 90 }}>
       <div style={{
         position: 'sticky', top: 0, zIndex: 20,
         background: 'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter: 'blur(20px)',
