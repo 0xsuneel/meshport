@@ -12,7 +12,8 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 
 // One asset's own page (Home → Assets → tap a token): balance, that token's
 // actions, and its history underneath. Actions open with the token already
-// chosen: USDC → Pay / Swap / Transfer; EURC and cirBTC → Pay / Receive.
+// chosen: USDC → Pay / Receive / Swap / Transfer; EURC and cirBTC → Pay /
+// Receive / Swap.
 type AssetToken = 'USDC' | 'EURC' | 'cirBTC'
 const TOKENS: Record<AssetToken, { name: string; logo: string; fallbackChar: string; fallbackColor: string }> = {
   USDC:   { name: 'USD Coin',      logo: '/logos/tokens/usdc.png',       fallbackChar: '$', fallbackColor: 'var(--usdc-icon)' },
@@ -21,17 +22,20 @@ const TOKENS: Record<AssetToken, { name: string; logo: string; fallbackChar: str
 }
 const ACTIONS: Record<AssetToken, { label: string; icon: ActionIconName; path: string }[]> = {
   USDC: [
-    { label: 'Pay',      icon: 'pay',  path: '/pay?token=USDC' },
-    { label: 'Swap',     icon: 'swap', path: '/swap' },
-    { label: 'Transfer', icon: 'hub',  path: '/multichain?tab=transfer' },
+    { label: 'Pay',      icon: 'pay',     path: '/pay?token=USDC' },
+    { label: 'Receive',  icon: 'receive', path: '/receive' },
+    { label: 'Swap',     icon: 'swap',    path: '/swap?from=USDC' },
+    { label: 'Transfer', icon: 'hub',     path: '/multichain?tab=transfer' },
   ],
   EURC: [
     { label: 'Pay',     icon: 'pay',     path: '/pay?token=EURC' },
     { label: 'Receive', icon: 'receive', path: '/receive' },
+    { label: 'Swap',    icon: 'swap',    path: '/swap?from=EURC' },
   ],
   cirBTC: [
     { label: 'Pay',     icon: 'pay',     path: '/pay?token=cirBTC' },
     { label: 'Receive', icon: 'receive', path: '/receive' },
+    { label: 'Swap',    icon: 'swap',    path: '/swap?from=cirBTC' },
   ],
 }
 
@@ -123,7 +127,7 @@ export function AssetPage() {
         </div>
 
         {/* Actions - same round buttons as Home */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: actions.length === 3 ? 30 : 46, padding: '20px 20px 24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: actions.length === 4 ? 18 : 30, padding: '20px 20px 24px' }}>
           {actions.map(a => (
             <button key={a.label} onClick={() => navigate(a.path)}
               style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, background: 'none', border: 'none',
