@@ -625,6 +625,18 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     return unsubscribe
   }, [user?.id])
 
+  // Chats search: a full username.arc also looks the person up.
+  const [chatSearchPeople, setChatSearchPeople] = useState<DbUser[]>([])
+  useEffect(() => {
+    const q = search.trim()
+    if (!q.toLowerCase().endsWith('.arc')) { setChatSearchPeople([]); return }
+    let cancelled = false
+    const timer = setTimeout(() => {
+      searchUsersDb(q, user?.id).then(r => { if (!cancelled) setChatSearchPeople(r) }).catch(() => {})
+    }, 300)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [search, user?.id])
+
   // Search users to start new chat - exact .arc match only
   useEffect(() => {
     const q = newChatSearch.trim()
@@ -822,12 +834,20 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   const tabList = listTab === 'archived' ? archivedConvs
     : listTab === 'unread' ? conversations.filter(c => (c.unread_count || 0) > 0)
     : conversations
-  const filtered = search
-    ? tabList.filter(c =>
-        (c.other_user?.display_name || '').toLowerCase().includes(search.toLowerCase()) ||
-        (c.other_user?.username || '').toLowerCase().includes(search.toLowerCase())
-      )
+  // Search covers every chat (archived too) and people: your contacts
+  // without a chat yet, plus anyone found by their full username.arc.
+  const searchQ = search.trim().toLowerCase().replace(/^@/, '')
+  const nameQ = searchQ.replace(/\.arc$/, '')
+  const matchesQ = (u?: { display_name?: string | null; username?: string | null } | null) =>
+    !!u && ((u.display_name || '').toLowerCase().includes(nameQ) || (u.username || '').toLowerCase().includes(nameQ))
+  const filtered = searchQ
+    ? [...conversations, ...archivedConvs].filter(c => matchesQ(c.other_user))
     : tabList
+  const chattedIds = new Set([...conversations, ...archivedConvs].map(c => c.other_user?.id).filter(Boolean))
+  const peopleMatches = searchQ
+    ? [...savedContacts.filter(c => matchesQ(c)), ...chatSearchPeople]
+        .filter((u, i, arr) => u.id !== user?.id && !chattedIds.has(u.id) && arr.findIndex(x => x.id === u.id) === i)
+    : []
 
   return (
     <div className="flex-1 min-h-0 relative flex flex-col bg-bg">
@@ -855,8 +875,8 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
           </div>
         )}
 
-        {/* All · Unread · Archived */}
-        <div className="flex gap-2" role="tablist" aria-label="Chat filter">
+        {/* All · Unread · Archived (hidden while searching - search covers all) */}
+        {!searchQ && <div className="flex gap-2" role="tablist" aria-label="Chat filter">
           {([['all', 'All'], ['unread', 'Unread'], ['archived', 'Archived']] as const).map(([id, label]) => {
             const on = listTab === id
             return (
@@ -874,21 +894,24 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
               </button>
             )
           })}
-        </div>
+        </div>}
       </div>
 
       {loading ? (
         <SkeletonRows count={8} />
-      ) : filtered.length === 0 && (listTab !== 'all' || search || archivedConvs.length > 0) ? (
+      ) : filtered.length === 0 && peopleMatches.length === 0 && (listTab !== 'all' || searchQ || archivedConvs.length > 0) ? (
         <div className="text-center py-16 px-5">
           <p className="text-text-secondary font-medium">
-            {search ? 'No chats found' : listTab === 'unread' ? 'No unread chats' : listTab === 'archived' ? 'No archived chats' : 'All your chats are archived'}
+            {searchQ ? 'No chats or people found' : listTab === 'unread' ? 'No unread chats' : listTab === 'archived' ? 'No archived chats' : 'All your chats are archived'}
           </p>
-          {!search && listTab === 'archived' && (
+          {searchQ && !searchQ.endsWith('.arc') && (
+            <p className="text-text-muted text-sm mt-1">Type a full username.arc to find someone new</p>
+          )}
+          {!searchQ && listTab === 'archived' && (
             <p className="text-text-muted text-sm mt-1">Long-press a chat to archive it</p>
           )}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : filtered.length === 0 && !searchQ ? (
         <div className="text-center py-16 px-5">
           <div className="w-16 h-16 bg-surface rounded-full flex items-center justify-center mx-auto mb-4">
             <Send className="w-8 h-8 text-text-secondary" />
@@ -902,6 +925,9 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
         </div>
       ) : (
         <div className="pb-4">
+          {searchQ && filtered.length > 0 && (
+            <p className="px-4 pt-3 pb-1 text-[12px] font-bold uppercase tracking-wide text-text-secondary">Chats</p>
+          )}
           {filtered.map((conv, idx) => {
             // A self-conversation (paying/messaging your own username) has
             // conv.other_user resolved to your OWN user record - see
@@ -985,6 +1011,16 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
               </button>
             )
           })}
+          {peopleMatches.length > 0 && (
+            <div className="px-4 pt-4">
+              <PeopleCard title="People" count={peopleMatches.length}>
+                {peopleMatches.map((u, i) => (
+                  <PersonRow key={u.id} person={u} first={i === 0} busy={openingId === u.id}
+                    action="Message" onClick={() => startChat(u)} />
+                ))}
+              </PeopleCard>
+            </div>
+          )}
         </div>
       )}
 
