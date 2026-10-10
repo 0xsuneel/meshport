@@ -2260,7 +2260,7 @@ export function ChatConversationPage() {
       await blockUser(user.id, otherUser.id)
       invalidateConversationsCache()
       showToastMessage(`${otherHandle} blocked`, 'success')
-      navigate('/chat')
+      navigate('/chat', { replace: true })
     } catch { showToastMessage("Couldn't block - try again", 'error') }
     finally { setGateBusy(false) }
   }
@@ -3767,6 +3767,22 @@ export function ChatConversationPage() {
   const [historyReceipt, setHistoryReceipt] = useState<any | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [showProfile, setShowProfile] = useState(false)
+  // Contact info is a page of its own (slides over the chat). It adds a
+  // history entry so the phone's Back closes it, like any page.
+  const openProfile = () => {
+    setShowProfile(true)
+    try { window.history.pushState({ ...(window.history.state || {}), mpChatInfo: true }, '') } catch { /* ignore */ }
+  }
+  const closeProfile = () => {
+    if ((window.history.state as any)?.mpChatInfo) window.history.back()
+    else setShowProfile(false)
+  }
+  useEffect(() => {
+    if (!showProfile) return
+    const onPop = () => { if (!(window.history.state as any)?.mpChatInfo) setShowProfile(false) }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [showProfile])
 
   const executeChatPayment = async () => {
     // Synchronous guard - payStep (React state) doesn't flip to 'processing'
@@ -4399,7 +4415,7 @@ export function ChatConversationPage() {
                 <ArrowLeft className="w-5 h-5 text-text-primary" />
               </button>
             )}
-            <button onClick={() => setShowProfile(true)} className="flex items-center gap-3 flex-1 min-w-0 active:opacity-70 transition-opacity">
+            <button onClick={openProfile} className="flex items-center gap-3 flex-1 min-w-0 active:opacity-70 transition-opacity">
               <Avatar name={otherUser?.display_name ?? ""} src={otherUser?.avatar_url ?? null} size="sm" className="!w-[38px] !h-[38px] self-center flex-shrink-0" />
               {otherUser ? (
                 <div className="min-w-0 flex flex-col justify-center text-left">
@@ -4955,7 +4971,7 @@ export function ChatConversationPage() {
               <div className="px-5 space-y-2.5">
                 {/* Pay */}
                 <button
-                  onClick={() => { setShowProfile(false); handlePay() }}
+                  onClick={() => { closeProfile(); handlePay() }}
                   className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
                   style={{ background:'color-mix(in srgb, var(--brand) 10%, transparent)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
                   <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--brand) 20%, transparent)' }}>
@@ -4968,7 +4984,7 @@ export function ChatConversationPage() {
 
                 {/* Transaction history */}
                 <button
-                  onClick={() => { setShowProfile(false); setShowHistory(true) }}
+                  onClick={() => { closeProfile(); setShowHistory(true) }}
                   className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
                   style={{ background:'color-mix(in srgb, var(--text-primary) 4%, transparent)', border:'1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)' }}>
                   <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--text-primary) 8%, transparent)' }}>
@@ -4988,9 +5004,9 @@ export function ChatConversationPage() {
                   return (
                     <button
                       onClick={() => {
-                        setShowProfile(false)
                         if (!conversationId) return
                         if (archived) {
+                          closeProfile()
                           unhideChat(conversationId, addr)
                           if (otherUser?.id && addr) {
                             import('@/lib/removedContacts').then(({ removeFromRemovedContacts }) => removeFromRemovedContacts(addr, otherUser.id)).catch(() => {})
@@ -5000,7 +5016,8 @@ export function ChatConversationPage() {
                         } else {
                           hideChat(conversationId, addr)
                           invalidateConversationsCache()
-                          navigate('/chat')
+                          setShowProfile(false)
+                          navigate('/chat', { replace: true })
                         }
                       }}
                       className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
@@ -5012,13 +5029,43 @@ export function ChatConversationPage() {
                     </button>
                   )
                 })()}
+
+                {/* Block / Unblock */}
+                {otherUser?.id && otherUser.id !== user?.id && (chatGate === 'iBlocked' ? (
+                  <button onClick={() => { closeProfile(); unblockChat() }}
+                    className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
+                    style={{ background:'color-mix(in srgb, var(--brand) 10%, transparent)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--brand) 20%, transparent)' }}>
+                      <Ban className="w-4 h-4 text-brand-text" />
+                    </div>
+                    <span className="text-[15px] font-semibold text-brand-text">Unblock {recipientClean}.arc</span>
+                  </button>
+                ) : (
+                  <button onClick={() => { setShowProfile(false); blockChat() }}
+                    className="w-full flex items-center gap-3.5 px-4 py-3.5 rounded-2xl active:scale-[0.98] transition-transform"
+                    style={{ background:'color-mix(in srgb, var(--danger) 6%, transparent)', border:'1px solid color-mix(in srgb, var(--danger) 18%, transparent)' }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background:'color-mix(in srgb, var(--danger) 12%, transparent)' }}>
+                      <Ban className="w-4 h-4 text-danger" />
+                    </div>
+                    <span className="text-[15px] font-semibold text-danger">Block {recipientClean}.arc</span>
+                  </button>
+                ))}
               </div>
             </>
           )
           return (
-            <DesktopDialogFrame onClose={() => setShowProfile(false)} maxWidth={420}>
-              <div className="pt-2 pb-6">{profileContent}</div>
-            </DesktopDialogFrame>
+            <motion.div key="chat-info" role="dialog" aria-label="Contact info"
+              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ duration: 0.24, ease: [0.32, 0.72, 0, 1] }}
+              className="bg-bg"
+              style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', flexDirection: 'column' }}>
+              <div className="header-row px-5 pt-header pb-2 flex-shrink-0" style={{ gap: 12 }}>
+                <button onClick={closeProfile} className="back-btn" aria-label="Back">
+                  <ArrowLeft className="w-5 h-5 text-text-primary" />
+                </button>
+                <h1 className="text-xl font-bold text-text-primary">Contact info</h1>
+              </div>
+              <div className="flex-1 overflow-y-auto pb-10" style={{ width: '100%', maxWidth: 560, margin: '0 auto' }}>{profileContent}</div>
+            </motion.div>
           )
         })()}
       </AnimatePresence>
