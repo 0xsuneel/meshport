@@ -14,16 +14,48 @@ import {
   listChatPendingOrders, getPayment, orderLabel, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type ChatPendingOrder,
 } from '@/lib/merchantPay'
 
+// Last known open orders per chat partner. The strip sits above the
+// messages, so it must be there from the chat's first frame: appearing a
+// moment later pushed every message down and back (the "dancing" open).
+// The chat list prefetches this with each chat's messages.
+const _pendingCache = new Map<string, ChatPendingOrder[]>()
+const _pendingInFlight = new Map<string, Promise<ChatPendingOrder[]>>()
+const sameOrders = (a: ChatPendingOrder[], b: ChatPendingOrder[]) =>
+  a.length === b.length && a.every((o, i) => o.code === b[i].code && o.amount === b[i].amount && o.received === b[i].received && o.note === b[i].note)
+
+function fetchPending(otherUserId: string): Promise<ChatPendingOrder[]> {
+  let p = _pendingInFlight.get(otherUserId)
+  if (!p) {
+    p = listChatPendingOrders(otherUserId)
+      .then(list => { _pendingCache.set(otherUserId, list); return list })
+      .finally(() => _pendingInFlight.delete(otherUserId))
+    _pendingInFlight.set(otherUserId, p)
+  }
+  return p
+}
+
+/** Load a chat's open orders ahead of opening it (once per chat unless asked again). */
+export function prefetchPendingOrders(otherUserId: string | null | undefined, force = false): Promise<unknown> {
+  if (!otherUserId || (!force && _pendingCache.has(otherUserId))) return Promise.resolve()
+  return fetchPending(otherUserId).catch(() => {})
+}
+
 export function ChatPendingOrders({ otherUserId, refreshKey }: { otherUserId: string | null | undefined; refreshKey?: unknown }) {
   const { showToastMessage } = useUIStore()
-  const [orders, setOrders] = useState<ChatPendingOrder[]>([])
+  const [orders, setOrders] = useState<ChatPendingOrder[]>(() => (otherUserId && _pendingCache.get(otherUserId)) || [])
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!otherUserId) { setOrders([]); return }
-    try { setOrders(await listChatPendingOrders(otherUserId)) } catch { /* keep last */ }
+    try {
+      const list = await fetchPending(otherUserId)
+      // Same orders: keep the same state, so nothing re-renders or moves.
+      setOrders(prev => sameOrders(prev, list) ? prev : list)
+    } catch { /* keep last */ }
   }, [otherUserId])
+  // Another chat (the page is reused when switching): its own cached list at once.
+  useEffect(() => { setOrders((otherUserId && _pendingCache.get(otherUserId)) || []) }, [otherUserId])
 
   useEffect(() => { void load() }, [load, refreshKey])
   useEffect(() => {
