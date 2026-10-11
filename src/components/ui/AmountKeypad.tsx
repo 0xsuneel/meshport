@@ -13,6 +13,7 @@ import { useRef, useEffect } from 'react'
 import { SHEET_SPRING, SHEET_BACKDROP } from '@/lib/motion'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { opensKeyboard } from '@/hooks/useKeyboardOpen'
 import { amountFontSize } from '@/lib/amountFontSize'
 
 // Same digit/decimal sanitizing handleKey already does one keystroke at a
@@ -92,6 +93,17 @@ export function AmountKeypad({
   // Desktop users type on a physical keyboard - the tap-grid below is a
   // mobile-only affordance. Same value/onChange contract either way.
   const isDesktop = useMediaQuery('(min-width: 980px)')
+
+  // Opening the keypad closes the phone's own keyboard. On iPhone, tapping
+  // the amount box doesn't take focus away from a text field typed in just
+  // before (e.g. the recipient address), so the system keyboard stayed up
+  // over this keypad - the keys looked "hidden" and typing went into the
+  // address field instead.
+  useEffect(() => {
+    if (!open || isDesktop) return
+    const el = document.activeElement
+    if (el instanceof HTMLElement && opensKeyboard(el)) el.blur()
+  }, [open, isDesktop])
 
   // BUG FIX: previously hardcoded to 2 everywhere below, regardless of
   // `token` - see sanitizeAmountInput's own comment. cirBTC needs its full

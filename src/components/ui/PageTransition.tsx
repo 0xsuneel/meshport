@@ -194,9 +194,9 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
   useLayoutEffect(() => () => cleanup.current?.(), [])
 
   return (
-    <div ref={hostRef}
+    <div ref={hostRef} data-no-scroll=""
       style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: isDesktop ? 'visible' : 'hidden' }}>
-      <div key={locationKey} ref={pageRef}
+      <div key={locationKey} ref={pageRef} data-no-scroll=""
         style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: isDesktop ? 'visible' : 'hidden' }}>
         {children}
       </div>

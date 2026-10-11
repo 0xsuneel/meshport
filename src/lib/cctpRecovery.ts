@@ -58,11 +58,13 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 export async function listRecoverable(): Promise<{ claims: RecoveryItem[]; transfers: RecoveryItem[] }> {
-  const r = await call<{ claims: RecoveryItem[]; transfers: RecoveryItem[] }>({ action: 'list' })
+  const raw = await call<{ claims?: RecoveryItem[]; transfers?: RecoveryItem[] } | null>({ action: 'list' })
+  // An empty reply means nothing to recover (not a crash on the page).
+  const r = { claims: raw?.claims ?? [], transfers: raw?.transfers ?? [] }
   // A transfer that failed before anything left the wallet (lib/failure.ts,
   // metadata.nothing_moved) has nothing to recover. cctp-recovery filters
   // these too; this keeps Recover right with an older deployed function.
-  if (r.transfers?.length) {
+  if (r.transfers.length) {
     const { data } = await supabase.from('activity').select('id')
       .in('id', r.transfers.map(t => t.id)).eq('metadata->>nothing_moved', 'true')
     const skip = new Set((data ?? []).map((x: { id: string }) => x.id))
