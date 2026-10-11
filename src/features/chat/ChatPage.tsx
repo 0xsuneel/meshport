@@ -1728,7 +1728,13 @@ const MessageBubble = memo(function MessageBubble({
             </div>
             {billRef && (
               // Reply to the bill card this payment settles - tap to jump to it.
-              <div onClick={e => { e.stopPropagation(); document.getElementById(billAnchor!)?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }}
+              // Same as any reply: scroll to the bill card's message and flash it.
+              <div role="button" onClick={e => {
+                  e.stopPropagation()
+                  const mid = document.getElementById(billAnchor!)?.closest('[data-mid]')?.getAttribute('data-mid')
+                  if (mid && onJumpTo) onJumpTo(mid)
+                  else useUIStore.getState().showToastMessage('That bill is further up in this chat - scroll up to load it', 'info')
+                }}
                 style={{
                   margin: '7px 10px 0', padding: '4px 8px', borderRadius: 8, cursor: 'pointer',
                   borderLeft: `3px solid ${isMine ? 'var(--brand)' : 'var(--success)'}`,
