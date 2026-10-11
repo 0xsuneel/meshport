@@ -1297,7 +1297,7 @@ export function PaySendPage() {
                     <div>
                       <div className="flex items-center">
                         <div className="flex-1"><SectionLabel>Recent</SectionLabel></div>
-                        <button onClick={() => navigate('/recent-paid')} className="text-[13px] font-semibold mb-2 text-link">See all</button>
+                        <button onClick={() => navigate('/recent-paid', { state: { from: '/pay' } })} className="text-[13px] font-semibold mb-2 text-link">See all</button>
                       </div>
                       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                         {recents.slice(0, 5).map((r, i) => (
@@ -1329,7 +1329,7 @@ export function PaySendPage() {
                                 <p className="px-4 pt-2.5 pb-0.5 text-[12px] font-extrabold text-link"
                                   style={{ borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : undefined }}>{letter}</p>
                               )}
-                              <PersonRow first={i === 0 || header} name={name} self={isSelf}
+                              <PersonRow first={i === 0 || header} name={name} self={isSelf} usernameBelow
                                 username={c.username?.endsWith('.arc') ? c.username : `${c.username}.arc`}
                                 avatarName={name} avatarUrl={c.avatar_url}
                                 onClick={() => pickResult(c)} />
@@ -2027,8 +2027,10 @@ function lastPaymentLine(info: { at: string; dir: 'paid' | 'received'; amount: n
   return `${amt}${info.dir === 'paid' ? 'sent' : 'received'}${when}`
 }
 // One Pay-page person row: avatar, name + username, optional last payment, Pay pill.
-function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast, first, onClick }: {
+function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast, first, usernameBelow, onClick }: {
   name: string; username: string; avatarName: string; avatarUrl?: string | null; self?: boolean
+  /** Contacts: name on the first line, username on its own line under it. */
+  usernameBelow?: boolean
   last?: { at: string; dir: 'paid' | 'received'; amount: number; token: string }; showLast?: boolean; first?: boolean; onClick: () => void
 }) {
   return (
@@ -2039,12 +2041,13 @@ function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-1.5 min-w-0">
           <span className="text-[15px] font-semibold text-text-primary truncate" style={{ maxWidth: '60%' }}>{name}</span>
-          <span className="text-[12.5px] truncate text-link">{username}</span>
+          {!usernameBelow && <span className="text-[12.5px] truncate text-link">{username}</span>}
           {self && (
             <span className="flex-shrink-0 self-center text-[10px] font-bold uppercase tracking-wide px-1.5 py-[1px] rounded-md"
               style={{ color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>You</span>
           )}
         </div>
+        {usernameBelow && <p className="text-[13px] mt-0.5 truncate text-link">{username}</p>}
         {showLast && (
           <p className="text-[13px] mt-0.5 truncate" style={{ color: last?.dir === 'received' ? 'var(--success)' : 'var(--text-secondary)' }}>
             {last ? lastPaymentLine(last) : 'No payments yet'}

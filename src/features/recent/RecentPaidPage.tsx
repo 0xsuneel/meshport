@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
 import { fetchRecentContacts, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
@@ -35,9 +35,24 @@ function Avatar({ person, size, color }: { person: RecentPerson; size: number; c
 
 const COLORS = RECENT_AVATAR_COLORS
 
+// Back goes where the list was opened from: Pay → See all comes back to Pay,
+// Home → View all to Home. Remembered for the session, so it still holds
+// after paying someone from here and returning (that comes back without state).
+const BACK_KEY = 'meshport_recent_paid_back'
+function backTarget(from: unknown): string {
+  const valid = (v: unknown): v is string => v === '/' || v === '/pay'
+  try {
+    if (valid(from)) { sessionStorage.setItem(BACK_KEY, from); return from }
+    const saved = sessionStorage.getItem(BACK_KEY)
+    return valid(saved) ? saved : '/'
+  } catch { return valid(from) ? from : '/' }
+}
+
 export function RecentPaidPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
+  const location = useLocation()
+  const [backTo] = useState(() => backTarget((location.state as { from?: unknown } | null)?.from))
   const walletAddress = useAuthStore(s => s.walletAddress)
   const [people, setPeople]   = useState<RecentPerson[]>([])
   const [loading, setLoading] = useState(true)
@@ -95,7 +110,7 @@ export function RecentPaidPage() {
         display: 'flex', alignItems: 'center', gap: 12,
       }}>
         {!isDesktop && (
-          <button onClick={() => navigate('/')} className="back-btn">
+          <button onClick={() => navigate(backTo)} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
         )}

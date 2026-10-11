@@ -711,7 +711,7 @@ function RecentRow({ navigate, compact, resultLimit = 5 }: { navigate: NavigateF
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: compact ? 8 : 14 }}>
         <span style={{ fontSize: 16, fontWeight: 700 }}>Recent</span>
-        <button onClick={() => navigate('/recent-paid')}
+        <button onClick={() => navigate('/recent-paid', { state: { from: '/' } })}
           style={{ fontSize: 14, color: 'var(--brand-text)', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer' }}>
           View all
         </button>
