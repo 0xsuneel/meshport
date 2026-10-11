@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
-import { ubFeeBreakdown, ubSpendAmount } from '@/lib/transferFees'
+import { ubFeeBreakdown, ubSpendAmount, ubQuoteFees } from '@/lib/transferFees'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/motion'
 import { useStepDirection } from '@/hooks/useStepDirection'
 import { createPortal } from 'react-dom'
@@ -29,7 +29,7 @@ import { isChainEnabledForTransfer, resolveChainMechanism, resolveAvailableMecha
 import { ARC_EXPLORER, explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ARC_RPCS, ARC_NETWORK } from '@/lib/arc'
 import { circleForwarderMintsTo, noteForwarderMintFailed } from '@/lib/chainRpcs'
-import { gatewaySelfMintsTo, forwarderMintRetry } from '@/lib/ubClaim'
+import { gatewaySelfMintsTo, forwarderMintRetry, getUnifiedBalances, UB_MIN_SWEEP } from '@/lib/ubClaim'
 import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -214,18 +214,12 @@ interface FeeEstimate {
 // balance -> destination) - it has no visibility into the DEPOSIT leg that
 // has to happen first (Arc USDC -> the Gateway Wallet contract), which is
 // itself a normal Arc transaction and therefore needs Arc gas. Arc's
-// native gas token is USDC (same fact PaySendPage.tsx's own feeReserve is
-// built on), so that deposit's gas has to come out of the exact same
-// balance being sent - reserving nothing for it here is exactly what let
-// someone type an amount right up to their full balance, have the deposit
-// itself succeed, and then have nothing left over once the spend step's
-// own (correctly estimated) fee tried to come out of what's left.
-// A flat conservative reserve, not a live estimate: depositWithPermit is
-// a more complex contract call than the simple 21000-gas native transfer
-// estimateTransferFee() prices, and this only needs to be safely
-// sufficient, not exact - any leftover just makes receiverGets a touch
-// more conservative than reality.
-const UB_DEPOSIT_GAS_RESERVE = 0.05 // USDC
+// native gas token is USDC, so that deposit's gas has to come out of the
+// exact same balance being sent - reserving nothing for it let someone type
+// their full balance, have the deposit succeed, and then have nothing left
+// for the spend. The reserve is Arc's live gas price for that deposit
+// (estimateUbDepositGas), read on Review into ubDepositGasRef - it used to be
+// a flat 0.05 USDC, ~10x the real gas.
 
 // Gateway attestations expire 10 minutes after issuance if unused (per
 // Circle's "Unified Balance Kit: Production Safeguards and Recovery
@@ -909,6 +903,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const [finishingMint, setFinishingMint] = useState(false)
   const [finishMintError, setFinishMintError] = useState('')
   const ubDepositTxRef = useRef<string | null>(null)
+  // Leftover dust in this wallet's Arc Unified Balance (earlier sends'
+  // headroom, unused maxFee) - stands in for the next send's headroom, so it
+  // is used instead of keeping more back. Read on Review, before the deposit.
+  const ubArcDustRef = useRef(0)
+  // Arc gas kept back for the Unified Balance deposit (see estimateUbDepositGas).
+  const ubDepositGasRef = useRef(0.05)
   const [bridgeSteps, setBridgeSteps] = useState<BridgeStepState[]>(makeDefaultSteps('Destination'))
   const [feeEstimate, setFeeEstimate] = useState<FeeEstimate>({ bridgeFee: 0, kitFee: 0, networkFee: 0, forwarderFee: 0, totalFee: 0, onTop: 0, spendOverhead: 0, receiverGets: 0, loading: false, error: '' })
   // Which (address, amount, chain, speed) combination `feeEstimate` above
@@ -1307,7 +1307,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // estimating on the full numAmount let this diverge from what
         // handleConfirm can actually deposit once the gas reserve is
         // carved out.
-        const ubTargetAmount = Math.min(numAmount, Math.max(0, balance - UB_DEPOSIT_GAS_RESERVE))
+        if (!ubDepositCompletedRef.current) ubDepositGasRef.current = await import('@/lib/arcService').then(m => m.estimateUbDepositGas()).catch(() => ubDepositGasRef.current)
+        const ubTargetAmount = Math.min(numAmount, Math.max(0, balance - ubDepositGasRef.current))
 
         // `from` takes an allocations object, not a bare adapter array -
         // `[{ adapter }]` silently satisfied the `any`-typed call but isn't
@@ -1330,32 +1331,25 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           token: 'USDC',
         })
         const forwarderTo = { chain: chain.sdk as any, recipientAddress: address, useForwarder: true }
+        // Dust only (under UB_MIN_SWEEP): a larger Arc balance is an earlier
+        // send's deposit waiting to be finished, not headroom.
+        if (senderAddress && !ubDepositCompletedRef.current) {
+          const arcUb = await getUnifiedBalances(kit, senderAddress)
+            .then(rows => rows.filter(r => r.chain === ARC_CHAIN_KEY).reduce((t, r) => t + r.confirmed, 0))
+            .catch(() => 0)
+          ubArcDustRef.current = arcUb > 0 && arcUb < UB_MIN_SWEEP ? arcUb : 0
+        }
         const est: any = gatewaySelfMintsTo(chain.sdk)
           ? await ubQuote({ chain: chain.sdk as any, recipientAddress: address, adapter, useForwarder: false }).catch(() => ubQuote(forwarderTo))
           : await ubQuote(forwarderTo)
-        let providerFee = 0, gasFee = 0, kitFee = 0, forwarderFee = 0
-        for (const f of est?.fees ?? []) {
-          // USDC fees only - without the forwarder, the destination's gas
-          // can be listed in its native token (paid by MeshPort's relayer).
-          if (f?.token && f.token !== 'USDC') continue
-          const amt = parseFloat(f.amount) || 0
-          if (f.type === 'provider') providerFee += amt
-          else if (f.type === 'gasFee') gasFee += amt
-          else if (f.type === 'kit') kitFee += amt
-          else if (f.type === 'forwarder') forwarderFee += amt
-        }
-        // Circle's Unified Balance fee model (docs.arc.io/app-kit/concepts/
-        // unified-balance-fees): the Gateway protocol fee ('provider') and
-        // burn-intent gas ('gasFee') are taken from the Unified Balance in
-        // addition to the spend amount; the custom ('kit') and Forwarding
-        // Service ('forwarder') fees are carved out of the spend amount
-        // before minting.
-        // Every fee comes out of the amount typed (see lib/transferFees).
-        // This used to promise amount − kit − forwarder only - more than ever
-        // arrived - and asked for the Gateway fee + gas again on top in the
-        // balance check although it was never sent from the wallet.
-        const { spendOverhead, networkFee, totalFee, receiverGets } =
-          ubFeeBreakdown(ubTargetAmount, { providerFee, gasFee, kitFee, forwarderFee })
+        // Circle's maxFee ('provider' + 'gasFee') is all the spend takes from
+        // the Unified Balance; the forwarding fee is a part of it, not extra
+        // (lib/transferFees). Dust already in the Arc Unified Balance stands
+        // in for the send's headroom.
+        const quoted = ubQuoteFees(est)
+        const { providerFee, kitFee } = quoted
+        const { spendOverhead, networkFee, forwarderFee, totalFee, receiverGets } =
+          ubFeeBreakdown(ubTargetAmount, quoted, ubArcDustRef.current)
 
         const fresh: FeeEstimate = {
           bridgeFee:    providerFee,
@@ -1365,7 +1359,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           totalFee,
           // Only Arc's own gas for the deposit transaction is paid from the
           // wallet beyond the amount (the deposit is capped to leave it).
-          onTop:        UB_DEPOSIT_GAS_RESERVE,
+          onTop:        ubDepositGasRef.current,
           spendOverhead,
           receiverGets,
           loading: false,
@@ -1412,14 +1406,26 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           else if (f.type === 'forwarder') forwarderFee += amt
         }
       }
+      // gasFees[] entries carry the amount in fees.fee (this read f.amount,
+      // never set, so Arc's own gas always showed as a made-up "~$0.01").
+      // Only gas paid in USDC is the wallet's: Arc's approve + burn. A
+      // destination mint's gas (native token) is paid by Circle's forwarder
+      // (inside its fee) or MeshPort's relayer.
       if (estimate?.gasFees) {
-        for (const f of estimate.gasFees) networkFee += parseFloat(f.amount) || 0
+        for (const f of estimate.gasFees) {
+          if (f?.token !== 'USDC') continue
+          networkFee += parseFloat(f?.fees?.fee ?? f?.amount) || 0
+        }
       }
 
       const totalFee = bridgeFee + kitFee + networkFee + forwarderFee
-      const receiverGets = Math.max(0, numAmount - totalFee)
+      // CCTP takes its protocol + forwarding fee from the burned amount when
+      // it mints (and refunds what's left of maxFee); Arc gas and a custom
+      // fee are paid from the wallet on top of the amount.
+      const receiverGets = Math.max(0, numAmount - bridgeFee - forwarderFee)
+      const onTop = networkFee + kitFee
 
-      const fresh: FeeEstimate = { bridgeFee, kitFee, networkFee, forwarderFee, totalFee, onTop: totalFee, spendOverhead: 0, receiverGets, loading: false, error: '' }
+      const fresh: FeeEstimate = { bridgeFee, kitFee, networkFee, forwarderFee, totalFee, onTop, spendOverhead: 0, receiverGets, loading: false, error: '' }
       notifyIfFeeChanged(fresh, silent)
       setFeeEstimate(fresh)
       setFeeEstimateKey(requestKey)
@@ -1445,8 +1451,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       const totalFee = bridgeFee + networkFee + forwarderFee
       const fresh: FeeEstimate = {
         bridgeFee, kitFee: 0, networkFee, forwarderFee, totalFee,
-        onTop: chain.ub ? UB_DEPOSIT_GAS_RESERVE : totalFee, spendOverhead: bridgeFee + networkFee,
-        receiverGets: Math.max(0, (chain.ub ? Math.min(numAmount, Math.max(0, balance - UB_DEPOSIT_GAS_RESERVE)) : numAmount) - totalFee),
+        onTop: chain.ub ? ubDepositGasRef.current : totalFee, spendOverhead: bridgeFee + networkFee,
+        receiverGets: Math.max(0, (chain.ub ? Math.min(numAmount, Math.max(0, balance - ubDepositGasRef.current)) : numAmount) - totalFee),
         approx: true, loading: false, error: '',
       }
       notifyIfFeeChanged(fresh, silent)
@@ -1744,7 +1750,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // Cap the deposit the same way fetchFeeEstimate caps its estimate -
           // leave room in `balance` for Arc's own deposit gas. Depositing the
           // raw numAmount (unadjusted) risked leaving nothing for that gas.
-          targetDepositAmount = Math.min(numAmount, Math.max(0, balance - UB_DEPOSIT_GAS_RESERVE))
+          targetDepositAmount = Math.min(numAmount, Math.max(0, balance - ubDepositGasRef.current))
           if (targetDepositAmount <= 0) {
             throw new Error(
               `Insufficient USDC balance to cover the transfer plus Arc network gas. ` +
@@ -1830,7 +1836,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // capped so a single very-high-fee chain can't eat an unreasonable
         // chunk of the transfer.
         const spendFeeEstimate = freshEstimate.spendOverhead
-        const spendAmount = ubSpendAmount(targetDepositAmount, spendFeeEstimate)
+        const spendAmount = ubSpendAmount(targetDepositAmount, spendFeeEstimate, ubArcDustRef.current)
         const spendParams = {
           amount: spendAmount.toFixed(6),
           from: {

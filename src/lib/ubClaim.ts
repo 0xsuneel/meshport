@@ -21,6 +21,7 @@ import { FORWARDER_MINT_FAILING_SDK_CHAINS, forwarderMintFailing, noteForwarderM
 export { UB_CLAIM_CHAINS }
 
 import { isMerchantNow } from './merchant'
+import { ubQuoteFees, ubSpendCost, ubSpendMargin, ubForwarderPart } from './transferFees'
 
 const FAST_FINALITY = new Set(['Avalanche_Fuji', 'Polygon_Amoy_Testnet', 'Sonic_Testnet', 'Sei_Testnet', 'HyperEVM_Testnet'])
 
@@ -73,7 +74,7 @@ async function assertDepositSucceeded(sdkChainId: string, txHash: string | undef
 }
 // Below this, a chain's Unified Balance is leftover fee dust. Dust is never
 // shown or swept - it stays in the Unified Balance as the safety margin for
-// the next spend from that chain (see spendMargin below).
+// the next spend from that chain (see ubSpendMargin in lib/transferFees).
 export const UB_MIN_SWEEP = 0.5
 // Kept for older imports; dust is no longer offered back to the user.
 export const UB_DUST_CLAIM_MIN = Number.POSITIVE_INFINITY
@@ -83,17 +84,6 @@ const CONFIRM_TIMEOUT_MS = 30 * 60 * 1000
 // server is sending it to Arc (seconds away) the screen checks every 2s.
 const POLL_MS = 10_000
 const POLL_MINTING_MS = 2_000
-const SPEND_MARGIN = 0.005 // USDC headroom so fee drift never fails the spend
-
-/**
- * Headroom to leave on top of the fee. Dust already sitting in the chain's
- * Unified Balance (from earlier claims) covers fee drift instead, so the user
- * receives the full `amount − fee` whenever there's enough of it.
- */
-function spendMargin(cushion = 0): number {
-  return Math.max(0, SPEND_MARGIN - Math.max(0, cushion))
-}
-
 type Stage = 'approving' | 'attesting' | 'minting' | 'done' | 'error'
 type StepFn = (stage: Stage, msg: string, pct: number, extra?: { txHash?: string; mintTxHash?: string }) => void
 
@@ -148,11 +138,13 @@ export async function spendUnifiedToArc(params: {
 /**
  * Read-only fee preview for a Unified Balance claim of `amount` from
  * `fromChain` to the user's own Arc wallet - the same estimateSpend() quote
- * the claim itself uses (signs nothing). Every USDC fee comes out of the
- * claimed amount, so the wallet receives at least `amount − total − margin`.
+ * the claim itself uses (signs nothing). The fee is Circle's maxFee for the
+ * spend (Gateway fee + source gas + forwarding fee, see lib/transferFees);
+ * the wallet receives at least `amount − total − headroom`. `cushion`: dust
+ * already in that chain's Unified Balance, which stands in for the headroom.
  */
 export async function estimateUbClaimFee(params: {
-  kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number
+  kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number; cushion?: number
 }): Promise<{ gatewayFee: number; forwarderFee: number; otherFee: number; total: number; receiveAtLeast: number }> {
   const { kit, adapter, walletAddr, fromChain, amount } = params
   const est: any = await kit.unifiedBalance.estimateSpend({
@@ -161,18 +153,12 @@ export async function estimateUbClaimFee(params: {
     token: 'USDC',
     amount: amount.toFixed(6),
   })
-  let gatewayFee = 0, forwarderFee = 0, otherFee = 0
-  for (const f of est?.fees ?? []) {
-    if (f?.token && f.token !== 'USDC') continue
-    const a = Number(f?.amount ?? 0) || 0
-    if (f?.type === 'provider' || f?.type === 'gasFee') gatewayFee += a
-    else if (f?.type === 'forwarder') forwarderFee += a
-    else otherFee += a
-  }
-  let total = gatewayFee + forwarderFee + otherFee
-  // Same fallback as the claim: some quotes only carry a total.
-  if (!total) { otherFee = Number(est?.total ?? 0) || 0; total = otherFee }
-  return { gatewayFee, forwarderFee, otherFee, total, receiveAtLeast: Math.max(0, amount - total - SPEND_MARGIN) }
+  const f = ubQuoteFees(est)
+  const total = ubSpendCost(f)
+  // The forwarding fee is part of maxFee ('gasFee'), shown as its own row.
+  const forwarderFee = ubForwarderPart(f)
+  const gatewayFee = total - forwarderFee
+  return { gatewayFee, forwarderFee, otherFee: 0, total, receiveAtLeast: Math.max(0, amount - total - ubSpendMargin(total, params.cushion)) }
 }
 
 // Destinations where Circle's Gateway forwarder mint has been failing
@@ -225,9 +211,8 @@ export async function spendUnifiedTo(params: {
   const selfMint = toChain !== ARC_CHAIN_KEY && gatewaySelfMintsTo(toChain)
   const quote = (to: any) => kit.unifiedBalance.estimateSpend({ from: alloc(amount), to, token: 'USDC', amount: amount.toFixed(6) })
   const est: any = selfMint ? await quote(selfMintTo).catch(() => quote(forwarderTo)) : await quote(forwarderTo)
-  const fee = (est?.fees ?? []).reduce((s: number, f: any) => s + (f?.token === 'USDC' ? Number(f.amount ?? 0) : 0), 0)
-    || Number(est?.total ?? 0)
-  const send = Math.max(0, amount - fee - spendMargin(params.cushion))
+  const fee = ubSpendCost(ubQuoteFees(est))
+  const send = Math.max(0, amount - fee - ubSpendMargin(fee, params.cushion))
   if (send <= 0) throw new Error(`Amount too small to cover the Gateway fee (${fee.toFixed(4)} USDC)`)
 
   if (selfMint) {
@@ -274,7 +259,7 @@ async function runUbClaimInner(params: {
   // that chain's gas, ~$1+). Depositing first and finding out at the send
   // left the USDC stuck there. A failed quote for another reason doesn't
   // block - the send step re-checks as before.
-  const fee = await estimateUbClaimFee({ kit, adapter, walletAddr, fromChain: sdkChainId, amount })
+  const fee = await estimateUbClaimFee({ kit, adapter, walletAddr, fromChain: sdkChainId, amount, cushion: before })
     .catch((e: any) => /too small/i.test(e?.message ?? '') ? { total: Infinity, receiveAtLeast: 0 } : null)
   if (fee && fee.receiveAtLeast <= 0) {
     throw new Error(fee.total === Infinity
@@ -352,9 +337,8 @@ export async function spendDustToArc(params: {
     from: { adapter, allocations: dust.map(d => ({ amount: d.amount.toFixed(6), chain: d.chain })) },
     to, token: 'USDC', amount: total.toFixed(6),
   })
-  const fee = (est?.fees ?? []).reduce((s: number, f: any) => s + (f?.token === 'USDC' ? Number(f.amount ?? 0) : 0), 0)
-    || Number(est?.total ?? 0)
-  const ratio = (total - fee - SPEND_MARGIN * dust.length) / total
+  const fee = ubSpendCost(ubQuoteFees(est))
+  const ratio = (total - fee - ubSpendMargin(fee)) / total
   if (ratio <= 0) throw new Error(`Leftover balance is too small to cover the Gateway fee (${fee.toFixed(4)} USDC)`)
   const allocations = dust
     .map(d => ({ chain: d.chain, amount: Math.floor(d.amount * ratio * 1e6) / 1e6 }))
@@ -441,9 +425,8 @@ export async function signSpendToArc(params: {
     token: 'USDC',
   }
   const est: any = await kit.unifiedBalance.estimateSpend({ ...base, amount: amount.toFixed(6) })
-  const fee = (est?.fees ?? []).reduce((s: number, f: any) => s + (f?.token === 'USDC' ? Number(f.amount ?? 0) : 0), 0)
-    || Number(est?.total ?? 0)
-  const send = Math.max(0, amount - fee - spendMargin(params.cushion))
+  const fee = ubSpendCost(ubQuoteFees(est))
+  const send = Math.max(0, amount - fee - ubSpendMargin(fee, params.cushion))
   if (send <= 0) throw new Error(`Amount too small to cover the Gateway fee (${fee.toFixed(4)} USDC)`)
 
   const captured = await withFetchPatch(async (realFetch) => {
@@ -494,9 +477,8 @@ export async function signSpendAllToArc(params: {
     from: { adapter, allocations: parts.map(p => ({ amount: p.amount.toFixed(6), chain: p.chain })) },
     to, token: 'USDC', amount: total.toFixed(6),
   })
-  const fee = (est?.fees ?? []).reduce((s: number, f: any) => s + (f?.token === 'USDC' ? Number(f.amount ?? 0) : 0), 0)
-    || Number(est?.total ?? 0)
-  const ratio = (total - fee - SPEND_MARGIN * parts.length) / total
+  const fee = ubSpendCost(ubQuoteFees(est))
+  const ratio = (total - fee - ubSpendMargin(fee)) / total
   if (ratio <= 0) throw new Error(`Too small to cover the Gateway fee (${fee.toFixed(4)} USDC)`)
   const allocations = parts
     .map(p => ({ chain: p.chain, amount: Math.floor(p.amount * ratio * 1e6) / 1e6 }))

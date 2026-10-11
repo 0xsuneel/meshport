@@ -5,7 +5,7 @@
 //
 //   GET  ?action=quote&chain=Base_Sepolia&amount=<USDC base units>
 //        → { fee, maxFee, usdcName, usdcVersion }
-//        fee    = MeshPort fee (relayer's source-chain gas, in USDC, + margin)
+//        fee    = MeshPort fee (relayer's source-chain gas, in USDC)
 //        maxFee = CCTP V2 maxFee (protocol fee + Circle forwarding fee, + margin)
 //
 //   POST { action:'relay', chain, bridge, authorization }
@@ -35,7 +35,7 @@
 //   BRIDGE_ROUTERS              {"Base_Sepolia":"0x…","Ethereum_Sepolia":"0x…"}
 //   BRIDGE_RPC_<CHAIN>          optional RPC override per chain
 //   BRIDGE_NATIVE_USD_<CHAIN>   optional gas-token USD price per chain (defaults in CHAINS)
-//   BRIDGE_MIN_FEE_UNITS        optional fee floor in USDC base units (default 50000 = 0.05)
+//   BRIDGE_MAX_FEE_UNITS        optional fee cap in USDC base units (default 100000 = 0.10)
 //   SUPABASE_URL, SUPABASE_SERVICE_KEY  session → wallet ownership check
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
@@ -54,7 +54,7 @@ const MIN_TOTAL_UNITS = 1_000_000n    // 1 USDC
 // (EXTERNAL_CHAINS, verified ids only) and Circle's domain table;
 // src/lib/gaslessBridge.test.ts checks this stays in sync. `gasUsd` is a rough
 // USD price of the chain's gas token, only used to turn gas into a USDC fee
-// (override per chain with BRIDGE_NATIVE_USD_<CHAIN>; the fee floor applies anyway).
+// (override per chain with BRIDGE_NATIVE_USD_<CHAIN>; the fee cap applies anyway).
 export const CHAINS: Record<string, { id: number; name: string; rpc: string; usdc: `0x${string}`; domain: number; gasUsd: number }> = {
   Ethereum_Sepolia:  { id: 11155111, name: 'Ethereum Sepolia',  rpc: 'https://ethereum-sepolia-rpc.publicnode.com', usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', domain: 0,  gasUsd: 3000 },
   Base_Sepolia:      { id: 84532,    name: 'Base Sepolia',      rpc: 'https://sepolia.base.org',                   usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', domain: 6,  gasUsd: 3000 },
@@ -395,20 +395,19 @@ async function cctpMaxFee(srcDomain: number, burn: bigint): Promise<bigint> {
   return ((protocol + forward) * 120n) / 100n + 1n
 }
 
-/** MeshPort's fee: the relayer's gas for the router call, priced in USDC, with margin and a floor. */
+/** MeshPort's fee: the relayer's gas for the router call, priced in USDC -
+ *  what that gas costs, nothing more (no margin, no minimum). */
 async function relayFee(pub: any, chainKey: string): Promise<bigint> {
   const gasPrice: bigint = await pub.getGasPrice()
   const nativeUsd = Number(process.env[`BRIDGE_NATIVE_USD_${chainKey.toUpperCase()}`] || CHAINS[chainKey].gasUsd)
   // wei → USDC units: wei * usd / 1e18 * 1e6 = wei * usd / 1e12
   const units = (ROUTER_GAS * gasPrice * BigInt(Math.round(nativeUsd * 100))) / 100n / 1_000_000_000_000n
-  const withMargin = (units * 130n) / 100n
-  const floor = BigInt(process.env.BRIDGE_MIN_FEE_UNITS || '50000')
   // Testnet gas has no real value, but priced at mainnet rates a busy chain
   // (Ethereum Sepolia) came out over 1 USDC - above the app's 5% fee limit,
-  // so every quote there was rejected. Capped so the fee stays small.
+  // so every quote there was rejected. Capped so the fee stays small: the
+  // cap only ever lowers the fee.
   const cap = BigInt(process.env.BRIDGE_MAX_FEE_UNITS || '100000')
-  const fee = withMargin > floor ? withMargin : floor
-  return fee > cap ? cap : fee
+  return units > cap ? cap : units
 }
 
 async function quote(chainKey: string, total: bigint) {

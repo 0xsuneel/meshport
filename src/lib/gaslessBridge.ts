@@ -46,7 +46,7 @@ export const GASLESS_CHAINS: Record<string, { chainId: number; usdc: Hex }> = Ob
 
 // Hard limits the app enforces whatever the server quotes.
 // The share limits alone would refuse every normal quote on a small amount
-// (a $1 bring: MeshPort's 0.05 floor is 5%, Circle's cap ~0.03 is 3%), so
+// (a $1 bring: MeshPort's relayer gas can be up to 0.10, Circle's cap ~0.03 is 3%), so
 // small fixed allowances let those through - still far below anything a bad
 // quote could take.
 const MAX_FEE_SHARE = 0.05        // MeshPort fee ≤ 5% of the amount…

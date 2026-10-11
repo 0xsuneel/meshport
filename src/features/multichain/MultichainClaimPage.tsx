@@ -217,9 +217,9 @@ function toSdkChainId(internalId: string): string {
 
 // Smallest Bring Funds amount, every route. Set by MeshPort's relayer: it
 // takes nothing under 1 USDC (api/bridge-relay MIN_TOTAL_UNITS - dust
-// deposits would let anyone burn its gas). At $1 the usual fees (MeshPort
-// 0.05 + Circle ~0.03 on CCTP) still leave ~$0.92 (see gaslessBridge's
-// small-amount fee limits). One constant for the amount screen, the
+// deposits would let anyone burn its gas). At $1 the usual fees (MeshPort's
+// relayer gas, at most 0.10, + Circle ~0.03 on CCTP) still leave ~$0.87 or
+// more (see gaslessBridge's small-amount fee limits). One constant for the amount screen, the
 // pre-claim estimate and executeClaim's own re-check.
 const MIN_CLAIM_AMOUNT = 1.00
 
