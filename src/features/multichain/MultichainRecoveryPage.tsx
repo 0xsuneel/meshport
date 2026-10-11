@@ -92,8 +92,8 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
           const [{ AppKit }, { getUnifiedBalances, UB_MIN_SWEEP }] = await Promise.all([import('@circle-fin/app-kit'), import('@/lib/ubClaim')])
           const kit = new AppKit({ disableErrorReporting: true } as any)
           const rows = await getUnifiedBalances(kit, walletAddress)
-          // Dust (below UB_MIN_SWEEP per chain) is never listed - it stays in
-          // the Unified Balance as the safety margin for the next spend.
+          // Dust (below UB_MIN_SWEEP per chain) isn't listed - moving it alone
+          // costs a whole fee; the next Bring from that chain sends it along.
           setUbHeld(rows.filter(r => r.chain !== ARC_CHAIN_KEY && (r.confirmed >= UB_MIN_SWEEP || r.pending >= UB_MIN_SWEEP)))
           setUbDust([])
           // Stuck transfers draw on the Arc Unified Balance, oldest first.

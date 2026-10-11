@@ -92,3 +92,29 @@ describe('Unified Balance Bring: fee checked before anything moves', () => {
     expect(deposited).toBe(false)
   })
 })
+
+describe('Unified Balance Bring: leftover dust goes back to the user', () => {
+  beforeEach(() => store.clear())
+
+  it('dust already in that chain is sent along to the own Arc wallet, at the same fee', async () => {
+    const { spendUnifiedToArc } = await import('./ubClaim')
+    const spends: any[] = []
+    const kit = { unifiedBalance: {
+      estimateSpend: async () => ({ fees: [usdc('provider', 0.0005), usdc('gasFee', 0.025889), usdc('forwarder', 0.016389)] }),
+      spend: async (p: any) => { spends.push(p); return { txHash: '0xabc' } },
+    } }
+    const out = await spendUnifiedToArc({ kit, adapter: {}, walletAddr: '0x1', fromChain: 'Base_Sepolia', amount: 10, dust: 0.03 })
+    const maxFee = 0.026389
+    expect(out.received).toBeCloseTo(10 + 0.03 - maxFee - 0.0008, 4) // headroom: 3% of maxFee
+    // Value + maxFee never exceed what is in the Unified Balance.
+    expect(Number(spends[0].amount) + maxFee).toBeLessThanOrEqual(10.03)
+  })
+
+  it('a balance of 0.5+ is an unfinished claim, not dust - never swept along', async () => {
+    const { claimDust } = await import('./ubClaim')
+    expect(claimDust(0.03)).toBe(0.03)
+    expect(claimDust(0.5)).toBe(0)
+    expect(claimDust(4)).toBe(0)
+    expect(claimDust(undefined)).toBe(0)
+  })
+})

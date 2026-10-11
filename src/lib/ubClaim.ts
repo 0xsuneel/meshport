@@ -72,11 +72,11 @@ async function assertDepositSucceeded(sdkChainId: string, txHash: string | undef
     throw new Error('The deposit failed on-chain - nothing was moved. If another collection was running, it has already taken this payment.')
   }
 }
-// Below this, a chain's Unified Balance is leftover fee dust. Dust is never
-// shown or swept - it stays in the Unified Balance as the safety margin for
-// the next spend from that chain (see ubSpendMargin in lib/transferFees).
+// Below this, a chain's Unified Balance is leftover fee dust. Dust isn't
+// shown on its own (moving it alone would cost a whole fee) - the next Bring
+// from that chain sends it along to the user's Arc wallet (claimDust).
 export const UB_MIN_SWEEP = 0.5
-// Kept for older imports; dust is no longer offered back to the user.
+// Kept for older imports; dust isn't offered on its own (see claimDust).
 export const UB_DUST_CLAIM_MIN = Number.POSITIVE_INFINITY
 
 const CONFIRM_TIMEOUT_MS = 30 * 60 * 1000
@@ -128,11 +128,23 @@ async function confirmedOn(kit: any, walletAddr: string, chain: string): Promise
   return rows.filter(r => r.chain === chain).reduce((s, r) => s + r.confirmed, 0)
 }
 
-/** Spend a chain's confirmed Unified Balance to the user's own Arc wallet. */
+/**
+ * Spend a chain's confirmed Unified Balance to the user's own Arc wallet.
+ * `dust`: leftover already in that chain's Unified Balance (earlier
+ * headroom, an unused part of a maxFee - see claimDust). It's the user's, and
+ * the fee is per burn, so it goes along to their wallet at no extra cost.
+ */
 export async function spendUnifiedToArc(params: {
-  kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number; cushion?: number
+  kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number; dust?: number
 }): Promise<{ txHash?: string; received: number }> {
-  return spendUnifiedTo({ ...params, toChain: ARC_CHAIN_KEY, recipient: params.walletAddr })
+  const { dust, ...rest } = params
+  return spendUnifiedTo({ ...rest, amount: params.amount + claimDust(dust), toChain: ARC_CHAIN_KEY, recipient: params.walletAddr })
+}
+
+/** The part of a chain's confirmed Unified Balance that is leftover dust
+ *  (under UB_MIN_SWEEP - anything larger is someone's unfinished claim). */
+export function claimDust(confirmed = 0): number {
+  return confirmed > 0 && confirmed < UB_MIN_SWEEP ? confirmed : 0
 }
 
 /**
@@ -140,11 +152,11 @@ export async function spendUnifiedToArc(params: {
  * `fromChain` to the user's own Arc wallet - the same estimateSpend() quote
  * the claim itself uses (signs nothing). The fee is Circle's maxFee for the
  * spend (Gateway fee + source gas + forwarding fee, see lib/transferFees);
- * the wallet receives at least `amount − total − headroom`. `cushion`: dust
- * already in that chain's Unified Balance, which stands in for the headroom.
+ * the wallet receives at least `amount − total − headroom`, plus `dust`
+ * already in that chain's Unified Balance, which goes along (see claimDust).
  */
 export async function estimateUbClaimFee(params: {
-  kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number; cushion?: number
+  kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number; dust?: number
 }): Promise<{ gatewayFee: number; forwarderFee: number; otherFee: number; total: number; receiveAtLeast: number }> {
   const { kit, adapter, walletAddr, fromChain, amount } = params
   const est: any = await kit.unifiedBalance.estimateSpend({
@@ -158,7 +170,7 @@ export async function estimateUbClaimFee(params: {
   // The forwarding fee is part of maxFee ('gasFee'), shown as its own row.
   const forwarderFee = ubForwarderPart(f)
   const gatewayFee = total - forwarderFee
-  return { gatewayFee, forwarderFee, otherFee: 0, total, receiveAtLeast: Math.max(0, amount - total - ubSpendMargin(total, params.cushion)) }
+  return { gatewayFee, forwarderFee, otherFee: 0, total, receiveAtLeast: Math.max(0, amount + claimDust(params.dust) - total - ubSpendMargin(total)) }
 }
 
 // Destinations where Circle's Gateway forwarder mint has been failing
@@ -259,7 +271,7 @@ async function runUbClaimInner(params: {
   // that chain's gas, ~$1+). Depositing first and finding out at the send
   // left the USDC stuck there. A failed quote for another reason doesn't
   // block - the send step re-checks as before.
-  const fee = await estimateUbClaimFee({ kit, adapter, walletAddr, fromChain: sdkChainId, amount, cushion: before })
+  const fee = await estimateUbClaimFee({ kit, adapter, walletAddr, fromChain: sdkChainId, amount, dust: before })
     .catch((e: any) => /too small/i.test(e?.message ?? '') ? { total: Infinity, receiveAtLeast: 0 } : null)
   if (fee && fee.receiveAtLeast <= 0) {
     throw new Error(fee.total === Infinity
@@ -282,7 +294,7 @@ async function runUbClaimInner(params: {
   // claim completes even if the phone is locked or the app is closed.
   let serverId: string | null = null
   try {
-    serverId = await registerServerClaim({ kit, adapter, walletAddr, sdkChainId, amount, depositTx, cushion: before })
+    serverId = await registerServerClaim({ kit, adapter, walletAddr, sdkChainId, amount, depositTx, dust: before })
   } catch (e) {
     console.warn('[ubClaim] server hand-off failed - finishing on this device', e)
   }
@@ -313,7 +325,7 @@ async function runUbClaimInner(params: {
   }
 
   onStep('minting', 'Sending to your Arc wallet…', 80, { txHash: depositTx })
-  const out = await spendUnifiedToArc({ kit, adapter, walletAddr, fromChain: sdkChainId, amount, cushion: before })
+  const out = await spendUnifiedToArc({ kit, adapter, walletAddr, fromChain: sdkChainId, amount, dust: before })
   // History: "Claimed from <chain>" in Activity and the Hub (best effort -
   // the funds have already arrived either way).
   await recordUbClaim({ walletAddr, sdkChainId, received: out.received, claimedAmount: amount, depositTxHash: depositTx, arcTxHash: out.txHash })
@@ -416,7 +428,7 @@ async function _runWithFetchPatch<T>(fn: (realFetch: typeof fetch) => Promise<T>
  * exact signed body App Kit would have sent. The server submits it later.
  */
 export async function signSpendToArc(params: {
-  kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number; cushion?: number
+  kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number; dust?: number
 }): Promise<{ body: any; send: number }> {
   const { kit, adapter, walletAddr, fromChain, amount } = params
   const base = {
@@ -426,7 +438,8 @@ export async function signSpendToArc(params: {
   }
   const est: any = await kit.unifiedBalance.estimateSpend({ ...base, amount: amount.toFixed(6) })
   const fee = ubSpendCost(ubQuoteFees(est))
-  const send = Math.max(0, amount - fee - ubSpendMargin(fee, params.cushion))
+  // Leftover dust goes along to the user's own wallet (see claimDust).
+  const send = Math.max(0, amount + claimDust(params.dust) - fee - ubSpendMargin(fee))
   if (send <= 0) throw new Error(`Amount too small to cover the Gateway fee (${fee.toFixed(4)} USDC)`)
 
   const captured = await withFetchPatch(async (realFetch) => {
@@ -513,9 +526,9 @@ export async function signSpendAllToArc(params: {
 }
 
 async function registerServerClaim(p: {
-  kit: any; adapter: any; walletAddr: string; sdkChainId: string; amount: number; depositTx?: string; cushion?: number
+  kit: any; adapter: any; walletAddr: string; sdkChainId: string; amount: number; depositTx?: string; dust?: number
 }): Promise<string | null> {
-  const { body, send } = await signSpendToArc({ kit: p.kit, adapter: p.adapter, walletAddr: p.walletAddr, fromChain: p.sdkChainId, amount: p.amount, cushion: p.cushion })
+  const { body, send } = await signSpendToArc({ kit: p.kit, adapter: p.adapter, walletAddr: p.walletAddr, fromChain: p.sdkChainId, amount: p.amount, dust: p.dust })
   const { supabase } = await import('./supabase')
   const { data, error } = await supabase.from('ub_claim_intents').insert({
     wallet_address: p.walletAddr.toLowerCase(),
