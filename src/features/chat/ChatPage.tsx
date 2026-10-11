@@ -3905,20 +3905,24 @@ export function ChatConversationPage() {
       // A definite failure (refused, or reverted) is noted for Pay → Recent;
       // a 'pending' send is never counted as failed.
       const payTo = otherUser.wallet_address
-      const noteFailed = () => import('@/lib/failedSends').then(m => m.recordFailedSend(useAuthStore.getState().walletAddress, { to: payTo, amount: numAmount, token: payToken })).catch(() => {})
+      const noteFailed = (err: unknown, txHash?: string) => import('@/lib/failure').then(({ recordFailure, classifyFailure }) => recordFailure({
+        feature: 'chat_pay', walletAddress: useAuthStore.getState().walletAddress, amount: numAmount, token: payToken,
+        counterparty: payTo, txHash, failure: classifyFailure(err, { reverted: !!txHash }),
+        metadata: { toUsername: otherUser?.username || undefined, ...(billPay?.orderNumber ? { merchantOrder: billPay.orderNumber } : {}) },
+      })).catch(() => {})
       const result = await (payToken === 'EURC'
         ? sendEURC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey })
         : payToken === 'cirBTC'
         ? sendCirBTC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey })
         : sendUSDC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey })
-      ).catch((e: unknown) => { noteFailed(); throw e })
+      ).catch((e: unknown) => { noteFailed(e); throw e })
 
       // The send now waits for the real receipt (waitForConfirmation in
       // arcService.ts): a reverted payment shows the error instead of
       // success, with a fresh idempotency key so retrying is a new payment.
       if (result.state === 'failed') {
         chatPayIdempotencyKeyRef.current = null
-        noteFailed()
+        noteFailed(null, result.txHash)
         throw new Error(`The payment was rejected on-chain, so no ${payToken} was sent. A small network fee may have been used. Please try again.`)
       }
       setPayPending(result.state === 'pending')
@@ -3960,8 +3964,8 @@ export function ChatConversationPage() {
         if (result.state === 'pending') import('@/lib/arcService').then(({ confirmTransactionInBackground }) => {
           confirmTransactionInBackground(result.txHash as `0x${string}`, ({ success }) => {
             if (success) { setPayPending(false); return }
-            import('@/lib/ActivityService').then(({ updateActivityStatus }) => {
-              updateActivityStatus(`send_${result.txHash.toLowerCase()}`, result.senderAddress, 'failed')
+            Promise.all([import('@/lib/ActivityService'), import('@/lib/failure')]).then(([{ updateActivityStatus }, { FAILURE_MESSAGES }]) => {
+              updateActivityStatus(`send_${result.txHash.toLowerCase()}`, result.senderAddress, 'failed', FAILURE_MESSAGES.reverted)
             })
             showToastMessage('Payment failed to confirm on-chain - please check Activity', 'error')
           })
@@ -4093,9 +4097,11 @@ export function ChatConversationPage() {
       setPayStep('success')
       setPayPassEntry('')
     } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || 'Payment failed'
-      console.error('[Chat] Payment failed:', msg)
-      setPayError(msg)
+      const raw = err?.shortMessage || err?.message || 'Payment failed'
+      console.error('[Chat] Payment failed:', raw)
+      // Same exact reason the failed Activity row carries (lib/failure.ts).
+      const { classifyFailure } = await import('@/lib/failure')
+      setPayError(classifyFailure(err).message)
       setPayStep('form')
     } finally {
       chatPayInFlightRef.current = false

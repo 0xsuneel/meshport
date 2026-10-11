@@ -252,7 +252,8 @@ export function InsightsPage() {
   useEffect(() => {
     if (!walletAddress) return
     fetchActivity(walletAddress, { limit: 200 }).then(records => {
-      setTransactions(records as any)
+      // Failed rows moved no money (lib/failure.ts) - history only, never totals.
+      setTransactions(records.filter(r => r.status !== 'failed') as any)
     }).catch(() => {})
     import('@/store').then(({ useWalletStore }) => {
       setBalance(useWalletStore.getState().balance)

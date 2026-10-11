@@ -2,11 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
-import {useLocation, useSearchParams} from 'react-router-dom'
+import {useLocation, useNavigate, useSearchParams} from 'react-router-dom'
 import { RefreshCw, Loader2, X } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useActivity } from '@/hooks/useActivity'
 import { ActivityRecord, ActivityType, recoveredViaLabel } from '@/lib/ActivityService'
+import { needsRecovery, failureReason } from '@/lib/failure'
 import { backfillP2PActivity } from '@/lib/p2pService'
 import { cn, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
@@ -156,6 +157,15 @@ export function dedupeAndSortActivityRecords(records: ActivityRecord[]): Activit
   })
 }
 
+// Failed P2P escrow steps (metadata.kind from lib/p2pProviders.ts).
+const P2P_FAILED_TITLES: Record<string, string> = {
+  deposit_offer_failed: 'P2P escrow deposit',
+  deposit_trade_failed: 'P2P escrow deposit',
+  register_trade_failed: 'P2P trade start',
+  release_failed: 'P2P release',
+  refund_failed: 'P2P refund',
+}
+
 export function deriveActivityRow(record: ActivityRecord) {
   const { activityType: type, status, sourceChain, destinationChain, createdAt, amount, tokenSymbol } = record
   const metadata: any = (record as any).metadata || {}
@@ -178,9 +188,13 @@ export function deriveActivityRow(record: ActivityRecord) {
   const isPending  = status === 'pending'
   const isSuccess  = status === 'completed'
   const isFailed   = status === 'failed'
+  // A Transfer / Bring Funds move whose money already left: not "Failed" -
+  // it's finished in Multichain Hub → Recover (lib/failure.ts).
+  const isRecovery = needsRecovery(record)
+  const reason     = isFailed ? failureReason(record) : null
 
-  const statusColor = isPending ? 'var(--warning)' : isFailed ? 'var(--danger)' : 'var(--success)'
-  const statusLabel = isPending ? 'Processing…' : isFailed ? 'Failed' : 'Completed'
+  const statusColor = isPending || isRecovery ? 'var(--warning)' : isFailed ? 'var(--danger)' : 'var(--success)'
+  const statusLabel = isPending ? 'Processing…' : isRecovery ? 'Needs recovery' : isFailed ? 'Failed' : 'Completed'
 
   const chain = isClaim
     ? chainLabel(sourceChain)
@@ -274,6 +288,9 @@ export function deriveActivityRow(record: ActivityRecord) {
               // looking like a brand-new offer had been created again,
               // when it was really just added funds. metadata.kind
               // distinguishes the two (see topUpOfferEscrow's own comment).
+              // A failed P2P escrow step (lib/p2pProviders.ts noteP2PFailure).
+              : (isP2PSellOrder || isP2PRefund) && typeof meta.kind === 'string' && meta.kind.endsWith('_failed')
+                ? (P2P_FAILED_TITLES[meta.kind] ?? 'P2P escrow')
               : isP2PSellOrder ? (meta.kind === 'offer_topped_up' ? 'Escrow Top-up' : 'P2P Sell Order Created')
               // P2P Refund covers both a cancelled sell offer and a
               // cancelled/expired buy-offer trade (see the ActivityType
@@ -284,13 +301,14 @@ export function deriveActivityRow(record: ActivityRecord) {
               : isP2PPurchase  ? 'P2P Purchase'
               : 'Transaction'
 
-  const amountColor = isFailed ? 'var(--danger)' : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'var(--success)' : 'var(--danger)'
+  // Failed: nothing moved, so the amount is neither + nor - (muted, struck).
+  const amountColor = isRecovery ? 'var(--warning)' : isFailed ? 'var(--text-muted)' : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'var(--success)' : 'var(--danger)'
   const amountPrefix = isFailed ? '' : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? '+' : '-'
 
   return {
     metadata, amount, tokenSymbol, createdAt,
     isClaim, isTransfer, isSend, isReceive, isSwap, isBulk, isBulkReceived, isP2PSellOrder, isP2PRefund, isP2PPurchase, isP2PCredit,
-    isPending, isSuccess, isFailed,
+    isPending, isSuccess, isFailed, isRecovery, reason,
     statusColor, statusLabel, chain, subtitle, title, amountColor, amountPrefix, counterpartyLabel,
   }
 }
@@ -320,11 +338,12 @@ function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
   const {
     metadata, amount, tokenSymbol, createdAt,
     isClaim, isTransfer, isSend, isReceive, isSwap, isBulk, isBulkReceived, isP2PSellOrder, isP2PRefund, isP2PPurchase, isP2PCredit,
-    isPending, isFailed,
+    isPending, isFailed, isRecovery, reason,
     statusColor, statusLabel, chain, subtitle, title, amountColor, amountPrefix, counterpartyLabel,
   } = deriveActivityRow(record)
 
   const rowIcon = activityRowIcon(record)
+  const oneLine: React.CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }
 
   return (
     <div onClick={onSelect} data-activity-id={record.id} className={flash ? 'mp-last-opened' : undefined} style={{
@@ -335,12 +354,17 @@ function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
       {/* Icon */}
       <div style={{
         width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-        background: isPending ? 'color-mix(in srgb, var(--warning) 12%, transparent)' : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'color-mix(in srgb, var(--success) 10%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
+        background: isPending || isRecovery ? 'color-mix(in srgb, var(--warning) 12%, transparent)' : isFailed ? 'color-mix(in srgb, var(--danger) 10%, transparent)' : (isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'color-mix(in srgb, var(--success) 10%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
       }}>
         {isPending ? (
           // Still processing: a clock from the same icon family, in the status colour.
           <ActionIcon name="clock" size={18} color="var(--warning)" />
+        ) : isFailed && !isRecovery ? (
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-label="Failed">
+            <circle cx="8" cy="8" r="6.2" stroke="var(--danger)" strokeWidth="1.4"/>
+            <path d="M6.2 6.2l3.6 3.6M9.8 6.2l-3.6 3.6" stroke="var(--danger)" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
         ) : rowIcon ? (
           <ActionIcon name={rowIcon} size={18}
             color={(isClaim || isReceive || isBulkReceived || isP2PCredit) ? 'var(--success)' : 'var(--brand-text)'} />
@@ -360,14 +384,14 @@ function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
 
       {/* Details */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{title}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', ...oneLine }}>{title}</div>
         {subtitle ? (
           <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: counterpartyLabel && !isSwap ? 'monospace' : undefined }}>
             {subtitle}
           </div>
         ) : null}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: subtitle ? 2 : 2 }}>
-          <span style={{ fontSize: 11, color: statusColor, fontWeight: 600 }}>{statusLabel}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, ...oneLine }}>
+          <span style={{ fontSize: 11, color: statusColor, fontWeight: 600, flexShrink: 0 }}>{statusLabel}</span>
           {/* BUG FIX: claim rows already show the source chain as the
               subtitle right above ("Claimed from" / "Linea") - showing it
               again here duplicated the chain name on the same card, and
@@ -383,12 +407,18 @@ function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
               Arc anyway (there's no cross-chain swap), so the chain label
               wasn't adding information here, just length. */}
           {(chain && !isClaim && !isSwap) ? <><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>·</span><span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{chain}</span></> : null}
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>· {timeAgo(createdAt)}</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>· {timeAgo(createdAt)}</span>
         </div>
+        {/* Why it failed - one line here, the full sentence in the receipt. */}
+        {isRecovery ? (
+          <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 2, ...oneLine }}>Tap to finish it in Recover</div>
+        ) : reason ? (
+          <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2, ...oneLine }} title={reason}>{reason}</div>
+        ) : null}
       </div>
 
       {/* Amount */}
-      {isSwap ? (
+      {isSwap && !isFailed ? (
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
             -{formatAmt(metadata.amountIn ?? amount, metadata.tokenIn || tokenSymbol)} {metadata.tokenIn || tokenSymbol || 'USDC'}
@@ -398,9 +428,9 @@ function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
           </div>
         </div>
       ) : (
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: amountColor }}>
-            {amountPrefix}{formatAmt(amount, tokenSymbol)} {tokenSymbol || 'USDC'}
+        <div style={{ textAlign: 'right', flexShrink: 0, maxWidth: '42%' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: amountColor, textDecoration: isFailed && !isRecovery ? 'line-through' : undefined, ...oneLine }}>
+            {amountPrefix}{formatAmt(isSwap ? (metadata.amountIn ?? amount) : amount, isSwap ? (metadata.tokenIn || tokenSymbol) : tokenSymbol)} {(isSwap ? metadata.tokenIn : null) || tokenSymbol || 'USDC'}
           </div>
         </div>
       )}
@@ -411,6 +441,9 @@ function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
 // ── Detail Sheet ───────────────────────────────────────────────────────────────
 export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClose: () => void }) {
   const { showToastMessage } = useUIStore()
+  const navigate = useNavigate()
+  const isRecovery = needsRecovery(record)
+  const failReason = record.status === 'failed' ? failureReason(record) : null
   const [rowCopied, setRowCopied] = useState<string | null>(null)
   const { activityType: type, status, sourceChain, destinationChain, createdAt, amount, tokenSymbol, txHash, destinationTxHash, metadata } = record
 
@@ -575,7 +608,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   // Tapping a history card reopens the same receipt a live payment ends on
   // (see ReceiptPopup) - incoming records get the receiver version.
   const isIncoming = isClaim || isReceive || isBulkReceived || isP2PCredit
-  const receiptStatus = isFailed ? 'failed' : isSuccess ? 'success' : 'pending'
+  // Needs recovery reads as in-progress (amber), not as a failure.
+  const receiptStatus = isRecovery ? 'pending' : isFailed ? 'failed' : isSuccess ? 'success' : 'pending'
   const doneTitle = isClaim ? ((metadata as any)?.merchant ? 'Payment Received' : 'Funds Arrived')
     : isReceive || isBulkReceived ? 'Payment Received'
     : isSwapType ? 'Swap Successful!'
@@ -583,8 +617,10 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     : type === 'bulk' ? 'Bulk Payment Sent'
     : type === 'send' ? 'Paid Successfully'
     : title
-  const receiptTitle = receiptStatus === 'success' ? doneTitle
-    : receiptStatus === 'failed' ? (isSwapType ? 'Swap Failed' : isTransfer ? 'Transfer Failed' : isClaim ? 'Claim Failed' : 'Payment Failed')
+  const receiptTitle = isRecovery ? 'Needs recovery'
+    : receiptStatus === 'success' ? doneTitle
+    : receiptStatus === 'failed' ? (isSwapType ? 'Swap Failed' : isTransfer ? 'Transfer Failed' : isClaim ? 'Claim Failed'
+      : type === 'bulk' ? 'Bulk Payment Failed' : (isP2PSellOrder || type === 'p2p_refund') ? `${title} Failed` : 'Payment Failed')
     : 'Processing…'
   const amountText = isSwapType
     ? `${metadata.amountIn || formatAmt(amount)} ${metadata.tokenIn || tokenSymbol || 'USDC'} → ${metadata.amountOut ? formatAmt(metadata.amountOut) : '?'} ${metadata.tokenOut || '?'}`
@@ -611,7 +647,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     { label: 'Time', value: when },
   ]
   const detailRowsList = [
-    { label: 'Status', value: isFailed ? 'Failed' : isSuccess ? 'Confirmed' : 'Processing', positive: isSuccess },
+    { label: 'Status', value: isRecovery ? 'Needs recovery' : isFailed ? 'Failed' : isSuccess ? 'Confirmed' : 'Processing', positive: isSuccess },
     ...(rows as { label: string; value: string; copy?: string }[]).filter(r => !MAIN_LABELS.has(r.label) && !['Status', 'Date', 'Time'].includes(r.label)).map(toReceiptRow),
     ...(type === 'bulk' && Array.isArray(metadata.recipients)
       ? metadata.recipients.map((r: any, i: number) => ({
@@ -631,13 +667,24 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       status={receiptStatus}
       title={receiptTitle}
       subtitle={<>
-        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: amountColor, marginBottom: 4 }}>{amountText}</span>
+        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: amountColor, marginBottom: 4, overflowWrap: 'anywhere' }}>{amountText}</span>
         {receiptSubtitle}
+        {/* The full reason - wraps, never overlaps the rows below. */}
+        {(isRecovery || failReason) && (
+          <span style={{ display: 'block', marginTop: 10, padding: '8px 10px', borderRadius: 10, fontSize: 12.5, lineHeight: 1.45, textAlign: 'left',
+            color: isRecovery ? 'var(--warning)' : 'var(--danger)',
+            background: isRecovery ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : 'color-mix(in srgb, var(--danger) 8%, transparent)' }}>
+            {isRecovery
+              ? `This move didn't finish on its own${failReason ? ` (${failReason.replace(/[.\s]+$/, '')})` : ''}. Your USDC already left the wallet - open Recover to finish it or bring it back.`
+              : failReason}
+          </span>
+        )}
       </>}
       rows={mainRows}
       detailRows={detailRowsList}
       fullHash={txHash && !isRecoveredClaim ? txHash : undefined}
       links={receiptLinks}
+      {...(isRecovery ? { primaryLabel: 'Open Recover', onPrimary: () => { onClose(); navigate('/multichain', { state: { tab: 'recovery' } }) } } : {})}
     />
   )
 }

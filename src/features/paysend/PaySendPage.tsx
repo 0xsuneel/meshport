@@ -20,7 +20,7 @@ import { useWalletStore, useAuthStore, useUIStore } from '@/store'
 import { formatAmount, shortenAddress, midShortenAddress, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { amountFontSize } from '@/lib/amountFontSize'
 import { sendUSDC, sendEURC, estimateTransferFee, isValidAddress, confirmTransactionInBackground } from '@/lib/arcService'
-import { failedSendsByAddress, recordFailedSend } from '@/lib/failedSends'
+import { classifyFailure, recordFailure, FAILURE_MESSAGES } from '@/lib/failure'
 import { arcRpcJson } from '@/lib/arc'
 import { notifyRewardSend } from '@/lib/notifications'
 import { searchUsersDb, getUserByWalletAddress, getUserByUsername, fetchContactsDbStrict, fetchConversations, type DbUser } from '@/lib/supabase'
@@ -119,16 +119,9 @@ export function PaySendPage() {
   // Last paid / received date per wallet address, for the Recent & Contacts rows.
   const [lastByAddr, setLastByAddr] = useState<Map<string, LastPayment>>(
     () => new Map(readPeople<[string, LastPayment]>('pay-last', user?.id) ?? []))
-  // Last payment for a Recent row: the newest of the ledger's last send /
-  // receive and a failed send recorded on this device (see lib/failedSends).
-  const lastFor = (addr: string | null | undefined): LastPayment | undefined => {
-    const k = (addr || '').toLowerCase()
-    const fromLedger = lastByAddr.get(k)
-    const failed = failedSendsByAddress(useAuthStore.getState().walletAddress).get(k)
-    if (!failed) return fromLedger
-    if (fromLedger && fromLedger.at >= failed.at) return fromLedger
-    return { at: failed.at, dir: 'failed', amount: failed.amount, token: failed.token }
-  }
+  // Last payment for a Recent row (sent / received / failed - failed sends
+  // are ledger rows too, see lib/failure.ts).
+  const lastFor = (addr: string | null | undefined): LastPayment | undefined => lastByAddr.get((addr || '').toLowerCase())
 
   // Resolve any recipient we already have synchronously (recent-avatar tap via
   // sendRecipient, or a payment-link `?to=` param) BEFORE the first paint, so
@@ -942,13 +935,17 @@ export function PaySendPage() {
       const recipientUsername = recipient?.isUsername ? recipient.display : undefined
       // A definite failure (refused by every node, or reverted) is noted for
       // the Recent rows; a 'pending' send is never counted as failed.
-      const noteFailed = () => recordFailedSend(useAuthStore.getState().walletAddress, { to: toAddr, amount: numAmount, token })
+      const noteFailed = (err: unknown, txHash?: string) => void recordFailure({
+        feature: 'pay', walletAddress: useAuthStore.getState().walletAddress, amount: numAmount, token,
+        counterparty: toAddr, txHash, failure: classifyFailure(err, { reverted: !!txHash }),
+        metadata: { toUsername: recipient?.isUsername ? recipient.display : undefined, ...(merchantPayCode ? { merchantOrder: merchantOrderNumber ?? undefined } : {}) },
+      })
       const result = await (token === 'EURC'
         ? sendEURC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
         : token === 'cirBTC' && arcMod.sendCirBTC
         ? arcMod.sendCirBTC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
         : sendUSDC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
-      ).catch((e: unknown) => { noteFailed(); throw e })
+      ).catch((e: unknown) => { noteFailed(e); throw e })
 
       // The send now waits for the real receipt (see waitForConfirmation in
       // arcService.ts). A reverted payment moved nothing - show the failed
@@ -956,7 +953,7 @@ export function PaySendPage() {
       // payment instead of a replay of this failed one.
       if (result.state === 'failed') {
         idempotencyKeyRef.current = null
-        noteFailed()
+        noteFailed(null, result.txHash)
         throw new Error(`The payment was rejected on-chain, so no ${token} was sent. A small network fee may have been used. Please try again.`)
       }
       setPayPending(result.state === 'pending')
@@ -1040,8 +1037,8 @@ export function PaySendPage() {
         // or correct the Activity rows if it ends up reverting.
         if (result.state === 'pending') confirmTransactionInBackground(result.txHash as `0x${string}`, ({ success }) => {
           if (success) { setPayPending(false); return }
-          updateActivityStatus(`send_${result.txHash.toLowerCase()}`, result.senderAddress, 'failed')
-          updateActivityStatus(`recv_${result.txHash.toLowerCase()}`, result.recipientAddress, 'failed')
+          updateActivityStatus(`send_${result.txHash.toLowerCase()}`, result.senderAddress, 'failed', FAILURE_MESSAGES.reverted)
+          updateActivityStatus(`recv_${result.txHash.toLowerCase()}`, result.recipientAddress, 'failed', FAILURE_MESSAGES.reverted)
           showToastMessage('Payment failed to confirm on-chain - please check Activity', 'error')
         })
       }
@@ -1136,7 +1133,8 @@ export function PaySendPage() {
       setProcessStage('delivered')
       clearResumableOperation('pay')
     } catch (err: any) {
-      setTxError(err?.message || 'Unknown error')
+      // Same exact reason the failed Activity row carries (lib/failure.ts).
+      setTxError(classifyFailure(err).message)
       setProcessStage('failed')
       clearResumableOperation('pay')
     }

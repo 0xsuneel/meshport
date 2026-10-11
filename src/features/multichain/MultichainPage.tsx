@@ -107,6 +107,12 @@ interface ActivityItem {
   // never recorded this before, so older rows won't have it.
   destinationAddress?: string
   error?: string
+  /**
+   * Failed after the money left (burned / deposited): finished in Recover,
+   * shown as "Needs recovery" - never plain "Failed". A move that failed
+   * before anything left the wallet is plain "Failed" with its reason.
+   */
+  needsRecovery?: boolean
 }
 
 /** Merchants: payments received on other chains, as Hub Activity rows (Hub only). */
@@ -713,6 +719,8 @@ export function MultichainPage() {
             id:         c.id,
             type:       'claim',
             status:     c.status === 'completed' ? 'success' : c.status === 'failed' ? 'failed' : 'pending',
+            // A claims row only exists once the burn happened - its money moved.
+            needsRecovery: c.status === 'failed',
             amount:     displayAmount,
             claimedAmount: c.amount,
             arrivedAmount: c.arrivedAmount ?? undefined,
@@ -741,13 +749,15 @@ export function MultichainPage() {
         // Unified Balance claims (direct or recovered) - written to `activity`
         // by lib/ubClaim.ts since UB has no `claims` row.
         const ubClaimItems: ActivityItem[] = bridges
-          .filter((item: any) => item.activityType === 'claim' && item.metadata?.route === 'ub')
+          .filter((item: any) => item.activityType === 'claim' && item.metadata?.route === 'ub' && !item.metadata?.nothing_moved)
           .map((item: any) => ({
             id:         item.id ?? item.txHash,
             type:       'claim',
             route:      'ub',
             recoveredVia: item.metadata?.recovered_via || undefined,
             status:     item.status === 'failed' ? 'failed' : item.status === 'pending' ? 'pending' : 'success',
+            needsRecovery: item.status === 'failed',
+            error:      item.error || undefined,
             amount:     item.amount ?? 0,
             claimedAmount: item.metadata?.claimed_amount != null ? Number(item.metadata.claimed_amount) : undefined,
             arrivedAmount: item.amount ?? undefined,
@@ -784,7 +794,24 @@ export function MultichainPage() {
           destinationTxHash: item.destinationTxHash ?? undefined,
           destinationAddress: item.counterpartyAddress ?? undefined,
           recoveredVia: item.metadata?.recovered_via || undefined,
+          error:        item.error || undefined,
+          needsRecovery: item.status === 'failed' && !item.metadata?.nothing_moved,
         }))
+
+        // Bring Funds that failed before anything left the source chain
+        // (lib/failure.ts) - plain "Failed" with the reason, nothing to recover.
+        const failedBringItems: ActivityItem[] = bridges
+          .filter((item: any) => item.activityType === 'claim' && item.status === 'failed' && item.metadata?.nothing_moved)
+          .map((item: any) => ({
+            id:         item.id,
+            type:       'claim',
+            status:     'failed',
+            amount:     item.amount ?? 0,
+            chain:      item.sourceChain || '',
+            chainLabel: CHAIN_LABELS[item.sourceChain] ?? String(item.sourceChain || 'Chain').replace(/_(Sepolia|Testnet|Fuji)$/,'').replace(/_/g, ' '),
+            timestamp:  new Date(item.createdAt).getTime(),
+            error:      item.error || undefined,
+          }))
 
         // UB fund-recovery rows (activity_type: 'withdraw', see
         // lib/ubFundRecovery.ts) - a byproduct of a failed multichain
@@ -806,6 +833,7 @@ export function MultichainPage() {
             recoveredVia: 'ub',
             readyAt:    item.metadata?.eligible_at || undefined,
             status:     item.status === 'completed' ? 'success' : item.status === 'failed' ? 'failed' : 'pending',
+            needsRecovery: item.status === 'failed',
             amount:     item.amount ?? 0,
             chain:      ARC_CHAIN_KEY,
             chainLabel: 'Unified Balance',
@@ -816,7 +844,7 @@ export function MultichainPage() {
 
         const receiptItems = await loadChainReceiptItems()
         if (!current()) return
-        setDbActivity(markOwnClaims([...claimItems, ...ubClaimItems, ...bridgeItems, ...recoveryItems, ...receiptItems]).sort((a, b) => b.timestamp - a.timestamp))
+        setDbActivity(markOwnClaims([...claimItems, ...ubClaimItems, ...bridgeItems, ...failedBringItems, ...recoveryItems, ...receiptItems]).sort((a, b) => b.timestamp - a.timestamp))
       } catch {
         // Even if the rest fails, a merchant still sees payments on other chains.
         const receipts = await loadChainReceiptItems()
@@ -902,7 +930,9 @@ export function MultichainPage() {
       })
     : allItems.filter(i => i.status === tab)
   const pendingCount = allItems.filter(i => i.status === 'pending').length
-  const failedCount  = allItems.filter(i => i.status === 'failed').length
+  // Recover's dot / count: only moves whose money already left and still
+  // needs finishing - a failure where nothing moved has nothing to recover.
+  const failedCount  = allItems.filter(i => i.status === 'failed' && i.needsRecovery).length
 
   const cardS = { background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)' }
   const isUbChain = (id: string) => UB_CLAIM_CHAINS.has(id === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : id)
@@ -973,17 +1003,24 @@ export function MultichainPage() {
               const isPending  = item.status === 'pending'
               const isSuccess  = item.status === 'success'
               const isFailed   = item.status === 'failed'
+              // Money already left: finish it in Recover (amber), not "Failed".
+              const isRecovery = isFailed && !!item.needsRecovery
               const receiptLabel = chainReceiptLabel(item)
               const statusColor = receiptLabel ? (item.chainReceipt === 'converted' ? 'var(--success)' : 'var(--brand)')
-                : isPending ? 'var(--warning)' : isSuccess ? 'var(--success)' : 'var(--danger)'
+                : isPending || isRecovery ? 'var(--warning)' : isSuccess ? 'var(--success)' : 'var(--danger)'
               const merchantClaim = isClaim && item.merchant && !item.chainReceipt && !item.autoConvert
               const statusLabel = receiptLabel ?? (isPending ? 'Processing...' : isSuccess
-                ? (merchantClaim ? `From ${item.chainLabel || item.chain} Ledger` : 'Completed') : 'Failed')
+                ? (merchantClaim ? `From ${item.chainLabel || item.chain} Ledger` : 'Completed')
+                : isRecovery ? 'Needs recovery' : 'Failed')
+              const oneLine: React.CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }
+              const openRecover = () => { setClaimChain(null); setTrackUb(null); setTrackCctp(null); setHubTab('recovery'); setShowRecovery(true); window.scrollTo?.({ top: 0, behavior: 'smooth' }) }
 
               return (
                 <div key={item.id}
                   onClick={() => {
-                    if (isTrackableCctp(item)) {
+                    if (isRecovery) {
+                      openRecover()
+                    } else if (isTrackableCctp(item)) {
                       // Live Circle tracking for a pending CCTP transfer or claim
                       // (a pending transfer used to just open the empty Transfer form).
                       setClaimChain(null)
@@ -1032,10 +1069,10 @@ export function MultichainPage() {
                       Claims is the only place with a live spinner; Activity
                       just reflects current state at a glance. */}
                   <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-                    background: isFailed ? 'color-mix(in srgb, var(--danger) 10%, transparent)' : isPending ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : isClaim ? 'color-mix(in srgb, var(--success) 10%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
+                    background: isRecovery ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : isFailed ? 'color-mix(in srgb, var(--danger) 10%, transparent)' : isPending ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : isClaim ? 'color-mix(in srgb, var(--success) 10%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {/* Same icon family as the action buttons and Activity. */}
-                    {isPending ? (
+                    {isPending || isRecovery ? (
                       <ActionIcon name="clock" size={18} color="var(--warning)" />
                     ) : isFailed ? (
                       <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -1051,16 +1088,17 @@ export function MultichainPage() {
 
                   {/* Details */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', ...oneLine }}>
                       {hubItemTitle(item)}
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                      <span style={{ fontSize: 11, color: statusColor, fontWeight: 600 }}>{statusLabel}</span>
-                      <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>· {timeAgo(new Date(item.timestamp).toISOString())}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, ...oneLine }}>
+                      <span style={{ fontSize: 11, color: statusColor, fontWeight: 600, flexShrink: 0 }}>{statusLabel}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-secondary)', flexShrink: 0 }}>· {timeAgo(new Date(item.timestamp).toISOString())}</span>
                     </div>
-                    {isFailed && item.error && (
-                      <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2, opacity: 0.8 }}>
-                        {item.error.slice(0, 60)}
+                    {/* Why: one line, ellipsis - never runs into the amount column. */}
+                    {isFailed && !isRecovery && item.error && (
+                      <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2, ...oneLine }} title={item.error}>
+                        {item.error}
                       </div>
                     )}
                   </div>
@@ -1068,7 +1106,7 @@ export function MultichainPage() {
                   {/* Amount */}
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 700,
-                      color: isFailed ? 'var(--danger)' : item.ownReceipt || item.ownClaim ? 'var(--text-secondary)' : isClaim ? 'var(--success)' : 'var(--danger)' }}>
+                      color: isRecovery ? 'var(--warning)' : isFailed ? 'var(--text-muted)' : item.ownReceipt || item.ownClaim ? 'var(--text-secondary)' : isClaim ? 'var(--success)' : 'var(--danger)' }}>
                       {/* Own transfer arriving on another chain: the same money as the
                           "Transfer to …" row (already −), so no sign - not new income. */}
                       {isFailed || item.ownReceipt || item.ownClaim
@@ -1080,6 +1118,11 @@ export function MultichainPage() {
                     </div>
                     {isPending && (
                       <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 2 }}>Tap to view →</div>
+                    )}
+                    {isRecovery && (
+                      <button type="button" onClick={e => { e.stopPropagation(); openRecover() }}
+                        style={{ marginTop: 4, padding: '3px 10px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                          background: 'var(--brand)', color: '#fff', fontSize: 11, fontWeight: 700 }}>Recover →</button>
                     )}
                   </div>
                 </div>
@@ -1375,7 +1418,7 @@ export function MultichainPage() {
             status={status}
             title={title}
             subtitle={<>
-              <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: status === 'failed' ? 'var(--danger)' : isClaimItem ? 'var(--success)' : 'var(--text-primary)', marginBottom: 4 }}>{amountText}</span>
+              <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: status === 'failed' ? 'var(--text-muted)' : isClaimItem ? 'var(--success)' : 'var(--text-primary)', marginBottom: 4 }}>{amountText}</span>
               {hubItemTitle(it)}
             </>}
             rows={[
@@ -1384,7 +1427,7 @@ export function MultichainPage() {
                     { label: 'Claimed', value: `$${formatAmount(it.claimedAmount!)} USDC` },
                     { label: 'Arrived', value: `$${formatAmount(it.arrivedAmount!)} USDC`, positive: true },
                   ]
-                : [{ label: isClaimItem ? 'Received' : 'Sent', value: `$${formatAmount(it.amount)} USDC`, positive: isClaimItem }]),
+                : [{ label: status === 'failed' ? 'Amount' : isClaimItem ? 'Received' : 'Sent', value: `$${formatAmount(it.amount)} USDC`, positive: isClaimItem && status !== 'failed' }]),
               { label: isClaimItem ? 'From' : 'To', value: chainName },
               ...(it.merchant && walletAddress ? [{ label: 'Paid to', value: `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`, onCopy: copyRow('Paid to', walletAddress), copied: rowCopied === 'Paid to' }] : []),
               ...(primaryHash && !isRecoveredClaim ? [hashRow('Transaction Hash', primaryHash)] : []),

@@ -46,7 +46,7 @@ import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, Deskt
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { formatAmount, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
-import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
+import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
   submitClaim,
   getClaim,
@@ -1268,6 +1268,18 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           return
         }
 
+        // Failed history (lib/failure.ts): only when NOTHING left the source
+        // chain. After the burn / Unified Balance deposit the claim is
+        // finished through Recover - never shown as plain "Failed".
+        const noteNothingMoved = (err: unknown, route: 'ub' | 'cctp') => {
+          import('@/lib/failure').then(({ classifyFailure, recordFailure }) => recordFailure({
+            feature: 'bring', walletAddress: wallet.addr, amount: claimAmount, token: 'USDC',
+            sourceChain: chain.chainId, destinationChain: ARC_CHAIN_KEY, failure: classifyFailure(err),
+            metadata: { route, claim_failed_before_burn: true },
+          })).catch(() => {})
+        }
+        let burned = false
+
         try {
           setChain(chain.chainId, 'approving', `Preparing ${formatAmount(claimAmount)} USDC…`, 25)
 
@@ -1300,7 +1312,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               // After the deposit, the funds sit in Unified Balance and Track Progress explains it.
               setChainProgress(prev => {
                 const cp = prev.find(p => p.chainId === chain.chainId)
-                if (!cp?.txHash) { setError(msg); setTimeout(() => setStep('failed'), 300) }
+                if (!cp?.txHash) { setError(msg); setTimeout(() => setStep('failed'), 300); noteNothingMoved(e, 'ub') }
                 return prev
               })
             })
@@ -1340,6 +1352,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               ? setChain(chain.chainId, 'burning', msg === 'Confirming…' ? `Waiting for ${getMeta(chain.chainId).label} to confirm the burn…` : 'Signed - MeshPort is sending the transfer…', 45)
               : setChain(chain.chainId, 'approving', msg === 'Signing…' ? 'Signing the USDC transfer…' : 'Getting fee…', 25),
           })
+          burned = true
           setClaimFees(prev => ({ ...prev, [chain.chainId]: r.fee + r.maxFee }))
           setIsSubmitted(true)
           setChain(chain.chainId, 'attesting', 'Burn confirmed - Circle processing…', 65, { txHash: r.txHash })
@@ -1352,6 +1365,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           const msg = String(e?.shortMessage ?? e?.message ?? 'Claim failed').slice(0, 160)
           chainErrors[chain.chainId] = msg
           console.error('[Claim]', chain.chainId, e)
+          if (!burned) noteNothingMoved(e, 'cctp')
           setChain(chain.chainId, 'error', msg.slice(0, 80), 0)
           return null
         }

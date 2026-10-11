@@ -54,6 +54,8 @@ export interface ActivityRecord {
   counterpartyAddress?: string
   status:              ActivityStatus
   explorerUrl?:        string
+  /** Why it failed (status 'failed'): one readable sentence, see lib/failure.ts. */
+  error?:              string
   metadata:            Record<string, any>
   createdAt:           string
   updatedAt:           string
@@ -76,9 +78,10 @@ function fromRow(r: any): ActivityRecord {
     id:                  r.id,
     userId:              r.user_id ?? undefined,
     walletAddress:       r.wallet_address,
-    // 'fail_<ts>' is a placeholder key for a failed swap that never got an
-    // on-chain hash - show no hash / explorer link for it.
-    txHash:              r.tx_hash && !String(r.tx_hash).startsWith('fail_') ? stripHashPrefix(r.tx_hash) : undefined,
+    // 'fail_…' is a placeholder key for a failed transaction (lib/failure.ts)
+    // - no hash of its own; one that reverted on-chain carries its real hash
+    // in metadata.failed_tx_hash.
+    txHash:              r.tx_hash && !String(r.tx_hash).startsWith('fail_') ? stripHashPrefix(r.tx_hash) : (r.metadata?.failed_tx_hash ?? undefined),
     destinationTxHash:   r.destination_tx_hash ?? undefined,
     activityType:        r.activity_type as ActivityType,
     sourceChain:         r.source_chain ?? undefined,
@@ -89,7 +92,10 @@ function fromRow(r: any): ActivityRecord {
     usdValue:            parseFloat(r.usd_value ?? r.amount ?? '0'),
     counterpartyAddress: r.counterparty_address ?? undefined,
     status:              (r.status ?? 'completed') as ActivityStatus,
-    explorerUrl:         String(r.tx_hash ?? '').startsWith('fail_') ? undefined : (r.explorer_url ?? undefined),
+    explorerUrl:         String(r.tx_hash ?? '').startsWith('fail_')
+      ? (r.metadata?.failed_tx_hash ? explorerUrl(r.metadata.failed_tx_hash, r.source_chain ?? undefined) : undefined)
+      : (r.explorer_url ?? undefined),
+    error:               r.error ?? r.metadata?.failure_reason ?? undefined,
     metadata:            r.metadata ?? {},
     createdAt:           r.created_at,
     updatedAt:           r.updated_at,
@@ -121,6 +127,8 @@ interface SaveParams {
   counterpartyAddress?: string
   status?:             ActivityStatus
   explorerUrl?:        string
+  /** Failure reason for a status 'failed' row (lib/failure.ts). */
+  error?:              string
   metadata?:           Record<string, any>
   arrivedAmount?:      number
 }
@@ -167,8 +175,9 @@ export async function saveActivity(p: SaveParams): Promise<boolean> {
     destination_chain:    p.destinationChain ?? null,
     counterparty_address: p.counterpartyAddress?.toLowerCase() ?? null,
     status:               p.status ?? 'completed',
-    explorer_url:         p.explorerUrl ?? (p.txHash ? explorerUrl(p.txHash, p.sourceChain) : null),
+    explorer_url:         p.explorerUrl || (p.txHash && !p.txHash.startsWith('fail_') ? explorerUrl(p.txHash, p.sourceChain) : null),
     metadata:             p.metadata ?? {},
+    ...(p.error ? { error: p.error.slice(0, 300), last_error_at: new Date().toISOString() } : {}),
     ...(p.arrivedAmount != null ? { arrived_amount: p.arrivedAmount } : {}),
   }
 
@@ -218,7 +227,7 @@ export async function saveActivity(p: SaveParams): Promise<boolean> {
  * actually reverted on-chain. txHash here should be the SAME prefixed form
  * (e.g. `send_0x...`/`recv_0x...`) the row was originally saved under.
  */
-export async function updateActivityStatus(txHash: string, walletAddress: string, status: ActivityStatus): Promise<void> {
+export async function updateActivityStatus(txHash: string, walletAddress: string, status: ActivityStatus, error?: string): Promise<void> {
   const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
   try {
     const { authHeaders } = await import('./chatService')
@@ -227,7 +236,7 @@ export async function updateActivityStatus(txHash: string, walletAddress: string
       {
         method: 'PATCH',
         headers: { ...(await authHeaders()), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status, ...(error ? { error: error.slice(0, 300), last_error_at: new Date().toISOString() } : {}) }),
       },
     )
   } catch (e) {

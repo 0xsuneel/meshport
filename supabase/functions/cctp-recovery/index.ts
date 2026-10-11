@@ -317,7 +317,7 @@ async function adminList() {
     db.from('claims').select('id, wallet_address, source_chain, amount, status, error, tx_hash, created_at, recovery_action, recovery_action_at, recovery_action_by')
       .or(`status.eq.failed,and(status.in.(submitted,bridging,verifying,settling),created_at.lt.${cutoff})`)
       .order('created_at', { ascending: false }).limit(200),
-    db.from('activity').select('id, wallet_address, destination_chain, counterparty_address, amount, status, error, tx_hash, created_at')
+    db.from('activity').select('id, wallet_address, destination_chain, counterparty_address, amount, status, error, tx_hash, created_at, metadata')
       .eq('activity_type', 'bridge')
       .or(`status.eq.failed,and(status.eq.pending,created_at.lt.${cutoff})`)
       .order('created_at', { ascending: false }).limit(200),
@@ -331,6 +331,10 @@ async function adminList() {
       .eq('activity_type', 'withdraw').eq('status', 'pending').contains('metadata', { ub_recovery: true })
       .order('created_at', { ascending: false }).limit(200),
   ])
+
+  // Transfers that failed before anything left the wallet (app
+  // lib/failure.ts, metadata.nothing_moved) have nothing to recover.
+  if (transfers.data) (transfers as any).data = transfers.data.filter((t: any) => !t.metadata?.nothing_moved)
 
   const wallets = new Set<string>()
   for (const set of [claims.data, transfers.data, ubStuck.data, ubIntents.data, ubWithdrawals.data]) {
@@ -465,7 +469,9 @@ Deno.serve(async (req: Request) => {
           kind: 'claim', id: c.id, chain: c.source_chain, amount: Number(c.amount), status: c.status, error: c.error, createdAt: c.created_at,
           action: activeAction(c.status, readAction(c.recovery_action, c.recovery_action_at, c.recovery_action_by)),
         })),
-        transfers: (transfers.data ?? []).map((t: any) => ({
+        // A transfer that failed before anything left the wallet (app
+        // lib/failure.ts, metadata.nothing_moved) has nothing to recover.
+        transfers: (transfers.data ?? []).filter((t: any) => !t.metadata?.nothing_moved).map((t: any) => ({
           kind: 'transfer', id: t.id, chain: t.destination_chain, amount: Number(t.amount), status: t.status, error: t.error, createdAt: t.created_at,
           action: activeAction(t.status, readAction(t.metadata?.recovery_action, t.metadata?.recovery_action_at, t.metadata?.recovery_action_by)),
         })),

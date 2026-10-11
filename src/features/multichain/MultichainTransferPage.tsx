@@ -2697,6 +2697,20 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // losing track of a real, irreversible burn.
       if (!burnTxHashRef.current) clearResumableOperation('multichain_transfer')
 
+      // Failed history: only when NOTHING left the wallet (no burn, no
+      // Unified Balance deposit). A move that already burned / deposited is
+      // finished through Recover instead - it never shows as plain "Failed"
+      // (lib/failure.ts needsRecovery). Uncertain outcomes aren't recorded.
+      if (!burnTxHashRef.current && !ubDepositedAmountRef.current && !ubDepositTxRef.current) {
+        const { walletAddress: failWa } = useAuthStore.getState()
+        import('@/lib/failure').then(({ classifyFailure, recordFailure }) => recordFailure({
+          feature: 'transfer', walletAddress: failWa, amount: parseFloat(amount) || 0, token: 'USDC',
+          sourceChain: ARC_CHAIN_KEY, destinationChain: chain.sdk || chain.name || selectedChain,
+          counterparty: address || undefined, failure: classifyFailure(err),
+          metadata: { route: chain.ub ? 'ub' : 'cctp' },
+        })).catch(() => {})
+      }
+
       // UB transfers that got as far as depositing into Unified Balance
       // before failing have real USDC sitting there with no forward path -
       // start the 7-day trustless recovery back to the Arc wallet right

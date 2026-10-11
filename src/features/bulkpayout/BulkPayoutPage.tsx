@@ -374,6 +374,19 @@ export function BulkPayoutPage() {
       useAuthStore.getState().lock(); return
     }
 
+    // A definite batch failure goes to Activity as one failed Bulk Payment
+    // row with its exact reason (lib/failure.ts); "may still complete" never does.
+    const batchTotal = resolved.reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+    const { classifyFailure, classifyPreBroadcastFailure, recordFailure } = await import('@/lib/failure')
+    type BulkFailure = ReturnType<typeof classifyFailure>
+    const noteBatchFailed = (failure: BulkFailure, txHash?: string | null) => {
+      void recordFailure({
+        feature: 'bulk_pay', walletAddress: useAuthStore.getState().walletAddress, amount: batchTotal, token: 'USDC',
+        txHash: txHash ?? undefined, failure, metadata: { recipientCount: resolved.length, purpose: purpose || 'Payroll' },
+      })
+      return failure.message
+    }
+
     setProcessingStatus('Connecting to Arc Testnet...')
     try {
       const account = privateKeyToAccount(activePrivateKey as `0x${string}`)
@@ -389,7 +402,9 @@ export function BulkPayoutPage() {
       // Arc native balance: 18 decimals. Divide by 1e18 to get human-readable USDC.
       const balanceUsdc = Number(BigInt(rawBal)) / 1e18
       if (balanceUsdc < totalAmount) {
-        resolved.forEach(r => txResults.push({ recipient: r, txHash: null, status: 'failed', error: `Insufficient balance: have ${trimTrailingZeros(balanceUsdc.toFixed(4))} USDC, need ${trimTrailingZeros(totalAmount.toFixed(4))} USDC` }))
+        const why = noteBatchFailed({ code: 'insufficient_funds', definite: true,
+          message: `Not enough balance: you have ${trimTrailingZeros(balanceUsdc.toFixed(4))} USDC, this payout needs ${trimTrailingZeros(totalAmount.toFixed(4))} USDC - nothing was sent.` })
+        resolved.forEach(r => txResults.push({ recipient: r, txHash: null, status: 'failed', error: why }))
       setResults(txResults); setProcessing(false); setStep('results'); clearResumableOperation('bulkpay'); return
       }
 
@@ -451,7 +466,8 @@ export function BulkPayoutPage() {
         }).catch(() => 80_000n + BigInt(resolved.length) * 40_000n),
       ])
       if (!intentResult.success || !intentResult.attemptId || typeof intentResult.nonce !== 'number') {
-        resolved.forEach(r => txResults.push({ recipient: r, txHash: null, status: 'failed', error: intentResult.error ?? 'Failed to prepare bulk payout' }))
+        const why = noteBatchFailed(classifyPreBroadcastFailure(new Error(intentResult.error ?? "Couldn't prepare the bulk payout")))
+        resolved.forEach(r => txResults.push({ recipient: r, txHash: null, status: 'failed', error: why }))
         setResults(txResults); setProcessing(false); setStep('results'); clearResumableOperation('bulkpay'); return
       }
       const attemptId = intentResult.attemptId
@@ -513,7 +529,9 @@ export function BulkPayoutPage() {
         // ONE tx, ONE hash - every recipient references the same bulkTxHash.
         resolved.forEach(r => txResults.push({ recipient: r, txHash: bulkTxHash, status: 'success' }))
       } catch (e: any) {
-        const errMsg = e?.shortMessage || e?.message || 'Bulk multicall send failed'
+        // Reverted → definite (real hash kept); "Not confirmed yet" → uncertain, not recorded.
+        const failure = classifyFailure(e)
+        const errMsg = failure.definite ? noteBatchFailed(failure, failure.code === 'reverted' ? bulkTxHash : null) : failure.message
         // bulkTxHash may now be non-null here (a real broadcast whose
         // receipt wait failed) - surfaced to txResults exactly as before,
         // now correctly carrying the real hash instead of null whenever a
@@ -559,8 +577,9 @@ export function BulkPayoutPage() {
       // the old value; a failed read keeps the shown balance.
       refreshBalancesAfterTx(account.address)
     } catch (err: any) {
-      const errMsg = err?.shortMessage || err?.message || 'Unknown error'
-      console.error('[BulkPayout] Unexpected error:', errMsg)
+      console.error('[BulkPayout] Unexpected error:', err?.shortMessage || err?.message)
+      // Only reached before the batch was sent (the send has its own catch above).
+      const errMsg = txResults.length ? classifyFailure(err).message : noteBatchFailed(classifyPreBroadcastFailure(err))
       resolved.forEach(r => {
         if (!txResults.find(t => t.recipient.id === r.id)) {
           txResults.push({ recipient: r, txHash: null, status: 'failed', error: errMsg })

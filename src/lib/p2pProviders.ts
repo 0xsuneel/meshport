@@ -297,36 +297,61 @@ async function assertNotPaused(): Promise<{ success: false; message: string } | 
   return null
 }
 
+// Failed P2P history (lib/failure.ts): every definite on-chain failure of
+// an escrow step is written to Activity with its exact reason. A timed-out
+// receipt wait ("may still land") and a cancelled wallet prompt are not.
+type P2PStep = 'deposit_offer' | 'deposit_trade' | 'register_trade' | 'release' | 'refund'
+async function noteP2PFailure<T extends { success: boolean; message: string; txHash?: string }>(
+  result: T, step: P2PStep, amount: number, ref: { offerId?: string; tradeId?: string },
+): Promise<T> {
+  if (result.success) return result
+  try {
+    const { useAuthStore } = await import('../store')
+    const { classifyFailure, recordFailure } = await import('./failure')
+    const failure = classifyFailure(new Error(result.message), { reverted: /reverted on-chain|rejected on-chain/i.test(result.message) })
+    void recordFailure({
+      feature: 'p2p', p2pType: step === 'refund' ? 'p2p_refund' : 'p2p_sell_order',
+      walletAddress: useAuthStore.getState().walletAddress, amount, token: 'USDC',
+      txHash: result.txHash, failure, metadata: { kind: `${step}_failed`, ...ref },
+    })
+  } catch { /* history is best-effort - never affects the P2P action */ }
+  return result
+}
+const provider = async () => {
+  const { isEscrowContractDeployed } = await import('./p2pEscrowContract')
+  return isEscrowContractDeployed() ? RealContractEscrowProvider : HonorSystemFallbackEscrowProvider
+}
+
 export const escrowProvider: EscrowProvider = {
   async depositForOffer(offerId, amountUsdc) {
-    const blocked = await assertNotPaused(); if (blocked) return blocked
-    const { isEscrowContractDeployed } = await import('./p2pEscrowContract')
-    return (isEscrowContractDeployed() ? RealContractEscrowProvider : HonorSystemFallbackEscrowProvider).depositForOffer(offerId, amountUsdc)
+    const blocked = await assertNotPaused(); if (blocked) return noteP2PFailure(blocked, 'deposit_offer', amountUsdc, { offerId })
+    return noteP2PFailure(await (await provider()).depositForOffer(offerId, amountUsdc), 'deposit_offer', amountUsdc, { offerId })
   },
   async depositForTrade(tradeId, amountUsdc) {
-    const blocked = await assertNotPaused(); if (blocked) return blocked
-    const { isEscrowContractDeployed } = await import('./p2pEscrowContract')
-    return (isEscrowContractDeployed() ? RealContractEscrowProvider : HonorSystemFallbackEscrowProvider).depositForTrade(tradeId, amountUsdc)
+    const blocked = await assertNotPaused(); if (blocked) return noteP2PFailure(blocked, 'deposit_trade', amountUsdc, { tradeId })
+    return noteP2PFailure(await (await provider()).depositForTrade(tradeId, amountUsdc), 'deposit_trade', amountUsdc, { tradeId })
   },
   async lockFunds(trade) {
     // Not gated - this is only ever a DB-level "reserved" message in both
     // providers, never a real fund movement, so there's nothing for a
     // pause to actually protect against here.
-    const { isEscrowContractDeployed } = await import('./p2pEscrowContract')
-    return (isEscrowContractDeployed() ? RealContractEscrowProvider : HonorSystemFallbackEscrowProvider).lockFunds(trade)
+    return noteP2PFailure(await (await provider()).lockFunds(trade), 'register_trade', trade.amountUsdc, { tradeId: trade.id, offerId: trade.offerId })
   },
   async release(trade) {
-    const blocked = await assertNotPaused(); if (blocked) return blocked
-    const { isEscrowContractDeployed } = await import('./p2pEscrowContract')
-    return (isEscrowContractDeployed() ? RealContractEscrowProvider : HonorSystemFallbackEscrowProvider).release(trade)
+    const blocked = await assertNotPaused(); if (blocked) return noteP2PFailure(blocked, 'release', trade.amountUsdc, { tradeId: trade.id })
+    return noteP2PFailure(await (await provider()).release(trade), 'release', trade.amountUsdc, { tradeId: trade.id })
   },
   async refund(trade) {
     // Matches contracts/P2PEscrow.sol exactly - withdrawRemaining is also
     // `whenNotPaused` on-chain, so refunds are blocked during a pause too,
     // not just deposits/releases.
-    const blocked = await assertNotPaused(); if (blocked) return blocked
-    const { isEscrowContractDeployed } = await import('./p2pEscrowContract')
-    return (isEscrowContractDeployed() ? RealContractEscrowProvider : HonorSystemFallbackEscrowProvider).refund(trade)
+    const blocked = await assertNotPaused()
+    const result = blocked ?? await (await provider()).refund(trade)
+    // Only the depositing seller's refund can succeed (see refund() above);
+    // the buyer's device attempting it is expected to fail - not their failure.
+    const { useAuthStore } = await import('../store')
+    const mine = (useAuthStore.getState().walletAddress || '').toLowerCase() === (trade.sellerWallet || '').toLowerCase()
+    return mine ? noteP2PFailure(result, 'refund', trade.amountUsdc, { tradeId: trade.id }) : result
   },
 }
 
