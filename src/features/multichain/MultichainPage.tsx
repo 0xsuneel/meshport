@@ -159,6 +159,9 @@ function chainReceiptLabel(item: ActivityItem): string | null {
   return item.chainReceipt === 'converted' ? 'Moved to Arc' : item.chainReceipt === 'converting' ? 'Moving to Arc' : `In ${chain} Ledger`
 }
 
+// Hub Activity shows the latest 20; See all opens the main Activity's Multichain tab.
+const HUB_RECENT = 20
+
 // Row / detail title for Hub Activity.
 function hubItemTitle(item: ActivityItem): string {
   const chain = item.chainLabel || item.chain
@@ -567,6 +570,8 @@ export function MultichainPage() {
   const [dbActivity, setDbActivity]       = useState<ActivityItem[]>([])
   const [loadingActivity, setLoadingActivity] = useState(true)
   const [selectedItem, setSelectedItem]   = useState<ActivityItem | null>(null)
+  // The row last opened flashes once (same highlight as the main Activity).
+  const [flashId, setFlashId]             = useState<string | null>(null)
   // Server-owned claims (Supabase `claims` table) - this is the ONLY source
   // of truth for claim state. Populated + kept live via Realtime.
   const [serverClaims, setServerClaims]   = useState<ServerClaim[]>([])
@@ -1002,10 +1007,17 @@ export function MultichainPage() {
                 )}
               </button>
             ))}
+            {!inPanel && allItems.length > 0 && (
+              <button onClick={() => navigate('/activity?filter=bridge')}
+                style={{ marginLeft: 'auto', alignSelf: 'center', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--brand-text)', padding: 0 }}>
+                See all
+              </button>
+            )}
           </div>
 
-          {/* Activity list */}
-          <div style={inPanel ? { overflow: 'hidden' } : { ...cardS, overflow: 'hidden' }}>
+          {/* Activity list - a clean list like the main Activity: no card
+              or divider lines, rows sit on the page. */}
+          <div>
             {loadingActivity && filtered.length === 0 ? (
               <div style={{ padding: 24, display: 'flex', justifyContent: 'center' }}>
                 <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid var(--brand)', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }}/>
@@ -1014,7 +1026,7 @@ export function MultichainPage() {
               <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>
                 {tab === 'all' ? 'No multichain activity yet' : `No ${tab} transactions`}
               </div>
-            ) : filtered.map((item, i) => {
+            ) : filtered.slice(0, HUB_RECENT).map(item => {
               const isClaim    = item.type === 'claim'
               const isPending  = item.status === 'pending'
               const isSuccess  = item.status === 'success'
@@ -1032,8 +1044,13 @@ export function MultichainPage() {
               const openRecover = () => { setClaimChain(null); setTrackUb(null); setTrackCctp(null); setHubTab('recovery'); setShowRecovery(true); window.scrollTo?.({ top: 0, behavior: 'smooth' }) }
 
               return (
-                <div key={item.id}
+                <div key={item.id} className={item.id === flashId ? 'mp-last-opened' : undefined}
                   onClick={() => {
+                    // Opening a detail flashes the row when it closes; the
+                    // trackers leave this list, so it flashes on the way back.
+                    setFlashId(null)
+                    const opensDetail = !isRecovery && !isTrackableCctp(item) && !isPending
+                    if (!opensDetail) setTimeout(() => setFlashId(item.id), 0)
                     if (isRecovery) {
                       openRecover()
                     } else if (isTrackableCctp(item)) {
@@ -1077,8 +1094,7 @@ export function MultichainPage() {
                     }
                   }}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px',
-                    borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' : 'none',
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px',
                     cursor: 'pointer',
                   }}>
                   {/* Icon - status-based, static (no animation). Processing
@@ -1430,7 +1446,7 @@ export function MultichainPage() {
 
         return (
           <ReceiptPopup
-            onClose={() => setSelectedItem(null)}
+            onClose={() => { setFlashId(it.id); setSelectedItem(null) }}
             status={status}
             title={title}
             subtitle={<>
