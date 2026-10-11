@@ -4977,13 +4977,30 @@ export function ChatConversationPage() {
               <button type="button" disabled={!valid || !me}
                 onClick={async () => {
                   setShowRequest(false)
-                  await handleSend(`Requesting ${amtStr} ${reqToken}\nhttps://meshport.xyz/paylink/${me}?amount=${amtStr}${reqToken === 'USDC' ? '' : `&token=${reqToken}`}`)
+                  // USDC: a real payment request (order number, customer =
+                  // this chat partner), sent as the same live card as
+                  // Receive → Request payment with a username - it flips to
+                  // "Paid" / "Payment received" once they pay. A plain
+                  // personal link has no order behind it, so its card could
+                  // never show that. Orders are USDC-only, so EURC / cirBTC
+                  // still go as a payment link.
+                  if (reqToken === 'USDC') {
+                    try {
+                      const { createPaymentRequest, paymentRequestMessage } = await import('@/lib/merchantPay')
+                      const it = await createPaymentRequest({ amount: n, customer: recipientClean || undefined })
+                      await handleSend(paymentRequestMessage(it, formatAmount(it.amount)))
+                    } catch (e) {
+                      showToastMessage(e instanceof Error ? e.message : 'Could not create the request', 'error')
+                    }
+                    return
+                  }
+                  await handleSend(`Requesting ${amtStr} ${reqToken}\nhttps://meshport.xyz/paylink/${me}?amount=${amtStr}&token=${reqToken}`)
                 }}
                 className="w-full py-3.5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40"
                 style={{ background: 'var(--brand)' }}>
                 {valid ? `Request ${reqToken === 'cirBTC' ? `${amtStr} cirBTC` : `${sym}${amtStr}`}` : 'Request'}
               </button>
-              <p className="text-xs text-text-secondary text-center">They'll see a card with a Pay button for this amount.</p>
+              <p className="text-xs text-text-secondary text-center">{reqToken === 'USDC' ? "They'll see a card with a Pay button - it shows Paid once they pay." : "They'll see a card with a Pay button for this amount."}</p>
             </div>
           )
         })()}
