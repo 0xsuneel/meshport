@@ -216,15 +216,20 @@ export async function spendUnifiedTo(params: {
   const selfMintTo = { chain: toChain, recipientAddress: recipient, adapter: destAdapter, useForwarder: false }
   const alloc = (a: number) => ({ adapter, allocations: [{ amount: a.toFixed(6), chain: fromChain }] })
 
-  // Fees come out of the Unified Balance, so send amount − fee. (The
-  // forwarder quote is the higher of the two, so it's safe for self-mint too.)
-  const est: any = await kit.unifiedBalance.estimateSpend({ from: alloc(amount), to: forwarderTo, token: 'USDC', amount: amount.toFixed(6) })
+  // Fees come out of the Unified Balance, so send amount − fee - priced for
+  // the route actually used. A self-mint destination (Ethereum Sepolia…)
+  // pays no forwarding fee: quoting it with the forwarder added Circle's
+  // forwarding fee + Ethereum mint gas (~1.5 USDC) that is never charged,
+  // so small amounts were refused and larger ones sent ~1.5 USDC short.
+  // If that quote fails, the forwarder quote (always the higher) is used.
+  const selfMint = toChain !== ARC_CHAIN_KEY && gatewaySelfMintsTo(toChain)
+  const quote = (to: any) => kit.unifiedBalance.estimateSpend({ from: alloc(amount), to, token: 'USDC', amount: amount.toFixed(6) })
+  const est: any = selfMint ? await quote(selfMintTo).catch(() => quote(forwarderTo)) : await quote(forwarderTo)
   const fee = (est?.fees ?? []).reduce((s: number, f: any) => s + (f?.token === 'USDC' ? Number(f.amount ?? 0) : 0), 0)
     || Number(est?.total ?? 0)
   const send = Math.max(0, amount - fee - spendMargin(params.cushion))
   if (send <= 0) throw new Error(`Amount too small to cover the Gateway fee (${fee.toFixed(4)} USDC)`)
 
-  const selfMint = toChain !== ARC_CHAIN_KEY && gatewaySelfMintsTo(toChain)
   if (selfMint) {
     const r: any = await kit.unifiedBalance.spend({ from: alloc(send), to: selfMintTo, token: 'USDC', amount: send.toFixed(6) })
     return { txHash: hashOf(r), received: send }
