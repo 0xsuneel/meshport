@@ -23,18 +23,18 @@ const TOKENS: Record<AssetToken, { name: string; logo: string; fallbackChar: str
 const ACTIONS: Record<AssetToken, { label: string; icon: ActionIconName; path: string }[]> = {
   USDC: [
     { label: 'Pay',      icon: 'pay',     path: '/pay?token=USDC' },
-    { label: 'Receive',  icon: 'receive', path: '/receive' },
+    { label: 'Receive',  icon: 'receive', path: '/receive?token=USDC' },
     { label: 'Swap',     icon: 'swap',    path: '/swap?from=USDC' },
     { label: 'Transfer', icon: 'hub',     path: '/multichain?tab=transfer' },
   ],
   EURC: [
     { label: 'Pay',     icon: 'pay',     path: '/pay?token=EURC' },
-    { label: 'Receive', icon: 'receive', path: '/receive' },
+    { label: 'Receive', icon: 'receive', path: '/receive?token=EURC' },
     { label: 'Swap',    icon: 'swap',    path: '/swap?from=EURC' },
   ],
   cirBTC: [
     { label: 'Pay',     icon: 'pay',     path: '/pay?token=cirBTC' },
-    { label: 'Receive', icon: 'receive', path: '/receive' },
+    { label: 'Receive', icon: 'receive', path: '/receive?token=cirBTC' },
     { label: 'Swap',    icon: 'swap',    path: '/swap?from=cirBTC' },
   ],
 }
