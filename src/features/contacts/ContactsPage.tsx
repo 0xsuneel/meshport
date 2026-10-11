@@ -294,14 +294,18 @@ export function ContactsPage() {
       const { sendUSDC, getUSDCBalance } = await import('@/lib/arcService')
       // A definite failure (refused, or reverted) is noted for Pay → Recent;
       // a 'pending' send is never counted as failed.
-      const noteFailed = () => import('@/lib/failedSends').then(m => m.recordFailedSend(useAuthStore.getState().walletAddress, { to: c.wallet_address, amount: numAmount, token: 'USDC' })).catch(() => {})
+      const noteFailed = (err: unknown, txHash?: string) => import('@/lib/failure').then(({ recordFailure, classifyFailure }) => recordFailure({
+        feature: 'pay', walletAddress: useAuthStore.getState().walletAddress, amount: numAmount, token: 'USDC',
+        counterparty: c.wallet_address, txHash, failure: classifyFailure(err, { reverted: !!txHash }),
+        metadata: { toUsername: c.username || undefined },
+      })).catch(() => {})
       const result = await sendUSDC({ privateKey: activePrivateKey, to: c.wallet_address, amount: numAmount, idempotencyKey, recipientUsername: c.username || undefined })
-        .catch((e: unknown) => { noteFailed(); throw e })
+        .catch((e: unknown) => { noteFailed(e); throw e })
       // Real confirmation (waitForConfirmation in arcService.ts): a reverted
       // payment shows the error, with a fresh key so a retry is a new send.
       if (result.state === 'failed') {
         payIdemRef.current = null
-        noteFailed()
+        noteFailed(null, result.txHash)
         throw new Error('The payment was rejected on-chain, so no USDC was sent. A small network fee may have been used. Please try again.')
       }
       setPayPending(result.state === 'pending')
@@ -309,9 +313,8 @@ export function ContactsPage() {
         import('@/lib/arcService').then(({ confirmTransactionInBackground }) => {
           confirmTransactionInBackground(result.txHash as `0x${string}`, ({ success }) => {
             if (success) { setPayPending(false); return }
-            noteFailed()
             import('@/lib/ActivityService').then(({ updateActivityStatus }) => {
-              updateActivityStatus(`send_${result.txHash.toLowerCase()}`, result.senderAddress, 'failed')
+              updateActivityStatus(`send_${result.txHash.toLowerCase()}`, result.senderAddress, 'failed', 'Rejected on-chain - nothing was sent. A small network fee may have been used.')
             }).catch(() => {})
             showToastMessage('Payment failed to confirm on-chain - please check Activity', 'error')
           })
@@ -370,8 +373,9 @@ export function ContactsPage() {
       setPayStep('success')
       setTimeout(() => { setPayStep('closed'); setPayTarget(null) }, 3400)
     } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || 'Payment failed'
-      setPayError(msg)
+      // Same exact reason the failed Activity row carries (lib/failure.ts).
+      const { classifyFailure } = await import('@/lib/failure')
+      setPayError(classifyFailure(err).message)
       setPayStep('form')
     }
   }

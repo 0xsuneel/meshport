@@ -1214,8 +1214,13 @@ export function SwapPage() {
       setStep('done')
       clearResumableOperation('swap')
     } catch (e: any) {
-      const msg = e?.shortMessage ?? e?.message ?? 'Swap failed'
       const uncertain = !!e?.isUncertain
+      // swap-proxy flags an outcome it can't be sure of (isUncertain); any
+      // other error means the swap did not happen - one exact reason, shown
+      // here and on the failed Activity row (lib/failure.ts).
+      const { classifyFailure, classifyPreBroadcastFailure, recordFailure } = await import('@/lib/failure')
+      const failure = uncertain ? classifyFailure(e) : classifyPreBroadcastFailure(e)
+      const msg = failure.message
       // Uncertain outcomes (a confirmation-check/RPC failure after the
       // transaction may have already broadcast - see swap-proxy.js's
       // extractError) skip writing a 'failed' record entirely. Asserting
@@ -1235,18 +1240,11 @@ export function SwapPage() {
         // stub that always returns [], so this used to wipe history to
         // empty on every genuine failure too, not just on success.
         setHistory(prev => [failedRec, ...prev])
-        if (walletAddress) {
-          import('@/lib/ActivityService').then(({ Activity }) => {
-            Activity.swap({
-              walletAddress,
-              txHash:    'fail_' + Date.now(),
-              amountIn:  parseFloat(amountIn) || 0,
-              amountOut: 0,
-              tokenIn:   tokenIn.id,
-              tokenOut:  tokenOut.id,
-              status:    'failed',
-            }).catch(() => {})
-          }).catch(() => {})
+        if (walletAddress && failure.definite) {
+          void recordFailure({
+            feature: 'swap', walletAddress, amount: parseFloat(amountIn) || 0, token: tokenIn.id, failure,
+            metadata: { tokenIn: tokenIn.id, tokenOut: tokenOut.id, amountIn: parseFloat(amountIn) || 0, amountOut: 0 },
+          })
         }
       }
       setIsUncertainFailure(uncertain)
