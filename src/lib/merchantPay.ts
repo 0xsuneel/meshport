@@ -154,6 +154,20 @@ export function orderLabel(v: { code: string; orderNumber?: string | null }): st
   return v.orderNumber || billNumber(v.code)
 }
 
+/**
+ * "Expires 7:53 PM" (today) / "Expires Oct 12, 7:53 PM" for a request with an
+ * expiry, "Expired" once it has passed, null when it never expires.
+ */
+export function expiryText(expiresAt: string | null | undefined, now = Date.now()): string | null {
+  if (!expiresAt) return null
+  const t = new Date(expiresAt)
+  if (Number.isNaN(t.getTime())) return null
+  if (t.getTime() <= now) return 'Expired'
+  const time = t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const sameDay = t.toDateString() === new Date(now).toDateString()
+  return `Expires ${sameDay ? time : `${t.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${time}`}`
+}
+
 /** Chat message text for a payment request (not a bill) sent to a customer. */
 export function paymentRequestMessage(i: { code: string; orderNumber?: string | null; amount: number; note?: string | null }, amountText: string): string {
   return `💸 Payment request · Order #${orderLabel(i)} · $${amountText} USDC${i.note ? `\n${i.note}` : ''}\n${paymentLink(i.code)}`

@@ -1,5 +1,5 @@
 // Receive → MeshPort QR → "Request payment" (every user).
-// Amount + note + expiry (+ customer for merchants) → a payment request with a
+// Amount + expiry (+ customer and note for merchants) → a payment request with a
 // unique order number. The QR, the copied link and the shared link all carry
 // the order: /paylink/r/<code>?order=ORD-…  Scanned in MeshPort (or opened), the
 // payer's amount and order number are fixed - they can't be edited.
@@ -13,7 +13,7 @@ import { CheckCircle2, Clock, Download, Share2, Copy, MessageCircle, Plus, X } f
 import { useAuthStore, useUIStore } from '@/store'
 import { formatAmount, copyToClipboard } from '@/lib/utils'
 import {
-  createPaymentRequest, watchPayment, orderLabel, orderPayLink, paymentRequestMessage, cancelPayment, STATUS_LABEL,
+  createPaymentRequest, watchPayment, orderLabel, orderPayLink, paymentRequestMessage, cancelPayment, expiryText, STATUS_LABEL,
   type MerchantIntent, type PaymentView,
 } from '@/lib/merchantPay'
 import { AmountHero } from '@/components/ui/AmountHero'
@@ -47,10 +47,10 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
   const [expiry, setExpiry] = useState(60)
   const [busy, setBusy] = useState(false)
   const [order, setOrder] = useState<MerchantIntent | null>(null)
-  // Username (optional): looked up only when the FULL name is typed
+  // Customer (merchants, optional): looked up only when the FULL name is typed
   // ("sunil.arc") - exact match, no partial suggestions.
   const walletAddress = useAuthStore(s => s.walletAddress)
-  const [match, setMatch] = useState<{ state: 'idle' | 'checking' | 'found' | 'notfound' | 'self' | 'denied'; user?: { id: string; username: string; display_name?: string | null; avatar_url?: string | null } }>({ state: 'idle' })
+  const [match, setMatch] = useState<{ state: 'idle' | 'checking' | 'found' | 'notfound' | 'self'; user?: { id: string; username: string; display_name?: string | null; avatar_url?: string | null } }>({ state: 'idle' })
   useEffect(() => {
     const raw = customer.trim().replace(/^@/, '').toLowerCase()
     if (!/^[a-z0-9_.-]+\.arc$/.test(raw)) { setMatch({ state: 'idle' }); return }
@@ -63,22 +63,11 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
         if (cancelled) return
         if (!u?.id) setMatch({ state: 'notfound' })
         else if (walletAddress && u.wallet_address?.toLowerCase() === walletAddress.toLowerCase()) setMatch({ state: 'self' })
-        else {
-          // Personal requests: they may take requests from contacts only, or be
-          // a merchant (merchants get Bills, not requests). Merchants' own
-          // customer orders aren't limited. The database enforces this too.
-          if (!withCustomer) {
-            const { reachCheck } = await import('@/lib/privacy')
-            const reach = await reachCheck(String(u.id))
-            if (cancelled) return
-            if (!reach.canRequest) { setMatch({ state: 'denied' }); return }
-          }
-          setMatch({ state: 'found', user: { id: String(u.id), username: u.username, display_name: u.display_name, avatar_url: u.avatar_url } })
-        }
+        else setMatch({ state: 'found', user: { id: String(u.id), username: u.username, display_name: u.display_name, avatar_url: u.avatar_url } })
       } catch { if (!cancelled) setMatch({ state: 'notfound' }) }
     }, 350)
     return () => { cancelled = true; clearTimeout(t) }
-  }, [customer, walletAddress, withCustomer])
+  }, [customer, walletAddress])
   const [live, setLive] = useState<PaymentView | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -99,7 +88,6 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
       const typed = customer.trim()
       if (typed && match.state !== 'found') {
         showToastMessage(match.state === 'self' ? "You can't send a request to yourself"
-          : match.state === 'denied' ? "You can't send a payment request to this person"
           : 'Enter the full MeshPort username, like sunil.arc', 'error')
         setBusy(false); return
       }
@@ -124,12 +112,13 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
   }
 
   const shareText = () => order
-    ? `Pay $${formatAmount(order.amount)} USDC · Order #${orderLabel(order)}${order.note ? ` · ${order.note}` : ''}\n${link}`
+    ? `Pay $${formatAmount(order.amount)} USDC · Order #${orderLabel(order)}${order.note ? ` · ${order.note}` : ''}${expiryText(order.expiresAt) ? `\n${expiryText(order.expiresAt)}` : ''}\n${link}`
     : ''
   const qrFile = async (): Promise<File | null> => {
     const qr = canvasRef.current
     if (!qr || !order) return null
-    const W = 600, H = 740
+    const expires = expiryText(order.expiresAt)
+    const W = 600, H = expires ? 776 : 740
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H
     const g = cv.getContext('2d'); if (!g) return null
     g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.textAlign = 'center'
@@ -141,6 +130,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
     g.fillText('Scan with MeshPort or any wallet app · Arc network', W / 2, 634)
     g.fillStyle = '#555'; g.font = '500 16px ui-monospace, monospace'
     g.fillText(link.length > 60 ? link.slice(0, 60) + '…' : link, W / 2, 666)
+    if (expires) { g.fillStyle = '#B4531F'; g.font = '700 19px system-ui, sans-serif'; g.fillText(expires, W / 2, 708) }
     const blob: Blob | null = await new Promise(r => cv.toBlob(b => r(b), 'image/png'))
     return blob ? new File([blob], `request-${orderLabel(order)}.png`, { type: 'image/png' }) : null
   }
@@ -202,6 +192,9 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
           <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 2 }}>
             Order #{orderLabel(order)}{order.customerUsername ? ` · ${order.customerUsername}.arc` : ''}{order.note ? ` · ${order.note}` : ''}
           </div>
+          {!paid && !closed && expiryText(order.expiresAt) && (
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning)', marginTop: 3 }}>{expiryText(order.expiresAt)}</div>
+          )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <div style={{ background: '#fff', padding: 6, borderRadius: 14, opacity: paid || closed ? 0.35 : 1 }}>
@@ -242,8 +235,10 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
     <div style={{ ...box, padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
       {header('Request payment')}
       <AmountHero value={amount} onChange={setAmount} autoFocus />
-      <div>
-        <div style={label}>{withCustomer ? 'Customer' : 'Username'} (optional)</div>
+      {/* Merchants only: their customer + note. Everyone else requests from a
+          person in chat (+ → Request), so here it's just amount + expiry. */}
+      {withCustomer && <div>
+        <div style={label}>Customer (optional)</div>
         <input value={customer} onChange={e => setCustomer(e.target.value)} placeholder="username.arc" autoCapitalize="none" autoCorrect="off" spellCheck={false} style={field} />
         {match.state === 'found' && match.user && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, padding: '8px 10px', borderRadius: 12, background: 'color-mix(in srgb, var(--success) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--success) 30%, transparent)' }}>
@@ -260,10 +255,9 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
         {match.state === 'checking' && <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 6 }}>Checking…</div>}
         {match.state === 'notfound' && <div style={{ fontSize: 11.5, color: 'var(--danger)', marginTop: 6 }}>No MeshPort user with this username</div>}
         {match.state === 'self' && <div style={{ fontSize: 11.5, color: 'var(--danger)', marginTop: 6 }}>That's your own username</div>}
-        {match.state === 'denied' && <div style={{ fontSize: 11.5, color: 'var(--danger)', marginTop: 6 }}>You can't send a payment request to this person (they accept requests from contacts only, or they're a merchant)</div>}
         {match.state === 'idle' && customer.trim() !== '' && <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 6 }}>Type the full username, like sunil.arc</div>}
-      </div>
-      <div><div style={label}>Note (optional)</div><input value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="e.g. Dinner split" style={field} /></div>
+      </div>}
+      {withCustomer && <div><div style={label}>Note (optional)</div><input value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="e.g. Order details" style={field} /></div>}
       <div><div style={label}>Expires</div><ExpiryChips value={expiry} onChange={setExpiry} /></div>
       <button onClick={create} disabled={busy || !(Number(amount) > 0)} style={{ ...primary, opacity: busy || !(Number(amount) > 0) ? 0.5 : 1 }}>
         {busy ? 'Creating…' : match.state === 'found' ? 'Send request in chat' : 'Generate request QR'}
