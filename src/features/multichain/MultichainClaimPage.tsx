@@ -64,7 +64,7 @@ import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFi
 import { readExternalBalances, refreshScope, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
 import { fetchCctpProgress } from '@/lib/cctpTracker'
 import { ARC_RPCS } from '@/lib/arc'
-import { UB_CLAIM_CHAINS, runUbClaim, ubClaimEta, estimateUbClaimFee } from '@/lib/ubClaim'
+import { UB_CLAIM_CHAINS, runUbClaim, ubBringTime, estimateUbClaimFee } from '@/lib/ubClaim'
 import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
@@ -130,6 +130,21 @@ const CHAIN_META: Record<string, { label: string; color: string; short: string; 
   Codex_Testnet:       { label: 'Codex',       color: '#5B5FDE', short: 'CDX',  logo: '/logos/chains/codex.svg' },
   Edge_Testnet:        { label: 'EDGE',        color: '#FFB800', short: 'EDGE', logo: '/logos/chains/edge.svg' },
   Injective_Testnet:   { label: 'Injective',   color: '#00D4FF', short: 'INJ',  logo: '/logos/chains/injective.svg' },
+}
+
+// Bring Funds timing on CCTP: Fast Transfer attests before source finality
+// (docs.arc.io: attestation typically ~60 s), then the relayer mints on Arc.
+const CCTP_BRING_TIME = '20–90 s'
+
+/** Slow / Fast tag on a route button. */
+function SpeedTag({ fast, on }: { fast: boolean; on: boolean }) {
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, lineHeight: '14px', padding: '0 6px', borderRadius: 999, flexShrink: 0,
+      color: on ? '#fff' : fast ? 'var(--success)' : 'var(--warning)',
+      background: on ? 'rgba(255,255,255,0.2)' : `color-mix(in srgb, ${fast ? 'var(--success)' : 'var(--warning)'} 14%, transparent)` }}>
+      {fast ? 'Fast' : 'Slow'}
+    </span>
+  )
 }
 
 // Digit/decimal sanitizing for the desktop "Amount" native input (mirrors
@@ -2007,10 +2022,16 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                           : (!claimEstimateIsLive || feeEstimate.loading ? 'Fee …' : feeEstimate.error ? '' : `Fee up to ${fmtFee(feeEstimate.totalFee).replace(' USDC', '')}`)
                       return (
                         <button key={id} role="radio" aria-checked={on} aria-disabled={tooHigh} onClick={() => { if (!tooHigh) pickRoute(id) }}
-                          style={{ minHeight: 42, padding: '4px 6px', borderRadius: 12, border: 'none', cursor: tooHigh ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: on ? 700 : 600,
+                          style={{ minHeight: 42, padding: '6px 6px', borderRadius: 12, border: 'none', cursor: tooHigh ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: on ? 700 : 600,
                             background: on ? 'var(--brand)' : 'transparent', color: on ? '#fff' : COLORS.muted, opacity: tooHigh ? 0.75 : 1,
                             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                          <span>{name}</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5, maxWidth: '100%' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+                            <SpeedTag fast={id === 'cctp'} on={on} />
+                          </span>
+                          <span style={{ fontSize: 11, fontWeight: 500, color: on ? 'rgba(255,255,255,0.85)' : COLORS.muted }}>
+                            {id === 'ub' ? ubBringTime(selectedSdkId) : CCTP_BRING_TIME}
+                          </span>
                           {feeLine && (
                             <span style={{ fontSize: 11, fontWeight: 500, color: tooHigh ? COLORS.error : (id === 'ub' && ubFeeHigh) ? 'var(--warning)' : on ? 'rgba(255,255,255,0.85)' : COLORS.muted }}>{feeLine}</span>
                           )}
@@ -2025,8 +2046,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   </svg>
                   <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: COLORS.muted }}>
                     {effectiveRoute === 'ub'
-                      ? <><b style={{ color: COLORS.text, fontWeight: 600 }}>Unified Balance · Gateway · {(e => e.charAt(0).toUpperCase() + e.slice(1))(ubClaimEta(selectedSdkId).replace('minutes', 'min').replace('minute', 'min'))}.</b> Your USDC goes into your Unified Balance, then to your Arc wallet. Circle's Gateway fee is taken when it's sent to Arc. If you leave before it finishes, finish it from Multichain Hub → Recover.</>
-                      : <><b style={{ color: COLORS.text, fontWeight: 600 }}>CCTP · Gasless · one signature.</b> Circle burns your USDC on {getMeta(selectedChain.chainId).label} and mints the same amount on Arc.</>}
+                      ? <><b style={{ color: COLORS.text, fontWeight: 600 }}>Unified Balance · Slow · {ubBringTime(selectedSdkId)}.</b> Your USDC goes into your Unified Balance, then to your Arc wallet. Circle's Gateway fee is taken when it's sent to Arc. If you leave before it finishes, finish it from Multichain Hub → Recover.</>
+                      : <><b style={{ color: COLORS.text, fontWeight: 600 }}>CCTP · Fast · {CCTP_BRING_TIME} · Gasless.</b> Circle burns your USDC on {getMeta(selectedChain.chainId).label} and mints the same amount on Arc.</>}
                   </p>
                 </div>
               </div>

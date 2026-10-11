@@ -25,6 +25,15 @@ import { ubQuoteFees, ubSpendCost, ubSpendMargin, ubForwarderPart } from './tran
 
 const FAST_FINALITY = new Set(['Avalanche_Fuji', 'Polygon_Amoy_Testnet', 'Sonic_Testnet', 'Sei_Testnet', 'HyperEVM_Testnet'])
 
+/** Bring Funds timing on Unified Balance: the deposit waits for the source
+ *  chain's finality before Gateway credits it (docs.arc.io: "standard deposits
+ *  wait for source chain finality, which can take 15 minutes or longer";
+ *  Ethereum 12-15 min; Avalanche and other fast-finality chains near-instant),
+ *  then the spend to Arc. */
+export function ubBringTime(sdkChainId: string): string {
+  return FAST_FINALITY.has(sdkChainId) ? '1–3 min' : '3–20 min'
+}
+
 export function ubClaimEta(sdkChainId: string): string {
   return FAST_FINALITY.has(sdkChainId) ? 'under a minute' : 'up to 15 minutes'
 }

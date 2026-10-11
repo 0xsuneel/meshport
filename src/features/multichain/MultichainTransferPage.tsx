@@ -51,6 +51,19 @@ const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) =
 // Digit/decimal sanitizing for the desktop "Amount" native input (mirrors
 // AmountKeypad's own internal sanitizer, which isn't exported) - max one
 // '.', capped at 2 typed decimal places.
+
+/** Speed tag on a route button. Out of Arc both routes are Fast: Arc is final
+ *  in under a second, so neither waits for source finality. */
+function SpeedTag({ fast, on }: { fast: boolean; on: boolean }) {
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, lineHeight: '14px', padding: '0 6px', borderRadius: 999, flexShrink: 0,
+      color: on ? '#fff' : fast ? 'var(--success)' : 'var(--warning)',
+      background: on ? 'rgba(255,255,255,0.2)' : `color-mix(in srgb, ${fast ? 'var(--success)' : 'var(--warning)'} 14%, transparent)` }}>
+      {fast ? 'Fast' : 'Slow'}
+    </span>
+  )
+}
+
 function sanitizeMultichainAmount(raw: string): string {
   let cleaned = raw.replace(/[^\d.]/g, '')
   const firstDot = cleaned.indexOf('.')
@@ -3022,8 +3035,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           {([['ub', 'Unified Balance', effectiveUb], ['cctp', 'CCTP', !effectiveUb]] as const).map(([id, name, on]) => (
             <button key={id} role="radio" aria-checked={on} onClick={() => setSelectedRoute(id)}
               style={{ height: 42, borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: on ? 700 : 600,
-                background: on ? 'var(--brand)' : 'transparent', color: on ? '#fff' : 'var(--text-secondary)' }}>
-              {name}
+                background: on ? 'var(--brand)' : 'transparent', color: on ? '#fff' : 'var(--text-secondary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '0 6px', minWidth: 0 }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+              <SpeedTag fast on={on} />
             </button>
           ))}
         </div>
@@ -3034,8 +3049,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         </svg>
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: 'var(--text-secondary)' }}>
           {effectiveUb
-            ? <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Unified Balance · Gateway · ~60s.</b> Sent through Circle Gateway; the recipient gets native USDC on {chain.name}.</>
-            : <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>CCTP · Burn-mint · 20–90s.</b> Circle burns the USDC on Arc and mints the same amount on {chain.name}.</>}
+            ? <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Unified Balance · Fast · ~60s.</b> Sent through Circle Gateway; the recipient gets native USDC on {chain.name}.</>
+            : <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>CCTP · Fast · 20–90s.</b> Circle burns the USDC on Arc and mints the same amount on {chain.name}.</>}
         </p>
       </div>
     </div>
