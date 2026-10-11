@@ -1314,17 +1314,30 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // the shape the SDK actually expects (see "Select source
         // blockchains" in the App Kit docs).
         assertAllocationsMatchAmount(ubTargetAmount.toFixed(6), [{ amount: ubTargetAmount.toFixed(6) }], 'estimateSpend')
-        const est: any = await kit.unifiedBalance.estimateSpend({
+        // Priced for the route the send really takes (handleConfirm): where
+        // MeshPort's relayer mints (gatewaySelfMintsTo - Ethereum Sepolia…)
+        // there's no forwarding fee. Quoting those with the forwarder added
+        // Circle's forwarding fee + Ethereum mint gas (~1.5 USDC) that is
+        // never charged - a $1 transfer to Ethereum could never pass. Falls
+        // back to the forwarder quote (always the higher) if this one fails.
+        const ubQuote = (to: any) => kit.unifiedBalance.estimateSpend({
           amount: ubTargetAmount.toFixed(6),
           from: {
             adapter,
             allocations: [{ amount: ubTargetAmount.toFixed(6), chain: ARC_CHAIN_KEY }],
           },
-          to: { chain: chain.sdk as any, recipientAddress: address, useForwarder: true },
+          to,
           token: 'USDC',
         })
+        const forwarderTo = { chain: chain.sdk as any, recipientAddress: address, useForwarder: true }
+        const est: any = gatewaySelfMintsTo(chain.sdk)
+          ? await ubQuote({ chain: chain.sdk as any, recipientAddress: address, adapter, useForwarder: false }).catch(() => ubQuote(forwarderTo))
+          : await ubQuote(forwarderTo)
         let providerFee = 0, gasFee = 0, kitFee = 0, forwarderFee = 0
         for (const f of est?.fees ?? []) {
+          // USDC fees only - without the forwarder, the destination's gas
+          // can be listed in its native token (paid by MeshPort's relayer).
+          if (f?.token && f.token !== 'USDC') continue
           const amt = parseFloat(f.amount) || 0
           if (f.type === 'provider') providerFee += amt
           else if (f.type === 'gasFee') gasFee += amt
