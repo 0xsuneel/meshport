@@ -12,8 +12,7 @@ import { useAuthStore, useUIStore } from '@/store'
 import { formatAmount, copyToClipboard } from '@/lib/utils'
 import {
   createPaymentRequest, watchPayment, orderLabel, STATUS_LABEL, orderChainPayLink,
-  type MerchantIntent, type PaymentView,
-} from '@/lib/merchantPay'
+  type MerchantIntent, type PaymentView, orderKindOf, orderTitle, orderDisplay } from '@/lib/merchantPay'
 import { MERCHANT_QR_EXTERNAL, MERCHANT_QR_NETWORK_NAME, merchantQrChain } from '@/lib/merchantQr'
 import { AmountHero } from '@/components/ui/AmountHero'
 
@@ -124,13 +123,13 @@ export function MerchantQrPanel() {
     g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.textAlign = 'center'
     g.fillStyle = '#111'; g.font = '700 26px system-ui, sans-serif'; g.fillText('Scan to pay', W / 2, 58)
     g.font = '800 44px system-ui, sans-serif'; g.fillText(`$${formatAmount(order.amount)} USDC`, W / 2, 118)
-    g.fillStyle = '#444'; g.font = '600 22px system-ui, sans-serif'; g.fillText(`Order #${orderLabel(order)} · ${c.label}`, W / 2, 156)
+    g.fillStyle = '#444'; g.font = '600 22px system-ui, sans-serif'; g.fillText(`${orderTitle(orderKindOf(order), orderLabel(order))} · ${c.label}`, W / 2, 156)
     g.drawImage(qr, (W - 420) / 2, 182, 420, 420)
     g.fillStyle = '#555'; g.font = '500 18px system-ui, sans-serif'
     g.fillText(`Scan with any wallet app · ${MERCHANT_QR_NETWORK_NAME[c.id] ?? c.label}`, W / 2, 648)
     g.fillText(`Pay exactly ${formatAmount(order.amount)} USDC`, W / 2, 676)
     const blob: Blob | null = await new Promise(r => cv.toBlob(b => r(b), 'image/png'))
-    return blob ? new File([blob], `order-${orderLabel(order)}-${c.label.toLowerCase()}.png`, { type: 'image/png' }) : null
+    return blob ? new File([blob], `order-${orderDisplay(order)}-${c.label.toLowerCase()}.png`, { type: 'image/png' }) : null
   }
   const save = async () => {
     const f = await qrFile(); if (!f) return
@@ -140,7 +139,7 @@ export function MerchantQrPanel() {
   const share = async () => {
     if (!order) return
     const f = await qrFile().catch(() => null)
-    const text = `Pay $${formatAmount(order.amount)} USDC on ${c.label} · Order #${orderLabel(order)}\n${uri}`
+    const text = `Pay $${formatAmount(order.amount)} USDC on ${c.label} · ${orderTitle(orderKindOf(order), orderLabel(order))}\n${uri}`
     try {
       if (f && navigator.canShare?.({ files: [f] })) { await navigator.share({ files: [f], title: 'Payment QR', text }); return }
       if (navigator.share) { await navigator.share({ title: 'Payment QR', text }); return }
@@ -161,7 +160,7 @@ export function MerchantQrPanel() {
             ${formatAmount(order.amount)} <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>USDC</span>
           </div>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Order #{orderLabel(order)}
+            {orderTitle(orderKindOf(order), orderLabel(order), { paid: order.status === 'paid' })}
           </div>
         </div>
 

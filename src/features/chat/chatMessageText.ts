@@ -2,6 +2,7 @@
 // (search, delete dialog, copy, forward). Filled as bubbles decrypt, and by
 // the sender with the plaintext of what it just encrypted.
 import { isEncryptedPayload } from '@/lib/chatCrypto'
+import { orderCardPreview } from '@/lib/orderLabels'
 
 // Decrypted text by ciphertext - shared so search, the delete dialog and a
 // bubble re-mounting (optimistic → saved copy) never show ciphertext or flash.
@@ -32,7 +33,7 @@ export function messagePreview(content: string): string {
   if (media.startsWith('[IMAGE') ) return caption ? `Photo · ${caption}` : 'Photo'
   const f = /^\[FILE(?:-E)?:(.+?)(?::[^:\]]+)?\]\(/.exec(media)
   if (f) { let n = f[1]; try { n = decodeURIComponent(n) } catch { /* plain */ } return caption ? `File · ${caption}` : `File · ${n}` }
-  return t
+  return orderCardPreview(t) ?? t
 }
 
 /** A photo / file message's parts (from its decrypted text), or null for text. */

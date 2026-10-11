@@ -11,7 +11,7 @@ import { ChevronDown, ChevronUp, Receipt } from 'lucide-react'
 import { useUIStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
 import {
-  listChatPendingOrders, getPayment, orderLabel, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type ChatPendingOrder,
+  listChatPendingOrders, getPayment, orderLabel, orderKindOf, orderTitle, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type ChatPendingOrder,
 } from '@/lib/merchantPay'
 
 // Last known open orders per chat partner. The strip sits above the
@@ -113,7 +113,7 @@ export function ChatPendingOrders({ otherUserId, refreshKey }: { otherUserId: st
                 <button onClick={() => { if (!scrollTo(o) && !o.iAmMerchant) void pay(o) }} className="flex-1 min-w-0 text-left"
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
                   <div className="truncate" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {o.kind === 'invoice' ? 'Bill' : 'Payment request'} · Order #{label(o)}
+                    {orderTitle(orderKindOf(o), label(o))}
                   </div>
                   <div className="truncate" style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 1 }}>
                     ${formatAmount(due(o))} USDC {o.received > 0 ? `left of $${formatAmount(o.amount)}` : ''}

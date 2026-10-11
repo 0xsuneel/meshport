@@ -15,7 +15,7 @@ import { WalletPayPanel } from '@/features/pay/WalletPayPanel'
 import { formatAmount } from '@/lib/utils'
 import {
   watchPayment, STATUS_LABEL, orderPaySendUrl, isOrderPayable, ARC_PAY_CHAIN, expiryText, type PaymentView,
-} from '@/lib/merchantPay'
+  orderKindOf, orderTitle, } from '@/lib/merchantPay'
 
 // Every chain merchant-pay accepts has a logo in the shared map (Arc is separate).
 const logo = (id: string) => id === 'Arc_Testnet' ? '/logos/chains/arc.svg' : chainLogoSrc(id)
@@ -99,7 +99,7 @@ export function MerchantPayPage() {
           <p className="text-sm text-text-secondary">Pay</p>
           <p className="text-xl font-bold text-text-primary">{view.merchantName ?? 'Merchant'}</p>
           <p className="text-4xl font-extrabold text-text-primary">${formatAmount(view.amount)} <span className="text-lg font-semibold text-text-secondary">USDC</span></p>
-          {view.orderNumber && <p className="text-sm font-semibold text-text-primary">Order #{view.orderNumber}</p>}
+          {view.orderNumber && <p className="text-sm font-semibold text-text-primary">{orderTitle(orderKindOf(view), view.orderNumber, { paid: view.status === 'paid' })}</p>}
           {view.note && <p className="text-sm text-text-secondary">{view.note}</p>}
           {view.kind === 'invoice' && !!view.items?.length && (
             <div className="bg-surface border border-border rounded-2xl p-4 text-left mt-2">

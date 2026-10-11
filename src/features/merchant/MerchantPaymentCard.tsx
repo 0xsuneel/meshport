@@ -15,7 +15,7 @@ import { formatAmount } from '@/lib/utils'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
-  watchPayment, getPayment, orderLabel, expiryText, STATUS_LABEL, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type PaymentView,
+  watchPayment, getPayment, orderLabel, orderKindOf, orderTitle, displayOrderNumber, expiryText, STATUS_LABEL, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type PaymentView,
 } from '@/lib/merchantPay'
 
 const CHAIN_LABEL: Record<string, string> = {
@@ -151,7 +151,7 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {paid ? <CheckCircle2 size={13} /> : isBill ? <Receipt size={13} /> : <Clock size={13} />}
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {isBill ? (v.merchantName || 'Bill') : 'Payment request'} · #{number}
+            {orderTitle(orderKindOf(v), number, { paid, short: true })}
           </span>
         </div>
         <div style={{ position: 'relative', fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px', lineHeight: 1.1, marginTop: 3 }}>
@@ -201,7 +201,8 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
 }) {
   const paid = v.status === 'paid'
   const closed = ['expired', 'cancelled', 'failed'].includes(v.status)
-  const kind = isBill ? 'Bill' : 'Payment Request'
+  const orderKind = orderKindOf(v)
+  const kind = orderKind === 'bill' ? 'Bill' : orderKind === 'merchant_request' ? 'Requested Payment' : 'Request'
   const number = orderLabel(v)
   const due = Math.max(0, v.amount - v.received)
   const payment = v.payments.find(p => p.txHash) ?? null
@@ -232,7 +233,7 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
         <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: paid ? 'var(--success)' : 'var(--text-primary)', marginBottom: 4 }}>
           ${formatAmount(v.amount)} {v.currency || 'USDC'}
         </span>
-        Order #{number}{v.merchantName ? ` · ${v.merchantName}` : ''}
+        {orderTitle(orderKind, number, { paid })}{v.merchantName ? ` · ${v.merchantName}` : ''}
       </>}
       rows={[
         { label: 'Status', value: statusText, positive: paid },
