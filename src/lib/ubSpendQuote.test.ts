@@ -91,6 +91,29 @@ describe('Unified Balance Bring: fee checked before anything moves', () => {
       .rejects.toThrow(/nothing was moved/)
     expect(deposited).toBe(false)
   })
+
+  it('no live quote before the deposit (empty Unified Balance): Circle\'s published fee decides - $1 from Ethereum refused, no deposit', async () => {
+    const { runUbClaim } = await import('./ubClaim')
+    let deposited = false
+    const kit = {
+      unifiedBalance: {
+        estimateSpend: async () => { throw new Error('Insufficient balance on Ethereum_Sepolia') },
+        deposit: async () => { deposited = true; return { txHash: '0x1' } },
+        getBalances: async () => ({ balances: [] }),
+      },
+    }
+    await expect(runUbClaim({ kit, adapter: {}, walletAddr: '0xabc', sdkChainId: 'Ethereum_Sepolia', chainLabel: 'Ethereum', amount: 1, onStep: () => {} }))
+      .rejects.toThrow(/nothing was moved/)
+    expect(deposited).toBe(false)
+  })
+
+  it('no live quote from a cheap chain still lets a $1 Bring through', async () => {
+    const { estimateUbClaimFee } = await import('./ubClaim')
+    const kit = { unifiedBalance: { estimateSpend: async () => { throw new Error('Insufficient balance') } } }
+    const r = await estimateUbClaimFee({ kit, adapter: {}, walletAddr: '0xabc', fromChain: 'Base_Sepolia', amount: 1 })
+    expect(r.approx).toBe(true)
+    expect(r.receiveAtLeast).toBeGreaterThan(0.98)
+  })
 })
 
 describe('Unified Balance Bring: leftover dust goes back to the user', () => {
