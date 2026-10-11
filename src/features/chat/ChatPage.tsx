@@ -59,7 +59,7 @@ import { useMerchant } from '@/lib/merchant'
 import { ChatBillSheet } from '@/features/merchant/InvoiceComposer'
 import { ChatRequestSheet } from './ChatRequestSheet'
 import { MerchantPaymentCard, prefetchPaymentView } from '@/features/merchant/MerchantPaymentCard'
-import { ChatPendingOrders } from '@/features/merchant/ChatPendingOrders'
+import { ChatPendingOrders, prefetchPendingOrders } from '@/features/merchant/ChatPendingOrders'
 import { fetchMerchantFlags } from '@/lib/merchantPay'
 import { PayLinkCard } from './PayLinkCard'
 import { CHAT_CARD_W, cardInnerWidth } from './chatCard'
@@ -155,6 +155,9 @@ function warmChat(msgs: ChatMessage[], otherId: string | null | undefined): Prom
     else if (_plainByContent.has(m.content)) warmCard(_plainByContent.get(m.content)!)
     else todo.push(m)
   }
+  // The pending bills / requests strip above the messages, so it's there
+  // from the first frame instead of pushing the messages down a moment later.
+  if (otherId && otherId !== useAuthStore.getState().user?.id) cards.push(prefetchPendingOrders(otherId))
   const wallet = useAuthStore.getState().walletAddress
   if (!todo.length || !wallet || !otherId) return Promise.all(cards)
   return getConversationKey(wallet, otherId).then(key => {
@@ -171,7 +174,7 @@ function warmChatWithin(msgs: ChatMessage[], otherId: string | null | undefined,
   return Promise.race([warmChat(msgs, otherId), new Promise(r => setTimeout(r, ms))])
 }
 function prefetchChat(conv: { id: string; other_user?: { id?: string } | null }) {
-  if (_cachedMessages[conv.id]) return
+  if (_cachedMessages[conv.id]) { void prefetchPendingOrders(conv.other_user?.id); return }
   loadMessages(conv.id).then(msgs => {
     if (!msgs.length) return
     _cachedMessages[conv.id] = msgs
