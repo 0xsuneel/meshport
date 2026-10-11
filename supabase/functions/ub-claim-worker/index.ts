@@ -23,6 +23,11 @@ const GATEWAY = 'https://gateway-api-testnet.circle.com'
 const ARC_EXPLORER = 'https://testnet.arcscan.app'
 const WAIT_LIMIT_MS = 24 * 60 * 60 * 1000 // give up waiting for a confirmed deposit after 24h
 const MAX_ERRORS = 20
+// Completion push - same endpoint, secret and wording as claim-worker's
+// notifyClaimComplete (CCTP claims). Unified Balance claims never sent one,
+// so a Bring by Unified Balance finished silently unless the app was open.
+const APP_BASE_URL = (Deno.env.get('APP_BASE_URL') || 'https://meshport.xyz').trim()
+const PUSH_INTERNAL_SECRET = (Deno.env.get('PUSH_INTERNAL_SECRET') || '').trim()
 
 function serviceKey(): string {
   const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -158,15 +163,48 @@ async function processWaiting(row: any) {
   return 'error'
 }
 
+async function notifyUbClaimComplete(row: any): Promise<void> {
+  if (!PUSH_INTERNAL_SECRET) {
+    console.warn('[ub-claim-worker] PUSH_INTERNAL_SECRET not set - skipping completion push, claim itself is unaffected')
+    return
+  }
+  try {
+    const wallet = String(row.wallet_address || '').toLowerCase()
+    const { data: user } = await db.from('users').select('id').eq('wallet_address', wallet).maybeSingle()
+    if (!user?.id) return
+    const amount = Number(row.send_amount ?? row.amount) || 0
+    const chains: string[] = Array.isArray(row.source_chains) && row.source_chains.length ? row.source_chains : [row.source_chain]
+    const label = (c: string) => String(c || '').replace(/_Amoy_Testnet|_Sepolia|_Testnet|_Fuji/g, '').replace(/_/g, ' ')
+    const chainLabel = chains.length > 1 ? `${chains.length} chains` : label(chains[0])
+    const merchant = !!row.merchant
+    await fetch(`${APP_BASE_URL}/api/push?action=send-internal`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${PUSH_INTERNAL_SECRET}` },
+      body: JSON.stringify({
+        userId: user.id,
+        ...(merchant
+          ? { title: 'Moved to Arc', body: `$${amount.toFixed(2)} USDC from your ${chainLabel} Ledger` }
+          : { title: 'Claim Complete', body: `$${amount.toFixed(2)} USDC arrived on Arc from ${chainLabel}` }),
+        url: '/multichain',
+        tag: `claim-complete-ub-${row.id}`,
+      }),
+    })
+  } catch (e) {
+    console.warn('[ub-claim-worker] completion push failed (non-fatal):', e instanceof Error ? e.message : e)
+  }
+}
+
 async function processSubmitted(row: any) {
   const res = await gw(`/v1/transfer/${encodeURIComponent(row.transfer_id)}`)
   if (!res.ok) return 'pending'
   const status = String(res.json?.status ?? '')
   const mintTx = typeof res.json?.transactionHash === 'string' ? res.json.transactionHash : null
   if (status === 'finalized' || (status === 'confirmed' && mintTx)) {
-    await db.from('ub_claim_intents').update({ status: 'completed', mint_tx: mintTx, completed_at: new Date().toISOString(), last_error: null })
-      .eq('id', row.id).neq('status', 'completed')
+    const { data: done } = await db.from('ub_claim_intents').update({ status: 'completed', mint_tx: mintTx, completed_at: new Date().toISOString(), last_error: null })
+      .eq('id', row.id).neq('status', 'completed').select('id')
     await recordActivity(row, mintTx)
+    // Only the run that actually completed it pushes (no duplicates).
+    if ((done?.length ?? 0) > 0) await notifyUbClaimComplete(row)
     return 'completed'
   }
   if (status === 'failed' || status === 'expired') {
