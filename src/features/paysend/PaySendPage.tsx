@@ -7,7 +7,7 @@ import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/mot
 import { createPortal } from 'react-dom'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import {
-  ChevronRight, ArrowLeft, Wallet,
+  ArrowLeft, Wallet,
   AlertCircle, Loader2, CheckCircle2, QrCode,
 } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
@@ -1292,55 +1292,48 @@ export function PaySendPage() {
               {/* ── Empty state ── */}
               {!query.trim() && (
                 <>
-                  {/* Recent - a row of avatars, like a phone's recent-contacts strip */}
+                  {/* Recent - last people you paid or got paid by, with the last payment */}
                   {recents.length > 0 && (
                     <div>
-                      <SectionLabel>Recent</SectionLabel>
-                      <div className="flex gap-1 overflow-x-auto -mx-5 px-4 pb-1" style={{ scrollbarWidth: 'none' }}>
-                        {recents.slice(0, 8).map((r, i) => {
-                          const name = r.displayName === 'You' ? 'You' : (r.displayName || midShortenAddress(r.walletAddress))
-                          return (
-                            <button key={r.id ?? i} onClick={() => pickRecipient(r)}
-                              className="flex flex-col items-center gap-1.5 flex-shrink-0 rounded-2xl px-1.5 py-2 active:bg-text-primary/5 transition-colors"
-                              style={{ width: 76 }}>
-                              <div className="rounded-full p-[2px]" style={{ background: 'linear-gradient(135deg, var(--success), var(--brand))' }}>
-                                <div className="rounded-full p-[2px]" style={{ background: 'var(--bg)' }}>
-                                  <Avatar name={r.displayName || r.display} src={r.avatarUrl} size="md" />
-                                </div>
-                              </div>
-                              <span className="text-[12px] font-medium text-text-primary truncate w-full text-center">{name.split(' ')[0]}</span>
-                            </button>
-                          )
-                        })}
+                      <div className="flex items-center">
+                        <div className="flex-1"><SectionLabel>Recent</SectionLabel></div>
+                        <button onClick={() => navigate('/recent-paid')} className="text-[13px] font-semibold mb-2 text-link">See all</button>
+                      </div>
+                      <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                        {recents.slice(0, 5).map((r, i) => (
+                          <PersonRow key={r.id ?? i} first={i === 0}
+                            name={r.displayName === 'You' ? 'You' : (r.displayName || midShortenAddress(r.walletAddress))}
+                            username={r.isUsername ? r.display : midShortenAddress(r.walletAddress)}
+                            avatarName={r.displayName || r.display} avatarUrl={r.avatarUrl}
+                            last={lastByAddr.get((r.walletAddress || '').toLowerCase())} showLast
+                            onClick={() => pickRecipient(r)} />
+                        ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Contacts - saved only, sorted A–Z, in one card */}
+                  {/* Contacts - everyone saved, A–Z with letter headers (you pinned first) */}
                   {savedContacts.length > 0 ? (
                     <div>
                       <SectionLabel count={savedContacts.length}>Contacts</SectionLabel>
                       <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
                         {savedContacts.map((c, i) => {
                           const isSelf = c.id === user?.id
+                          const name = c.display_name || c.username
+                          const letter = isSelf ? '' : contactLetter(name)
+                          const prev = i > 0 && savedContacts[i - 1].id !== user?.id ? contactLetter(savedContacts[i - 1].display_name || savedContacts[i - 1].username) : null
+                          const header = !isSelf && letter !== prev
                           return (
-                            <button key={c.id} onClick={() => pickResult(c)}
-                              className="w-full flex items-center gap-3 px-3.5 py-3 active:bg-text-primary/5 transition-colors text-left"
-                              style={{ borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : undefined }}>
-                              <Avatar name={c.display_name || c.username} src={c.avatar_url} size="sm" />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <p className="text-[15px] font-semibold text-text-primary truncate">{c.display_name || c.username}</p>
-                                  {isSelf && (
-                                    <span className="flex-shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-[1px] rounded-md"
-                                      style={{ color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>You</span>
-                                  )}
-                                </div>
-                                <p className="text-[12px] mt-0.5 truncate text-link">{c.username?.endsWith('.arc') ? c.username : `${c.username}.arc`}</p>
-                              </div>
-                              <LastSeen info={lastByAddr.get((c.wallet_address || '').toLowerCase())} />
-                              <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--text-muted)' }} />
-                            </button>
+                            <div key={c.id}>
+                              {header && (
+                                <p className="px-4 pt-2.5 pb-0.5 text-[12px] font-extrabold text-link"
+                                  style={{ borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : undefined }}>{letter}</p>
+                              )}
+                              <PersonRow first={i === 0 || header} name={name} self={isSelf}
+                                username={c.username?.endsWith('.arc') ? c.username : `${c.username}.arc`}
+                                avatarName={name} avatarUrl={c.avatar_url}
+                                onClick={() => pickResult(c)} />
+                            </div>
                           )
                         })}
                       </div>
@@ -2009,19 +2002,6 @@ function SRow({ label, value, valueColor }: { label: string; value: string; valu
 }
 
 
-// Right side of a Recent / Contacts row: when you last paid or received.
-function lastDateLabel(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return ''
-  const now = new Date()
-  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
-  const days = Math.round((startOf(now) - startOf(d)) / 86400000)
-  if (days <= 0) return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-  if (days === 1) return 'Yesterday'
-  if (days < 7) return d.toLocaleDateString([], { weekday: 'short' })
-  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString([], { day: 'numeric', month: 'short' })
-  return d.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })
-}
 function lastAmountLabel(amount: number, token: string): string {
   const n = trimTrailingZeros(amount.toFixed(token === 'cirBTC' ? 8 : 2))
   return token === 'USDC' ? `$${n}` : `${n} ${token}`
@@ -2035,16 +2015,44 @@ function SectionLabel({ children, count }: { children: string; count?: number })
   )
 }
 
-function LastSeen({ info }: { info?: { at: string; dir: 'paid' | 'received'; amount: number; token: string } }) {
-  if (!info) return null
-  const label = lastDateLabel(info.at)
-  if (!label) return null
+// First letter for the Contacts A–Z headers ('#' for anything that isn't a letter).
+function contactLetter(name: string): string {
+  const ch = (name || '').trim().charAt(0).toUpperCase()
+  return /[A-Z]/.test(ch) ? ch : '#'
+}
+function lastPaymentLine(info: { at: string; dir: 'paid' | 'received'; amount: number; token: string }): string {
+  const d = new Date(info.at)
+  const when = isNaN(d.getTime()) ? '' : ` on ${d.toLocaleDateString([], { day: '2-digit', month: 'short', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) })}`
+  const amt = info.amount > 0 ? `${lastAmountLabel(info.amount, info.token)} ` : ''
+  return `${amt}${info.dir === 'paid' ? 'sent' : 'received'}${when}`
+}
+// One Pay-page person row: avatar, name + username, optional last payment, Pay pill.
+function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast, first, onClick }: {
+  name: string; username: string; avatarName: string; avatarUrl?: string | null; self?: boolean
+  last?: { at: string; dir: 'paid' | 'received'; amount: number; token: string }; showLast?: boolean; first?: boolean; onClick: () => void
+}) {
   return (
-    <div className="flex flex-col items-end flex-shrink-0 text-right" style={{ minWidth: 0 }}>
-      <span className="text-[12px] tabular-nums" style={{ color: 'var(--text-secondary)' }}>{label}</span>
-      <span className="text-[11px] mt-0.5" style={{ color: info.dir === 'paid' ? 'var(--text-secondary)' : 'var(--success)', opacity: 0.85 }}>
-        {info.dir === 'paid' ? 'Paid' : 'Received'}{info.amount > 0 ? ` ${lastAmountLabel(info.amount, info.token)}` : ''}
-      </span>
-    </div>
+    <button onClick={onClick}
+      className="w-full flex items-center gap-3 px-3.5 py-3 active:bg-text-primary/5 transition-colors text-left"
+      style={{ borderTop: first ? undefined : '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
+      <Avatar name={avatarName} src={avatarUrl ?? undefined} size="md" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-1.5 min-w-0">
+          <span className="text-[15px] font-semibold text-text-primary truncate" style={{ maxWidth: '60%' }}>{name}</span>
+          <span className="text-[12.5px] truncate text-link">{username}</span>
+          {self && (
+            <span className="flex-shrink-0 self-center text-[10px] font-bold uppercase tracking-wide px-1.5 py-[1px] rounded-md"
+              style={{ color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>You</span>
+          )}
+        </div>
+        {showLast && (
+          <p className="text-[13px] mt-0.5 truncate" style={{ color: last?.dir === 'received' ? 'var(--success)' : 'var(--text-secondary)' }}>
+            {last ? lastPaymentLine(last) : 'No payments yet'}
+          </p>
+        )}
+      </div>
+      <span className="flex-shrink-0 rounded-full px-4 text-[14px] font-bold flex items-center"
+        style={{ height: 32, background: 'var(--brand)', color: '#fff' }}>Pay</span>
+    </button>
   )
 }
