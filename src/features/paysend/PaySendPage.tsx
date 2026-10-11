@@ -20,6 +20,7 @@ import { useWalletStore, useAuthStore, useUIStore } from '@/store'
 import { formatAmount, shortenAddress, midShortenAddress, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { amountFontSize } from '@/lib/amountFontSize'
 import { sendUSDC, sendEURC, estimateTransferFee, isValidAddress, confirmTransactionInBackground } from '@/lib/arcService'
+import { failedSendsByAddress, recordFailedSend } from '@/lib/failedSends'
 import { arcRpcJson } from '@/lib/arc'
 import { notifyRewardSend } from '@/lib/notifications'
 import { searchUsersDb, getUserByWalletAddress, getUserByUsername, fetchContactsDbStrict, fetchConversations, type DbUser } from '@/lib/supabase'
@@ -116,8 +117,18 @@ export function PaySendPage() {
   const [savedContacts, setSavedContacts] = useState<DbUser[]>(() => readPeople<DbUser>('pay-contacts', user?.id) ?? [])
   const [contactsLoaded, setContactsLoaded] = useState(() => readPeople('pay-contacts', user?.id) !== null)
   // Last paid / received date per wallet address, for the Recent & Contacts rows.
-  const [lastByAddr, setLastByAddr] = useState<Map<string, { at: string; dir: 'paid' | 'received'; amount: number; token: string }>>(
-    () => new Map(readPeople<[string, { at: string; dir: 'paid' | 'received'; amount: number; token: string }]>('pay-last', user?.id) ?? []))
+  const [lastByAddr, setLastByAddr] = useState<Map<string, LastPayment>>(
+    () => new Map(readPeople<[string, LastPayment]>('pay-last', user?.id) ?? []))
+  // Last payment for a Recent row: the newest of the ledger's last send /
+  // receive and a failed send recorded on this device (see lib/failedSends).
+  const lastFor = (addr: string | null | undefined): LastPayment | undefined => {
+    const k = (addr || '').toLowerCase()
+    const fromLedger = lastByAddr.get(k)
+    const failed = failedSendsByAddress(useAuthStore.getState().walletAddress).get(k)
+    if (!failed) return fromLedger
+    if (fromLedger && fromLedger.at >= failed.at) return fromLedger
+    return { at: failed.at, dir: 'failed', amount: failed.amount, token: failed.token }
+  }
 
   // Resolve any recipient we already have synchronously (recent-avatar tap via
   // sendRecipient, or a payment-link `?to=` param) BEFORE the first paint, so
@@ -929,11 +940,15 @@ export function PaySendPage() {
     try {
       const arcMod: any = await import('@/lib/arcService').catch(() => ({}))
       const recipientUsername = recipient?.isUsername ? recipient.display : undefined
-      const result = token === 'EURC'
-        ? await sendEURC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
+      // A definite failure (refused by every node, or reverted) is noted for
+      // the Recent rows; a 'pending' send is never counted as failed.
+      const noteFailed = () => recordFailedSend(useAuthStore.getState().walletAddress, { to: toAddr, amount: numAmount, token })
+      const result = await (token === 'EURC'
+        ? sendEURC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
         : token === 'cirBTC' && arcMod.sendCirBTC
-        ? await arcMod.sendCirBTC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
-        : await sendUSDC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
+        ? arcMod.sendCirBTC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
+        : sendUSDC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
+      ).catch((e: unknown) => { noteFailed(); throw e })
 
       // The send now waits for the real receipt (see waitForConfirmation in
       // arcService.ts). A reverted payment moved nothing - show the failed
@@ -941,6 +956,7 @@ export function PaySendPage() {
       // payment instead of a replay of this failed one.
       if (result.state === 'failed') {
         idempotencyKeyRef.current = null
+        noteFailed()
         throw new Error(`The payment was rejected on-chain, so no ${token} was sent. A small network fee may have been used. Please try again.`)
       }
       setPayPending(result.state === 'pending')
@@ -1305,7 +1321,7 @@ export function PaySendPage() {
                             name={r.displayName === 'You' ? 'You' : (r.displayName || midShortenAddress(r.walletAddress))}
                             username={r.isUsername ? r.display : midShortenAddress(r.walletAddress)}
                             avatarName={r.displayName || r.display} avatarUrl={r.avatarUrl}
-                            last={lastByAddr.get((r.walletAddress || '').toLowerCase())} showLast
+                            last={lastFor(r.walletAddress)} showLast usernameBelow
                             onClick={() => pickRecipient(r)} />
                         ))}
                       </div>
@@ -2020,18 +2036,31 @@ function contactLetter(name: string): string {
   const ch = (name || '').trim().charAt(0).toUpperCase()
   return /[A-Z]/.test(ch) ? ch : '#'
 }
-function lastPaymentLine(info: { at: string; dir: 'paid' | 'received'; amount: number; token: string }): string {
-  const d = new Date(info.at)
-  const when = isNaN(d.getTime()) ? '' : ` on ${d.toLocaleDateString([], { day: '2-digit', month: 'short', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) })}`
+type LastPayment = { at: string; dir: 'paid' | 'received' | 'failed'; amount: number; token: string }
+/** "Today, 6:42 PM" / "Yesterday, 9:15 AM" / "08 Oct, 4:03 PM" (+ year if not this year). */
+export function lastPaymentWhen(iso: string, now = new Date()): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const diff = Math.round((day(now) - day(d)) / 864e5)
+  const date = diff === 0 ? 'Today' : diff === 1 ? 'Yesterday'
+    : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) })
+  return `${date}, ${time}`
+}
+/** "↓ $5 received · Today, 6:42 PM" / "↑ $1 sent · …" / "✕ $2 failed · …" */
+export function lastPaymentLine(info: LastPayment): string {
+  const when = lastPaymentWhen(info.at)
   const amt = info.amount > 0 ? `${lastAmountLabel(info.amount, info.token)} ` : ''
-  return `${amt}${info.dir === 'paid' ? 'sent' : 'received'}${when}`
+  const [icon, verb] = info.dir === 'failed' ? ['✕', 'failed'] : info.dir === 'paid' ? ['↑', 'sent'] : ['↓', 'received']
+  return `${icon} ${amt}${verb}${when ? ` · ${when}` : ''}`
 }
 // One Pay-page person row: avatar, name + username, optional last payment, Pay pill.
 function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast, first, usernameBelow, onClick }: {
   name: string; username: string; avatarName: string; avatarUrl?: string | null; self?: boolean
-  /** Contacts: name on the first line, username on its own line under it. */
+  /** Name on the first line, username on its own line under it. */
   usernameBelow?: boolean
-  last?: { at: string; dir: 'paid' | 'received'; amount: number; token: string }; showLast?: boolean; first?: boolean; onClick: () => void
+  last?: LastPayment; showLast?: boolean; first?: boolean; onClick: () => void
 }) {
   return (
     <button onClick={onClick}
@@ -2049,7 +2078,7 @@ function PersonRow({ name, username, avatarName, avatarUrl, self, last, showLast
         </div>
         {usernameBelow && <p className="text-[13px] mt-0.5 truncate text-link">{username}</p>}
         {showLast && (
-          <p className="text-[13px] mt-0.5 truncate" style={{ color: last?.dir === 'received' ? 'var(--success)' : 'var(--text-secondary)' }}>
+          <p className="text-[13px] mt-0.5 truncate" style={{ color: last?.dir === 'received' ? 'var(--success)' : last?.dir === 'failed' ? 'var(--danger)' : 'var(--text-secondary)' }}>
             {last ? lastPaymentLine(last) : 'No payments yet'}
           </p>
         )}
