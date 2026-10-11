@@ -280,7 +280,7 @@ function SwapChecklist({ step, error, txHash, progress }: { step: string; error:
       msg: progress.approve === 'skipped' ? 'No separate approval needed'
         : approveOk ? 'Approval confirmed on Arc'
         : progress.approve === 'sent' ? 'Approval sent · waiting for confirmation'
-        : 'One-time on-chain approval',
+        : 'On-chain approval for this swap',
       done: approveOk, active: !approveOk,
     },
     {
