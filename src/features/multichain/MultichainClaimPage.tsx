@@ -223,6 +223,9 @@ function toSdkChainId(internalId: string): string {
 // pre-claim estimate and executeClaim's own re-check.
 const MIN_CLAIM_AMOUNT = 1.00
 
+/** Bring: a Unified Balance fee above this (USD) picks CCTP and warns. */
+const UB_HIGH_FEE_USD = 0.5
+
 /** Unified Balance fee estimate error: the fee is more than the amount. */
 const UB_FEE_TOO_HIGH = 'Fee is more than this amount'
 
@@ -1537,17 +1540,26 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const ubFeeTooHigh = ubFeeLive && !ubFee.needsUnlock
     && (ubFee.error === UB_FEE_TOO_HIGH || (!ubFee.error && ubFee.receiveAtLeast <= 0))
   const bringEnabled = reviewEnabled && !(effectiveRoute === 'ub' && ubFeeTooHigh)
-  // Unified Balance would cost more than the amount but CCTP can take it
-  // (cents): switch to CCTP for the person rather than leave Bring disabled.
-  const [ubSwitchedNote, setUbSwitchedNote] = useState('')
+  // Unified Balance fee above UB_HIGH_FEE_USD (Circle's gas to move USDC out
+  // of that chain - Ethereum ~$1.1): CCTP costs cents, so Bring picks CCTP
+  // and says why. Every Unified Balance chain, Bring only. The person can
+  // still pick Unified Balance (unless its fee is more than the amount) -
+  // a deliberate pick for this chain + amount is never switched back.
+  const ubFeeHigh = ubFeeLive && !ubFee.needsUnlock && !ubFee.error && ubFee.total > UB_HIGH_FEE_USD
+  const ubPickedFor = useRef('')
   useEffect(() => {
-    if (effectiveRoute === 'ub' && ubFeeTooHigh && cctpAvailable && selected) {
-      setClaimRoute('cctp')
-      setUbSwitchedNote(`Switched to CCTP: moving ${trimTrailingZeros(claimAmt.toFixed(2))} USDC out of ${getMeta(selected).label}'s Unified Balance would cost ${ubFee.approx ? 'up to' : 'about'} ${fmtFee(ubFee.total)} - more than the amount.`)
-    }
+    if (effectiveRoute === 'ub' && cctpAvailable && selected
+      && (ubFeeTooHigh || (ubFeeHigh && ubPickedFor.current !== ubFeeKey))) setClaimRoute('cctp')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveRoute, ubFeeTooHigh, cctpAvailable, selected])
-  useEffect(() => { setUbSwitchedNote('') }, [selected, claimAmt])
+  }, [effectiveRoute, ubFeeTooHigh, ubFeeHigh, cctpAvailable, selected, ubFeeKey])
+  const pickRoute = (id: 'ub' | 'cctp') => {
+    if (id === 'ub') ubPickedFor.current = ubFeeKey
+    setClaimRoute(id)
+  }
+  const cctpFeeText = claimEstimateIsLive && !feeEstimate.loading && !feeEstimate.error ? `up to ${fmtFee(feeEstimate.totalFee)}` : 'a few cents'
+  const ubHighWarning = (ubFeeHigh || ubFeeTooHigh) && cctpAvailable && selected
+    ? `Unified Balance fee is high: Circle charges ${ubFee.approx ? 'up to' : 'about'} ${fmtFee(ubFee.total)} to move USDC out of ${getMeta(selected).label}'s Unified Balance${ubFeeTooHigh ? ' - more than this amount' : ''}. CCTP costs ${cctpFeeText}${effectiveRoute === 'cctp' ? ', so CCTP is selected.' : '.'}`
+    : ''
   const ubSummaryCard = (
     <div style={{ width: '100%', marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1990,16 +2002,17 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                       const feeLine = !showClaimEstimateRow ? ''
                         : id === 'ub'
                           ? (!ubFeeLive ? 'Fee …' : ubFee.needsUnlock ? '' : tooHigh ? (ubFee.total > 0 ? `Fee ${fmtFee(ubFee.total).replace(' USDC', '')} · too high` : 'Fee too high')
+                            : ubFeeHigh ? `Fee ${ubFee.approx ? 'up to ' : ''}${fmtFee(ubFee.total).replace(' USDC', '')} · high`
                             : ubFee.error ? '' : `Fee ${ubFee.approx ? 'up to ' : ''}${fmtFee(ubFee.total).replace(' USDC', '')}`)
                           : (!claimEstimateIsLive || feeEstimate.loading ? 'Fee …' : feeEstimate.error ? '' : `Fee up to ${fmtFee(feeEstimate.totalFee).replace(' USDC', '')}`)
                       return (
-                        <button key={id} role="radio" aria-checked={on} aria-disabled={tooHigh} onClick={() => { if (!tooHigh) setClaimRoute(id) }}
+                        <button key={id} role="radio" aria-checked={on} aria-disabled={tooHigh} onClick={() => { if (!tooHigh) pickRoute(id) }}
                           style={{ minHeight: 42, padding: '4px 6px', borderRadius: 12, border: 'none', cursor: tooHigh ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: on ? 700 : 600,
                             background: on ? 'var(--brand)' : 'transparent', color: on ? '#fff' : COLORS.muted, opacity: tooHigh ? 0.75 : 1,
                             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
                           <span>{name}</span>
                           {feeLine && (
-                            <span style={{ fontSize: 11, fontWeight: 500, color: tooHigh ? COLORS.error : on ? 'rgba(255,255,255,0.85)' : COLORS.muted }}>{feeLine}</span>
+                            <span style={{ fontSize: 11, fontWeight: 500, color: tooHigh ? COLORS.error : (id === 'ub' && ubFeeHigh) ? 'var(--warning)' : on ? 'rgba(255,255,255,0.85)' : COLORS.muted }}>{feeLine}</span>
                           )}
                         </button>
                       )
@@ -2018,8 +2031,12 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 </div>
               </div>
 
-              {ubSwitchedNote && effectiveRoute === 'cctp' && (
-                <p style={{ fontSize: 12, color: COLORS.muted, margin: 0, padding: '0 4px', lineHeight: 1.45 }}>{ubSwitchedNote}</p>
+              {ubHighWarning && (
+                <div role="status" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 12, fontSize: 12.5, lineHeight: 1.45,
+                  color: COLORS.text, background: 'color-mix(in srgb, var(--warning) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)' }}>
+                  <span aria-hidden style={{ color: 'var(--warning)', fontWeight: 700 }}>!</span>
+                  <span>{ubHighWarning}</span>
+                </div>
               )}
 
               {error && <p role="alert" style={{ fontSize: 13, color: COLORS.error, margin: 0, textAlign: 'center' }}>{error}</p>}
