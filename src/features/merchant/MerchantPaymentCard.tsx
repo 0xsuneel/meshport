@@ -15,7 +15,7 @@ import { formatAmount } from '@/lib/utils'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
-  watchPayment, getPayment, orderLabel, STATUS_LABEL, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type PaymentView,
+  watchPayment, getPayment, orderLabel, expiryText, STATUS_LABEL, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type PaymentView,
 } from '@/lib/merchantPay'
 
 const CHAIN_LABEL: Record<string, string> = {
@@ -115,6 +115,7 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
     : paid ? (isMine ? '✓ Payment received' : '✓ Paid')
     : v.status === 'processing' && v.payments.some(p => p.status === 'in_ledger') ? 'In Ledger · moving to Arc'
     : closed ? 'Can no longer be paid' // the band already says expired / cancelled / failed
+    : expiryText(v.expiresAt) && v.status !== 'processing' ? `${STATUS_LABEL[v.status]} · ${expiryText(v.expiresAt)!.replace(/^Expires/, 'expires')}`
     : STATUS_LABEL[v.status]
   const muted = 'var(--text-secondary)'
 

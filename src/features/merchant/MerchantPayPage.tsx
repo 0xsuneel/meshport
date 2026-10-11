@@ -14,7 +14,7 @@ import { useAuthStore, useWalletStore } from '@/store'
 import { WalletPayPanel } from '@/features/pay/WalletPayPanel'
 import { formatAmount } from '@/lib/utils'
 import {
-  watchPayment, STATUS_LABEL, orderPaySendUrl, isOrderPayable, ARC_PAY_CHAIN, type PaymentView,
+  watchPayment, STATUS_LABEL, orderPaySendUrl, isOrderPayable, ARC_PAY_CHAIN, expiryText, type PaymentView,
 } from '@/lib/merchantPay'
 
 // Every chain merchant-pay accepts has a logo in the shared map (Arc is separate).
@@ -116,6 +116,9 @@ export function MerchantPayPage() {
             </div>
           )}
           <p className="text-xs font-semibold" style={{ color: statusColor }}>{STATUS_LABEL[view.status]}</p>
+          {['pending', 'partially_paid', 'payment_detected'].includes(view.status) && expiryText(view.expiresAt) && (
+            <p className="text-xs font-semibold" style={{ color: 'var(--warning)' }}>{expiryText(view.expiresAt)}</p>
+          )}
           {view.received > 0 && view.status !== 'paid' && (
             <p className="text-xs text-text-secondary">Received ${formatAmount(view.received)} of ${formatAmount(view.amount)}</p>
           )}
