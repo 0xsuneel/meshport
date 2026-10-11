@@ -13,7 +13,7 @@ import { ImageResponse } from '@vercel/og'
  * display name and @handle below it, and the real MeshPort logo mark +
  * tagline underneath that. With `amount` (a payment link for a set amount, or
  * a merchant bill) the person moves left and a white card on the right shows
- * the amount ("$10") with an optional `label` under it (e.g. "Order #ORD-12").
+ * the amount ("$10") with an optional `label` under it (e.g. "Bill ORD-00012").
  */
 
 export const config = { runtime: 'edge' }

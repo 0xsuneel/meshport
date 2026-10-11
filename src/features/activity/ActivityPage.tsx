@@ -14,6 +14,7 @@ import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { SearchField } from '@/components/ui/SearchField'
 import { useMerchant, isMerchantClaim } from '@/lib/merchant'
+import { orderTitle, displayOrderNumber, type OrderKind } from '@/lib/merchantPay'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { TokenMenu } from '@/components/ui/TokenMenu'
@@ -259,7 +260,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   // plain receive / paid - merchant side "Payment received", customer side
   // "Order payment".
   const merchantOrder = (isReceive || isSend) && metadata.merchantOrder ? String(metadata.merchantOrder) : null
-  const subtitle = merchantOrder ? `Order #${merchantOrder} · ${isSend && metadata.merchantName ? metadata.merchantName : counterpartyLabel}`
+  const subtitle = merchantOrder ? (isSend && metadata.merchantName ? String(metadata.merchantName) : counterpartyLabel)
                  : isSelfTransfer && (isSend || isReceive) ? 'Self'
                  : isSend     ? counterpartyLabel
                  : isReceive  ? counterpartyLabel
@@ -275,7 +276,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   const recoveredTitle = recoveredViaLabel(record)
   const title = isClaim && metadata.auto_convert ? (status === 'pending' ? 'Ledger funds moving to Arc' : 'Ledger payment received')
               : isClaim && isMerchantClaim(record as any) ? 'Payment received'
-              : merchantOrder ? (isSend ? 'Order payment' : metadata.merchantPersonal ? 'Requested amount received' : metadata.merchantOrderKind === 'invoice' ? 'Bill payment received' : 'Requested payment received')
+              : merchantOrder ? paidOrderTitle(metadata, merchantOrder)
               : recoveredTitle ? recoveredTitle
               // A rewards claim that didn't go through (lib/rewards.ts).
               : isReceive && isFailed && metadata.receiveKind === 'reward_claim' ? 'Reward claim'
@@ -337,6 +338,20 @@ export function activityRowIcon(record: ActivityRecord): ActionIconName | null {
 // ── Single row - hub style ─────────────────────────────────────────────────────
 // Shared with the asset page (Home → Assets → a token), so both show the
 // exact same rows - failed / pending / needs-recovery included.
+/** Which order a merchant-order activity row is about (metadata set by the
+ *  server on receives and by Chat Pay on sends). null: an older row that
+ *  doesn't say - shown as "Paid ORD-00042". */
+export function activityOrderKind(md: any): OrderKind | null {
+  if (md?.merchantOrderKind === 'invoice') return 'bill'
+  if (md?.merchantPersonal === true) return 'request'
+  if (md?.merchantPersonal === false) return 'merchant_request'
+  return null
+}
+const paidOrderTitle = (md: any, number: string) => {
+  const kind = activityOrderKind(md)
+  return kind ? orderTitle(kind, number, { paid: true }) : `Paid ${displayOrderNumber(number)}`
+}
+
 export function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
   record: ActivityRecord; isFirst: boolean; isLast: boolean; onSelect: () => void
   /** The row whose details were just closed - flashes once. */
@@ -510,7 +525,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
 
   const recoveredDetail = recoveredViaLabel(record)
   const merchantOrderDetail = (type === 'receive' || type === 'send') && (metadata as any)?.merchantOrder ? String((metadata as any).merchantOrder) : null
-  const orderWord = type === 'send' ? 'Order payment' : (metadata as any)?.merchantPersonal ? 'Requested amount received' : (metadata as any)?.merchantOrderKind === 'invoice' ? 'Bill payment received' : 'Requested payment received'
+  const orderWord = merchantOrderDetail ? paidOrderTitle(metadata, merchantOrderDetail) : ''
   const title = isClaim && (metadata as any)?.merchant ? `Payment received · ${chainLabel(sourceChain) || 'External'}`
               : merchantOrderDetail ? orderWord
               : recoveredDetail && isClaim ? `${recoveredDetail} · ${chainLabel(sourceChain) || 'External'}`
@@ -591,7 +606,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const rows = [
     { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Payment received from ${chain || 'other chain'} Ledger` : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
     { label: 'Chain',  value: chain },
-    ...(merchantOrderDetail ? [{ label: 'Order', value: `#${merchantOrderDetail}` }] : []),
+    ...(merchantOrderDetail ? [{ label: activityOrderKind(metadata) === 'bill' ? 'Bill' : activityOrderKind(metadata) === 'merchant_request' ? 'Requested Payment' : 'Request', value: displayOrderNumber(merchantOrderDetail) }] : []),
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Merchant', value: String((metadata as any).merchantName) }] : []),
     ...(isClaim && (metadata as any)?.merchant && (record as any).walletAddress
       ? [{ label: 'Paid to', value: `${String((record as any).walletAddress).slice(0, 6)}…${String((record as any).walletAddress).slice(-6)}`, copy: String((record as any).walletAddress) }]

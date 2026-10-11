@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, Clock, Plus, XCircle, PieChart } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
-import { listMyIntents, subscribeMerchantPayments, orderLabel, expiryText, STATUS_LABEL, type MerchantIntent } from '@/lib/merchantPay'
+import { listMyIntents, subscribeMerchantPayments, orderLabel, orderKindOf, orderTitle, expiryText, STATUS_LABEL, type MerchantIntent } from '@/lib/merchantPay'
 import { RequestQrPanel } from './RequestQrPanel'
 import { useMerchant } from '@/lib/merchant'
 
@@ -141,7 +141,6 @@ export function MyRequestsPage() {
                   const tint = bucket === 'paid' ? 'var(--success)' : bucket === 'closed' ? 'var(--text-secondary)' : st === 'partially_paid' ? 'var(--brand-text)' : 'var(--warning)'
                   const Icon = bucket === 'paid' ? CheckCircle2 : bucket === 'closed' ? XCircle : st === 'partially_paid' ? PieChart : Clock
                   const who = i.customerUsername && bucket === 'waiting' ? ` · ${i.customerUsername.replace(/\.arc$/i, '')}.arc` : ''
-                  const kind = i.kind === 'invoice' ? 'Bill · ' : ''
                   return (
                     <button key={i.id} onClick={() => setOpen(i)}
                       style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left',
@@ -152,7 +151,7 @@ export function MyRequestsPage() {
                       </span>
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ display: 'block', fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {kind}Order #{orderLabel(i)}{who}
+                          {orderTitle(orderKindOf(i), orderLabel(i))}{who}
                         </span>
                         <span style={{ display: 'block', fontSize: 11.5, marginTop: 2, color: line.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {line.text}

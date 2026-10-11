@@ -54,7 +54,7 @@ import {
   subscribeWithRetry,
   type ChatMessage,
 } from '@/lib/chatService'
-import { codeFromLink, paymentLink, orderLabel, BILL_PAY_EVENT, type PaymentView } from '@/lib/merchantPay'
+import { codeFromLink, paymentLink, orderLabel, orderKindOf, orderTitle, displayOrderNumber, paymentOrderTag, parsePaymentOrderTag, paidTitleFromTag, orderCardPreview, BILL_PAY_EVENT, type PaymentView, type OrderKind } from '@/lib/merchantPay'
 import { useMerchant } from '@/lib/merchant'
 import { ChatBillSheet } from '@/features/merchant/InvoiceComposer'
 import { ChatRequestSheet } from './ChatRequestSheet'
@@ -350,12 +350,17 @@ export function formatPaymentMessagePreview(msg: string, opts: {
 }): string {
   const { isSelfChat, uname, myId, lastMessageSender, myUsername } = opts
 
-  // A bill / order payment carries a trailing " · Order #ORD-100001" (older
-  // ones " · Bill #ABC123") - rewrite the
-  // payment part as usual and put the bill tag back on the end.
-  const billTag = / · (?:Bill|Order) #[A-Z0-9-]{6,20}$/.exec(msg)
-  if (billTag) {
-    return formatPaymentMessagePreview(msg.slice(0, billTag.index), opts) + billTag[0]
+  // A bill / request card: "🧾 Bill ORD-00042 · $8.2 USDC".
+  const card = orderCardPreview(msg)
+  if (card) return card
+
+  // A payment that settles a bill / request carries a trailing tag
+  // (" · Bill #ORD-100042", older " · Order #…") - rewrite the payment part
+  // as usual and name the order the way it shows everywhere:
+  // "… · Paid Bill ORD-00042".
+  const orderTag = parsePaymentOrderTag(msg)
+  if (orderTag) {
+    return formatPaymentMessagePreview(msg.slice(0, orderTag.index), opts) + ' · ' + paidTitleFromTag(orderTag)
   }
 
   // Only process payment messages. BUG FIX: this used to hardcode
@@ -1662,7 +1667,8 @@ const MessageBubble = memo(function MessageBubble({
     </button>
   ) : null
   // Payment for a merchant order / bill → shown as a reply to that card.
-  const billRef = isPayment ? (/ · (?:Bill|Order) #([A-Z0-9-]{6,20})$/.exec(content)?.[1] ?? null) : null
+  const orderTag = isPayment ? parsePaymentOrderTag(content) : null
+  const billRef = orderTag?.number ?? null
   const billAnchor = billRef ? (billRef.startsWith('ORD-') ? `order-${billRef.toLowerCase()}` : `bill-${billRef.toLowerCase()}`) : null
   // A photo / file may carry a caption on the lines after its marker.
   const { media: mediaContent, caption } = splitCaption(content)
@@ -1723,7 +1729,7 @@ const MessageBubble = memo(function MessageBubble({
               <span aria-hidden style={{ position: 'absolute', right: -18, top: -18, width: 72, height: 72, borderRadius: '50%', border: '12px solid rgba(255,255,255,0.12)' }} />
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, opacity: 0.9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {isMine ? <ArrowUpRight className="w-3 h-3 flex-shrink-0" /> : <ArrowDownLeft className="w-3 h-3 flex-shrink-0" />}
-                {billRef ? (isMine ? 'Order paid' : 'Payment received') : (isMine ? `Paid to ${recipientClean}.arc` : `Received from ${recipientClean}.arc`)}
+                {orderTag ? paidTitleFromTag(orderTag, true) : (isMine ? `Paid to ${recipientClean}.arc` : `Received from ${recipientClean}.arc`)}
               </div>
               <p style={{ position: 'relative', fontSize: 22, lineHeight: 1.1, fontWeight: 800, letterSpacing: '-0.4px', marginTop: 3 }}>
                 {formatAmount(msg.payment_amount || 0, chatPayTokenDecimals((msg.token_symbol as ChatPayToken) || 'USDC'))} <span style={{ fontSize: 14, fontWeight: 700, opacity: 0.85 }}>{msg.token_symbol || 'USDC'}</span>
@@ -1743,7 +1749,7 @@ const MessageBubble = memo(function MessageBubble({
                   borderLeft: `3px solid ${isMine ? 'var(--brand)' : 'var(--success)'}`,
                   background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)',
                 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: isMine ? 'var(--brand-text)' : 'var(--success)' }}>{billRef.startsWith('ORD-') ? `Order #${billRef}` : `🧾 Bill #${billRef}`}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: isMine ? 'var(--brand-text)' : 'var(--success)' }}>{orderTag?.kind ? orderTitle(orderTag.kind, billRef) : `🧾 ${displayOrderNumber(billRef)}`}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{isMine ? 'Paid in full' : 'Paid by customer'}</div>
               </div>
             )}
@@ -2798,7 +2804,7 @@ export function ChatConversationPage() {
   // Set when the pay sheet was opened from a bill / payment-request card:
   // amount + token are fixed and the payment is linked to that bill.
   // number = the order number (ORD-…); older requests fall back to the code.
-  const [billPay, setBillPay] = useState<{ code: string; number: string; orderNumber: string | null; amount: number } | null>(null)
+  const [billPay, setBillPay] = useState<{ code: string; number: string; orderNumber: string | null; amount: number; kind: OrderKind } | null>(null)
   // Set when the pay sheet was opened from a personal payment link card; an
   // amount in the link is fixed (the requester set it).
   const [linkPay, setLinkPay] = useState<{ username: string; amount: string | null } | null>(null)
@@ -3806,14 +3812,14 @@ export function ChatConversationPage() {
     const onBillPay = (e: Event) => {
       const v = (e as CustomEvent<PaymentView>).detail
       if (!v) return
-      if (v.status === 'paid') { showToastMessage(`Order #${orderLabel(v)} is already paid`, 'info'); return }
+      if (v.status === 'paid') { showToastMessage(`${orderTitle(orderKindOf(v), orderLabel(v))} is already paid`, 'info'); return }
       if (['expired', 'cancelled', 'failed'].includes(v.status)) { showToastMessage('This order can no longer be paid', 'error'); return }
       const payee = otherUser?.wallet_address?.toLowerCase()
       if (!payee || payee !== v.merchantWallet?.toLowerCase()) { navigate(`/paylink/r/${v.code}`); return }
       const due = Math.round(Math.max(0, v.amount - v.received) * 1e6) / 1e6
       if (!(due > 0)) return
       handlePayRef.current()
-      setBillPay({ code: v.code, number: orderLabel(v), orderNumber: v.orderNumber ?? null, amount: due })
+      setBillPay({ code: v.code, number: orderLabel(v), orderNumber: v.orderNumber ?? null, amount: due, kind: orderKindOf(v) })
       setPayToken('USDC')
       setPayAmount(String(due))
       setShowAmountPad(false)
@@ -4006,7 +4012,7 @@ export function ChatConversationPage() {
       const noteFailed = (err: unknown, txHash?: string) => import('@/lib/failure').then(({ recordFailure, classifyFailure }) => recordFailure({
         feature: 'chat_pay', walletAddress: useAuthStore.getState().walletAddress, amount: numAmount, token: payToken,
         counterparty: payTo, txHash, failure: classifyFailure(err, { reverted: !!txHash }),
-        metadata: { toUsername: otherUser?.username || undefined, ...(billPay?.orderNumber ? { merchantOrder: billPay.orderNumber } : {}) },
+        metadata: { toUsername: otherUser?.username || undefined, ...(billPay?.orderNumber ? { merchantOrder: billPay.orderNumber, merchantOrderKind: billPay.kind === 'bill' ? 'invoice' : 'request', merchantPersonal: billPay.kind === 'bill' ? undefined : billPay.kind === 'request' } : {}) },
       })).catch(() => {})
       const result = await (payToken === 'EURC'
         ? sendEURC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey })
@@ -4122,7 +4128,7 @@ export function ChatConversationPage() {
           // literal, persisted chat message content, not just a display
           // formatting choice, so getting cirBTC's precision right here
           // matters more than anywhere else in this file.
-          const payContent = `Sent ${formatAmount(numAmount, chatPayTokenDecimals(token as ChatPayToken))} ${token} to ${recipientClean}.arc${billPay ? ` · Order #${billPay.number}` : ''}`
+          const payContent = `Sent ${formatAmount(numAmount, chatPayTokenDecimals(token as ChatPayToken))} ${token} to ${recipientClean}.arc${billPay ? paymentOrderTag(billPay.kind, billPay.number) : ''}`
 
           // Optimistic card - visible immediately before DB confirms
           const optId  = 'optimistic_pay_' + Date.now()
@@ -5316,7 +5322,7 @@ export function ChatConversationPage() {
                 {billPay && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: 14,
                     background: 'color-mix(in srgb, var(--brand) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Order #{billPay.number}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{orderTitle(billPay.kind, billPay.number)}</span>
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Amount set by merchant</span>
                   </div>
                 )}
@@ -5658,7 +5664,7 @@ export function ChatConversationPage() {
                   </div>
                   <div className="bg-surface rounded-2xl border border-border mt-2">
                     <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Recipient</span><span className="text-sm font-semibold text-link">{recipientClean}.arc</span></div>
-                    {billPay && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Order</span><span className="text-sm font-semibold text-text-primary">#{billPay.number}</span></div>}
+                    {billPay && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">{billPay.kind === 'bill' ? 'Bill' : billPay.kind === 'merchant_request' ? 'Requested Payment' : 'Request'}</span><span className="text-sm font-semibold text-text-primary">{displayOrderNumber(billPay.number)}</span></div>}
                     <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Amount</span><span className="text-sm font-bold text-text-primary">{formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} {payToken}</span></div>
                     <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Network Fee</span><span className="text-sm font-semibold text-success">{payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free'}</span></div>
                     {payNote && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Note</span><span className="text-sm text-text-primary truncate max-w-[60%]">{payNote}</span></div>}

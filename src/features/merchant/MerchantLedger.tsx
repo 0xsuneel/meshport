@@ -16,8 +16,7 @@ import {
   cancelPayment, submitPayment, STATUS_LABEL, paymentStageLabel, isArriving, orderLabel, paymentRequestMessage,
   listUnmatchedDeposits, assignDeposit, dismissDeposit, completeOrder,
   listChainReceipts, getAutoConvert, setAutoConvert, isOwnReceipt, isBridgeReceipt,
-  type MerchantIntent, type MerchantPayment, type UnmatchedDeposit, type ChainReceipt,
-} from '@/lib/merchantPay'
+  type MerchantIntent, type MerchantPayment, type UnmatchedDeposit, type ChainReceipt, orderKindOf, orderTitle, orderDisplay } from '@/lib/merchantPay'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { PinKeypad } from '@/components/ui/PinKeypad'
@@ -195,7 +194,7 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
     <Row key={i.id}
       icon={i.status === 'paid' ? <CheckCircle2 size={16} color="var(--success)" /> : ['expired', 'cancelled', 'failed'].includes(i.status) ? <XCircle size={16} color="var(--text-secondary)" /> : <Clock size={16} color="var(--warning)" />}
       title={`${i.kind === 'invoice' ? 'Bill · ' : ''}$${formatAmount(i.amount)} USDC${i.note ? ' · ' + i.note : ''}`}
-      sub={`#${orderLabel(i)} · ${i.customerUsername ? i.customerUsername + '.arc · ' : ''}${i.status === 'paid' && i.completedByMerchant ? 'Completed by you' : STATUS_LABEL[i.status]}${i.sourceChain ? ' · ' + routeLabel(i.sourceChain) : ''} · ${timeAgo(i.createdAt)}`}
+      sub={`${orderDisplay(i)} · ${i.customerUsername ? i.customerUsername + '.arc · ' : ''}${i.status === 'paid' && i.completedByMerchant ? 'Completed by you' : STATUS_LABEL[i.status]}${i.sourceChain ? ' · ' + routeLabel(i.sourceChain) : ''} · ${timeAgo(i.createdAt)}`}
       onClick={() => onOpenRequest(i.code)} amountColor={i.status === 'paid' ? 'var(--success)' : undefined} />
   )
   const more = (shown: number, total: number, open: boolean, toggle: () => void) => total > shown || open ? (
@@ -492,8 +491,8 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
 
   const message = !intent ? link
     : qrMode === 'wallet' && walletAddress
-    ? `Pay $${formatAmount(dueNow)} USDC on ${merchantQrChain(qrChain).label} · Order #${orderLabel(intent)}\n${qrValue}`
-    : `Payment request · Order #${orderLabel(intent)}: $${formatAmount(intent.amount)} USDC${intent.note ? ` · ${intent.note}` : ''}\n${link}`
+    ? `Pay $${formatAmount(dueNow)} USDC on ${merchantQrChain(qrChain).label} · ${orderTitle(orderKindOf(intent), orderLabel(intent))}\n${qrValue}`
+    : `${orderTitle(orderKindOf(intent), orderLabel(intent))}: $${formatAmount(intent.amount)} USDC${intent.note ? ` · ${intent.note}` : ''}\n${link}`
 
   const copy = (text: string, what: string) =>
     copyToClipboard(text).then(ok => showToastMessage(ok ? `${what} copied` : 'Could not copy', ok ? 'success' : 'error'))
@@ -510,7 +509,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
     g.fillStyle = '#111111'; g.textAlign = 'center'
     g.font = '700 26px system-ui, sans-serif'; g.fillText('Payment request', W / 2, 60)
     g.font = '800 46px system-ui, sans-serif'; g.fillText(`$${formatAmount(intent.amount)} USDC`, W / 2, 122)
-    g.font = '600 24px system-ui, sans-serif'; g.fillStyle = '#444444'; g.fillText(`Order #${orderLabel(intent)}`, W / 2, 162)
+    g.font = '600 24px system-ui, sans-serif'; g.fillStyle = '#444444'; g.fillText(`${orderTitle(orderKindOf(intent), orderLabel(intent))}`, W / 2, 162)
     g.drawImage(qr, (W - 420) / 2, 190, 420, 420)
     g.font = '500 18px system-ui, sans-serif'; g.fillStyle = '#555555'
     g.fillText(qrMode === 'wallet' ? `Scan with any wallet · ${merchantQrChain(qrChain).label} · amount fills in` : 'Scan with MeshPort or any wallet · Arc network', W / 2, 650)
@@ -518,7 +517,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
     g.fillText(qrMode === 'wallet' ? (walletAddress ?? '') : (link.length > 52 ? link.slice(0, 52) + '…' : link), W / 2, 690)
 
     const blob: Blob | null = await new Promise(r => c.toBlob(b => r(b), 'image/png'))
-    return blob ? new File([blob], `payment-${orderLabel(intent)}-${merchantQrChain(shownChain).label.toLowerCase()}.png`, { type: 'image/png' }) : null
+    return blob ? new File([blob], `payment-${orderDisplay(intent)}-${merchantQrChain(shownChain).label.toLowerCase()}.png`, { type: 'image/png' }) : null
   }
 
   const share = async () => {
@@ -591,7 +590,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
     setBusy(true)
     try {
       await completeOrder(code, completeNote.trim() || undefined)
-      showToastMessage(`Order #${intent ? orderLabel(intent) : ''} marked as completed`, 'success')
+      showToastMessage(`${intent ? orderTitle(orderKindOf(intent), orderLabel(intent)) : 'Order'} marked as completed`, 'success')
       setCompleteOpen(false); setCompleteNote(''); onChanged()
     } catch (e) {
       showToastMessage(e instanceof Error ? e.message : 'Could not complete the order', 'error')
@@ -606,7 +605,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
       {intent && (
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--text-primary)' }}>${formatAmount(intent.amount)} <span style={{ fontSize: 15, color: 'var(--text-secondary)' }}>USDC</span></div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>Order #{orderLabel(intent)}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>{orderTitle(orderKindOf(intent), orderLabel(intent), { paid: intent.status === 'paid' })}</div>
           {intent.customerUsername && <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>Customer · {intent.customerUsername}.arc</div>}
           {intent.note && <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{intent.note}</div>}
           {intent.items?.length ? (
@@ -680,7 +679,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
           ))}
         </Section>
       )}
-      {receiptFor && <MerchantPaymentReceipt p={receiptFor} orderNumber={intent ? orderLabel(intent) : null} note={intent?.note ?? null} onClose={() => setReceiptFor(null)} />}
+      {receiptFor && <MerchantPaymentReceipt p={receiptFor} orderNumber={intent ? orderTitle(orderKindOf(intent), orderLabel(intent)) : null} note={intent?.note ?? null} onClose={() => setReceiptFor(null)} />}
 
       {!done && (
         <>
@@ -705,7 +704,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
           <button onClick={() => setCompleteOpen(true)} style={btnGhost}><CheckCircle2 size={15} /> Mark as completed</button>
         ) : (
           <div style={{ ...card, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Mark order #{intent ? orderLabel(intent) : ''} as completed?</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Mark {intent ? orderTitle(orderKindOf(intent), orderLabel(intent)) : 'this order'} as completed?</div>
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
               Use this when the order was settled another way (cash, a payment you checked yourself…). The customer can't pay it any more.
               {intent && intent.received > 0 && intent.received < intent.amount ? ` $${formatAmount(intent.received)} of $${formatAmount(intent.amount)} was received.` : ''}
@@ -760,7 +759,7 @@ function CustomerDetail({ keyId, payments, intents, onBack, onRequest, onOpenReq
       </Section>
       {receiptFor && (() => {
         const it = intentById.get(receiptFor.intentId)
-        return <MerchantPaymentReceipt p={receiptFor} orderNumber={it ? orderLabel(it) : null} note={it?.note ?? null}
+        return <MerchantPaymentReceipt p={receiptFor} orderNumber={it ? orderTitle(orderKindOf(it), orderLabel(it)) : null} note={it?.note ?? null}
           onViewOrder={it ? () => { setReceiptFor(null); onOpenRequest(it.code) } : undefined}
           onClose={() => setReceiptFor(null)} />
       })()}
@@ -787,7 +786,7 @@ function MerchantPaymentReceipt({ p, orderNumber, note, onViewOrder, onClose }: 
       title={arriving ? 'Payment Arriving' : 'Payment Received'}
       subtitle={<>
         <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: 'var(--success)', marginBottom: 4 }}>+${formatAmount(p.amount)} USDC</span>
-        From {from}{orderNumber ? ` · Order #${orderNumber}` : ''}
+        From {from}{orderNumber ? ` · ${orderNumber}` : ''}
       </>}
       rows={[
         { label: 'Amount', value: `$${formatAmount(p.amount)} USDC`, positive: true },
@@ -797,7 +796,7 @@ function MerchantPaymentReceipt({ p, orderNumber, note, onViewOrder, onClose }: 
         { label: 'Time', value: new Date(p.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
       ]}
       detailRows={[
-        ...(orderNumber ? [{ label: 'Order', value: `#${orderNumber}` }] : []),
+        ...(orderNumber ? [{ label: 'For', value: orderNumber }] : []),
         { label: 'Route', value: routeLabel(p.chain) || 'Arc' },
         { label: 'Sender wallet', value: short(p.from) },
         ...(p.matchedBy ? [{ label: 'Matched by', value: p.matchedBy === 'watcher' ? 'Direct deposit' : p.matchedBy === 'merchant' ? 'You (checked a transaction)' : 'Customer' }] : []),
@@ -895,9 +894,9 @@ function NeedsReview({ deposits, intents, onDone }: { deposits: UnmatchedDeposit
             {d.candidateCodes.map(code => {
               const i = byCode.get(code)
               return (
-                <button key={code} disabled={!!busy} onClick={() => act(d.id + ':' + code, () => assignDeposit(d.id, code), `Linked to order #${i ? orderLabel(i) : code}`)}
+                <button key={code} disabled={!!busy} onClick={() => act(d.id + ':' + code, () => assignDeposit(d.id, code), `Linked to ${i ? orderTitle(orderKindOf(i), orderLabel(i)) : code}`)}
                   style={{ ...btnGhost, padding: '7px 10px', fontSize: 12, opacity: busy === d.id + ':' + code ? 0.6 : 1 }}>
-                  #{i ? orderLabel(i) : code}{i ? ` · $${formatAmount(Math.max(0, i.amount - i.received))} due` : ''}{i?.customerUsername ? ` · ${i.customerUsername}.arc` : ''}{i?.note ? ` · ${i.note}` : ''}
+                  {i ? orderDisplay(i) : code}{i ? ` · $${formatAmount(Math.max(0, i.amount - i.received))} due` : ''}{i?.customerUsername ? ` · ${i.customerUsername}.arc` : ''}{i?.note ? ` · ${i.note}` : ''}
                 </button>
               )
             })}

@@ -1,5 +1,19 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
+// Same names as the app (src/lib/orderLabels.ts): ORD-100042 shows as
+// ORD-00042; "Bill / Request / Requested Payment ORD-…", "Paid Bill …" etc.
+function orderDisplay(n: string): string {
+  const m = /^ORD-(\d+)$/i.exec(n || '')
+  if (!m || Number(m[1]) <= 100000) return n || ''
+  return `ORD-${String(Number(m[1]) - 100000).padStart(5, '0')}`
+}
+function orderName(kind: string | undefined, personal: boolean | null | undefined, n: string, paid: boolean): string {
+  const no = orderDisplay(n)
+  if (kind === 'invoice') return paid ? `Paid Bill ${no}` : `Bill ${no}`
+  if (personal === false) return paid ? `Requested Payment Paid ${no}` : `Requested Payment ${no}`
+  return paid ? `Request Amount Paid ${no}` : `Request ${no}`
+}
+
 /**
  * GET /api/og-pay?username=<username>[&amount=<n>]   personal payment link
  * GET /api/og-pay?code=<code>[&order=<ORD-…>]        merchant bill / payment request
@@ -116,11 +130,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           avatarUrl = v.merchantAvatar || ''
           const due = Math.max(0, Number(v.amount) - Number(v.received || 0))
           amount = v.status === 'paid' ? Number(v.amount) : (due > 0 ? due : Number(v.amount))
-          label = v.status === 'paid' ? 'Paid' : v.orderNumber ? `Order #${v.orderNumber}` : v.kind === 'invoice' ? 'Invoice' : ''
+          label = v.orderNumber ? orderName(v.kind, v.personal, v.orderNumber, v.status === 'paid') : v.status === 'paid' ? 'Paid' : v.kind === 'invoice' ? 'Bill' : ''
         }
       } catch { /* plainer card below */ }
     }
-    if (!label && order) label = `Order #${order}`
+    if (!label && order) label = orderDisplay(order)
   } else {
     amount = Number(String(req.query.amount || '').replace(/[^0-9.]/g, '')) || 0
     const isAddress = /^0x[0-9a-fA-F]{40}$/.test(username)

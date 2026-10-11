@@ -127,13 +127,26 @@ function effectiveStatus(i: any): string {
   return i.status
 }
 
+// How an order is named (same as the app's src/lib/orderLabels.ts):
+// "Bill ORD-00042" / "Request ORD-00043" / "Requested Payment ORD-00044".
+// Stored numbers count from 100001; they're shown from 00001.
+function orderDisplay(n: string | null | undefined): string {
+  const m = /^ORD-(\d+)$/i.exec(n || '')
+  if (!m || Number(m[1]) <= 100000) return n || ''
+  return `ORD-${String(Number(m[1]) - 100000).padStart(5, '0')}`
+}
+function orderName(i: any): string {
+  const no = orderDisplay(i.order_number)
+  return i.kind === 'invoice' ? `Bill ${no}` : i.personal === false ? `Requested Payment ${no}` : `Request ${no}`
+}
+
 function publicView(i: any, payments: any[]) {
   return {
     code: i.code, orderNumber: i.order_number ?? null, merchantName: i.merchant_name, merchantWallet: i.merchant_wallet,
     merchantUsername: i._merchant_username ?? null, merchantAvatar: i._merchant_avatar ?? null,
     amount: Number(i.requested_amount), received: Number(i.received_amount), currency: i.currency,
     note: i.note, customerUsername: i.customer_username, status: effectiveStatus(i),
-    kind: i.kind ?? 'request', items: Array.isArray(i.items) ? i.items : null,
+    kind: i.kind ?? 'request', personal: typeof i.personal === 'boolean' ? i.personal : null, items: Array.isArray(i.items) ? i.items : null,
     createdAt: i.created_at, expiresAt: i.expires_at, paidAt: i.paid_at,
     completedByMerchant: !!i.completed_by_merchant, completedNote: i.completed_note ?? null,
     chains: Object.entries(PAY_CHAINS).map(([id, c]) => ({ id, label: c.label, chainId: c.chainId, usdc: c.usdc, route: c.route })),
@@ -218,13 +231,13 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   // the amount must be exactly what's due, and a paid order takes no more.
   const due = Math.max(0, Number(i.requested_amount) - Number(i.received_amount))
   if (effectiveStatus(i) === 'paid' || (Number(i.received_amount) > 0 && due <= 0.000001)) {
-    return { error: `Order #${i.order_number} is already paid.`, status: 409 }
+    return { error: `${orderName(i)} is already paid.`, status: 409 }
   }
   if (order.orderNumber && order.orderNumber.toUpperCase() !== String(i.order_number).toUpperCase()) {
-    return { error: `Order number doesn't match this payment request (#${i.order_number}).`, status: 409 }
+    return { error: `That number doesn't match this payment (${orderName(i)}).`, status: 409 }
   }
   if (order.amount != null && Math.abs(order.amount - due) > 0.000001) {
-    return { error: `Amount doesn't match order #${i.order_number} - $${due.toFixed(2)} USDC is due.`, status: 409 }
+    return { error: `Amount doesn't match ${orderName(i)} - $${due.toFixed(2)} USDC is due.`, status: 409 }
   }
   const receipt = await rpc(chain.rpcs, 'eth_getTransactionReceipt', [tx]).catch(() => null)
   if (!receipt) return { pending: true }
@@ -232,7 +245,7 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   const { amount, from } = usdcToMerchant(receipt, chain.usdc, i.merchant_wallet, chainId)
   if (!(amount > 0) || !from) return { error: `This transaction didn't send USDC to ${i.merchant_name ?? 'the merchant'} on ${chain.label}.`, status: 409 }
   if (order.amount != null && amount + 0.000001 < order.amount) {
-    return { error: `This transaction sent $${amount} USDC, but order #${i.order_number} is for $${order.amount} USDC.`, status: 409 }
+    return { error: `This transaction sent $${amount} USDC, but ${orderName(i)} is for $${order.amount} USDC.`, status: 409 }
   }
 
   // A payer claiming a transfer for an order must show it's really theirs and
@@ -606,7 +619,7 @@ Deno.serve(async (req: Request) => {
       const who = await caller(req)
       if (who?.authUid !== i.merchant_auth_uid) return jsonFor(req, { error: 'Not found' }, 404)
       const st = effectiveStatus(i)
-      if (st === 'paid') return jsonFor(req, { error: `Order #${i.order_number} is already completed.` }, 409)
+      if (st === 'paid') return jsonFor(req, { error: `${orderName(i)} is already completed.` }, 409)
       if (st === 'cancelled') return jsonFor(req, { error: 'This order was cancelled.' }, 409)
       const note = typeof b.note === 'string' ? b.note.trim().slice(0, 140) : ''
       const now = new Date().toISOString()

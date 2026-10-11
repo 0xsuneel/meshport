@@ -12,7 +12,7 @@ import { format, getHours, getDay, startOfWeek, startOfMonth, startOfYear, subWe
 import { useAuthStore } from '@/store'
 import { formatAmount, timeAgo } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { listMyIntents, listMyPayments, listChainReceipts, type MerchantIntent, type MerchantPayment } from '@/lib/merchantPay'
+import { listMyIntents, listMyPayments, listChainReceipts, type MerchantIntent, type MerchantPayment , displayOrderNumber } from '@/lib/merchantPay'
 import { fetchActivity } from '@/lib/ActivityService'
 import { isMerchantClaim, useMerchant } from '@/lib/merchant'
 import { chainLogoSrc } from '@/lib/chainLogos'
@@ -362,7 +362,7 @@ export function LedgerInsightsPage() {
                     <img src={chainLogo(p.chain)} alt="" width={22} height={22} style={{ borderRadius: '50%', flexShrink: 0 }}
                       onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
                     <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{customersOf([p])[0]?.name}</span> · {chainName(p.chain)}{p.orderNumber ? ` · #${p.orderNumber}` : ''} · {timeAgo(p.createdAt)}
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{customersOf([p])[0]?.name}</span> · {chainName(p.chain)}{p.orderNumber ? ` · ${displayOrderNumber(p.orderNumber)}` : ''} · {timeAgo(p.createdAt)}
                     </div>
                     <b style={{ fontSize: 13.5, color: 'var(--success)', flexShrink: 0 }}>+${formatAmount(p.amount)}</b>
                   </div>

@@ -52,6 +52,8 @@ export type PaymentView = {
   note: string | null
   customerUsername: string | null
   kind?: 'request' | 'invoice'
+  /** A normal user's request (true) vs an approved merchant's (false); unknown on older servers. */
+  personal?: boolean | null
   items?: InvoiceItem[] | null
   status: 'pending' | 'payment_detected' | 'processing' | 'paid' | 'partially_paid' | 'expired' | 'failed' | 'cancelled'
   createdAt: string
@@ -149,10 +151,19 @@ export function billNumber(code: string): string {
   return code.slice(0, 6).toUpperCase()
 }
 
-/** The order number to show for a request / bill. */
+/** The stored order number of a request / bill (links, matching, anchors).
+ *  To SHOW it, use orderTitle / orderDisplay. */
 export function orderLabel(v: { code: string; orderNumber?: string | null }): string {
   return v.orderNumber || billNumber(v.code)
 }
+
+// How orders are named on screen: src/lib/orderLabels.ts (pure, no network).
+export {
+  displayOrderNumber, orderKindOf, orderTitle, PAYMENT_ORDER_TAG, paymentOrderTag, parsePaymentOrderTag,
+  paidTitleFromTag, orderCardPreview, type OrderKind,
+} from './orderLabels'
+import { displayOrderNumber } from './orderLabels'
+export const orderDisplay = (v: { code: string; orderNumber?: string | null }) => displayOrderNumber(orderLabel(v))
 
 /**
  * "Expires 7:53 PM" (today) / "Expires Oct 12, 7:53 PM" for a request with an
@@ -202,6 +213,7 @@ export type MerchantIntent = {
   sourceChain: string | null; paymentMethod: string | null; createdAt: string; expiresAt: string | null; paidAt: string | null
   kind: 'request' | 'invoice'; items: InvoiceItem[] | null
   completedByMerchant: boolean; completedNote: string | null
+  personal?: boolean | null
 }
 export type MerchantPayment = {
   id: string; intentId: string; chain: string; txHash: string; from: string; amount: number
@@ -236,7 +248,7 @@ function mapIntent(r: any): MerchantIntent {
     id: r.id, code: r.code, orderNumber: r.order_number ?? null, amount: Number(r.requested_amount), received: Number(r.received_amount), note: r.note,
     customerUsername: r.customer_username, customerWallet: r.customer_wallet, status: expired ? 'expired' : r.status,
     sourceChain: r.source_chain, paymentMethod: r.payment_method, createdAt: r.created_at, expiresAt: r.expires_at, paidAt: r.paid_at,
-    kind: r.kind === 'invoice' ? 'invoice' : 'request',
+    kind: r.kind === 'invoice' ? 'invoice' : 'request', personal: typeof r.personal === 'boolean' ? r.personal : null,
     completedByMerchant: !!r.completed_by_merchant, completedNote: r.completed_note ?? null,
     items: Array.isArray(r.items) ? r.items.map((i: any) => ({ name: i.name, qty: Number(i.qty), price: Number(i.price), total: Number(i.total) })) : null,
   }
@@ -281,6 +293,7 @@ export async function listMyPayments(limit = 500): Promise<MerchantPayment[]> {
 export type ChatPendingOrder = {
   code: string; orderNumber: string | null; kind: 'invoice' | 'request'; amount: number; received: number
   note: string | null; merchantName: string | null; iAmMerchant: boolean; createdAt: string; expiresAt: string | null
+  personal?: boolean | null
 }
 
 /** Open orders between me and `otherUserId` - whichever of us is the merchant. */
@@ -291,6 +304,7 @@ export async function listChatPendingOrders(otherUserId: string): Promise<ChatPe
     code: r.code, orderNumber: r.order_number ?? null, kind: r.kind === 'invoice' ? 'invoice' : 'request',
     amount: Number(r.amount), received: Number(r.received), note: r.note ?? null, merchantName: r.merchant_name ?? null,
     iAmMerchant: !!r.i_am_merchant, createdAt: r.created_at, expiresAt: r.expires_at ?? null,
+    personal: typeof r.personal === 'boolean' ? r.personal : null,
   }))
 }
 

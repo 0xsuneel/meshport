@@ -1,3 +1,4 @@
+import { orderKindOf, orderTitle, paymentOrderTag, type OrderKind } from '@/lib/merchantPay'
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { TokenLogo } from '@/components/ui/TokenLogo'
@@ -217,6 +218,7 @@ export function PaySendPage() {
   // Merchant payment: order number + amount come from the request and
   // can't be edited; the payment is confirmed against both.
   const [merchantOrderNumber, setMerchantOrderNumber] = useState<string | null>(() => searchParams.get('order'))
+  const [merchantOrderKind, setMerchantOrderKind] = useState<OrderKind>('request')
   // The order's requester (for the chat card when the recipient came from a
   // link or QR without a username).
   const [merchantUsername, setMerchantUsername] = useState<string | null>(null)
@@ -236,6 +238,7 @@ export function PaySendPage() {
         setToken('USDC')
         setAmount(String(orderDue(v)))
         setMerchantOrderNumber(v.orderNumber ?? null)
+        setMerchantOrderKind(orderKindOf(v))
         setMerchantUsername(v.merchantUsername ? String(v.merchantUsername).replace(/\.arc$/i, '') : null)
         // The recipient is the order's own merchant wallet (checked above).
         setRecipient(r => r ? { ...r, verified: true } : r)
@@ -938,7 +941,7 @@ export function PaySendPage() {
       const noteFailed = (err: unknown, txHash?: string) => void recordFailure({
         feature: 'pay', walletAddress: useAuthStore.getState().walletAddress, amount: numAmount, token,
         counterparty: toAddr, txHash, failure: classifyFailure(err, { reverted: !!txHash }),
-        metadata: { toUsername: recipient?.isUsername ? recipient.display : undefined, ...(merchantPayCode ? { merchantOrder: merchantOrderNumber ?? undefined } : {}) },
+        metadata: { toUsername: recipient?.isUsername ? recipient.display : undefined, ...(merchantPayCode ? { merchantOrder: merchantOrderNumber ?? undefined, merchantOrderKind: merchantOrderKind === 'bill' ? 'invoice' : 'request', merchantPersonal: merchantOrderKind === 'bill' ? undefined : merchantOrderKind === 'request' } : {}) },
       })
       const result = await (token === 'EURC'
         ? sendEURC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
@@ -1087,8 +1090,8 @@ export function PaySendPage() {
           const { supabase, ensureAnonSession } = await import('@/lib/supabase')
           const { ensureConversation, persistMessage, touchConversation } = await import('@/lib/chatService')
           // Paying an order by link / QR: the chat gets the same payment card
-          // as paying the request in chat - with "Order #… · Paid in full".
-          const orderTag = merchantPayCode && merchantOrderNumber ? ` · Order #${merchantOrderNumber}` : ''
+          // as paying the request in chat - with "Bill ORD-… · Paid in full".
+          const orderTag = merchantPayCode && merchantOrderNumber ? paymentOrderTag(merchantOrderKind, merchantOrderNumber) : ''
           const chatName = recipient.isUsername ? recipient.display.replace('.arc', '') : merchantPayCode ? merchantUsername : null
           if (chatName && user) {
             await ensureAnonSession()
@@ -1426,7 +1429,7 @@ export function PaySendPage() {
               <p className="text-[13px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Amount</p>
               {merchantPayCode && (
                 <p className="text-[12px]" style={{ color: 'var(--text-secondary)', marginTop: -6 }}>
-                  {merchantOrderNumber ? `Order #${merchantOrderNumber} · ` : ''}Amount and order are fixed by the request
+                  {merchantOrderNumber ? `${orderTitle(merchantOrderKind, merchantOrderNumber)} · ` : ''}Amount is fixed by the request
                 </p>
               )}
 

@@ -14,8 +14,7 @@ import { useAuthStore, useUIStore } from '@/store'
 import { formatAmount, copyToClipboard } from '@/lib/utils'
 import {
   createPaymentRequest, watchPayment, orderLabel, orderPayLink, paymentRequestMessage, cancelPayment, expiryText, STATUS_LABEL,
-  type MerchantIntent, type PaymentView,
-} from '@/lib/merchantPay'
+  type MerchantIntent, type PaymentView, orderKindOf, orderTitle, orderDisplay } from '@/lib/merchantPay'
 import { AmountHero } from '@/components/ui/AmountHero'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 
@@ -109,7 +108,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
           navigate(`/chat/${convId}`, { state: { autoSend: paymentRequestMessage(it, formatAmount(it.amount)) } })
           return
         }
-        showToastMessage(`Order #${orderLabel(it)} created - couldn't open the chat`, 'error')
+        showToastMessage(`${orderTitle(orderKindOf(it), orderLabel(it))} created - couldn't open the chat`, 'error')
       }
       setLive(null); setOrder(it)
     } catch (e) {
@@ -119,7 +118,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
   }
 
   const shareText = () => order
-    ? `Pay $${formatAmount(order.amount)} USDC · Order #${orderLabel(order)}${order.note ? ` · ${order.note}` : ''}${expiryText(order.expiresAt) ? `\n${expiryText(order.expiresAt)}` : ''}\n${link}`
+    ? `Pay $${formatAmount(order.amount)} USDC · ${orderTitle(orderKindOf(order), orderLabel(order))}${order.note ? ` · ${order.note}` : ''}${expiryText(order.expiresAt) ? `\n${expiryText(order.expiresAt)}` : ''}\n${link}`
     : ''
   const qrFile = async (): Promise<File | null> => {
     const qr = canvasRef.current
@@ -131,7 +130,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
     g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.textAlign = 'center'
     g.fillStyle = '#111'; g.font = '700 26px system-ui, sans-serif'; g.fillText('Pay with MeshPort', W / 2, 58)
     g.font = '800 44px system-ui, sans-serif'; g.fillText(`$${formatAmount(order.amount)} USDC`, W / 2, 118)
-    g.fillStyle = '#444'; g.font = '600 22px system-ui, sans-serif'; g.fillText(`Order #${orderLabel(order)}`, W / 2, 156)
+    g.fillStyle = '#444'; g.font = '600 22px system-ui, sans-serif'; g.fillText(`${orderTitle(orderKindOf(order), orderLabel(order))}`, W / 2, 156)
     g.drawImage(qr, (W - 420) / 2, 182, 420, 420)
     g.fillStyle = '#444'; g.font = '600 17px system-ui, sans-serif'
     g.fillText('Scan with MeshPort or any wallet app · Arc network', W / 2, 634)
@@ -139,7 +138,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
     g.fillText(link.length > 60 ? link.slice(0, 60) + '…' : link, W / 2, 666)
     if (expires) { g.fillStyle = '#B4531F'; g.font = '700 19px system-ui, sans-serif'; g.fillText(expires, W / 2, 708) }
     const blob: Blob | null = await new Promise(r => cv.toBlob(b => r(b), 'image/png'))
-    return blob ? new File([blob], `request-${orderLabel(order)}.png`, { type: 'image/png' }) : null
+    return blob ? new File([blob], `request-${orderDisplay(order)}.png`, { type: 'image/png' }) : null
   }
   const save = async () => {
     const f = await qrFile(); if (!f) return
@@ -213,7 +212,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
             ${formatAmount(order.amount)} <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>USDC</span>
           </div>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 2 }}>
-            Order #{orderLabel(order)}{order.customerUsername ? ` · ${order.customerUsername}.arc` : ''}{order.note ? ` · ${order.note}` : ''}
+            {orderTitle(orderKindOf(order), orderLabel(order), { paid: order.status === 'paid' })}{order.customerUsername ? ` · ${order.customerUsername}.arc` : ''}{order.note ? ` · ${order.note}` : ''}
           </div>
           {open && expiryText(order.expiresAt) && (
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning)', marginTop: 3 }}>{expiryText(order.expiresAt)}</div>
