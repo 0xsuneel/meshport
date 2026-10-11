@@ -3,8 +3,8 @@ import { useNavigate, useParams, Navigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import { useAuthStore, useWalletStore } from '@/store'
 import { formatAmount, trimTrailingZeros } from '@/lib/utils'
-import { activitySign, activityLabel, type ActivityRecord } from '@/lib/ActivityService'
-import { deriveActivityRow, activityRowIcon, DetailSheet } from '@/features/activity/ActivityPage'
+import { type ActivityRecord } from '@/lib/ActivityService'
+import { ActivityRow, DetailSheet, recordMovesToken } from '@/features/activity/ActivityPage'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { loadAssetSlot } from '@/lib/assetSlot'
 import { fetchBtcPriceUsd } from '@/lib/btcPrice'
@@ -42,17 +42,22 @@ const ACTIONS: Record<AssetToken, { label: string; icon: ActionIconName; path: s
 const SKEL = 'color-mix(in srgb, var(--text-primary) 6%, transparent)'
 const sortNewest = (a: ActivityRecord, b: ActivityRecord) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
 
-/** Everything that moved this token: direct activity in it, plus swaps in or out of it. */
+// How many of this token's latest transactions show here; "See all" opens
+// the main Activity page filtered to the token (same rows, same details).
+const RECENT = 8
+
+/** Everything that moved this token (same rule as Activity's token filter), newest first. */
 async function loadAssetHistory(walletAddress: string, token: AssetToken): Promise<ActivityRecord[]> {
   const { fetchActivity } = await import('@/lib/ActivityService')
-  const directTypes = new Set(['send', 'receive', 'claim', 'bridge', 'deposit', 'bulk'])
   const records = await fetchActivity(walletAddress, { limit: 100 })
-  const direct = records.filter(r => directTypes.has(r.activityType) && (r.tokenSymbol || 'USDC') === token)
   // Swaps come separately (fetchActivity's default type filter doesn't
   // cover them); a USDC→EURC swap belongs in both tokens' histories.
-  const swaps = (await fetchActivity(walletAddress, { activityType: 'swap', limit: 100 }))
-    .filter(r => r.metadata?.tokenIn === token || r.metadata?.tokenOut === token)
-  return [...direct, ...swaps].sort(sortNewest)
+  const swaps = await fetchActivity(walletAddress, { activityType: 'swap', limit: 100 })
+  const seen = new Set<string>()
+  return [...records, ...swaps]
+    .filter(r => r.activityType !== 'deposit' && recordMovesToken(r, token))
+    .filter(r => { const k = r.id || `${r.txHash}_${r.activityType}`; if (seen.has(k)) return false; seen.add(k); return true })
+    .sort(sortNewest)
 }
 
 function fmtTokenAmount(n: number, token: AssetToken): string {
@@ -143,7 +148,15 @@ export function AssetPage() {
 
         {/* History */}
         <div style={{ padding: '0 20px' }}>
-          <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>History</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>History</span>
+            {history && history.length > 0 && (
+              <button onClick={() => navigate(`/activity?token=${token}`)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--brand-text)', padding: 0 }}>
+                See all
+              </button>
+            )}
+          </div>
           {history === null ? (
             [0, 1, 2, 3].map(i => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px' }}>
@@ -156,9 +169,9 @@ export function AssetPage() {
             ))
           ) : history.length === 0 ? (
             <div style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>No {token} transactions yet</div>
-          ) : history.map((item, i) => (
-            <HistoryRow key={item.id || i} item={item} token={token}
-              onOpen={() => setSelected(item)} />
+          ) : history.slice(0, RECENT).map((item, i, list) => (
+            <ActivityRow key={item.id || i} record={item} isFirst={i === 0} isLast={i === list.length - 1}
+              onSelect={() => setSelected(item)} />
           ))}
         </div>
       </div>
@@ -177,69 +190,5 @@ function TokenLogo({ token }: { token: AssetToken }) {
         ? <img src={info.logo} alt={token} style={{ width: 56, height: 56, objectFit: 'cover' }} onError={() => setImgOk(false)} />
         : info.fallbackChar}
     </div>
-  )
-}
-
-function HistoryRow({ item, token, onOpen }: { item: ActivityRecord; token: AssetToken; onOpen: () => void }) {
-  const type = item.activityType
-  const meta: any = item.metadata || {}
-  const { title: derivedTitle, subtitle: derivedSubtitle, isPending, isClaim, isReceive, isBulkReceived, isP2PCredit } = deriveActivityRow(item)
-
-  // Swaps are stored once, tagged with the input side - re-sign and
-  // re-amount for the side this page's token was on.
-  let sign: '+' | '-' | '↔' = activitySign(type, meta.direction)
-  let displayAmount = item.amount
-  if (type === 'swap') {
-    if (token === meta.tokenOut) { sign = '+'; displayAmount = meta.amountOut ?? item.amount }
-    else { sign = '-'; displayAmount = meta.amountIn ?? item.amount }
-  }
-  const color = sign === '+' ? 'var(--success)' : sign === '-' ? 'var(--danger)' : 'var(--text-secondary)'
-
-  let title = derivedTitle
-  let subtitle = derivedSubtitle
-  if (type === 'deposit') {
-    title = activityLabel(type)
-    subtitle = `From ${(item.sourceChain || '').replace(/_/g, ' ')}`
-  } else if (!['send', 'receive', 'swap', 'bulk', 'bridge', 'claim', 'p2p_sell_order', 'p2p_refund', 'p2p_purchase'].includes(type)) {
-    title = activityLabel(type)
-    const a = item.counterpartyAddress
-    subtitle = a ? a.slice(0, 6) + '...' + a.slice(-6) : type
-  }
-
-  const rawDate = item.createdAt || (item as any).updatedAt
-  const d = rawDate ? new Date(rawDate) : null
-  const dateStr = d && !isNaN(d.getTime())
-    ? `${d.toLocaleDateString()} · ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-    : '-'
-
-  // Small amounts (cirBTC, testnet dust) keep their real digits.
-  const amtNum = Number(displayAmount) || 0
-  const amtAbs = Math.abs(amtNum)
-  const amountStr = amtAbs !== 0 && amtAbs < 0.01
-    ? trimTrailingZeros(amtAbs < 0.0001 ? amtNum.toFixed(8) : amtNum.toFixed(6))
-    : formatAmount(amtNum)
-
-  const incoming = isClaim || isReceive || isBulkReceived || isP2PCredit || (type === 'swap' && sign === '+')
-  const icon = activityRowIcon(item)
-  return (
-    <button onClick={onOpen}
-      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px', textAlign: 'left',
-        background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-primary)', font: 'inherit' }}>
-      <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-        background: isPending ? 'color-mix(in srgb, var(--warning) 12%, transparent)' : incoming ? 'color-mix(in srgb, var(--success) 10%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {isPending ? <ActionIcon name="clock" size={18} color="var(--warning)" />
-          : icon ? <ActionIcon name={icon} size={18} color={incoming ? 'var(--success)' : 'var(--brand-text)'} />
-          : <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M10 5l3 3-3 3" stroke="var(--brand-text)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>{title}</div>
-        <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>
-      </div>
-      <div style={{ textAlign: 'right' }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color }}>{sign}{amountStr} {token}</div>
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{dateStr}</div>
-      </div>
-    </button>
   )
 }

@@ -157,6 +157,8 @@ export function dedupeAndSortActivityRecords(records: ActivityRecord[]): Activit
   })
 }
 
+const SWAP_FAILED_FALLBACK = "The swap didn't go through - nothing was swapped."
+
 // Failed P2P escrow steps (metadata.kind from lib/p2pProviders.ts).
 const P2P_FAILED_TITLES: Record<string, string> = {
   deposit_offer_failed: 'P2P escrow deposit',
@@ -191,7 +193,8 @@ export function deriveActivityRow(record: ActivityRecord) {
   // A Transfer / Bring Funds move whose money already left: not "Failed" -
   // it's finished in Multichain Hub → Recover (lib/failure.ts).
   const isRecovery = needsRecovery(record)
-  const reason     = isFailed ? failureReason(record) : null
+  // Older failed swaps were saved without a reason - say what happened anyway.
+  const reason     = isFailed ? (failureReason(record) ?? (isSwap ? SWAP_FAILED_FALLBACK : null)) : null
 
   const statusColor = isPending || isRecovery ? 'var(--warning)' : isFailed ? 'var(--danger)' : 'var(--success)'
   const statusLabel = isPending ? 'Processing…' : isRecovery ? 'Needs recovery' : isFailed ? 'Failed' : 'Completed'
@@ -332,7 +335,9 @@ export function activityRowIcon(record: ActivityRecord): ActionIconName | null {
 }
 
 // ── Single row - hub style ─────────────────────────────────────────────────────
-function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
+// Shared with the asset page (Home → Assets → a token), so both show the
+// exact same rows - failed / pending / needs-recovery included.
+export function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
   record: ActivityRecord; isFirst: boolean; isLast: boolean; onSelect: () => void
   /** The row whose details were just closed - flashes once. */
   flash?: boolean
@@ -445,7 +450,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const { showToastMessage } = useUIStore()
   const navigate = useNavigate()
   const isRecovery = needsRecovery(record)
-  const failReason = record.status === 'failed' ? failureReason(record) : null
+  const failReason = record.status === 'failed' ? (failureReason(record) ?? (record.activityType === 'swap' ? SWAP_FAILED_FALLBACK : null)) : null
   const [rowCopied, setRowCopied] = useState<string | null>(null)
   const { activityType: type, status, sourceChain, destinationChain, createdAt, amount, tokenSymbol, txHash, destinationTxHash, metadata } = record
 
@@ -595,7 +600,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     ...(type === 'bulk' && !isBulkReceived && metadata.recipientCount ? [{ label: 'Recipients', value: String(metadata.recipientCount) }] : []),
     ...(isSwapType ? [
       { label: 'From',   value: `${metadata.amountIn || formatAmt(amount)} ${metadata.tokenIn || tokenSymbol || 'USDC'}` },
-      { label: 'To',     value: `${metadata.amountOut ? formatAmt(metadata.amountOut) : '?'} ${metadata.tokenOut || '?'}` },
+      { label: 'To',     value: isFailed ? `Not swapped${metadata.tokenOut ? ` (${metadata.tokenOut})` : ''}` : `${metadata.amountOut ? formatAmt(metadata.amountOut) : '?'} ${metadata.tokenOut || '?'}` },
     ] : [
       { label: 'Amount', value: `$${formatAmt(amount)} ${tokenSymbol || 'USDC'}` },
     ]),
@@ -626,7 +631,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       : isReceive && (metadata as any)?.receiveKind === 'reward_claim' ? 'Reward Claim Failed' : 'Payment Failed')
     : 'Processing…'
   const amountText = isSwapType
-    ? `${metadata.amountIn || formatAmt(amount)} ${metadata.tokenIn || tokenSymbol || 'USDC'} → ${metadata.amountOut ? formatAmt(metadata.amountOut) : '?'} ${metadata.tokenOut || '?'}`
+    ? `${metadata.amountIn || formatAmt(amount)} ${metadata.tokenIn || tokenSymbol || 'USDC'} → ${isFailed ? '' : metadata.amountOut ? `${formatAmt(metadata.amountOut)} ` : '? '}${metadata.tokenOut || '?'}`
     : `${amountPrefix}${formatAmt(amount, tokenSymbol)} ${tokenSymbol || 'USDC'}`
   const receiptSubtitle = cpLabel && (type === 'send' || type === 'receive' || isTransfer) && !isSelfTransferDetail
     ? `${title} ${cpLabel}` : title
@@ -640,7 +645,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const toReceiptRow = (row: { label: string; value: string; copy?: string }) => ({
     label: row.label,
     value: row.value,
-    positive: row.label === 'From' || row.label === 'To' || (isIncoming && row.label === 'Amount'),
+    positive: !isFailed && (row.label === 'From' || row.label === 'To' || (isIncoming && row.label === 'Amount')),
     ...(row.copy ? { onCopy: copyRow(row.label, row.copy), copied: rowCopied === row.label } : {}),
   })
   const MAIN_LABELS = new Set(['Amount', 'From', 'To', 'Order', 'Merchant', 'Paid to', 'Purpose', 'Recipients', sourceHashLabel])
@@ -747,7 +752,18 @@ function FilterMenu({ anchor, active, onSelect, onClose }: {
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
+/** Did this record move `token`? Its own token, or either side of a swap. */
+export function recordMovesToken(r: ActivityRecord, token: string): boolean {
+  const t = token.toUpperCase()
+  if (r.activityType === 'swap') {
+    const md: any = r.metadata ?? {}
+    return String(md.tokenIn ?? r.tokenSymbol ?? '').toUpperCase() === t || String(md.tokenOut ?? '').toUpperCase() === t
+  }
+  return (r.tokenSymbol || 'USDC').toUpperCase() === t
+}
+
 export function ActivityPage() {
+  const navigateAll = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const walletAddress = useAuthStore(s => s.walletAddress)
@@ -834,7 +850,7 @@ export function ActivityPage() {
   }, [hasMore, loadingMore, loading, loadMore, error, records.length])
 
   const displayed = (tokenFilter
-    ? records.filter(r => r.tokenSymbol?.toUpperCase() === tokenFilter.toUpperCase())
+    ? records.filter(r => recordMovesToken(r, tokenFilter))
     : records
   ).filter(r => {
     if (r.activityType === 'deposit') return false
@@ -864,7 +880,17 @@ export function ActivityPage() {
       {/* Header */}
       <div className="sticky top-0 z-20 backdrop-blur-md" style={{ background: 'color-mix(in srgb, var(--bg) 95%, transparent)' }}>
         <div className="header-row px-5 pt-header pb-header justify-between">
-          <h1 className="text-xl font-bold text-text-primary">Activity</h1>
+          <div className="flex items-center gap-2 min-w-0">
+            <h1 className="text-xl font-bold text-text-primary">Activity</h1>
+            {/* Opened from an asset page's "See all": that token only - tap to clear. */}
+            {tokenFilter && (
+              <button onClick={() => navigateAll('/activity', { replace: true })}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-semibold"
+                style={{ background: 'color-mix(in srgb, var(--brand) 16%, transparent)', color: 'var(--brand-text)', border: 'none', cursor: 'pointer' }}>
+                {tokenFilter} <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
           <button onClick={refresh} disabled={loading}
             className="w-9 h-9 rounded-2xl flex items-center justify-center active:scale-95 disabled:opacity-40"
             style={{ background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
