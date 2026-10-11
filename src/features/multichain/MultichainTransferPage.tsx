@@ -818,6 +818,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // sits right under the header, above the keys, on any screen height.
   const amountFocus = showAmountPad && !desktopInput
   const keypadLift = useKeypadLift(showAmountPad, amountBoxRef, !isDesktop && !amountFocus)
+  // Leaving the Transfer Funds page (back to the Hub) closes its keypad -
+  // it was left open on the Hub screen.
+  useEffect(() => { if (sheetMode && formSheet === 0) setShowAmountPad(false) }, [sheetMode, formSheet])
   const [selectedChain, setSelectedChain] = useState<ChainId>('eth')
   // Editing the address, amount or chain while the inline review is showing
   // hides it again - the fees shown must always match what's in the fields.
@@ -3080,6 +3083,33 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       )}
     </div>
   )
+  const amountKeypad = (
+    <AmountKeypad
+      open={showAmountPad}
+      value={amount}
+      onChange={v => setAmount(v)}
+      balance={balance}
+      token="USDC"
+      quickAmounts={[10, 20, 50, 100]}
+      // Same reserve as the inline Max button below - this sheet
+      // has its own separate Max button and was filling in the
+      // full balance too. No live fee estimate is fetched here
+      // (that only happens on Review now) - this is a static,
+      // conservative reserve just to leave enough USDC for the
+      // transaction to actually execute.
+      feeReserve={feeReserveEstimate}
+      // Removed - this page already has its own inline Max
+      // button in the balance row just below (see the comment
+      // above), so the sheet's copy was a duplicate. Dropping
+      // it also shortens the sheet enough that the amount box
+      // above stays partially visible instead of being fully
+      // covered when the keypad opens.
+      showMax={false}
+      error={numAmount > balance ? 'Insufficient balance' : undefined}
+      onClose={() => setShowAmountPad(false)}
+      onDone={() => setShowAmountPad(false)}
+    />
+  )
   const formGasWarning = gasWarning ? (
       <div className="flex items-start gap-2 p-3 rounded-xl" style={{background:'color-mix(in srgb, var(--warning) 8%, transparent)', border:'1px solid color-mix(in srgb, var(--warning) 25%, transparent)'}}>
         <AlertCircle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5"/>
@@ -3243,33 +3273,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               </motion.div>
 
 
-              {!desktopInput && (
-                  <AmountKeypad
-                    open={showAmountPad}
-                    value={amount}
-                    onChange={v => setAmount(v)}
-                    balance={balance}
-                    token="USDC"
-                    quickAmounts={[10, 20, 50, 100]}
-                    // Same reserve as the inline Max button below - this sheet
-                    // has its own separate Max button and was filling in the
-                    // full balance too. No live fee estimate is fetched here
-                    // (that only happens on Review now) - this is a static,
-                    // conservative reserve just to leave enough USDC for the
-                    // transaction to actually execute.
-                    feeReserve={feeReserveEstimate}
-                    // Removed - this page already has its own inline Max
-                    // button in the balance row just below (see the comment
-                    // above), so the sheet's copy was a duplicate. Dropping
-                    // it also shortens the sheet enough that the amount box
-                    // above stays partially visible instead of being fully
-                    // covered when the keypad opens.
-                    showMax={false}
-                    error={numAmount > balance ? 'Insufficient balance' : undefined}
-                    onClose={() => setShowAmountPad(false)}
-                    onDone={() => setShowAmountPad(false)}
-                  />
-              )}
+              {/* Hub (phone): the keypad opens inside the Transfer Funds page instead (see HubPage below). */}
+              {!desktopInput && !sheetMode && amountKeypad}
 
             </motion.div>
           )}
@@ -3740,6 +3745,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             {foldable(formRoute)}
             {formGasWarning && foldable(formGasWarning)}
           </motion.div>
+          {/* The amount keypad belongs to this page: drawn with the Hub
+              underneath, iPhone kept it behind this page - it only showed
+              after going back to the Hub. */}
+          {!desktopInput && amountKeypad}
         </HubPage>
       )}
 
