@@ -141,3 +141,13 @@ describe('Unified Balance Bring: leftover dust goes back to the user', () => {
     expect(claimDust(undefined)).toBe(0)
   })
 })
+
+describe('Auto-finish only moves held funds when the fee is small', () => {
+  it('a held $1.09 on Ethereum (fee ~0.6) stays for Recover; $10 on Base (fee 0.026) is moved', async () => {
+    const { autoFinishWorthIt } = await import('./ubClaim')
+    expect(autoFinishWorthIt({ total: 0.6, receiveAtLeast: 0.48 }, 1.09)).toBe(false)
+    expect(autoFinishWorthIt({ total: 0.026389, receiveAtLeast: 9.97 }, 10)).toBe(true)
+    // A published-fee fallback (no live quote) never moves anything by itself.
+    expect(autoFinishWorthIt({ total: 0.01, receiveAtLeast: 9.9, approx: true }, 10)).toBe(false)
+  })
+})

@@ -489,6 +489,22 @@ export const Activity = {
       metadata:         { route: 'ub', claimed_amount: p.amount, ...(p.merchant ? { merchant: true } : {}) },
     }),
 
+  /** Deposit tx of the newest still-open UB claim from `sourceChain` (its
+   *  Activity row key), so finishing the held funds completes that row. */
+  pendingUbClaimTx: async (p: { walletAddress: string; sourceChain: string }): Promise<string | undefined> => {
+    try {
+      const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
+      const { authHeaders } = await import('./chatService')
+      const w = encodeURIComponent(p.walletAddress.toLowerCase())
+      const r = await fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${w}&activity_type=eq.claim&status=eq.pending&source_chain=eq.${encodeURIComponent(p.sourceChain)}&metadata->>route=eq.ub&select=tx_hash&order=created_at.desc&limit=1`, {
+        headers: { ...(await authHeaders()), 'Accept': 'application/json' },
+      })
+      const rows: any[] = r.ok ? await r.json().catch(() => []) : []
+      const tx = rows[0]?.tx_hash
+      return typeof tx === 'string' && /^0x[0-9a-fA-F]{64}$/.test(tx) ? tx.toLowerCase() : undefined
+    } catch { return undefined }
+  },
+
   // A UB claim whose deposit landed but whose send to Arc can't go ahead
   // (e.g. Circle's fee from that chain is more than the amount): flag the
   // "Processing" row as held so Track Progress says the USDC is safe in the
