@@ -207,7 +207,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
     )
     return (
       <div style={{ ...box, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {header('Payment request')}
+        {header(order.kind === 'invoice' ? 'Bill' : 'Payment request')}
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.4px' }}>
             ${formatAmount(order.amount)} <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>USDC</span>

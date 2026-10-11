@@ -1,5 +1,6 @@
 // Receive → My requests: every payment request you made (Receive → Request
-// payment, or chat + → Request), newest first, with its live status. Tap one
+// payment, or chat + → Request) - and for merchants their bills too -
+// newest first, with its live status. Tap one
 // to reopen it: a waiting one shows its QR / Share / Cancel again, a paid one
 // shows who paid, how much, when and the transaction.
 import { useCallback, useEffect, useState } from 'react'
@@ -9,6 +10,7 @@ import { useAuthStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
 import { listMyIntents, subscribeMerchantPayments, orderLabel, expiryText, STATUS_LABEL, type MerchantIntent } from '@/lib/merchantPay'
 import { RequestQrPanel } from './RequestQrPanel'
+import { useMerchant } from '@/lib/merchant'
 
 type Filter = 'all' | 'waiting' | 'paid' | 'closed'
 type Bucket = 'waiting' | 'paid' | 'closed'
@@ -53,14 +55,15 @@ function statusLine(i: MerchantIntent): { text: string; color: string } {
 export function MyRequestsPage() {
   const navigate = useNavigate()
   const walletAddress = useAuthStore(s => s.walletAddress)
+  const isMerchant = useMerchant().isMerchant
   const [items, setItems] = useState<MerchantIntent[] | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [open, setOpen] = useState<MerchantIntent | null>(null)
 
   const load = useCallback(async () => {
     try {
-      // Payment requests only (merchants' bills live in their Ledger).
-      setItems((await listMyIntents(200)).filter(i => i.kind !== 'invoice'))
+      // Requests and (merchants) bills - every order you sent.
+      setItems(await listMyIntents(200))
     } catch { setItems(prev => prev ?? []) }
   }, [])
 
@@ -86,13 +89,13 @@ export function MyRequestsPage() {
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 className="text-xl font-bold text-text-primary">My requests</h1>
-          <p className="text-text-secondary text-xs mt-0.5">Payment requests you made, and whether they're paid</p>
+          <p className="text-text-secondary text-xs mt-0.5">{isMerchant ? 'Requests and bills you sent, and whether they\'re paid' : 'Payment requests you made, and whether they\'re paid'}</p>
         </div>
       </div>
 
       <div style={{ padding: '0 16px', maxWidth: 560, margin: '0 auto' }}>
         {open ? (
-          <RequestQrPanel key={open.code} initialOrder={open} onClose={() => { setOpen(null); void load() }} onNewRequest={newRequest} />
+          <RequestQrPanel key={open.code} initialOrder={open} withCustomer={isMerchant} onClose={() => { setOpen(null); void load() }} onNewRequest={newRequest} />
         ) : (
           <>
             <div role="tablist" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
@@ -138,6 +141,7 @@ export function MyRequestsPage() {
                   const tint = bucket === 'paid' ? 'var(--success)' : bucket === 'closed' ? 'var(--text-secondary)' : st === 'partially_paid' ? 'var(--brand-text)' : 'var(--warning)'
                   const Icon = bucket === 'paid' ? CheckCircle2 : bucket === 'closed' ? XCircle : st === 'partially_paid' ? PieChart : Clock
                   const who = i.customerUsername && bucket === 'waiting' ? ` · ${i.customerUsername.replace(/\.arc$/i, '')}.arc` : ''
+                  const kind = i.kind === 'invoice' ? 'Bill · ' : ''
                   return (
                     <button key={i.id} onClick={() => setOpen(i)}
                       style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left',
@@ -148,7 +152,7 @@ export function MyRequestsPage() {
                       </span>
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ display: 'block', fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          Order #{orderLabel(i)}{who}
+                          {kind}Order #{orderLabel(i)}{who}
                         </span>
                         <span style={{ display: 'block', fontSize: 11.5, marginTop: 2, color: line.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {line.text}
