@@ -44,7 +44,7 @@ import {
   type DbConversation,
   type DbUser,
 } from '@/lib/supabase'
-import { decryptText, isEncryptedPayload, isWaitingPayload } from '@/lib/chatCrypto'
+import { decryptText, isEncryptedPayload, isWaitingPayload, getConversationKey, peekConversationKey } from '@/lib/chatCrypto'
 import {
   loadMessages,
   ensureConversation,
@@ -57,7 +57,7 @@ import {
 import { codeFromLink, paymentLink, orderLabel, BILL_PAY_EVENT, type PaymentView } from '@/lib/merchantPay'
 import { useMerchant } from '@/lib/merchant'
 import { InvoiceComposer } from '@/features/merchant/InvoiceComposer'
-import { MerchantPaymentCard } from '@/features/merchant/MerchantPaymentCard'
+import { MerchantPaymentCard, prefetchPaymentView } from '@/features/merchant/MerchantPaymentCard'
 import { ChatPendingOrders } from '@/features/merchant/ChatPendingOrders'
 import { fetchMerchantFlags } from '@/lib/merchantPay'
 import { PayLinkCard } from './PayLinkCard'
@@ -139,6 +139,44 @@ function applyReadOverrides(convs: DbConversation[]): DbConversation[] {
 }
 const _cachedMessages: Record<string, ChatMessage[]> = {}
 const _cachedOtherUser: Record<string, any> = {}
+
+// Gets a prefetched chat fully ready before it opens: its messages decrypted
+// (the shared plaintext cache) and its bill / request cards' live status
+// fetched - so the conversation's first frame shows the text and the final
+// cards, instead of empty bubbles → "Decrypting…" → text and a card that
+// changes colour.
+function warmChat(msgs: ChatMessage[], otherId: string | null | undefined): Promise<unknown> {
+  const cards: Promise<unknown>[] = []
+  const warmCard = (text: string) => { const code = codeFromLink(text); if (code) cards.push(prefetchPaymentView(code)) }
+  const todo: ChatMessage[] = []
+  for (const m of msgs) {
+    if (!isEncryptedPayload(m.content)) warmCard(m.content)
+    else if (_plainByContent.has(m.content)) warmCard(_plainByContent.get(m.content)!)
+    else todo.push(m)
+  }
+  const wallet = useAuthStore.getState().walletAddress
+  if (!todo.length || !wallet || !otherId) return Promise.all(cards)
+  return getConversationKey(wallet, otherId).then(key => {
+    if (!key) return
+    return Promise.all(todo.map(m => decryptText(m.content, key).then(d => {
+      if (isDecryptFailure(d)) return
+      _plainByContent.set(m.content, d)
+      warmCard(d)
+    })))
+  }).then(() => Promise.all(cards)).catch(() => {})
+}
+/** warmChat, but never waits longer than `ms` (a slow network shows the chat anyway). */
+function warmChatWithin(msgs: ChatMessage[], otherId: string | null | undefined, ms: number): Promise<unknown> {
+  return Promise.race([warmChat(msgs, otherId), new Promise(r => setTimeout(r, ms))])
+}
+function prefetchChat(conv: { id: string; other_user?: { id?: string } | null }) {
+  if (_cachedMessages[conv.id]) return
+  loadMessages(conv.id).then(msgs => {
+    if (!msgs.length) return
+    _cachedMessages[conv.id] = msgs
+    void warmChat(msgs, conv.other_user?.id)
+  }).catch(() => {})
+}
 
 // ─── Linkify plain-text message content ───────────────────────────────────────
 // Message bubbles previously rendered raw text content directly (see the
@@ -366,7 +404,9 @@ function ConversationPreview({ conv, isSelfChat, uname, userId }: {
   conv: any; isSelfChat: boolean; uname: string; userId: string | undefined
 }) {
   const raw = conv.last_message || (isSelfChat ? 'You' : `${uname}.arc`)
-  const [msg, setMsg] = useState<string>(() => (isEncryptedPayload(raw) ? raw : raw))
+  // Never the ciphertext itself: the decrypted text if this device already
+  // has it, else a lock until it's read.
+  const [msg, setMsg] = useState<string>(() => (isEncryptedPayload(raw) ? (_plainByContent.get(raw) ?? '') : raw))
   // Reactive, not getState() - same fix as ChatPage's convKey effect below:
   // reading walletAddress once via getState() meant the preview got stuck
   // on the "🔒 New message" fallback for good if the Chats list rendered
@@ -376,14 +416,16 @@ function ConversationPreview({ conv, isSelfChat, uname, userId }: {
   const walletKeyReady = useAuthStore((s) => !!s.privateKey)
   useEffect(() => {
     if (!isEncryptedPayload(raw)) { setMsg(raw); return }
+    const known = _plainByContent.get(raw)
+    if (known != null) { setMsg(known); return }
     let cancelled = false
     const otherId = conv.other_user?.id
     if (!walletAddress || !otherId) { setMsg('🔒 New message'); return }
-    import('@/lib/chatCrypto').then(async ({ getConversationKey }) => {
-      const key = await getConversationKey(walletAddress, otherId)
+    getConversationKey(walletAddress, otherId).then(async key => {
       const decrypted = await decryptText(raw, key)
+      if (!isDecryptFailure(decrypted)) _plainByContent.set(raw, decrypted)
       if (!cancelled) setMsg(decrypted)
-    })
+    }).catch(() => {})
     return () => { cancelled = true }
   }, [raw, conv.other_user?.id, walletAddress, walletKeyReady])
 
@@ -549,12 +591,29 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
       // full refetch, so nothing besides this one common case changes.
       .on('postgres_changes', { event: 'UPDATE',  schema: 'public', table: 'messages' }, (payload: any) => {
         const msg = payload?.new
+        // A "waiting" message re-sealed for the recipient (q2 → readable):
+        // its read / delivered flags are often already set, so the branches
+        // below would keep the list on "⏳ Waiting…" - refresh the preview.
+        const conv = msg?.conversation_id ? _cachedConversations.find(c => c.id === msg.conversation_id) : null
+        if (conv && isWaitingPayload(conv.last_message || '') && msg?.content && !isWaitingPayload(msg.content)) {
+          invalidateConversationsCache()
+          loadConversations()
+          return
+        }
         if (msg?.conversation_id && msg?.is_read) {
-          setConversations(prev => {
-            const next = prev.map(c => (c.id === msg.conversation_id && c.unread_count) ? { ...c, unread_count: 0 } : c)
-            _cachedConversations = next
-            return next
-          })
+          // Only my reading THEIR latest message clears the badge. The same
+          // UPDATE also fires when they read MY message, and when a delivery
+          // receipt lands on an old, already-read message - neither means I
+          // read what's still unread (it used to wipe a real badge).
+          const theirLatestRead = msg.sender_id !== user?.id && !!conv?.last_message_at && !!msg.created_at
+            && new Date(msg.created_at).getTime() >= new Date(conv.last_message_at).getTime()
+          if (theirLatestRead) {
+            setConversations(prev => {
+              const next = prev.map(c => (c.id === msg.conversation_id && c.unread_count) ? { ...c, unread_count: 0 } : c)
+              _cachedConversations = next
+              return next
+            })
+          }
           return
         }
         // A delivery receipt (two grey ticks) changes nothing in the list.
@@ -628,7 +687,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     const toPrefetch = filtered.filter(c => !_cachedMessages[c.id]).slice(0, 8)
     toPrefetch.forEach((c, i) => {
       setTimeout(() => {
-        loadMessages(c.id).then(msgs => { if (msgs.length) _cachedMessages[c.id] = msgs }).catch(() => {})
+        prefetchChat(c)
       }, i * 150)
     })
   }, [user?.id, chatWalletAddr])
@@ -1165,9 +1224,9 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                   if (selecting) { toggleSelect(conv.id); return }
                   navigate(`/chat/${conv.id}`)
                 }}
-                onMouseEnter={() => { if (!_cachedMessages[conv.id]) loadMessages(conv.id).then(msgs => { if (msgs.length) _cachedMessages[conv.id] = msgs }).catch(() => {}) }}
+                onMouseEnter={() => prefetchChat(conv)}
                 onTouchStart={(e) => {
-                  if (!_cachedMessages[conv.id]) loadMessages(conv.id).then(msgs => { if (msgs.length) _cachedMessages[conv.id] = msgs }).catch(() => {})
+                  prefetchChat(conv)
                   startLongPress(conv)
                 }}
                 onTouchEnd={(e) => { cancelLongPress() }}
@@ -1712,7 +1771,7 @@ const MessageBubble = memo(function MessageBubble({
               </div>
             )}
             {quoteBlock && (plainImageUrl || encImageMatch) ? <div style={{ padding: '1px 1px 0' }}>{quoteBlock}</div> : quoteBlock}
-            {!isDeleted && <div className={`relative text-[15px] leading-snug ${isMine ? 'text-white' : 'text-text-primary'}`}>
+            {!isDeleted && <div className={`relative text-[15px] leading-snug whitespace-pre-wrap break-words ${isMine ? 'text-white' : 'text-text-primary'}`}>
               {(plainImageUrl || encImageMatch) ? (
                 <>
                   <ChatImage
@@ -2280,12 +2339,14 @@ export function ChatConversationPage() {
   // both sides have a chat_public_key on file - see getConversationKey's
   // own comment on why that's a safe, non-blocking fallback rather than an
   // error state.
-  const [convKey, setConvKey] = useState<any>(null)
+  // Already worked out for this chat (the list's prefetch, an earlier visit):
+  // used from the first frame, so bubbles never wait on it.
+  const [convKey, setConvKey] = useState<any>(() => peekConversationKey(useAuthStore.getState().walletAddress, otherUser?.id))
   // Bumped to look the key up again (after confirming changed security info).
   const [keyNonce, setKeyNonce] = useState(0)
   // Which conversation partner convKey was resolved for (null key is a valid
   // "no E2E yet" answer, so readiness is tracked separately).
-  const [convKeyFor, setConvKeyFor] = useState<string | null>(null)
+  const [convKeyFor, setConvKeyFor] = useState<string | null>(() => (convKey ? otherUser?.id ?? null : null))
   // Reactive, not getState() - this used to read walletAddress once via
   // getState() with only otherUser?.id in the dependency array. If the chat
   // page opened before the wallet address had finished loading (a real race
@@ -2302,23 +2363,30 @@ export function ChatConversationPage() {
   // The key counts as final once it's found, or once it was looked up with
   // the wallet key available (then "no key" is the real answer). Until then
   // encrypted messages read "Decrypting…" instead of "unable to decrypt".
-  const [keyFinalFor, setKeyFinalFor] = useState<string | null>(null)
+  const [keyFinalFor, setKeyFinalFor] = useState<string | null>(() => (convKey ? otherUser?.id ?? null : null))
   const [keyWaitOver, setKeyWaitOver] = useState(false)
+  const convKeyForRef = useRef(convKeyFor)
+  convKeyForRef.current = convKeyFor
   useEffect(() => {
     setKeyWaitOver(false)
     const t = setTimeout(() => setKeyWaitOver(true), 10000)
     return () => clearTimeout(t)
   }, [otherUser?.id])
   useEffect(() => {
-    if (!otherUser?.id || !walletAddress) { setConvKey(null); return }
+    if (!otherUser?.id || !walletAddress) { setConvKey(null); setConvKeyFor(null); return }
+    const known = peekConversationKey(walletAddress, otherUser.id)
+    if (known) { setConvKey(known); setConvKeyFor(otherUser.id); setKeyFinalFor(otherUser.id); return }
+    // Another chat's key must never be used here while this one's loads
+    // (the route reuses this page when switching chats): bubbles would try
+    // the wrong key, and a photo sent meanwhile would be sealed for the
+    // previous person.
+    if (convKeyForRef.current !== otherUser.id) { setConvKey(null); setConvKeyFor(null) }
     let cancelled = false
-    import('@/lib/chatCrypto').then(({ getConversationKey }) =>
-      getConversationKey(walletAddress, otherUser.id).then(k => {
-        if (cancelled) return
-        setConvKey(k); setConvKeyFor(otherUser.id)
-        if (k || useAuthStore.getState().privateKey) setKeyFinalFor(otherUser.id)
-      })
-    )
+    getConversationKey(walletAddress, otherUser.id).then(k => {
+      if (cancelled) return
+      setConvKey(k); setConvKeyFor(otherUser.id)
+      if (k || useAuthStore.getState().privateKey) setKeyFinalFor(otherUser.id)
+    })
     return () => { cancelled = true }
   }, [otherUser?.id, walletAddress, walletKeyReady, keyNonce])
   // This contact's wallet or chat key differs from the one this device
@@ -2343,14 +2411,17 @@ export function ChatConversationPage() {
   }
   // What text bubbles get: the key, null (no key - final), or undefined
   // (still unlocking).
-  const bubbleKey = convKey || (keyFinalFor === otherUser?.id || keyWaitOver ? null : undefined)
+  const ownKey = convKeyFor === otherUser?.id ? convKey : null
+  const ownKeyRef = useRef<any>(ownKey)
+  ownKeyRef.current = ownKey
+  const bubbleKey = ownKey || (keyFinalFor === otherUser?.id || keyWaitOver ? null : undefined)
   // The keys every send needs. Nothing is ever sent readable: without a chat
   // identity on this device (wallet still locked) the send fails and says so.
   const keyForSend = async () => {
-    if (convKey) return convKey
+    if (ownKey) return ownKey
     const addr = useAuthStore.getState().walletAddress
     const k = addr && otherUser?.id
-      ? await import('@/lib/chatCrypto').then(({ getConversationKey }) => getConversationKey(addr, otherUser.id)).catch(() => null)
+      ? await getConversationKey(addr, otherUser.id).catch(() => null)
       : null
     if (!k) {
       showToastMessage('Unlock your wallet to send encrypted messages', 'error')
@@ -2941,6 +3012,7 @@ export function ChatConversationPage() {
 
         _setConvId(convId)
         const msgs = await fetchMessagesFromDB(convId)
+        await warmChatWithin(msgs, otherId, 1200)
         _cachedMessages[convId] = msgs
         setMessages(filterDeleted(msgs))
         if (msgs.length < 50) setHasMoreHistory(false)
@@ -2969,6 +3041,10 @@ export function ChatConversationPage() {
         const conv = convRes.data
         if (!conv) { navigate('/chat'); return }
 
+        // Decrypt (and fetch card statuses) before the messages are shown,
+        // so a chat opened cold - a notification, a reload - appears with
+        // its text, not "Decrypting…" bubbles that fill in a moment later.
+        await warmChatWithin(msgs, conv.participant_a === user!.id ? conv.participant_b : conv.participant_a, 1200)
         _cachedMessages[id] = msgs
         setMessages(filterDeleted(msgs))
         if (msgs.length < 50) setHasMoreHistory(false)
@@ -3033,14 +3109,18 @@ export function ChatConversationPage() {
     // rendered and been looked at before counting it as read.
     const initialMarkReadTimer = setTimeout(tryMarkRead, 1200)
 
-    const unsubscribe = subscribeWithRetry(supabase, 'msgs-' + conversationId, channel => channel
-      .on('postgres_changes', {
-        event:  'INSERT',
-        schema: 'public',
-        table:  'messages',
-        filter: `conversation_id=eq.${conversationId}`,
-      }, (payload) => {
+    // A new message is decrypted before it's added, so it appears with its
+    // text instead of an empty bubble that fills in a frame later. Handled
+    // one at a time, so two quick messages still land in arrival order.
+    let insertQueue: Promise<void> = Promise.resolve()
+    const onInsert = (payload: any) => { insertQueue = insertQueue.then(() => handleInsert(payload)).catch(() => {}) }
+    const handleInsert = async (payload: any) => {
         const newMsg = payload.new as ChatMessage
+        const key = ownKeyRef.current
+        if (key && isEncryptedPayload(newMsg.content) && !_plainByContent.has(newMsg.content)) {
+          const d = await decryptText(newMsg.content, key).catch(() => '')
+          if (d && !isDecryptFailure(d)) _plainByContent.set(newMsg.content, d)
+        }
 
         // /api/send-message.ts inserts TWO rows per payment: a 'payment_sent'
         // row owned by the real sender, and a 'payment_received' row whose
@@ -3109,7 +3189,15 @@ export function ChatConversationPage() {
           // 200ms is comfortably past any entrance animation's duration.
           setTimeout(() => scrollToBottom(false), 200)
         }
-      })
+    }
+
+    const unsubscribe = subscribeWithRetry(supabase, 'msgs-' + conversationId, channel => channel
+      .on('postgres_changes', {
+        event:  'INSERT',
+        schema: 'public',
+        table:  'messages',
+        filter: `conversation_id=eq.${conversationId}`,
+      }, onInsert)
       // BUG FIX: this channel only ever listened for INSERT. "Delete for
       // everyone" (handleDeleteForEveryone) does `supabase.from('messages')
       // .update({ content: '[deleted]', ... })` - an UPDATE, not an INSERT -
@@ -4677,13 +4765,13 @@ export function ChatConversationPage() {
                           setSelected(prev => { const n = { ...prev }; group.forEach(m => { if (allOn) delete n[m.id]; else n[m.id] = { ...m, isMine } }); return n })
                         } : undefined}>
                         {albumOf[msg.id] ? (
-                          <AlbumBubble msgs={group} isMine={isMine} convKey={convKey} selecting={selecting}
+                          <AlbumBubble msgs={group} isMine={isMine} convKey={bubbleKey} selecting={selecting}
                             onOpen={mid => setViewerStartId(mid)}
                             onSelectAll={selectAll}
                             onReply={selecting || group.some(m => String(m.id).startsWith('optimistic_')) ? undefined : () => startReply(group[0])}
                             onCancelUpload={cancelUpload} onRetry={retryMessage} />
                         ) : (
-                          <FileGroupBubble msgs={group} isMine={isMine} convKey={convKey}
+                          <FileGroupBubble msgs={group} isMine={isMine} convKey={bubbleKey}
                             onOpenImage={handleImageTap} onSelectAll={selectAll}
                             onReply={selecting || group.some(m => String(m.id).startsWith('optimistic_')) ? undefined : () => startReply(group[0])}
                             onCancelUpload={cancelUpload} onRetry={retryMessage} />
@@ -4812,7 +4900,7 @@ export function ChatConversationPage() {
               <div className="flex items-center gap-2 mx-3 mt-2 rounded-xl px-3 py-2"
                 style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', borderLeft: `4px solid ${replyTo.sender_id === user?.id ? 'var(--link)' : '#e7a36b'}` }}>
                 <div className="flex-1 min-w-0">
-                  <QuoteBody quoted={replyTo} convKey={convKey}
+                  <QuoteBody quoted={replyTo} convKey={bubbleKey}
                     name={replyTo.sender_id === user?.id ? 'You' : (otherUser?.display_name || recipientClean)}
                     nameColor={replyTo.sender_id === user?.id ? 'var(--link)' : '#e7a36b'} textColor="var(--text-secondary)" />
                 </div>
@@ -5773,7 +5861,7 @@ export function ChatConversationPage() {
             return isImg ? [{ id: m.id, url: md.url, iv: md.iv, sender: m.sender_id === user?.id ? 'You' : (otherUser?.display_name || recipientClean), createdAt: m.created_at, msg: m }] : []
           })
           return (
-            <ChatImageViewer key="viewer" items={items} startId={viewerStartId} convKey={convKey}
+            <ChatImageViewer key="viewer" items={items} startId={viewerStartId} convKey={bubbleKey}
               onClose={() => setViewerStartId(null)}
               onReply={m => startReply(m)}
               onForward={m => setForwardMsgs([{ ...m, isMine: m.sender_id === user?.id }])} />
@@ -5893,7 +5981,7 @@ export function ChatConversationPage() {
         })()}
 
         {forwardMsgs && user?.id && (
-          <ChatForwardSheet key="fwd" messages={forwardMsgs} sourceKey={convKey} myUserId={user.id} walletAddress={walletAddress}
+          <ChatForwardSheet key="fwd" messages={forwardMsgs} sourceKey={ownKey} myUserId={user.id} walletAddress={walletAddress}
             onClose={() => setForwardMsgs(null)}
             onDone={(count) => { setForwardMsgs(null); clearSelection(); showToastMessage(count > 1 ? `Forwarded to ${count} chats` : 'Forwarded', 'success') }}
             onError={(m) => showToastMessage(m, 'error')} />

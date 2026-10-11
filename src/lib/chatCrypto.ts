@@ -304,6 +304,12 @@ export async function makeChatKeys(seed: Uint8Array, otherPub: Uint8Array | null
   return { kind: 'chat-keys', seed, myPub: x25519.getPublicKey(seed), otherPub, v1: otherPub ? await deriveV1Key(seed, otherPub) : null }
 }
 
+/** The keys getConversationKey already worked out for this chat, without waiting (null if not yet). */
+export function peekConversationKey(myWalletAddress: string | null | undefined, otherUserId: string | null | undefined): ChatKeys | null {
+  if (!myWalletAddress || !otherUserId) return null
+  return _keysCache.get(`${myWalletAddress.toLowerCase()}:${otherUserId}`) ?? null
+}
+
 /**
  * This user's keys for the chat with `otherUserId`, or null when this
  * device has no chat identity yet (wallet still locked on a fresh device).
@@ -328,13 +334,8 @@ export async function getConversationKey(myWalletAddress: string, otherUserId: s
     }
     // Remembered copy first (no network wait), confirmed in the background.
     let pubStr = cachedPub(otherUserId)
-    if (pubStr && parsePublicKey(pubStr)) {
-      void fetchPub().then(fresh => {
-        if (fresh === undefined || fresh === pubStr) return
-        if (parsePublicKey(fresh)) savePub(otherUserId, fresh as string); else dropPub(otherUserId)
-        _keysCache.delete(cacheKey)
-      }).catch(() => {})
-    } else {
+    const fromMemory = !!(pubStr && parsePublicKey(pubStr))
+    if (!fromMemory) {
       const fresh = await fetchPub()
       pubStr = fresh ?? null
       if (parsePublicKey(pubStr)) savePub(otherUserId, pubStr as string); else dropPub(otherUserId)
@@ -343,6 +344,15 @@ export async function getConversationKey(myWalletAddress: string, otherUserId: s
     const keys = await makeChatKeys(seed, otherPub)
     // Only cache a complete answer: a missing key is looked up again next time.
     if (otherPub) _keysCache.set(cacheKey, keys)
+    // The background check starts only after caching, so a fast answer that
+    // drops the remembered key can't land first and be undone by the set above.
+    if (fromMemory) {
+      void fetchPub().then(fresh => {
+        if (fresh === undefined || fresh === pubStr) return
+        if (parsePublicKey(fresh)) savePub(otherUserId, fresh as string); else dropPub(otherUserId)
+        if (_keysCache.get(cacheKey) === keys) _keysCache.delete(cacheKey)
+      }).catch(() => {})
+    }
     return keys
   } catch (e) {
     console.error('[chatCrypto] getConversationKey failed:', e instanceof Error ? e.message : e)
@@ -476,7 +486,12 @@ export async function encryptBlob(blob: Blob, key: AnyKey): Promise<{ blob: Blob
 
 /** Decrypts a downloaded file (new or legacy format). Bytes pass through when it was never encrypted. */
 export async function decryptBlob(encryptedBytes: ArrayBuffer, ivBase64: string | null, key: AnyKey): Promise<Blob> {
-  if (!ivBase64 || !key) return new Blob([encryptedBytes])
+  if (!ivBase64) return new Blob([encryptedBytes])
+  // Encrypted but no key yet (still unlocking): fail, so the caller retries
+  // once the key is there. Passing the ciphertext through as "the file" got
+  // it cached as a broken photo for the session (chatMediaStore) and
+  // forwarded as garbage (ChatForwardSheet).
+  if (!key) throw new Error('no chat key yet')
   try {
     if (ivBase64.startsWith(MEDIA_V2_PREFIX)) {
       if (!isChatKeys(key)) throw new Error('no chat identity')
@@ -555,7 +570,13 @@ export async function resealWaitingMessages(walletAddress: string, myUserId: str
         const sealed = await resealWaiting(r.content as string, keys)
         if (!sealed) continue
         const { error } = await supabase.from('messages').update({ content: sealed }).eq('id', r.id)
-        if (!error) done++
+        if (!error) {
+          done++
+          // The chat list's stored preview may be this very message: hand it
+          // over too, or the recipient's preview keeps reading "Waiting…".
+          await supabase.from('conversations').update({ last_message: sealed })
+            .eq('id', c.id).eq('last_message', r.content as string)
+        }
       }
     }
     return done
