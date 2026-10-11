@@ -2220,10 +2220,13 @@ export function ChatConversationPage() {
   // blocked me. And on my side: this chat may be a message request (Accept /
   // Block instead of the message box) or someone I blocked (Unblock).
   const [payBlockedByPrivacy, setPayBlockedByPrivacy] = useState(false)
+  // Request shows only once the server says I may (their "Who can request
+  // money from me", blocks, and no requests to / from merchants).
+  const [canRequestThem, setCanRequestThem] = useState(false)
   const [chatGate, setChatGate] = useState<null | 'request' | 'iBlocked' | 'blockedMe'>(null)
   const [gateBusy, setGateBusy] = useState(false)
   useEffect(() => {
-    setPayBlockedByPrivacy(false); setChatGate(null)
+    setPayBlockedByPrivacy(false); setCanRequestThem(false); setChatGate(null)
     const otherId = otherUser?.id
     if (!otherId || !user?.id || otherId === user.id) return
     let cancelled = false
@@ -2231,6 +2234,7 @@ export function ChatConversationPage() {
       .then(([reach, blockedList, requests]) => {
         if (cancelled) return
         setPayBlockedByPrivacy(!reach.canPay)
+        setCanRequestThem(reach.canRequest)
         setChatGate(blockedList.some(p => p.id === otherId) ? 'iBlocked'
           : reach.blocked ? 'blockedMe'
           : id && requests.has(id) ? 'request'
@@ -4895,7 +4899,8 @@ export function ChatConversationPage() {
                 padding: 6, borderRadius: 20, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 14px 32px rgba(0,0,0,0.38)' }}>
               {[
                 { key: 'pay',     label: 'Pay',     tint: 'var(--brand)',     icon: <ActionIcon name="pay" size={18} /> },
-                { key: 'request', label: 'Request', tint: 'var(--usdc-icon)', icon: <ActionIcon name="receive" size={18} /> },
+                // Merchants send a Bill instead; nobody requests from a merchant.
+                ...(!merchant.isMerchant && canRequestThem ? [{ key: 'request', label: 'Request', tint: 'var(--usdc-icon)', icon: <ActionIcon name="receive" size={18} /> }] : []),
                 { key: 'gallery', label: 'Photo',   tint: '#7B61FF',          icon: <Image className="w-[18px] h-[18px] text-white" /> },
                 { key: 'camera',  label: 'Camera',  tint: '#E9967A',          icon: (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
