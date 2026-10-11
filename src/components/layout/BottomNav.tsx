@@ -51,15 +51,29 @@ export function BottomNav() {
     // it's now called on every relevant insert/update (see below).
     const fetchUnread = async () => {
       try {
-        // App start: the count comes from the one startup call (lib/homeBootstrap.ts).
+        // Message requests (Chat privacy → "Contacts only") and people I
+        // blocked arrive without an alert, so they don't count here either -
+        // the Chats list leaves them out of All / Unread the same way.
+        // (The server answers no requests unless "Contacts only" is on, so a
+        // device that hasn't loaded the setting yet still gets it right.)
+        const { fetchMyRequestIds, fetchBlocked } = await import('@/lib/privacy')
+        const [requestIds, blocked] = await Promise.all([
+          fetchMyRequestIds().catch(() => new Set<string>()),
+          fetchBlocked(user.id).catch(() => []),
+        ])
+        const blockedIds = new Set(blocked.map(b => b.id))
+        // App start: the count comes from the one startup call (lib/homeBootstrap.ts)
+        // - it counts every chat, so only when nothing needs leaving out.
         const { bootPart } = await import('@/lib/homeBootstrap')
         const bootCount = await bootPart('unread_chats', 'bottomnav', { userId: user.id })
-        if (typeof bootCount === 'number') { setUnreadChats(bootCount); return }
+        if (typeof bootCount === 'number' && !requestIds.size && !blockedIds.size) { setUnreadChats(bootCount); return }
         const { supabase } = await import('@/lib/supabase')
         const { data: convs } = await supabase
-          .from('conversations').select('id')
+          .from('conversations').select('id, participant_a, participant_b')
           .or(`participant_a.eq.${user.id},participant_b.eq.${user.id}`)
-        const convIds = (convs || []).map((c: any) => c.id)
+        const convIds = (convs || [])
+          .filter((c: any) => !requestIds.has(c.id) && !blockedIds.has(c.participant_a === user.id ? c.participant_b : c.participant_a))
+          .map((c: any) => c.id)
         if (!convIds.length) { setUnreadChats(0); return }
         const { count } = await supabase
           .from('messages').select('*', { count: 'exact', head: true })
