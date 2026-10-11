@@ -23,6 +23,14 @@ describe('orderTitle', () => {
     expect(orderTitle('merchant_request', 'ORD-100044')).toBe('Requested Payment ORD-00044')
     expect(orderTitle('merchant_request', 'ORD-100044', { paid: true })).toBe('Requested Payment Paid ORD-00044')
   })
+  it('receiver side says Received', () => {
+    expect(orderTitle('bill', 'ORD-100042', { received: true })).toBe('Bill ORD-00042 Received')
+    expect(orderTitle('request', 'ORD-100043', { received: true })).toBe('Request ORD-00043 Amount Received')
+    expect(orderTitle('merchant_request', 'ORD-100044', { received: true })).toBe('Requested ORD-00044 Payment Received')
+    expect(orderTitle('request', 'ORD-100043', { received: true, short: true })).toBe('Request ORD-00043 Received')
+    expect(paidTitleFromTag({ number: 'ORD-100042', kind: 'bill' }, false, true)).toBe('Bill ORD-00042 Received')
+    expect(paidTitleFromTag({ number: 'ORD-100042', kind: null }, false, true)).toBe('ORD-00042 Received')
+  })
   it('short form for card bands', () => {
     expect(orderTitle('request', 'ORD-100043', { paid: true, short: true })).toBe('Request Paid · ORD-00043')
     expect(orderTitle('merchant_request', 'ORD-100044', { paid: true, short: true })).toBe('Requested Payment Paid · ORD-00044')

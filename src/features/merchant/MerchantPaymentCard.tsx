@@ -148,10 +148,11 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
             background: 'rgba(255,255,255,0.1)', boxShadow: '0 0 0 1px rgba(255,255,255,0.18) inset',
           }}>PAID</span>
         )}
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, opacity: 0.92, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {paid ? <CheckCircle2 size={13} /> : isBill ? <Receipt size={13} /> : <Clock size={13} />}
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {orderTitle(orderKindOf(v), number, { paid, short: true })}
+        {/* The order's name wraps rather than being cut ("Request ORD-00042 Received"). */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 11.5, fontWeight: 700, lineHeight: 1.3, opacity: 0.92 }}>
+          <span style={{ flexShrink: 0, display: 'flex', marginTop: 1 }}>{paid ? <CheckCircle2 size={13} /> : isBill ? <Receipt size={13} /> : <Clock size={13} />}</span>
+          <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+            {orderTitle(orderKindOf(v), number, { paid, received: paid && isMine, short: true })}
           </span>
         </div>
         <div style={{ position: 'relative', fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px', lineHeight: 1.1, marginTop: 3 }}>
@@ -233,7 +234,7 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
         <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: paid ? 'var(--success)' : 'var(--text-primary)', marginBottom: 4 }}>
           ${formatAmount(v.amount)} {v.currency || 'USDC'}
         </span>
-        {orderTitle(orderKind, number, { paid })}{v.merchantName ? ` · ${v.merchantName}` : ''}
+        {orderTitle(orderKind, number, { paid, received: paid && isMine })}{v.merchantName ? ` · ${v.merchantName}` : ''}
       </>}
       rows={[
         { label: 'Status', value: statusText, positive: paid },
