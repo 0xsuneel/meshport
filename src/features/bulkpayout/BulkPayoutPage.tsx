@@ -1077,7 +1077,7 @@ export function BulkPayoutPage() {
         <textarea
           value={purpose}
           onChange={e => { if (e.target.value.length <= 120) setPurpose(e.target.value) }}
-          placeholder="Add a purpose for this payment (optional)"
+          placeholder="What's it for? (optional)"
           rows={2}
           className="w-full bg-surface/50 border border-border rounded-xl px-3 py-2.5 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-brand/50 resize-none"
         />

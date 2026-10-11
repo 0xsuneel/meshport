@@ -214,7 +214,7 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
               <Plus size={16} /> {atLimit ? `${MAX_BILL_ITEMS} items is the most for one bill` : 'Add item'}
             </button>
           </div>
-          <input value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="Note, e.g. Table 4 (optional)" aria-label="Note"
+          <input value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="What's it for? (optional)" aria-label="Note"
             enterKeyHint="done" onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
             className="w-full mt-3 mb-1 rounded-[14px] px-3.5 py-3 text-[14.5px] text-text-primary outline-none placeholder:text-text-muted focus:border-[var(--brand-text)]"
             style={{ background: 'var(--bg)', border: '1px solid var(--border)' }} />
