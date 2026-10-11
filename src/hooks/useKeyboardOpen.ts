@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 
 const NO_KEYBOARD_TYPES = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'range', 'color', 'image', 'hidden'])
 
-function opensKeyboard(el: Element | null): boolean {
+export function opensKeyboard(el: Element | null): boolean {
   if (!el) return false
   if (el instanceof HTMLTextAreaElement) return !el.readOnly && el.inputMode !== 'none'
   if (el instanceof HTMLInputElement) return !el.readOnly && !NO_KEYBOARD_TYPES.has(el.type) && el.inputMode !== 'none'

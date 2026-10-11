@@ -4465,7 +4465,7 @@ export function ChatConversationPage() {
 
 
   return (
-    <div className="flex flex-col bg-bg" style={{
+    <div data-no-scroll="" className="flex flex-col bg-bg" style={{
       position: 'relative',
       // Desktop: no on-screen keyboard to react to, and this panel lives
       // inside ChatDesktopSplit's right column - NOT the full browser

@@ -1,4 +1,6 @@
+import { useRef } from 'react'
 import { amountFontSize } from '@/lib/amountFontSize'
+import { useAutoFocus } from '@/hooks/useAutoFocus'
 
 /**
  * Big amount entry used on Receive (Request payment, Merchant QR) - the same
@@ -16,6 +18,8 @@ export function AmountHero({ value, onChange, symbol = '$', token = 'USDC', auto
   maxDecimals?: number
   base?: number
 }) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  useAutoFocus(inputRef, !!autoFocus)
   const shown = value || '0.00'
   const size = amountFontSize(shown, base)
   const empty = !value
@@ -34,7 +38,7 @@ export function AmountHero({ value, onChange, symbol = '$', token = 'USDC', auto
         value={value}
         placeholder="0.00"
         aria-label={ariaLabel}
-        autoFocus={autoFocus}
+        ref={inputRef}
         onChange={e => onChange(clean(e.target.value))}
         style={{
           width: `${shown.length}ch`, minWidth: '1ch', maxWidth: '100%',

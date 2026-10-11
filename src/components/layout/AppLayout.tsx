@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { primeHomeBootstrap } from '@/lib/homeBootstrap'
 import { preloadScanner } from '@/lib/scannerPrewarm'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -13,7 +13,7 @@ import { ModeToggle } from '@/components/admin/ModeToggle'
 import { useAuthStore, useP2PTradesCountStore, useWalletStore, useUIStore } from '@/store'
 import { fetchMyTrades, subscribeToMyTrades, isTradeExpired } from '@/lib/p2pService'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { useVisibleViewportHeight } from '@/hooks/useVisibleViewportHeight'
+import { useVisibleFrame, visibleFrame } from '@/hooks/useVisibleViewportHeight'
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen'
 import { supabase, syncAuthUidToProfile } from '@/lib/supabase'
 import { getWalletSecurityStatus, knownSecured } from '@/lib/socialWallet'
@@ -69,10 +69,31 @@ export function AppLayout() {
   const navHidden = useUIStore(s => s.navHidden)
   const walletAddress = useAuthStore(s => s.walletAddress)
   const userId = useAuthStore(s => s.user?.id)
-  // Real, currently-visible viewport height - see the hook's own comment.
-  // Drives the mobile shell's actual pixel height below, replacing the old
-  // fixed+inset:0-only approach (see that block's own updated comment).
-  const visibleHeight = useVisibleViewportHeight()
+  // The phone shell sits exactly on the visible area (top + height) - see
+  // the hook's own comment and the shell below.
+  const frameRef = useRef<HTMLDivElement>(null)
+  useVisibleFrame(frameRef, !isDesktop)
+  // Nothing in the app scrolls sideways on purpose except swipeable rows
+  // (overflow-x: auto). iPhone, though, scrolls even overflow:hidden boxes
+  // to bring a focused field into view - e.g. a field focused while its
+  // page is still sliding in from the right - and leaves the whole screen
+  // shifted half off the side. Put any such sideways scroll straight back,
+  // and keep the app's own frame (never meant to scroll) at the top.
+  useEffect(() => {
+    const frame = frameRef.current
+    if (isDesktop || !frame) return
+    const onScroll = (e: Event) => {
+      const el = e.target
+      if (!(el instanceof HTMLElement) || el.closest('.mp-page-snapshot')) return
+      if (el.scrollLeft) {
+        const ox = getComputedStyle(el).overflowX
+        if (ox === 'hidden' || ox === 'clip') el.scrollLeft = 0
+      }
+      if (el.scrollTop && (el === frame || el.hasAttribute('data-no-scroll'))) el.scrollTop = 0
+    }
+    frame.addEventListener('scroll', onScroll, true)
+    return () => frame.removeEventListener('scroll', onScroll, true)
+  }, [isDesktop])
 
   // Links this session to the account with a wallet signature (see
   // syncAuthUidToProfile). Re-checked when the app comes back to the front,
@@ -656,17 +677,27 @@ export function AppLayout() {
   // ChatPage.tsx already uses for the keyboard) and applying it directly
   // as this shell's height fixes both problems at once, for every page
   // and sheet in the app, without touching each one individually.
+  //
+  // iPhone keyboard: the visible area is also PANNED down (offsetTop), so
+  // the shell follows its top as well as its height (useVisibleFrame) -
+  // otherwise the header went off the top of the screen and a blank band
+  // showed under the chat box / sheet. `contain: layout` makes this shell
+  // the frame for every position:fixed popup inside it (amount keypad,
+  // Hub pages, dialogs), so they sit on the visible area too instead of on
+  // the unmoved layout viewport (half behind the keyboard).
+  const frame = visibleFrame()
   return (
-    <div style={{
+    <div ref={frameRef} style={{
       position: 'fixed',
-      top: 0, left: 0, right: 0,
-      height: visibleHeight ?? '100dvh',
+      top: frame.top, left: 0, right: 0,
+      height: frame.height || '100dvh',
+      contain: 'layout',
       background: 'var(--bg)',
       display: 'flex',
       alignItems: 'flex-start',
       justifyContent: 'center',
     }}>
-      <div data-page-shell="" style={{
+      <div data-page-shell="" data-no-scroll="" style={{
         background: 'var(--bg)',
         color: 'var(--text-primary)',
         width: '100%',
@@ -677,7 +708,7 @@ export function AppLayout() {
         flexDirection: 'column',
         overflow: 'hidden',
       }}>
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', paddingBottom: navVisible ? 'calc(65px + env(safe-area-inset-bottom, 0px))' : 0, minHeight: 0 }}>
+        <div data-no-scroll="" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', paddingBottom: navVisible ? 'calc(65px + env(safe-area-inset-bottom, 0px))' : 0, minHeight: 0 }}>
           {holdForWallet ? null : (
             <PageTransition locationKey={location.pathname}>
               <Outlet key={reloadKey} />

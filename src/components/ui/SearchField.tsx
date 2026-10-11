@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useAutoFocus } from '@/hooks/useAutoFocus'
 
 // The one search box style used across the app (Home, Chats, in-conversation
 // search, Activity): a 44px pill in the card colour with a thin border, a
@@ -20,6 +21,8 @@ export function SearchField({ value, onChange, placeholder, autoFocus, onFocus, 
 }) {
   const [focused, setFocused] = useState(false)
   const areaRef = useRef<HTMLTextAreaElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  useAutoFocus(wrap ? areaRef : inputRef, !!autoFocus)
   useLayoutEffect(() => {
     const el = areaRef.current
     if (!el) return
@@ -33,7 +36,6 @@ export function SearchField({ value, onChange, placeholder, autoFocus, onFocus, 
   }, [value, wrap])
   const common = {
     'aria-label': ariaLabel ?? placeholder,
-    autoFocus,
     value,
     onFocus: () => { setFocused(true); onFocus?.() },
     onBlur: () => { setFocused(false); onBlur?.() },
@@ -72,6 +74,7 @@ export function SearchField({ value, onChange, placeholder, autoFocus, onFocus, 
       ) : (
         <input
           {...common}
+          ref={inputRef}
           type="search"
           enterKeyHint="search"
           onChange={e => onChange(e.target.value)}
