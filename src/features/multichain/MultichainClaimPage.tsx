@@ -1458,7 +1458,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     { forKey: '', loading: false, error: '', needsUnlock: false, gatewayFee: 0, forwarderFee: 0, otherFee: 0, total: 0, receiveAtLeast: 0 })
   const ubFeeKey = `${selected}|${claimAmt}`
   useEffect(() => {
-    if (step !== 'select' || !selected || effectiveRoute !== 'ub' || claimAmt < MIN_CLAIM_AMOUNT) return
+    // Quoted whichever route is picked, so the switch can show both fees.
+    if (step !== 'select' || !selected || !ubAvailable || claimAmt < MIN_CLAIM_AMOUNT) return
     let cancelled = false
     setUbFee(prev => ({ ...prev, loading: true, error: '', needsUnlock: false, forKey: ubFeeKey }))
     const t = setTimeout(async () => {
@@ -1479,7 +1480,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     }, 600)
     return () => { cancelled = true; clearTimeout(t) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, selected, effectiveRoute, claimAmt, selectedSdkId])
+  }, [step, selected, ubAvailable, claimAmt, selectedSdkId])
   // BUG FIX (live report): previously showed the raw, fee-less amount here
   // the instant it was typed while the fee row below still said
   // "Estimating…" -- two numbers appearing at different times, one of
@@ -1982,11 +1983,24 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     background: COLORS.surface, border: `1px solid ${COLORS.border}` }}>
                     {([['ub', 'Unified Balance'], ['cctp', 'CCTP']] as const).map(([id, name]) => {
                       const on = effectiveRoute === id
+                      // Each route's fee under its name; Unified Balance is
+                      // marked and can't be picked when Circle's fee from this
+                      // chain is more than the amount.
+                      const tooHigh = id === 'ub' && ubFeeTooHigh
+                      const feeLine = !showClaimEstimateRow ? ''
+                        : id === 'ub'
+                          ? (!ubFeeLive ? 'Fee …' : ubFee.needsUnlock ? '' : tooHigh ? (ubFee.total > 0 ? `Fee ${fmtFee(ubFee.total).replace(' USDC', '')} · too high` : 'Fee too high')
+                            : ubFee.error ? '' : `Fee ${ubFee.approx ? 'up to ' : ''}${fmtFee(ubFee.total).replace(' USDC', '')}`)
+                          : (!claimEstimateIsLive || feeEstimate.loading ? 'Fee …' : feeEstimate.error ? '' : `Fee up to ${fmtFee(feeEstimate.totalFee).replace(' USDC', '')}`)
                       return (
-                        <button key={id} role="radio" aria-checked={on} onClick={() => setClaimRoute(id)}
-                          style={{ height: 42, borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: on ? 700 : 600,
-                            background: on ? 'var(--brand)' : 'transparent', color: on ? '#fff' : COLORS.muted }}>
-                          {name}
+                        <button key={id} role="radio" aria-checked={on} aria-disabled={tooHigh} onClick={() => { if (!tooHigh) setClaimRoute(id) }}
+                          style={{ minHeight: 42, padding: '4px 6px', borderRadius: 12, border: 'none', cursor: tooHigh ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: on ? 700 : 600,
+                            background: on ? 'var(--brand)' : 'transparent', color: on ? '#fff' : COLORS.muted, opacity: tooHigh ? 0.75 : 1,
+                            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                          <span>{name}</span>
+                          {feeLine && (
+                            <span style={{ fontSize: 11, fontWeight: 500, color: tooHigh ? COLORS.error : on ? 'rgba(255,255,255,0.85)' : COLORS.muted }}>{feeLine}</span>
+                          )}
                         </button>
                       )
                     })}
