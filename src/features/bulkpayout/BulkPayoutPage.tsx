@@ -353,6 +353,27 @@ export function BulkPayoutPage() {
   const executePayout = async () => {
     const resolved = recipients.filter(r => r.status === 'resolved')
     if (!resolved.length) return
+    // Chat privacy, checked for every MeshPort user in the list (typed by
+    // username or by wallet) before anything is sent: someone who blocked me,
+    // or only takes payments from their contacts, can't be paid here either -
+    // same rule and wording as Pay. Nothing is sent while any is refused.
+    setProcessing(true)
+    const { reachCheck, BLOCKED_YOU, STRANGER_PAY_BLOCKED } = await import('@/lib/privacy')
+    const refused = new Map<string, string>()
+    await Promise.all(resolved.map(async r => {
+      const userId = r.arcUserId || (r.walletAddress ? (await getUserByWalletAddress(r.walletAddress).catch(() => null))?.id : null)
+      if (!userId) return
+      const reach = await reachCheck(userId)
+      if (reach.canPay) return
+      const name = `${String(r.username || '').replace(/\.arc$/, '')}.arc`
+      refused.set(r.id, reach.blocked ? BLOCKED_YOU(name) : STRANGER_PAY_BLOCKED(name))
+    }))
+    if (refused.size) {
+      setProcessing(false)
+      setRecipients(prev => prev.map(r => refused.has(r.id) ? { ...r, status: 'unresolved' as RecipientStatus, error: refused.get(r.id) } : r))
+      showToastMessage(refused.size === 1 ? "1 person can't be paid - remove them to continue" : `${refused.size} people can't be paid - remove them to continue`, 'error')
+      return
+    }
     setProcessing(true); setStep('processing')
     const txResults: TxResult[] = []
     // One BulkPay operation = one idempotency key, generated once per
