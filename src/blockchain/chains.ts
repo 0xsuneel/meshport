@@ -364,9 +364,10 @@ export const EXTERNAL_CHAINS: Record<string, ExternalChainConfig> = {
     decimals: 6,
   },
   Edge_Testnet: {
-    // chainId deliberately absent: api/relay-gas.ts documents that Edge's
-    // numeric id could not be confirmed from an authoritative source, and
-    // omitted it for that reason. Same standard applied here.
+    // Verified 2026-10-11: eth_chainId on Edge's own RPC returns 0x8297.
+    // (It was left out earlier because it couldn't be confirmed; the 1116
+    // once used elsewhere is Core DAO's id, not Edge's.)
+    chainId:  33431,
     rpcs:     ['https://edge-testnet.g.alchemy.com/public'],
     usdc:     '0x2d9F7CAD728051AA35Ecdc472a14cf8cDF5CFD6B',
     decimals: 6,
