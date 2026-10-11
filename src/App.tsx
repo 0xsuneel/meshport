@@ -36,6 +36,7 @@ const P2PHistoryPage        = lazyRetry(() => import('./features/p2p/HistoryPage
 const MultichainPage        = lazyRetry(() => import('./features/multichain/MultichainPage').then(m => ({ default: m.MultichainPage })), 'MultichainPage')
 const MultichainRecoveryPage = lazyRetry(() => import('./features/multichain/MultichainRecoveryPage').then(m => ({ default: m.MultichainRecoveryPage })), 'MultichainRecoveryPage')
 const ReceivePage           = lazyRetry(() => import('./features/receive/ReceivePage').then(m => ({ default: m.ReceivePage })), 'ReceivePage')
+const MyRequestsPage        = lazyRetry(() => import('./features/receive/MyRequestsPage').then(m => ({ default: m.MyRequestsPage })), 'MyRequestsPage')
 const ScannerPage           = lazyRetry(() => import('./features/scanner/ScannerPage').then(m => ({ default: m.ScannerPage })), 'ScannerPage')
 const ChatPrivacyPage       = lazyRetry(() => import('./features/chat/ChatPrivacyPage').then(m => ({ default: m.ChatPrivacyPage })), 'ChatPrivacyPage')
 const ChatListPage          = lazyRetry(() => import('./features/chat/ChatPage').then(m => ({ default: m.ChatListPage })), 'ChatListPage')
@@ -425,6 +426,7 @@ const router = createBrowserRouter([
       { path: 'pay',                        element: <FeatureGate feature="pay_send_enabled"><PaySendPage /></FeatureGate> },
       { path: 'pay-send',                   element: <RenamedPathRedirect from="/pay-send" to="/pay" /> },
       { path: 'receive',                    element: <FeatureGate feature="receive_enabled"><ReceivePage /></FeatureGate> },
+      { path: 'receive/requests',           element: <FeatureGate feature="receive_enabled"><MyRequestsPage /></FeatureGate> },
       { path: 'rewards',                    element: <FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate> },
       { path: 'recent-paid',                element: <RecentPaidPage /> },
       { path: 'asset/:token',               element: <AssetPage /> },
