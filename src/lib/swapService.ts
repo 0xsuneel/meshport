@@ -103,7 +103,7 @@ function routeSwapServiceThroughServer() {
 // via a permit signature (no transaction), a separate approve() transaction,
 // or not at all. Every broadcast and receipt does pass through the provider
 // below, though, so the checklist is driven from what actually hits the
-// chain: a broadcast whose calldata starts with approve()'s selector is the
+// chain: a broadcast whose calldata starts with an allowance selector is the
 // approval, any other broadcast is the swap, and a non-null receipt is that
 // transaction's confirmation.
 export type SwapProgress =
@@ -111,7 +111,18 @@ export type SwapProgress =
   | { kind: 'swap-sent'; hash: string }
   | { kind: 'confirmed'; hash: string; success: boolean }
 
-const APPROVE_SELECTOR = '0x095ea7b3'
+// Arc has no permit metadata in the SDK, so every token-in swap sends its own
+// approval first: USDC through increaseAllowance(), EURC/cirBTC through
+// approve(). Both must read as the approval - an increaseAllowance taken for
+// the swap made a USDC swap that failed after its approval look "confirmed"
+// (the approval's receipt) and get recorded as a completed swap.
+const APPROVAL_SELECTORS = new Set([
+  '0x095ea7b3', // approve(address,uint256)
+  '0x39509351', // increaseAllowance(address,uint256)
+])
+export function isApprovalCalldata(data: unknown): boolean {
+  return APPROVAL_SELECTORS.has(String(data || '').slice(0, 10).toLowerCase())
+}
 let _onSwapProgress: ((p: SwapProgress) => void) | null = null
 let _confirmedHashes = new Set<string>()
 // Set once a swap transaction (not an approve) has actually been broadcast in
@@ -127,14 +138,22 @@ let _swapReceipt: any = null
 // the error path below finds out what really happened.
 let _swapSendAttempted = false
 
+// A different swap hash drops any receipt held for the previous one, so a
+// confirmation can only ever belong to the transaction it was read for.
+function noteSwapHash(hash: string) {
+  const h = hash.toLowerCase()
+  if (h !== _swapHash) { _swapConfirmed = false; _swapReceipt = null }
+  _swapHash = h
+}
+
 function noteSwapSends(reqs: any[], Transaction: any) {
   for (const req of reqs) {
     try {
       if (req?.method !== 'eth_sendRawTransaction') continue
       const tx = Transaction.from(req.params[0])
-      if (String(tx.data || '').slice(0, 10).toLowerCase() === APPROVE_SELECTOR) continue
+      if (isApprovalCalldata(tx.data)) continue
       _swapSendAttempted = true
-      if (tx.hash) _swapHash = String(tx.hash).toLowerCase()
+      if (tx.hash) noteSwapHash(String(tx.hash))
     } catch { /* bookkeeping only */ }
   }
 }
@@ -146,9 +165,9 @@ function reportSwapProgress(reqs: any[], results: any[], Transaction: any) {
     if (!res || res.error) continue
     try {
       if (req.method === 'eth_sendRawTransaction' && typeof res.result === 'string') {
-        const selector = String(Transaction.from(req.params[0]).data || '').slice(0, 10).toLowerCase()
-        if (selector !== APPROVE_SELECTOR) { _swapBroadcast = true; _swapHash = String(res.result).toLowerCase() }
-        emit({ kind: selector === APPROVE_SELECTOR ? 'approve-sent' : 'swap-sent', hash: res.result })
+        const isApproval = isApprovalCalldata(Transaction.from(req.params[0]).data)
+        if (!isApproval) { _swapBroadcast = true; noteSwapHash(res.result) }
+        emit({ kind: isApproval ? 'approve-sent' : 'swap-sent', hash: res.result })
       } else if (req.method === 'eth_getTransactionReceipt' && res.result && !_confirmedHashes.has(res.result.transactionHash)) {
         _confirmedHashes.add(res.result.transactionHash)
         if (_swapHash && String(res.result.transactionHash).toLowerCase() === _swapHash && res.result.status === '0x1') {
