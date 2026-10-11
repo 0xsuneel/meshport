@@ -500,6 +500,25 @@ export async function estimateTransferFee(_amount = 0, isErc20 = false): Promise
   }
 }
 
+// Arc gas (paid in USDC) to keep back in the wallet for the Unified Balance
+// deposit (Gateway Wallet depositWithPermit) a Transfer Funds send makes
+// first. Live gas price × a gas limit above what that call uses, × 2 for a
+// base-fee rise (Arc docs' maxFeePerGas = 2 × base fee). Only kept back when
+// the amount is the whole balance - the chain charges just gasUsed × price,
+// and the rest stays in the wallet.
+const UB_DEPOSIT_GAS_UNITS = 200_000n
+export async function estimateUbDepositGas(): Promise<number> {
+  try {
+    const publicClient = createPublicClient({
+      transport: arcTransport({ timeout: 10000 }),
+    })
+    const gasPrice = await publicClient.getGasPrice()
+    return Number(UB_DEPOSIT_GAS_UNITS * gasPrice * 2n) / 1e18
+  } catch {
+    return 0.05 // gas price unreadable: the old fixed reserve
+  }
+}
+
 // ─── EURC/cirBTC contracts - from the shared token registry ────────────────
 export const EURC_CONTRACT = ARC_TOKENS.EURC.contract
 export const CIRBTC_CONTRACT = ARC_TOKENS.cirBTC.contract

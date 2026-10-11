@@ -21,7 +21,9 @@ function fakeKit(opts: { selfMintQuoteFails?: boolean } = {}) {
     unifiedBalance: {
       estimateSpend: async (p: any) => {
         quotes.push(p.to)
-        if (p.to.useForwarder) return { fees: [usdc('provider', 0.0001), usdc('gasFee', 0.001), usdc('forwarder', 1.52)] }
+        // As App Kit reports it: the forwarding fee is part of gasFee (the
+        // signed maxFee) and is also listed on its own.
+        if (p.to.useForwarder) return { fees: [usdc('provider', 0.0001), usdc('gasFee', 1.521), usdc('forwarder', 1.52)] }
         if (opts.selfMintQuoteFails) throw new Error('quote failed')
         return { fees: [usdc('provider', 0.0001), usdc('gasFee', 0.001), { type: 'gasFee', token: 'ETH', amount: '0.0004' }] }
       },
@@ -56,6 +58,20 @@ describe('Unified Balance spend pricing', () => {
     expect(spends[0].to.useForwarder).toBe(true)
     expect(out.received).toBeLessThan(5 - 1.5)
   })
+
+  it('the forwarding fee is taken once: send = amount − maxFee − headroom', async () => {
+    const { kit, spends } = fakeKit()
+    const out = await spendUnifiedTo({ kit, adapter: {}, fromChain: 'Arc_Testnet', amount: 5, toChain: 'Base_Sepolia', recipient: '0x1' })
+    const maxFee = 0.0001 + 1.521
+    expect(out.received).toBeCloseTo(5 - maxFee - 0.01, 6) // headroom: 3% of maxFee, capped at 0.01
+    expect(Number(spends[0].amount)).toBeCloseTo(out.received, 6)
+  })
+
+  it('dust already in the Unified Balance replaces the headroom', async () => {
+    const { kit } = fakeKit()
+    const out = await spendUnifiedTo({ kit, adapter: {}, fromChain: 'Arc_Testnet', amount: 5, toChain: 'Base_Sepolia', recipient: '0x1', cushion: 0.02 })
+    expect(out.received).toBeCloseTo(5 - (0.0001 + 1.521), 6)
+  })
 })
 
 describe('Unified Balance Bring: fee checked before anything moves', () => {
@@ -66,7 +82,7 @@ describe('Unified Balance Bring: fee checked before anything moves', () => {
     let deposited = false
     const kit = {
       unifiedBalance: {
-        estimateSpend: async () => ({ fees: [usdc('provider', 0.00005), usdc('gasFee', 1.07), usdc('forwarder', 0.05)] }),
+        estimateSpend: async () => ({ fees: [usdc('provider', 0.00005), usdc('gasFee', 1.12), usdc('forwarder', 0.05)] }),
         deposit: async () => { deposited = true; return { txHash: '0x1' } },
         getBalances: async () => ({ balances: [] }),
       },
