@@ -204,6 +204,7 @@ export function PaySendPage() {
   // the success screen's "Completed in X Seconds" pill - doesn't affect
   // payment/transaction logic at all.
   const sendStartRef = useRef(0)
+  const reachPromiseRef = useRef<Promise<Awaited<ReturnType<typeof reachCheck>> | null> | null>(null)
   const [elapsedSeconds, setElapsedSeconds] = useState('0.00')
   // Broadcast but not confirmed within the send's wait - shown as
   // "submitted", never as success or failure (see waitForConfirmation).
@@ -879,6 +880,11 @@ export function PaySendPage() {
           from: fromAddr, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername,
         })).catch(() => {})
       }
+      // PERF: the "may I pay this person" check is a network round trip that
+      // used to run only after the passcode check (PBKDF2) finished - run
+      // the two side by side; runProcessing awaits this same promise.
+      reachPromiseRef.current = merchantPayCode ? Promise.resolve(null)
+        : recipientAccountId().then(id => (id ? reachCheck(id) : null)).catch(() => null)
       if (storedPasscode) {
         const { verifyPasscode } = await import('@/lib/security')
         const correct = await verifyPasscode(pin, storedPasscode)
@@ -902,9 +908,13 @@ export function PaySendPage() {
     sendStartRef.current = performance.now()
     setTxError(''); setTxHash(''); setPayPending(false); setProcessStage('verifying')
     // Preflight: nothing has been signed or sent yet, so a refusal is final.
-    const reachId = merchantPayCode ? null : await recipientAccountId()
-    if (reachId) {
-      const reach = await reachCheck(reachId)
+    // Started alongside the passcode check (verifyAndSend) when it can be.
+    const early = reachPromiseRef.current
+    reachPromiseRef.current = null
+    const reach = early ? await early
+      : merchantPayCode ? null
+      : await recipientAccountId().then(id => (id ? reachCheck(id) : null))
+    if (reach) {
       if (!reach.canPay) {
         setPayBlocked(true); setBlockedMe(reach.blocked)
         setTxError(reach.blocked ? BLOCKED_YOU(recipient.display) : STRANGER_PAY_BLOCKED(recipient.display))
@@ -1839,6 +1849,12 @@ export function PaySendPage() {
                           {estimatedFee > 0 ? `~${formatAmount(estimatedFee, 4)} USDC` : 'Free'}
                         </span>
                       </div>
+                      {note.trim() && (
+                        <div className="pt-3 mt-2 flex items-start justify-between gap-4" style={{ borderTop: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
+                          <span className="text-sm flex-shrink-0" style={{ color: 'var(--text-secondary)' }}>Message</span>
+                          <span className="text-sm font-semibold text-text-primary text-right" style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{note.trim()}</span>
+                        </div>
+                      )}
                       {!recipient.isUsername && (
                         <div className="flex items-center gap-2 mt-2 p-2.5 rounded-xl" style={{ background: 'color-mix(in srgb, var(--warning) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 20%, transparent)' }}>
                           <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" style={{ color: 'var(--warning)' }} />
