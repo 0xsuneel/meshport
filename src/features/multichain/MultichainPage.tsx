@@ -223,8 +223,11 @@ function HubUbTrackView({ item, onBack, onViewInHub, onHome }: {
 }) {
   const chain = item.chainLabel || item.chain
   const claimed = item.claimedAmount
-  const arriving = item.arrivedAmount ?? item.amount
-  const fee = claimed != null && arriving != null ? claimed - arriving : null
+  // The arrived amount is only known once it lands. Before that the fee is
+  // unknown too - say so, rather than showing the claimed amount as if it
+  // were what arrives (and no fee).
+  const arrived = item.arrivedAmount
+  const fee = claimed != null && arrived != null ? claimed - arrived : null
   const when = new Date(item.timestamp)
   const src = item.sourceTxHash
   const rows: TrackDetailRow[] = [
@@ -232,8 +235,11 @@ function HubUbTrackView({ item, onBack, onViewInHub, onHome }: {
     { label: 'Route', value: 'Unified Balance' },
     { label: 'From Chain', value: chain },
     ...(claimed != null ? [{ label: 'Claimed', value: `$${formatAmount(claimed)} USDC` }] : []),
-    ...(fee != null && fee > 0.000001 ? [{ label: 'Fee', value: `-$${formatAmount(fee)} USDC` }] : []),
-    { label: 'Arriving', value: `$${formatAmount(arriving)} USDC` },
+    ...(fee != null && fee > 0.000001 ? [{ label: 'Fee', value: `-$${formatAmount(fee)} USDC` }]
+      : fee == null && claimed != null ? [{ label: 'Fee', value: 'Shown once it arrives' }] : []),
+    arrived != null
+      ? { label: 'Arrived', value: `$${formatAmount(arrived)} USDC` }
+      : { label: 'Arriving', value: claimed != null ? `$${formatAmount(claimed)} USDC, less fees` : `$${formatAmount(item.amount)} USDC` },
     { label: 'Date', value: when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
     { label: 'Time', value: when.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) },
     ...(src ? [{ label: 'Source Tx', value: `${src.slice(0, 10)}…${src.slice(-8)}`, copy: src, href: explorerTxUrl(item.chain, src) }] : []),
@@ -248,7 +254,7 @@ function HubUbTrackView({ item, onBack, onViewInHub, onHome }: {
       </div>
       <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, textAlign: 'center' }}>
-          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>${formatAmount(claimed ?? arriving)} USDC</span> · You may safely leave this page at any time.
+          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>${formatAmount(claimed ?? arrived ?? item.amount)} USDC</span> · You may safely leave this page at any time.
         </p>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>

@@ -69,6 +69,7 @@ import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
+import { claimFeeSummary, type SignedClaimFee } from '@/lib/claimFees'
 
 // ─── MeshPort V2 Design System ────────────────────────────────────────────────
 const COLORS = {
@@ -505,11 +506,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const [error,          setError]         = useState('')
   const [txRecords,      setTxRecords]     = useState<ActivityRecord[]>([])
   const [chainProgress,  setChainProgress] = useState<ChainProgress[]>([])
-  // Per-chain fee each gasless bring actually signed (MeshPort fee + CCTP
-  // maxFee) -
-  // summed for the success screen's "Total Fees" row, mirroring
-  // MultichainTransferPage's own transfer success screen.
-  const [claimFees,      setClaimFees]     = useState<Record<string, number>>({})
+  // Per chain, what each gasless bring signed: MeshPort's fee and the cap
+  // on Circle's CCTP fee - see lib/claimFees for how the success screen
+  // turns these into the fees actually paid.
+  const [claimFees,      setClaimFees]     = useState<Record<string, SignedClaimFee>>({})
   const notifiedClaimIdsRef = useRef<Set<string>>(new Set())
   const sdkRef = useRef<{ AppKit: any; createEthersAdapterFromPrivateKey: any } | null>(null)
 
@@ -1353,7 +1353,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               : setChain(chain.chainId, 'approving', msg === 'Signing…' ? 'Signing the USDC transfer…' : 'Getting fee…', 25),
           })
           burned = true
-          setClaimFees(prev => ({ ...prev, [chain.chainId]: r.fee + r.maxFee }))
+          setClaimFees(prev => ({ ...prev, [chain.chainId]: { meshport: r.fee, circleCap: r.maxFee } }))
           setIsSubmitted(true)
           setChain(chain.chainId, 'attesting', 'Burn confirmed - Circle processing…', 65, { txHash: r.txHash })
           notifyExternalBalanceChanged(chain.chainId, wallet.addr)
@@ -1441,7 +1441,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const claimEstimateIsLive = feeEstimate.forKey === `${selected}|${claimAmt}`
   const showClaimEstimateRow = claimAmt >= MIN_CLAIM_AMOUNT
   const estimateReady = showClaimEstimateRow && claimEstimateIsLive && !feeEstimate.loading && !feeEstimate.error
-  const canConfirm = claimAmt >= MIN_CLAIM_AMOUNT && claimAmt <= (selectedChain?.claimable ?? 0) && estimateReady
   // Route (CCTP vs Unified Balance) - UB only for chains Gateway supports.
   const selectedSdkId = selected ? toSdkChainId(selected) : ''
   // Merchants never get the Unified Balance route - CCTP only.
@@ -2403,11 +2402,17 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
             })
             const fmtAmount = `${formatAmount(displayTotal)} USDC`
-            // All per-chain fees each gasless bring signed rolled into one
-            // number for the "Total Fees" row - same treatment
-            // MultichainTransferPage's transfer success screen gives its own
-            // totalFeesLabel.
-            const totalFeesLabel = `${trimTrailingZeros(Object.values(claimFees).reduce((sum, f) => sum + f, 0).toFixed(4))} USDC`
+            // Fees actually paid: MeshPort's fee, plus Circle's CCTP fee as
+            // taken (burned − arrived) once the funds are on Arc - until
+            // then only its cap is known, shown as "up to" (it used to be
+            // added in as if the whole cap had been charged).
+            const fees = claimFeeSummary(claimFees, Object.values(claimsByStatus))
+            const usdc = (n: number) => `${trimTrailingZeros(n.toFixed(4))} USDC`
+            const hasFees = Object.keys(claimFees).length > 0
+            const totalFeesLabel = fees.final
+              ? usdc(fees.meshport + fees.circle)
+              : `${usdc(fees.meshport + fees.circle)} + up to ${usdc(fees.circleCap)}`
+            const circleFeeLabel = fees.final ? usdc(fees.circle) : `Up to ${usdc(fees.circle + fees.circleCap)} (final once it arrives)`
             // Process checklist - same stages Track Progress shows
             // (Submitted excluded there too, already confirmed on the
             // screen before it), all rendered as already-done since this
@@ -2469,7 +2474,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     { label: 'Status', value: 'Confirmed', positive: true },
                     { label: 'From', value: fromLabel },
                     { label: 'To', value: 'Arc Testnet' },
-                    { label: 'Total Fees', value: totalFeesLabel },
+                    ...(hasFees ? [
+                      { label: 'MeshPort Fee', value: usdc(fees.meshport) },
+                      { label: 'Circle Fee', value: circleFeeLabel },
+                    ] : []),
+                    { label: 'Total Fees', value: hasFees ? totalFeesLabel : usdc(0) },
                   ]}
                   links={links}
                   linksNote={mintPending && links.length > 0 ? 'The Arc mint link appears once the mint lands on Arc.' : undefined}
