@@ -13,7 +13,7 @@ import { ModeToggle } from '@/components/admin/ModeToggle'
 import { useAuthStore, useP2PTradesCountStore, useWalletStore, useUIStore } from '@/store'
 import { fetchMyTrades, subscribeToMyTrades, isTradeExpired } from '@/lib/p2pService'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { useVisibleFrame, visibleFrame } from '@/hooks/useVisibleViewportHeight'
+import { useVisibleFrame, useFrameScrollGuard, visibleFrame } from '@/hooks/useVisibleViewportHeight'
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen'
 import { supabase, syncAuthUidToProfile } from '@/lib/supabase'
 import { getWalletSecurityStatus, knownSecured } from '@/lib/socialWallet'
@@ -73,27 +73,7 @@ export function AppLayout() {
   // the hook's own comment and the shell below.
   const frameRef = useRef<HTMLDivElement>(null)
   useVisibleFrame(frameRef, !isDesktop)
-  // Nothing in the app scrolls sideways on purpose except swipeable rows
-  // (overflow-x: auto). iPhone, though, scrolls even overflow:hidden boxes
-  // to bring a focused field into view - e.g. a field focused while its
-  // page is still sliding in from the right - and leaves the whole screen
-  // shifted half off the side. Put any such sideways scroll straight back,
-  // and keep the app's own frame (never meant to scroll) at the top.
-  useEffect(() => {
-    const frame = frameRef.current
-    if (isDesktop || !frame) return
-    const onScroll = (e: Event) => {
-      const el = e.target
-      if (!(el instanceof HTMLElement) || el.closest('.mp-page-snapshot')) return
-      if (el.scrollLeft) {
-        const ox = getComputedStyle(el).overflowX
-        if (ox === 'hidden' || ox === 'clip') el.scrollLeft = 0
-      }
-      if (el.scrollTop && (el === frame || el.hasAttribute('data-no-scroll'))) el.scrollTop = 0
-    }
-    frame.addEventListener('scroll', onScroll, true)
-    return () => frame.removeEventListener('scroll', onScroll, true)
-  }, [isDesktop])
+  useFrameScrollGuard(frameRef, !isDesktop)
 
   // Links this session to the account with a wallet signature (see
   // syncAuthUidToProfile). Re-checked when the app comes back to the front,

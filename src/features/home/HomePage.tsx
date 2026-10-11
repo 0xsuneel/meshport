@@ -3732,7 +3732,7 @@ export function HomePage() {
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 </button>
                 {/* Bell - notifications */}
-                <button onClick={() => navigate('/notifications')}
+                <button onClick={() => navigate('/notifications')} aria-label="Notifications"
                   style={{ position: 'relative', width: 38, height: 38, borderRadius: '50%',
                     background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>

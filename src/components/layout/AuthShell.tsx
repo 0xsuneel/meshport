@@ -1,7 +1,9 @@
+import { useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import { PageTransition } from '@/components/ui/PageTransition'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY } from '@/lib/motion'
+import { useFrameScrollGuard, useVisibleFrame, visibleFrame } from '@/hooks/useVisibleViewportHeight'
 
 // AuthShell - wraps public, pre-login pages (login/register flow, the
 // public payment link, legal pages) so they get the same phone-width
@@ -25,18 +27,25 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
   // Desktop: a centred card on a soft background (like desktop sign-in
   // pages), not a phone-width strip stuck to the top of a wide screen.
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
+  // Phone: sit exactly on the visible area, so the iPhone keyboard doesn't
+  // push the page up with a blank band under it (same as AppLayout's shell -
+  // see useVisibleFrame).
+  const frameRef = useRef<HTMLDivElement>(null)
+  useVisibleFrame(frameRef, !isDesktop)
+  useFrameScrollGuard(frameRef, !isDesktop)
+  const frame = visibleFrame()
 
   return (
-    <div style={{
+    <div ref={frameRef} style={{
       position: 'fixed',
-      inset: 0,
+      ...(isDesktop ? { inset: 0 } : { top: frame.top, left: 0, right: 0, height: frame.height || '100dvh', contain: 'layout' }),
       background: isDesktop ? 'color-mix(in srgb, var(--brand) 6%, var(--bg))' : 'var(--bg)',
       display: 'flex',
       alignItems: isDesktop ? 'center' : 'flex-start',
       justifyContent: 'center',
       padding: isDesktop ? 24 : 0,
     }}>
-      <div data-page-shell="" style={{
+      <div data-page-shell="" data-no-scroll="" style={{
         width: '100%',
         maxWidth: isDesktop ? '460px' : '430px',
         height: isDesktop ? 'min(860px, 100%)' : '100%',
