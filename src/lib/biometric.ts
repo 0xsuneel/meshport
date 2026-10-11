@@ -187,12 +187,34 @@ export async function isBiometricSupported(): Promise<boolean> {
   return checkPlatformAuthenticator()
 }
 
+/** iPadOS reports itself as a Mac; a touch screen tells them apart. */
+function isIPadOS(ua: string): boolean {
+  return /Macintosh/.test(ua) && typeof navigator !== 'undefined' && (navigator.maxTouchPoints ?? 0) > 1
+}
+
 /** Rough platform label for copy - "Use Face ID" reads better on iOS than "Use biometric". */
 export function biometricLabel(): string {
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
-  if (/iPhone|iPad|iPod/.test(ua)) return 'Face ID'
+  if (/iPhone|iPad|iPod/.test(ua) || isIPadOS(ua)) return 'Face ID'
   if (/Android/.test(ua)) return 'Fingerprint'
+  if (/Macintosh/.test(ua)) return 'Touch ID'
+  if (/Windows/.test(ua)) return 'Windows Hello'
   return 'Biometric'
+}
+
+/**
+ * iPhone, iPad and Mac: a website can only reach Face ID / Touch ID through
+ * Apple's passkeys - turning it on shows Apple's own "Save a passkey for
+ * meshport.xyz?" sheet before Face ID, whatever options are passed
+ * (residentKey 'discouraged' is ignored there). There is no web API for the
+ * plain lock-screen prompt; only a native app gets that. The app explains
+ * the sheet up front so it doesn't look like something went wrong.
+ * Android (screen lock) and Windows (Windows Hello) show their normal
+ * device prompt.
+ */
+export function isApplePasskeyDevice(): boolean {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  return /iPhone|iPad|iPod|Macintosh/.test(ua)
 }
 
 export function hasBiometricRegistered(walletAddress: string): boolean {
