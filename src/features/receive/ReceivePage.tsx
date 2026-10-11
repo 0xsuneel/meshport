@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Copy, Share2, CheckCircle, ArrowLeft, Lightbulb, DollarSign, Download } from 'lucide-react'
+import { Copy, Share2, CheckCircle, ArrowLeft, Lightbulb, DollarSign, Download, ListChecks } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMerchant } from '@/lib/merchant'
 import { MerchantQrPanel } from '@/features/merchant/MerchantQrPanel'
@@ -309,10 +309,16 @@ export function ReceivePage() {
             <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
         )}
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <h1 className="text-xl font-bold text-text-primary">Receive</h1>
           <p className="text-text-secondary text-xs mt-0.5">Pick a token, then share your QR or link</p>
         </div>
+        {/* Requests you made and whether they're paid (Receive → My requests). */}
+        <button onClick={() => navigate('/receive/requests')}
+          style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 999, cursor: 'pointer',
+            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 700 }}>
+          <ListChecks size={15} /> My requests
+        </button>
       </div>
 
       {isMerchant && (

@@ -17,6 +17,7 @@ import {
   type MerchantIntent, type PaymentView,
 } from '@/lib/merchantPay'
 import { AmountHero } from '@/components/ui/AmountHero'
+import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 
 const EXPIRY = [{ label: '15 min', min: 15 }, { label: '1 hour', min: 60 }, { label: '24 hours', min: 1440 }, { label: 'No expiry', min: 0 }]
 const box: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: 'var(--shadow-1)' }
@@ -37,7 +38,13 @@ export function ExpiryChips({ value, onChange }: { value: number; onChange: (m: 
   )
 }
 
-export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { withCustomer?: boolean; initialCustomer?: string; onClose?: () => void }) {
+export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initialOrder, onNewRequest }: {
+  withCustomer?: boolean; initialCustomer?: string; onClose?: () => void
+  /** Open straight on an existing request (Receive → My requests). */
+  initialOrder?: MerchantIntent
+  /** "New request" replaces the default (clear and show the form here). */
+  onNewRequest?: () => void
+}) {
   const navigate = useNavigate()
   const { showToastMessage } = useUIStore()
   const user = useAuthStore(s => s.user)
@@ -46,7 +53,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
   const [note, setNote] = useState('')
   const [expiry, setExpiry] = useState(60)
   const [busy, setBusy] = useState(false)
-  const [order, setOrder] = useState<MerchantIntent | null>(null)
+  const [order, setOrder] = useState<MerchantIntent | null>(initialOrder ?? null)
   // Customer (merchants, optional): looked up only when the FULL name is typed
   // ("sunil.arc") - exact match, no partial suggestions.
   const walletAddress = useAuthStore(s => s.walletAddress)
@@ -179,9 +186,25 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
   )
 
   if (order) {
-    const st = live?.status ?? 'pending'
+    // Saved status until the live one loads (an old request opened from My requests).
+    const saved = order.status === 'pending' && order.expiresAt && new Date(order.expiresAt).getTime() < Date.now() ? 'expired' : order.status
+    const st = live?.status ?? saved ?? 'pending'
     const paid = st === 'paid'
     const closed = ['expired', 'cancelled', 'failed'].includes(st)
+    const open = !paid && !closed
+    const received = live?.received ?? order.received
+    const payment = live?.payments.find(p => p.txHash) ?? null
+    const paidAt = live?.paidAt ?? order.paidAt
+    const payer = live?.customerUsername ?? order.customerUsername
+    const when = (iso: string | null | undefined) => iso
+      ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null
+    const txHref = payment?.txHash ? arcExplorerTxUrl(payment.txHash) : null
+    const kv = (k: string, v: React.ReactNode, color?: string) => (
+      <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, padding: '8px 0', borderTop: '1px solid var(--border)' }}>
+        <span style={{ color: 'var(--text-secondary)', flexShrink: 0 }}>{k}</span>
+        <span style={{ fontWeight: 600, color: color ?? 'var(--text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>{v}</span>
+      </div>
+    )
     return (
       <div style={{ ...box, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         {header('Payment request')}
@@ -192,7 +215,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
           <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 2 }}>
             Order #{orderLabel(order)}{order.customerUsername ? ` · ${order.customerUsername}.arc` : ''}{order.note ? ` · ${order.note}` : ''}
           </div>
-          {!paid && !closed && expiryText(order.expiresAt) && (
+          {open && expiryText(order.expiresAt) && (
             <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--warning)', marginTop: 3 }}>{expiryText(order.expiresAt)}</div>
           )}
         </div>
@@ -206,26 +229,53 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
             {paid ? <CheckCircle2 size={14} /> : <Clock size={14} />}
             {paid ? 'Payment received' : STATUS_LABEL[st]}
           </div>
-          {!paid && !closed && (
+          {open && (
             <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.45, maxWidth: 300 }}>
               Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) - the amount and order number are fixed; wallets get Arc, the address and the amount filled in.
             </div>
           )}
+          {open && received > 0 && (
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>${formatAmount(received)} of ${formatAmount(order.amount)} received</div>
+          )}
         </div>
-        <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', wordBreak: 'break-all', textAlign: 'center', fontFamily: 'ui-monospace, monospace' }}>{link}</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={save} style={ghost}><Download size={15} /> Save QR</button>
-          <button onClick={share} style={ghost}><Share2 size={15} /> Share</button>
-          <button onClick={async () => { const ok = await copyToClipboard(link); showToastMessage(ok ? 'Link copied' : 'Could not copy', ok ? 'success' : 'error') }} style={ghost}><Copy size={15} /> Copy link</button>
-        </div>
+        {/* Paid: who paid, how much, when, and the transaction. */}
+        {paid && (
+          <div>
+            {kv('Paid by', payer ? `${payer.replace(/\.arc$/i, '')}.arc` : 'A wallet')}
+            {kv('Received', `$${formatAmount(received || order.amount)} USDC`, 'var(--success)')}
+            {when(paidAt) && kv('Paid on', when(paidAt))}
+            {payment?.txHash && kv('Transaction', txHref
+              ? <a href={txHref} target="_blank" rel="noreferrer" style={{ color: 'var(--brand-text)', textDecoration: 'none' }}>{payment.txHash.slice(0, 6)}…{payment.txHash.slice(-4)} ↗</a>
+              : `${payment.txHash.slice(0, 6)}…${payment.txHash.slice(-4)}`)}
+            {when(order.createdAt) && kv('Created', when(order.createdAt))}
+          </div>
+        )}
+        {closed && (
+          <div>
+            {kv('Status', st === 'expired' && order.expiresAt ? `Expired · ${when(order.expiresAt)}` : STATUS_LABEL[st], 'var(--text-secondary)')}
+            {when(order.createdAt) && kv('Created', when(order.createdAt))}
+          </div>
+        )}
+        {/* Sharing only while it can still be paid. */}
+        {open && <>
+          <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', wordBreak: 'break-all', textAlign: 'center', fontFamily: 'ui-monospace, monospace' }}>{link}</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={save} style={ghost}><Download size={15} /> Save QR</button>
+            <button onClick={share} style={ghost}><Share2 size={15} /> Share</button>
+            <button onClick={async () => { const ok = await copyToClipboard(link); showToastMessage(ok ? 'Link copied' : 'Could not copy', ok ? 'success' : 'error') }} style={ghost}><Copy size={15} /> Copy link</button>
+          </div>
+        </>}
         {order.customerUsername && !paid && !closed && (
           <button onClick={sendInChat} style={{ ...ghost, flex: 'none' }}><MessageCircle size={15} /> Send to {order.customerUsername}.arc in chat</button>
         )}
         <div style={{ display: 'flex', gap: 8 }}>
-          {!paid && !closed && (live?.received ?? 0) === 0 && (
+          {open && received === 0 && (
             <button onClick={cancel} style={{ ...ghost, color: 'var(--danger)', borderColor: 'color-mix(in srgb, var(--danger) 40%, transparent)' }}>Cancel</button>
           )}
-          <button onClick={() => { setOrder(null); setLive(null); setAmount(''); setNote('') }} style={{ ...primary, flex: 2 }}><Plus size={16} /> New request</button>
+          {paid && (
+            <button onClick={() => navigate('/activity')} style={ghost}>View in Activity</button>
+          )}
+          <button onClick={() => { if (onNewRequest) { onNewRequest(); return } setOrder(null); setLive(null); setAmount(''); setNote('') }} style={{ ...primary, flex: 2 }}><Plus size={16} /> New request</button>
         </div>
       </div>
     )
