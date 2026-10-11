@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
-import { reachCheck, STRANGER_PAY_BLOCKED, BLOCKED_YOU, cachedPrivacy, fetchMyPrivacy, fetchMyRequestIds, fetchBlocked, blockUser, unblockUser, type ChatPrivacy } from '@/lib/privacy'
+import { reachCheck, chatCountChanged, STRANGER_PAY_BLOCKED, BLOCKED_YOU, cachedPrivacy, fetchMyPrivacy, fetchMyRequestIds, fetchBlocked, blockUser, unblockUser, type ChatPrivacy } from '@/lib/privacy'
 import { Ban, Check, Pin, PinOff, Plus } from 'lucide-react'
 import { ActionIcon } from '@/components/ui/ActionIcon'
 import { TokenLogo } from '@/components/ui/TokenLogo'
@@ -877,7 +877,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   const acceptRequest = (conv: DbConversation) => {
     const otherId = conv.other_user?.id
     setRequestIds(prev => { const n = new Set(prev); n.delete(conv.id); return n })
-    if (user?.id && otherId) addContactDb(user.id, otherId).catch(() => {})
+    if (user?.id && otherId) addContactDb(user.id, otherId).then(chatCountChanged).catch(() => {})
   }
 
 
@@ -2309,6 +2309,7 @@ export function ChatConversationPage() {
     setGateBusy(false)
     if (error) { showToastMessage("Couldn't accept - try again", 'error'); return }
     invalidateConversationsCache()
+    chatCountChanged()
     setChatGate(null)
   }
   const blockChat = async () => {

@@ -118,16 +118,23 @@ export async function blockedWalletMap(userId: string): Promise<Map<string, numb
   return map
 }
 
+/** Fired when which chats count as unread changes - I blocked, unblocked or
+ *  accepted someone - so the Chats badge recounts (no message event says so). */
+export const CHAT_COUNT_CHANGED_EVENT = 'meshport:chat-count-changed'
+export const chatCountChanged = () => { try { window.dispatchEvent(new Event(CHAT_COUNT_CHANGED_EVENT)) } catch { /* no window (tests) */ } }
+
 export async function blockUser(userId: string, otherId: string): Promise<void> {
   clearBlockedCache()
   const { error } = await supabase.from('chat_blocks').upsert({ owner_id: userId, blocked_id: otherId }, { onConflict: 'owner_id,blocked_id', ignoreDuplicates: true })
   if (error) throw error
+  chatCountChanged()
 }
 
 export async function unblockUser(userId: string, otherId: string): Promise<void> {
   clearBlockedCache()
   const { error } = await supabase.from('chat_blocks').delete().eq('owner_id', userId).eq('blocked_id', otherId)
   if (error) throw error
+  chatCountChanged()
 }
 
 export const BLOCKED_YOU = (name: string) => `${name} has blocked you. You can't message or pay them.`

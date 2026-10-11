@@ -111,7 +111,13 @@ export function BottomNav() {
       )
     })
     window.addEventListener('meshport:session-bound', fetchUnread)
-    return () => { cancelled = true; unsubscribe?.(); window.removeEventListener('meshport:session-bound', fetchUnread) }
+    // Blocking, unblocking or accepting someone changes what counts.
+    window.addEventListener('meshport:chat-count-changed', fetchUnread)
+    return () => {
+      cancelled = true; unsubscribe?.()
+      window.removeEventListener('meshport:session-bound', fetchUnread)
+      window.removeEventListener('meshport:chat-count-changed', fetchUnread)
+    }
   }, [user?.id])
 
   // Tab root paths - back button on any of these goes to Home (or exits if already Home)
