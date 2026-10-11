@@ -221,6 +221,18 @@ interface FeeEstimate {
 // (estimateUbDepositGas), read on Review into ubDepositGasRef - it used to be
 // a flat 0.05 USDC, ~10x the real gas.
 
+// Plain-language message for a failed transfer; the raw error is kept for
+// "Technical details". Arc's public RPCs sometimes all time out or rate-limit
+// at once - /api/arc-rpc then answers 502 "Arc RPC upstream unavailable" -
+// and ethers wraps that in a long dump nobody can read on a phone.
+function friendlyTransferError(msg: string): string {
+  if (/no runners/i.test(msg)) return 'Connection to Arc Testnet dropped. Please try again.'
+  if (/upstream unavailable|server response 50[234]|SERVER_ERROR|ECONNRESET|timeout|429|rate.?limit/i.test(msg)) {
+    return "Arc Testnet's network is busy or not responding right now. Please try again in a minute."
+  }
+  return msg
+}
+
 // Gateway attestations expire 10 minutes after issuance if unused (per
 // Circle's "Unified Balance Kit: Production Safeguards and Recovery
 // Patterns for spend()"). The resumable-retry path below fires
@@ -893,6 +905,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const isConfirmingRef = useRef(false)
   const [txHash, setTxHash] = useState('')
   const [txError, setTxError] = useState('')
+  // The raw error behind a plain-language txError (shown under "Technical details").
+  const [txErrorDetail, setTxErrorDetail] = useState('')
   // True once initiateUBRecovery has successfully started the 7-day
   // trustless recovery for a failed UB transfer - drives the "your funds
   // are safe" messaging on the failed screen instead of (or alongside) the
@@ -1614,7 +1628,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     // user is already on the broadcasting screen seeing step 1 active.
     const freshSteps = chain.ub ? makeUBSteps(chain.name) : makeDefaultSteps(chain.name)
     setBridgeSteps(freshSteps)
-    setTxHash(''); setTxError('')
+    setTxHash(''); setTxError(''); setTxErrorDetail('')
     setSuccessInfo(null)
     finalTxHashRef.current = ''
     burnTxHashRef.current = ''
@@ -2722,7 +2736,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       if (/no runners/i.test(msg)) resetArcFallbackProvider()
       stopStepTimer()
       stopTicker()
-      setTxError(/no runners/i.test(msg) ? 'Connection to Arc Testnet dropped. Please try again.' : msg)
+      // Plain wording only when nothing moved yet (no burn, no Unified
+      // Balance deposit) - after that the exact error stays up front.
+      const nothingMoved = !burnTxHashRef.current && !ubDepositCompletedRef.current
+      const shown = (nothingMoved || /no runners/i.test(msg)) ? friendlyTransferError(msg) : msg
+      setTxError(shown)
+      setTxErrorDetail(shown === msg ? '' : msg)
       setBridgeSteps(prev => prev.map(s => s.status === 'active' ? { ...s, status: 'error', message: 'Step failed' } : s))
       setStep('failed')
       // If the burn never happened, nothing irreversible occurred - safe to
@@ -3642,7 +3661,15 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
               <div className="flex items-start gap-3 p-4 bg-danger/10 border border-danger/30 rounded-xl text-left">
                 <AlertCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-text-secondary">{txError || 'Unknown error occurred'}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-text-secondary" style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{txError || 'Unknown error occurred'}</p>
+                  {txErrorDetail && (
+                    <details className="mt-2">
+                      <summary className="text-xs text-text-secondary cursor-pointer select-none">Technical details</summary>
+                      <p className="text-[11px] font-mono text-text-secondary mt-1.5 max-h-40 overflow-y-auto" style={{ overflowWrap: 'anywhere', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>{txErrorDetail}</p>
+                    </details>
+                  )}
+                </div>
               </div>
 
               {/* UB only: initiateUBRecovery already started the moment this
