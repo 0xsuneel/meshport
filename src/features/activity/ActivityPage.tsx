@@ -1,21 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { usePopupOpen } from '@/hooks/usePopupOpen'
+import { createPortal } from 'react-dom'
 import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
 import {useLocation, useSearchParams} from 'react-router-dom'
-import { RefreshCw, Loader2, X, Check } from 'lucide-react'
+import { RefreshCw, Loader2, X } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useActivity } from '@/hooks/useActivity'
 import { ActivityRecord, ActivityType, recoveredViaLabel } from '@/lib/ActivityService'
 import { backfillP2PActivity } from '@/lib/p2pService'
 import { cn, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
-import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { SearchField } from '@/components/ui/SearchField'
 import { useMerchant, isMerchantClaim } from '@/lib/merchant'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
+import { TokenMenu } from '@/components/ui/TokenMenu'
 
 const FILTERS: { id: ActivityType | 'all' | 'p2p' | 'merchant'; label: string }[] = [
   { id: 'all',     label: 'All'       },
@@ -661,73 +661,38 @@ function groupByDate(records: ActivityRecord[]) {
   return ['Today','Yesterday','This Week','Earlier'].filter(l => groups[l]?.length).map(l => ({ label: l, items: groups[l] }))
 }
 
-// ── Filter sheet ──────────────────────────────────────────────────────────────
-// Every category label that used to sit as a permanently-visible row of tabs
-// under the header now lives in here instead, opened from the slider icon
-// next to Search. "All" is always the default on load/reset - nothing here
-// changes that; the user has to explicitly tap a label to narrow the list.
-// Opens as a right-edge drawer (both mobile and desktop) rather than a
-// bottom sheet or centered dialog, per product request.
-function FilterSheet({ active, onSelect, onClose }: {
+// ── Filter menu ───────────────────────────────────────────────────────────────
+// Floats down from the filter icon next to Search, same look as the Pay /
+// Swap token picker (TokenMenu). "All" is the default on load/reset.
+const FILTER_ICONS: Record<string, ActionIconName> = {
+  all: 'clock', send: 'pay', receive: 'receive', swap: 'swap', bridge: 'hub', bulk: 'bulk', p2p: 'p2p', merchant: 'insights',
+}
+function FilterMenu({ anchor, active, onSelect, onClose }: {
+  anchor: HTMLElement | null
   active: ActivityType | 'all' | 'p2p' | 'merchant'
   onSelect: (id: ActivityType | 'all' | 'p2p' | 'merchant') => void
   onClose: () => void
 }) {
-  const isDesktop = useMediaQuery('(min-width: 980px)')
-  const panelWidth = isDesktop ? 340 : 'min(80vw, 320px)'
   const isMerchant = useMerchant().isMerchant
-
-  const listContent = (
-    <>
-      <div className="flex items-center justify-between px-5 pt-5 pb-2">
-        <h2 className="text-base font-bold text-text-primary">Filter</h2>
-        <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center"
-          style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-          <X className="w-4 h-4 text-text-secondary" />
-        </button>
-      </div>
-      <div className="px-3 pb-4">
-        {FILTERS.filter(f => f.id !== 'merchant' || isMerchant).map(f => {
-          const isActive = active === f.id
-          return (
-            <button key={f.id} onClick={() => { onSelect(f.id); onClose() }}
-              className="w-full flex items-center justify-between px-3 py-3 rounded-2xl text-left"
-              style={{ background: isActive ? 'color-mix(in srgb, var(--brand) 12%, transparent)' : 'transparent' }}>
-              <span className="text-sm font-semibold" style={{ color: isActive ? 'var(--brand-text)' : 'var(--text-primary)' }}>
-                {f.label}
-              </span>
-              {isActive && <Check className="w-4 h-4" style={{ color: 'var(--brand-text)' }} />}
-            </button>
-          )
-        })}
-      </div>
-    </>
-  )
-
-  // A plain dim (no backdrop blur - Android re-blurs it every frame of the
-  // fade), and it slides back out when closed instead of vanishing.
-  usePopupOpen()
-  return (
-    <motion.div onClick={onClose}
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.24 } }}
-      transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-      style={{
-        position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, zIndex: 100,
-        background: 'rgba(0,0,0,0.5)',
-        display: 'flex', justifyContent: 'flex-end',
-      }}>
-      <motion.div onClick={e => e.stopPropagation()}
-        initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
-        transition={{ duration: 0.42, ease: [0.32, 0.72, 0, 1] }}
-        style={{
-          width: panelWidth, height: '100%', background: 'var(--surface)',
-          borderLeft: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)',
-          boxShadow: 'var(--shadow-3, -8px 0 24px rgba(0,0,0,0.25))',
-          overflowY: 'auto',
-        }}>
-        {listContent}
-      </motion.div>
-    </motion.div>
+  // Portalled over the page at the icon's spot - the search row's collapse
+  // wrapper clips anything that overflows it.
+  const r = anchor?.getBoundingClientRect()
+  if (!r) return null
+  return createPortal(
+    <div style={{ position: 'fixed', top: r.top, left: r.left, width: r.width, height: r.height, zIndex: 60 }}>
+    <TokenMenu width={200} ariaLabel="Filter activity" selected={active} onClose={onClose}
+      onSelect={id => onSelect(id as ActivityType | 'all' | 'p2p' | 'merchant')}
+      options={FILTERS.filter(f => f.id !== 'merchant' || isMerchant).map(f => ({
+        id: f.id, label: f.label,
+        icon: (
+          <span className="flex items-center justify-center rounded-full flex-shrink-0"
+            style={{ width: 30, height: 30, background: f.id === active ? 'rgba(255,255,255,0.2)' : 'color-mix(in srgb, var(--brand) 16%, transparent)' }}>
+            <ActionIcon name={FILTER_ICONS[f.id] ?? 'more'} size={17} color={f.id === active ? '#fff' : 'var(--brand-text)'} />
+          </span>
+        ),
+      }))} />
+    </div>,
+    document.body,
   )
 }
 
@@ -762,6 +727,7 @@ export function ActivityPage() {
     if (flashId) listScrollRef.current?.querySelector(`[data-activity-id="${CSS.escape(flashId)}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [flashId])
   const [filterOpen, setFilterOpen] = useState(false)
+  const filterBtnRef = useRef<HTMLButtonElement>(null)
   const [searchInput, setSearchInput] = useState('')
   // Search box tucks away while scrolling down the list, back on scroll up.
   const listScrollRef = useRef<HTMLDivElement>(null)
@@ -860,7 +826,7 @@ export function ActivityPage() {
             onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)}
             trailing={<>
             <div className="w-px h-5 flex-shrink-0" style={{ background: 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }} />
-            <button onClick={() => setFilterOpen(true)} aria-label="Filter"
+            <button ref={filterBtnRef} onClick={() => setFilterOpen(o => !o)} aria-label="Filter" aria-expanded={filterOpen}
               className="flex-shrink-0 flex items-center justify-center relative w-7 h-7 -mr-1 rounded-full active:scale-90 transition-transform">
               {/* Two-line filter icon (was SlidersHorizontal's 3 rows) - same
                   slider-row visual language, one row fewer, per request. */}
@@ -964,12 +930,10 @@ export function ActivityPage() {
       </div>
 
       <AnimatePresence>
-        {selected && <DetailSheet key="detail" record={selected} onClose={closeDetail} />}
+        {filterOpen && <FilterMenu key="filter" anchor={filterBtnRef.current} active={activeTab} onSelect={handleTabChange} onClose={() => setFilterOpen(false)} />}
       </AnimatePresence>
       <AnimatePresence>
-        {filterOpen && (
-          <FilterSheet key="filter" active={activeTab} onSelect={handleTabChange} onClose={() => setFilterOpen(false)} />
-        )}
+        {selected && <DetailSheet key="detail" record={selected} onClose={closeDetail} />}
       </AnimatePresence>
     </div>
   )

@@ -7,11 +7,15 @@ import { motion } from 'framer-motion'
 // inside a `position: relative` wrapper around the pill, inside AnimatePresence.
 export type TokenMenuOption = { id: string; label: string; icon: ReactNode; disabled?: boolean }
 
-export function TokenMenu({ options, selected, onSelect, onClose }: {
+// `width` (with right-aligned placement) floats it under a small button instead,
+// e.g. Activity's filter icon.
+export function TokenMenu({ options, selected, onSelect, onClose, width, ariaLabel = 'Choose token' }: {
   options: TokenMenuOption[]
   selected: string
   onSelect: (id: string) => void
   onClose: () => void
+  width?: number
+  ariaLabel?: string
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -20,10 +24,10 @@ export function TokenMenu({ options, selected, onSelect, onClose }: {
   }, [onClose])
   return (<>
     <div aria-hidden onClick={e => { e.stopPropagation(); onClose() }} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-    <motion.div role="listbox" aria-label="Choose token"
+    <motion.div role="listbox" aria-label={ariaLabel}
       initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
-      style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 41, transformOrigin: 'top center',
+      style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, ...(width ? { width } : { left: 0 }), zIndex: 41, transformOrigin: width ? 'top right' : 'top center',
         display: 'flex', flexDirection: 'column', gap: 2, padding: 4, borderRadius: 22,
         background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 12px 28px rgba(0,0,0,0.3)' }}>
       {options.map(o => {
