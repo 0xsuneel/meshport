@@ -80,6 +80,7 @@ export const CHAINS: Record<string, { id: number; name: string; rpc: string; usd
   Linea_Sepolia:     { id: 59141,    name: 'Linea Sepolia',     rpc: 'https://rpc.sepolia.linea.build',            usdc: '0xFEce4462D57bD51A6A552365A011b95f0E16d9B7', domain: 11, gasUsd: 3000 }, // arc-studio-allow-onchain-literal
   // RELIABILITY FIX (Ink): added second RPC to match client-side chains.ts.
   Ink_Testnet:       { id: 763373,   name: 'Ink Sepolia',       rpc: process.env.BRIDGE_RPC_INK_TESTNET || 'https://rpc-gel-sepolia.inkonchain.com',     usdc: '0xFabab97dCE620294D2B0b0e46C68964e326300Ac', domain: 21, gasUsd: 3000 }, // arc-studio-allow-onchain-literal
+  Edge_Testnet:      { id: 33431,    name: 'Edge Testnet',      rpc: process.env.BRIDGE_RPC_EDGE_TESTNET || 'https://edge-testnet.g.alchemy.com/public',   usdc: '0x2d9F7CAD728051AA35Ecdc472a14cf8cDF5CFD6B', domain: 28, gasUsd: 1 }, // arc-studio-allow-onchain-literal
   Injective_Testnet: { id: 1439,     name: 'Injective Testnet', rpc: 'https://k8s.testnet.json-rpc.injective.network', usdc: '0x0C382e685bbeeFE5d3d9C29e29E341fEE8E84C5d', domain: 29, gasUsd: 20 },
 }
 
@@ -304,7 +305,7 @@ export async function checkRelayable(to: string, data: `0x${string}`, caller: st
 // CHAINS (verified) and the known static ids for EXTRA_RPCS chains.
 const EXTRA_CHAIN_IDS: Record<string, number> = {
   Arc_Testnet:       5042002,
-  Edge_Testnet:      1116, // from api/relay-gas.ts - absent means auto-detect still applies
+  Edge_Testnet:      33431, // eth_chainId on Edge's RPC (0x8297); 1116 was Core DAO's id
   Injective_Testnet: 1439,
 }
 

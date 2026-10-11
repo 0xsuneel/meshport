@@ -46,6 +46,7 @@ const CHAINS = {
   World_Chain_Sepolia: { chainId: 4801,   usdc: '0x66145f38cBAC35Ca6F1Dfb4914dF98F1614aeA88', rpc: 'https://worldchain-sepolia.g.alchemy.com/public' },
   Linea_Sepolia:     { chainId: 59141,    usdc: '0xFEce4462D57bD51A6A552365A011b95f0E16d9B7', rpc: 'https://rpc.sepolia.linea.build' },
   Ink_Testnet:       { chainId: 763373,   usdc: '0xFabab97dCE620294D2B0b0e46C68964e326300Ac', rpc: 'https://rpc-gel-sepolia.inkonchain.com' },
+  Edge_Testnet:      { chainId: 33431,    usdc: '0x2d9F7CAD728051AA35Ecdc472a14cf8cDF5CFD6B', rpc: 'https://edge-testnet.g.alchemy.com/public' },
   Injective_Testnet: { chainId: 1439,     usdc: '0x0C382e685bbeeFE5d3d9C29e29E341fEE8E84C5d', rpc: 'https://k8s.testnet.json-rpc.injective.network' },
 }
 
