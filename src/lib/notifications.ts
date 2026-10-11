@@ -207,12 +207,21 @@ export function notifySwapComplete({ amountOut, tokenOut }: { amountOut: number;
 
 // ── Reward claimed to USDC (always fire - no cap) ──────────────────────────
 
-export function notifyRewardClaimed({ usdcAmount, points }: { usdcAmount: number; points: number }) {
+/**
+ * A rewards claim landing: shown like any payment received - "Received ·
+ * $5 USDC from MeshPort Rewards". Fired by the claim itself (rewards.ts) and
+ * by the on-chain deposit watcher (a transfer from the rewards contract);
+ * both use the transaction's id, so it only ever shows once.
+ */
+export const REWARDS_SENDER = 'MeshPort Rewards'
+export function notifyRewardClaimed({ usdcAmount, txHash, createdAt }: { usdcAmount: number; points?: number; txHash?: string; createdAt?: string }) {
   useNotificationStore.getState().addNotification({
-    type: 'reward_earned',
-    title: 'Reward Claimed',
-    body: `+${trimTrailingZeros(usdcAmount.toFixed(2))} USDC for ${points} points`,
+    ...(txHash ? { id: `ext_recv_tx_${txHash.toLowerCase()}` } : {}),
+    type: 'payment_received',
+    title: 'Received',
+    body: `${formatNotifAmount(usdcAmount, 'USDC')} from ${REWARDS_SENDER}`,
     isRead: false,
+    ...(createdAt ? { timestamp: createdAt } : {}),
   })
 }
 

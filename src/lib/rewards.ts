@@ -333,6 +333,17 @@ export async function claimPointsAsUSDC(params: {
 
   const usdcAmount = pointsToUSDC(points)
 
+  // A claim that failed goes to Activity as a failed "Reward claim" row with
+  // its exact reason (lib/failure.ts). Uncertain outcomes are not recorded.
+  const noteClaimFailed = (failure: import('./failure').Failure) => {
+    if (!failure.definite) return
+    import('./failure').then(({ recordFailure }) => recordFailure({
+      feature: 'rewards', walletAddress, amount: usdcAmount, token: 'USDC',
+      counterparty: REWARDS_CONTRACT || undefined, failure,
+      metadata: { receiveKind: 'reward_claim', fromUsername: 'MeshPort Reward', note: `${points} points`, points },
+    })).catch(() => {})
+  }
+
   // 2. Claim id - reuse an unfinished claim's id for the same amount: the
   // server already reserved those points for it and re-issues the same
   // voucher, so a failed send never costs points twice.
@@ -393,6 +404,7 @@ export async function claimPointsAsUSDC(params: {
         const msg = signError?.message ?? 'Signing service unavailable'
         console.error('[Rewards] rewards-claim-sign failed:', msg)
         await supabase.from('reward_claims').update({ status: 'failed' }).eq('id', claimRecord?.id)
+        noteClaimFailed({ code: 'service_unavailable', definite: true, message: "MeshPort couldn't sign this claim - nothing was sent and your points are safe. Try again." })
         return { txHash: null, usdcReceived: 0, error: `Claim signing failed: ${msg}. Your points are safe.` }
       }
       const claimSignature = signData.signature as `0x${string}`
@@ -480,7 +492,7 @@ export async function claimPointsAsUSDC(params: {
 
         // In-app notification - guaranteed to show regardless of push state
         import('./notifications').then(({ notifyRewardClaimed }) => {
-          notifyRewardClaimed({ usdcAmount: paidUsdc, points })
+          notifyRewardClaimed({ usdcAmount: paidUsdc, points, txHash: hash })
         }).catch(() => {})
 
         // The phone-shade notification comes from the in-app one above
@@ -520,6 +532,14 @@ export async function claimPointsAsUSDC(params: {
         }
         const msg = (errorName && FRIENDLY_ERRORS[errorName]) || err?.shortMessage || err?.message || 'Contract error'
         console.error('[Rewards] On-chain claim failed:', errorName || msg, err)
+        // The contract's own named reason when it gave one; otherwise the
+        // general classification (a timed-out receipt wait is uncertain).
+        if (errorName && FRIENDLY_ERRORS[errorName]) {
+          noteClaimFailed({ code: 'reverted', definite: true, message: FRIENDLY_ERRORS[errorName] })
+        } else {
+          const { classifyFailure } = await import('./failure')
+          noteClaimFailed(classifyFailure(err))
+        }
         // Mark as failed - do NOT fake success
         await supabase.from('reward_claims').update({ status: 'failed' }).eq('id', claimRecord?.id)
         if (errorName === 'AlreadyClaimed') { try { localStorage.removeItem(pendingKey) } catch { /* none */ } }
@@ -528,6 +548,8 @@ export async function claimPointsAsUSDC(params: {
     } else {
       // Treasury genuinely empty - honest error, do NOT deduct points
       await supabase.from('reward_claims').update({ status: 'treasury_empty' }).eq('id', claimRecord?.id)
+      noteClaimFailed({ code: 'insufficient_funds', definite: true,
+        message: `The rewards treasury has ${trimTrailingZeros(treasuryUsdc.toFixed(4))} USDC, this claim needs ${trimTrailingZeros(usdcAmount.toFixed(4))} USDC - nothing was sent and your points are safe.` })
       return {
         txHash: null,
         usdcReceived: 0,
@@ -538,6 +560,7 @@ export async function claimPointsAsUSDC(params: {
 
   // No contract deployed - honest message, do NOT deduct points or fake success
   await supabase.from('reward_claims').update({ status: 'pending_contract' }).eq('id', claimRecord?.id)
+  noteClaimFailed({ code: 'service_unavailable', definite: true, message: 'Reward claims are not live yet - nothing was sent and your points are saved.' })
   return {
     txHash: null,
     usdcReceived: 0,

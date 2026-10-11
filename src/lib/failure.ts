@@ -1,5 +1,5 @@
 // Failed-transaction history for every money feature: Pay, Chat Pay, Bulk
-// Pay, Swap, Transfer Funds, Bring Funds and P2P.
+// Pay, Swap, Transfer Funds, Bring Funds, P2P and MeshPort Rewards claims.
 //
 // classifyFailure() turns whatever a feature caught into one exact, readable
 // reason, and says whether the failure is DEFINITE:
@@ -20,7 +20,7 @@
 // happened the move is finished through Recover instead - those rows show
 // "Needs recovery", not "Failed" (see needsRecovery()).
 
-export type FailureFeature = 'pay' | 'chat_pay' | 'bulk_pay' | 'swap' | 'transfer' | 'bring' | 'p2p'
+export type FailureFeature = 'pay' | 'chat_pay' | 'bulk_pay' | 'swap' | 'transfer' | 'bring' | 'p2p' | 'rewards'
 
 export type FailureCode =
   | 'insufficient_funds' | 'insufficient_gas' | 'reverted' | 'rejected' | 'nonce'
@@ -139,8 +139,10 @@ type RecordParams = {
   metadata?: Record<string, unknown>
 }
 
-const ACTIVITY_TYPE: Record<Exclude<FailureFeature, 'p2p'>, 'send' | 'bulk' | 'swap' | 'bridge' | 'claim'> = {
+const ACTIVITY_TYPE: Record<Exclude<FailureFeature, 'p2p'>, 'send' | 'receive' | 'bulk' | 'swap' | 'bridge' | 'claim'> = {
   pay: 'send', chat_pay: 'send', bulk_pay: 'bulk', swap: 'swap', transfer: 'bridge', bring: 'claim',
+  // A rewards claim is money coming in (receiveKind 'reward_claim').
+  rewards: 'receive',
 }
 
 /**
