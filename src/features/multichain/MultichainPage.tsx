@@ -53,6 +53,10 @@ type TabType = 'all' | 'pending' | 'success' | 'failed'
 type HubTab = 'transfer' | 'bring' | 'activity' | 'recovery'
 type FlowFocus = 'none' | 'processing' | 'result'
 
+// A device-path UB claim waits up to 30 min for the deposit to confirm, then
+// gives up; past this it isn't being sent on any more.
+const UB_DEVICE_CLAIM_STALE_MS = 40 * 60 * 1000
+
 interface ActivityItem {
   id: string
   type: 'claim' | 'transfer'
@@ -774,7 +778,13 @@ export function MultichainPage() {
             sourceTxHash:      item.metadata?.hasRealSourceHash === false || item.metadata?.recovered_via ? undefined : item.txHash,
             destinationTxHash: item.destinationTxHash ?? undefined,
             ubIntentId: item.metadata?.ub_intent_id || undefined,
-            ubHeld:     !!item.metadata?.ub_held,
+            // Held: flagged by the server or the app - or a device-path UB
+            // claim (no server intent) still pending well past the device's
+            // 30-min wait, so it's no longer being sent: it's safe in the
+            // Unified Balance, finish it from Recover (not "Verifying").
+            ubHeld:     !!item.metadata?.ub_held
+              || (item.metadata?.route === 'ub' && item.status === 'pending' && !item.metadata?.ub_intent_id
+                && Date.now() - new Date(item.createdAt).getTime() > UB_DEVICE_CLAIM_STALE_MS),
             merchant:   isMerchantClaim(item),
             autoConvert: !!item.metadata?.auto_convert,
             autoConvertChains: Array.isArray(item.metadata?.chains) ? item.metadata.chains : undefined,

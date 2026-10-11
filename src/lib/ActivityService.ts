@@ -489,6 +489,28 @@ export const Activity = {
       metadata:         { route: 'ub', claimed_amount: p.amount, ...(p.merchant ? { merchant: true } : {}) },
     }),
 
+  // A UB claim whose deposit landed but whose send to Arc can't go ahead
+  // (e.g. Circle's fee from that chain is more than the amount): flag the
+  // "Processing" row as held so Track Progress says the USDC is safe in the
+  // Unified Balance and points to Recover, instead of "Verifying" forever.
+  // Same ub_held flag the server sets when a ub_claim_intents row fails.
+  ubClaimHeld: async (p: { walletAddress: string; depositTxHash: string; claimedAmount: number; reason: string; merchant?: boolean }) => {
+    try {
+      const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
+      const { authHeaders } = await import('./chatService')
+      const w = encodeURIComponent(p.walletAddress.toLowerCase())
+      const t = encodeURIComponent(p.depositTxHash.toLowerCase())
+      await fetch(`${SUPA_URL}/rest/v1/activity?tx_hash=eq.${t}&wallet_address=eq.${w}&status=eq.pending`, {
+        method: 'PATCH',
+        headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          error:    p.reason.slice(0, 300),
+          metadata: { route: 'ub', claimed_amount: p.claimedAmount, ub_held: true, ...(p.merchant ? { merchant: true } : {}) },
+        }),
+      })
+    } catch { /* best effort - the funds are safe either way */ }
+  },
+
   ubClaim: async (p: {
     walletAddress: string; sourceChain: string; received: number; claimedAmount: number
     depositTxHash?: string; arcTxHash?: string; recovered?: boolean; merchant?: boolean

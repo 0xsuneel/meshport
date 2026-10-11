@@ -1454,7 +1454,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // Unified Balance route: Circle Gateway's fee quote for this exact claim
   // (read-only, signs nothing), fetched ~600ms after the amount settles.
   const [ubFee, setUbFee] = useState<{ forKey: string; loading: boolean; error: string; needsUnlock: boolean
-    gatewayFee: number; forwarderFee: number; otherFee: number; total: number; receiveAtLeast: number }>(
+    gatewayFee: number; forwarderFee: number; otherFee: number; total: number; receiveAtLeast: number; approx?: boolean }>(
     { forKey: '', loading: false, error: '', needsUnlock: false, gatewayFee: 0, forwarderFee: 0, otherFee: 0, total: 0, receiveAtLeast: 0 })
   const ubFeeKey = `${selected}|${claimAmt}`
   useEffect(() => {
@@ -1470,7 +1470,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         const kit = new AppKit({ disableErrorReporting: true } as any)
         const adapter = await buildAdapter(createEthersAdapterFromPrivateKey, privateKey)
         const r = await estimateUbClaimFee({ kit, adapter, walletAddr: walletAddress, fromChain: selectedSdkId, amount: claimAmt })
-        if (!cancelled) setUbFee({ ...r, forKey: ubFeeKey, loading: false, error: '', needsUnlock: false })
+        if (!cancelled) setUbFee({ approx: false, ...r, forKey: ubFeeKey, loading: false, error: '', needsUnlock: false })
       } catch (e: any) {
         console.warn('[bring] Unified Balance fee estimate failed', e)
         // Raw SDK errors are long and technical - keep the card readable.
@@ -1536,6 +1536,17 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const ubFeeTooHigh = ubFeeLive && !ubFee.needsUnlock
     && (ubFee.error === UB_FEE_TOO_HIGH || (!ubFee.error && ubFee.receiveAtLeast <= 0))
   const bringEnabled = reviewEnabled && !(effectiveRoute === 'ub' && ubFeeTooHigh)
+  // Unified Balance would cost more than the amount but CCTP can take it
+  // (cents): switch to CCTP for the person rather than leave Bring disabled.
+  const [ubSwitchedNote, setUbSwitchedNote] = useState('')
+  useEffect(() => {
+    if (effectiveRoute === 'ub' && ubFeeTooHigh && cctpAvailable && selected) {
+      setClaimRoute('cctp')
+      setUbSwitchedNote(`Switched to CCTP: moving ${trimTrailingZeros(claimAmt.toFixed(2))} USDC out of ${getMeta(selected).label}'s Unified Balance would cost ${ubFee.approx ? 'up to' : 'about'} ${fmtFee(ubFee.total)} - more than the amount.`)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveRoute, ubFeeTooHigh, cctpAvailable, selected])
+  useEffect(() => { setUbSwitchedNote('') }, [selected, claimAmt])
   const ubSummaryCard = (
     <div style={{ width: '100%', marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1564,7 +1575,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             <div style={{ ...feeRowStyle, color: COLORS.error }}><span>Fees</span><span style={{ textAlign: 'right' }}>{ubFee.error}</span></div>
           ) : (
             <>
-              <div style={feeRowStyle}><span>Circle Gateway fee</span><span>{fmtFee(ubFee.gatewayFee)}</span></div>
+              <div style={feeRowStyle}><span>Circle Gateway fee</span><span>{ubFee.approx ? 'Up to ' : ''}{fmtFee(ubFee.gatewayFee)}</span></div>
               {ubFee.forwarderFee > 0 && <div style={feeRowStyle}><span>Forwarding fee</span><span>{fmtFee(ubFee.forwarderFee)}</span></div>}
               {ubFee.otherFee > 0 && <div style={feeRowStyle}><span>Other fees</span><span>{fmtFee(ubFee.otherFee)}</span></div>}
               <div style={{ ...feeRowStyle, color: COLORS.text, fontWeight: 600 }}><span>Total fees</span><span>Up to {fmtFee(ubFee.total)}</span></div>
@@ -1992,6 +2003,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   </p>
                 </div>
               </div>
+
+              {ubSwitchedNote && effectiveRoute === 'cctp' && (
+                <p style={{ fontSize: 12, color: COLORS.muted, margin: 0, padding: '0 4px', lineHeight: 1.45 }}>{ubSwitchedNote}</p>
+              )}
 
               {error && <p role="alert" style={{ fontSize: 13, color: COLORS.error, margin: 0, textAlign: 'center' }}>{error}</p>}
 

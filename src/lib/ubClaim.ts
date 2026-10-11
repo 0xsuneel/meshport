@@ -147,6 +147,25 @@ export function claimDust(confirmed = 0): number {
   return confirmed > 0 && confirmed < UB_MIN_SWEEP ? confirmed : 0
 }
 
+// Circle's published Gateway gas fee per source chain, in USDC
+// (developers.circle.com/gateway/references/fees - the same table App Kit
+// ships as GAS_FEE_BY_CHAIN; testnets use their mainnet's fee). Only used
+// when a live quote can't be had - e.g. before the deposit, when that
+// chain's Unified Balance is still empty - so a Bring the fee would swallow
+// is refused BEFORE anything moves.
+const UB_PUBLISHED_GAS_FEE: Record<string, number> = {
+  Arc_Testnet: 0.001, Arbitrum_Sepolia: 0.01, Avalanche_Fuji: 0.02, Base_Sepolia: 0.01,
+  Ethereum_Sepolia: 2, HyperEVM_Testnet: 0.05, Optimism_Sepolia: 0.0015, Polygon_Amoy_Testnet: 0.0015,
+  Sei_Testnet: 0.001, Sonic_Testnet: 0.01, Unichain_Sepolia: 0.001, World_Chain_Sepolia: 0.01,
+}
+const UB_DEFAULT_GAS_FEE = 0.1 // App Kit's own default for an unlisted chain
+const GATEWAY_TRANSFER_FEE = 0.00005 // 0.5 bps
+
+/** Circle's published Gateway fee to move `amount` out of `fromChain` (no live quote). */
+export function ubPublishedFee(fromChain: string, amount: number): number {
+  return (UB_PUBLISHED_GAS_FEE[fromChain] ?? UB_DEFAULT_GAS_FEE) + amount * GATEWAY_TRANSFER_FEE
+}
+
 /**
  * Read-only fee preview for a Unified Balance claim of `amount` from
  * `fromChain` to the user's own Arc wallet - the same estimateSpend() quote
@@ -154,23 +173,36 @@ export function claimDust(confirmed = 0): number {
  * spend (Gateway fee + source gas + forwarding fee, see lib/transferFees);
  * the wallet receives at least `amount − total − headroom`, plus `dust`
  * already in that chain's Unified Balance, which goes along (see claimDust).
+ * Never fails for want of a quote: before the deposit that chain's Unified
+ * Balance can be empty and Circle won't price a spend from it, so Circle's
+ * published fee for the chain is used instead (`approx`).
  */
 export async function estimateUbClaimFee(params: {
   kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number; dust?: number
-}): Promise<{ gatewayFee: number; forwarderFee: number; otherFee: number; total: number; receiveAtLeast: number }> {
+}): Promise<{ gatewayFee: number; forwarderFee: number; otherFee: number; total: number; receiveAtLeast: number; approx?: boolean }> {
   const { kit, adapter, walletAddr, fromChain, amount } = params
-  const est: any = await kit.unifiedBalance.estimateSpend({
-    from: { adapter, allocations: [{ amount: amount.toFixed(6), chain: fromChain }] },
-    to: { chain: ARC_CHAIN_KEY, recipientAddress: walletAddr, useForwarder: true },
-    token: 'USDC',
-    amount: amount.toFixed(6),
-  })
+  const dust = claimDust(params.dust)
+  let est: any
+  try {
+    est = await kit.unifiedBalance.estimateSpend({
+      from: { adapter, allocations: [{ amount: amount.toFixed(6), chain: fromChain }] },
+      to: { chain: ARC_CHAIN_KEY, recipientAddress: walletAddr, useForwarder: true },
+      token: 'USDC',
+      amount: amount.toFixed(6),
+    })
+  } catch (e: any) {
+    // "too small": Circle says the fee is more than the amount.
+    const published = ubPublishedFee(fromChain, amount)
+    const total = /too small/i.test(e?.message ?? '') ? Math.max(published, amount) : published
+    return { gatewayFee: total, forwarderFee: 0, otherFee: 0, total, approx: true,
+      receiveAtLeast: Math.max(0, amount + dust - total - ubSpendMargin(total)) }
+  }
   const f = ubQuoteFees(est)
   const total = ubSpendCost(f)
   // The forwarding fee is part of maxFee ('gasFee'), shown as its own row.
   const forwarderFee = ubForwarderPart(f)
   const gatewayFee = total - forwarderFee
-  return { gatewayFee, forwarderFee, otherFee: 0, total, receiveAtLeast: Math.max(0, amount + claimDust(params.dust) - total - ubSpendMargin(total)) }
+  return { gatewayFee, forwarderFee, otherFee: 0, total, receiveAtLeast: Math.max(0, amount + dust - total - ubSpendMargin(total)) }
 }
 
 // Destinations where Circle's Gateway forwarder mint has been failing
@@ -269,14 +301,12 @@ async function runUbClaimInner(params: {
   // Check the fee BEFORE anything moves. Moving USDC out of some chains'
   // Unified Balance costs more than a small amount (Ethereum: Circle charges
   // that chain's gas, ~$1+). Depositing first and finding out at the send
-  // left the USDC stuck there. A failed quote for another reason doesn't
-  // block - the send step re-checks as before.
+  // left the USDC stuck there. Without a live quote (that chain's Unified
+  // Balance is often empty before the deposit) Circle's published fee for the
+  // chain decides - a failed quote used to let the deposit go ahead.
   const fee = await estimateUbClaimFee({ kit, adapter, walletAddr, fromChain: sdkChainId, amount, dust: before })
-    .catch((e: any) => /too small/i.test(e?.message ?? '') ? { total: Infinity, receiveAtLeast: 0 } : null)
-  if (fee && fee.receiveAtLeast <= 0) {
-    throw new Error(fee.total === Infinity
-      ? `The fee to bring from ${chainLabel} is more than ${amount} USDC - nothing was moved. Bring a larger amount or use CCTP.`
-      : `The fee to bring from ${chainLabel} (about ${fee.total.toFixed(2)} USDC) is more than ${amount} USDC - nothing was moved. Bring a larger amount or use CCTP.`)
+  if (fee.receiveAtLeast <= 0) {
+    throw new Error(`The fee to bring from ${chainLabel} (${fee.approx ? 'up to' : 'about'} ${fee.total.toFixed(2)} USDC) is more than ${amount} USDC - nothing was moved. Use CCTP, or bring a larger amount.`)
   }
 
   onStep('approving', `Moving ${amount} USDC into Unified Balance on ${chainLabel}…`, 25)
@@ -313,22 +343,35 @@ async function runUbClaimInner(params: {
     return
   }
 
-  const started = Date.now()
-  let available = 0
-  while (Date.now() - started < CONFIRM_TIMEOUT_MS) {
-    available = await confirmedOn(kit, walletAddr, sdkChainId).catch(() => available)
-    if (available - before >= amount * 0.999) break
-    await new Promise(r => setTimeout(r, POLL_MS))
-  }
-  if (available - before < amount * 0.999) {
-    throw new Error(`Your USDC is safe in your Unified Balance on ${chainLabel} but isn't confirmed yet. Finish it later from Multichain Hub → Recover.`)
-  }
+  let out: { txHash?: string; received: number }
+  try {
+    const started = Date.now()
+    let available = 0
+    while (Date.now() - started < CONFIRM_TIMEOUT_MS) {
+      available = await confirmedOn(kit, walletAddr, sdkChainId).catch(() => available)
+      if (available - before >= amount * 0.999) break
+      await new Promise(r => setTimeout(r, POLL_MS))
+    }
+    if (available - before < amount * 0.999) {
+      throw new Error(`Your USDC is safe in your Unified Balance on ${chainLabel} but isn't confirmed yet. Finish it later from Multichain Hub → Recover.`)
+    }
 
-  onStep('minting', 'Sending to your Arc wallet…', 80, { txHash: depositTx })
-  const out = await spendUnifiedToArc({ kit, adapter, walletAddr, fromChain: sdkChainId, amount, dust: before })
-  // History: "Claimed from <chain>" in Activity and the Hub (best effort -
-  // the funds have already arrived either way).
-  await recordUbClaim({ walletAddr, sdkChainId, received: out.received, claimedAmount: amount, depositTxHash: depositTx, arcTxHash: out.txHash })
+    onStep('minting', 'Sending to your Arc wallet…', 80, { txHash: depositTx })
+    out = await spendUnifiedToArc({ kit, adapter, walletAddr, fromChain: sdkChainId, amount, dust: before })
+    // History: "Claimed from <chain>" in Activity and the Hub (best effort -
+    // the funds have already arrived either way).
+    await recordUbClaim({ walletAddr, sdkChainId, received: out.received, claimedAmount: amount, depositTxHash: depositTx, arcTxHash: out.txHash })
+  } catch (e: any) {
+    // The USDC is in the Unified Balance but couldn't be sent on: say so on
+    // its Activity row (held → Recover), instead of "Verifying" forever.
+    if (depositTx) {
+      try {
+        const { Activity } = await import('./ActivityService')
+        await Activity.ubClaimHeld({ walletAddress: walletAddr, depositTxHash: depositTx, claimedAmount: amount, reason: String(e?.message ?? e), merchant: isMerchantNow() })
+      } catch { /* best effort */ }
+    }
+    throw e
+  }
   onStep('done', `Received ${out.received.toFixed(2)} USDC on Arc`, 100, { txHash: depositTx, mintTxHash: out.txHash })
 }
 
