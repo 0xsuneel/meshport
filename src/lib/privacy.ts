@@ -5,16 +5,20 @@
 //   strangerPayments  'allow'    | 'block'     - MeshPort won't let a stranger
 //                     pay you, and payments that arrive from outside MeshPort
 //                     send no alert
+//   requestPrivacy    'everyone' | 'contacts'  - who may send you a payment
+//                     request (chat Request / Receive → Request payment)
 //
 // "Stranger" = not in your contacts and you've never messaged / paid them.
-// Merchants always accept everyone.
+// Merchants always accept everyone. Payment requests are only between
+// people: merchants send Bills, and nobody can request from a merchant.
 import { supabase } from './supabase'
 
 export type MsgPrivacy = 'everyone' | 'contacts'
 export type StrangerPayments = 'allow' | 'block'
-export type ChatPrivacy = { msgPrivacy: MsgPrivacy; strangerPayments: StrangerPayments }
+export type RequestPrivacy = 'everyone' | 'contacts'
+export type ChatPrivacy = { msgPrivacy: MsgPrivacy; strangerPayments: StrangerPayments; requestPrivacy: RequestPrivacy }
 
-const DEFAULTS: ChatPrivacy = { msgPrivacy: 'everyone', strangerPayments: 'allow' }
+const DEFAULTS: ChatPrivacy = { msgPrivacy: 'everyone', strangerPayments: 'allow', requestPrivacy: 'everyone' }
 const key = (userId: string) => `meshport_chat_privacy_${userId}`
 
 /** Last known settings on this device (instant), refreshed by fetchMyPrivacy. */
@@ -25,6 +29,7 @@ export function cachedPrivacy(userId: string | undefined | null): ChatPrivacy {
     return {
       msgPrivacy: v?.msgPrivacy === 'contacts' ? 'contacts' : 'everyone',
       strangerPayments: v?.strangerPayments === 'block' ? 'block' : 'allow',
+      requestPrivacy: v?.requestPrivacy === 'contacts' ? 'contacts' : 'everyone',
     }
   } catch { return DEFAULTS }
 }
@@ -33,11 +38,15 @@ function remember(userId: string, p: ChatPrivacy) {
 }
 
 export async function fetchMyPrivacy(userId: string): Promise<ChatPrivacy> {
-  const { data, error } = await supabase.from('users').select('msg_privacy, stranger_payments').eq('id', userId).maybeSingle()
+  let { data, error } = await supabase.from('users').select('msg_privacy, stranger_payments, request_privacy').eq('id', userId).maybeSingle()
+  // Before the request_privacy migration (20261011120000) the column isn't
+  // there yet - still read the other two settings.
+  if (error) ({ data, error } = await supabase.from('users').select('msg_privacy, stranger_payments').eq('id', userId).maybeSingle() as any)
   if (error || !data) return cachedPrivacy(userId)
   const p: ChatPrivacy = {
     msgPrivacy: data.msg_privacy === 'contacts' ? 'contacts' : 'everyone',
     strangerPayments: data.stranger_payments === 'block' ? 'block' : 'allow',
+    requestPrivacy: data.request_privacy === 'contacts' ? 'contacts' : 'everyone',
   }
   remember(userId, p)
   return p
@@ -45,9 +54,13 @@ export async function fetchMyPrivacy(userId: string): Promise<ChatPrivacy> {
 
 export async function saveMyPrivacy(userId: string, patch: Partial<ChatPrivacy>): Promise<ChatPrivacy> {
   const next = { ...cachedPrivacy(userId), ...patch }
-  const { error } = await supabase.from('users')
-    .update({ msg_privacy: next.msgPrivacy, stranger_payments: next.strangerPayments })
-    .eq('id', userId)
+  // Only the changed setting is written, so one setting can't fail because
+  // of another's column.
+  const cols: Record<string, string> = {}
+  if (patch.msgPrivacy) cols.msg_privacy = patch.msgPrivacy
+  if (patch.strangerPayments) cols.stranger_payments = patch.strangerPayments
+  if (patch.requestPrivacy) cols.request_privacy = patch.requestPrivacy
+  const { error } = await supabase.from('users').update(cols).eq('id', userId)
   if (error) throw error
   remember(userId, next)
   return next
@@ -57,14 +70,19 @@ export async function saveMyPrivacy(userId: string, patch: Partial<ChatPrivacy>)
  * Before paying someone: may I? `canPay: false` means they only accept
  * payments from their contacts - nothing should be sent. Fails open (a
  * network error never blocks a payment to someone who allows everyone).
+ * `canRequest: false` hides Request for them: they take requests from
+ * contacts only, they blocked me, or one of us is a merchant. (The database
+ * refuses such a request anyway, so failing open here is safe.)
  */
-export async function reachCheck(recipientId: string): Promise<{ canPay: boolean; toRequests: boolean; blocked: boolean }> {
+export type Reach = { canPay: boolean; toRequests: boolean; blocked: boolean; canRequest: boolean }
+const OPEN: Reach = { canPay: true, toRequests: false, blocked: false, canRequest: true }
+export async function reachCheck(recipientId: string): Promise<Reach> {
   try {
     const { data, error } = await supabase.rpc('chat_reach_check', { recipient: recipientId })
     const row = Array.isArray(data) ? data[0] : data
-    if (error || !row) return { canPay: true, toRequests: false, blocked: false }
-    return { canPay: row.can_pay !== false, toRequests: row.to_requests === true, blocked: row.blocked === true }
-  } catch { return { canPay: true, toRequests: false, blocked: false } }
+    if (error || !row) return OPEN
+    return { canPay: row.can_pay !== false, toRequests: row.to_requests === true, blocked: row.blocked === true, canRequest: row.can_request !== false }
+  } catch { return OPEN }
 }
 
 // ── Blocking (chat_blocks: yours only) ─────────────────────────────────────

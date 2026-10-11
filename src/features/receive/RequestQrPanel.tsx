@@ -50,7 +50,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
   // Username (optional): looked up only when the FULL name is typed
   // ("sunil.arc") - exact match, no partial suggestions.
   const walletAddress = useAuthStore(s => s.walletAddress)
-  const [match, setMatch] = useState<{ state: 'idle' | 'checking' | 'found' | 'notfound' | 'self'; user?: { id: string; username: string; display_name?: string | null; avatar_url?: string | null } }>({ state: 'idle' })
+  const [match, setMatch] = useState<{ state: 'idle' | 'checking' | 'found' | 'notfound' | 'self' | 'denied'; user?: { id: string; username: string; display_name?: string | null; avatar_url?: string | null } }>({ state: 'idle' })
   useEffect(() => {
     const raw = customer.trim().replace(/^@/, '').toLowerCase()
     if (!/^[a-z0-9_.-]+\.arc$/.test(raw)) { setMatch({ state: 'idle' }); return }
@@ -63,11 +63,22 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
         if (cancelled) return
         if (!u?.id) setMatch({ state: 'notfound' })
         else if (walletAddress && u.wallet_address?.toLowerCase() === walletAddress.toLowerCase()) setMatch({ state: 'self' })
-        else setMatch({ state: 'found', user: { id: String(u.id), username: u.username, display_name: u.display_name, avatar_url: u.avatar_url } })
+        else {
+          // Personal requests: they may take requests from contacts only, or be
+          // a merchant (merchants get Bills, not requests). Merchants' own
+          // customer orders aren't limited. The database enforces this too.
+          if (!withCustomer) {
+            const { reachCheck } = await import('@/lib/privacy')
+            const reach = await reachCheck(String(u.id))
+            if (cancelled) return
+            if (!reach.canRequest) { setMatch({ state: 'denied' }); return }
+          }
+          setMatch({ state: 'found', user: { id: String(u.id), username: u.username, display_name: u.display_name, avatar_url: u.avatar_url } })
+        }
       } catch { if (!cancelled) setMatch({ state: 'notfound' }) }
     }, 350)
     return () => { cancelled = true; clearTimeout(t) }
-  }, [customer, walletAddress])
+  }, [customer, walletAddress, withCustomer])
   const [live, setLive] = useState<PaymentView | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -87,7 +98,9 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
     try {
       const typed = customer.trim()
       if (typed && match.state !== 'found') {
-        showToastMessage(match.state === 'self' ? "You can't send a request to yourself" : 'Enter the full MeshPort username, like sunil.arc', 'error')
+        showToastMessage(match.state === 'self' ? "You can't send a request to yourself"
+          : match.state === 'denied' ? "You can't send a payment request to this person"
+          : 'Enter the full MeshPort username, like sunil.arc', 'error')
         setBusy(false); return
       }
       const who = match.state === 'found' && match.user ? match.user.username.replace(/\.arc$/i, '').toLowerCase() : ''
@@ -247,6 +260,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose }: { wit
         {match.state === 'checking' && <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 6 }}>Checking…</div>}
         {match.state === 'notfound' && <div style={{ fontSize: 11.5, color: 'var(--danger)', marginTop: 6 }}>No MeshPort user with this username</div>}
         {match.state === 'self' && <div style={{ fontSize: 11.5, color: 'var(--danger)', marginTop: 6 }}>That's your own username</div>}
+        {match.state === 'denied' && <div style={{ fontSize: 11.5, color: 'var(--danger)', marginTop: 6 }}>You can't send a payment request to this person (they accept requests from contacts only, or they're a merchant)</div>}
         {match.state === 'idle' && customer.trim() !== '' && <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 6 }}>Type the full username, like sunil.arc</div>}
       </div>
       <div><div style={label}>Note (optional)</div><input value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="e.g. Dinner split" style={field} /></div>

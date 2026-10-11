@@ -10,8 +10,9 @@ import {
   type ChatPrivacy, type BlockedPerson,
 } from '@/lib/privacy'
 
-// Chats → your profile picture. Who can message you, payments from
-// strangers, and the people you've blocked (Unblock brings them back).
+// Chats → your profile picture. Who can message you, who can request money
+// from you, payments from strangers, and the people you've blocked (Unblock
+// brings them back).
 export function ChatPrivacyPage() {
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
@@ -52,6 +53,10 @@ export function ChatPrivacyPage() {
       { v: 'everyone', label: 'Everyone', hint: 'Anyone on MeshPort can start a chat with you.' },
       { v: 'contacts', label: 'Contacts only', hint: "Chats from people you don't know go to Requests, without alerts." },
     ] },
+    { title: 'Who can request money from me', key: 'requestPrivacy' as const, options: [
+      { v: 'everyone', label: 'Everyone', hint: 'Anyone on MeshPort can send you a payment request.' },
+      { v: 'contacts', label: 'Contacts only', hint: "People you don't know won't see Request for you, and can't send you one." },
+    ] },
     { title: 'Payments from strangers', key: 'strangerPayments' as const, options: [
       { v: 'allow', label: 'Allow', hint: 'Anyone can pay you.' },
       { v: 'block', label: 'Block', hint: "MeshPort won't let people you don't know pay you. Payments sent from outside MeshPort still arrive (nobody can stop a blockchain transfer), just without an alert." },
@@ -82,7 +87,7 @@ export function ChatPrivacyPage() {
 
         {isMerchant ? (
           <p className="text-[13px] text-text-secondary rounded-2xl px-4 py-3" style={card}>
-            Merchant accounts accept messages and payments from everyone, so customers can always reach you.
+            Merchant accounts accept messages and payments from everyone, so customers can always reach you. Merchants send Bills instead of payment requests, and customers can't send requests to a merchant.
           </p>
         ) : (
           <>
