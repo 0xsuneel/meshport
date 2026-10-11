@@ -214,7 +214,7 @@ function RecentBox({ navigate }: { navigate: NavigateFunction }) {
     )
   }
 
-  return <Box title="Recent" onViewAll={n > 0 ? () => navigate('/recent-paid') : undefined}>{content}</Box>
+  return <Box title="Recent" onViewAll={n > 0 ? () => navigate('/recent-paid', { state: { from: '/' } }) : undefined}>{content}</Box>
 }
 
 function NewsBox({ navigate }: { navigate: NavigateFunction }) {
