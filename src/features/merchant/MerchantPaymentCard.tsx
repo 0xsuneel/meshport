@@ -73,6 +73,12 @@ function rememberView(code: string, v: PaymentView) {
   try { localStorage.setItem(VIEW_KEY(code), JSON.stringify(v)) } catch { /* storage full or blocked */ }
 }
 
+/** Fetches a bill's live status ahead of time (a chat about to open), so its card is drawn final. */
+export function prefetchPaymentView(code: string): Promise<void> {
+  if (cachedView(code)) return Promise.resolve()
+  return getPayment(code).then(v => rememberView(code, v)).catch(() => {})
+}
+
 export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMine: boolean; text?: string }) {
   const [live, setLive] = useState<PaymentView | null>(() => cachedView(code))
   const setV = (v: PaymentView) => { rememberView(code, v); setLive(v) }
@@ -106,10 +112,13 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
   // Colour-band card: the amount on a band that says the state at a glance
   // (amber = due, green = paid, grey = expired / cancelled), items and the
   // Pay button on a strip below. Same width limits as before.
-  const band = paid ? 'linear-gradient(135deg, #27C796, #12806B)'
+  // Status not known yet (first sight of this bill): a neutral band and no
+  // "due" tag, so a bill that turns out paid doesn't flip amber → green.
+  const band = loading ? 'linear-gradient(135deg, #7C8796, #5B6573)'
+    : paid ? 'linear-gradient(135deg, #27C796, #12806B)'
     : closed ? 'linear-gradient(135deg, #8A929C, #5E6670)'
     : 'linear-gradient(135deg, #F0B24F, #C9812A)'
-  const amountTag = paid ? 'paid' : closed ? STATUS_LABEL[v.status].toLowerCase() : 'due'
+  const amountTag = loading ? '' : paid ? 'paid' : closed ? STATUS_LABEL[v.status].toLowerCase() : 'due'
   const statusLine = loading ? 'Checking status…'
     : paid && v.completedByMerchant ? '✓ Completed'
     : paid ? (isMine ? '✓ Payment received' : '✓ Paid')
@@ -146,7 +155,7 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
           </span>
         </div>
         <div style={{ position: 'relative', fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px', lineHeight: 1.1, marginTop: 3 }}>
-          ${formatAmount(v.amount)} {!paid && <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.85 }}>{amountTag}</span>}
+          ${formatAmount(v.amount)} {!paid && amountTag && <span style={{ fontSize: 13, fontWeight: 700, opacity: 0.85 }}>{amountTag}</span>}
         </div>
       </div>
 

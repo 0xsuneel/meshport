@@ -48,7 +48,10 @@ export function ChatImage({ url, iv, convKey, radius, square, upload, failed, on
   const [error, setError] = useState(false)
   const meta = metaOf(url)
   useEffect(() => {
-    if (src) return
+    // An encrypted photo waits for the chat key (undefined = still unlocking)
+    // instead of failing and showing "Couldn't load" until it arrives.
+    if (src || (iv && convKey === undefined)) return
+    setError(false)
     let cancelled = false
     loadMedia(url, iv, convKey, p => { if (!cancelled) setProgress(p) })
       .then(r => { if (!cancelled) setSrc(r.url) })
@@ -99,7 +102,7 @@ export function ChatImage({ url, iv, convKey, radius, square, upload, failed, on
 export function QuoteThumb({ url, iv, convKey, size = 46 }: { url: string; iv: string | null; convKey: any; size?: number }) {
   const [src, setSrc] = useState<string | null>(() => cachedMedia(url)?.url ?? (!iv && url.startsWith('blob:') ? url.split('#')[0] : null))
   useEffect(() => {
-    if (src) return
+    if (src || (iv && convKey === undefined)) return
     let cancelled = false
     loadMedia(url, iv, convKey).then(r => { if (!cancelled) setSrc(r.url) }).catch(() => {})
     return () => { cancelled = true }
