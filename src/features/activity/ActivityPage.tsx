@@ -276,7 +276,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   const recoveredTitle = recoveredViaLabel(record)
   const title = isClaim && metadata.auto_convert ? (status === 'pending' ? 'Ledger funds moving to Arc' : 'Ledger payment received')
               : isClaim && isMerchantClaim(record as any) ? 'Payment received'
-              : merchantOrder ? paidOrderTitle(metadata, merchantOrder)
+              : merchantOrder ? paidOrderTitle(metadata, merchantOrder, isReceive)
               : recoveredTitle ? recoveredTitle
               // A rewards claim that didn't go through (lib/rewards.ts).
               : isReceive && isFailed && metadata.receiveKind === 'reward_claim' ? 'Reward claim'
@@ -347,9 +347,11 @@ export function activityOrderKind(md: any): OrderKind | null {
   if (md?.merchantPersonal === false) return 'merchant_request'
   return null
 }
-const paidOrderTitle = (md: any, number: string) => {
+/** Payer: "Paid Bill ORD-00042"; receiver: "Bill ORD-00042 Received". */
+const paidOrderTitle = (md: any, number: string, received: boolean) => {
   const kind = activityOrderKind(md)
-  return kind ? orderTitle(kind, number, { paid: true }) : `Paid ${displayOrderNumber(number)}`
+  if (!kind) return received ? `${displayOrderNumber(number)} Received` : `Paid ${displayOrderNumber(number)}`
+  return orderTitle(kind, number, received ? { received: true } : { paid: true })
 }
 
 export function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
@@ -525,7 +527,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
 
   const recoveredDetail = recoveredViaLabel(record)
   const merchantOrderDetail = (type === 'receive' || type === 'send') && (metadata as any)?.merchantOrder ? String((metadata as any).merchantOrder) : null
-  const orderWord = merchantOrderDetail ? paidOrderTitle(metadata, merchantOrderDetail) : ''
+  const orderWord = merchantOrderDetail ? paidOrderTitle(metadata, merchantOrderDetail, type === 'receive') : ''
   const title = isClaim && (metadata as any)?.merchant ? `Payment received · ${chainLabel(sourceChain) || 'External'}`
               : merchantOrderDetail ? orderWord
               : recoveredDetail && isClaim ? `${recoveredDetail} · ${chainLabel(sourceChain) || 'External'}`

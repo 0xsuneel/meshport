@@ -360,7 +360,9 @@ export function formatPaymentMessagePreview(msg: string, opts: {
   // "… · Paid Bill ORD-00042".
   const orderTag = parsePaymentOrderTag(msg)
   if (orderTag) {
-    return formatPaymentMessagePreview(msg.slice(0, orderTag.index), opts) + ' · ' + paidTitleFromTag(orderTag)
+    const head = formatPaymentMessagePreview(msg.slice(0, orderTag.index), opts)
+    // The side that was paid reads "Bill ORD-00042 Received".
+    return head + ' · ' + paidTitleFromTag(orderTag, false, head.startsWith('Received'))
   }
 
   // Only process payment messages. BUG FIX: this used to hardcode
@@ -1727,9 +1729,12 @@ const MessageBubble = memo(function MessageBubble({
               background: isMine ? 'linear-gradient(135deg, #1A7A72, #0C4A46)' : 'linear-gradient(135deg, #27C796, #12806B)',
             }}>
               <span aria-hidden style={{ position: 'absolute', right: -18, top: -18, width: 72, height: 72, borderRadius: '50%', border: '12px solid rgba(255,255,255,0.12)' }} />
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, opacity: 0.9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {isMine ? <ArrowUpRight className="w-3 h-3 flex-shrink-0" /> : <ArrowDownLeft className="w-3 h-3 flex-shrink-0" />}
-                {orderTag ? paidTitleFromTag(orderTag, true) : (isMine ? `Paid to ${recipientClean}.arc` : `Received from ${recipientClean}.arc`)}
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', gap: 5, fontSize: 11.5, fontWeight: 700, lineHeight: 1.3, opacity: 0.9 }}>
+                {isMine ? <ArrowUpRight className="w-3 h-3 flex-shrink-0" style={{ marginTop: 1.5 }} /> : <ArrowDownLeft className="w-3 h-3 flex-shrink-0" style={{ marginTop: 1.5 }} />}
+                {/* An order's name wraps rather than being cut; a plain payment stays on one line. */}
+                <span style={orderTag ? { minWidth: 0, overflowWrap: 'anywhere' } : { minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {orderTag ? paidTitleFromTag(orderTag, true, !isMine) : (isMine ? `Paid to ${recipientClean}.arc` : `Received from ${recipientClean}.arc`)}
+                </span>
               </div>
               <p style={{ position: 'relative', fontSize: 22, lineHeight: 1.1, fontWeight: 800, letterSpacing: '-0.4px', marginTop: 3 }}>
                 {formatAmount(msg.payment_amount || 0, chatPayTokenDecimals((msg.token_symbol as ChatPayToken) || 'USDC'))} <span style={{ fontSize: 14, fontWeight: 700, opacity: 0.85 }}>{msg.token_symbol || 'USDC'}</span>

@@ -19,12 +19,20 @@ export function orderKindOf(v: { kind?: string | null; personal?: boolean | null
   return v.personal === false ? 'merchant_request' : 'request'
 }
 /**
- * "Bill ORD-00042" / "Request ORD-00043" / "Requested Payment ORD-00044";
- * paid: "Paid Bill ORD-00042" / "Request Amount Paid ORD-00043" /
- * "Requested Payment Paid ORD-00044". `short` (card bands): "Request Paid · ORD-00043".
+ * Waiting: "Bill ORD-00042" / "Request ORD-00043" / "Requested Payment ORD-00044".
+ * Paid, payer's side: "Paid Bill ORD-00042" / "Request Amount Paid ORD-00043" /
+ * "Requested Payment Paid ORD-00044".
+ * Paid, receiver's side (`received`): "Bill ORD-00042 Received" /
+ * "Request ORD-00043 Amount Received" / "Requested ORD-00044 Payment Received".
+ * `short` (card bands): "Request Paid · ORD-00043", "Request ORD-00043 Received".
  */
-export function orderTitle(kind: OrderKind, number: string | null | undefined, opts: { paid?: boolean; short?: boolean } = {}): string {
+export function orderTitle(kind: OrderKind, number: string | null | undefined, opts: { paid?: boolean; received?: boolean; short?: boolean } = {}): string {
   const no = displayOrderNumber(number)
+  if (opts.received) {
+    if (kind === 'bill') return `Bill ${no} Received`
+    if (kind === 'merchant_request') return opts.short ? `Requested ${no} Received` : `Requested ${no} Payment Received`
+    return opts.short ? `Request ${no} Received` : `Request ${no} Amount Received`
+  }
   const sep = opts.short ? ' · ' : ' '
   if (kind === 'bill') return opts.paid ? `Paid Bill ${no}` : `Bill ${no}`
   if (kind === 'merchant_request') return opts.paid ? `Requested Payment Paid${sep}${no}` : `Requested Payment ${no}`
@@ -46,8 +54,10 @@ export function parsePaymentOrderTag(text: string): { number: string; kind: Orde
   return { number: m[2], kind, index: m.index }
 }
 /** Title for a paid order from a payment tag; an older untyped tag reads "Paid ORD-00042". */
-export function paidTitleFromTag(t: { number: string; kind: OrderKind | null }, short = false): string {
-  return t.kind ? orderTitle(t.kind, t.number, { paid: true, short }) : `Paid ${displayOrderNumber(t.number)}`
+/** `received`: the receiver's side ("Bill ORD-00042 Received"); older untyped tags read "ORD-00042 Received". */
+export function paidTitleFromTag(t: { number: string; kind: OrderKind | null }, short = false, received = false): string {
+  if (!t.kind) return received ? `${displayOrderNumber(t.number)} Received` : `Paid ${displayOrderNumber(t.number)}`
+  return orderTitle(t.kind, t.number, received ? { received: true, short } : { paid: true, short })
 }
 
 /** A bill / request card's text → its one-line preview (chat list, reply

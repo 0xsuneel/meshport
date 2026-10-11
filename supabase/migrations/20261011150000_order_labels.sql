@@ -1,7 +1,9 @@
 -- Orders are named by what they are, not "Order #":
 --   Bill ORD-00042 / Request ORD-00043 / Requested Payment ORD-00044
---   paid: Paid Bill ORD-00042 / Request Amount Paid ORD-00043 /
---         Requested Payment Paid ORD-00044
+--   paid, payer:    Paid Bill ORD-00042 / Request Amount Paid ORD-00043 /
+--                   Requested Payment Paid ORD-00044
+--   paid, receiver: Bill ORD-00042 Received / Request ORD-00043 Amount Received /
+--                   Requested ORD-00044 Payment Received
 -- Request = a normal user's payment request; Requested Payment = an approved
 -- merchant's request from Receive; Bill = a merchant's itemised bill.
 -- Numbers are shown from 00001 (the stored ORD-100042 shows as ORD-00042);
@@ -34,6 +36,19 @@ as $$
   end || coalesce(public.merchant_order_display(p_order), '')
 $$;
 
+-- What the person who was paid sees.
+create or replace function public.merchant_order_received_title(p_kind text, p_personal boolean, p_order text)
+returns text
+language sql
+immutable
+as $$
+  select case
+    when p_kind = 'invoice' then 'Bill ' || coalesce(public.merchant_order_display(p_order), '') || ' Received'
+    when coalesce(p_personal, true) then 'Request ' || coalesce(public.merchant_order_display(p_order), '') || ' Amount Received'
+    else 'Requested ' || coalesce(public.merchant_order_display(p_order), '') || ' Payment Received'
+  end
+$$;
+
 -- Notifications: the title names the order; the body says who / how much.
 create or replace function public.merchant_payment_intents_notify()
 returns trigger language plpgsql security definer set search_path to 'public'
@@ -46,6 +61,7 @@ declare
                        then ' on ' || public.merchant_chain_label(new.source_chain) else '' end;
   paid_title text := public.merchant_order_title(new.kind, new.personal, new.order_number, true);
   open_title text := public.merchant_order_title(new.kind, new.personal, new.order_number, false);
+  received_title text := public.merchant_order_received_title(new.kind, new.personal, new.order_number);
 begin
   who := coalesce(nullif(new.customer_username, ''), case when new.customer_wallet is not null
            then substr(new.customer_wallet, 1, 6) || '…' || right(new.customer_wallet, 4) end, 'A customer');
@@ -55,9 +71,9 @@ begin
     if new.merchant_user_id is not null then
       insert into public.notifications (user_id, type, title, message, read)
       values (new.merchant_user_id, 'merchant_payment_received',
-              case when onchain <> '' then 'Payment received in Ledger' else paid_title end,
+              case when onchain <> '' then 'Payment received in Ledger' else received_title end,
               amt || ' from ' || who
-                || case when onchain <> '' then ' · ' || paid_title || ' · ' || public.merchant_chain_label(new.source_chain) || ' Ledger'
+                || case when onchain <> '' then ' · ' || received_title || ' · ' || public.merchant_chain_label(new.source_chain) || ' Ledger'
                         else coalesce(' · ' || nullif(new.note, ''), '') end, false);
     end if;
     if new.customer_user_id is not null then
