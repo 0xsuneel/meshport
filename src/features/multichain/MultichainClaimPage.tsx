@@ -223,6 +223,9 @@ function toSdkChainId(internalId: string): string {
 // pre-claim estimate and executeClaim's own re-check.
 const MIN_CLAIM_AMOUNT = 1.00
 
+/** Unified Balance fee estimate error: the fee is more than the amount. */
+const UB_FEE_TOO_HIGH = 'Fee is more than this amount'
+
 const _arcProviderCache = new Map<string, any>()
 
 /** The claim adapter - for merchant auto-collect. */
@@ -1471,7 +1474,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       } catch (e: any) {
         console.warn('[bring] Unified Balance fee estimate failed', e)
         // Raw SDK errors are long and technical - keep the card readable.
-        if (!cancelled) setUbFee(prev => ({ ...prev, loading: false, error: /too small/i.test(e?.message ?? '') ? 'Amount too small to cover the fee' : "Couldn't load fees - shown on the next screen" }))
+        if (!cancelled) setUbFee(prev => ({ ...prev, loading: false, error: /too small/i.test(e?.message ?? '') ? UB_FEE_TOO_HIGH : "Couldn't load fees - shown on the next screen" }))
       }
     }, 600)
     return () => { cancelled = true; clearTimeout(t) }
@@ -1526,6 +1529,13 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   )
 
   const ubFeeLive = ubFee.forKey === ubFeeKey && !ubFee.loading
+  // Unified Balance fee bigger than the amount (Ethereum: Circle charges the
+  // gas to move USDC out of Ethereum, ~$1+): nothing would arrive. Bring is
+  // refused up front - it used to go ahead, deposit, then fail to send,
+  // leaving the USDC stuck in the Unified Balance on that chain.
+  const ubFeeTooHigh = ubFeeLive && !ubFee.needsUnlock
+    && (ubFee.error === UB_FEE_TOO_HIGH || (!ubFee.error && ubFee.receiveAtLeast <= 0))
+  const bringEnabled = reviewEnabled && !(effectiveRoute === 'ub' && ubFeeTooHigh)
   const ubSummaryCard = (
     <div style={{ width: '100%', marginTop: 12, paddingTop: 12, borderTop: `1px solid ${COLORS.border}` }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -1542,6 +1552,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             <div style={feeRowStyle}><span>Fees</span><span>Calculating…</span></div>
           ) : ubFee.needsUnlock ? (
             <div style={feeRowStyle}><span>Fees</span><span>Shown on the next screen</span></div>
+          ) : ubFeeTooHigh ? (
+            <div style={{ ...feeRowStyle, color: COLORS.error }}>
+              <span>Fees</span>
+              <span style={{ textAlign: 'right' }}>
+                {ubFee.total > 0 ? `About ${fmtFee(ubFee.total)} - more than this amount.` : 'More than this amount.'}
+                {cctpAvailable ? ' Switch to CCTP, or bring more.' : ' Bring a larger amount.'}
+              </span>
+            </div>
           ) : ubFee.error ? (
             <div style={{ ...feeRowStyle, color: COLORS.error }}><span>Fees</span><span style={{ textAlign: 'right' }}>{ubFee.error}</span></div>
           ) : (
@@ -1986,14 +2004,15 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     if (amt < MIN_CLAIM_AMOUNT) { setError(`Minimum $${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}`); return }
                     if (amt > selectedChain.claimable) { setError('Exceeds available balance'); return }
                     if (effectiveRoute === 'cctp' && !estimateReady) return
+                    if (effectiveRoute === 'ub' && ubFeeTooHigh) return
                     setAmountConfirmed(true)
                     setKeypadOpen(false)
                     handleClaimTap()
                   }}
-                  disabled={!reviewEnabled}
+                  disabled={!bringEnabled}
                   className="active:scale-[.98] transition-all"
                   style={{ width: '100%', height: 56, borderRadius: 18, fontSize: 16, fontWeight: 700, border: 'none', color: '#fff',
-                    background: COLORS.primary, cursor: reviewEnabled ? 'pointer' : 'not-allowed', opacity: reviewEnabled ? 1 : 0.45 }}>
+                    background: COLORS.primary, cursor: bringEnabled ? 'pointer' : 'not-allowed', opacity: bringEnabled ? 1 : 0.45 }}>
                   {claimAmt > 0 ? `Bring ${formatAmount(claimAmt)} USDC` : 'Bring'}
                 </button>
                 {/* Desktop's header has no back arrow - keep a quiet way back there. */}

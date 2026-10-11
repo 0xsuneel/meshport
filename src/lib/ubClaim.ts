@@ -269,6 +269,19 @@ async function runUbClaimInner(params: {
 
   const before = await confirmedOn(kit, walletAddr, sdkChainId).catch(() => 0)
 
+  // Check the fee BEFORE anything moves. Moving USDC out of some chains'
+  // Unified Balance costs more than a small amount (Ethereum: Circle charges
+  // that chain's gas, ~$1+). Depositing first and finding out at the send
+  // left the USDC stuck there. A failed quote for another reason doesn't
+  // block - the send step re-checks as before.
+  const fee = await estimateUbClaimFee({ kit, adapter, walletAddr, fromChain: sdkChainId, amount })
+    .catch((e: any) => /too small/i.test(e?.message ?? '') ? { total: Infinity, receiveAtLeast: 0 } : null)
+  if (fee && fee.receiveAtLeast <= 0) {
+    throw new Error(fee.total === Infinity
+      ? `The fee to bring from ${chainLabel} is more than ${amount} USDC - nothing was moved. Bring a larger amount or use CCTP.`
+      : `The fee to bring from ${chainLabel} (about ${fee.total.toFixed(2)} USDC) is more than ${amount} USDC - nothing was moved. Bring a larger amount or use CCTP.`)
+  }
+
   onStep('approving', `Moving ${amount} USDC into Unified Balance on ${chainLabel}…`, 25)
   const dep: any = await kit.unifiedBalance.deposit({
     from: { adapter, chain: sdkChainId }, amount: amount.toFixed(6), token: 'USDC', allowanceStrategy: 'permit',

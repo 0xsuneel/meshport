@@ -57,3 +57,22 @@ describe('Unified Balance spend pricing', () => {
     expect(out.received).toBeLessThan(5 - 1.5)
   })
 })
+
+describe('Unified Balance Bring: fee checked before anything moves', () => {
+  beforeEach(() => store.clear())
+
+  it('refuses a $1 Bring from Ethereum when the fee is ~$1.12 - no deposit', async () => {
+    const { runUbClaim } = await import('./ubClaim')
+    let deposited = false
+    const kit = {
+      unifiedBalance: {
+        estimateSpend: async () => ({ fees: [usdc('provider', 0.00005), usdc('gasFee', 1.07), usdc('forwarder', 0.05)] }),
+        deposit: async () => { deposited = true; return { txHash: '0x1' } },
+        getBalances: async () => ({ balances: [] }),
+      },
+    }
+    await expect(runUbClaim({ kit, adapter: {}, walletAddr: '0xabc', sdkChainId: 'Ethereum_Sepolia', chainLabel: 'Ethereum', amount: 1, onStep: () => {} }))
+      .rejects.toThrow(/nothing was moved/)
+    expect(deposited).toBe(false)
+  })
+})
