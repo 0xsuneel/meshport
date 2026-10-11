@@ -14,7 +14,7 @@ export function BiometricFirst({ Icon, label, trying, onTry, onUsePasscode, heig
   onUsePasscode: () => void
   height: number
 }) {
-  const what = label === 'Face ID' ? 'Face ID' : label === 'Fingerprint' ? 'fingerprint' : 'biometrics'
+  const what = label === 'Fingerprint' ? 'fingerprint' : label === 'Biometric' ? 'biometrics' : label
   return (
     <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
       {/* Plain button: WebKit wants the WebAuthn call inside a raw click. */}

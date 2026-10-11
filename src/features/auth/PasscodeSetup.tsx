@@ -518,7 +518,7 @@ export function PasscodeLockPage() {
         <MeshPortLogo className="w-20 h-20 mx-auto mb-2" splashTarget />
         <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">MeshPort</h2>
         <p className="text-text-secondary text-[14px] leading-[1.5]">
-          {noPasscode ? `Signed in as ${displayName}` : mode === 'bio' ? `Unlock with ${label === 'Fingerprint' ? 'your fingerprint' : label === 'Face ID' ? 'Face ID' : 'biometrics'}` : 'Enter passcode to unlock'}
+          {noPasscode ? `Signed in as ${displayName}` : mode === 'bio' ? `Unlock with ${label === 'Fingerprint' ? 'your fingerprint' : label === 'Biometric' ? 'biometrics' : label}` : 'Enter passcode to unlock'}
         </p>
         {noPasscode ? (
           <div className="mt-8 w-full max-w-xs space-y-3">

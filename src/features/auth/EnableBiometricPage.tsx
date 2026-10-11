@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { Fingerprint, ScanFace } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useAuthStore, useUIStore } from '@/store'
-import { isBiometricSupported, registerBiometric, biometricLabel, recordBiometricOfferSkip } from '@/lib/biometric'
+import { isBiometricSupported, registerBiometric, biometricLabel, recordBiometricOfferSkip, isApplePasskeyDevice } from '@/lib/biometric'
 
 /**
  * Shown right after a passcode is confirmed - for new signups (create/
@@ -35,6 +35,8 @@ export function EnableBiometricPage() {
   useEffect(() => () => clearBiometricPasscode(), [])
   const label = biometricLabel()
   const Icon = label === 'Face ID' ? ScanFace : Fingerprint
+  // iPhone / iPad / Mac show Apple's "Save a passkey" sheet first (see biometric.ts).
+  const apple = isApplePasskeyDevice()
 
   useEffect(() => {
     isBiometricSupported().then(setSupported)
@@ -105,6 +107,15 @@ export function EnableBiometricPage() {
             Your passcode still works anytime as a fallback.
           </p>
         </div>
+
+        {apple && (
+          <div className="w-full max-w-xs rounded-2xl px-4 py-3 text-left text-[12.5px] leading-[1.5]"
+            style={{ background: 'color-mix(in srgb, var(--brand) 9%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 22%, transparent)', color: 'var(--text-secondary)' }}>
+            <p className="font-semibold text-text-primary mb-1">Apple will ask to "Save a passkey"</p>
+            On iPhone, iPad and Mac, websites use {label} through a passkey, so Apple shows its passkey screen first. Tap <b>Continue</b>, then use {label}.
+            It only lets {label} unlock MeshPort on this device - it can't open your wallet or move money on its own.
+          </div>
+        )}
 
         <div className="w-full max-w-xs space-y-3 mt-4">
           <button onClick={handleEnable} disabled={working}
