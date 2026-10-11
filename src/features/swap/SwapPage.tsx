@@ -153,15 +153,19 @@ function TokenDropdown({ selected, exclude, onSelect, onClose }: {
   )
 }
 
-function SwapHistoryItem({ r, onOpen, isFirst }: { r: SwapRecord; onOpen: () => void; isFirst?: boolean }) {
+// Recent Swaps shows the latest 20; See all opens the main Activity's Swap tab.
+const SWAP_RECENT = 20
+
+function SwapHistoryItem({ r, onOpen, flash, inPanel }: { r: SwapRecord; onOpen: () => void; flash?: boolean; inPanel?: boolean }) {
   const amtOut = parseFloat(r.amountOut || '0')
   const fmtOut = trimTrailingZeros(r.tokenOut === 'cirBTC' ? amtOut.toFixed(6) : amtOut.toFixed(2))
   const isFailed = r.status !== 'success'
   const statusColor = isFailed ? 'var(--danger)' : 'var(--success)'
   return (
-    <div onClick={onOpen} style={{
-      display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px',
-      borderTop: isFirst ? 'none' : '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)',
+    // A clean list like the main Activity: no divider lines; the row last
+    // opened flashes once when its receipt closes.
+    <div onClick={onOpen} className={flash ? 'mp-last-opened' : undefined} style={{
+      display: 'flex', alignItems: 'center', gap: 12, padding: inPanel ? '11px 16px' : '11px 4px',
       cursor: 'pointer',
     }}>
       <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
@@ -427,7 +431,7 @@ export function SwapPage() {
   // Swap history
   const [history,      setHistory]      = useState<SwapRecord[]>(() => loadHistory(walletAddress))
   const [histDetail,   setHistDetail]   = useState<SwapRecord|null>(null)
-  const [showAllHistory, setShowAllHistory] = useState(false)
+  const [histFlashId, setHistFlashId] = useState<string | null>(null)
   // Mirrors the last quote's total fee so the silent Review-poll can detect
   // a change without depending on a stale closure.
   const totalFeesRef = useRef(0)
@@ -610,7 +614,7 @@ export function SwapPage() {
   useEffect(() => {
     if (!walletAddress) return
     import('@/lib/ActivityService').then(({ fetchActivity }) => {
-      fetchActivity(walletAddress, { activityType: 'swap', limit: 100 }).then(records => {
+      fetchActivity(walletAddress, { activityType: 'swap', limit: SWAP_RECENT }).then(records => {
         if (!records.length) return
         const mapped: SwapRecord[] = records.map(r => ({
           id:         r.id,
@@ -1929,7 +1933,12 @@ export function SwapPage() {
                 <Clock className="w-4 h-4 text-text-secondary"/>
                 <p className="text-sm font-semibold text-text-secondary">Recent Swaps</p>
               </div>
-
+              {history.length > 0 && (
+                <button onClick={() => navigate('/activity?filter=swap')}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--brand-text)', padding: 0 }}>
+                  See all
+                </button>
+              )}
             </div>
 
             {history.length === 0 ? (
@@ -1943,18 +1952,10 @@ export function SwapPage() {
                 <p className="text-xs text-text-muted text-center px-8">Your completed swaps will appear here</p>
               </div>
             ) : (
-              <div className="rounded-2xl overflow-hidden" style={{ background:'var(--surface)', border:'1px solid var(--border)' }}>
-                {(showAllHistory ? history : history.slice(0, 5)).map((r, i) => (
-                  <SwapHistoryItem key={(r as any).id} r={r as any} onOpen={() => setHistDetail(r)} isFirst={i === 0}/>
+              <div>
+                {history.slice(0, SWAP_RECENT).map(r => (
+                  <SwapHistoryItem key={r.id} r={r} onOpen={() => { setHistFlashId(null); setHistDetail(r) }} flash={r.id === histFlashId}/>
                 ))}
-                {history.length > 5 && (
-                  <button
-                    onClick={() => setShowAllHistory(v => !v)}
-                    className="w-full text-xs text-center text-text-secondary py-2.5 active:opacity-70 transition-opacity"
-                    style={{borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)'}}>
-                    {showAllHistory ? 'Show less' : `+${history.length - 5} more · show all`}
-                  </button>
-                )}
               </div>
             )}
           </div>
@@ -2040,7 +2041,7 @@ export function SwapPage() {
       {/* History detail modal */}
       <AnimatePresence>
       {histDetail && (
-        <HistoryDetail r={histDetail} onClose={() => setHistDetail(null)}/>
+        <HistoryDetail r={histDetail} onClose={() => { setHistFlashId(histDetail.id); setHistDetail(null) }}/>
       )}
       </AnimatePresence>
     </div>
@@ -2067,8 +2068,8 @@ export function SwapPage() {
           {history.length === 0 ? (
             <DesktopHistoryEmpty label="Your completed swaps will appear here" />
           ) : (
-            history.map((r, i) => (
-              <SwapHistoryItem key={r.id} r={r} onOpen={() => setHistDetail(r)} isFirst={i === 0} />
+            history.slice(0, SWAP_RECENT).map(r => (
+              <SwapHistoryItem key={r.id} r={r} onOpen={() => { setHistFlashId(null); setHistDetail(r) }} flash={r.id === histFlashId} inPanel />
             ))
           )}
         </DesktopHistoryPanel>

@@ -77,6 +77,8 @@ export function AssetPage() {
   const [btcPrice, setBtcPrice] = useState(0)
   // The transaction whose details are open (shown here, over this page).
   const [selected, setSelected] = useState<ActivityRecord | null>(null)
+  // The row last opened flashes once when its details close (same as Activity).
+  const [flashId, setFlashId] = useState<string | null>(null)
   const [hidden] = useState(() => { try { return localStorage.getItem('meshport_balance_hidden') === '1' } catch { return false } })
 
   useEffect(() => {
@@ -171,11 +173,11 @@ export function AssetPage() {
             <div style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 14 }}>No {token} transactions yet</div>
           ) : history.slice(0, RECENT).map((item, i, list) => (
             <ActivityRow key={item.id || i} record={item} isFirst={i === 0} isLast={i === list.length - 1}
-              onSelect={() => setSelected(item)} />
+              onSelect={() => { setFlashId(null); setSelected(item) }} flash={!!item.id && item.id === flashId} />
           ))}
         </div>
       </div>
-      {selected && <DetailSheet record={selected} onClose={() => setSelected(null)} />}
+      {selected && <DetailSheet record={selected} onClose={() => { setFlashId(selected.id ?? null); setSelected(null) }} />}
     </div>
   )
 }
