@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { MeshPortLogo } from '@/components/ui/MeshPortLogo'
 import { useStepDirection } from '@/hooks/useStepDirection'
+import { useAutoFocus } from '@/hooks/useAutoFocus'
 import { ScreenPush } from '@/components/ui/ScreenPush'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useNavigate, Navigate } from 'react-router-dom'
@@ -971,6 +972,9 @@ export function ClaimUsernamePage() {
   const [loading, setLoading] = useState(false)
   const [checking, setChecking] = useState(true)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Focused without scrolling (the page is still sliding in - see useAutoFocus).
+  const handleRef = useRef<HTMLInputElement>(null)
+  useAutoFocus(handleRef, !checking)
 
   // ── Check if wallet already has a registered profile ──────────────────────
   useEffect(() => {
@@ -1084,7 +1088,10 @@ export function ClaimUsernamePage() {
   const icons = { idle: null, checking: <Loader2 className="w-4 h-4 animate-spin text-text-secondary" />, available: <CheckCircle className="w-4 h-4 text-success" />, taken: <XCircle className="w-4 h-4 text-danger" />, invalid: <AlertCircle className="w-4 h-4 text-warning" /> }
 
   return (
-    <div className="flex flex-col h-full bg-bg px-6 py-12">
+    // Scrolls: with the phone keyboard up, the Claim button sits below the
+    // keys - it must be reachable without closing the keyboard first.
+    <div className="h-full overflow-y-auto bg-bg">
+    <div className="min-h-full flex flex-col px-6 py-12">
       <div className="flex-1 flex flex-col justify-center space-y-8 max-w-sm mx-auto w-full">
         <div className="text-center">
           <div className="w-16 h-16 bg-brand/20 rounded-3xl flex items-center justify-center mx-auto mb-4">
@@ -1105,10 +1112,10 @@ export function ClaimUsernamePage() {
         <div className="space-y-4">
           <div>
             <div className="flex items-center bg-surface border border-border rounded-2xl focus-within:border-brand transition-colors">
-              <input value={handle} onChange={e => handleChange(e.target.value)}
+              <input ref={handleRef} value={handle} onChange={e => handleChange(e.target.value)}
                 placeholder="yourname" maxLength={20}
                 className="flex-1 bg-transparent pl-4 pr-2 py-3.5 text-text-primary placeholder-gray-600 focus:outline-none text-base"
-                autoCapitalize="none" autoCorrect="off" autoFocus />
+                autoCapitalize="none" autoCorrect="off" />
               <span className="text-text-secondary font-semibold pr-2">.arc</span>
               <div className="pr-3 w-8 flex justify-center">{icons[status]}</div>
             </div>
@@ -1131,6 +1138,7 @@ export function ClaimUsernamePage() {
           </Button>
         </div>
       </div>
+    </div>
     </div>
   )
 }

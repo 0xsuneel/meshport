@@ -133,3 +133,30 @@ export function useVisibleFrame(ref: RefObject<HTMLElement | null>, enabled = tr
     }
   }, [ref, enabled])
 }
+
+/**
+ * Nothing in the app scrolls sideways on purpose except swipeable rows
+ * (overflow-x: auto). iPhone, though, scrolls even overflow:hidden boxes to
+ * bring a focused field into view - e.g. a field focused while its page is
+ * still sliding in from the right - and leaves the whole screen shifted
+ * half off the side. Puts any such sideways scroll straight back, and keeps
+ * the frame's own boxes (never meant to scroll: the frame itself and
+ * anything marked data-no-scroll) at the top.
+ */
+export function useFrameScrollGuard(ref: RefObject<HTMLElement | null>, enabled = true) {
+  useEffect(() => {
+    const frame = ref.current
+    if (!enabled || !frame) return
+    const onScroll = (e: Event) => {
+      const el = e.target
+      if (!(el instanceof HTMLElement) || el.closest('.mp-page-snapshot')) return
+      if (el.scrollLeft) {
+        const ox = getComputedStyle(el).overflowX
+        if (ox === 'hidden' || ox === 'clip') el.scrollLeft = 0
+      }
+      if (el.scrollTop && (el === frame || el.hasAttribute('data-no-scroll'))) el.scrollTop = 0
+    }
+    frame.addEventListener('scroll', onScroll, true)
+    return () => frame.removeEventListener('scroll', onScroll, true)
+  }, [ref, enabled])
+}

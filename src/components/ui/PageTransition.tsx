@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useNavigationType } from 'react-router-dom'
 import { pushLook } from '@/lib/pushLook'
 import { useReducedMotion } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -68,6 +69,7 @@ function takeSnapshot(page: HTMLElement, key: string): Snapshot {
 export function PageTransition({ children, locationKey }: PageTransitionProps) {
   const reduceMotion = useReducedMotion()
   const nav = useNavDirection()
+  const navType = useNavigationType()
   // Desktop keeps a light fade (no sliding in a sidebar layout) and must not
   // clip: AppLayout's own scroller reaches a tall page's tail.
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -189,6 +191,25 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
     cleanup.current = finish
     Promise.all(anims.map(a => a.finished)).then(finish, finish)
   }, [locationKey])
+
+  // First page of a new frame reached by a navigation (landing → sign-in,
+  // the last sign-up step → Home): there's no old page in this frame to
+  // slide over, so the page glides in a short way and fades up instead of
+  // cutting in. A first load / reload (nav 'none') still shows at once.
+  useLayoutEffect(() => {
+    const page = pageRef.current
+    // Entering a new frame is moving on (landing → sign-in, sign-up → Home),
+    // unless it came from the browser's back button. A first load / reload
+    // (a POP with nothing before it) shows at once.
+    const dir = navType === 'POP' ? (nav === 'none' ? null : 'back') : 'forward'
+    if (!page || reduceMotion || isDesktop || !dir) return
+    const a = page.animate([
+      { opacity: 0, transform: `translateX(${dir === 'back' ? -32 : 32}px)` },
+      { opacity: 1, transform: 'none' },
+    ], { duration: 240, easing: EASE })
+    return () => a.cancel()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Never leave a picture behind if the shell unmounts mid-animation.
   useLayoutEffect(() => () => cleanup.current?.(), [])
