@@ -1,159 +1,260 @@
-// Merchant chat → Bill. Add products with quantity and price (line totals
-// and the bill total update as you type), generate the bill, preview it,
-// then send it into the chat. The customer sees a live bill card with
-// "Pay invoice". The total is recomputed by the database from the items.
-import { useState } from 'react'
-import { Plus, Trash2, ArrowLeft, Receipt } from 'lucide-react'
+// Merchant chat → Bill. Items with quantity and price (line totals and the
+// bill total update as you type), an optional note, then Send bill - the
+// customer gets a live bill card with a Pay button. The database recomputes
+// the total from the items.
+//
+// Built for long bills: finished items collapse to one line ("Masala dosa ·
+// 2 × $3.50 · $7.00"), only the item being edited opens up, and only the
+// list scrolls - the person at the top and the total + Send at the bottom
+// stay put. With the phone keyboard up, the header and footer shrink to one
+// line each and Next walks name → price → next item.
+import { useEffect, useRef, useState } from 'react'
+import { Plus, Receipt, X } from 'lucide-react'
 import { formatAmount } from '@/lib/utils'
 import { createPaymentRequest, invoiceTotal, type InvoiceItem, type MerchantIntent } from '@/lib/merchantPay'
+import { ChatSheet, SheetPerson } from '@/features/chat/ChatSheet'
 
+export const MAX_BILL_ITEMS = 50 // the database's limit
 type Row = { id: number; name: string; qty: string; price: string }
 
 const num = (v: string) => { const n = Number(v); return Number.isFinite(n) ? n : 0 }
 const decimal = (v: string, places: number) =>
   v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(new RegExp(`^(\\d*\\.\\d{0,${places}}).*$`), '$1')
-
-const mini: React.CSSProperties = { fontSize: 11.5, fontWeight: 600, color: 'var(--text-secondary)' }
-const input: React.CSSProperties = {
-  width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: 12, border: '1px solid var(--border)',
-  background: 'var(--surface)', color: 'var(--text-primary)', fontSize: 14, outline: 'none', minWidth: 0,
+const lineTotal = (r: Row) => Math.round(num(r.qty) * num(r.price) * 1e6) / 1e6
+/** Bill money always shows cents: $9.40, not $9.4 (more decimals only when typed). */
+export const billMoney = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 })
+const isBlank = (r: Row) => !r.name.trim() && !num(r.price)
+const isComplete = (r: Row) => !!r.name.trim() && num(r.qty) > 0 && num(r.price) > 0
+/** What a started-but-unfinished item still needs (null when it's fine or blank). */
+export function rowProblem(r: Row): string | null {
+  if (isBlank(r) || isComplete(r)) return null
+  if (!r.name.trim()) return 'Add a name'
+  if (!(num(r.qty) > 0)) return 'Add a quantity'
+  return 'Add a price'
 }
 
-export function InvoiceComposer({ merchantName, customerUsername, onCancel, onSend }: {
+const field: React.CSSProperties = {
+  boxSizing: 'border-box', height: 36, borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)',
+  color: 'var(--text-primary)', fontSize: 15, outline: 'none', minWidth: 0,
+}
+
+export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer, onSend }: {
+  open: boolean
+  onClose: () => void
+  isDesktop: boolean
   merchantName?: string | null
-  customerUsername?: string | null
-  onCancel: () => void
-  /** Called with the created invoice; the caller posts it into the chat. */
+  customer: { name: string; username: string; avatar?: string | null }
+  /** Called with the created bill; the caller posts it into the chat. */
   onSend: (invoice: MerchantIntent) => Promise<void> | void
 }) {
   const [rows, setRows] = useState<Row[]>([{ id: 1, name: '', qty: '1', price: '' }])
+  const [editing, setEditing] = useState<number | null>(1)
   const [note, setNote] = useState('')
-  const [step, setStep] = useState<'edit' | 'preview'>('edit')
+  const [typing, setTyping] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const nameRefs = useRef(new Map<number, HTMLInputElement>())
+  const priceRefs = useRef(new Map<number, HTMLInputElement>())
+  const rowRefs = useRef(new Map<number, HTMLDivElement>())
+  const focusSoon = (el: () => HTMLElement | undefined) => requestAnimationFrame(() => el()?.focus())
 
-  // Only complete lines (name, quantity and price) go on the bill.
-  const valid: InvoiceItem[] = rows
-    .map(r => ({ name: r.name.trim(), qty: num(r.qty), price: num(r.price) }))
-    .filter(i => i.name && i.qty > 0 && i.price > 0)
+  // A fresh bill every time the sheet opens.
+  useEffect(() => {
+    if (!open) return
+    setRows([{ id: 1, name: '', qty: '1', price: '' }]); setEditing(1); setNote(''); setError(null); setBusy(false); setTyping(false)
+  }, [open])
+  // The item being edited stays in view (keyboard opening, Next, Add item).
+  useEffect(() => {
+    if (editing == null) return
+    const el = rowRefs.current.get(editing)
+    requestAnimationFrame(() => el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }))
+  }, [editing, typing])
+
+  const valid: InvoiceItem[] = rows.filter(isComplete).map(r => ({ name: r.name.trim(), qty: num(r.qty), price: num(r.price) }))
   const total = invoiceTotal(valid)
+  const atLimit = rows.length >= MAX_BILL_ITEMS
 
-  const update = (id: number, patch: Partial<Row>) => setRows(rs => rs.map(r => r.id === id ? { ...r, ...patch } : r))
-  const addRow = () => setRows(rs => [...rs, { id: (rs[rs.length - 1]?.id ?? 0) + 1, name: '', qty: '1', price: '' }])
-  const removeRow = (id: number) => setRows(rs => rs.length > 1 ? rs.filter(r => r.id !== id) : rs)
-
-  const generate = () => {
+  const update = (id: number, patch: Partial<Row>) => { setRows(rs => rs.map(r => r.id === id ? { ...r, ...patch } : r)); setError(null) }
+  const addRow = () => {
+    if (atLimit) return
+    const id = (rows[rows.length - 1]?.id ?? 0) + 1
+    setRows(rs => [...rs, { id, name: '', qty: '1', price: '' }])
+    setEditing(id)
+    focusSoon(() => nameRefs.current.get(id))
+  }
+  const removeRow = (id: number) => {
     setError(null)
-    if (valid.length === 0 || !(total > 0)) { setError('Add at least one product with a quantity and price.'); return }
-    setStep('preview')
+    if (rows.length === 1) { setRows([{ id, name: '', qty: '1', price: '' }]); return }
+    const at = rows.findIndex(r => r.id === id)
+    setRows(rs => rs.filter(r => r.id !== id))
+    if (editing === id) setEditing(rows[at + 1]?.id ?? rows[at - 1]?.id ?? null)
+  }
+  const step = (r: Row, d: number) => {
+    const q = Math.round((num(r.qty) + d) * 1000) / 1000
+    if (q >= 1) update(r.id, { qty: String(q) })
+  }
+  // Next on a price: the next item, or a new one once this one is complete.
+  const nextFromPrice = (r: Row) => {
+    const at = rows.findIndex(x => x.id === r.id)
+    const next = rows[at + 1]
+    if (next) { setEditing(next.id); focusSoon(() => nameRefs.current.get(next.id)); return }
+    if (isComplete(r) && !atLimit) { addRow(); return }
+    priceRefs.current.get(r.id)?.blur()
   }
 
   const send = async () => {
+    if (busy) return
+    const bad = rows.find(r => rowProblem(r))
+    if (bad) {
+      setEditing(bad.id)
+      setError(`${bad.name.trim() ? `“${bad.name.trim()}”` : 'An item'}: ${rowProblem(bad)!.toLowerCase()}`)
+      return
+    }
+    if (valid.length === 0 || !(total > 0)) { setError('Add at least one item with a price.'); return }
     setBusy(true); setError(null)
     try {
-      const inv = await createPaymentRequest({ amount: total, items: valid, note: note || undefined, customer: customerUsername ?? undefined, expiresInMinutes: 7 * 24 * 60 })
+      const inv = await createPaymentRequest({ amount: total, items: valid, note: note.trim() || undefined, customer: customer.username, expiresInMinutes: 7 * 24 * 60 })
       await onSend(inv)
+      onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send the bill')
-    }
-    setBusy(false)
+    } finally { setBusy(false) }
   }
 
-  if (step === 'preview') {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '4px 20px 20px' }}>
-        <button onClick={() => setStep('edit')} style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', padding: 0 }}>
-          <ArrowLeft size={16} /> Edit bill
-        </button>
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)' }}>{merchantName ?? 'Bill'}</div>
-              {customerUsername && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Bill to {customerUsername.replace(/\.arc$/, '')}.arc</div>}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{new Date().toLocaleDateString()}</div>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '6px 12px', fontSize: 13, color: 'var(--text-primary)' }}>
-            <span style={{ color: 'var(--text-secondary)', fontSize: 11, fontWeight: 700 }}>ITEM</span>
-            <span style={{ color: 'var(--text-secondary)', fontSize: 11, fontWeight: 700, textAlign: 'right' }}>QTY × PRICE</span>
-            <span style={{ color: 'var(--text-secondary)', fontSize: 11, fontWeight: 700, textAlign: 'right' }}>TOTAL</span>
-            {valid.map((i, k) => (
-              <Line key={k} item={i} />
-            ))}
-          </div>
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: 10, paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Total</span>
-            <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)' }}>${formatAmount(total)} USDC</span>
-          </div>
-          {note && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8 }}>{note}</div>}
-        </div>
-        {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</div>}
-        <button onClick={send} disabled={busy}
-          style={{ padding: 14, borderRadius: 14, border: '1px solid color-mix(in srgb, black 12%, transparent)', background: 'var(--brand)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>
-          {busy ? 'Sending…' : `Send bill · $${formatAmount(total)}`}
-        </button>
-      </div>
-    )
-  }
+  const compact = !isDesktop && typing
+  const firstName = customer.name || customer.username.replace(/\.arc$/i, '')
+  const sendDisabled = busy || valid.length === 0
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '4px 20px 20px' }}>
-      {rows.map((r, idx) => {
-        const line = Math.round(num(r.qty) * num(r.price) * 1e6) / 1e6
-        return (
-          <div key={r.id} style={{ background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)', borderRadius: 16, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <input value={r.name} onChange={e => update(r.id, { name: e.target.value })} placeholder={idx === 0 ? 'Item name, e.g. Masala dosa' : `Item ${idx + 1}`} maxLength={80}
-                aria-label={`Item ${idx + 1} name`} style={{ ...input, fontWeight: 600 }} />
-              {rows.length > 1 && (
-                <button onClick={() => removeRow(r.id)} aria-label="Remove item" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: 6, flexShrink: 0 }}><Trash2 size={16} /></button>
-              )}
+    <ChatSheet open={open} onClose={onClose} isDesktop={isDesktop} id="chat-bill">
+      <div className="flex flex-col min-h-0 flex-1"
+        // Any field in the sheet focused = the phone keyboard is up.
+        onFocus={e => { if ((e.target as HTMLElement).tagName === 'INPUT') setTyping(true) }}
+        onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setTyping(false) }}>
+        <div className="px-5 flex-shrink-0" style={{ paddingTop: isDesktop ? 20 : 4, paddingBottom: compact ? 8 : 12 }}>
+          <SheetPerson label="Bill to" name={customer.name} username={customer.username} avatar={customer.avatar}
+            compact={compact} onClose={onClose} sub={merchantName ? `From ${merchantName}` : null} />
+          {!compact && (
+            <div className="flex items-center justify-between mt-3 px-0.5">
+              <span className="text-[12px] font-bold uppercase tracking-[0.06em] text-text-secondary">Items{valid.length ? ` · ${valid.length}` : ''}</span>
+              {rows.length > 1 && <span className="text-[11.5px] font-semibold text-text-muted">{rows.length} of {MAX_BILL_ITEMS}</span>}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '72px 16px 1fr auto', gap: 8, alignItems: 'end' }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-                <span style={mini}>Qty</span>
-                <input inputMode="decimal" value={r.qty} onChange={e => update(r.id, { qty: decimal(e.target.value, 3) })} style={{ ...input, textAlign: 'center' }} />
-              </label>
-              <span style={{ alignSelf: 'center', marginTop: 18, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>×</span>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
-                <span style={mini}>Price</span>
-                <div style={{ position: 'relative' }}>
-                  <span aria-hidden style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, fontWeight: 600, color: r.price ? 'var(--text-primary)' : 'var(--text-muted)', pointerEvents: 'none' }}>$</span>
-                  <input inputMode="decimal" value={r.price} onChange={e => update(r.id, { price: decimal(e.target.value, 6) })} placeholder="0.00" style={{ ...input, paddingLeft: 24 }} />
+          )}
+        </div>
+
+        {/* Only this scrolls. */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-5" data-no-drag>
+          <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid var(--border)', background: 'var(--bg)' }}>
+            {rows.map((r, idx) => {
+              const open = editing === r.id
+              const problem = rowProblem(r)
+              const line = lineTotal(r)
+              const top = idx ? '1px solid var(--border)' : 'none'
+              if (!open) {
+                return (
+                  <button key={r.id} type="button" ref={el => { if (el) rowRefs.current.set(r.id, el as unknown as HTMLDivElement); else rowRefs.current.delete(r.id) }}
+                    onClick={() => { setEditing(r.id); focusSoon(() => (r.name ? priceRefs : nameRefs).current.get(r.id)) }}
+                    className="w-full flex items-center gap-2 text-left px-3.5"
+                    style={{ minHeight: 46, borderTop: top, background: 'transparent', cursor: 'pointer' }}>
+                    <span className="flex-1 min-w-0 truncate text-[14.5px] font-semibold" style={{ color: r.name.trim() ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                      {r.name.trim() || 'Item name'}
+                    </span>
+                    {problem
+                      ? <span className="text-[12.5px] font-semibold flex-shrink-0" style={{ color: 'var(--warning)' }}>{problem}</span>
+                      : <span className="text-[13px] text-text-secondary flex-shrink-0 tabular-nums">{Number(num(r.qty))} × ${billMoney(num(r.price))}</span>}
+                    <span className="text-[14.5px] font-bold flex-shrink-0 text-right tabular-nums" style={{ minWidth: 56, color: line > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>${billMoney(line)}</span>
+                  </button>
+                )
+              }
+              return (
+                <div key={r.id} ref={el => { if (el) rowRefs.current.set(r.id, el); else rowRefs.current.delete(r.id) }}
+                  className="px-3.5 py-3" style={{ borderTop: top, background: 'color-mix(in srgb, var(--brand) 9%, transparent)' }}>
+                  <div className="flex items-center gap-2">
+                    <input ref={el => { if (el) nameRefs.current.set(r.id, el); else nameRefs.current.delete(r.id) }}
+                      value={r.name} maxLength={80} placeholder={idx === 0 ? 'Item name, e.g. Masala dosa' : 'Item name'} aria-label={`Item ${idx + 1} name`}
+                      enterKeyHint="next" autoComplete="off"
+                      onChange={e => update(r.id, { name: e.target.value })}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); priceRefs.current.get(r.id)?.focus() } }}
+                      className="flex-1 px-2.5 font-semibold placeholder:text-text-muted placeholder:font-medium focus:border-[var(--brand-text)]"
+                      style={field} />
+                    <button type="button" onClick={() => removeRow(r.id)} aria-label={rows.length > 1 ? 'Remove item' : 'Clear item'}
+                      className="flex-shrink-0 flex items-center justify-center" style={{ width: 30, height: 30, borderRadius: 15, border: 'none', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                      <X size={17} />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2.5">
+                    <div className="flex items-center flex-shrink-0" style={{ height: 34, borderRadius: 999, border: '1px solid var(--border)', background: 'var(--surface)' }}>
+                      <button type="button" onClick={() => step(r, -1)} aria-label="One less" disabled={num(r.qty) <= 1}
+                        className="disabled:opacity-35" style={{ width: 32, height: 32, border: 'none', background: 'none', color: 'var(--brand-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer' }}>−</button>
+                      <input value={r.qty} inputMode="decimal" aria-label={`Item ${idx + 1} quantity`} enterKeyHint="next"
+                        onChange={e => update(r.id, { qty: decimal(e.target.value, 3) })}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); priceRefs.current.get(r.id)?.focus() } }}
+                        className="text-center font-bold bg-transparent outline-none" style={{ width: Math.max(24, r.qty.length * 10 + 8), border: 'none', fontSize: 14.5, color: 'var(--text-primary)' }} />
+                      <button type="button" onClick={() => step(r, 1)} aria-label="One more"
+                        style={{ width: 32, height: 32, border: 'none', background: 'none', color: 'var(--brand-text)', fontSize: 19, fontWeight: 700, cursor: 'pointer' }}>+</button>
+                    </div>
+                    <span className="text-text-muted text-[14px]">×</span>
+                    <div className="relative" style={{ width: 104 }}>
+                      <span aria-hidden className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[15px] font-semibold pointer-events-none" style={{ color: r.price ? 'var(--text-primary)' : 'var(--text-muted)' }}>$</span>
+                      <input ref={el => { if (el) priceRefs.current.set(r.id, el); else priceRefs.current.delete(r.id) }}
+                        value={r.price} inputMode="decimal" placeholder="0.00" aria-label={`Item ${idx + 1} price`} enterKeyHint="next"
+                        onChange={e => update(r.id, { price: decimal(e.target.value, 6) })}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); nextFromPrice(r) } }}
+                        className="w-full font-semibold placeholder:text-text-muted placeholder:font-medium focus:border-[var(--brand-text)]"
+                        style={{ ...field, paddingLeft: 22, paddingRight: 8 }} />
+                    </div>
+                    <span className="ml-auto text-[15px] font-bold tabular-nums whitespace-nowrap" style={{ color: line > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>${billMoney(line)}</span>
+                  </div>
                 </div>
-              </label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end', minWidth: 64 }}>
-                <span style={mini}>Amount</span>
-                <span style={{ fontSize: 15, fontWeight: 700, color: line > 0 ? 'var(--text-primary)' : 'var(--text-muted)', padding: '10px 0', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>${formatAmount(line)}</span>
-              </div>
-            </div>
+              )
+            })}
+            <button type="button" onClick={addRow} disabled={atLimit}
+              className="w-full flex items-center justify-center gap-1.5 text-[14px] font-bold disabled:opacity-40"
+              style={{ height: 44, borderTop: '1px dashed var(--border)', background: 'transparent', color: 'var(--brand-text)', cursor: atLimit ? 'default' : 'pointer' }}>
+              <Plus size={16} /> {atLimit ? `${MAX_BILL_ITEMS} items is the most for one bill` : 'Add item'}
+            </button>
           </div>
-        )
-      })}
-      <button onClick={addRow} disabled={rows.length >= 50}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 11, borderRadius: 14, border: '1px dashed color-mix(in srgb, var(--brand) 45%, var(--border))', background: 'transparent', color: 'var(--brand-text)', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
-        <Plus size={16} /> Add item
-      </button>
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span style={mini}>Note (optional)</span>
-        <input value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="e.g. Table 4 · Dinner" style={input} />
-      </label>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '6px 2px 2px', borderTop: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)', marginTop: 2 }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>Total</span>
-        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5 }}>
-          <span style={{ fontSize: 24, fontWeight: 800, color: total > 0 ? 'var(--text-primary)' : 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>${formatAmount(total)}</span>
-          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>USDC</span>
-        </span>
+          <input value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="Note, e.g. Table 4 (optional)" aria-label="Note"
+            enterKeyHint="done" onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+            className="w-full mt-3 mb-1 rounded-[14px] px-3.5 py-3 text-[14.5px] text-text-primary outline-none placeholder:text-text-muted focus:border-[var(--brand-text)]"
+            style={{ background: 'var(--bg)', border: '1px solid var(--border)' }} />
+        </div>
+
+        {/* Total + Send - always on screen. */}
+        <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: compact ? 8 : 10, paddingBottom: compact ? 10 : 'calc(env(safe-area-inset-bottom, 0px) + 18px)' }}>
+          {error && <p role="alert" className="text-[13px] text-danger mb-2">{error}</p>}
+          {compact ? (
+            <div className="flex items-center gap-3">
+              <div className="min-w-0">
+                <p className="text-[12px] font-semibold text-text-secondary">Total{valid.length ? ` · ${valid.length} item${valid.length === 1 ? '' : 's'}` : ''}</p>
+                <p className="text-[20px] font-extrabold tabular-nums text-text-primary leading-tight">${billMoney(total)}</p>
+              </div>
+              <button type="button" onClick={send} disabled={sendDisabled} onMouseDown={e => e.preventDefault()}
+                className="ml-auto flex items-center gap-1.5 px-5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40"
+                style={{ height: 46, background: 'var(--brand)' }}>
+                <Receipt size={16} /> {busy ? 'Sending…' : 'Send bill'}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-baseline justify-between mb-3 px-0.5">
+                <span className="text-[14px] font-semibold text-text-secondary">Total{valid.length ? ` · ${valid.length} item${valid.length === 1 ? '' : 's'}` : ''}</span>
+                <span className="flex items-baseline gap-1.5">
+                  <span className="text-[28px] font-extrabold tabular-nums tracking-tight" style={{ color: total > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>${billMoney(total)}</span>
+                  <span className="text-[13px] font-bold text-text-secondary">USDC</span>
+                </span>
+              </div>
+              <button type="button" onClick={send} disabled={sendDisabled}
+                className="w-full flex items-center justify-center gap-2 rounded-2xl text-[16px] font-bold text-white disabled:opacity-40 active:scale-[0.98] transition-transform"
+                style={{ height: 52, background: 'var(--brand)' }}>
+                <Receipt size={18} /> {busy ? 'Sending…' : total > 0 ? `Send bill · $${billMoney(total)}` : 'Send bill'}
+              </button>
+              <p className="text-[12px] text-text-secondary text-center mt-2">{firstName} gets a bill card with a Pay button</p>
+            </>
+          )}
+        </div>
       </div>
-      {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)' }}>{error}</div>}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={onCancel} style={{ flex: 1, padding: 13, borderRadius: 14, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-        <button onClick={generate}
-          style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: 13, borderRadius: 14, border: '1px solid color-mix(in srgb, black 12%, transparent)', background: 'var(--brand)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-          <Receipt size={16} /> Generate bill
-        </button>
-      </div>
-    </div>
+    </ChatSheet>
   )
 }
 

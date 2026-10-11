@@ -56,7 +56,8 @@ import {
 } from '@/lib/chatService'
 import { codeFromLink, paymentLink, orderLabel, BILL_PAY_EVENT, type PaymentView } from '@/lib/merchantPay'
 import { useMerchant } from '@/lib/merchant'
-import { InvoiceComposer } from '@/features/merchant/InvoiceComposer'
+import { ChatBillSheet } from '@/features/merchant/InvoiceComposer'
+import { ChatRequestSheet } from './ChatRequestSheet'
 import { MerchantPaymentCard, prefetchPaymentView } from '@/features/merchant/MerchantPaymentCard'
 import { ChatPendingOrders } from '@/features/merchant/ChatPendingOrders'
 import { fetchMerchantFlags } from '@/lib/merchantPay'
@@ -2443,7 +2444,6 @@ export function ChatConversationPage() {
   const [showAttach, setShowAttach] = useState(false)
   // + → Request: ask them for an amount (a payment-link card they can pay in-chat).
   const [showRequest, setShowRequest] = useState(false)
-  const [reqAmount, setReqAmount] = useState('')
   const [attachMode, setAttachMode] = useState<'attachments' | 'bill'>('attachments')
   // Merchants: "Bill" in the attach menu - build a bill and send it here.
   const merchant = useMerchant()
@@ -5015,7 +5015,7 @@ export function ChatConversationPage() {
                     if (item.key === 'bill') { setAttachMode('bill'); return }
                     setShowAttach(false)
                     if (item.key === 'pay') { handlePay(); return }
-                    if (item.key === 'request') { setReqAmount(''); setShowRequest(true); return }
+                    if (item.key === 'request') { setShowRequest(true); return }
                     const input = fileInputRef.current
                     if (!input) return
                     pickModeRef.current = item.key === 'gallery' || item.key === 'camera' ? 'image' : 'file'
@@ -5042,66 +5042,28 @@ export function ChatConversationPage() {
           partner - same as Receive → Request payment with a username - and
           sends it as the live 💸 Payment request card. They pay it right
           here; it then shows "Paid" for them and "Payment received" for you. */}
-      <Sheet isOpen={showRequest} onClose={() => setShowRequest(false)} title={`Request from ${recipientClean}.arc`}>
-        {(() => {
-          const n = parseFloat(reqAmount) || 0
-          const valid = n > 0 && /^\d+(\.\d{1,6})?$/.test(reqAmount)
-          const amtStr = trimTrailingZeros(n.toFixed(6))
-          return (
-            <div className="px-5 pb-5 space-y-4">
-              <div className="rounded-2xl px-4 py-3" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-[32px] font-bold text-text-muted">$</span>
-                  <input autoFocus inputMode="decimal" value={reqAmount} placeholder="0" aria-label="Amount to request in USDC"
-                    onChange={e => setReqAmount(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/^(\d*\.\d{0,6}).*$/, '$1'))}
-                    className="flex-1 min-w-0 bg-transparent text-[32px] font-bold text-text-primary outline-none" style={{ border: 'none' }} />
-                  <span className="text-sm font-semibold text-text-secondary">USDC</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-4 gap-2">
-                {['5', '10', '20', '50'].map(v => (
-                  <button key={v} type="button" onClick={() => setReqAmount(v)}
-                    className="rounded-full text-[13px] font-bold" style={{ height: 34, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>${v}</button>
-                ))}
-              </div>
-              <button type="button" disabled={!valid || !recipientClean}
-                onClick={async () => {
-                  setShowRequest(false)
-                  // A real order (not a plain pay link): only an order can
-                  // flip the card to Paid / Payment received.
-                  try {
-                    const { createPaymentRequest, paymentRequestMessage } = await import('@/lib/merchantPay')
-                    const it = await createPaymentRequest({ amount: n, customer: recipientClean })
-                    await handleSend(paymentRequestMessage(it, formatAmount(it.amount)))
-                  } catch (e) {
-                    showToastMessage(e instanceof Error ? e.message : 'Could not create the request', 'error')
-                  }
-                }}
-                className="w-full py-3.5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40"
-                style={{ background: 'var(--brand)' }}>
-                {valid ? `Request $${amtStr}` : 'Request'}
-              </button>
-              <p className="text-xs text-text-secondary text-center">They'll see a card with a Pay button - it shows Paid once they pay.</p>
-            </div>
-          )
-        })()}
-      </Sheet>
+      <ChatRequestSheet open={showRequest} onClose={() => setShowRequest(false)} isDesktop={isDesktop}
+        name={otherUser?.display_name || recipientClean} username={recipientClean} avatar={otherUser?.avatar_url ?? null}
+        onRequest={async (amount, note) => {
+          // A real order (not a plain pay link): only an order can flip the
+          // card to Paid / Payment received.
+          const { createPaymentRequest, paymentRequestMessage } = await import('@/lib/merchantPay')
+          const it = await createPaymentRequest({ amount, customer: recipientClean, note: note || undefined })
+          // The sheet closes once the request exists; the card then posts like
+          // any message (a failed send shows Retry in the chat itself).
+          void handleSend(paymentRequestMessage(it, formatAmount(it.amount)))
+        }} />
 
-      <Sheet isOpen={showAttach && attachMode === 'bill'} onClose={() => { setShowAttach(false); setAttachMode('attachments') }} title="New bill">
-        {merchant.isMerchant && (
-          <InvoiceComposer
-            merchantName={merchant.application?.businessName}
-            customerUsername={otherUser?.username ?? null}
-            onCancel={() => { setShowAttach(false); setAttachMode('attachments') }}
-            onSend={async inv => {
-              const lines = (inv.items ?? []).map(i => `${i.name} × ${i.qty}`).join(', ')
-              await handleSend(`🧾 Bill · Order #${orderLabel(inv)} · $${formatAmount(inv.amount)} USDC${lines ? `\n${lines}` : ''}${inv.note ? `\n${inv.note}` : ''}\n${paymentLink(inv.code)}`)
-              setShowAttach(false)
-              setAttachMode('attachments')
-            }}
-          />
-        )}
-      </Sheet>
+      {merchant.isMerchant && (
+        <ChatBillSheet open={showAttach && attachMode === 'bill'} isDesktop={isDesktop}
+          onClose={() => { setShowAttach(false); setAttachMode('attachments') }}
+          merchantName={merchant.application?.businessName}
+          customer={{ name: otherUser?.display_name || recipientClean, username: otherUser?.username || recipientClean, avatar: otherUser?.avatar_url ?? null }}
+          onSend={async inv => {
+            const lines = (inv.items ?? []).map(i => `${i.name} × ${i.qty}`).join(', ')
+            void handleSend(`🧾 Bill · Order #${orderLabel(inv)} · $${formatAmount(inv.amount)} USDC${lines ? `\n${lines}` : ''}${inv.note ? `\n${inv.note}` : ''}\n${paymentLink(inv.code)}`)
+          }} />
+      )}
 
       {/* ── User Profile Sheet / Dialog ────────────────────────────────── */}
       <AnimatePresence>
