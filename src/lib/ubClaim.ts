@@ -239,6 +239,9 @@ export async function spendUnifiedTo(params: {
   destAdapter?: any
   /** Dust on `fromChain` beyond `amount`, used as the safety margin. */
   cushion?: number
+  /** Same-chain move (Arc → Arc): the wallet submits the mint itself, paying
+   *  only that chain's gas, instead of Circle's forwarder. */
+  selfMint?: boolean
 }): Promise<{ txHash?: string; received: number }> {
   const { kit, adapter, fromChain, amount, toChain, recipient } = params
   const destAdapter = params.destAdapter ?? adapter
@@ -252,7 +255,7 @@ export async function spendUnifiedTo(params: {
   // forwarding fee + Ethereum mint gas (~1.5 USDC) that is never charged,
   // so small amounts were refused and larger ones sent ~1.5 USDC short.
   // If that quote fails, the forwarder quote (always the higher) is used.
-  const selfMint = toChain !== ARC_CHAIN_KEY && gatewaySelfMintsTo(toChain)
+  const selfMint = !!params.selfMint || (toChain !== ARC_CHAIN_KEY && gatewaySelfMintsTo(toChain))
   const quote = (to: any) => kit.unifiedBalance.estimateSpend({ from: alloc(amount), to, token: 'USDC', amount: amount.toFixed(6) })
   const est: any = selfMint ? await quote(selfMintTo).catch(() => quote(forwarderTo)) : await quote(forwarderTo)
   const fee = ubSpendCost(ubQuoteFees(est))
@@ -324,7 +327,7 @@ async function runUbClaimInner(params: {
   // claim completes even if the phone is locked or the app is closed.
   let serverId: string | null = null
   try {
-    serverId = await registerServerClaim({ kit, adapter, walletAddr, sdkChainId, amount, depositTx, dust: before })
+    serverId = (await registerServerClaim({ kit, adapter, walletAddr, sdkChainId, amount, depositTx, dust: before })).id
   } catch (e) {
     console.warn('[ubClaim] server hand-off failed - finishing on this device', e)
   }
@@ -570,7 +573,7 @@ export async function signSpendAllToArc(params: {
 
 async function registerServerClaim(p: {
   kit: any; adapter: any; walletAddr: string; sdkChainId: string; amount: number; depositTx?: string; dust?: number
-}): Promise<string | null> {
+}): Promise<{ id: string | null; send: number }> {
   const { body, send } = await signSpendToArc({ kit: p.kit, adapter: p.adapter, walletAddr: p.walletAddr, fromChain: p.sdkChainId, amount: p.amount, dust: p.dust })
   const { supabase } = await import('./supabase')
   const { data, error } = await supabase.from('ub_claim_intents').insert({
@@ -584,7 +587,30 @@ async function registerServerClaim(p: {
     transfer_body:  body,
   }).select('id').single()
   if (error) throw error
-  return (data as any)?.id ?? null
+  return { id: (data as any)?.id ?? null, send }
+}
+
+/**
+ * Sends a chain's held Unified Balance (a claim that didn't finish) to the
+ * user's own Arc wallet through MeshPort's server, the same hand-off a Bring
+ * uses: the server submits it and its trigger completes the claim's Activity
+ * row (keyed by that claim's deposit tx), so it finishes even if the app is
+ * closed straight after. Falls back to sending from this device.
+ */
+export async function finishHeldUbToArc(p: {
+  kit: any; adapter: any; walletAddr: string; chain: string; amount: number
+}): Promise<{ serverId: string | null; received: number; txHash?: string }> {
+  const { Activity } = await import('./ActivityService')
+  const depositTx = await Activity.pendingUbClaimTx({ walletAddress: p.walletAddr, sourceChain: SDK_TO_APP_CHAIN[p.chain] ?? p.chain })
+  try {
+    const { id, send } = await registerServerClaim({ kit: p.kit, adapter: p.adapter, walletAddr: p.walletAddr, sdkChainId: p.chain, amount: p.amount, depositTx })
+    if (id) return { serverId: id, received: send }
+  } catch (e) {
+    console.warn('[ubClaim] server hand-off for held funds failed - sending from this device', e)
+  }
+  const out = await spendUnifiedToArc({ kit: p.kit, adapter: p.adapter, walletAddr: p.walletAddr, fromChain: p.chain, amount: p.amount })
+  await recordUbClaim({ walletAddr: p.walletAddr, sdkChainId: p.chain, received: out.received, claimedAmount: p.amount, depositTxHash: depositTx, arcTxHash: out.txHash, recovered: !depositTx })
+  return { serverId: null, ...out }
 }
 
 /** Mirrors the server row into the claim screen's progress. */
@@ -726,6 +752,15 @@ export async function autoCollectMerchantPayments(_p: { walletAddress: string; p
 // reverted" activity row with no explanation. Using a per-wallet Web Lock
 // (exclusive, non-blocking) means only one tab can sweep a given wallet at
 // a time across the entire browser session.
+// Auto-finish moves held funds by itself only when Circle's fee is at most
+// this share of them; anything costlier waits in Recover for the person.
+export const UB_AUTO_FINISH_MAX_FEE_SHARE = 0.05
+
+/** Auto-finish may move `amount` only for a live quote whose fee is a small share of it. */
+export function autoFinishWorthIt(fee: { total: number; approx?: boolean; receiveAtLeast: number }, amount: number): boolean {
+  return !fee.approx && fee.receiveAtLeast > 0 && fee.total <= amount * UB_AUTO_FINISH_MAX_FEE_SHARE
+}
+
 let _sweepingSameTab = false
 
 export async function autoFinishUbClaims(p: { walletAddress: string; privateKey: string }): Promise<number> {
@@ -761,8 +796,16 @@ async function _runAutoFinish(p: { walletAddress: string; privateKey: string }):
       // same guard, same lock namespace, so a manual claim and an auto-sweep
       // for the same chain never race.
       const ran = await withChainLock(p.walletAddress, r.chain, async () => {
-        const out = await spendUnifiedToArc({ kit, adapter, walletAddr: p.walletAddress, fromChain: r.chain, amount: r.confirmed })
-        await recordUbClaim({ walletAddr: p.walletAddress, sdkChainId: r.chain, received: out.received, claimedAmount: r.confirmed, arcTxHash: out.txHash })
+        // Only when Circle's fee is small next to the amount. Moving a held
+        // $1 out of Ethereum's Unified Balance took ~$0.60 of it without
+        // asking; a balance like that stays in Recover, where the person
+        // sees the fee and can pick the 7-day withdrawal instead.
+        const fee = await estimateUbClaimFee({ kit, adapter, walletAddr: p.walletAddress, fromChain: r.chain, amount: r.confirmed })
+        if (!autoFinishWorthIt(fee, r.confirmed)) {
+          console.info(`[ubClaim] auto-finish: leaving ${r.confirmed} USDC on ${r.chain} for Recover - Circle's fee ${fee.total.toFixed(4)} is too large a share`)
+          return
+        }
+        await finishHeldUbToArc({ kit, adapter, walletAddr: p.walletAddress, chain: r.chain, amount: r.confirmed })
         finished++
       })
       if (!ran) console.warn('[ubClaim] auto-finish: chain lock busy for', r.chain, '- skipping this chain this sweep')

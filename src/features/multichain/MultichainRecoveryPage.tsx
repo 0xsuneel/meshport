@@ -64,6 +64,9 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
   const [ubDust, setUbDust] = useState<Array<{ chain: string; amount: number }>>([])
   // Failed UB transfers (Arc → other chain) still sitting in the Arc Unified Balance.
   const [ubStuck, setUbStuck] = useState<Array<import('@/lib/ubFundRecovery').UbStuckTransfer & { available: number }>>([])
+  // Arc Unified Balance not reserved for a stuck transfer above - it's the
+  // person's, and was never listed anywhere.
+  const [ubArc, setUbArc] = useState(0)
   const [loading, setLoading] = useState(true)
   const everLoaded = useRef(false)
   if (!loading) everLoaded.current = true
@@ -109,8 +112,9 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
             // the amount for the failed delivery (its attestation, ~10 min),
             // the Arc balance reads low - show it, just without buttons.
             setUbStuck(stuck)
-          } catch { setUbStuck([]) }
-        } catch { setUbHeld([]); setUbDust([]); setUbStuck([]) }
+            setUbArc(arcLeft >= UB_MIN_SWEEP ? arcLeft : 0)
+          } catch { setUbStuck([]); setUbArc(0) }
+        } catch { setUbHeld([]); setUbDust([]); setUbStuck([]); setUbArc(0) }
       }
     } catch (e) {
       setResult(p => ({ ...p, _list: { error: e instanceof Error ? e.message : String(e) } }))
@@ -162,15 +166,42 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
     const key = `ubheld:${chain}`
     setBusy(key)
     try {
-      const [{ AppKit }, { createEthersAdapterFromPrivateKey }, { spendUnifiedToArc, recordUbClaim }] = await Promise.all([
+      const [{ AppKit }, { createEthersAdapterFromPrivateKey }, { estimateUbClaimFee, finishHeldUbToArc }] = await Promise.all([
         import('@circle-fin/app-kit'), import('@circle-fin/adapter-ethers-v6'), import('@/lib/ubClaim'),
       ])
       const kit = new AppKit({ disableErrorReporting: true } as any)
       const adapter = (createEthersAdapterFromPrivateKey as any)({ privateKey: await getKey() })
-      const out = await spendUnifiedToArc({ kit, adapter, walletAddr: walletAddress!, fromChain: chain, amount })
-      // History: "Recovered via UB · <chain>"
-      await recordUbClaim({ walletAddr: walletAddress!, sdkChainId: chain, received: out.received, claimedAmount: amount, arcTxHash: out.txHash, recovered: true })
-      setResult(p => ({ ...p, [key]: { diag: { state: 'already_minted', detail: `${out.received.toFixed(2)} USDC sent to Arc` } } }))
+      // Say what Circle's fee takes before anything moves.
+      const fee = await estimateUbClaimFee({ kit, adapter, walletAddr: walletAddress!, fromChain: chain, amount })
+      const name = chain.replace(/_(Sepolia|Testnet|Fuji|Amoy_Testnet)$/, '').replace(/_/g, ' ')
+      if (fee.receiveAtLeast <= 0) throw new Error(`Circle's fee to move this out of ${name} (${fee.approx ? 'up to' : 'about'} ${fee.total.toFixed(2)} USDC) is more than ${amount.toFixed(2)} USDC. Use the 7-day withdrawal instead - it has no Circle fee.`)
+      if (!window.confirm(`Send ${amount.toFixed(2)} USDC from ${name} to your Arc wallet?\n\nCircle's fee: ${fee.approx ? 'up to' : 'about'} ${fee.total.toFixed(4)} USDC\nYou receive: at least ${fee.receiveAtLeast.toFixed(4)} USDC\n\nThe 7-day withdrawal has no Circle fee.`)) { setBusy(null); return }
+      const out = await finishHeldUbToArc({ kit, adapter, walletAddr: walletAddress!, chain, amount })
+      setResult(p => ({ ...p, [key]: { diag: { state: 'already_minted', detail: out.serverId
+        ? `Sending about ${out.received.toFixed(2)} USDC to Arc - it finishes by itself, you can leave this page.`
+        : `${out.received.toFixed(2)} USDC sent to Arc` } } }))
+      setTimeout(() => { void load() }, 1500)
+    } catch (e) {
+      setResult(p => ({ ...p, [key]: { error: e instanceof Error ? e.message : String(e) } }))
+    }
+    setBusy(null)
+  }
+
+  // Arc Unified Balance → Arc wallet: same chain, so no Circle transfer fee -
+  // only Arc gas (paid in USDC) for the mint the wallet submits itself.
+  const moveArcUb = async () => {
+    const key = 'ubarc'
+    setBusy(key)
+    try {
+      const [{ AppKit }, { createEthersAdapterFromPrivateKey }, { spendUnifiedTo, recordUbClaim }] = await Promise.all([
+        import('@circle-fin/app-kit'), import('@circle-fin/adapter-ethers-v6'), import('@/lib/ubClaim'),
+      ])
+      const kit = new AppKit({ disableErrorReporting: true } as any)
+      const adapter = (createEthersAdapterFromPrivateKey as any)({ privateKey: await getKey() })
+      const out = await spendUnifiedTo({ kit, adapter, fromChain: ARC_CHAIN_KEY, amount: ubArc, toChain: ARC_CHAIN_KEY, recipient: walletAddress!, selfMint: true })
+      // History: "Recovered via UB · Arc"
+      await recordUbClaim({ walletAddr: walletAddress!, sdkChainId: ARC_CHAIN_KEY, received: out.received, claimedAmount: ubArc, arcTxHash: out.txHash, recovered: true })
+      setResult(p => ({ ...p, [key]: { diag: { state: 'already_minted', detail: `${out.received.toFixed(2)} USDC moved to your Arc wallet` } } }))
       setTimeout(() => { void load() }, 1500)
     } catch (e) {
       setResult(p => ({ ...p, [key]: { error: e instanceof Error ? e.message : String(e) } }))
@@ -251,14 +282,14 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
         {showHeader && <button onClick={() => navigate('/multichain')} className="back-btn" aria-label="Back"><ArrowLeft className="w-5 h-5 text-text-primary" /></button>}
         {showHeader
           ? <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>Recover funds</h1>
-          : <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{loading ? 'Checking your moves…' : `${items.length + ub.length + ubHeld.length + ubStuck.length + (ubDust.length ? 1 : 0)} to review`}</span>}
+          : <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{loading ? 'Checking your moves…' : `${items.length + ub.length + ubHeld.length + ubStuck.length + (ubDust.length ? 1 : 0) + (ubArc > 0 ? 1 : 0)} to review`}</span>}
         <button onClick={() => void load()} style={{ ...btn, marginLeft: 'auto' }} disabled={loading}>{loading ? 'Checking…' : 'Refresh'}</button>
       </div>
 
       {result._list?.error && <div role="alert" style={{ ...card, color: 'var(--danger)' }}>{result._list.error}</div>}
 
       {/* Stays up while Refresh re-checks (no blink), and never under an error. */}
-      {(!loading || everLoaded.current) && !result._list?.error && items.length === 0 && ub.length === 0 && ubHeld.length === 0 && ubDust.length === 0 && ubStuck.length === 0 && (
+      {(!loading || everLoaded.current) && !result._list?.error && items.length === 0 && ub.length === 0 && ubHeld.length === 0 && ubDust.length === 0 && ubStuck.length === 0 && ubArc === 0 && (
         <div style={{ ...card, color: 'var(--text-secondary)' }}>Nothing stuck. All your cross-chain moves have finished.</div>
       )}
 
@@ -395,6 +426,23 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
           {result.ubdust?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger)' }}>{result.ubdust.error}</div>}
           <button style={{ ...btn, marginTop: 12 }} disabled={busy === 'ubdust'} onClick={() => void claimDust()}>
             {busy === 'ubdust' ? 'Sending…' : 'Claim back to Arc'}
+          </button>
+        </div>
+      )}
+
+      {ubArc > 0 && (
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-primary)', fontWeight: 600 }}>
+            <span>Unified Balance on Arc</span>
+            <span>{ubArc.toFixed(2)} USDC</span>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+            Left in your Unified Balance on Arc. Moving it to your Arc wallet has no Circle transfer fee - only Arc gas.
+          </div>
+          {result.ubarc?.diag?.detail && <div style={{ fontSize: 13, marginTop: 10, color: 'var(--text-primary)' }}>{result.ubarc.diag.detail}</div>}
+          {result.ubarc?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger)' }}>{result.ubarc.error}</div>}
+          <button style={{ ...btn, marginTop: 12 }} disabled={busy === 'ubarc'} onClick={() => void moveArcUb()}>
+            {busy === 'ubarc' ? 'Moving…' : 'Move to Arc wallet'}
           </button>
         </div>
       )}
