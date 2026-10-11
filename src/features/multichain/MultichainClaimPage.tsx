@@ -215,14 +215,13 @@ function toSdkChainId(internalId: string): string {
   return CIRCLE_SDK_CHAIN_ID[internalId] ?? internalId
 }
 
-// CCTP V2's depositForBurn requires maxFee < amount at the contract level,
-// and real quoted fees on routes like Monad/Polygon Amoy have been seen
-// running close to $1.40 - $2.00 leaves real headroom. Was three separate
-// hardcoded `2.00`/`2.00` literals (the amount screen's desktop Confirm
-// button, its mobile keypad onDone, and executeClaim's own defensive
-// re-check) that could silently drift apart; one constant now, shared by
-// the pre-claim fee estimate too.
-const MIN_CLAIM_AMOUNT = 2.00
+// Smallest Bring Funds amount, every route. Set by MeshPort's relayer: it
+// takes nothing under 1 USDC (api/bridge-relay MIN_TOTAL_UNITS - dust
+// deposits would let anyone burn its gas). At $1 the usual fees (MeshPort
+// 0.05 + Circle ~0.03 on CCTP) still leave ~$0.92 (see gaslessBridge's
+// small-amount fee limits). One constant for the amount screen, the
+// pre-claim estimate and executeClaim's own re-check.
+const MIN_CLAIM_AMOUNT = 1.00
 
 const _arcProviderCache = new Map<string, any>()
 

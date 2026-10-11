@@ -1218,7 +1218,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     setAddrHint({ type: '', text: 'Keep typing…' })
   }
 
-  const MIN_AMOUNT = 3
+  // Smallest transfer: at $1 the usual fees (Circle's forwarding fee ~0.05 +
+  // gas) still leave the recipient ~95% on most chains.
+  const MIN_AMOUNT = 1
   // Conservative static reserve used anywhere we need a "roughly how much
   // fee will this cost" number WITHOUT calling the SDK - the Max button and
   // the AmountKeypad's max-amount math use this instead of the live fee
@@ -3052,7 +3054,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const feeLine = overBalance
     ? <span style={{ fontWeight: 700, color: 'var(--danger)' }}>Insufficient balance · Max {formatAmount(Math.max(0, balance - feeReserveEstimate))} USDC</span>
     : belowMin
-    ? <span style={{ fontWeight: 700, color: 'var(--danger)' }}>Minimum $3</span>
+    ? <span style={{ fontWeight: 700, color: 'var(--danger)' }}>Minimum ${MIN_AMOUNT}</span>
     // feeReserveEstimate is only Max's safety margin, not a fee - real fees
     // are priced on Review, so no number is shown here.
     : <span>Exact fees are shown on the next screen</span>

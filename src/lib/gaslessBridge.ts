@@ -45,9 +45,15 @@ export const GASLESS_CHAINS: Record<string, { chainId: number; usdc: Hex }> = Ob
 )
 
 // Hard limits the app enforces whatever the server quotes.
+// The share limits alone would refuse every normal quote on a small amount
+// (a $1 bring: MeshPort's 0.05 floor is 5%, Circle's cap ~0.03 is 3%), so
+// small fixed allowances let those through - still far below anything a bad
+// quote could take.
 const MAX_FEE_SHARE = 0.05        // MeshPort fee ≤ 5% of the amount…
-const MAX_FEE_ABS = 2_000_000n    // …and ≤ 2 USDC
-const MAX_CCTP_SHARE = 0.02       // CCTP maxFee ≤ 2% of the amount
+const MAX_FEE_SMALL = 100_000n    // …or up to 0.10 USDC (the relayer's own cap)…
+const MAX_FEE_ABS = 2_000_000n    // …and never over 2 USDC
+const MAX_CCTP_SHARE = 0.02       // CCTP maxFee ≤ 2% of the amount…
+const MAX_CCTP_SMALL = 60_000n    // …or up to 0.06 USDC
 const AUTH_WINDOW_SEC = 60 * 60   // signature valid for 1 hour
 
 function configuredRouters(): Record<string, Hex> {
@@ -103,8 +109,8 @@ export interface BridgeQuote {
 export function checkQuote(q: BridgeQuote, amount: bigint): { fee: bigint; maxFee: bigint } {
   const fee = BigInt(q.fee), maxFee = BigInt(q.maxFee)
   if (fee < 0n || maxFee < 0n) throw new Error('Invalid quote')
-  if (fee > MAX_FEE_ABS || Number(fee) > Number(amount) * MAX_FEE_SHARE) throw new Error('Network fee is unusually high right now - try again later')
-  if (Number(maxFee) > Number(amount) * MAX_CCTP_SHARE) throw new Error('Bridge fee is unusually high right now - try again later')
+  if (fee > MAX_FEE_ABS || (fee > MAX_FEE_SMALL && Number(fee) > Number(amount) * MAX_FEE_SHARE)) throw new Error('Network fee is unusually high right now - try again later')
+  if (maxFee > MAX_CCTP_SMALL && Number(maxFee) > Number(amount) * MAX_CCTP_SHARE) throw new Error('Bridge fee is unusually high right now - try again later')
   if (maxFee >= amount) throw new Error('Amount too small to cover the bridge fee')
   return { fee, maxFee }
 }

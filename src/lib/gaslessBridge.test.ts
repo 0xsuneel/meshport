@@ -43,6 +43,15 @@ describe('gaslessBridge', () => {
     expect(() => checkQuote({ fee: '0', maxFee: '10', usdcName: '', usdcVersion: '' }, 10n)).toThrow()
   })
 
+  it('checkQuote lets normal fees through on a $1 bring, still refuses high ones', () => {
+    const one = 1_000_000n // 1 USDC
+    // MeshPort's 0.05 floor + Circle's usual ~0.03 cap
+    expect(checkQuote({ fee: '50000', maxFee: '30000', usdcName: 'USDC', usdcVersion: '2' }, one)).toEqual({ fee: 50000n, maxFee: 30000n })
+    expect(checkQuote({ fee: '100000', maxFee: '60000', usdcName: 'USDC', usdcVersion: '2' }, one)).toEqual({ fee: 100000n, maxFee: 60000n })
+    expect(() => checkQuote({ fee: '100001', maxFee: '0', usdcName: '', usdcVersion: '' }, one)).toThrow(/Network fee/)
+    expect(() => checkQuote({ fee: '0', maxFee: '60001', usdcName: '', usdcVersion: '' }, one)).toThrow(/Bridge fee/)
+  })
+
   it('stays off until a router is configured, and ignores bad entries', () => {
     vi.stubEnv('VITE_BRIDGE_ROUTERS', '')
     expect(isGaslessBridgeAvailable('Base_Sepolia')).toBe(false)
