@@ -1575,7 +1575,7 @@ export function PaySendPage() {
                     <input id="pay-note" type="text" value={note} maxLength={140}
                       onChange={e => setNote(e.target.value)}
                       onFocus={() => setShowAmountPad(false)}
-                      placeholder="Add a message (optional)" enterKeyHint="done"
+                      placeholder="What's it for? (optional)" enterKeyHint="done"
                       className="w-full text-[15px] text-text-primary placeholder-text-secondary focus:outline-none"
                       style={{ display: 'block', height: 46, padding: '0 58px 0 14px', borderRadius: 14, boxSizing: 'border-box',
                         background: 'var(--surface)', border: '1px solid var(--border)' }} />

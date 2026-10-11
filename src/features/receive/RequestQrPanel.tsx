@@ -306,7 +306,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
         {match.state === 'self' && <div style={{ fontSize: 11.5, color: 'var(--danger)', marginTop: 6 }}>That's your own username</div>}
         {match.state === 'idle' && customer.trim() !== '' && <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 6 }}>Type the full username, like sunil.arc</div>}
       </div>}
-      {withCustomer && <div><div style={label}>Note (optional)</div><input value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="e.g. Order details" style={field} /></div>}
+      {withCustomer && <div><div style={label}>Note</div><input value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="What's it for? (optional)" style={field} /></div>}
       <div><div style={label}>Expires</div><ExpiryChips value={expiry} onChange={setExpiry} /></div>
       <button onClick={create} disabled={busy || !(Number(amount) > 0)} style={{ ...primary, opacity: busy || !(Number(amount) > 0) ? 0.5 : 1 }}>
         {busy ? 'Creating…' : match.state === 'found' ? 'Send request in chat' : 'Generate request QR'}
