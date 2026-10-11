@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
+import { ubFeeBreakdown, ubSpendAmount } from '@/lib/transferFees'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/motion'
 import { useStepDirection } from '@/hooks/useStepDirection'
 import { createPortal } from 'react-dom'
@@ -190,11 +191,21 @@ interface BridgeStepState {
 }
 
 interface FeeEstimate {
+  /** Bridge / Gateway protocol fee ('provider'). */
   bridgeFee: number
+  /** Custom fee ('kit') - normally 0 (the app sets no custom fee); its own row when not. */
+  kitFee: number
   networkFee: number
   forwarderFee: number
+  /** Every fee on the Review screen added up (= You Send − Receiver Gets on Unified Balance). */
   totalFee: number
+  /** What the wallet needs on top of the amount (the balance check). */
+  onTop: number
+  /** Unified Balance only: the Gateway fee + burn gas held back from the spend (see handleConfirm). */
+  spendOverhead: number
   receiverGets: number
+  /** The live fee couldn't be fetched - these are rough stand-in numbers, retried shortly. */
+  approx?: boolean
   loading: boolean
   error: string
 }
@@ -899,7 +910,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const [finishMintError, setFinishMintError] = useState('')
   const ubDepositTxRef = useRef<string | null>(null)
   const [bridgeSteps, setBridgeSteps] = useState<BridgeStepState[]>(makeDefaultSteps('Destination'))
-  const [feeEstimate, setFeeEstimate] = useState<FeeEstimate>({ bridgeFee: 0, networkFee: 0, forwarderFee: 0, totalFee: 0, receiverGets: 0, loading: false, error: '' })
+  const [feeEstimate, setFeeEstimate] = useState<FeeEstimate>({ bridgeFee: 0, kitFee: 0, networkFee: 0, forwarderFee: 0, totalFee: 0, onTop: 0, spendOverhead: 0, receiverGets: 0, loading: false, error: '' })
   // Which (address, amount, chain, speed) combination `feeEstimate` above
   // was actually fetched for - lets canContinue tell a fresh fee apart from
   // a stale one left over from a previous amount/chain, instead of trusting
@@ -1319,49 +1330,28 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           else if (f.type === 'forwarder') forwarderFee += amt
         }
         // Circle's Unified Balance fee model (docs.arc.io/app-kit/concepts/
-        // unified-balance-fees) treats these four fee types in two
-        // fundamentally different ways - they must NOT be summed into one
-        // "spendFee" the way this used to work:
-        //   - Gateway protocol fee ('provider') and burn-intent gas
-        //     ('gasFee') are deducted from the Unified Balance IN ADDITION
-        //     to the spend amount. They never touch what gets minted on
-        //     the destination chain, so they must not reduce receiverGets
-        //     - but the wallet/balance DOES need extra room for them on
-        //     top of the spend amount.
-        //   - The custom/kit fee ('kit') and Forwarding Service fee
-        //     ('forwarder') are carved OUT of the spend amount itself
-        //     before minting, so they DO reduce what the recipient
-        //     receives - but since they come out of the spend amount
-        //     that's already reserved, they need no extra balance on top.
-        // The old code lumped all four together and used that single
-        // number for both receiverGets and the required-balance check,
-        // which simultaneously overstated the balance requirement (kit/
-        // forwarder don't need extra balance) and understated
-        // receiverGets (provider/gas don't come out of the destination
-        // amount) - the exact contradiction between the preview and the
-        // balance check that was reported.
-        const balanceOnlyFee = providerFee + gasFee
-        const spendReducingFee = kitFee + forwarderFee
-        // totalFee is what's needed ON TOP of the spend amount: the
-        // Gateway protocol fee + burn gas (drawn from the Unified Balance
-        // alongside the spend), plus UB_DEPOSIT_GAS_RESERVE - a completely
-        // separate cost (Arc's own gas for the deposit transaction, paid
-        // from the sender's Arc wallet, never touches the Unified Balance
-        // spend accounting or the destination amount at all).
-        const totalFee = balanceOnlyFee + UB_DEPOSIT_GAS_RESERVE
-        // receiverGets is based on ubTargetAmount (what's actually going to
-        // be deposited/spent), not the raw numAmount - otherwise this
-        // preview overstates what the recipient gets whenever the gas
-        // reserve had to cap the deposit below what the user typed. Only
-        // the spend-reducing fees come off it; provider/gas fees are paid
-        // from the balance separately and never touch this figure.
-        const receiverGets = Math.max(0, ubTargetAmount - spendReducingFee)
+        // unified-balance-fees): the Gateway protocol fee ('provider') and
+        // burn-intent gas ('gasFee') are taken from the Unified Balance in
+        // addition to the spend amount; the custom ('kit') and Forwarding
+        // Service ('forwarder') fees are carved out of the spend amount
+        // before minting.
+        // Every fee comes out of the amount typed (see lib/transferFees).
+        // This used to promise amount − kit − forwarder only - more than ever
+        // arrived - and asked for the Gateway fee + gas again on top in the
+        // balance check although it was never sent from the wallet.
+        const { spendOverhead, networkFee, totalFee, receiverGets } =
+          ubFeeBreakdown(ubTargetAmount, { providerFee, gasFee, kitFee, forwarderFee })
 
         const fresh: FeeEstimate = {
-          bridgeFee:    providerFee + kitFee,
-          networkFee:   gasFee + UB_DEPOSIT_GAS_RESERVE,
+          bridgeFee:    providerFee,
+          kitFee,
+          networkFee,
           forwarderFee,
           totalFee,
+          // Only Arc's own gas for the deposit transaction is paid from the
+          // wallet beyond the amount (the deposit is capped to leave it).
+          onTop:        UB_DEPOSIT_GAS_RESERVE,
+          spendOverhead,
           receiverGets,
           loading: false,
           error: '',
@@ -1398,11 +1388,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // config.customFee is set, which this app never does, so it's normally
       // 0 - included here for correctness/future-proofing, not because it
       // explained any observed discrepancy.
-      let bridgeFee = 0, networkFee = 0, forwarderFee = 0
+      let bridgeFee = 0, kitFee = 0, networkFee = 0, forwarderFee = 0
       if (estimate?.fees) {
         for (const f of estimate.fees) {
           const amt = parseFloat(f.amount) || 0
-          if (f.type === 'provider' || f.type === 'kit') bridgeFee += amt
+          if (f.type === 'provider') bridgeFee += amt
+          else if (f.type === 'kit') kitFee += amt
           else if (f.type === 'forwarder') forwarderFee += amt
         }
       }
@@ -1410,10 +1401,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         for (const f of estimate.gasFees) networkFee += parseFloat(f.amount) || 0
       }
 
-      const totalFee = bridgeFee + networkFee + forwarderFee
+      const totalFee = bridgeFee + kitFee + networkFee + forwarderFee
       const receiverGets = Math.max(0, numAmount - totalFee)
 
-      const fresh: FeeEstimate = { bridgeFee, networkFee, forwarderFee, totalFee, receiverGets, loading: false, error: '' }
+      const fresh: FeeEstimate = { bridgeFee, kitFee, networkFee, forwarderFee, totalFee, onTop: totalFee, spendOverhead: 0, receiverGets, loading: false, error: '' }
       notifyIfFeeChanged(fresh, silent)
       setFeeEstimate(fresh)
       setFeeEstimateKey(requestKey)
@@ -1426,12 +1417,23 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // than silently falling back to static fees here and letting the
       // real bridge attempt inherit the same wedged instance later.
       if (/no runners/i.test(e?.message || '')) resetArcFallbackProvider()
-      // Fallback: estimate from chain config
-      const bridgeFee = selectedSpeed === 'fast' ? 0.0013 : 0
+      // The live fee couldn't be fetched: rough stand-in numbers so Review
+      // isn't empty, marked approx - Review says so and retries in a few
+      // seconds, and a Unified Balance send never spends against them (it
+      // waits for a live estimate, see handleConfirm). Typical Fast-transfer
+      // fees; the forwarding fee only when Circle's forwarder mints (always
+      // on Unified Balance), and Arc gas (paid in USDC) the same on every
+      // route - the destination chain's gas is the forwarder's.
+      const bridgeFee = 0.0013
+      const forwarderFee = (chain.ub || circleForwarderMintsTo(chain.sdk)) ? 0.002 : 0
       const networkFee = 0.01
-      const forwarderFee = selectedSpeed === 'fast' ? 0.002 : 0.002
       const totalFee = bridgeFee + networkFee + forwarderFee
-      const fresh: FeeEstimate = { bridgeFee, networkFee, forwarderFee, totalFee, receiverGets: Math.max(0, numAmount - totalFee), loading: false, error: '' }
+      const fresh: FeeEstimate = {
+        bridgeFee, kitFee: 0, networkFee, forwarderFee, totalFee,
+        onTop: chain.ub ? UB_DEPOSIT_GAS_RESERVE : totalFee, spendOverhead: bridgeFee + networkFee,
+        receiverGets: Math.max(0, (chain.ub ? Math.min(numAmount, Math.max(0, balance - UB_DEPOSIT_GAS_RESERVE)) : numAmount) - totalFee),
+        approx: true, loading: false, error: '',
+      }
       notifyIfFeeChanged(fresh, silent)
       setFeeEstimate(fresh)
       setFeeEstimateKey(requestKey)
@@ -1449,7 +1451,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // uses. Once on Review/Confirm, feeEstimate.totalFee is the real,
   // SDK-fetched forwarder service fee and is used instead.
   const validateGasBalance = () => {
-    const feeForCheck = (step === 'form') ? feeReserveEstimate : feeEstimate.totalFee
+    const feeForCheck = (step === 'form') ? feeReserveEstimate : feeEstimate.onTop
     const required = numAmount + feeForCheck
     if (balance < required) {
       setGasWarning(`Insufficient USDC balance. You need approximately ${trimTrailingZeros(required.toFixed(4))} USDC (amount + fees) but have ${trimTrailingZeros(balance.toFixed(4))} USDC.`)
@@ -1491,6 +1493,15 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     return () => clearInterval(interval)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, address, amount, selectedChain, selectedSpeed])
+
+  // Stand-in fees on Review (the live fee couldn't be fetched): try again
+  // after a few seconds rather than waiting for the 20s refresh.
+  useEffect(() => {
+    if (step !== 'review' || !feeEstimate.approx || feeEstimate.loading) return
+    const t = setTimeout(() => { void fetchFeeEstimate(true) }, 4000)
+    return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, feeEstimate])
 
   // ── Navigate to review ────────────────────────────────────────────────────
   // No fee has been fetched yet at this point - Continue only checks
@@ -1572,7 +1583,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // anything" symptom. Surface the same message through `passError`,
       // which this screen already renders, and clear the passcode so they
       // can back out and adjust the amount.
-      setPassError(`Insufficient balance for amount + fees. Need ${trimTrailingZeros((numAmount + feeEstimate.totalFee).toFixed(4))} USDC, have ${trimTrailingZeros(balance.toFixed(4))} USDC.`)
+      setPassError(`Insufficient balance for amount + fees. Need ${trimTrailingZeros((numAmount + feeEstimate.onTop).toFixed(4))} USDC, have ${trimTrailingZeros(balance.toFixed(4))} USDC.`)
       setPassEntry('')
       return
     }
@@ -1759,12 +1770,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // immediately dump the user on the failed screen - a plain retry of
         // just this call usually clears it.
         let freshEstimate = await fetchFeeEstimate(true)
-        for (let attempt = 0; (!freshEstimate || freshEstimate.receiverGets <= 0) && attempt < 3; attempt++) {
+        // A stand-in estimate (approx) is never spent against - wait for a live one.
+        const notLive = (e: FeeEstimate | null) => !e || e.receiverGets <= 0 || !!e.approx
+        for (let attempt = 0; notLive(freshEstimate) && attempt < 3; attempt++) {
           await new Promise(r => setTimeout(r, 1500 * (attempt + 1)))
           logTestEvent({ runId: testRunId, flow: 'transfer', chainId: chain.id, service: testService, kind: 'note', label: `UB spend estimate retry ${attempt + 1}`, data: {} })
           freshEstimate = await fetchFeeEstimate(true)
         }
-        if (!freshEstimate || freshEstimate.receiverGets <= 0) {
+        if (!freshEstimate || notLive(freshEstimate)) {
           throw new Error(
             `Your USDC is safely in your Unified Balance, but the fee estimate for the ` +
             `send step keeps failing. Your funds are NOT lost - tap Retry to resume the ` +
@@ -1801,9 +1814,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // cheap/stable routes keep exactly the same protection they had),
         // capped so a single very-high-fee chain can't eat an unreasonable
         // chunk of the transfer.
-        const spendFeeEstimate = Math.max(0, freshEstimate.totalFee - UB_DEPOSIT_GAS_RESERVE)
-        const SPEND_SAFETY_MARGIN = Math.min(0.01, Math.max(0.0005, spendFeeEstimate * 0.03))
-        const spendAmount = Math.max(0, targetDepositAmount - spendFeeEstimate - SPEND_SAFETY_MARGIN)
+        const spendFeeEstimate = freshEstimate.spendOverhead
+        const spendAmount = ubSpendAmount(targetDepositAmount, spendFeeEstimate)
         const spendParams = {
           amount: spendAmount.toFixed(6),
           from: {
@@ -1994,7 +2006,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           // number Gateway already hands back: top up `amount` by that much
           // (plus a small buffer, in case a second live quote at retry time
           // asks for slightly more than the first) and retry once. Bounded
-          // by `headroom` - the gap SPEND_SAFETY_MARGIN already reserved
+          // by `headroom` - the gap the spend margin (ubSpendMargin) already reserved
           // between spendAmount+spendFeeEstimate and targetDepositAmount -
           // so this can never spend more than what's actually sitting in
           // the Unified Balance.
@@ -3846,6 +3858,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     // this list. CCTP keeps its original "Bridge Fee" label
                     // and value untouched.
                     ...((loading || feeEstimate.bridgeFee > 0) ? [[chain.ub ? 'Protocol Fee' : 'Bridge Fee', loading ? null : `${trimTrailingZeros(feeEstimate.bridgeFee.toFixed(4))} USDC`, 'var(--warning)'] as [string, string | null, string]] : []),
+                    // The custom ('kit') fee - normally 0, so normally no row.
+                    ...((!loading && feeEstimate.kitFee > 0) ? [['Service Fee', `${trimTrailingZeros(feeEstimate.kitFee.toFixed(4))} USDC`, 'var(--warning)'] as [string, string | null, string]] : []),
                     ...((loading ? chain.ub : feeEstimate.forwarderFee > 0) ? [['Forwarder Fee', loading ? null : `${trimTrailingZeros(feeEstimate.forwarderFee.toFixed(4))} USDC`, 'var(--warning)'] as [string, string | null, string]] : []),
                     ['Network Gas', loading ? null : feeEstimate.networkFee > 0 ? `${trimTrailingZeros(feeEstimate.networkFee.toFixed(4))} USDC` : '~$0.01', 'var(--success)'],
                     ['Est. Time', '<30s', 'var(--accent)'],
@@ -3861,8 +3875,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                       <div className="flex justify-between items-center px-3 py-2.5 mt-1"
                         style={{background:'color-mix(in srgb, var(--brand) 8%, transparent)', borderRadius: 14}}>
                         <span className="text-sm font-bold text-text-primary">Receiver Gets</span>
-                        {loading ? bar(92) : <span className="text-sm font-bold" style={{color:'var(--success)'}}>{trimTrailingZeros(feeEstimate.receiverGets.toFixed(4))} USDC</span>}
+                        {loading ? bar(92) : <span className="text-sm font-bold" style={{color:'var(--success)'}}>{feeEstimate.approx ? '≈ ' : ''}{trimTrailingZeros(feeEstimate.receiverGets.toFixed(4))} USDC</span>}
                       </div>
+                      {/* Stand-in numbers (the live fee couldn't be fetched): say so - they're retried every few seconds. */}
+                      {!loading && feeEstimate.approx && (
+                        <p className="text-xs px-3 pt-2" style={{ color: 'var(--text-secondary)' }}>
+                          Estimated fees - the live fee couldn't be loaded yet. Updating…
+                        </p>
+                      )}
                     </>
                   )
                 })()}
