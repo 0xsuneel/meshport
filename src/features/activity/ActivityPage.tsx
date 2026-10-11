@@ -274,6 +274,8 @@ export function deriveActivityRow(record: ActivityRecord) {
               : isClaim && isMerchantClaim(record as any) ? 'Payment received'
               : merchantOrder ? (isSend ? 'Order payment' : metadata.merchantPersonal ? 'Requested amount received' : metadata.merchantOrderKind === 'invoice' ? 'Bill payment received' : 'Requested payment received')
               : recoveredTitle ? recoveredTitle
+              // A rewards claim that didn't go through (lib/rewards.ts).
+              : isReceive && isFailed && metadata.receiveKind === 'reward_claim' ? 'Reward claim'
               : isSelfTransfer && isSend    ? 'Paid to'
               : isSelfTransfer && isReceive ? 'Received from'
               : isClaim    ? 'Claimed from'
@@ -620,7 +622,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const receiptTitle = isRecovery ? 'Needs recovery'
     : receiptStatus === 'success' ? doneTitle
     : receiptStatus === 'failed' ? (isSwapType ? 'Swap Failed' : isTransfer ? 'Transfer Failed' : isClaim ? 'Claim Failed'
-      : type === 'bulk' ? 'Bulk Payment Failed' : (isP2PSellOrder || type === 'p2p_refund') ? `${title} Failed` : 'Payment Failed')
+      : type === 'bulk' ? 'Bulk Payment Failed' : (isP2PSellOrder || type === 'p2p_refund') ? `${title} Failed`
+      : isReceive && (metadata as any)?.receiveKind === 'reward_claim' ? 'Reward Claim Failed' : 'Payment Failed')
     : 'Processing…'
   const amountText = isSwapType
     ? `${metadata.amountIn || formatAmt(amount)} ${metadata.tokenIn || tokenSymbol || 'USDC'} → ${metadata.amountOut ? formatAmt(metadata.amountOut) : '?'} ${metadata.tokenOut || '?'}`

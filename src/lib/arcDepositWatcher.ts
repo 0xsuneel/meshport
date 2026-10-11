@@ -890,6 +890,14 @@ async function fireDepositNotification(tx: OnchainReceivedTx): Promise<void> {
   if (Number.isFinite(ageMs) && ageMs > NOTIFY_MAX_AGE_MS) return
   try {
     const id = `ext_recv_tx_${tx.txHash.toLowerCase()}`
+    // A rewards claim paying out: "Received · … from MeshPort Rewards" - the
+    // same notification (same id) the claim itself fires, never a bare address.
+    const rewardsContract = String(import.meta.env.VITE_REWARDS_CONTRACT || '').toLowerCase()
+    if (rewardsContract && (tx.fromAddress || '').toLowerCase() === rewardsContract) {
+      const { notifyRewardClaimed } = await import('./notifications')
+      notifyRewardClaimed({ usdcAmount: tx.amount, txHash: tx.txHash, createdAt: tx.timestamp })
+      return
+    }
     let fromUsername: string | undefined
     try {
       const { supabase } = await import('./supabase')
