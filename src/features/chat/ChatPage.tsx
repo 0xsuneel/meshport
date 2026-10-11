@@ -3902,17 +3902,23 @@ export function ChatConversationPage() {
       const { sendUSDC, sendEURC, sendCirBTC, getUSDCBalance, getEURCBalance, getCirBtcBalance } = await import('@/lib/arcService')
 
       // Send the correct token - mirrors PaySendPage's own token-routing
-      const result = payToken === 'EURC'
-        ? await sendEURC({ privateKey: activePrivateKey, to: otherUser.wallet_address, amount: numAmount, idempotencyKey })
+      // A definite failure (refused, or reverted) is noted for Pay → Recent;
+      // a 'pending' send is never counted as failed.
+      const payTo = otherUser.wallet_address
+      const noteFailed = () => import('@/lib/failedSends').then(m => m.recordFailedSend(useAuthStore.getState().walletAddress, { to: payTo, amount: numAmount, token: payToken })).catch(() => {})
+      const result = await (payToken === 'EURC'
+        ? sendEURC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey })
         : payToken === 'cirBTC'
-        ? await sendCirBTC({ privateKey: activePrivateKey, to: otherUser.wallet_address, amount: numAmount, idempotencyKey })
-        : await sendUSDC({ privateKey: activePrivateKey, to: otherUser.wallet_address, amount: numAmount, idempotencyKey })
+        ? sendCirBTC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey })
+        : sendUSDC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey })
+      ).catch((e: unknown) => { noteFailed(); throw e })
 
       // The send now waits for the real receipt (waitForConfirmation in
       // arcService.ts): a reverted payment shows the error instead of
       // success, with a fresh idempotency key so retrying is a new payment.
       if (result.state === 'failed') {
         chatPayIdempotencyKeyRef.current = null
+        noteFailed()
         throw new Error(`The payment was rejected on-chain, so no ${payToken} was sent. A small network fee may have been used. Please try again.`)
       }
       setPayPending(result.state === 'pending')

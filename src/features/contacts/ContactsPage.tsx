@@ -292,11 +292,16 @@ export function ContactsPage() {
 
     try {
       const { sendUSDC, getUSDCBalance } = await import('@/lib/arcService')
+      // A definite failure (refused, or reverted) is noted for Pay → Recent;
+      // a 'pending' send is never counted as failed.
+      const noteFailed = () => import('@/lib/failedSends').then(m => m.recordFailedSend(useAuthStore.getState().walletAddress, { to: c.wallet_address, amount: numAmount, token: 'USDC' })).catch(() => {})
       const result = await sendUSDC({ privateKey: activePrivateKey, to: c.wallet_address, amount: numAmount, idempotencyKey, recipientUsername: c.username || undefined })
+        .catch((e: unknown) => { noteFailed(); throw e })
       // Real confirmation (waitForConfirmation in arcService.ts): a reverted
       // payment shows the error, with a fresh key so a retry is a new send.
       if (result.state === 'failed') {
         payIdemRef.current = null
+        noteFailed()
         throw new Error('The payment was rejected on-chain, so no USDC was sent. A small network fee may have been used. Please try again.')
       }
       setPayPending(result.state === 'pending')
@@ -304,6 +309,7 @@ export function ContactsPage() {
         import('@/lib/arcService').then(({ confirmTransactionInBackground }) => {
           confirmTransactionInBackground(result.txHash as `0x${string}`, ({ success }) => {
             if (success) { setPayPending(false); return }
+            noteFailed()
             import('@/lib/ActivityService').then(({ updateActivityStatus }) => {
               updateActivityStatus(`send_${result.txHash.toLowerCase()}`, result.senderAddress, 'failed')
             }).catch(() => {})

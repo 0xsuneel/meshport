@@ -148,7 +148,7 @@ export async function fetchRecentContacts(
   return result
 }
 
-export type LastActivity = { at: string; dir: 'paid' | 'received'; amount: number; token: string }
+export type LastActivity = { at: string; dir: 'paid' | 'received' | 'failed'; amount: number; token: string }
 /**
  * When you last paid or received from each address (latest wins), from your
  * most recent `limit` send/receive rows. Keys are lower-cased addresses.
@@ -159,12 +159,15 @@ export async function fetchLastActivityByAddress(walletAddress: string, limit = 
   const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
   const { authHeaders } = await import('./chatService')
   const headers = await authHeaders()
-  const res = await fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${walletAddress.toLowerCase()}&activity_type=in.(send,receive)&order=created_at.desc&limit=${limit}&select=counterparty_address,activity_type,created_at,amount,token_symbol`, { headers })
+  const res = await fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${walletAddress.toLowerCase()}&activity_type=in.(send,receive)&order=created_at.desc&limit=${limit}&select=counterparty_address,activity_type,created_at,amount,token_symbol,status`, { headers })
   const rows = await res.json().catch(() => [])
   for (const r of Array.isArray(rows) ? rows : []) {
     const addr = (r.counterparty_address || '').toLowerCase()
     if (!addr || out.has(addr)) continue
-    out.set(addr, { at: r.created_at, dir: r.activity_type === 'send' ? 'paid' : 'received', amount: parseFloat(r.amount || 0) || 0, token: String(r.token_symbol || 'USDC') })
+    const failed = r.status === 'failed'
+    // A failed receive brought nothing in - not a "last payment" to show.
+    if (failed && r.activity_type !== 'send') continue
+    out.set(addr, { at: r.created_at, dir: failed ? 'failed' : r.activity_type === 'send' ? 'paid' : 'received', amount: parseFloat(r.amount || 0) || 0, token: String(r.token_symbol || 'USDC') })
   }
   return out
 }
