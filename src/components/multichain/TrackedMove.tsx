@@ -9,9 +9,12 @@
 //   - Bring over Unified Balance: its server intent (ub-claim-worker)
 //   - Transfer over Unified Balance: no server record - only its finished row
 
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { MoveProgress } from './MoveProgress'
 import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
+import { SuccessFlash } from '@/components/ui/SuccessFlash'
+import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
+import { isDesktopNow } from '@/lib/motion'
 import { useCctpProgress } from '@/lib/cctpTracker'
 import { subscribeToClaim, type Claim } from '@/lib/claimService'
 import {
@@ -115,15 +118,60 @@ export function TrackedMove({ info, onClose, onViewHub, onArrived, backIcon = 'b
   const done = current >= steps.length
   useEffect(() => { if (done && !info.completed) onArrived?.(mintTx) }, [done]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Landing while this page is open gets the same moment as the live flow:
+  // the success flash, then its check travels into the receipt and the
+  // receipt rises in. A move opened already finished just shows its receipt.
+  const live = !info.completed
+  const [phase, setPhase] = useState<'flash' | 'collapsed'>('flash')
+  useEffect(() => {
+    if (!done || !live) return
+    const t = setTimeout(() => setPhase('collapsed'), 1500)
+    return () => clearTimeout(t)
+  }, [done, live])
+  const rootRef = useRef<HTMLDivElement>(null)
+  const flashCheckRef = useRef<HTMLDivElement>(null)
+  const lastFlashRect = useRef<DOMRect | null>(null)
+  const [flashRect, setFlashRect] = useState<DOMRect | null>(null)
+  const [heroCheck, setHeroCheck] = useState<HTMLDivElement | null>(null)
+  const [travel, setTravel] = useState<{ from: DOMRect; to: DOMRect } | null>(null)
+  const [travelDone, setTravelDone] = useState(false)
+  useLayoutEffect(() => {
+    if (phase === 'flash' && flashCheckRef.current) lastFlashRect.current = flashCheckRef.current.getBoundingClientRect()
+  })
+  // Desktop: the flash covers this page's panel (or column), not the window.
+  useLayoutEffect(() => {
+    if (!done || !live || !isDesktopNow()) return
+    const target = rootRef.current?.closest('[data-hub-page], [data-flow-scroller]') as HTMLElement | null
+    setFlashRect((target ?? rootRef.current)?.getBoundingClientRect() ?? null)
+  }, [done, live])
+  useLayoutEffect(() => {
+    if (phase !== 'collapsed' || !heroCheck) return
+    const from = lastFlashRect.current
+    if (!from) { setTravelDone(true); return }
+    setTravel({ from, to: heroCheck.getBoundingClientRect() })
+    const t = setTimeout(() => setTravelDone(true), 520)
+    return () => clearTimeout(t)
+  }, [phase, heroCheck])
+
+  if (done && live && phase === 'flash') {
+    return (
+      <div ref={rootRef} style={{ minHeight: '100%' }}>
+        <SuccessFlash title={kind === 'transfer' ? 'Transfer Complete' : 'Funds Arrived'} checkRef={flashCheckRef} rect={flashRect} radius={20} />
+      </div>
+    )
+  }
+
   if (done) {
     const srcHref = info.sourceTxHash ? (kind === 'transfer' ? arcExplorerTxUrl(info.sourceTxHash) : explorerTxUrl(info.chain, info.sourceTxHash)) : null
     const mintHref = mintTx ? (kind === 'transfer' ? explorerTxUrl(info.chain, mintTx) : arcExplorerTxUrl(mintTx)) : null
     const amountLabel = `${formatAmount(info.amount)} USDC`
     return (
-      <div style={{ margin: '0 -12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div ref={rootRef} style={{ margin: '0 -12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+        {live && travel && !travelDone && <TravelingCheckmark from={travel.from} to={travel.to} toStroke="var(--success)" />}
         <SuccessReceipt
           style={{ height: 'auto', flex: 1, minHeight: 0 }}
-          revealed celebrate={false}
+          checkRef={live ? setHeroCheck : undefined}
+          revealed={live ? travelDone : true} celebrate={live}
           title={kind === 'transfer' ? 'Transfer Complete' : 'Funds Arrived'}
           subtitle={kind === 'transfer' ? <>Moved from Arc to {to}</> : <>From {from}, now in your Arc wallet</>}
           rows={[
