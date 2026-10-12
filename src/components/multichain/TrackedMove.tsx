@@ -125,11 +125,10 @@ export function TrackedMove({ info, onClose, onViewHub, onArrived, backIcon = 'b
           style={{ height: 'auto', flex: 1, minHeight: 0 }}
           revealed celebrate={false}
           title={kind === 'transfer' ? 'Transfer Complete' : 'Funds Arrived'}
-          subtitle={kind === 'transfer' ? <>{amountLabel} moved from Arc to {to}</> : <>{amountLabel} from {from} is now on Arc</>}
+          subtitle={kind === 'transfer' ? <>Moved from Arc to {to}</> : <>From {from}, now in your Arc wallet</>}
           rows={[
             { label: kind === 'transfer' ? 'You Sent' : 'Brought', value: amountLabel },
             ...(info.arrivedAmount != null ? [{ label: 'Received', value: `${formatAmount(info.arrivedAmount)} USDC`, positive: true }] : []),
-            { label: kind === 'transfer' ? 'Destination Chain' : 'From', value: kind === 'transfer' ? to : from, positive: kind === 'transfer' },
             ...(info.recipient ? [{ label: 'Recipient', value: shortAddr(info.recipient)! }] : []),
             { label: 'Route', value: route === 'ub' ? 'Unified Balance' : 'CCTP' },
           ]}

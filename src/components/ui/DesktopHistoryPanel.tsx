@@ -94,7 +94,6 @@ export function DesktopHistoryDetail({ onClose, title, amountLabel, amountColor,
       title={receiptTitle}
       subtitle={<span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: amountColor }}>{amountLabel}</span>}
       rows={rows.filter(r => r.label !== 'Status').map(r => ({ label: r.label, value: r.value, positive: r.label === 'To' || r.label === 'From' }))}
-      detailRows={[{ label: 'Status', value: status === 'success' ? 'Confirmed' : status === 'failed' ? 'Failed' : 'Processing', positive: status === 'success' }]}
       links={explorerLinks?.map(l => ({ title: l.label, href: l.href }))}
     />
   )

@@ -76,17 +76,15 @@ function RewardClaimReceipt({ claim, onClose }: { claim: ClaimRecord; onClose: (
       title={status === 'success' ? 'Reward Claimed' : status === 'failed' ? 'Reward Claim Failed' : 'Processing…'}
       subtitle={<>
         <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: claimColor(status), marginBottom: 4 }}>{status === 'success' ? '+' : ''}${formatAmount(claim.usdc_received)} USDC</span>
-        {status === 'success' ? `${claim.points_claimed} points converted to USDC` : status === 'failed' ? 'Claim did not go through - your points were not deducted' : `${claim.points_claimed} points being converted…`}
+        {status === 'success' ? 'Paid out by MeshPort Rewards' : status === 'failed' ? 'Claim did not go through - your points were not deducted' : 'Being sent to your wallet…'}
       </>}
       rows={[
-        { label: status === 'success' ? 'Received' : 'Amount', value: `$${formatAmount(claim.usdc_received)} USDC`, positive: status === 'success' },
-        { label: 'Points used', value: status === 'success' ? `${claim.points_claimed} pts` : status === 'failed' ? '0 pts (not deducted)' : `${claim.points_claimed} pts` },
-        { label: 'From', value: 'MeshPort Rewards', positive: true },
+        // The header shows the USDC and where it came from; the title the outcome.
+        ...(status !== 'failed' ? [{ label: 'Points used', value: `${claim.points_claimed} pts` }] : []),
         ...(hash ? [{ label: 'Transaction Hash', value: `${hash.slice(0, 6)}…${hash.slice(-4)}` }] : []),
         { label: 'Time', value: when },
       ]}
       detailRows={[
-        { label: 'Status', value: status === 'success' ? 'Confirmed' : status === 'failed' ? 'Failed' : 'Processing', positive: status === 'success' },
         { label: 'Network', value: 'Arc Testnet' },
       ]}
       fullHash={hash || undefined}

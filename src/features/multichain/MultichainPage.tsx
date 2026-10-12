@@ -1299,26 +1299,23 @@ export function MultichainPage() {
               <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: status === 'failed' ? 'var(--text-muted)' : isClaimItem ? 'var(--success)' : 'var(--text-primary)', marginBottom: 4 }}>{amountText}</span>
               {hubItemTitle(it)}
             </>}
+            // The header shows the amount and "Claim from / Transfer to <chain>",
+            // the title the outcome - rows add only what those don't.
             rows={[
-              ...(feeWasDeducted
-                ? [
-                    { label: 'Claimed', value: `$${formatAmount(it.claimedAmount!)} USDC` },
-                    { label: 'Arrived', value: `$${formatAmount(it.arrivedAmount!)} USDC`, positive: true },
-                  ]
-                : [{ label: status === 'failed' ? 'Amount' : isClaimItem ? 'Received' : 'Sent', value: `$${formatAmount(it.amount)} USDC`, positive: isClaimItem && status !== 'failed' }]),
-              { label: isClaimItem ? 'From' : 'To', value: chainName },
+              ...(feeWasDeducted ? [{ label: 'Claimed', value: `$${formatAmount(it.claimedAmount!)} USDC` }] : []),
               ...(it.merchant && walletAddress ? [{ label: 'Paid to', value: `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`, onCopy: copyRow('Paid to', walletAddress), copied: rowCopied === 'Paid to' }] : []),
               ...(primaryHash && !isRecoveredClaim ? [hashRow('Transaction Hash', primaryHash)] : []),
               { label: 'Time', value: new Date(it.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
             ]}
             detailRows={[
-              { label: 'Status', value: chainReceiptLabel(it) ?? (status === 'success' ? 'Confirmed' : status === 'failed' ? 'Failed' : 'Processing'), positive: status === 'success' },
-              { label: 'Type', value: it.isRecovery ? 'Refund to Arc' : it.merchant ? `Moved to Arc from ${it.chainLabel || it.chain} Ledger` : isClaimItem ? 'Claim to Arc' : 'Transfer out' },
+              ...(chainReceiptLabel(it) ? [{ label: 'Status', value: chainReceiptLabel(it)!, positive: status === 'success' }] : []),
+              ...(it.merchant && !it.isRecovery ? [{ label: 'Type', value: `Moved to Arc from ${it.chainLabel || it.chain} Ledger` }] : []),
               ...(isClaimItem && it.route ? [{ label: 'Route', value: it.route === 'ub' ? 'Unified Balance' : 'CCTP' }] : []),
               ...(it.recoveredVia ? [{ label: 'Recovered', value: `Via ${it.recoveredVia.toUpperCase()}` }] : []),
               ...(feeWasDeducted ? [{ label: 'Fee', value: `-$${formatAmount(it.claimedAmount! - it.arrivedAmount!)} USDC` }] : []),
-              ...(it.sourceTxHash && !isRecoveredClaim ? [hashRow(isClaimItem ? 'Source Tx (Burn)' : 'Source Tx (Arc)', it.sourceTxHash)] : []),
-              ...(it.destinationTxHash ? [hashRow(isClaimItem ? 'Destination Tx (Arc Mint)' : 'Destination Tx (Arrival)', it.destinationTxHash)] : []),
+              // The summary row above already shows one of these two.
+              ...(it.sourceTxHash && !isRecoveredClaim && it.sourceTxHash !== primaryHash ? [hashRow(isClaimItem ? 'Source Tx (Burn)' : 'Source Tx (Arc)', it.sourceTxHash)] : []),
+              ...(it.destinationTxHash && it.destinationTxHash !== primaryHash ? [hashRow(isClaimItem ? 'Destination Tx (Arc Mint)' : 'Destination Tx (Arrival)', it.destinationTxHash)] : []),
               ...(it.type === 'transfer' && it.destinationAddress ? [hashRow('Sent To', it.destinationAddress)] : []),
             ]}
             links={[

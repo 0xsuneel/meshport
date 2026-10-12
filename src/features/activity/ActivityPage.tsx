@@ -674,15 +674,26 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     positive: !isFailed && (row.label === 'From' || row.label === 'To' || (isIncoming && row.label === 'Amount')),
     ...(row.copy ? { onCopy: copyRow(row.label, row.copy), copied: rowCopied === row.label } : {}),
   })
-  const MAIN_LABELS = new Set(['Amount', 'From', 'To', 'Order', 'Merchant', 'Paid to', 'Purpose', 'Recipients', sourceHashLabel])
+  // The header already shows the amount (a swap's both sides) and, in the
+  // subtitle, who it was with; the title says the outcome. So no Amount row,
+  // no To/From row repeating the subtitle (the wallet address goes in the
+  // details instead), no Status, and no Type that just restates the title.
+  const nameInSubtitle = receiptSubtitle !== title
+  const MAIN_LABELS = new Set(['Order', 'Merchant', 'Paid to', 'Purpose', 'Recipients', sourceHashLabel, ...(nameInSubtitle || isSwapType ? [] : ['From', 'To'])])
+  const DROP_LABELS = new Set(['Amount', 'Status', 'Date', 'Time',
+    ...(isSwapType || nameInSubtitle ? ['From', 'To'] : []),
+    ...((isClaim && isMerchantClaim(record as any)) ? [] : ['Type'])])
   const when = new Date(createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
   const mainRows = [
     ...(rows as { label: string; value: string; copy?: string }[]).filter(r => MAIN_LABELS.has(r.label)).map(toReceiptRow),
     { label: 'Time', value: when },
   ]
   const detailRowsList = [
-    { label: 'Status', value: isRecovery ? 'Needs recovery' : isFailed ? 'Failed' : isSuccess ? 'Confirmed' : 'Processing', positive: isSuccess },
-    ...(rows as { label: string; value: string; copy?: string }[]).filter(r => !MAIN_LABELS.has(r.label) && !['Status', 'Date', 'Time'].includes(r.label)).map(toReceiptRow),
+    ...(rows as { label: string; value: string; copy?: string }[]).filter(r => !MAIN_LABELS.has(r.label) && !DROP_LABELS.has(r.label)).map(toReceiptRow),
+    // Only when the subtitle shows a username - then the address is new information.
+    ...(nameInSubtitle && cpUsername && counterparty && !isSwapType
+      ? [toReceiptRow({ label: 'Wallet', value: `${counterparty.slice(0, 6)}…${counterparty.slice(-6)}`, copy: counterparty })]
+      : []),
     ...(type === 'bulk' && Array.isArray(metadata.recipients)
       ? metadata.recipients.map((r: any, i: number) => ({
           label: r.label?.startsWith('0x') ? `${r.label.slice(0, 6)}…${r.label.slice(-4)}` : (r.label || `Recipient ${i + 1}`),

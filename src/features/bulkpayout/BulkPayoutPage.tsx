@@ -1158,6 +1158,8 @@ export function BulkPayoutPage() {
     </>
   )
 
+  const resultHashes = [...new Set(results.map(r => r.txHash).filter(Boolean))]
+  const sharedTxHash = resultHashes.length === 1 && results.filter(r => r.txHash).length > 1 ? resultHashes[0] : null
   const resultsContent = (
     <>
       {bulkFlash && <SuccessFlash title={failCount ? `${successCount} Payments Sent` : 'Payout Successful'}
@@ -1172,6 +1174,14 @@ export function BulkPayoutPage() {
           <p className="text-sm text-danger">Failed</p>
         </div>
       </div>
+      {/* The whole payout is one transaction (Multicall3): one link for it,
+          not the same link on every row. */}
+      {sharedTxHash && (
+        <a href={`${ARC_EXPLORER}/tx/${sharedTxHash}`} target="_blank" rel="noopener noreferrer"
+          className="text-sm font-semibold text-brand-text flex items-center justify-center gap-1.5">
+          <ExternalLink className="w-4 h-4" /> View transaction on ArcScan
+        </a>
+      )}
       <div className="bg-surface border border-border rounded-2xl divide-y divide-border">
         {results.map(r => (
           <div key={r.recipient.id} className="flex items-center gap-3 px-4 py-3">
@@ -1183,7 +1193,7 @@ export function BulkPayoutPage() {
                   : <span className="text-link">{r.recipient.username}.arc</span>}
               </p>
               <p className="text-xs text-text-secondary">${formatAmount(r.recipient.amount)} USDC</p>
-              {r.txHash && (
+              {r.txHash && !sharedTxHash && (
                 <a href={`${ARC_EXPLORER}/tx/${r.txHash}`} target="_blank" rel="noopener noreferrer"
                   className="text-xs text-brand-text flex items-center gap-1 mt-0.5">
                   <ExternalLink className="w-3 h-3" /> View on ArcScan

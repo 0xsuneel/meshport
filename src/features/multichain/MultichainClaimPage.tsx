@@ -2341,20 +2341,15 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     { label: 'Done', onClick: () => navigate('/multichain'), primary: true },
                   ]}
                   title="Funds Arrived"
-                  subtitle={<>{fmtAmount} from {fromLabel} is now on Arc</>}
+                  subtitle={<>From {fromLabel}, now in your Arc wallet</>}
                   pill={`Completed in ${claimElapsedSeconds} Seconds`}
                   rows={[
                     { label: 'Claimed', value: fmtAmount, positive: true },
-                    { label: fromChainIds.length === 1 ? 'From' : 'From Chains', value: fromLabel },
-                    { label: 'Destination', value: 'Arc Testnet' },
                     ...(txHash ? [{ label: 'Transaction Hash', value: shortHash, onCopy: () => copyClaimHash(txHash), copied: hashCopied }] : []),
                     { label: 'Time', value: timeLabel },
                   ]}
                   steps={processSteps.map(s => s.done)}
                   detailRows={[
-                    { label: 'Status', value: 'Confirmed', positive: true },
-                    { label: 'From', value: fromLabel },
-                    { label: 'To', value: 'Arc Testnet' },
                     ...(hasFees ? [
                       { label: 'MeshPort Fee', value: usdc(fees.meshport) },
                       { label: 'Circle Fee', value: circleFeeLabel },

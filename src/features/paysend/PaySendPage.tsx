@@ -1648,8 +1648,8 @@ export function PaySendPage() {
                 <SuccessReceipt
                   title={payPending ? 'Payment Submitted' : 'Paid Successfully'}
                   subtitle={payPending
-                    ? <>{amountLabel} to {recipientLabel} is still confirming on Arc. Activity updates when it lands.</>
-                    : <>{amountLabel} is now with {recipientLabel}</>}
+                    ? <>Still confirming on Arc. Activity updates when it lands.</>
+                    : <>Delivered on Arc</>}
                   pill={payPending ? undefined : `Completed in ${elapsedSeconds} Seconds`}
                   rows={[
                     { label: 'Amount', value: amountLabel },
@@ -1660,7 +1660,6 @@ export function PaySendPage() {
                   ]}
                   steps={payPending ? ['Payment approved', <>Payment sent by <strong>{senderLabel}</strong></>] : ['Payment approved', <>Payment made by <strong>{senderLabel}</strong></>, <>Payment received by <strong>{recipientLabel}</strong></>]}
                   detailRows={[
-                    { label: 'Status', value: payPending ? 'Confirming' : 'Confirmed', positive: !payPending },
                     { label: 'Network', value: 'Arc Testnet' },
                   ]}
                   fullHash={txHash || undefined}
