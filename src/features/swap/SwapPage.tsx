@@ -1352,6 +1352,8 @@ export function SwapPage() {
   // someone tap Swap against a rate that hasn't shown up yet.
   // Which screen the swap is on, for the page-style push between them.
   const swapScreen = isActive ? 'form' : 'review'
+  // The header's back arrow returns to the form from these (see the header).
+  const backToForm = step === 'confirming' || (step === 'failed' && !isUncertainFailure)
   // Leaving the amount page closes the slippage panel (it only lives there).
   useEffect(() => { if (!isActive) setShowSettings(false) }, [isActive])
   const canReview = step === 'idle'
@@ -1392,21 +1394,32 @@ export function SwapPage() {
           style={{ background:'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter:'blur(12px)', borderBottom:'1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
           <div className="flex items-center gap-3">
             {!isDesktop && (
-              <button onClick={() => navigate('/')}
+              // Review / a definite failure: back to the swap form (pushes back
+              // like the in-page Back button) instead of leaving Swap. An
+              // uncertain failure keeps Home - that screen leads with Check
+              // Activity, not a retry. While swapping, Home raises Stay / Leave.
+              <button onClick={() => backToForm
+                  ? (setStep('idle'), setError(''), setQuoteChangedNotice(''))
+                  : navigate('/')}
+                aria-label={backToForm ? 'Back to swap' : 'Back'}
                 className="back-btn">
                 <ArrowLeft className="w-5 h-5 text-text-primary"/>
               </button>
             )}
             <h1 className="text-xl font-bold text-text-primary">Swap</h1>
           </div>
-          {/* Slippage settings: amount page only (not on review, swapping or the result). */}
+          {/* Slippage settings: amount page only (not on review, swapping or the result).
+              Fades with the page change instead of popping out. */}
+          <AnimatePresence initial={false}>
           {isActive && (
-          <button onClick={() => setShowSettings(s => !s)} aria-label="Slippage settings"
+          <motion.button key="slippage" onClick={() => setShowSettings(s => !s)} aria-label="Slippage settings"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
             className="w-9 h-9 rounded-2xl flex items-center justify-center active:scale-95"
             style={showSettings ? { background:'var(--brand)' } : { background:'var(--surface)', border:'1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
             <Settings className="w-4 h-4 text-text-secondary"/>
-          </button>
+          </motion.button>
           )}
+          </AnimatePresence>
         </div>
       )}
 
@@ -1414,16 +1427,23 @@ export function SwapPage() {
       <div className={isDesktop ? undefined : "flex-1 overflow-y-auto"}>
       {/* Swap form ⇄ Review push like pages (Review, swapping and the
           success flash are one screen). */}
-      <ScreenPush screenKey={isDesktop ? 'desktop' : swapScreen} back={swapScreen === 'form'} style={isDesktop ? undefined : { minHeight: '100%' }}>
+      {/* Phone: form ⇄ Review push like pages. Desktop: ScreenPush's quick
+          fade in place (Review → swapping → success stay one screen, so the
+          success flash is untouched). */}
+      <ScreenPush screenKey={swapScreen} back={swapScreen === 'form'} style={isDesktop ? undefined : { minHeight: '100%' }}>
       {/* Phone success: this column fills the screen so the receipt card can
           sit in the middle with equal space above and below. */}
       <div className={cn("px-4 pt-4 pb-8 space-y-3", !isDesktop && step === 'done' && successPhase === 'collapsed' && "flex-1 flex flex-col")}>
 
         {/* Settings panel */}
-        <AnimatePresence>
+        {/* Closing it on the form animates; leaving the form (Swap → Review)
+            removes it at once, so it doesn't collapse inside the Review
+            screen that is sliding in. */}
+        <AnimatePresence custom={isActive}>
         {showSettings && isActive && (
           <motion.div key="set" initial={{ height:0, opacity:0 }} animate={{ height:'auto', opacity:1 }}
-            exit={{ height:0, opacity:0 }} className="overflow-hidden">
+            variants={{ leave: (stillOnForm: boolean) => stillOnForm ? { height: 0, opacity: 0 } : { opacity: 0, transition: { duration: 0 } } }}
+            exit="leave" className="overflow-hidden">
             <div className="p-4 rounded-2xl space-y-3" style={{ background:'var(--surface)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
               <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Slippage Tolerance</p>
               <div className="flex gap-2">
