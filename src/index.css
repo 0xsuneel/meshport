@@ -627,3 +627,27 @@ html.mp-locking #root { visibility: hidden; }
 @keyframes mpCaretBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 .mp-amount-caret { display: inline-block; width: 3px; height: 0.82em; margin-left: 4px; vertical-align: -0.06em; border-radius: 2px; background: var(--brand-text); animation: mpCaretBlink 1s steps(1) infinite; }
 @media (prefers-reduced-motion: reduce) { .mp-amount-caret { animation: none; } }
+
+/* Swap processing hero (SwapPage SwapProcessingHero): live dot, a down arrow
+   that keeps sliding through its circle, and a shimmer over the receive amount
+   until the swap lands. */
+.mp-swap-live { animation: mp-swap-live 1s ease-in-out infinite; }
+@keyframes mp-swap-live { 50% { opacity: .25; } }
+.mp-swap-arrow { animation: mp-swap-arrow 1.2s ease-in infinite; }
+@keyframes mp-swap-arrow {
+  0% { transform: translateY(-20px); opacity: 0; }
+  30%, 70% { opacity: 1; }
+  100% { transform: translateY(20px); opacity: 0; }
+}
+.mp-swap-shimmer {
+  background: linear-gradient(90deg, var(--brand-text) 0%, color-mix(in srgb, var(--brand-text) 40%, var(--bg)) 40%, var(--brand-text) 80%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: mp-swap-shimmer 1.5s linear infinite;
+}
+@keyframes mp-swap-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .mp-swap-live, .mp-swap-arrow { animation: none; }
+  .mp-swap-shimmer { animation: none; background: none; -webkit-text-fill-color: currentColor; }
+}

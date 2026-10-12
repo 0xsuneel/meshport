@@ -32,7 +32,6 @@ import { amountFontSize } from '@/lib/amountFontSize'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { DesktopHistoryPanel, DesktopHistoryEmpty } from '@/components/ui/DesktopHistoryPanel'
-import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { ARC_EXPLORER } from '@/lib/chainExplorers'
@@ -253,6 +252,62 @@ function applySwapProgress(s: SwapProgressState, p: SwapProgress): SwapProgressS
       if (p.hash === s.swapHash && p.success) return { ...s, confirm: 'done' }
       return s
   }
+}
+
+// Top of the "Swapping…" screen: live pill with total elapsed time, then the
+// two amounts at Review's size. The receive amount shimmers until the swap
+// lands (mp-swap-shimmer in index.css; static under reduced motion).
+function SwapProcessingHero({ step, tokenIn, tokenOut, amountIn, amountOut, minOut }: {
+  step: string; tokenIn: Token; tokenOut: Token; amountIn: string; amountOut: string; minOut: string
+}) {
+  const running = step === 'swapping'
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (!running) return
+    const started = Date.now()
+    setElapsed(0)
+    const t = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(t)
+  }, [running])
+  const fmt = (s: number) => `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`
+  const inStr  = trimTrailingZeros(parseFloat(amountIn).toFixed(swapTokenDecimals(tokenIn.id)))
+  const outStr = trimTrailingZeros(parseFloat(amountOut).toFixed(swapTokenDecimals(tokenOut.id)))
+  const minNum = parseFloat(minOut)
+
+  return (
+    <div className="flex flex-col items-center" style={{ position: 'relative', gap: 6, paddingTop: 4 }}>
+      <div className="flex items-center" style={{
+        gap: 8, padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+        color: running ? 'var(--brand-text)' : 'var(--success)',
+        background: running ? 'color-mix(in srgb, var(--brand) 18%, transparent)' : 'color-mix(in srgb, var(--success) 14%, transparent)',
+        border: `1px solid ${running ? 'color-mix(in srgb, var(--brand-text) 35%, transparent)' : 'color-mix(in srgb, var(--success) 35%, transparent)'}`,
+      }}>
+        <span className={running ? 'mp-swap-live' : undefined} style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor' }}/>
+        {running ? `Processing on Arc · ${fmt(elapsed)}` : 'Completed on Arc'}
+      </div>
+
+      <div className="flex items-center" style={{ gap: 10, marginTop: 10 }}>
+        <TLogo t={tokenIn} size={28}/>
+        <span className="font-extrabold text-text-primary" style={{ fontSize: amountFontSize(inStr, 30), letterSpacing: '-0.7px', lineHeight: 1.1 }}>
+          {inStr} {tokenIn.id}
+        </span>
+      </div>
+      <div className="flex items-center justify-center" aria-hidden="true"
+        style={{ width: 34, height: 34, borderRadius: '50%', border: '1px solid var(--border)', margin: '4px 0', color: 'var(--brand-text)', overflow: 'hidden' }}>
+        <svg className={running ? 'mp-swap-arrow' : undefined} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="5 12 12 19 19 12"/></svg>
+      </div>
+      <div className="flex items-center" style={{ gap: 10 }}>
+        <TLogo t={tokenOut} size={28}/>
+        <span className={cn('font-extrabold', running && 'mp-swap-shimmer')}
+          style={{ fontSize: amountFontSize(outStr, 30), letterSpacing: '-0.7px', lineHeight: 1.1, color: 'var(--brand-text)' }}>
+          ≈ {outStr} {tokenOut.id}
+        </span>
+      </div>
+      <p className="text-xs text-center" style={{ color: 'var(--text-secondary)', marginTop: 6 }}>
+        {minNum > 0 ? `At least ${trimTrailingZeros(minNum.toFixed(swapTokenDecimals(tokenOut.id)))} ${tokenOut.id} · ` : ''}Keep this page open
+      </p>
+    </div>
+  )
 }
 
 function SwapChecklist({ step, error, txHash, progress }: { step: string; error: string; txHash?: string; progress: SwapProgressState }) {
@@ -1735,43 +1790,12 @@ export function SwapPage() {
                 </div>
               </>
             ) : (
-            /* Glass exchange card */
-            <div className="rounded-2xl p-5" style={{
-              position: 'relative',
-              background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)',
-            }}>
-              <div className="flex items-center justify-between">
-                <div className="text-center">
-                  <div className="w-11 h-11 rounded-2xl mx-auto mb-2 flex items-center justify-center"
-                    style={{ background: 'color-mix(in srgb, var(--brand) 18%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)' }}>
-                    <TLogo t={tokenIn} size={26}/>
-                  </div>
-                  <p className="text-lg font-extrabold text-text-primary leading-none">
-                    {trimTrailingZeros(parseFloat(amountIn).toFixed(swapTokenDecimals(tokenIn.id)))}
-                  </p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>{tokenIn.id}</p>
-                </div>
-
-                <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-                  style={{ background: 'color-mix(in srgb, var(--brand) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-                  <ProcessingRing size={36} />
-                </div>
-
-                <div className="text-center">
-                  <div className="w-11 h-11 rounded-2xl mx-auto mb-2 flex items-center justify-center"
-                    style={{ background: 'color-mix(in srgb, var(--brand) 18%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)' }}>
-                    <TLogo t={tokenOut} size={26}/>
-                  </div>
-                  <p className="text-lg font-extrabold leading-none" style={{ color: 'var(--text-primary)' }}>
-                    ~{trimTrailingZeros(parseFloat(estimate?.estimatedOutput?.amount ?? '0').toFixed(swapTokenDecimals(tokenOut.id)))}
-                  </p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>{tokenOut.id}</p>
-                </div>
-              </div>
-
-              <p className="text-xs text-center mt-4" style={{ color: 'var(--text-secondary)' }}>Keep this page open · 15–30 sec</p>
-            </div>
+            /* Processing hero - the Review amounts stay put (nothing jumps on
+               Confirm); a live pill and a shimmering receive amount say it's
+               running. The checklist below carries the per-step detail. */
+            <SwapProcessingHero step={step} tokenIn={tokenIn} tokenOut={tokenOut}
+              amountIn={amountIn} amountOut={estimate?.estimatedOutput?.amount ?? '0'}
+              minOut={estimate?.stopLimit?.amount ?? '0'}/>
             )}
 
             {step === 'confirming' && gasShortfall > 0 && (
