@@ -62,3 +62,20 @@ describe('step index mappers', () => {
     expect(safeFromIndex('bring', 'ub')).toBe(2)
   })
 })
+
+describe('step texts', () => {
+  it('never repeat the step name or the Safe to leave note', () => {
+    for (const kind of ['transfer', 'bring'] as const) for (const route of ['cctp', 'ub'] as const) {
+      const steps = moveSteps({ kind, route, from: kind === 'transfer' ? 'Arc' : 'Ethereum', to: kind === 'transfer' ? 'Base' : 'Arc', amount: '10.00' })
+      for (const s of steps) {
+        const name = s.label.toLowerCase()
+        for (const t of [s.upcoming, s.done]) expect(t.toLowerCase()).not.toBe(name)
+        expect(s.done.toLowerCase()).not.toContain(name)
+        for (const t of [s.upcoming, s.active, s.done]) expect(t).not.toMatch(/close the app/i)
+      }
+      // No two steps say the same thing.
+      expect(new Set(steps.map(s => s.done)).size).toBe(steps.length)
+      expect(new Set(steps.map(s => s.upcoming)).size).toBe(steps.length)
+    }
+  })
+})

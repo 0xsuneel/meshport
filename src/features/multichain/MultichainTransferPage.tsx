@@ -3342,7 +3342,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     <div className="flex items-start gap-2 p-3 mt-2 bg-brand/10 border border-brand/20 rounded-xl">
                       <Clock className="w-4 h-4 text-brand-text flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-xs text-brand-text font-semibold">Still processing ({activeStepElapsed}s)</p>
+                        <p className="text-xs text-brand-text font-semibold">Still processing</p>
                         <p className="text-xs text-brand-text/80 mt-0.5">{stepInfoHint}</p>
                       </div>
                     </div>
@@ -3352,7 +3352,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     <div className="flex items-start gap-2 p-3 mt-2 bg-warning/10 border border-warning/30 rounded-xl">
                       <AlertCircle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-xs text-warning font-semibold">Taking longer than usual ({activeStepElapsed}s)</p>
+                        <p className="text-xs text-warning font-semibold">Taking longer than usual</p>
                         <p className="text-xs text-warning/80 mt-0.5">{stepTimeoutHint}</p>
                       </div>
                     </div>
