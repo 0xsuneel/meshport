@@ -599,6 +599,11 @@ html.mp-locking #root { visibility: hidden; }
 }
 .mp-last-opened { animation: mpLastOpened 1.6s ease-out; border-radius: 12px; }
 
+/* Updates on desktop: the cover zooms in a touch under the pointer. */
+.mp-news-card img { transition: transform 0.35s ease; }
+.mp-news-card:hover img { transform: scale(1.03); }
+@media (prefers-reduced-motion: reduce) { .mp-news-card:hover img { transform: none; } }
+
 /* Typing caret after the amount while the phone keypad is open. */
 @keyframes mpCaretBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 .mp-amount-caret { display: inline-block; width: 3px; height: 0.82em; margin-left: 4px; vertical-align: -0.06em; border-radius: 2px; background: var(--brand-text); animation: mpCaretBlink 1s steps(1) infinite; }

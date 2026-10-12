@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useUIStore } from '@/store'
 import { copyToClipboard } from '@/lib/utils'
 import { fetchNewsItem, markNewsRead, newsHost, NEWS_SOURCE_LABEL, type NewsItem } from '@/lib/news'
@@ -14,6 +15,7 @@ import { NewsCover, newsMeta } from './NewsPage'
 export function NewsArticlePage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
+  const isDesktop = useMediaQuery('(min-width: 980px)')
   const location = useLocation()
   const { showToastMessage } = useUIStore()
   const [item, setItem] = useState<NewsItem | null>(null)
@@ -47,12 +49,17 @@ export function NewsArticlePage() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 100 }}>
-      <div style={{ position: 'relative' }}>
+      {/* Phone: the cover runs edge to edge (capped height). Desktop: the
+          whole cover, uncropped, in the same centred column as the text -
+          a full-width strip cut wide covers down to a sliver. */}
+      <div style={isDesktop ? { position: 'relative', maxWidth: 760, margin: '24px auto 0', padding: '0 20px' } : { position: 'relative' }}>
         {item
-          ? <NewsCover item={item} variant="hero" style={{ width: '100%', aspectRatio: '1200 / 630', maxHeight: 320 }} />
-          : <div style={{ width: '100%', aspectRatio: '1200 / 630', maxHeight: 320, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />}
+          ? <NewsCover item={item} variant="hero" style={isDesktop
+              ? { width: '100%', aspectRatio: '1200 / 630', borderRadius: 18, boxShadow: 'var(--shadow-1)' }
+              : { width: '100%', aspectRatio: '1200 / 630', maxHeight: 320 }} />
+          : <div style={{ width: '100%', aspectRatio: '1200 / 630', maxHeight: isDesktop ? undefined : 320, borderRadius: isDesktop ? 18 : 0, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />}
         <button onClick={back} aria-label="Back"
-          style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top, 0px) + 14px)', left: 14, width: 38, height: 38, borderRadius: '50%',
+          style={{ position: 'absolute', top: isDesktop ? 14 : 'calc(env(safe-area-inset-top, 0px) + 14px)', left: isDesktop ? 34 : 14, width: 38, height: 38, borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
             background: 'rgba(0,0,0,0.42)', border: 'none', backdropFilter: 'blur(8px)' }}>
           {/* Same arrow as every back button; the dark circle keeps it readable over the photo. */}
@@ -60,7 +67,7 @@ export function NewsArticlePage() {
         </button>
       </div>
 
-      <div style={{ padding: '18px 20px 0', maxWidth: 680, margin: '0 auto' }}>
+      <div style={{ padding: isDesktop ? '24px 20px 0' : '18px 20px 0', maxWidth: isDesktop ? 760 : 680, margin: '0 auto' }}>
         {state === 'loading' && (
           <div>
             <div style={{ width: '85%', height: 20, borderRadius: 8, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', marginBottom: 10 }} />
@@ -81,7 +88,7 @@ export function NewsArticlePage() {
           <>
             <span style={{ display: 'inline-block', fontSize: 11.5, fontWeight: 700, letterSpacing: '0.03em', textTransform: 'uppercase',
               color: 'var(--brand-text)', marginBottom: 8 }}>{NEWS_SOURCE_LABEL[item.source]}</span>
-            <h1 style={{ margin: 0, fontSize: 22, lineHeight: 1.25, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px', textWrap: 'balance' } as React.CSSProperties}>
+            <h1 style={{ margin: 0, fontSize: isDesktop ? 30 : 22, lineHeight: 1.25, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px', textWrap: 'balance' } as React.CSSProperties}>
               {item.title}
             </h1>
             <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 8 }}>{newsMeta(item, false)}</div>
@@ -93,7 +100,7 @@ export function NewsArticlePage() {
               <p key={i} style={{ fontSize: 15, lineHeight: 1.65, color: 'var(--text-primary)', opacity: 0.88, margin: '14px 0 0' }}>{p}</p>
             ))}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 24 }}>
+            <div style={{ display: 'flex', flexDirection: isDesktop ? 'row' : 'column', gap: 8, marginTop: 24 }}>
               {item.url && (
                 <button onClick={openOriginal}
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
