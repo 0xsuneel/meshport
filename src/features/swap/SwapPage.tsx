@@ -1409,7 +1409,11 @@ export function SwapPage() {
             <h1 className="text-xl font-bold text-text-primary">Swap</h1>
           </div>
           {/* Slippage settings: amount page only (not on review, swapping or the result).
-              Fades with the page change instead of popping out. */}
+              Fades with the page change instead of popping out. Its 36px
+              slot stays in every step: the header was 8px shorter without
+              it, so Review's whole content jumped up mid-slide when the
+              button finished fading. */}
+          <div className="w-9 h-9 flex-shrink-0">
           <AnimatePresence initial={false}>
           {isActive && (
           <motion.button key="slippage" onClick={() => setShowSettings(s => !s)} aria-label="Slippage settings"
@@ -1420,6 +1424,7 @@ export function SwapPage() {
           </motion.button>
           )}
           </AnimatePresence>
+          </div>
         </div>
       )}
 

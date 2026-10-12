@@ -32,14 +32,46 @@ function pictureOf(el: HTMLElement): { node: HTMLElement; floats: HTMLElement[] 
   const copy = node.querySelectorAll<HTMLElement>('*')
   const drop: HTMLElement[] = []
   const floats: HTMLElement[] = []
+  const swaps: Array<[HTMLImageElement, HTMLCanvasElement]> = []
   for (let i = 0; i < orig.length && i < copy.length; i++) {
     const o = orig[i], c = copy[i]
     if (o.scrollTop) c.dataset.mpScrollTop = String(o.scrollTop)
     if (getComputedStyle(o).position === 'fixed') (o.hasAttribute('data-amount-keypad-sheet') ? floats : drop).push(c)
     if ((o instanceof HTMLInputElement || o instanceof HTMLTextAreaElement) && (c instanceof HTMLInputElement || c instanceof HTMLTextAreaElement)) c.value = o.value
+    // A copied <img> (token / chain logo, avatar) is blank for the picture's
+    // first frame while it decodes again; draw the already-decoded original
+    // into a canvas of the same size instead, which paints at once.
+    if (o instanceof HTMLImageElement && c instanceof HTMLImageElement && o.complete && o.naturalWidth > 0) {
+      const r = o.getBoundingClientRect()
+      if (r.width > 0 && r.height > 0) {
+        try {
+          const dpr = window.devicePixelRatio || 1
+          const cv = document.createElement('canvas')
+          cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr)
+          // Same crop as the original's object-fit (avatars use cover).
+          const fit = getComputedStyle(o).objectFit
+          const iw = o.naturalWidth, ih = o.naturalHeight, W = cv.width, H = cv.height
+          const ctx = cv.getContext('2d')
+          if (fit === 'cover') {
+            const k = Math.max(W / iw, H / ih), sw = W / k, sh = H / k
+            ctx?.drawImage(o, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, W, H)
+          } else if (fit === 'contain' || fit === 'scale-down') {
+            const k = Math.min(W / iw, H / ih), dw = iw * k, dh = ih * k
+            ctx?.drawImage(o, (W - dw) / 2, (H - dh) / 2, dw, dh)
+          } else {
+            ctx?.drawImage(o, 0, 0, W, H)
+          }
+          cv.className = c.className
+          cv.setAttribute('style', c.getAttribute('style') ?? '')
+          Object.assign(cv.style, { width: `${r.width}px`, height: `${r.height}px` })
+          swaps.push([c, cv])
+        } catch { /* keep the copied <img> */ }
+      }
+    }
     if (c.id) c.removeAttribute('id')
     if (c.hasAttribute('data-amount-keypad-sheet')) c.removeAttribute('data-amount-keypad-sheet')
   }
+  swaps.forEach(([img, cv]) => img.replaceWith(cv))
   drop.forEach(c => c.remove())
   floats.forEach(c => { c.remove(); c.style.position = 'absolute' })
   node.removeAttribute('id')
