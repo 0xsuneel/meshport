@@ -90,15 +90,14 @@ function TradeReceipt({ t, isBuyer, label, counterparty, counterpartyWallet, onO
         </span>
         {isBuyer ? 'Bought from' : 'Sold to'} {counterparty}
       </>}
+      // The header shows the USDC and who it was with, and the title the
+      // status - rows only add the fiat side and the rest.
       rows={[
-        { label: isBuyer ? 'You received' : 'You sold', value: `${t.amountUsdc} USDC`, positive: isBuyer && status === 'success' },
         { label: isBuyer ? 'You paid' : 'You receive', value: `${currencySymbol(t.currency)}${t.amountFiat} ${t.currency}` },
-        { label: isBuyer ? 'Seller' : 'Buyer', value: counterparty, positive: true },
         ...(hash ? [{ label: 'Transaction Hash', value: `${hash.slice(0, 6)}…${hash.slice(-4)}` }] : []),
         { label: 'Time', value: fmtDate(t.completedAt || t.createdAt) },
       ]}
       detailRows={[
-        { label: 'Status', value: label, positive: status === 'success' },
         { label: 'Price', value: `${t.pricePerUsdc} ${t.currency}/USDC` },
         { label: 'Payment method', value: t.paymentMethod },
         { label: 'Trade ID', value: shortHash(t.id) },
