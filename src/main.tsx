@@ -26,6 +26,9 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
 
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+// Before App (and its router): the leave guard's Back listener must be added
+// ahead of React Router's - window listeners run in the order they're added.
+import './lib/leaveGuard'
 import App from './App.tsx'
 import './index.css'
 import { clearLegacyData } from './lib/clearLegacyData'

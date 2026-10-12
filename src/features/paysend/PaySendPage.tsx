@@ -1685,7 +1685,7 @@ export function PaySendPage() {
                     <ArrowLeft className="w-5 h-5 text-text-primary" />
                   </button>
                 )}
-                <h1 className="text-xl font-bold text-text-primary">Review Payment</h1>
+                <h1 className="text-xl font-bold text-text-primary">{isProcessing ? 'Sending Payment' : 'Review Payment'}</h1>
               </div>
             )}
 

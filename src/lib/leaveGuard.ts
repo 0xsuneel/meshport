@@ -83,3 +83,73 @@ export function shouldHoldNavigation(guarded: boolean, fromPath: string, toPath:
   if (toPath === '/auth' || toPath.startsWith('/auth/')) return false
   return true
 }
+
+// ── Back button ───────────────────────────────────────────────────────────
+// React Router can't hold a Back press onto a history entry it didn't create
+// (the bottom nav, the Hub and some flows push their own entries), and a
+// Back that stays on the same path never reaches its blocker at all. So while
+// a guard is on, LeaveGuardHost catches every popstate itself, before the
+// router and the pages see it. When the person chooses Leave, the next Back
+// is let through untouched - and the router's blocker lets it through too.
+
+let passPending = false
+let passing = false
+
+/** Let the next Back (popstate) through the guard: the person chose Leave. */
+export function letNextBackThrough() { passPending = true }
+
+/** In LeaveGuardHost's popstate handler: true once, for the Back that was let through. */
+export function takePassThrough(): boolean {
+  if (!passPending) return false
+  passPending = false
+  passing = true
+  // The router and the pages handle this same event synchronously after us.
+  setTimeout(() => { passing = false }, 0)
+  return true
+}
+
+/** True while the let-through Back is being handled. */
+export const isPassingThrough = () => passing
+
+// The app itself also steps back through history (a flow dropping its own
+// entry as it moves on, navigate(-1)). Those calls go through history.back()
+// / history.go(-n); a person's Back button never does. They're tallied here
+// (from the moment the app loads, since such a call can come in the very
+// render that turns a guard on) so the guard only catches real Back presses.
+const appPops: number[] = []
+const APP_POP_WINDOW_MS = 1500
+
+if (typeof window !== 'undefined' && window.history) {
+  const h = window.history
+  const back = h.back.bind(h)
+  const go = h.go.bind(h)
+  h.back = () => { appPops.push(Date.now()); back() }
+  h.go = (delta?: number) => { if (delta && delta < 0) appPops.push(Date.now()); go(delta) }
+  // The Back press itself. Listeners on window run in the order they were
+  // added (capture or not), so this one - added when this module first loads,
+  // which main.tsx makes happen before the router is created - sees every
+  // Back before React Router and every page's own popstate handler. While a
+  // guard is on, a real Back is undone (history.go(1): the screen and
+  // history stay exactly as they were) and the person is asked Stay / Leave.
+  let undoing = false
+  window.addEventListener('popstate', e => {
+    // Every Back is paired with its cause, guard on or not, so a step back the
+    // app made just before a guard switched on can't be taken for the next one.
+    const byApp = takeAppPop()
+    if (undoing) { undoing = false; e.stopImmediatePropagation(); return }
+    if (takePassThrough() || byApp || !isLeaveGuarded()) return
+    e.stopImmediatePropagation()
+    undoing = true
+    go(1)
+    const close = () => useLeaveGuardStore.setState({ ask: null })
+    useLeaveGuardStore.setState({ ask: { stay: close, leave: () => { close(); letNextBackThrough(); window.history.back() } } })
+  })
+}
+
+/** In LeaveGuardHost's popstate handler: true once per back step the app made itself. */
+export function takeAppPop(now = Date.now()): boolean {
+  while (appPops.length && now - appPops[0] > APP_POP_WINDOW_MS) appPops.shift()
+  if (!appPops.length) return false
+  appPops.shift()
+  return true
+}

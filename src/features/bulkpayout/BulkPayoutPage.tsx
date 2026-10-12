@@ -442,7 +442,7 @@ export function BulkPayoutPage() {
       // publicClient.getTransactionCount at all; a client-computed nonce
       // is exactly the value a lost broadcast response leaves nothing to
       // reconcile against.
-      setProcessingStatus('Preparing bulk payout...')
+      setProcessingStatus('Preparing...')
       const totalAmountAtomic = (BigInt(Math.round(totalAmount * 1_000_000)) * (10n ** 12n)).toString()
       const { createBulkPayIntent, markBulkPayAttemptSubmitted } = await import('@/lib/bulkPayIntentService')
 
@@ -521,7 +521,7 @@ export function BulkPayoutPage() {
         // Case 2 (lost broadcast response) recoverable at all.
         const nonce = serverNonce
 
-        setProcessingStatus('Sending bulk payout transaction...')
+        setProcessingStatus('Sending the transaction...')
         // Cast: viem's sendTransaction overload resolution (in the installed
         // viem/typescript combination) spuriously demands an EIP-4844 `kzg`
         // field for this plain EIP-1559 transaction. Runtime behavior is
@@ -541,7 +541,7 @@ export function BulkPayoutPage() {
             totalAmount, recipientCount: resolved.length, walletAddress: account.address,
           })
           void markBulkPayAttemptSubmitted(attemptId, txHash).catch(() => { /* best-effort */ })
-          setProcessingStatus('Confirming bulk payout transaction...')
+          setProcessingStatus('Confirming on Arc...')
         }
         const sent = await relaySend(account, { to: MULTICALL3_ADDRESS as `0x${string}`, data, value: totalValue, gas: (gasEst * 130n) / 100n, nonce }, onSent)
         // A batch the network may still be mining gets the old full wait
