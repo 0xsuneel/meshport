@@ -5,6 +5,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { BottomNav } from './BottomNav'
 import { DesktopSidebar } from './DesktopSidebar'
 import { DesktopHeader } from './DesktopHeader'
+import { LeaveGuardHost } from './LeaveGuardHost'
 import { Toast } from '@/components/ui/Toast'
 import { PushPermissionBanner } from '@/components/ui/PushPermissionBanner'
 import { PageTransition } from '@/components/ui/PageTransition'
@@ -638,6 +639,7 @@ export function AppLayout() {
         <Toast />
         <PushPermissionBanner />
         <DeviceKeyNotice />
+        <LeaveGuardHost />
         <ModeToggle />
       </div>
     )
@@ -707,6 +709,7 @@ export function AppLayout() {
         <Toast />
         <PushPermissionBanner />
         <DeviceKeyNotice />
+        <LeaveGuardHost />
         <ModeToggle />
       </div>
     </div>

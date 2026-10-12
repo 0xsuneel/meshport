@@ -183,13 +183,13 @@ export function ClaimAllScreen({ chains, steps, running, onClose, onRetry, onTra
     isDesktop ? (
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <PopupDim background="rgba(0,0,0,0.55)" />
-        <motion.div onClick={e => e.stopPropagation()} initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }} transition={{ duration: 0.2 }}
+        <motion.div onClick={e => e.stopPropagation()} data-leave-guard={running ? '' : undefined} initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }} transition={{ duration: 0.2 }}
           style={{ position: 'relative', width: 420, maxHeight: 'min(760px, calc(100vh - 48px))', height: 720, borderRadius: 24, overflow: 'hidden', border: '1px solid var(--border)', boxShadow: 'var(--shadow-3)' }}>
           {panel}
         </motion.div>
       </div>
     ) : (
-      <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+      <motion.div data-leave-guard={running ? '' : undefined} initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
         style={{ position: 'fixed', inset: 0, zIndex: 100 }}>
         {panel}
       </motion.div>

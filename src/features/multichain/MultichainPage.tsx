@@ -34,6 +34,7 @@ import { HubPage, HubPageBack } from '@/components/multichain/HubPage'
 import { UbProgressTracker, type UbTrackerProgress } from '@/components/multichain/UbProgressTracker'
 import { TrackDetails, type TrackDetailRow } from '@/components/multichain/TrackDetails'
 import { useCctpProgress, fetchCctpProgress } from '@/lib/cctpTracker'
+import { isLeaveGuarded, requestLeave } from '@/lib/leaveGuard'
 
 // Below half a cent a balance shows as "0" - treat it as empty (no "$0 on
 // 1 chain", no highlighted "0 USDC" row).
@@ -547,7 +548,17 @@ export function MultichainPage() {
     if (!bringSubOpen) return
     let poppedByBack = false
     window.history.pushState({ ...(window.history.state ?? {}), mpHubSub: true }, '')
-    const onPop = () => { poppedByBack = true; setClaimChain(null); setTrackUb(null); closeTracking() }
+    const close = () => { setClaimChain(null); setTrackUb(null); closeTracking() }
+    const onPop = () => {
+      // A bring is processing in this panel: keep it open (put the entry
+      // back), blink and ask; Leave closes it with the on-screen path.
+      if (isLeaveGuarded()) {
+        window.history.pushState({ ...(window.history.state ?? {}), mpHubSub: true }, '')
+        requestLeave(close)
+        return
+      }
+      poppedByBack = true; close()
+    }
     window.addEventListener('popstate', onPop)
     return () => {
       window.removeEventListener('popstate', onPop)

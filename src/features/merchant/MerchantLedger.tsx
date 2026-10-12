@@ -34,6 +34,7 @@ import { ChainPicker, WalletPaymentDetails } from './MerchantQrPanel'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 
 /** Chat text for a request / bill - the chat renders it as a live card. */
 function chatMessageFor(i: MerchantIntent): string {
@@ -331,6 +332,8 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
   const [pin, setPin] = useState('')
   const [pinError, setPinError] = useState(false)
   const [running, setRunning] = useState(false)
+  // Claim All is moving funds on several chains: hold Back / sidebar until it ends.
+  useLeaveGuard(running, 'Claim All')
   const [steps, setSteps] = useState<Record<string, ClaimAllStep>>({})
   // The chains of the current run (snapshot - the scan list refreshes under
   // it) and whether its tracking screen is up. Retry re-runs only `retryIds`.

@@ -19,6 +19,7 @@ import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { P2PSheet } from '@/features/p2p/p2pUi'
 import { PopupOpen } from '@/hooks/usePopupOpen'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 
 interface ClaimRecord {
   id: string; points_claimed: number; usdc_received: number
@@ -171,7 +172,7 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 22 }}>
         <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }} transition={{ duration: 0.22 }}
-          role="dialog" aria-live="polite" aria-label="Claiming reward"
+          role="dialog" aria-live="polite" aria-label="Claiming reward" data-leave-guard={p.phase === 'running' ? '' : undefined}
           style={{ width: '100%', maxWidth: 380, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 26, padding: '26px 22px 22px', textAlign: 'center', boxShadow: 'var(--shadow-3)' }}>
           {/* Logo → result */}
           <div style={{ position: 'relative', width: 96, height: 96, margin: '0 auto' }}>
@@ -289,6 +290,8 @@ export function RewardsPage() {
   const [claimInput, setClaimInput]         = useState('')
   const [showClaimSheet, setShowClaimSheet] = useState(false)
   const [progress, setProgress]             = useState<ClaimProgress | null>(null)
+  // The claim is signing and sending on-chain: hold Back / sidebar until it lands.
+  useLeaveGuard(progress?.phase === 'running', 'Reward claim')
   const [historyTab, setHistoryTab]         = useState<'earned' | 'claimed'>('earned')
 
   const userId = rewardsUserId(user?.id, walletAddress)

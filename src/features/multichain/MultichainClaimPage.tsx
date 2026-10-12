@@ -72,6 +72,7 @@ import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { claimFeeSummary, type SignedClaimFee } from '@/lib/claimFees'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 
 // ─── MeshPort V2 Design System ────────────────────────────────────────────────
 const COLORS = {
@@ -412,6 +413,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const focus = step === 'confirm'
     ? ((confirmPhase === 'processing' || confirmPhase === 'submitted') ? 'processing' : 'result')
     : step === 'failed' ? 'result' : 'none'
+  // After the passcode the bring is on its way: hold Back / sidebar until it lands.
+  useLeaveGuard(focus === 'processing', 'Bring')
   useEffect(() => {
     if (!embedded) return
     onFocusChange?.(focus)

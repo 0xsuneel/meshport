@@ -47,6 +47,7 @@ import { readPeople, writePeople } from '@/lib/peopleCache'
 import { SearchField } from '@/components/ui/SearchField'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { reachCheck, STRANGER_PAY_BLOCKED, BLOCKED_YOU } from '@/lib/privacy'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 
 type Screen = 'search' | 'amount' | 'review'
 type Token = 'USDC' | 'EURC' | 'cirBTC'
@@ -305,6 +306,8 @@ export function PaySendPage() {
   const numAmount = parseFloat(amount) || 0
   const activeBalance = token === 'EURC' ? eurcBalance : token === 'cirBTC' ? (cirbtcBalance ?? 0) : balance
   const isProcessing = processStage !== 'idle' && processStage !== 'failed' && processStage !== 'delivered'
+  // Hold Back / sidebar from the passcode until the payment lands or fails.
+  useLeaveGuard(isProcessing, 'Payment')
   const isDone = processStage === 'delivered'
 
   // ─── Resume an in-flight payment after a refresh ────────────────────────
@@ -1209,7 +1212,7 @@ export function PaySendPage() {
   // buttons - with no way to reach it, since this was the innermost clip
   // boundary. Mobile keeps overflow-hidden, unchanged.
   const flow = (
-    <div className={`flex flex-col ${isDesktop ? 'h-full' : 'h-screen overflow-hidden'}`} style={{ background: 'var(--bg)' }}>
+    <div data-leave-guard={isProcessing ? '' : undefined} className={`flex flex-col ${isDesktop ? 'h-full' : 'h-screen overflow-hidden'}`} style={{ background: 'var(--bg)', borderRadius: isDesktop ? 20 : undefined }}>
       {/* Search → amount → review push like pages (ScreenPush), so two
           screens are never seen through each other mid-change. Desktop
           keeps its own slide. */}

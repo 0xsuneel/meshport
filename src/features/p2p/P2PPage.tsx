@@ -47,6 +47,7 @@ import { sheetDrag } from '@/lib/sheetDrag'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 
 export const COLORS = {
   bg: 'var(--bg)', surface: 'var(--surface)', surfaceSecondary: 'var(--surface)',
@@ -1263,6 +1264,8 @@ export function P2PTradePage() {
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const [acting, setActing] = useState(false)
   const [processingPayment, setProcessingPayment] = useState(false)
+  // Marking the trade paid is an on-chain step: hold Back / sidebar until it returns.
+  useLeaveGuard(processingPayment, 'Payment')
   const [now, setNow] = useState(Date.now())
   const { flipState, runFlip, dismissFlip } = useProcessingFlip()
   const { glassPop, showGlassPop, dismissGlassPop } = useGlassPop()
@@ -1790,7 +1793,7 @@ export function P2PTradePage() {
       {/* Fake payment-processing overlay - see handleMarkPaid's comment */}
       <AnimatePresence>
         {processingPayment && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          <motion.div data-leave-guard="" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
             <MeshLoader size={44} color="#5CD6CB" label="Processing" />
             <p style={{ fontSize: 14.5, fontWeight: 600, color: '#fff' }}>Notifying the seller…</p>

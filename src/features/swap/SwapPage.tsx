@@ -37,6 +37,7 @@ import { MeshLoader } from '@/components/ui/MeshLoader'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { ARC_EXPLORER } from '@/lib/chainExplorers'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 
 // ── Token definitions ─────────────────────────────────────────────────────────
 // Arc Testnet: only USDC, EURC, cirBTC supported for swap (per Arc docs)
@@ -402,6 +403,8 @@ export function SwapPage() {
   // executing against the stale numbers.
   const [quoteChangedNotice, setQuoteChangedNotice] = useState('')
   const [step,         setStep]         = useState<Step>('idle')
+  // After the passcode the swap is on-chain: hold Back / sidebar until it lands.
+  useLeaveGuard(step === 'swapping', 'Swap')
   const [error,        setError]        = useState('')
   const [isUncertainFailure, setIsUncertainFailure] = useState(false)
   const [passEntry,    setPassEntry]    = useState('')
@@ -1601,7 +1604,7 @@ export function SwapPage() {
         {/* Stays up under the success flash (until the receipt takes over),
             so the flash never grows over an empty screen. */}
         {(step === 'confirming' || step === 'swapping' || (step === 'done' && (successPhase === 'flash' || !heroCheckEl))) && (
-          <motion.div key="conf" initial={false}
+          <motion.div key="conf" initial={false} data-leave-guard={step === 'swapping' ? '' : undefined}
             className="space-y-3" style={{ position: 'relative', overflow: 'hidden', borderRadius: 24, padding: 2 }}>
 
             <p className="text-center text-sm font-bold text-text-primary" style={{ position: 'relative' }}>

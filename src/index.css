@@ -604,6 +604,19 @@ html.mp-locking #root { visibility: hidden; }
 .mp-news-card:hover img { transform: scale(1.03); }
 @media (prefers-reduced-motion: reduce) { .mp-news-card:hover img { transform: none; } }
 
+/* Leave guard (components/layout/LeaveGuardHost.tsx): the panel of a flow
+   that is moving money blinks amber when someone tries to leave it, and
+   keeps blinking until the step completes. An animation outranks the
+   panel's own inline border / shadow while it runs. */
+@keyframes mpLeaveBlink {
+  0%, 100% { box-shadow: inset 0 0 0 1.5px transparent, 0 0 0 0 transparent; }
+  50% { box-shadow: inset 0 0 0 2px var(--warning), 0 0 0 3px color-mix(in srgb, var(--warning) 28%, transparent), 0 0 24px color-mix(in srgb, var(--warning) 35%, transparent); }
+}
+.mp-leave-blink { animation: mpLeaveBlink 0.84s ease-in-out infinite !important; }
+@media (prefers-reduced-motion: reduce) {
+  .mp-leave-blink { animation: none !important; box-shadow: inset 0 0 0 2px var(--warning) !important; }
+}
+
 /* Typing caret after the amount while the phone keypad is open. */
 @keyframes mpCaretBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 .mp-amount-caret { display: inline-block; width: 3px; height: 0.82em; margin-left: 4px; vertical-align: -0.06em; border-radius: 2px; background: var(--brand-text); animation: mpCaretBlink 1s steps(1) infinite; }

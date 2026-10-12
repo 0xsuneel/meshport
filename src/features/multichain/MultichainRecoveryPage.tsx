@@ -23,6 +23,7 @@ import {
   listRecoverable, inspectCctp, retryClaimRelay, requestReattest, selfMintTransfer,
   listPendingUbRecoveries, type RecoveryItem, type CctpDiagnosis,
 } from '@/lib/cctpRecovery'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 16 }
 const btn: React.CSSProperties = { padding: '10px 14px', borderRadius: 12, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
@@ -71,6 +72,8 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
   const everLoaded = useRef(false)
   if (!loading) everLoaded.current = true
   const [busy, setBusy] = useState<string | null>(null)
+  // A recovery send is in flight: hold Back / sidebar until it returns.
+  useLeaveGuard(busy !== null, 'Recovery')
   const [result, setResult] = useState<Record<string, { diag?: CctpDiagnosis; error?: string }>>({})
 
   const load = useCallback(async () => {
