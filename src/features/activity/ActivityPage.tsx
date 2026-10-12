@@ -77,8 +77,10 @@ function chainLabel(raw?: string) {
 // token, so the fine-precision tiers now apply regardless of symbol; only
 // the >= 0.01 tier still varies by token (USDC/EURC show 2 decimals there,
 // BTC-like tokens show 4).
-function formatAmt(n: number, symbol?: string) {
-  if (!n) return '0'
+function formatAmt(value: number | string, symbol?: string) {
+  // Metadata amounts can arrive as strings (e.g. a swap's amountOut).
+  const n = Number(value)
+  if (!n || !Number.isFinite(n)) return '0'
   const abs = Math.abs(n)
   const sym = (symbol || '').toLowerCase()
   const isBtcLike = sym.includes('btc') || sym.includes('eth') || sym.includes('wbtc')

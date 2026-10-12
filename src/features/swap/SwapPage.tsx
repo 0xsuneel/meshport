@@ -1556,7 +1556,8 @@ export function SwapPage() {
         )}
 
         {/* Error */}
-        {error && !['confirming','swapping'].includes(step) && (
+        {/* (The failed screen shows the reason itself.) */}
+        {error && !['confirming','swapping','failed'].includes(step) && (
           <div className="rounded-2xl p-3.5 space-y-1.5"
             style={{ background: 'color-mix(in srgb, var(--danger) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 20%, transparent)' }}>
             {/* BUG FIX: a raw error message can be one long, space-free
@@ -1787,7 +1788,9 @@ export function SwapPage() {
               ]}
               fullHash={txHash || undefined}
               links={txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: txHash, href: `${ARC_EXPLORER}/tx/${txHash}` }] : undefined}
-              onPrimary={() => navigate('/')}
+              // Desktop: back to a fresh swap here, beside the updated Recent
+              // History (like Transfer / Bring); phone: Home.
+              onPrimary={isDesktop ? () => { setStep('idle'); setAmountIn(''); setEstimate(null); setError(''); setTxHash('') } : () => navigate('/')}
               checkRef={heroCheckCallback}
               revealed={travelDone}
               checkContent={paidViaBiometric && travelDone
@@ -1919,6 +1922,7 @@ export function SwapPage() {
           <DesktopTransactionAuthDialog
             onClose={closeSheet}
             title={storedPasscode ? 'Authorize Swap' : 'Confirm Swap'}
+            anchor={desktopColumnRef.current}
             amountLabel={`${trimTrailingZeros(parseFloat(amountIn || '0').toFixed(swapTokenDecimals(tokenIn.id)))} ${tokenIn.id}`}
             subLabel={`For ~${trimTrailingZeros(parseFloat(estimate?.estimatedOutput?.amount ?? '0').toFixed(swapTokenDecimals(tokenOut.id)))} ${tokenOut.id}`}
           >
