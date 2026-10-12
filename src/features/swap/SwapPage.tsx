@@ -1652,7 +1652,6 @@ export function SwapPage() {
                 <div className="rounded-2xl" style={{ position: 'relative', marginTop: 20, padding: '4px 16px', background: 'var(--surface)', border: '1px solid var(--border)' }}>
                   {[
                     ['Rate', `1 ${tokenIn.id} = ${estimate ? trimTrailingZeros((parseFloat(estimate.estimatedOutput.amount)/parseFloat(amountIn)).toFixed(tokenOut.id === 'cirBTC' ? 8 : 4)) : '-'} ${tokenOut.id}`],
-                    ['Price protection', `${slippage/100}% slippage`],
                     ['Network fee', `~$${formatAmount(totalFees)}`],
                     ['Network', 'Arc Testnet'],
                   ].map(([l, v], i, rows) => (
