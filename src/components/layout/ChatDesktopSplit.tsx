@@ -12,6 +12,7 @@
 // conversation" placeholder (Outlet would otherwise just render the list
 // a second time, since that's literally what the bare `/chat` route's own
 // element is).
+import { motion } from 'framer-motion'
 import { type ReactNode } from 'react'
 import { Outlet, useParams } from 'react-router-dom'
 import { MessageCircle } from 'lucide-react'
@@ -30,7 +31,13 @@ export function ChatDesktopSplit({ list }: { list: ReactNode }) {
       </div>
       <div style={{ flex: 1, minWidth: 0, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {id ? (
-          <Outlet />
+          // Only this column changes when another chat is opened (like
+          // WhatsApp): the conversation eases in, the list stays put.
+          <motion.div key={id} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+            style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <Outlet />
+          </motion.div>
         ) : (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, color: 'var(--text-secondary)', background: 'var(--bg)' }}>
             <div style={{
