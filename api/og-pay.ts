@@ -15,12 +15,13 @@ function orderName(kind: string | undefined, personal: boolean | null | undefine
 }
 
 /**
- * GET /api/og-pay?username=<username>[&amount=<n>]   personal payment link
+ * GET /api/og-pay?username=<username>[&amount=<n>][&token=EURC|cirBTC]   personal payment link
  * GET /api/og-pay?code=<code>[&order=<ORD-…>]        merchant bill / payment request
  *
  * Powers rich link previews for payment links (meshport.xyz/paylink/:username
  * and /paylink/r/:code, plus the older /pay/… forms). A link with an amount
- * (?amount=10, or a merchant bill) shows that amount on the card: "Pay $10".
+ * (?amount=10, or a merchant bill) shows that amount on the card: "Pay $10",
+ * in the link's token (?token=EURC → "€10 EURC"), plus the bill's status.
  *
  * WHY THIS EXISTS: MeshPort is a client-side React app - the actual HTML the
  * server sends back is the same empty shell for every route, and the real
@@ -64,9 +65,31 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-function formatAmount(n: number): string {
+// Same tokens and symbols as og-image.tsx and src/lib/payLinks.ts.
+const TOKENS: Record<string, { symbol: string; decimals: number }> = {
+  USDC: { symbol: '$', decimals: 2 },
+  EURC: { symbol: '€', decimals: 2 },
+  cirBTC: { symbol: '', decimals: 8 },
+}
+
+function formatAmount(n: number, token = 'USDC'): string {
   if (!Number.isFinite(n) || n <= 0 || n > 1e12) return ''
-  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(n) ? 0 : 2, maximumFractionDigits: 2 })
+  const t = TOKENS[token] || TOKENS.USDC
+  return t.symbol + n.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(n) ? 0 : Math.min(2, t.decimals), maximumFractionDigits: t.decimals })
+}
+
+/** "For sunil.arc · 2x Flat white +1 more" - who a bill is for and what's on it. */
+function billMemo(v: any): string {
+  const parts: string[] = []
+  if (v.customerUsername) parts.push(`For ${String(v.customerUsername).replace(/\.arc$/i, '')}.arc`)
+  const items = Array.isArray(v.items) ? v.items.filter((i: any) => i && i.name) : []
+  if (items.length) {
+    const first = `${Number(items[0].qty) > 1 ? `${Number(items[0].qty)}x ` : ''}${items[0].name}`
+    parts.push(items.length > 1 ? `${first} +${items.length - 1} more` : first)
+  } else if (v.note) {
+    parts.push(String(v.note))
+  }
+  return parts.join(' · ')
 }
 
 const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
@@ -82,6 +105,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const proto = /^localhost/i.test(host) ? 'http' : 'https'
   const appPath = code ? `/paylink/r/${code}` : `/paylink/${username}`
   const pageUrl = `${proto}://${host}${appPath}`
+  const rawToken = String(req.query.token || '')
+  const linkToken = !code && (rawToken === 'EURC' || rawToken === 'cirBTC') ? rawToken : 'USDC'
 
   // ── Real visitor: pass through to the actual app, unchanged ──────────────
   if (!isBot(userAgent)) {
@@ -95,7 +120,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // If the self-fetch ever fails for some reason, redirecting still
       // gets a real visitor to a working page rather than an error.
       const amt = code ? '' : String(req.query.amount || '').replace(/[^0-9.]/g, '')
-      res.setHeader('Location', appPath + (amt ? `?amount=${amt}` : ''))
+      const q = new URLSearchParams()
+      if (amt) q.set('amount', amt)
+      if (linkToken !== 'USDC') q.set('token', linkToken)
+      res.setHeader('Location', appPath + (q.toString() ? `?${q}` : ''))
       return res.status(302).end()
     }
   }
@@ -110,6 +138,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let avatarUrl = ''
   let amount = 0
   let label = ''
+  let token = linkToken
+  let status = ''
+  let memo = ''
 
   if (code) {
     // Merchant bill / payment request: the public view the pay page shows.
@@ -131,6 +162,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const due = Math.max(0, Number(v.amount) - Number(v.received || 0))
           amount = v.status === 'paid' ? Number(v.amount) : (due > 0 ? due : Number(v.amount))
           label = v.orderNumber ? orderName(v.kind, v.personal, v.orderNumber, v.status === 'paid') : v.status === 'paid' ? 'Paid' : v.kind === 'invoice' ? 'Bill' : ''
+          if (TOKENS[v.currency]) token = v.currency
+          status = String(v.status || '')
+          memo = billMemo(v)
         }
       } catch { /* plainer card below */ }
     }
@@ -156,25 +190,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  const amountText = formatAmount(amount)
+  const amountText = formatAmount(amount, token)
   const title = amountText ? `Pay ${amountText} to ${displayName} on MeshPort` : `Pay ${displayName} on MeshPort`
   const description = [
     handle ? `${handle}.arc` : '',
     label,
-    amountText ? `${amountText} USDC • Pay instantly with MeshPort` : 'Send USDC instantly with MeshPort',
+    amountText ? `${amountText} ${token} • Pay instantly with MeshPort` : `Send ${token} instantly with MeshPort`,
   ].filter(Boolean).join(' • ')
-  // Render the branded card (avatar + name + handle, the amount when there is
-  // one, and the logo) via the og-image edge function, so it's personalized
-  // per link. og-image.tsx falls back to an initials badge itself when
-  // avatarUrl is empty, so no separate default-image branch needed.
+  // Render the branded ticket card (avatar + name + handle, the amount and
+  // status when there is one, the link path) via the og-image edge function,
+  // so it's personalized per link. og-image.tsx falls back to an initials
+  // badge itself when avatarUrl is empty, so no separate default-image branch.
+  const displayHost = host.replace(/^www\./i, '')
+  const displayPath = code ? appPath : `/paylink/${/^0x[0-9a-fA-F]{40}$/.test(username) ? shortAddr(username) : username}`
   const imageParams = new URLSearchParams({ name: displayName })
   if (handle) imageParams.set('username', handle)
   if (avatarUrl) imageParams.set('avatar', avatarUrl)
-  if (amountText) imageParams.set('amount', String(Math.round(amount * 100) / 100))
+  if (amountText) imageParams.set('amount', String(Number(amount.toFixed(TOKENS[token].decimals))))
+  if (token !== 'USDC') imageParams.set('currency', token)
   if (label) imageParams.set('label', label)
-  imageParams.set('v', '3') // new logo - a fresh URL for every preview cache
+  if (status) imageParams.set('status', status)
+  if (memo) imageParams.set('memo', memo)
+  if (code) imageParams.set('kind', 'merchant')
+  imageParams.set('path', displayHost + displayPath)
+  imageParams.set('v', '4') // ticket redesign - a fresh URL for every preview cache
   const image = `${proto}://${host}/api/og-image?${imageParams.toString()}`
-  const shareUrl = pageUrl + (amountText && !code ? `?amount=${encodeURIComponent(String(amount))}` : '')
+  const shareQuery = new URLSearchParams()
+  if (amountText && !code) shareQuery.set('amount', String(amount))
+  if (token !== 'USDC' && !code) shareQuery.set('token', token)
+  const shareUrl = pageUrl + (shareQuery.toString() ? `?${shareQuery}` : '')
 
   const html = `<!DOCTYPE html>
 <html>
