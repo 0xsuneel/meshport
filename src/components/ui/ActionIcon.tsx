@@ -5,7 +5,7 @@ import { useId } from 'react'
 // the gift ribbon, the globe lines…), Pay as a rounded line plane. Each glyph
 // is mask content: white = ink, black = cut-out. The mask paints one rect in
 // `color`, so the icon takes any colour, cut-outs show the background.
-export type ActionIconName = 'pay' | 'receive' | 'swap' | 'more' | 'bulk' | 'hub' | 'p2p' | 'rewards' | 'insights' | 'clock'
+export type ActionIconName = 'pay' | 'receive' | 'swap' | 'more' | 'bulk' | 'hub' | 'p2p' | 'rewards' | 'insights' | 'clock' | 'chat'
 
 // Static markup written here (never user data).
 const GLYPHS: Record<ActionIconName, string> = {
@@ -19,6 +19,7 @@ const GLYPHS: Record<ActionIconName, string> = {
   rewards: "<rect x=\"4\" y=\"11.6\" width=\"16\" height=\"9.2\" rx=\"1.8\" fill=\"#fff\"/><rect x=\"2.8\" y=\"7.2\" width=\"18.4\" height=\"3.6\" rx=\"1.3\" fill=\"#fff\"/><path d=\"M12 7.2C10.8 4.3 7.3 3.4 7.1 5.5 7 7 9.4 7.2 12 7.2zM12 7.2c1.2-2.9 4.7-3.8 4.9-1.7.1 1.5-2.3 1.7-4.9 1.7z\" fill=\"#fff\" stroke=\"#fff\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-width=\"1.3\"/><path d=\"M12 7.6V21.2M2 11.2h20\" fill=\"none\" stroke=\"#000\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.6\"/>",
   insights: "<rect x=\"3.6\" y=\"13\" width=\"4.4\" height=\"7.8\" rx=\"1.4\" fill=\"#fff\"/><rect x=\"9.8\" y=\"9\" width=\"4.4\" height=\"11.8\" rx=\"1.4\" fill=\"#fff\"/><rect x=\"16\" y=\"4.2\" width=\"4.4\" height=\"16.6\" rx=\"1.4\" fill=\"#fff\"/>",
   clock: "<circle cx=\"12\" cy=\"12\" r=\"9.4\" fill=\"#fff\"/><path d=\"M12 6.8v5.4l3.6 2.2\" fill=\"none\" stroke=\"#000\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\"/>",
+  chat: "<path d=\"M12 3.2c-5 0-9 3.4-9 7.7 0 2.3 1.2 4.4 3 5.8l-.9 3.7 4.2-2.2c.85.2 1.75.3 2.7.3 5 0 9-3.4 9-7.6S17 3.2 12 3.2z\" fill=\"#fff\"/><circle cx=\"8\" cy=\"11\" r=\"1.35\" fill=\"#000\"/><circle cx=\"12\" cy=\"11\" r=\"1.35\" fill=\"#000\"/><circle cx=\"16\" cy=\"11\" r=\"1.35\" fill=\"#000\"/>",
 }
 
 export function ActionIcon({ name, size = 26, color = '#fff' }: { name: ActionIconName; size?: number; color?: string }) {
