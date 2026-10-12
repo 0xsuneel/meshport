@@ -13,7 +13,7 @@ import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { parseUnits } from 'viem'
 import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
-import { drawQrLogo } from '@/lib/qrLogo'
+import { drawMeshportQr } from '@/lib/qrLogo'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
 import { copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { readArcBalanceOrThrow, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT, EXTERNAL_SCAN_PROGRESS_EVENT } from '@/blockchain/BlockchainManager'
@@ -208,17 +208,9 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
     if (!qrData || !canvasRef.current) return
     setQrReady(false)
     setQrError(false)
-    import('qrcode').then(QRCode => {
-      QRCode.toCanvas(canvasRef.current!, qrData, {
-        width: 236,
-        margin: 2,
-        color: { dark: '#000000', light: '#ffffff' },
-        errorCorrectionLevel: 'H',
-      }, (err) => {
-        if (err) { setQrError(true); return }
-        drawQrLogo(canvasRef.current, () => setQrReady(true))
-      })
-    }).catch(() => setQrError(true))
+    drawMeshportQr(canvasRef.current, qrData)
+      .then(() => setQrReady(true))
+      .catch(() => setQrError(true))
   }, [qrData])
 
   const handleDownload = () => {
@@ -325,14 +317,15 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
           </button>
         )}
       </div>
+      {/* The frame hugs the QR: drawMeshportQr sizes the canvas to whole pixels per module (≤236px). */}
       <div style={{
-        width: 242, height: 242, borderRadius: 12, background: '#DEE6E8',
+        padding: 3, minWidth: 200, minHeight: 200, borderRadius: 12, background: '#DEE6E8',
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
       }}>
         {qrError ? (
           <span role="alert" style={{ fontSize: 12, color: 'var(--text-secondary)', padding: 8, textAlign: 'center' }}>Couldn't load QR</span>
         ) : (
-          <canvas ref={canvasRef} style={{ display: qrReady ? 'block' : 'none', width: 236, height: 236, borderRadius: 10 }} />
+          <canvas ref={canvasRef} style={{ display: qrReady ? 'block' : 'none', borderRadius: 10 }} />
         )}
       </div>
 

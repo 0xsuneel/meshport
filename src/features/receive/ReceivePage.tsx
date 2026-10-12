@@ -9,7 +9,7 @@ import { useAuthStore, useUIStore } from '@/store'
 import { Card } from '@/components/ui/Card'
 import { shortenAddress, copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { drawQrLogo } from '@/lib/qrLogo'
+import { drawMeshportQr } from '@/lib/qrLogo'
 
 const APP_URL = 'https://meshport.xyz'
 
@@ -78,17 +78,9 @@ export function ReceivePage() {
     setQrReady(false)
     setQrError(false)
 
-    import('qrcode').then(QRCode => {
-      QRCode.toCanvas(canvasRef.current!, qrData, {
-        width: 236,
-        margin: 2,
-        color: { dark: '#000000', light: '#ffffff' },
-        errorCorrectionLevel: 'H',
-      }, (err) => {
-        if (err) { setQrError(true); return }
-        drawQrLogo(canvasRef.current, () => setQrReady(true))
-      })
-    }).catch(() => setQrError(true))
+    drawMeshportQr(canvasRef.current, qrData)
+      .then(() => setQrReady(true))
+      .catch(() => setQrError(true))
     // Redraw when My QR comes back into view (after Request payment or the
     // Merchant QR tab) - the canvas is a fresh, empty element then.
   }, [qrData, requesting, merchantTab])
@@ -163,14 +155,17 @@ export function ReceivePage() {
         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>My QR</span>
       </div>
 
+      {/* The frame hugs the QR: drawMeshportQr sizes the canvas to whole pixels per module (≤236px). */}
       <div className="relative" style={{
-        width: 242, height: 242, borderRadius: 12, background: '#DEE6E8',
+        padding: 3, minWidth: 200, minHeight: 200, borderRadius: 12, background: '#DEE6E8',
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
       }}>
         <canvas
           ref={canvasRef}
+          width={236}
+          height={236}
           className={qrReady ? 'opacity-100' : 'opacity-0'}
-          style={{ width: 236, height: 236, borderRadius: 10 }}
+          style={{ borderRadius: 10 }}
         />
         {!qrReady && !qrError && qrData && (
           <div className="absolute inset-0 flex items-center justify-center rounded-xl">
