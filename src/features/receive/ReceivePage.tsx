@@ -9,7 +9,8 @@ import { useAuthStore, useUIStore } from '@/store'
 import { Card } from '@/components/ui/Card'
 import { shortenAddress, copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { TokenLogo, TOKEN_LOGO_SRC, type TokenLogoSymbol } from '@/components/ui/TokenLogo'
+import { TokenLogo, type TokenLogoSymbol } from '@/components/ui/TokenLogo'
+import { drawQrLogo } from '@/lib/qrLogo'
 
 const APP_URL = 'https://meshport.xyz'
 const RECEIVE_TOKENS: TokenLogoSymbol[] = ['USDC', 'EURC', 'cirBTC']
@@ -95,23 +96,7 @@ export function ReceivePage() {
         errorCorrectionLevel: 'H',
       }, (err) => {
         if (err) { setQrError(true); return }
-        // The token's logo in the middle (the QR's error correction covers it),
-        // drawn into the canvas so Download / Share QR include it too.
-        const c = canvasRef.current
-        const img = new Image()
-        img.onload = () => {
-          const g = c?.getContext('2d')
-          if (g && c) {
-            const size = c.width * 0.2, cx = c.width / 2, cy = c.height / 2
-            g.fillStyle = '#ffffff'
-            g.beginPath(); g.arc(cx, cy, size / 2 + 5, 0, Math.PI * 2); g.fill()
-            g.save(); g.beginPath(); g.arc(cx, cy, size / 2, 0, Math.PI * 2); g.clip()
-            g.drawImage(img, cx - size / 2, cy - size / 2, size, size); g.restore()
-          }
-          setQrReady(true)
-        }
-        img.onerror = () => setQrReady(true)
-        img.src = TOKEN_LOGO_SRC[token]
+        drawQrLogo(canvasRef.current, () => setQrReady(true))
       })
     }).catch(() => setQrError(true))
     // Redraw when My QR comes back into view (after Request payment or the

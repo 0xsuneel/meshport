@@ -13,6 +13,7 @@ import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { parseUnits } from 'viem'
 import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
+import { drawQrLogo } from '@/lib/qrLogo'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
 import { copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { readArcBalanceOrThrow, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT, EXTERNAL_SCAN_PROGRESS_EVENT } from '@/blockchain/BlockchainManager'
@@ -215,7 +216,7 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
         errorCorrectionLevel: 'H',
       }, (err) => {
         if (err) { setQrError(true); return }
-        setQrReady(true)
+        drawQrLogo(canvasRef.current, () => setQrReady(true))
       })
     }).catch(() => setQrError(true))
   }, [qrData])
