@@ -276,7 +276,7 @@ export function deriveActivityRow(record: ActivityRecord) {
                  : isClaim && metadata.auto_convert && Array.isArray(metadata.chains) ? `From ${metadata.chains.map((c: string) => c.split('_')[0]).join(', ')} Ledger`
                  : isClaim && isMerchantClaim(record as any) ? `From ${chain || 'other chain'} Ledger`
                  : isClaim    ? (chain || 'External')
-                 : isTransfer ? counterpartyLabel
+                 : isTransfer ? (isSelfTransfer ? 'Self' : counterpartyLabel)
                  : (isP2PSellOrder || isP2PRefund || isP2PPurchase) ? p2pSubtitle
                  : ''
 
@@ -534,6 +534,11 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     String((record as any).counterpartyAddress).toLowerCase() === String((record as any).walletAddress).toLowerCase()
   )
 
+  const transferCp = String((record as any).counterpartyAddress || '')
+  const transferCpName = (metadata as any)?.toUsername ? `${String((metadata as any).toUsername).replace(/\.arc$/i, '')}.arc` : ''
+  const transferToLabel = !isTransfer ? ''
+    : isSelfTransferDetail ? 'Self'
+    : transferCpName || (transferCp ? `${transferCp.slice(0, 6)}…${transferCp.slice(-4)}` : '')
   const recoveredDetail = recoveredViaLabel(record)
   const merchantOrderDetail = (type === 'receive' || type === 'send') && (metadata as any)?.merchantOrder ? String((metadata as any).merchantOrder) : null
   const orderWord = merchantOrderDetail ? paidOrderTitle(metadata, merchantOrderDetail, type === 'receive') : ''
@@ -544,7 +549,9 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
               : isSelfTransferDetail && type === 'send'    ? 'Paid to Self'
               : isSelfTransferDetail && type === 'receive' ? 'Received from Self'
               : isClaim    ? `Claimed from ${chainLabel(sourceChain) || 'External'}`
-              : isTransfer ? 'Transfer to'
+              // Who it went to: "Self" for your own wallet, else their
+              // username or shortened address (the chain is in the details).
+              : isTransfer ? (transferToLabel ? `Transfer to ${transferToLabel}` : `Transfer to ${chainLabel(destinationChain) || 'another chain'}`)
               : type === 'send' ? 'Paid to' : type === 'receive' ? 'Received from' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment'
               // See deriveActivityRow's identical comment on why p2p_refund
               // is labeled "Sell Order Cancelled" here - product decision,
@@ -659,7 +666,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const amountText = isSwapType
     ? `${metadata.amountIn || formatAmt(amount)} ${metadata.tokenIn || tokenSymbol || 'USDC'} → ${isFailed ? '' : metadata.amountOut ? `${formatAmt(metadata.amountOut)} ` : '? '}${metadata.tokenOut || '?'}`
     : `${amountPrefix}${formatAmt(amount, tokenSymbol)} ${tokenSymbol || 'USDC'}`
-  const receiptSubtitle = cpLabel && (type === 'send' || type === 'receive' || isTransfer) && !isSelfTransferDetail
+  // (A transfer's title already names who it went to, Self included.)
+  const receiptSubtitle = cpLabel && (type === 'send' || type === 'receive') && !isSelfTransferDetail
     ? `${title} ${cpLabel}` : title
 
   const copyRow = (label: string, value: string) => async () => {
@@ -678,7 +686,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   // subtitle, who it was with; the title says the outcome. So no Amount row,
   // no To/From row repeating the subtitle (the wallet address goes in the
   // details instead), no Status, and no Type that just restates the title.
-  const nameInSubtitle = receiptSubtitle !== title
+  const nameInSubtitle = receiptSubtitle !== title || (isTransfer && !!transferToLabel)
   const MAIN_LABELS = new Set(['Order', 'Merchant', 'Paid to', 'Purpose', 'Recipients', sourceHashLabel, ...(nameInSubtitle || isSwapType ? [] : ['From', 'To'])])
   const DROP_LABELS = new Set(['Amount', 'Status', 'Date', 'Time',
     ...(isSwapType || nameInSubtitle ? ['From', 'To'] : []),
@@ -691,7 +699,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const detailRowsList = [
     ...(rows as { label: string; value: string; copy?: string }[]).filter(r => !MAIN_LABELS.has(r.label) && !DROP_LABELS.has(r.label)).map(toReceiptRow),
     // Only when the subtitle shows a username - then the address is new information.
-    ...(nameInSubtitle && cpUsername && counterparty && !isSwapType
+    // (and for a transfer to someone else's address, so it can still be copied)
+    ...(nameInSubtitle && (cpUsername || (isTransfer && !isSelfTransferDetail)) && counterparty && !isSwapType
       ? [toReceiptRow({ label: 'Wallet', value: `${counterparty.slice(0, 6)}…${counterparty.slice(-6)}`, copy: counterparty })]
       : []),
     ...(type === 'bulk' && Array.isArray(metadata.recipients)
