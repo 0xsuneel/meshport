@@ -135,14 +135,16 @@ export function NewsPage() {
   }, [more, loading, error, load])
 
   const showLive = (filter === null || filter === 'arc_status') ? live : []
+  const stories = items.filter(it => !showLive.some(l => l.id === it.id))
 
   return (
     <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 90 }}>
       <div style={{
         position: 'sticky', top: 0, zIndex: 20,
         background: 'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter: 'blur(20px)',
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))', paddingLeft: 20, paddingRight: 20, paddingBottom: 10,
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))', paddingLeft: isDesktop ? 28 : 20, paddingRight: isDesktop ? 28 : 20, paddingBottom: 10,
       }}>
+        <div style={isDesktop ? { maxWidth: 1240 - 56, margin: '0 auto' } : undefined}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44 }}>
           {!isDesktop && (
             <button onClick={() => navigate('/')} className="back-btn" aria-label="Back">
@@ -164,9 +166,10 @@ export function NewsPage() {
             )
           })}
         </div>
+        </div>
       </div>
 
-      <div style={{ padding: '6px 20px 0' }}>
+      <div style={isDesktop ? { padding: '10px 28px 0', maxWidth: 1240, margin: '0 auto' } : { padding: '6px 20px 0' }}>
         {showLive.map(it => (
           <button key={it.id} data-news-id={it.id} className={it.id === flashId ? 'mp-last-opened' : undefined} onClick={() => openStory(it.id)}
             style={{ width: '100%', display: 'flex', gap: 10, alignItems: 'flex-start', textAlign: 'left', cursor: 'pointer', marginBottom: 10,
@@ -184,7 +187,38 @@ export function NewsPage() {
           </button>
         ))}
 
-        {items.filter(it => !showLive.some(l => l.id === it.id)).map(it => (
+        {/* Desktop: a grid of cards like arc.io - big cover, source,
+            headline, date. Phone keeps the compact list below. */}
+        {isDesktop && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '32px 24px', paddingTop: 6 }}>
+            {stories.map(it => (
+              <button key={it.id} data-news-id={it.id} className={`mp-news-card${it.id === flashId ? ' mp-last-opened' : ''}`} onClick={() => openStory(it.id)}
+                style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', cursor: 'pointer', background: 'none', border: 'none', padding: 0,
+                  minWidth: 0, color: 'var(--text-primary)', borderRadius: 16 }}>
+                <NewsCover item={it} variant="hero" style={{ width: '100%', aspectRatio: '1200 / 630', borderRadius: 16, boxShadow: 'var(--shadow-1)' }} />
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 14 }}>
+                  {[NEWS_SOURCE_LABEL[it.source], it.source === 'arc_status' ? it.status_label : it.topic].filter(Boolean).join(' · ')}
+                </span>
+                <span style={{ fontSize: 17, fontWeight: 650, lineHeight: 1.4, marginTop: 6, color: readIds.has(it.id) ? 'var(--text-secondary)' : undefined,
+                  display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{it.title}</span>
+                <span style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
+                  {[newsDate(it.published_at), it.read_minutes ? `${it.read_minutes} min read` : null].filter(Boolean).join(' · ')}
+                </span>
+              </button>
+            ))}
+            {loading && Array.from({ length: items.length ? 3 : 9 }, (_, i) => (
+              <div key={`s${i}`}>
+                <div style={{ width: '100%', aspectRatio: '1200 / 630', borderRadius: 16, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+                <div style={{ width: '30%', height: 10, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', margin: '16px 0 10px' }} />
+                <div style={{ width: '90%', height: 14, borderRadius: 7, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', marginBottom: 8 }} />
+                <div style={{ width: '60%', height: 14, borderRadius: 7, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!isDesktop && (<>
+        {stories.map(it => (
           <button key={it.id} data-news-id={it.id} className={it.id === flashId ? 'mp-last-opened' : undefined} onClick={() => openStory(it.id)}
             style={{ width: '100%', display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left', cursor: 'pointer',
               background: 'none', border: 'none', padding: '10px 0', color: 'var(--text-primary)' }}>
@@ -206,6 +240,8 @@ export function NewsPage() {
             </div>
           </div>
         ))}
+
+        </>)}
 
         {error && (
           <div style={{ textAlign: 'center', padding: '28px 0' }}>
