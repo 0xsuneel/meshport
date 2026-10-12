@@ -1439,41 +1439,40 @@ export function SwapPage() {
               <p className="text-[13px] text-text-secondary">You pay</p>
               <p className="text-[13px]" style={{ color: parseFloat(amountIn || '0') > inBalance ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: parseFloat(amountIn || '0') > inBalance ? 600 : undefined }}>Balance {fmtBal(tokenIn.id, inBalance)}</p>
             </div>
-            <div className="flex items-center justify-between gap-3" style={{ marginTop: 12 }}>
-              <span/>
-              <div className="flex-shrink-0" style={{ position: 'relative', zIndex: pickerFor === 'in' ? 41 : undefined }}>
-                <button onClick={() => setPickerFor(v => v === 'in' ? null : 'in')} aria-expanded={pickerFor === 'in'}
-                  className="w-full flex items-center gap-2 rounded-full active:opacity-70 transition-opacity"
-                  style={{ height: 40, padding: '0 10px 0 6px', background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
-                  <TLogo t={tokenIn} size={26}/>
-                  <span className="text-[15px] font-bold text-text-primary">{tokenIn.id}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-text-secondary" style={{ transform: pickerFor === 'in' ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }}/>
-                </button>
-                <AnimatePresence>
-                  {pickerFor === 'in' && (
-                    <TokenDropdown selected={tokenIn} exclude={tokenOut} onClose={() => setPickerFor(null)}
-                      onSelect={t => { setTokenIn(t); setAmountIn(''); setEstimate(null) }} />
-                  )}
-                </AnimatePresence>
-              </div>
+            <div style={{ marginTop: 12 }}>
+              <AmountField
+                value={amountIn}
+                onChange={raw => { setAmountIn(sanitizeSwapAmount(raw, swapTokenDecimals(tokenIn.id))); setEstimate(null) }}
+                symbol={swapTokenSymbolChar(tokenIn.id)}
+                tokenPicker={
+                  <div className="flex-shrink-0" style={{ position: 'relative', zIndex: pickerFor === 'in' ? 41 : undefined }}>
+                    <button onClick={() => setPickerFor(v => v === 'in' ? null : 'in')} aria-expanded={pickerFor === 'in'}
+                      className="w-full flex items-center gap-2 rounded-full active:opacity-70 transition-opacity"
+                      style={{ height: 40, padding: '0 10px 0 6px', background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)' }}>
+                      <TLogo t={tokenIn} size={26}/>
+                      <span className="text-[15px] font-bold text-text-primary">{tokenIn.id}</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-text-secondary" style={{ transform: pickerFor === 'in' ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }}/>
+                    </button>
+                    <AnimatePresence>
+                      {pickerFor === 'in' && (
+                        <TokenDropdown selected={tokenIn} exclude={tokenOut} onClose={() => setPickerFor(null)}
+                          onSelect={t => { setTokenIn(t); setAmountIn(''); setEstimate(null) }} />
+                      )}
+                    </AnimatePresence>
+                  </div>
+                }
+                // Mobile: the same field opens the number pad.
+                onTap={isDesktop ? undefined : () => setShowAmountPad(true)}
+                editing={showAmountPad && !isDesktop}
+                invalid={parseFloat(amountIn || '0') > inBalance}
+                ariaLabel={`Amount in ${tokenIn.id}`}
+                // Same fee-safe ceiling as Max everywhere else: USDC pays
+                // Arc's native gas out of this same balance, so the parts
+                // hold back gasNeeded for it.
+                quick={inBalance > 0 ? ([['25%', 0.25], ['50%', 0.5], ['75%', 0.75]] as const).map(([label, part]) => ({ label, onClick: () => setSwapPart(part) })) : []}
+                onMax={inBalance > 0 ? () => setSwapPart(1) : undefined}
+              />
             </div>
-              <div style={{ marginTop: 12 }}>
-                <AmountField
-                  value={amountIn}
-                  onChange={raw => { setAmountIn(sanitizeSwapAmount(raw, swapTokenDecimals(tokenIn.id))); setEstimate(null) }}
-                  symbol={swapTokenSymbolChar(tokenIn.id)}
-                  // Mobile: the same field opens the number pad.
-                  onTap={isDesktop ? undefined : () => setShowAmountPad(true)}
-                  editing={showAmountPad && !isDesktop}
-                  invalid={parseFloat(amountIn || '0') > inBalance}
-                  ariaLabel={`Amount in ${tokenIn.id}`}
-                  // Same fee-safe ceiling as Max everywhere else: USDC pays
-                  // Arc's native gas out of this same balance, so the parts
-                  // hold back gasNeeded for it.
-                  quick={inBalance > 0 ? ([['25%', 0.25], ['50%', 0.5], ['75%', 0.75]] as const).map(([label, part]) => ({ label, onClick: () => setSwapPart(part) })) : []}
-                  onMax={inBalance > 0 ? () => setSwapPart(1) : undefined}
-                />
-              </div>
             {!isDesktop && (
               <AmountKeypad
                 // The amount field above has its own quick amounts and Max.

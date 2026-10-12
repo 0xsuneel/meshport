@@ -1443,55 +1443,53 @@ export function PaySendPage() {
                 </p>
               )}
 
-              {/* Token picker, right-aligned above the amount field. */}
-              <div className="flex items-center" style={{ justifyContent: 'flex-end' }}>
-                <div className="flex-shrink-0" style={{ position: 'relative', zIndex: showTokenPicker ? 41 : undefined }}>
-                  <button onClick={e => { e.stopPropagation(); if (!merchantPayCode) setShowTokenPicker(v => !v) }}
-                    aria-expanded={showTokenPicker} className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full flex-shrink-0 active:opacity-70"
-                    style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-                    {/* BUG FIX: this badge hardcoded the USDC "$" glyph +
-                        color regardless of which token was actually selected
-                        -- picking EURC or cirBTC still showed a blue "$"
-                        circle here. Now matches the same per-token
-                        symbol/color the other token badges on this page
-                        already use (see the receive-summary and token-list
-                        badges below). */}
-                    <TokenLogo token={token} size={20} />
-                    <span className="text-sm font-bold text-text-primary">{token}</span>
-                    {!merchantPayCode && <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)', transform: showTokenPicker ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>}
-                  </button>
-                  <AnimatePresence>
-                    {showTokenPicker && (
-                      <TokenMenu selected={token} onClose={() => setShowTokenPicker(false)}
-                        onSelect={id => { setToken(id as Token); setAmount('') }}
-                        options={(['USDC', 'EURC'] as Token[]).concat(cirbtcBalance !== null ? ['cirBTC' as Token] : [])
-                          .filter(t => isCoinEnabled(settingsMap, t)).map(t => ({
-                            id: t, label: t,
-                            icon: <TokenLogo token={t} size={22} />,
-                          }))} />
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
-
-                <AmountField
-                  value={amount}
-                  onChange={raw => { if (merchantPayCode) return; setAmount(sanitizeSendAmount(raw, tokenDisplayDecimals(token))); setAmountError('') }}
-                  autoFocus={isDesktop && !merchantPayCode}
-                  // Mobile: the same field opens the number pad.
-                  onTap={isDesktop ? undefined : () => setShowAmountPad(true)}
-                  editing={showAmountPad}
-                  readOnly={!!merchantPayCode}
-                  invalid={!!amountErrorMessage}
-                  symbol={tokenSymbolChar(token)}
-                  ariaLabel={`Amount in ${token}`}
-                  // Same fee-safe ceiling as the keypad's Max (maxSpendable).
-                  onMax={merchantPayCode ? undefined : () => { setAmount(parseFloat(maxSpendable.toFixed(tokenDisplayDecimals(token))).toString()); setAmountError('') }}
-                  quick={merchantPayCode ? [] : token === 'cirBTC'
-                    ? [0.25, 0.5, 0.75].map(f => ({ label: `${f * 100}%`, disabled: maxSpendable <= 0,
-                        onClick: () => { setAmount(parseFloat((maxSpendable * f).toFixed(tokenDisplayDecimals(token))).toString()); setAmountError('') } }))
-                    : quickAmounts(QUICK_AMOUNTS, tokenSymbolChar(token), v => { setAmount(v); setAmountError('') }, maxSpendable)}
-                />
+              <AmountField
+                value={amount}
+                onChange={raw => { if (merchantPayCode) return; setAmount(sanitizeSendAmount(raw, tokenDisplayDecimals(token))); setAmountError('') }}
+                autoFocus={isDesktop && !merchantPayCode}
+                // Mobile: the same field opens the number pad.
+                onTap={isDesktop ? undefined : () => setShowAmountPad(true)}
+                editing={showAmountPad}
+                readOnly={!!merchantPayCode}
+                invalid={!!amountErrorMessage}
+                symbol={tokenSymbolChar(token)}
+                tokenPicker={
+                  <div className="flex-shrink-0" style={{ position: 'relative', zIndex: showTokenPicker ? 41 : undefined }}>
+                    <button onClick={e => { e.stopPropagation(); if (!merchantPayCode) setShowTokenPicker(v => !v) }}
+                      aria-expanded={showTokenPicker} className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full flex-shrink-0 active:opacity-70"
+                      style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
+                      {/* BUG FIX: this badge hardcoded the USDC "$" glyph +
+                          color regardless of which token was actually selected
+                          -- picking EURC or cirBTC still showed a blue "$"
+                          circle here. Now matches the same per-token
+                          symbol/color the other token badges on this page
+                          already use (see the receive-summary and token-list
+                          badges below). */}
+                      <TokenLogo token={token} size={20} />
+                      <span className="text-sm font-bold text-text-primary">{token}</span>
+                      {!merchantPayCode && <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)', transform: showTokenPicker ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>}
+                    </button>
+                    <AnimatePresence>
+                      {showTokenPicker && (
+                        <TokenMenu selected={token} onClose={() => setShowTokenPicker(false)}
+                          onSelect={id => { setToken(id as Token); setAmount('') }}
+                          options={(['USDC', 'EURC'] as Token[]).concat(cirbtcBalance !== null ? ['cirBTC' as Token] : [])
+                            .filter(t => isCoinEnabled(settingsMap, t)).map(t => ({
+                              id: t, label: t,
+                              icon: <TokenLogo token={t} size={22} />,
+                            }))} />
+                      )}
+                    </AnimatePresence>
+                  </div>
+                }
+                ariaLabel={`Amount in ${token}`}
+                // Same fee-safe ceiling as the keypad's Max (maxSpendable).
+                onMax={merchantPayCode ? undefined : () => { setAmount(parseFloat(maxSpendable.toFixed(tokenDisplayDecimals(token))).toString()); setAmountError('') }}
+                quick={merchantPayCode ? [] : token === 'cirBTC'
+                  ? [0.25, 0.5, 0.75].map(f => ({ label: `${f * 100}%`, disabled: maxSpendable <= 0,
+                      onClick: () => { setAmount(parseFloat((maxSpendable * f).toFixed(tokenDisplayDecimals(token))).toString()); setAmountError('') } }))
+                  : quickAmounts(QUICK_AMOUNTS, tokenSymbolChar(token), v => { setAmount(v); setAmountError('') }, maxSpendable)}
+              />
               {!isDesktop && (
                 <AmountKeypad
                   // The amount field above has its own Max.
