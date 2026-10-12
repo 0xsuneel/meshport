@@ -30,7 +30,7 @@ import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import {formatAmount, trimTrailingZeros} from '@/lib/utils'
-import { amountFontSize } from '@/lib/amountFontSize'
+import { AmountField } from '@/components/ui/AmountField'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isCoinEnabled } from '@/lib/featureFilters'
 import { useAuthStore, useUIStore, useWalletStore, useChatUnreadStore } from '@/store'
@@ -5341,11 +5341,23 @@ export function ChatConversationPage() {
                   </div>
                 )}
 
-                {/* Token: one pill; the list floats down from it (same as Swap and Pay).
-                    Phone: the pill sits inside the amount box below instead. */}
-                {!payLocked && isDesktop && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-[13px]" style={{ color: 'var(--text-secondary)' }}>Pay with</span>
+                {/* Amount - same field as Pay / Swap / Transfer: the token
+                    picker inside it, quick amounts + Max under it. Desktop
+                    types into it; phone taps it to show the keypad below.
+                    cirBTC quick amounts are dollar values ($10 = $10 worth
+                    of cirBTC at the current price). */}
+                {(() => {
+                  const dec = chatPayTokenDecimals(payToken)
+                  const bal = payTokenBalanceOf(payToken)
+                  const setAmt = (n: number) => { setPayAmount(trimTrailingZeros(n.toFixed(dec))); setPayError('') }
+                  const isBtc = payToken === 'cirBTC'
+                  // Rounded down so Max never asks for more than is there.
+                  const max = Math.floor(bal * 10 ** dec) / 10 ** dec
+                  const tokenPicker = payLocked ? (
+                    <span className="text-sm font-bold text-text-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <TokenLogo token={payToken} size={20} />{payToken}
+                    </span>
+                  ) : (
                     <div style={{ position: 'relative', zIndex: payTokenMenu ? 41 : undefined }}>
                       <button onClick={() => setPayTokenMenu(v => !v)} aria-expanded={payTokenMenu}
                         className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
@@ -5362,152 +5374,40 @@ export function ChatConversationPage() {
                         )}
                       </AnimatePresence>
                     </div>
-                  </div>
-                )}
-
-                {/* Amount - mobile taps to reveal the keypad below (unchanged).
-                    Desktop uses the same bare-box + overlaid Max pill +
-                    Balance row treatment as Multichain Transfer/Swap's own
-                    amount box instead of this static display duplicated
-                    above a second, separate live input. */}
-                {!isDesktop && (
-                  // Amount on the left (balance under it); token picker on the right.
-                  <div className="rounded-2xl" style={{ background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 8%, transparent)', padding: '12px 16px' }}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0 text-left" onClick={() => { if (!payLocked) setShowAmountPad(v => !v) }}
-                        style={{ cursor: payLocked ? 'default' : 'pointer', flex: 1 }}>
-                        <div className="flex items-baseline gap-0.5">
-                          <span style={{ fontSize: amountFontSize(payAmount, 34), fontWeight: 700, lineHeight: 1.05, color: 'var(--text-muted)' }}>{chatPayTokenSymbolChar(payToken)}</span>
-                          <span style={{ fontSize: amountFontSize(payAmount, 34), fontWeight: 700, lineHeight: 1.05, minWidth: '1ch', fontVariantNumeric: 'tabular-nums',
-                            color: payAmount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>{payAmount || '0'}</span>
-                        </div>
-                        <p className="text-xs" style={{ color: payInsufficient ? 'var(--danger)' : 'var(--text-muted)', marginTop: 4, fontWeight: payInsufficient ? 600 : undefined }}>
-                          {payInsufficient ? 'Insufficient balance · ' : 'Balance '}{chatPayTokenSymbolChar(payToken)}{formatAmount(payTokenBalanceOf(payToken), chatPayTokenDecimals(payToken))}
-                        </p>
-                      </div>
-                      {payLocked ? (
-                        <span className="text-sm font-bold text-text-primary">{payToken}</span>
-                      ) : (
-                        <div style={{ position: 'relative', zIndex: payTokenMenu ? 41 : undefined }}>
-                          <button onClick={() => setPayTokenMenu(v => !v)} aria-expanded={payTokenMenu}
-                            className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
-                            style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-                            <TokenLogo token={payToken} size={20} />
-                            <span className="text-sm font-bold text-text-primary">{payToken}</span>
-                            <svg className="w-2.5 h-2.5" style={{ color: 'var(--brand-text)', transform: payTokenMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
-                          </button>
-                          <AnimatePresence>
-                            {payTokenMenu && (
-                              <TokenMenu selected={payToken} onClose={() => setPayTokenMenu(false)}
-                                onSelect={id => { setPayToken(id as typeof payToken); setPayAmount(''); setPayError('') }}
-                                options={payTokenList.map(t => ({ id: t, label: t, icon: <TokenLogo token={t} size={22} /> }))} />
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Quick amounts under the amount box, then Max (the whole
-                    balance). cirBTC shows dollar values ($10 = $10 worth of
-                    cirBTC at the current price). */}
-                {!isDesktop && !payLocked && (
-                  <div className="grid grid-cols-4 gap-2">
-                    {[10, 30, 50].map(v => {
-                      const isBtc = payToken === 'cirBTC'
-                      const dec = chatPayTokenDecimals(payToken)
-                      const amt = isBtc ? (btcUsd > 0 ? Math.round((v / btcUsd) * 10 ** dec) / 10 ** dec : 0) : v
-                      const over = amt <= 0 || amt > payTokenBalanceOf(payToken)
-                      const on = amt > 0 && parseFloat(payAmount || '0') === amt
-                      return (
-                        <button key={v} disabled={over}
-                          onClick={() => { setPayAmount(trimTrailingZeros(amt.toFixed(dec))); setPayError('') }}
-                          className="rounded-full text-[13px] font-bold active:scale-[.97] transition-transform"
-                          style={{ height: 34, opacity: over ? 0.4 : 1, cursor: over ? 'default' : 'pointer',
-                            background: on ? 'var(--brand)' : 'var(--surface)', color: on ? '#fff' : 'var(--text-primary)',
-                            border: on ? '1px solid var(--brand)' : '1px solid var(--border)' }}>
-                          {isBtc ? '$' : chatPayTokenSymbolChar(payToken)}{v}
-                        </button>
-                      )
-                    })}
-                    {(() => {
-                      const dec = chatPayTokenDecimals(payToken)
-                      // Rounded down so Max never asks for more than is there.
-                      const max = Math.floor(payTokenBalanceOf(payToken) * 10 ** dec) / 10 ** dec
-                      const on = max > 0 && parseFloat(payAmount || '0') === max
-                      return (
-                        <button disabled={max <= 0}
-                          onClick={() => { setPayAmount(trimTrailingZeros(max.toFixed(dec))); setPayError('') }}
-                          className="rounded-full text-[13px] font-bold active:scale-[.97] transition-transform"
-                          style={{ height: 34, opacity: max <= 0 ? 0.4 : 1, cursor: max <= 0 ? 'default' : 'pointer',
-                            background: on ? 'var(--brand)' : 'var(--surface)', color: on ? '#fff' : 'var(--brand-text)',
-                            border: on ? '1px solid var(--brand)' : '1px solid var(--border)' }}>
-                          Max
-                        </button>
-                      )
-                    })()}
-                  </div>
-                )}
-
-                {isDesktop && (() => {
-                  const payTokenBalance = payTokenBalanceOf(payToken)
+                  )
                   return (
-                    <div style={{ position: 'relative' }}>
-                      <div style={{
-                        background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14,
-                        padding: '28px 20px', minHeight: 108, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
-                      }}>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          autoFocus={!payLocked}
-                          readOnly={payLocked}
-                          value={payAmount}
-                          onChange={e => {
-                            if (payLocked) return
-                            let cleaned = e.target.value.replace(/[^\d.]/g, '')
-                            const firstDot = cleaned.indexOf('.')
-                            if (firstDot !== -1) cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '')
-                            const [intPart, decPart] = cleaned.split('.')
-                            // BUG FIX: this used to hardcode a 2-decimal cap
-                            // -- fine for USDC/EURC, but cirBTC is 8-decimal
-                            // and realistic amounts (0.00025) collapse to
-                            // "0.00" at 2 decimals, making cirBTC unusable
-                            // here even once selectable.
-                            if (decPart !== undefined) cleaned = intPart + '.' + decPart.slice(0, chatPayTokenDecimals(payToken))
-                            setPayAmount(cleaned)
-                            setPayError('')
-                          }}
-                          placeholder="0.00"
-                          style={{
-                            width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: 0,
-                            // BUG FIX: this was a fixed 34px no matter how
-                            // long the typed amount got -- an 8-decimal
-                            // cirBTC value would overflow the box instead
-                            // of shrinking.
-                            fontSize: amountFontSize(payAmount, 34), fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums',
-                            textAlign: 'center',
-                          }}
-                          aria-label={`Amount in ${payToken}`}
-                        />
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Balance: <span style={{ color: 'var(--success)', fontWeight: 600 }}>{chatPayTokenSymbolChar(payToken)}{formatAmount(payTokenBalance, chatPayTokenDecimals(payToken))} {payToken}</span></span>
-                        {payTokenBalance > 0 && !payLocked && (
-                          <button
-                            onClick={() => { setPayAmount(parseFloat(payTokenBalance.toFixed(chatPayTokenDecimals(payToken))).toString()); setPayError('') }}
-                            style={{
-                              padding: '5px 14px', borderRadius: 100,
-                              border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)',
-                              background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)',
-                              fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                            }}
-                          >
-                            Max
-                          </button>
-                        )}
-                      </div>
+                    <div>
+                      <AmountField
+                        value={payAmount}
+                        onChange={raw => {
+                          if (payLocked) return
+                          let cleaned = raw.replace(/[^\d.]/g, '')
+                          const firstDot = cleaned.indexOf('.')
+                          if (firstDot !== -1) cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '')
+                          const [intPart, decPart] = cleaned.split('.')
+                          // cirBTC is 8-decimal - realistic amounts (0.00025)
+                          // would collapse to "0.00" at a 2-decimal cap.
+                          if (decPart !== undefined) cleaned = intPart + '.' + decPart.slice(0, dec)
+                          setPayAmount(cleaned)
+                          setPayError('')
+                        }}
+                        autoFocus={isDesktop && !payLocked}
+                        readOnly={payLocked}
+                        onTap={isDesktop ? undefined : () => { if (!payLocked) setShowAmountPad(v => !v) }}
+                        editing={showAmountPad && !payLocked}
+                        invalid={payInsufficient}
+                        symbol={chatPayTokenSymbolChar(payToken)}
+                        tokenPicker={tokenPicker}
+                        ariaLabel={`Amount in ${payToken}`}
+                        quick={payLocked ? [] : [10, 30, 50].map(v => {
+                          const amt = isBtc ? (btcUsd > 0 ? Math.round((v / btcUsd) * 10 ** dec) / 10 ** dec : 0) : v
+                          return { label: `${isBtc ? '$' : chatPayTokenSymbolChar(payToken)}${v}`, onClick: () => setAmt(amt), disabled: amt <= 0 || amt > bal }
+                        })}
+                        onMax={payLocked || max <= 0 ? undefined : () => setAmt(max)}
+                      />
+                      <p className="text-xs" style={{ color: payInsufficient ? 'var(--danger)' : 'var(--text-secondary)', marginTop: 8, fontWeight: payInsufficient ? 600 : undefined }}>
+                        {payInsufficient ? 'Insufficient balance · ' : 'Balance '}{chatPayTokenSymbolChar(payToken)}{formatAmount(bal, dec)} {payToken}
+                      </p>
                     </div>
                   )
                 })()}

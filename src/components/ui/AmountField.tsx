@@ -1,18 +1,20 @@
-import { useRef, useState, type Ref } from 'react'
-import { amountFontSize } from '@/lib/amountFontSize'
+import { useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react'
+
+const BASE_FONT = 36
+const MIN_FONT = 14
 
 export interface QuickAmount { label: string; onClick: () => void; disabled?: boolean }
 
 // The amount box on Pay, Swap, Bulk Pay, Multichain Transfer and Bring, on
 // desktop and mobile alike: a soft filled field with the currency sign right
-// before the digits, an optional token pill on the right and a brand ring
+// before the digits, the token (pill or picker) on the right and a brand ring
 // while it's being filled in; quick amounts and Max underneath.
 //   • Desktop: a real input, typed straight in with the keyboard.
 //   • Mobile (`onTap` given): the same field as a display - tapping it opens
 //     the page's AmountKeypad sheet, `editing` while that sheet is up.
 export function AmountField({
   value, onChange, onMax, ariaLabel, invalid = false, autoFocus = true, readOnly = false, id,
-  symbol = '$', token, quick = [], onTap, editing = false, boxRef,
+  symbol = '$', token, tokenPicker, quick = [], onTap, editing = false, boxRef,
 }: {
   value: string
   /** Raw text as typed; the caller sanitizes it. */
@@ -27,8 +29,10 @@ export function AmountField({
   id?: string
   /** Currency sign before the digits ($, €, ₿). */
   symbol?: string
-  /** Token pill on the right - left out where the page has its own token picker. */
+  /** Fixed token pill on the right (e.g. USDC-only pages). */
   token?: { label: string; logo?: string }
+  /** A token picker shown on the right inside the field instead of the pill. */
+  tokenPicker?: ReactNode
   /** Quick amounts under the field, e.g. $10 / $50 / $100 or 25% / 50%. */
   quick?: QuickAmount[]
   /** Mobile: tapping the field opens the keypad sheet instead of typing. */
@@ -44,7 +48,24 @@ export function AmountField({
   const tapMode = !!onTap
   const ring = invalid ? 'var(--danger)' : 'var(--brand)'
   const active = (tapMode ? editing : focused) || invalid
-  const fontSize = amountFontSize(value, 36)
+  // Fit the amount to the room left beside the token: measure it at full
+  // size and scale down until it fits (long cirBTC amounts, big numbers).
+  const roomRef = useRef<HTMLDivElement>(null)
+  const measureRef = useRef<HTMLSpanElement>(null)
+  const [fontSize, setFontSize] = useState(BASE_FONT)
+  useLayoutEffect(() => {
+    const room = roomRef.current, measure = measureRef.current
+    if (!room || !measure) return
+    const fit = () => {
+      const avail = room.clientWidth - 6 // caret
+      const full = measure.offsetWidth
+      setFontSize(full > avail && full > 0 ? Math.max(MIN_FONT, Math.floor(BASE_FONT * avail / full)) : BASE_FONT)
+    }
+    fit()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(fit) : null
+    ro?.observe(room)
+    return () => ro?.disconnect()
+  }, [value, symbol])
   const buttons: (QuickAmount & { max?: boolean })[] = [...quick, ...(onMax ? [{ label: 'Max', onClick: onMax, max: true }] : [])]
   const digits = { fontSize, fontWeight: 700, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' as const }
 
@@ -63,7 +84,11 @@ export function AmountField({
           boxShadow: active ? `0 0 0 4px color-mix(in srgb, ${ring} 18%, transparent)` : 'none',
           transition: 'border-color 0.15s, box-shadow 0.15s',
         }}>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', overflow: 'hidden' }}>
+        <div ref={roomRef} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', overflow: 'hidden', position: 'relative' }}>
+          {/* Off-screen copy at full size, measured to fit the real one. */}
+          <span ref={measureRef} aria-hidden="true" style={{ ...digits, fontSize: BASE_FONT, position: 'absolute', visibility: 'hidden', whiteSpace: 'nowrap', pointerEvents: 'none' }}>
+            {symbol}{value || '0.00'}
+          </span>
           <span aria-hidden="true" style={{ ...digits, color: 'var(--text-secondary)', flexShrink: 0 }}>{symbol}</span>
           {tapMode ? (
             <span style={{ ...digits, whiteSpace: 'nowrap', color: value ? 'var(--text-primary)' : 'var(--text-muted)' }}>
@@ -92,7 +117,11 @@ export function AmountField({
             />
           )}
         </div>
-        {token && (
+        {tokenPicker && (
+          // Taps on the picker don't open the keypad / focus the input.
+          <div onClick={e => e.stopPropagation()} style={{ flexShrink: 0 }}>{tokenPicker}</div>
+        )}
+        {token && !tokenPicker && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: token.logo && logoOk ? '5px 12px 5px 5px' : '6px 12px',
             borderRadius: 999, background: 'var(--surface)', border: '1px solid var(--border)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
             {token.logo && logoOk && <img src={token.logo} alt="" width={22} height={22} onError={() => setLogoOk(false)} style={{ borderRadius: '50%', display: 'block' }} />}
