@@ -41,7 +41,7 @@ import { slideStepVariants, MOBILE_SLIDE_TRANSITION, MOBILE_SLIDE_X, MOBILE_TAB_
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
-import { DesktopAmountInput } from '@/components/ui/DesktopAmountInput'
+import { DesktopAmountInput, quickAmounts } from '@/components/ui/DesktopAmountInput'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -1968,6 +1968,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                       }}
                       invalid={!!error || claimOver || (claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT)}
                       ariaLabel="Amount in USDC"
+                      token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
+                      quick={quickAmounts([10, 50, 100], '$', v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') }, selectedChain.claimable)}
                     />
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5 }}>
                       <span style={{ color: COLORS.muted }}>Available: {formatAmount(selectedChain.claimable)} USDC</span>
