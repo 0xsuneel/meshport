@@ -740,8 +740,14 @@ export function BulkPayoutPage() {
   }
   // The payout is done: clear the entry screen straight away (the results
   // keep their own copy of who was paid), so it's ready for the next one.
+  // Recipients that failed stay in the list (with the purpose), ready to
+  // retry with Review Payout.
   useEffect(() => {
-    if (step === 'results') clearEntry()
+    if (step !== 'results') return
+    const failed = results.filter(r => r.status === 'failed').map(r => ({ ...r.recipient, error: undefined }))
+    const keepPurpose = purpose
+    clearEntry()
+    if (failed.length) { setRecipients(failed); setPurpose(keepPurpose) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step])
   // Desktop: the step column beside Add Recipients - the passcode and the
@@ -1242,9 +1248,19 @@ export function BulkPayoutPage() {
 
   const resultsActionButtons = (
     <div className="flex flex-col gap-2.5">
+      {/* The failed recipients are still in the list - back to it to retry them. */}
+      {failCount > 0 && (
+        <button onClick={() => { setStep('setup'); setResults([]) }}
+          className="w-full py-3.5 rounded-2xl text-white font-bold"
+          style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
+          Retry {failCount} failed
+        </button>
+      )}
       <button onClick={() => { setStep('setup'); setResults([]); clearEntry() }}
-        className="w-full py-3.5 rounded-2xl text-white font-bold"
-        style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
+        className={failCount > 0 ? 'w-full py-3.5 rounded-2xl font-semibold' : 'w-full py-3.5 rounded-2xl text-white font-bold'}
+        style={failCount > 0
+          ? { background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-primary)' }
+          : { background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
         New Bulk Payment
       </button>
       <button onClick={() => navigate('/')}
