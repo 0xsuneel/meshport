@@ -57,23 +57,15 @@ export function ReceivePage() {
   // "Request payment" (replaces the old Collect USDC): an order-numbered
   // request whose QR / link / share carry the order.
   const [requesting, setRequesting] = useState(() => params.get('request') === '1' || !!params.get('customer'))
-  // Which token to receive. The QR and link carry it (?token=), so the payer
-  // is asked to pay in that token.
-  const [token, setToken] = useState<TokenLogoSymbol>(() => {
-    const t = params.get('token')
-    return t === 'EURC' || t === 'cirBTC' ? t : 'USDC'
-  })
-
   if (!user) return null
 
   const displayUsername = (username || (user?.username || '')).replace(/\.arc$/, '')
 
   // Payment link - the real shareable URL
-  const tokenQuery = token === 'USDC' ? '' : `?token=${token}`
   const paymentLink = displayUsername
-    ? `${APP_URL}/paylink/${displayUsername}${tokenQuery}`
+    ? `${APP_URL}/paylink/${displayUsername}`
     : walletAddress
-    ? `${APP_URL}/paylink/${walletAddress}${tokenQuery}`
+    ? `${APP_URL}/paylink/${walletAddress}`
     : APP_URL
 
   // My QR: the pay page link. MeshPort's scanner pays you directly; a wallet
@@ -101,7 +93,7 @@ export function ReceivePage() {
     }).catch(() => setQrError(true))
     // Redraw when My QR comes back into view (after Request payment or the
     // Merchant QR tab) - the canvas is a fresh, empty element then.
-  }, [qrData, requesting, merchantTab, token])
+  }, [qrData, requesting, merchantTab])
 
   const handleCopy = async (value: string, key: string) => {
     const ok = await copyToClipboard(value)
@@ -115,8 +107,8 @@ export function ReceivePage() {
     const shareData = {
       title: 'Pay me on MeshPort',
       text: displayUsername
-        ? `Send ${token} to ${displayUsername}.arc on MeshPort ⚡`
-        : `Send me ${token} on MeshPort`,
+        ? `Send USDC, EURC or cirBTC to ${displayUsername}.arc on MeshPort ⚡`
+        : 'Send me USDC, EURC or cirBTC on MeshPort',
       url: paymentLink,
     }
     if (navigator.share) {
@@ -145,7 +137,7 @@ export function ReceivePage() {
       canvasRef.current.toBlob(async (blob) => {
         if (!blob) { showToastMessage('Could not share QR', 'error'); return }
         const file = new File([blob], 'meshport-qr.png', { type: 'image/png' })
-        const shareText = `Pay me in ${token} on MeshPort - ${paymentLink}`
+        const shareText = `Pay me on MeshPort - ${paymentLink}`
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({ files: [file], title: 'My QR', text: shareText })
         } else if (navigator.share) {
@@ -170,7 +162,17 @@ export function ReceivePage() {
       padding: 16, boxShadow: 'var(--shadow-1)', width: '100%', boxSizing: 'border-box',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>My QR · {token}</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>My QR</span>
+      </div>
+
+      {/* The tokens this QR accepts - the payer picks one on the pay page. */}
+      <div aria-label="Accepts" style={{ display: 'flex', gap: 6, width: '100%' }}>
+        {RECEIVE_TOKENS.map(t => (
+          <span key={t} className="flex-1 flex items-center justify-center gap-1.5 rounded-full"
+            style={{ height: 32, fontSize: 13, fontWeight: 700, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
+            <TokenLogo token={t} size={18} />{t}
+          </span>
+        ))}
       </div>
 
       <div className="relative" style={{
@@ -201,7 +203,7 @@ export function ReceivePage() {
 
       {/* Request payment - an order-numbered request (replaces Collect USDC).
           Orders are in USDC, so it shows on USDC only. */}
-      {token === 'USDC' && <button
+      <button
         onClick={() => setRequesting(true)}
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
@@ -210,7 +212,7 @@ export function ReceivePage() {
         }}>
         <DollarSign size={14} />
         <span style={{ fontSize: 13, fontWeight: 600 }}>Request payment</span>
-      </button>}
+      </button>
 
       {/* Divider + Download/Share row - same layout as Home's MyQrCard */}
       <div style={{ width: '100%', height: 1, background: 'var(--border)', margin: '6px 0 2px' }} />
@@ -269,7 +271,7 @@ export function ReceivePage() {
     <button onClick={handleShare}
       className="w-full flex items-center justify-center gap-2 py-4 bg-brand text-white font-semibold rounded-2xl shadow-elevation-2 active:scale-95 transition-transform"
       style={{ border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
-      <Share2 className="w-5 h-5" /> Share {token} Payment Link
+      <Share2 className="w-5 h-5" /> Share Payment Link
     </button>
   )
 
@@ -277,9 +279,7 @@ export function ReceivePage() {
     <div className="p-3 bg-surface rounded-2xl border border-border flex items-start gap-2">
       <Lightbulb className="w-4 h-4 text-text-secondary flex-shrink-0 mt-0.5" />
       <p className="text-xs text-text-secondary flex-1">
-        {token === 'USDC'
-          ? 'Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) - it opens your payment page on Arc'
-          : `Scan with MeshPort to pay you in ${token} on Arc - it opens your payment page with ${token} selected`}
+        One QR for every token - whoever scans it with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) picks USDC, EURC or cirBTC on your payment page
       </p>
     </div>
   )
@@ -296,7 +296,7 @@ export function ReceivePage() {
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 className="text-xl font-bold text-text-primary">Receive</h1>
-          <p className="text-text-secondary text-xs mt-0.5">Pick a token, then share your QR or link</p>
+          <p className="text-text-secondary text-xs mt-0.5">One QR for USDC, EURC and cirBTC</p>
         </div>
         {/* Requests you made and whether they're paid (Receive → My requests). */}
         <button onClick={() => navigate('/receive/requests')}
@@ -317,27 +317,6 @@ export function ReceivePage() {
               </button>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* USDC · EURC · cirBTC */}
-      {!merchantTab && !requesting && (
-        <div role="tablist" aria-label="Token to receive" className="px-4 pb-3 flex-shrink-0 flex gap-2"
-          style={isDesktop ? { padding: '0 24px 8px', maxWidth: 460 } : undefined}>
-          {RECEIVE_TOKENS.map(t => {
-            const on = token === t
-            return (
-              <button key={t} role="tab" aria-selected={on} onClick={() => setToken(t)}
-                className="flex-1 flex items-center justify-center gap-2 rounded-full active:scale-[.97] transition-transform"
-                style={{ height: 44, fontSize: 15, fontWeight: 700, cursor: 'pointer',
-                  background: on ? 'color-mix(in srgb, var(--brand) 25%, transparent)' : 'var(--surface)',
-                  border: `1px solid ${on ? 'var(--brand)' : 'var(--border)'}`,
-                  color: on ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
-                <span style={{ opacity: on ? 1 : 0.75, display: 'flex' }}><TokenLogo token={t} size={22} /></span>
-                {t}
-              </button>
-            )
-          })}
         </div>
       )}
 
