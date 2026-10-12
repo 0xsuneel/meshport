@@ -26,8 +26,7 @@ import { searchUsersDb, getOrCreateConversation, fetchContactsDb, type DbUser } 
 import { filterServices } from '@/lib/searchServices'
 import { RecentNewsRow } from './RecentNewsRow'
 import { BALANCES_STALE_EVENT } from '@/lib/balanceRefresh'
-import { onReconnect, useReconnectCount, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
-import { fetchRecentContacts, recentInitial, recentShortName, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
+import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
 import { useSettingsStore } from '@/store/settingsStore'
 import { activityLabel, activitySign, type ActivityRecord } from '@/lib/ActivityService'
 // Reused so the desktop "Recent Activity" panel shows the exact same
@@ -606,142 +605,6 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
       </motion.div>
     </>,
     document.body,
-  )
-}
-
-// ── Recent - people I sent money to recently ──────────────────────────────────
-// Clicking a person goes to /send?to=walletAddress (pre-fills recipient in send page)
-// "View all" opens /recent-paid page showing full list
-// Logic lives in src/lib/recentContacts.ts - this is the canonical "Home
-// Avatar Recent" behavior that the Send page recent row and the View-all
-// Recent page both reuse, so all three stay in sync.
-function RecentRow({ navigate, compact, resultLimit = 5 }: { navigate: NavigateFunction; compact?: boolean; resultLimit?: number }) {
-  const avatarSize = compact ? 44 : 56
-  const user = useAuthStore(s => s.user)
-  const walletAddress = useAuthStore(s => s.walletAddress)
-  // Opens with the last known list (saved on this device) so a reload
-  // doesn't flash placeholders → people; the fresh list replaces it quietly.
-  const recentsKey = walletAddress ? `meshport_recents_${walletAddress.toLowerCase()}_${resultLimit}` : ''
-  const [recents, setRecents] = useState<RecentContact[]>(() => {
-    try { const c = recentsKey ? JSON.parse(localStorage.getItem(recentsKey) || 'null') : null; return Array.isArray(c) ? c : [] } catch { return [] }
-  })
-  const [loaded, setLoaded]   = useState(() => { try { return !!recentsKey && localStorage.getItem(recentsKey) != null } catch { return false } })
-  const reconnects = useReconnectCount()
-
-  useEffect(() => {
-    if (!walletAddress) return
-
-    // Backfill activity history from messages - run ONCE per wallet per session
-    const backfillKey = `meshport_backfilled_${walletAddress.toLowerCase()}`
-    if (user?.id && !user.id.startsWith('usr_') && !sessionStorage.getItem(backfillKey)) {
-      sessionStorage.setItem(backfillKey, '1')
-      import('@/lib/ActivityService').then(({ backfillActivityFromMessages }) => {
-        backfillActivityFromMessages(walletAddress, user.id!).catch(() => {})
-      })
-    }
-
-    const load = async () => {
-      try {
-        // resultLimit is desktop-aware (see the call site below) - desktop's
-        // wider card was stretching just 5 avatars across the full row
-        // width (each one gets flex:1, so fewer avatars = more empty gap
-        // between them), while mobile's narrower width already fills
-        // naturally at 5. maxAddresses stays comfortably above whatever
-        // resultLimit asks for either way.
-        const meshPortUsers = await fetchRecentContacts(walletAddress, { activityLimit: 20, maxAddresses: Math.max(10, resultLimit * 2), resultLimit })
-        setRecents(meshPortUsers)
-        try { if (recentsKey) localStorage.setItem(recentsKey, JSON.stringify(meshPortUsers)) } catch { /* storage full */ }
-      } catch (e) {
-        console.error('RecentRow load error:', e)
-      } finally {
-        setLoaded(true)
-      }
-    }
-    load()
-  }, [walletAddress, resultLimit, reconnects])
-
-  const COLORS = RECENT_AVATAR_COLORS
-  const initials = recentInitial
-  const shortName = recentShortName
-
-  // Click → pre-fill /send with this recipient
-  const goSend = (c: RecentContact) => {
-    navigate(`/pay?to=${encodeURIComponent(recentSendTarget(c))}`, { state: { returnTo: '/' } })
-  }
-
-  if (!loaded) {
-    return (
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: compact ? 8 : 14 }}>
-          <span style={{ fontSize: 16, fontWeight: 700 }}>Recent</span>
-        </div>
-        <div style={{ display: 'flex', gap: compact ? 12 : 16 }}>
-          {Array.from({ length: resultLimit }, (_, i) => i).map(i => (
-            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: avatarSize, height: avatarSize, borderRadius: '50%', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}/>
-              <div style={{ width: 36, height: 8, borderRadius: 4, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}/>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  if (recents.length === 0) {
-    return (
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: compact ? 6 : 12 }}>
-          <span style={{ fontSize: 16, fontWeight: 700 }}>Recent</span>
-          <button onClick={() => navigate('/pay')}
-            style={{ fontSize: 14, color: 'var(--brand-text)', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer' }}>
-            Pay →
-          </button>
-        </div>
-        <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)',
-          padding: compact ? '10px 14px' : '14px 18px', textAlign: 'center', cursor: 'pointer' }}
-          onClick={() => navigate('/pay')}>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Your recent recipients will appear here</div>
-          <div style={{ fontSize: 14, color: 'var(--brand-text)', fontWeight: 600, marginTop: 6 }}>Make your first payment →</div>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: compact ? 8 : 14 }}>
-        <span style={{ fontSize: 16, fontWeight: 700 }}>Recent</span>
-        <button onClick={() => navigate('/recent-paid', { state: { from: '/' } })}
-          style={{ fontSize: 14, color: 'var(--brand-text)', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer' }}>
-          View all
-        </button>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-        {recents.map((c, i) => (
-          <div key={c.id || c.wallet_address}
-            onClick={() => goSend(c)}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: compact ? 6 : 8, cursor: 'pointer', flex: 1 }}>
-            {c.avatar_url ? (
-              <img src={c.avatar_url} alt={shortName(c)}
-                style={{ width: avatarSize, height: avatarSize, borderRadius: '50%', objectFit: 'cover',
-                  border: '1px solid var(--border)' }}/>
-            ) : (
-              <div style={{ width: avatarSize, height: avatarSize, borderRadius: '50%',
-                background: COLORS[i % COLORS.length],
-                border: '1px solid var(--border)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: compact ? 16 : 20, fontWeight: 700, color: '#fff' }}>
-                {initials(c)}
-              </div>
-            )}
-            <span style={{ fontSize: 12, color: 'var(--text-primary)', textAlign: 'center',
-              maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {shortName(c)}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
   )
 }
 
@@ -3984,19 +3847,8 @@ export function HomePage() {
         {/* Same width/radius as the old Multichain Hub row, 10% taller. */}
         <FeatureBanner height={isDesktop ? 64 : 75} onOpen={path => navigate(path)} />
 
-        {/* ── RECENT - people I sent money to ──────────────────────────────── */}
-        {/* Desktop: bordered card, same language as the Multichain Hub card
-            above it. Mobile: Recent and News side by side (RecentNewsRow). */}
-        {isDesktop ? (
-          <div style={{
-            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16,
-            padding: '12px 16px', boxShadow: 'var(--shadow-1)',
-          }}>
-            <RecentRow navigate={navigate} compact resultLimit={7} />
-          </div>
-        ) : (
-          <RecentNewsRow navigate={navigate} />
-        )}
+        {/* ── RECENT + UPDATES - side by side, same on desktop and mobile ───── */}
+        <RecentNewsRow navigate={navigate} />
 
         {/* ── ASSETS - all 3 tokens ────────────────────────────────────────── */}
         <div ref={assetsCardRef}>
