@@ -1167,6 +1167,14 @@ export function PaySendPage() {
     if (merchantPayCode) { navigate(`/paylink/r/${merchantPayCode}?stay=1`, { replace: true }); return }
     if (returnTo === 'contacts') navigate('/contacts', { replace: true })
     else if (returnTo === 'chat' && returnConvId) navigate(`/chat/${returnConvId}`, { replace: true })
+    else if (isDesktop) {
+      // Desktop: a fresh payment on the same page, beside the updated
+      // Recent History (like Swap / Transfer); phone: Home.
+      setProcessStage('idle'); setTxHash(''); setPayPending(false)
+      setRecipient(null); setAmount(''); setAmountError(''); setNote(''); setQuery(''); setResults([])
+      idempotencyKeyRef.current = null
+      goBack2('search')
+    }
     else navigate('/', { replace: true })
   }
 
@@ -1850,6 +1858,7 @@ export function PaySendPage() {
           <DesktopTransactionAuthDialog
             onClose={() => setShowPasscodeSheet(false)}
             title="Authorize Payment"
+            anchor={desktopColumnRef.current}
             amountLabel={`${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token}`}
             subLabel={`To ${recipient?.displayName}`}
           >
