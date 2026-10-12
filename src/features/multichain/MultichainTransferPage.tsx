@@ -34,7 +34,7 @@ import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
-import { DesktopAmountInput } from '@/components/ui/DesktopAmountInput'
+import { DesktopAmountInput, quickAmounts } from '@/components/ui/DesktopAmountInput'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { sheetDrag } from '@/lib/sheetDrag'
@@ -3132,6 +3132,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             onMax={setMaxAmount}
             invalid={amountBad}
             ariaLabel="Amount in USDC"
+            token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
+            quick={quickAmounts([10, 50, 100], '$', setAmount, Math.max(0, balance - feeReserveEstimate))}
           />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5, color: 'var(--text-secondary)' }}>
             <span>Balance: {formatAmount(balance)} USDC</span>

@@ -19,6 +19,7 @@ import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { notifyRewardBulk } from '@/lib/notifications'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
+import { DesktopAmountInput, quickAmounts } from '@/components/ui/DesktopAmountInput'
 import { formatAmount, shortenAddress, midShortenAddress, trimTrailingZeros } from '@/lib/utils'
 import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { hasAnyActivityForTx } from '@/lib/ActivityService'
@@ -932,48 +933,16 @@ export function BulkPayoutPage() {
             </div>
           )}
           {isDesktop ? (
-            // Same bare-box + overlaid Max pill treatment as Multichain
-            // Transfer's amount box (centered value, plain bordered box -
-            // not AmountKeypad's own elevated/shadowed desktop card).
-            <div style={{ position: 'relative' }}>
-              <div style={{
-                position: 'relative',
-                background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14,
-                padding: '28px 20px', minHeight: 108, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
-              }}>
-                {/* $ pinned to a fixed left inset, not inline before the
-                    input - keeps the digits truly centered in the box no
-                    matter how many are typed. */}
-                <span style={{ position: 'absolute', left: 20, fontSize: 34, fontWeight: 700, color: rowAmount ? 'var(--text-primary)' : 'var(--text-muted)', pointerEvents: 'none' }}>$</span>
-                <input
-                  id="bulk-amount-input"
-                  type="text"
-                  inputMode="decimal"
-                  value={rowAmount}
-                  onChange={e => setRowAmount(sanitizeBulkAmount(e.target.value))}
-                  placeholder="0.00"
-                  style={{
-                    width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: 0,
-                    fontSize: 34, fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums',
-                    textAlign: 'center',
-                  }}
-                  aria-label="Amount in USDC"
-                />
-              </div>
-              {balance > 0 && (
-                <button
-                  onClick={() => setRowAmount(parseFloat(balance.toFixed(2)).toString())}
-                  style={{
-                    position: 'absolute', top: 14, right: 16, padding: '5px 14px', borderRadius: 100,
-                    border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)',
-                    background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)',
-                    fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                  }}
-                >
-                  Max
-                </button>
-              )}
-            </div>
+            <DesktopAmountInput
+              id="bulk-amount-input"
+              value={rowAmount}
+              onChange={raw => setRowAmount(sanitizeBulkAmount(raw))}
+              autoFocus={false}
+              ariaLabel="Amount in USDC"
+              token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
+              onMax={balance > 0 ? () => setRowAmount(parseFloat(balance.toFixed(2)).toString()) : undefined}
+              quick={quickAmounts([10, 50, 100], '$', setRowAmount, balance)}
+            />
           ) : null}
           {isDesktop && (
             <button onClick={handleRowAdd}

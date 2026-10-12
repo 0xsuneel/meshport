@@ -5,6 +5,7 @@ import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
+import { DesktopAmountInput } from '@/components/ui/DesktopAmountInput'
 import { TransactionComplete } from '@/components/ui/TransactionComplete'
 import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
@@ -1306,6 +1307,13 @@ export function SwapPage() {
     ? Math.max(estimate.gasFee * 1.15, MIN_GAS_RESERVE)
     : Math.max(estimatedFee * SWAP_GAS_MULTIPLIER, MIN_GAS_RESERVE)
   const usdcAfterSwap = balance - (tokenIn.id === 'USDC' ? (parseFloat(amountIn) || 0) : 0)
+  // Desktop quick amounts: a share of the fee-safe Max (USDC pays Arc's gas
+  // out of this same balance, so Max holds back gasNeeded for it).
+  const setSwapPart = (part: number) => {
+    const maxSendable = Math.max(0, inBalance - (tokenIn.id === 'USDC' ? gasNeeded : 0))
+    setAmountIn(parseFloat((maxSendable * part).toFixed(swapTokenDecimals(tokenIn.id))).toString())
+    setEstimate(null)
+  }
   const gasShortfall  = Math.max(0, gasNeeded - usdcAfterSwap)
 
   // The Swap CTA used to be the ONLY trigger for the first quote fetch, so
@@ -1461,60 +1469,17 @@ export function SwapPage() {
             </div>
             {isDesktop ? (
               <div style={{ marginTop: 12 }}>
-              {/* The amount lives directly inside "You pay" as a plain
-                  bordered box with an overlaid Max pill - not AmountKeypad's
-                  own card, which would double up the framing here. */}
-              <div style={{ position: 'relative' }}>
-                <div style={{
-                  position: 'relative',
-                  background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 14,
-                  padding: '18px 20px', minHeight: 84, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
-                }}>
-                  {/* $ pinned to a fixed left inset, not inline before the
-                      input - keeps the digits truly centered in the box no
-                      matter how many are typed (matches Pay's amount box). */}
-                  <span style={{ position: 'absolute', left: 20, fontSize: 34, fontWeight: 700, color: amountIn ? 'var(--text-primary)' : 'var(--text-muted)', pointerEvents: 'none' }}>{swapTokenSymbolChar(tokenIn.id)}</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    autoFocus
-                    value={amountIn}
-                    onChange={e => { setAmountIn(sanitizeSwapAmount(e.target.value, swapTokenDecimals(tokenIn.id))); setEstimate(null) }}
-                    placeholder="0.00"
-                    style={{
-                      width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: 0,
-                      // BUG FIX: this was a fixed 34px no matter how long
-                      // the typed amount got -- an 8-decimal cirBTC value
-                      // would overflow the box instead of shrinking.
-                      fontSize: amountFontSize(amountIn, 34), fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums',
-                      textAlign: 'center',
-                    }}
-                    aria-label={`Amount in ${tokenIn.id}`}
-                  />
-                </div>
-                {inBalance > 0 && (
-                  <button
-                    onClick={() => {
-                      // Same fee-safe Max ceiling AmountKeypad's Max button
-                      // uses (see feeReserve comment on the mobile branch
-                      // below) - USDC pays Arc's native gas out of this same
-                      // balance, so Max holds back gasNeeded for it.
-                      const decimals = swapTokenDecimals(tokenIn.id)
-                      const maxSendable = Math.max(0, inBalance - (tokenIn.id === 'USDC' ? gasNeeded : 0))
-                      setAmountIn(parseFloat(maxSendable.toFixed(decimals)).toString())
-                      setEstimate(null)
-                    }}
-                    style={{
-                      position: 'absolute', top: 14, right: 16, padding: '5px 14px', borderRadius: 100,
-                      border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)',
-                      background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)',
-                      fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                    }}
-                  >
-                    Max
-                  </button>
-                )}
-              </div>
+                <DesktopAmountInput
+                  value={amountIn}
+                  onChange={raw => { setAmountIn(sanitizeSwapAmount(raw, swapTokenDecimals(tokenIn.id))); setEstimate(null) }}
+                  symbol={swapTokenSymbolChar(tokenIn.id)}
+                  ariaLabel={`Amount in ${tokenIn.id}`}
+                  // Same fee-safe ceiling as Max everywhere else: USDC pays
+                  // Arc's native gas out of this same balance, so the parts
+                  // hold back gasNeeded for it.
+                  quick={inBalance > 0 ? ([['25%', 0.25], ['50%', 0.5], ['75%', 0.75]] as const).map(([label, part]) => ({ label, onClick: () => setSwapPart(part) })) : []}
+                  onMax={inBalance > 0 ? () => setSwapPart(1) : undefined}
+                />
               </div>
             ) : (
               <div className="flex items-center justify-between gap-3" style={{ marginTop: 12 }}>

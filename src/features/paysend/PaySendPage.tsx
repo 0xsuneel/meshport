@@ -17,6 +17,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
+import { DesktopAmountInput, quickAmounts } from '@/components/ui/DesktopAmountInput'
 import { useWalletStore, useAuthStore, useUIStore } from '@/store'
 import { formatAmount, shortenAddress, midShortenAddress, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { amountFontSize } from '@/lib/amountFontSize'
@@ -1492,40 +1493,21 @@ export function PaySendPage() {
               </div>
 
               {isDesktop ? (
-                // Same bare-box + centered value treatment as Multichain
-                // Transfer's amount box, instead of AmountKeypad's own
-                // elevated/shadowed desktop card.
-                <div style={{
-                  position: 'relative',
-                  background: 'var(--bg)', border: `1px solid ${amountErrorMessage ? 'var(--danger)' : 'var(--border)'}`, borderRadius: 14,
-                  padding: '28px 20px', minHeight: 108, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box',
-                }}>
-                  {/* Symbol pinned to a fixed left inset, not inline before
-                      the input - that keeps the digits truly centered in
-                      the box no matter how many are typed, instead of the
-                      whole "symbol+digits" group drifting off-center as it
-                      grows. BUG FIX: was hardcoded to "$" regardless of
-                      token, so EURC/cirBTC showed the wrong symbol here too. */}
-                  <span style={{ position: 'absolute', left: 20, fontSize: 34, fontWeight: 700, color: amount ? 'var(--text-primary)' : 'var(--text-muted)', pointerEvents: 'none' }}>{tokenSymbolChar(token)}</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    autoFocus={!merchantPayCode}
-                    readOnly={!!merchantPayCode}
-                    value={amount}
-                    onChange={e => { if (merchantPayCode) return; setAmount(sanitizeSendAmount(e.target.value, tokenDisplayDecimals(token))); setAmountError('') }}
-                    placeholder="0.00"
-                    style={{
-                      width: '100%', background: 'transparent', border: 'none', outline: 'none', padding: 0,
-                      // BUG FIX: this was a fixed 34px no matter how long
-                      // the typed amount got -- an 8-decimal cirBTC value
-                      // would overflow the box instead of shrinking.
-                      fontSize: amountFontSize(amount, 34), fontWeight: 700, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums',
-                      textAlign: 'center',
-                    }}
-                    aria-label={`Amount in ${token}`}
-                  />
-                </div>
+                <DesktopAmountInput
+                  value={amount}
+                  onChange={raw => { if (merchantPayCode) return; setAmount(sanitizeSendAmount(raw, tokenDisplayDecimals(token))); setAmountError('') }}
+                  autoFocus={!merchantPayCode}
+                  readOnly={!!merchantPayCode}
+                  invalid={!!amountErrorMessage}
+                  symbol={tokenSymbolChar(token)}
+                  ariaLabel={`Amount in ${token}`}
+                  // Same fee-safe ceiling as the keypad's Max (maxSpendable).
+                  onMax={merchantPayCode ? undefined : () => { setAmount(parseFloat(maxSpendable.toFixed(tokenDisplayDecimals(token))).toString()); setAmountError('') }}
+                  quick={merchantPayCode ? [] : token === 'cirBTC'
+                    ? [0.25, 0.5, 0.75].map(f => ({ label: `${f * 100}%`, disabled: maxSpendable <= 0,
+                        onClick: () => { setAmount(parseFloat((maxSpendable * f).toFixed(tokenDisplayDecimals(token))).toString()); setAmountError('') } }))
+                    : quickAmounts(QUICK_AMOUNTS, tokenSymbolChar(token), v => { setAmount(v); setAmountError('') }, maxSpendable)}
+                />
               ) : (
                 <AmountKeypad
                   open={showAmountPad}
