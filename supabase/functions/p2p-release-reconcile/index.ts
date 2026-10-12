@@ -161,19 +161,18 @@ async function ethCall(to: string, data: string): Promise<string | null> {
 }
 
 /**
- * offerKey for the CURRENT (V2) contract - seller-bound, matching
- * offerKeyFor() in src/lib/p2pEscrowContract.ts exactly:
- * keccak256(abi.encode(string, address)). Required for sell-offer trades
- * (the offer's own bucket); buy-offer trades use tradeKeyPlain instead
- * (their bucket is keyed by the trade's own id, never seller-bound - see
- * depositForTrade's own reasoning in p2pProviders.ts, unchanged by the V2
- * hardening).
+ * Escrow key on the CURRENT (V3) contract - bound on-chain to the depositor:
+ * offerKeyOf(idHash, depositor) = keccak256(abi.encode(bytes32, address)),
+ * idHash = keccak256(id). Must match escrowKeyFor() in
+ * src/lib/p2pEscrowContract.ts. Sell-offer trades: id = the offer's id,
+ * depositor = the seller. Buy-offer trades: id = the trade's id (its own
+ * bucket), depositor = the trade's seller (the user who accepted).
  */
-async function offerKeyV2(offerId: string, sellerWallet: string): Promise<string> {
-  const { keccak256, encodeAbiParameters } = await import('npm:viem@2')
+async function escrowKeyV3(id: string, depositorWallet: string): Promise<string> {
+  const { keccak256, encodeAbiParameters, toHex } = await import('npm:viem@2')
   return keccak256(encodeAbiParameters(
-    [{ type: 'string' }, { type: 'address' }],
-    [offerId, sellerWallet.toLowerCase() as `0x${string}`],
+    [{ type: 'bytes32' }, { type: 'address' }],
+    [keccak256(toHex(id)), depositorWallet.toLowerCase() as `0x${string}`],
   ))
 }
 
@@ -227,19 +226,17 @@ async function probeTradeReleased(tradeId: string): Promise<boolean | null> {
 
 /**
  * Escrow still held under this trade's bucket, summed across the current
- * and every legacy contract. `sellerWallet` is required for sell-offer
- * trades on the CURRENT contract (seller-bound key) - pass '' for
- * buy-offer trades, where the bucket is the trade's own plain key on every
- * contract generation. Returns null if none could be read.
+ * and every legacy contract. `sellerWallet` (the trade's seller) is
+ * required on the CURRENT contract: both sell-offer and buy-offer buckets
+ * are bound to the depositor there. Legacy contracts used plain keys. Returns null if none could be read.
  */
 async function probeEscrowRemaining(tradeId: string, offerId: string, isBuyOffer: boolean, sellerWallet: string): Promise<number | null> {
   let total = 0
   let anyAnswered = false
 
-  if (ESCROW_CONTRACT) {
-    const key = isBuyOffer
-      ? (await tradeKeyPlain(tradeId)).slice(2)
-      : (await offerKeyV2(offerId, sellerWallet)).slice(2)
+  // No seller wallet on the row: the current contract's key can't be derived.
+  if (ESCROW_CONTRACT && /^0x[0-9a-fA-F]{40}$/.test(sellerWallet)) {
+    const key = (await escrowKeyV3(isBuyOffer ? tradeId : offerId, sellerWallet)).slice(2)
     const raw = await ethCall(ESCROW_CONTRACT, SELECTOR_GET_REMAINING + key).catch(() => null)
     if (raw !== null) {
       anyAnswered = true

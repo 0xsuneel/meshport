@@ -2037,7 +2037,8 @@ export async function reconcileStuckReleases(
       // on the front-run fix). Probe whichever one actually holds funds.
       const [onChainReleased, escrowRemaining] = await Promise.all([
         probeTradeReleasedOnChain(t.id),
-        t.offerType === 'buy' ? probeTradeEscrowRemaining(t.id) : probeOfferEscrowRemaining(t.offerId, t.sellerWallet),
+        // Buy-offer trades: the accepting seller deposited, so the bucket is bound to them.
+        t.offerType === 'buy' ? probeTradeEscrowRemaining(t.id, t.sellerWallet) : probeOfferEscrowRemaining(t.offerId, t.sellerWallet),
       ])
       const offer = await fetchOfferById(t.offerId).catch(() => null)
       const everDeposited = t.offerType === 'buy'

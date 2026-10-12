@@ -190,8 +190,10 @@ export function isEscrowContractDeployed(): boolean {
 // entry is referenced by name, so having both in one ABI is harmless.
 const ESCROW_ABI = [
   {
+    // V3: takes the offer's id hash; the contract derives the key from the
+    // caller (offerKeyOf(offerId, msg.sender)) - see offerKeyFor below.
     type: 'function', name: 'deposit', stateMutability: 'payable',
-    inputs: [{ name: 'offerKey', type: 'bytes32' }], outputs: [],
+    inputs: [{ name: 'offerId', type: 'bytes32' }], outputs: [],
   },
   {
     // release(tradeKey) - buyer/amount come from the trade registered
@@ -474,13 +476,30 @@ const ESCROW_ABI = [
  * fast in the mempool.
  */
 export function offerKeyFor(offerId: string, sellerAddress: string): `0x${string}` {
-  return keccak256(encodeAbiParameters(
-    [{ type: 'string' }, { type: 'address' }],
-    [offerId, sellerAddress.toLowerCase() as `0x${string}`],
-  ))
+  return escrowKeyFor(offerIdHash(offerId), sellerAddress)
 }
 export function tradeKeyFor(tradeId: string): `0x${string}` {
   return keccak256(toHex(tradeId))
+}
+/**
+ * V3 binds the key ON-CHAIN: deposit(offerIdHash) files the money under
+ * offerKeyOf(offerIdHash, msg.sender) = keccak256(abi.encode(bytes32, address)),
+ * so a deposit can only ever land under the depositor's own key - knowing
+ * the key no longer lets anyone deposit under it first (V2 trusted the
+ * key the caller passed). Must match P2PMeshportEscrowV3.offerKeyOf().
+ */
+export function offerIdHash(offerId: string): `0x${string}` {
+  return keccak256(toHex(offerId))
+}
+export function escrowKeyFor(idHash: `0x${string}`, depositorAddress: string): `0x${string}` {
+  return keccak256(encodeAbiParameters(
+    [{ type: 'bytes32' }, { type: 'address' }],
+    [idHash, depositorAddress.toLowerCase() as `0x${string}`],
+  ))
+}
+/** A buy-offer trade's own escrow bucket: deposited with the trade's key, bound to its depositor (the trade's seller). */
+export function tradeBucketKeyFor(tradeId: string, depositorAddress: string): `0x${string}` {
+  return escrowKeyFor(tradeKeyFor(tradeId), depositorAddress)
 }
 
 const USDC_DECIMALS = 18 // native on Arc - see arcService.ts's own amount18dec conversion
@@ -598,8 +617,8 @@ async function sendContractTxOnce(privateKey: string, functionName: string, args
 
 /** Seller deposits USDC for their offer. Real on-chain transaction - the deposit IS the value sent with this call. */
 export async function depositToEscrow(privateKey: string, offerId: string, amountUsdc: number): Promise<Hash> {
-  const sellerAddress = privateKeyToAccount(privateKey as `0x${string}`).address
-  return sendContractTx(privateKey, 'deposit', [offerKeyFor(offerId, sellerAddress)], toNativeUnits(amountUsdc))
+  // The contract files it under offerKeyFor(offerId, this wallet) by itself.
+  return sendContractTx(privateKey, 'deposit', [offerIdHash(offerId)], toNativeUnits(amountUsdc))
 }
 
 /**
@@ -626,8 +645,8 @@ export async function depositForTrade(privateKey: string, tradeId: string, amoun
  * accepted the offer and is depositing/releasing.
  */
 export async function registerTradeKeyedTradeOnChain(privateKey: string, tradeId: string, buyOfferCreatorAddress: string, amountUsdc: number): Promise<Hash> {
-  const key = tradeKeyFor(tradeId)
-  return sendContractTx(privateKey, 'registerTrade', [key, key, buyOfferCreatorAddress as `0x${string}`, toNativeUnits(amountUsdc)])
+  const depositor = privateKeyToAccount(privateKey as `0x${string}`).address
+  return sendContractTx(privateKey, 'registerTrade', [tradeKeyFor(tradeId), tradeBucketKeyFor(tradeId, depositor), buyOfferCreatorAddress as `0x${string}`, toNativeUnits(amountUsdc)])
 }
 
 /**
@@ -641,7 +660,8 @@ export async function releaseTradeKeyedEscrow(privateKey: string, tradeId: strin
 
 /** Refunds a buy-offer trade's escrowed deposit back to the seller who deposited it (e.g. the trade was cancelled or expired). */
 export async function refundTradeKeyedEscrow(privateKey: string, tradeId: string): Promise<Hash> {
-  return sendContractTx(privateKey, 'withdrawRemaining', [tradeKeyFor(tradeId)])
+  const depositor = privateKeyToAccount(privateKey as `0x${string}`).address
+  return sendContractTx(privateKey, 'withdrawRemaining', [tradeBucketKeyFor(tradeId, depositor)])
 }
 
 /**
@@ -1136,11 +1156,11 @@ export async function probeOfferEscrowRemaining(offerId: string, sellerAddress: 
  * deposit into a trade-keyed bucket (see depositForTrade), not an offer's
  * shared pool. Returns null if it cannot be determined.
  */
-export async function probeTradeEscrowRemaining(tradeId: string): Promise<number | null> {
+export async function probeTradeEscrowRemaining(tradeId: string, depositorAddress: string): Promise<number | null> {
   if (!CONTRACT_ADDRESS) return null
   try {
     const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 15000 }) })
-    const data = encodeFunctionData({ abi: ESCROW_ABI, functionName: 'getRemaining', args: [tradeKeyFor(tradeId)] })
+    const data = encodeFunctionData({ abi: ESCROW_ABI, functionName: 'getRemaining', args: [tradeBucketKeyFor(tradeId, depositorAddress)] })
     const result = await publicClient.call({ to: CONTRACT_ADDRESS, data })
     if (!result.data) return null
     return Number(BigInt(result.data)) / (10 ** USDC_DECIMALS)
@@ -1545,7 +1565,7 @@ export const ESCROW_AUTO_ACCEPT_ENABLED = (import.meta.env.VITE_P2P_ESCROW_AUTO_
 
 const AUTO_ACCEPT_ABI = [
   { type: 'function', name: 'depositWithAutoAccept', stateMutability: 'payable', outputs: [], inputs: [
-    { name: 'offerKey', type: 'bytes32' }, { name: 'operator', type: 'address' }, { name: 'minTrade', type: 'uint256' }, { name: 'maxTrade', type: 'uint256' }] },
+    { name: 'offerId', type: 'bytes32' }, { name: 'operator', type: 'address' }, { name: 'minTrade', type: 'uint256' }, { name: 'maxTrade', type: 'uint256' }] },
   { type: 'function', name: 'setAutoAccept', stateMutability: 'nonpayable', outputs: [], inputs: [
     { name: 'offerKey', type: 'bytes32' }, { name: 'operator', type: 'address' }, { name: 'minTrade', type: 'uint256' }, { name: 'maxTrade', type: 'uint256' }] },
   { type: 'function', name: 'registerTrade', stateMutability: 'nonpayable', outputs: [], inputs: [
@@ -1590,9 +1610,8 @@ async function sendAutoAcceptTx(privateKey: string, functionName: 'depositWithAu
 
 /** Sell ad on V3: deposit and turn on auto-accept for the ad's per-trade limits, one transaction. */
 export async function depositToEscrowWithAutoAccept(privateKey: string, offerId: string, amountUsdc: number, minTradeUsdc: number, maxTradeUsdc: number, operator: string): Promise<Hash> {
-  const sellerAddress = privateKeyToAccount(privateKey as `0x${string}`).address
   return sendAutoAcceptTx(privateKey, 'depositWithAutoAccept',
-    [offerKeyFor(offerId, sellerAddress), operator as `0x${string}`, toNativeUnits(minTradeUsdc), toNativeUnits(maxTradeUsdc)], toNativeUnits(amountUsdc))
+    [offerIdHash(offerId), operator as `0x${string}`, toNativeUnits(minTradeUsdc), toNativeUnits(maxTradeUsdc)], toNativeUnits(amountUsdc))
 }
 
 /** The seller changed the ad's limits: keep the on-chain auto-accept limits the same. */

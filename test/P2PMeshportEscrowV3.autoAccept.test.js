@@ -9,7 +9,15 @@
 const { expect } = require('chai')
 const { ethers } = require('hardhat')
 
-const offerKeyFor = (id, seller) => ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['string', 'address'], [id, seller]))
+// offerKeyOf(offerId, seller) on-chain; idOf() maps a key back to its offerId (see P2PMeshportEscrowV3.test.js).
+const offerIds = new Map()
+const offerKeyFor = (name, seller) => {
+  const id = ethers.keccak256(ethers.toUtf8Bytes(name))
+  const key = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['bytes32', 'address'], [id, seller]))
+  offerIds.set(key, id)
+  return key
+}
+const idOf = key => offerIds.get(key) ?? key
 const tradeKeyFor = id => ethers.keccak256(ethers.toUtf8Bytes(id))
 
 describe('P2PMeshportEscrowV3 auto-accept', function () {
@@ -24,7 +32,7 @@ describe('P2PMeshportEscrowV3 auto-accept', function () {
     escrow = await F.deploy([rm1.address, rm2.address, rm3.address])
     await escrow.waitForDeployment()
     offerKey = offerKeyFor('ad-1', seller.address)
-    await expect(escrow.connect(seller).depositWithAutoAccept(offerKey, operator.address, MIN, MAX, { value: ONE }))
+    await expect(escrow.connect(seller).depositWithAutoAccept(idOf(offerKey), operator.address, MIN, MAX, { value: ONE }))
       .to.emit(escrow, 'AutoAcceptSet').withArgs(offerKey, operator.address, MIN, MAX)
   })
 
@@ -83,7 +91,11 @@ describe('P2PMeshportEscrowV3 auto-accept', function () {
     await escrow.connect(operator).registerTrade(tk, offerKey, buyer.address, MIN)
     await expect(escrow.connect(operator).release(tk)).to.be.revertedWith('P2PEscrowV3: only the trade\'s seller can release it')
     await expect(escrow.connect(operator).withdrawRemaining(offerKey)).to.be.revertedWith('P2PEscrowV3: not the offer\'s seller')
-    await expect(escrow.connect(operator).deposit(offerKey, { value: 1n })).to.be.revertedWith('P2PEscrowV3: not offer owner')
+    // Depositing the same offer id only ever creates the operator's OWN escrow - never touches the seller's.
+    const before = await escrow.getRemaining(offerKey)
+    await escrow.connect(operator).deposit(idOf(offerKey), { value: 1n })
+    expect(await escrow.getRemaining(offerKey)).to.equal(before)
+    expect(await escrow.getSeller(offerKey)).to.equal(seller.address)
   })
 
   it('seller release still works on an operator-registered trade', async function () {
@@ -99,7 +111,7 @@ describe('P2PMeshportEscrowV3 auto-accept', function () {
     await escrow.connect(operator).registerTrade(tk, offerKey, buyer.address, MAX)
     await expect(escrow.connect(operator).cancelTrade(tk)).to.be.revertedWith('P2PEscrowV3: the buyer\'s payment window is still open')
     await ethers.provider.send('evm_increaseTime', [30 * 60 + 1]); await ethers.provider.send('evm_mine')
-    await expect(escrow.connect(operator).cancelTrade(tk)).to.emit(escrow, 'TradeCancelled').withArgs(offerKey, tk, operator.address, MAX)
+    await expect(escrow.connect(operator).cancelTrade(tk)).to.emit(escrow, 'TradeCancelled').withArgs(offerKey, tk, operator.address, seller.address, MAX)
     // the reservation is back: the full deposit is withdrawable again
     await expect(escrow.connect(seller).withdrawRemaining(offerKey)).to.emit(escrow, 'Withdrawn').withArgs(offerKey, seller.address, ONE)
   })
@@ -117,7 +129,7 @@ describe('P2PMeshportEscrowV3 auto-accept', function () {
     const tk = tradeKeyFor('bc')
     await escrow.connect(operator).registerTrade(tk, offerKey, buyer.address, MAX)
     const sig = await buyer.signMessage(ethers.getBytes(await escrow.cancelDigest(tk)))
-    await expect(escrow.connect(operator).cancelTradeFor(tk, sig)).to.emit(escrow, 'TradeCancelled').withArgs(offerKey, tk, buyer.address, MAX)
+    await expect(escrow.connect(operator).cancelTradeFor(tk, sig)).to.emit(escrow, 'TradeCancelled').withArgs(offerKey, tk, buyer.address, seller.address, MAX)
   })
 
   it('a cancel signature from anyone but the buyer is rejected', async function () {
