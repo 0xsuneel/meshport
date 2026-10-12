@@ -1640,9 +1640,10 @@ export function P2PTradePage() {
                   ))}
                 </div>
               )}
-              {dead && (
+              {/* The title already says cancelled / expired - only the reason is new. */}
+              {dead && trade.cancelReason && (
                 <div style={{ ...card, textAlign: 'center', color: COLORS.muted, fontSize: 13 }}>
-                  {trade.cancelReason ? `This order was cancelled: ${trade.cancelReason}` : 'This order is no longer active.'}
+                  Reason: {trade.cancelReason}
                 </div>
               )}
 
@@ -1651,7 +1652,7 @@ export function P2PTradePage() {
                 <div style={{ ...card, borderColor: 'color-mix(in srgb, var(--success) 45%, transparent)', background: 'color-mix(in srgb, var(--success) 8%, var(--surface))' }}>
                   <div style={{ fontWeight: 700, color: COLORS.success, fontSize: 14 }}>Buyer marked the order as paid</div>
                   <div style={{ fontSize: 12.5, color: COLORS.muted, marginTop: 4, lineHeight: 1.45 }}>
-                    Open your {trade.paymentMethod} account and check that {sym}{fmtMoney(trade.amountFiat)} has arrived before releasing. Never release on a screenshot alone.
+                    Open your {trade.paymentMethod} account and check the payment has arrived before releasing. Never release on a screenshot alone.
                   </div>
                 </div>
               )}
@@ -1663,9 +1664,9 @@ export function P2PTradePage() {
                   {sym}{fmtMoney(trade.amountFiat)} <CopyBtn label="Amount" v={String(trade.amountFiat)} />
                 </div>
                 {line('Price', `${sym}${fmtMoney(trade.pricePerUsdc)}`)}
-                {line(isBuyer ? 'You receive' : 'You release', `${trimTrailingZeros(trade.amountUsdc.toFixed(6))} USDC`)}
+                {/* Done: the completed card below shows the USDC. The header title says the status. */}
+                {!done && line(isBuyer ? 'You receive' : 'You release', `${trimTrailingZeros(trade.amountUsdc.toFixed(6))} USDC`)}
                 {line('Order no.', <>{orderNo}<CopyBtn label="Order number" v={trade.id} /></>)}
-                {line('Status', <span style={{ color: meta.color }}>{meta.label}</span>)}
               </div>
 
               {/* Pay to */}
@@ -1705,7 +1706,7 @@ export function P2PTradePage() {
               {/* Buyer, after paying */}
               {trade.status === 'payment_sent' && isBuyer && trade.disputeStatus !== 'open' && (
                 <div style={{ ...card, fontSize: 12.5, color: COLORS.muted, lineHeight: 1.45 }}>
-                  The seller has been notified. Once they confirm your payment, {trimTrailingZeros(trade.amountUsdc.toFixed(6))} USDC is released from escrow to your wallet.
+                  The seller has been notified. Once they confirm your payment, the USDC is released from escrow to your wallet.
                 </div>
               )}
 
