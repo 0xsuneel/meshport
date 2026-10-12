@@ -238,6 +238,22 @@ contract P2PMeshportEscrowV3 is ReentrancyGuard {
     mapping(bytes32 => OfferEscrow) public escrows;
     mapping(bytes32 => Trade) public trades;
 
+    // FIX (stuck payout): USDC owed to a buyer whose payout couldn't be sent
+    // when their trade was released (Arc reverts a native send to a
+    // blocklisted address; a contract buyer may reject it). The trade still
+    // finishes - it never sits stuck in Active/Investigated - and the buyer
+    // pulls the amount later with withdrawOwed(). Already removed from its
+    // offer's `remaining`, so no seller withdrawal can ever touch it.
+    mapping(address => uint256) public owedToBuyer;
+
+    // Gas kept back from a buyer payout call, so a buyer contract that burns
+    // all forwarded gas can't make the release itself run out of gas.
+    uint256 private constant PAYOUT_GAS_RESERVE = 50_000;
+    // Least gas a payout call is always given. Without this a release sent
+    // with too little gas (e.g. a gas estimate that found the cheaper
+    // "record as owed" path) would skip paying a normal wallet.
+    uint256 private constant PAYOUT_MIN_GAS = 50_000;
+
     address public admin;
     address public pendingAdmin;
 
@@ -264,6 +280,8 @@ contract P2PMeshportEscrowV3 is ReentrancyGuard {
     event Deposited(bytes32 indexed offerKey, address indexed seller, uint256 amount, uint256 newRemaining);
     event TradeRegistered(bytes32 indexed offerKey, bytes32 indexed tradeKey, address indexed seller, address buyer, uint256 amount);
     event Released(bytes32 indexed offerKey, bytes32 indexed tradeKey, address indexed buyer, uint256 amount);
+    event PayoutDeferred(bytes32 indexed tradeKey, address indexed buyer, uint256 amount);
+    event OwedWithdrawn(address indexed buyer, uint256 amount);
     event TradeCancelled(bytes32 indexed offerKey, bytes32 indexed tradeKey, address indexed seller, uint256 amount);
     event Withdrawn(bytes32 indexed offerKey, address indexed seller, uint256 amount);
     event AutoAcceptSet(bytes32 indexed offerKey, address indexed operator, uint256 minTrade, uint256 maxTrade);
@@ -448,9 +466,36 @@ contract P2PMeshportEscrowV3 is ReentrancyGuard {
         t.state = TradeState.Released;
         e.remaining -= t.amount;
         e.reserved -= t.amount;
-        (bool sent, ) = payable(t.buyer).call{value: t.amount}("");
-        require(sent, "P2PEscrowV3: transfer to buyer failed");
+        _payBuyer(tradeKey, t.buyer, t.amount);
         emit Released(t.offerKey, tradeKey, t.buyer, t.amount);
+    }
+
+    /// Sends a released trade's USDC to its buyer. If the send fails it is
+    /// recorded in owedToBuyer instead of reverting, so the release (and the
+    /// trade) always completes. The call copies no return data (no
+    /// return-data bomb) and keeps PAYOUT_GAS_RESERVE back for the rest.
+    function _payBuyer(bytes32 tradeKey, address buyer, uint256 amount) private {
+        uint256 g = gasleft();
+        require(g >= PAYOUT_GAS_RESERVE + PAYOUT_MIN_GAS, "P2PEscrowV3: not enough gas to pay the buyer");
+        uint256 forward = g - PAYOUT_GAS_RESERVE;
+        bool sent;
+        assembly { sent := call(forward, buyer, amount, 0, 0, 0, 0) }
+        if (!sent) {
+            owedToBuyer[buyer] += amount;
+            emit PayoutDeferred(tradeKey, buyer, amount);
+        }
+    }
+
+    /// A buyer collects USDC whose payout couldn't be sent at release time.
+    /// Only to the buyer's own address: a blocklisted buyer stays unable to
+    /// collect until Circle lifts the block, which is the intended outcome.
+    function withdrawOwed() external whenNotPaused nonReentrant {
+        uint256 amount = owedToBuyer[msg.sender];
+        require(amount > 0, "P2PEscrowV3: nothing owed to this address");
+        owedToBuyer[msg.sender] = 0;
+        (bool sent, ) = payable(msg.sender).call{value: amount}("");
+        require(sent, "P2PEscrowV3: owed transfer failed");
+        emit OwedWithdrawn(msg.sender, amount);
     }
 
     // ── Seller-initiated cancel — the fix for the "abandoned trade" gap ──
@@ -716,8 +761,7 @@ contract P2PMeshportEscrowV3 is ReentrancyGuard {
             t.state = TradeState.Released;
             e.remaining -= t.amount;
             e.reserved -= t.amount;
-            (bool sent, ) = payable(t.buyer).call{value: t.amount}("");
-            require(sent, "P2PEscrowV3: transfer to buyer failed");
+            _payBuyer(tradeKey, t.buyer, t.amount);
             emit AdminResolvedRelease(t.offerKey, tradeKey, t.buyer, t.amount, msg.sender);
         } else {
             // Refund: the amount was never removed from e.remaining (only

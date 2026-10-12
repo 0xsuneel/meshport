@@ -361,21 +361,25 @@ describe('P2PMeshportEscrowV3', function () {
       expect(await ethers.provider.getBalance(attackerAddr)).to.equal(ONE) // exactly the trade amount, not more
     })
 
-    it('26. a failed transfer to a contract that rejects value preserves accounting (state doesn\'t advance)', async function () {
+    it('26. a buyer that rejects value: release still completes and the USDC is held for the buyer (owedToBuyer)', async function () {
       const Rejecter = await ethers.getContractFactory('RejectingReceiver')
       const rejecter = await Rejecter.deploy()
       await rejecter.waitForDeployment()
+      const rejecterAddr = await rejecter.getAddress()
 
       const offerKey = offerKeyFor('offer-reject', seller.address)
       await escrow.connect(seller).deposit(offerKey, { value: ONE })
       const tradeKey = tradeKeyFor('trade-reject')
-      await escrow.connect(seller).registerTrade(tradeKey, offerKey, await rejecter.getAddress(), ONE)
+      await escrow.connect(seller).registerTrade(tradeKey, offerKey, rejecterAddr, ONE)
 
-      await expect(escrow.connect(seller).release(tradeKey)).to.be.revertedWith('P2PEscrowV3: transfer to buyer failed')
-      // Whole tx reverted -- remaining balance and trade state are untouched.
-      expect(await escrow.getRemaining(offerKey)).to.equal(ONE)
+      await expect(escrow.connect(seller).release(tradeKey))
+        .to.emit(escrow, 'PayoutDeferred').withArgs(tradeKey, rejecterAddr, ONE)
+      // The trade finishes; the amount left the offer and is owed to the buyer.
+      expect(await escrow.getRemaining(offerKey)).to.equal(0n)
       const t = await escrow.getTrade(tradeKey)
-      expect(t.state).to.equal(1n) // still Active
+      expect(t.state).to.equal(4n) // Released
+      expect(await escrow.owedToBuyer(rejecterAddr)).to.equal(ONE)
+      expect(await ethers.provider.getBalance(rejecterAddr)).to.equal(0n)
     })
   })
 
@@ -1682,7 +1686,7 @@ describe('P2PMeshportEscrowV3', function () {
       expect(await escrow.getAvailable(offerKey)).to.equal(ethers.parseEther('30')) // unchanged
     })
 
-    it('a failed transfer during release preserves the reservation exactly -- no partial state change', async function () {
+    it('a failed payout during release keeps the seller\'s available balance exact', async function () {
       const Rejecter = await ethers.getContractFactory('RejectingReceiver')
       const rejecter = await Rejecter.deploy()
       await rejecter.waitForDeployment()
@@ -1692,12 +1696,14 @@ describe('P2PMeshportEscrowV3', function () {
       const tradeKey = tradeKeyFor('trade-final-failedtx')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, await rejecter.getAddress(), ethers.parseEther('70'))
 
-      await expect(escrow.connect(seller).release(tradeKey)).to.be.revertedWith('P2PEscrowV3: transfer to buyer failed')
-      // Whole transaction reverted -- remaining, reserved, and available
-      // are all exactly as they were before the failed attempt.
-      expect(await escrow.getRemaining(offerKey)).to.equal(ethers.parseEther('100'))
-      expect(await escrow.getReserved(offerKey)).to.equal(ethers.parseEther('70'))
+      await escrow.connect(seller).release(tradeKey)
+      // The 70 moved out of the offer into owedToBuyer; the seller's
+      // available 30 is exactly what it was - a failed payout never leaks
+      // into, or locks, the seller's free balance.
+      expect(await escrow.getRemaining(offerKey)).to.equal(ethers.parseEther('30'))
+      expect(await escrow.getReserved(offerKey)).to.equal(0n)
       expect(await escrow.getAvailable(offerKey)).to.equal(ethers.parseEther('30'))
+      expect(await escrow.owedToBuyer(await rejecter.getAddress())).to.equal(ethers.parseEther('70'))
     })
   })
 
