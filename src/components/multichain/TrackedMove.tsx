@@ -165,7 +165,7 @@ export function TrackedMove({ info, onClose, onViewHub, onArrived, backIcon = 'b
       steps={steps} current={current} failed={failed} loading={loading}
       safe={safe} txs={txs}
       holdText={`MeshPort mints on ${to} while the transfer screen is open. If it doesn't arrive, finish it from Multichain Hub → Recover.`}
-      onBack={onClose} backIcon={backIcon} onViewHub={onViewHub ?? onClose}
+      onBack={onClose} backIcon={backIcon} onViewHub={onViewHub ?? onClose} trackButton={false}
     />
   )
 }
