@@ -7,8 +7,8 @@
 // While a money-moving step is running:
 //   - a route change (sidebar, bottom nav, header, links, browser / phone
 //     Back) is held, the flow's panel border blinks amber and an ask offers
-//     Stay / Leave. The blink keeps going until the step completes, even
-//     after Stay, so it's clear the screen is still working.
+//     Stay / Leave. Stay (or Escape) closes the ask and stops the blink;
+//     another leave attempt brings both back.
 //   - closing or refreshing the tab gets the browser's "Leave site?" prompt.
 // When the step completes the ask closes by itself and the person stays on
 // the result.
@@ -41,7 +41,8 @@ export function LeaveGuardHost() {
   const blocked = blocker.state === 'blocked'
   const asking = blocked || !!ownAsk
 
-  // Blinking starts at the first leave attempt and runs until the step ends.
+  // Blinking runs from a leave attempt until the person answers it (Stay or
+  // Leave) or the step ends - not on and on after they chose to stay.
   const [alerting, setAlerting] = useState(false)
   useEffect(() => { if (asking) setAlerting(true) }, [asking])
   useEffect(() => {
@@ -80,7 +81,11 @@ export function LeaveGuardHost() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [guarded])
 
-  const stay = () => { if (blocker.state === 'blocked') blocker.reset(); ownAsk?.stay() }
+  const stay = () => {
+    setAlerting(false)
+    if (blocker.state === 'blocked') blocker.reset()
+    ownAsk?.stay()
+  }
   const leave = () => {
     setAlerting(false)
     if (blocker.state === 'blocked') blocker.proceed()

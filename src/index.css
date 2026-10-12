@@ -605,8 +605,8 @@ html.mp-locking #root { visibility: hidden; }
 @media (prefers-reduced-motion: reduce) { .mp-news-card:hover img { transform: none; } }
 
 /* Leave guard (components/layout/LeaveGuardHost.tsx): the panel of a flow
-   that is moving money blinks amber when someone tries to leave it, and
-   keeps blinking until the step completes. An animation outranks the
+   that is moving money blinks amber when someone tries to leave it, until
+   they answer Stay / Leave or the step completes. An animation outranks the
    panel's own inline border / shadow while it runs. */
 @keyframes mpLeaveBlink {
   0%, 100% { box-shadow: inset 0 0 0 1.5px transparent, 0 0 0 0 transparent; }
