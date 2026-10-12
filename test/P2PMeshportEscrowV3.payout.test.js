@@ -7,7 +7,15 @@
 const { expect } = require('chai')
 const { ethers } = require('hardhat')
 
-const offerKeyFor = (id, seller) => ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['string', 'address'], [id, seller]))
+// offerKeyOf(offerId, seller) on-chain; idOf() maps a key back to its offerId (see P2PMeshportEscrowV3.test.js).
+const offerIds = new Map()
+const offerKeyFor = (name, seller) => {
+  const id = ethers.keccak256(ethers.toUtf8Bytes(name))
+  const key = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['bytes32', 'address'], [id, seller]))
+  offerIds.set(key, id)
+  return key
+}
+const idOf = key => offerIds.get(key) ?? key
 const tradeKeyFor = id => ethers.keccak256(ethers.toUtf8Bytes(id))
 
 describe('P2PMeshportEscrowV3 buyer payouts', function () {
@@ -29,7 +37,7 @@ describe('P2PMeshportEscrowV3 buyer payouts', function () {
   }
   async function trade(id, buyerAddr) {
     const offerKey = offerKeyFor(`offer-${id}`, seller.address)
-    await escrow.connect(seller).deposit(offerKey, { value: ONE })
+    await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
     const tradeKey = tradeKeyFor(`trade-${id}`)
     await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyerAddr, ONE)
     return { offerKey, tradeKey }

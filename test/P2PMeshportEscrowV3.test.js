@@ -9,11 +9,21 @@
 const { expect } = require('chai')
 const { ethers } = require('hardhat')
 
-function offerKeyFor(offerId, sellerAddress) {
-  return ethers.keccak256(
-    ethers.AbiCoder.defaultAbiCoder().encode(['string', 'address'], [offerId, sellerAddress]),
-  )
+// The contract derives an offer's key on-chain: offerKeyOf(offerId, seller)
+// = keccak256(abi.encode(bytes32 offerId, seller)), with offerId the
+// keccak of the app's offer id. Tests keep working with keys; idOf() maps a
+// key back to the offerId that deposit()/depositWithAutoAccept() take.
+const offerIds = new Map()
+function offerIdFor(name) {
+  return ethers.keccak256(ethers.toUtf8Bytes(name))
 }
+function offerKeyFor(offerName, sellerAddress) {
+  const id = offerIdFor(offerName)
+  const key = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(['bytes32', 'address'], [id, sellerAddress]))
+  offerIds.set(key, id)
+  return key
+}
+const idOf = key => offerIds.get(key) ?? key
 function tradeKeyFor(tradeId) {
   return ethers.keccak256(ethers.toUtf8Bytes(tradeId))
 }
@@ -75,14 +85,14 @@ describe('P2PMeshportEscrowV3', function () {
   describe('normal payment flow', function () {
     it('1. seller can deposit USDC (native value)', async function () {
       const offerKey = offerKeyFor('offer-1', seller.address)
-      await expect(escrow.connect(seller).deposit(offerKey, { value: ONE }))
+      await expect(escrow.connect(seller).deposit(idOf(offerKey), { value: ONE }))
         .to.emit(escrow, 'Deposited').withArgs(offerKey, seller.address, ONE, ONE)
       expect(await escrow.getRemaining(offerKey)).to.equal(ONE)
     })
 
     it('2 & 3. seller can release a registered trade with NO privileged approval, buyer gets the exact stored amount', async function () {
       const offerKey = offerKeyFor('offer-2', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-2')
       const half = ONE / 2n
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, half)
@@ -97,7 +107,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('normal release is rejected for admin/pauser/investigator/anyone but the trade\'s own seller (INVARIANT 1)', async function () {
       const offerKey = offerKeyFor('offer-inv1', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-inv1')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
 
@@ -110,22 +120,25 @@ describe('P2PMeshportEscrowV3', function () {
 
   // ── 4 (front-run): offer ownership can't be hijacked ──────────────────
   describe('offer security — the offerKey front-run fix', function () {
-    it('4. an attacker cannot claim another seller\'s legitimate offerKey — they can only ever construct a key bound to their OWN address', async function () {
+    it('offerKeyOf matches the key the app computes (src/lib/p2pEscrowContract.ts offerKeyFor, same vector as its unit test)', async function () {
+      const id = '0x99da535f493e790254f5b0b946f2001e720f5b91200f95df976207399e08729e' // keccak256('3f2c9a10-0000-4000-8000-000000000001')
+      expect(await escrow.offerKeyOf(id, '0x000000000000000000000000000000000000bEEF'))
+        .to.equal('0x48556409277b71f5abea3fa2fd46242b4638039c932d6b6a447bf1a746772e70')
+    })
+
+    it('4. an attacker cannot claim another seller\'s offerKey - the key is derived on-chain from the depositor', async function () {
       const legitimateKey = offerKeyFor('offer-4', seller.address)
-      // The attacker doesn't know a preimage that maps to legitimateKey
-      // under a DIFFERENT address — the best they can do is deposit to
-      // the key their OWN address produces, which is a different key
-      // entirely and can never collide with the seller's.
-      const attackerKey = offerKeyFor('offer-4', attacker.address)
-      expect(attackerKey).to.not.equal(legitimateKey)
+      // The attacker knows the offer id and front-runs the seller's deposit
+      // with it: the contract files it under the ATTACKER's own key.
+      await escrow.connect(attacker).deposit(idOf(legitimateKey), { value: 1n })
+      expect(await escrow.getSeller(legitimateKey)).to.equal(ethers.ZeroAddress)
+      expect(await escrow.getSeller(offerKeyFor('offer-4', attacker.address))).to.equal(attacker.address)
+      expect(await escrow.offerKeyOf(idOf(legitimateKey), seller.address)).to.equal(legitimateKey)
 
-      await escrow.connect(attacker).deposit(attackerKey, { value: ONE })
-      expect(await escrow.getSeller(attackerKey)).to.equal(attacker.address)
-
-      // The real seller can still deposit to their own correctly-derived
-      // key and be recognized as its seller, completely unaffected.
-      await escrow.connect(seller).deposit(legitimateKey, { value: ONE })
+      // The real seller's deposit still goes through and owns their key.
+      await escrow.connect(seller).deposit(idOf(legitimateKey), { value: ONE })
       expect(await escrow.getSeller(legitimateKey)).to.equal(seller.address)
+      expect(await escrow.getRemaining(legitimateKey)).to.equal(ONE)
     })
   })
 
@@ -134,8 +147,8 @@ describe('P2PMeshportEscrowV3', function () {
     it('5 & 6. seller A cannot release or drain seller B\'s trade/offer', async function () {
       const offerKeyA = offerKeyFor('offer-A', seller.address)
       const offerKeyB = offerKeyFor('offer-B', seller2.address)
-      await escrow.connect(seller).deposit(offerKeyA, { value: ONE })
-      await escrow.connect(seller2).deposit(offerKeyB, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKeyA), { value: ONE })
+      await escrow.connect(seller2).deposit(idOf(offerKeyB), { value: ONE })
 
       const tradeKeyB = tradeKeyFor('trade-B')
       await escrow.connect(seller2).registerTrade(tradeKeyB, offerKeyB, buyer.address, ONE)
@@ -148,7 +161,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('7. seller A cannot register a trade against seller B\'s offer to redirect funds', async function () {
       const offerKeyB = offerKeyFor('offer-B2', seller2.address)
-      await escrow.connect(seller2).deposit(offerKeyB, { value: ONE })
+      await escrow.connect(seller2).deposit(idOf(offerKeyB), { value: ONE })
       const tradeKey = tradeKeyFor('trade-B2')
       await expect(
         escrow.connect(seller).registerTrade(tradeKey, offerKeyB, attacker.address, ONE),
@@ -158,8 +171,8 @@ describe('P2PMeshportEscrowV3', function () {
     it('8 & 9. duplicate trade key is rejected, and a colliding tradeKey cannot bleed into a different offer', async function () {
       const offerKey1 = offerKeyFor('offer-dup1', seller.address)
       const offerKey2 = offerKeyFor('offer-dup2', seller.address)
-      await escrow.connect(seller).deposit(offerKey1, { value: ONE })
-      await escrow.connect(seller).deposit(offerKey2, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey1), { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey2), { value: ONE })
 
       const tradeKey = tradeKeyFor('trade-dup')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey1, buyer.address, ONE)
@@ -173,7 +186,7 @@ describe('P2PMeshportEscrowV3', function () {
   describe('single finalization', function () {
     async function setupActiveTrade() {
       const offerKey = offerKeyFor('offer-fin', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-fin-' + Math.random())
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
       return { offerKey, tradeKey }
@@ -206,7 +219,7 @@ describe('P2PMeshportEscrowV3', function () {
   describe('Pauser -> Investigator -> Admin sequence', function () {
     async function setupFrozenTrade() {
       const offerKey = offerKeyFor('offer-seq', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-seq-' + Math.random())
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
       await escrow.connect(pauser).freezeTrade(tradeKey)
@@ -234,7 +247,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('16 & 17. investigator can investigate only a FROZEN trade, and cannot move USDC (INVARIANT 4)', async function () {
       const offerKey = offerKeyFor('offer-inv', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const activeTradeKey = tradeKeyFor('trade-inv-active')
       await escrow.connect(seller).registerTrade(activeTradeKey, offerKey, buyer.address, ONE)
       // Not frozen yet -- investigate must reject it.
@@ -260,7 +273,7 @@ describe('P2PMeshportEscrowV3', function () {
       // A second, unrelated frozen trade on a different offer must be
       // completely unaffected by resolving the first one.
       const offerKey2 = offerKeyFor('offer-seq2', seller2.address)
-      await escrow.connect(seller2).deposit(offerKey2, { value: ONE })
+      await escrow.connect(seller2).deposit(idOf(offerKey2), { value: ONE })
       const tradeKey2 = tradeKeyFor('trade-seq2')
       await escrow.connect(seller2).registerTrade(tradeKey2, offerKey2, buyer.address, ONE)
       await escrow.connect(pauser).freezeTrade(tradeKey2)
@@ -299,8 +312,8 @@ describe('P2PMeshportEscrowV3', function () {
     it('24. admin cannot drain seller B\'s escrow via seller A\'s investigated trade', async function () {
       const offerKeyA = offerKeyFor('offer-drainA', seller.address)
       const offerKeyB = offerKeyFor('offer-drainB', seller2.address)
-      await escrow.connect(seller).deposit(offerKeyA, { value: ONE })
-      await escrow.connect(seller2).deposit(offerKeyB, { value: ethers.parseEther('5') })
+      await escrow.connect(seller).deposit(idOf(offerKeyA), { value: ONE })
+      await escrow.connect(seller2).deposit(idOf(offerKeyB), { value: ethers.parseEther('5') })
 
       const tradeKeyA = tradeKeyFor('trade-drainA')
       await escrow.connect(seller).registerTrade(tradeKeyA, offerKeyA, buyer.address, ONE)
@@ -321,7 +334,7 @@ describe('P2PMeshportEscrowV3', function () {
       await attackerContract.waitForDeployment()
 
       const offerKey = offerKeyFor('offer-reentry', await attackerContract.getAddress())
-      await attackerContract.deposit(offerKey, { value: ONE })
+      await attackerContract.deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-reentry')
       await attackerContract.registerTrade(tradeKey, offerKey, await attackerContract.getAddress(), ONE)
 
@@ -344,7 +357,7 @@ describe('P2PMeshportEscrowV3', function () {
       // contract — adminResolve() sends value to t.buyer, which is where
       // reentrancy would have to happen for this specific function.
       const offerKey = offerKeyFor('offer-reentry-admin', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-reentry-admin')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, attackerAddr, ONE)
       await escrow.connect(pauser).freezeTrade(tradeKey)
@@ -368,7 +381,7 @@ describe('P2PMeshportEscrowV3', function () {
       const rejecterAddr = await rejecter.getAddress()
 
       const offerKey = offerKeyFor('offer-reject', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-reject')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, rejecterAddr, ONE)
 
@@ -387,7 +400,7 @@ describe('P2PMeshportEscrowV3', function () {
   describe('input validation', function () {
     it('27. registering a trade for more than the remaining escrow fails', async function () {
       const offerKey = offerKeyFor('offer-insuff', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-insuff')
       await expect(
         escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE + 1n),
@@ -396,8 +409,8 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('28. zero amount / zero address are rejected', async function () {
       const offerKey = offerKeyFor('offer-zero', seller.address)
-      await expect(escrow.connect(seller).deposit(offerKey, { value: 0 })).to.be.revertedWith('P2PEscrowV3: zero deposit')
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await expect(escrow.connect(seller).deposit(idOf(offerKey), { value: 0 })).to.be.revertedWith('P2PEscrowV3: zero deposit')
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-zero')
       await expect(
         escrow.connect(seller).registerTrade(tradeKey, offerKey, ethers.ZeroAddress, ONE),
@@ -409,7 +422,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('29. invalid state transitions fail (unfreeze a non-frozen trade, investigate a non-frozen trade, resolve a non-investigated trade)', async function () {
       const offerKey = offerKeyFor('offer-invstate', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-invstate')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
 
@@ -423,7 +436,7 @@ describe('P2PMeshportEscrowV3', function () {
   describe('access control (INVARIANT 2)', function () {
     it('30. an unauthorized wallet cannot call any privileged function', async function () {
       const offerKey = offerKeyFor('offer-access', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-access')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
 
@@ -488,7 +501,7 @@ describe('P2PMeshportEscrowV3', function () {
   describe('32. full Pauser -> Investigator -> Admin sequence enforced end-to-end', function () {
     it('a disputed trade can only complete through every step, in order, with the right role at each step', async function () {
       const offerKey = offerKeyFor('offer-e2e', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-e2e')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
 
@@ -526,7 +539,7 @@ describe('P2PMeshportEscrowV3', function () {
       expect(await escrow.admin()).to.equal(cleanAdmin.address)
 
       const offerKey = offerKeyFor('offer-roleoverlap', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-roleoverlap')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
       await escrow.connect(pauser).freezeTrade(tradeKey)
@@ -646,15 +659,15 @@ describe('P2PMeshportEscrowV3', function () {
       const keyForSeller2 = offerKeyFor(sameOfferId, seller2.address)
       expect(keyForSeller).to.not.equal(keyForSeller2)
 
-      await escrow.connect(seller).deposit(keyForSeller, { value: ONE })
-      await escrow.connect(seller2).deposit(keyForSeller2, { value: ethers.parseEther('2') })
+      await escrow.connect(seller).deposit(idOf(keyForSeller), { value: ONE })
+      await escrow.connect(seller2).deposit(idOf(keyForSeller2), { value: ethers.parseEther('2') })
 
       expect(await escrow.getSeller(keyForSeller)).to.equal(seller.address)
       expect(await escrow.getSeller(keyForSeller2)).to.equal(seller2.address)
       expect(await escrow.getRemaining(keyForSeller)).to.equal(ONE)
       expect(await escrow.getRemaining(keyForSeller2)).to.equal(ethers.parseEther('2'))
 
-      await escrow.connect(seller2).deposit(keyForSeller2, { value: ONE })
+      await escrow.connect(seller2).deposit(idOf(keyForSeller2), { value: ONE })
       expect(await escrow.getRemaining(keyForSeller)).to.equal(ONE) // unchanged
     })
   })
@@ -662,14 +675,14 @@ describe('P2PMeshportEscrowV3', function () {
   describe('offer-level freeze (PAUSER)', function () {
     it('freezeOffer blocks new deposits and new trade registrations, but does not touch trades already registered', async function () {
       const offerKey = offerKeyFor('offer-freeze', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const existingTradeKey = tradeKeyFor('trade-before-freeze')
       await escrow.connect(seller).registerTrade(existingTradeKey, offerKey, buyer.address, ethers.parseEther('0.2'))
 
       await expect(escrow.connect(pauser).freezeOffer(offerKey))
         .to.emit(escrow, 'OfferFrozen').withArgs(offerKey, pauser.address)
 
-      await expect(escrow.connect(seller).deposit(offerKey, { value: ONE }))
+      await expect(escrow.connect(seller).deposit(idOf(offerKey), { value: ONE }))
         .to.be.revertedWith('P2PEscrowV3: offer is frozen')
       const newTradeKey = tradeKeyFor('trade-after-freeze')
       await expect(escrow.connect(seller).registerTrade(newTradeKey, offerKey, buyer.address, ethers.parseEther('0.1')))
@@ -678,12 +691,12 @@ describe('P2PMeshportEscrowV3', function () {
       await expect(escrow.connect(seller).release(existingTradeKey)).to.not.be.reverted
 
       await escrow.connect(pauser).unfreezeOffer(offerKey)
-      await expect(escrow.connect(seller).deposit(offerKey, { value: ONE })).to.not.be.reverted
+      await expect(escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })).to.not.be.reverted
     })
 
     it('only a pauser can freeze/unfreeze an offer', async function () {
       const offerKey = offerKeyFor('offer-freeze-access', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       await expect(escrow.connect(attacker).freezeOffer(offerKey)).to.be.revertedWith('P2PEscrowV3: caller is not a pauser')
     })
   })
@@ -737,7 +750,7 @@ describe('P2PMeshportEscrowV3', function () {
 
       // And they can no longer freeze anything.
       const offerKey = offerKeyFor('offer-cascade', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-cascade')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
       await expect(escrow.connect(pauser).freezeTrade(tradeKey))
@@ -755,7 +768,7 @@ describe('P2PMeshportEscrowV3', function () {
   describe('true role independence per dispute — same operator cannot satisfy two stages of one dispute', function () {
     async function setupActiveTradeIndependence() {
       const offerKey = offerKeyFor('offer-indep-' + Math.random(), seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-indep-' + Math.random())
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
       return { offerKey, tradeKey }
@@ -856,14 +869,14 @@ describe('P2PMeshportEscrowV3', function () {
   describe('complete accounting audit — multiple sellers, offers, trades, and simultaneous disputes', function () {
     it('traces exact balances through a realistic mixed scenario: two sellers, several trades each, one normal release, one disputed release, one disputed refund — nothing bleeds across sellers or trades', async function () {
       const offerA = offerKeyFor('offer-audit-A', seller.address)
-      await escrow.connect(seller).deposit(offerA, { value: ethers.parseEther('3') })
+      await escrow.connect(seller).deposit(idOf(offerA), { value: ethers.parseEther('3') })
       const tradeA1 = tradeKeyFor('trade-audit-A1')
       const tradeA2 = tradeKeyFor('trade-audit-A2')
       await escrow.connect(seller).registerTrade(tradeA1, offerA, buyer.address, ethers.parseEther('1'))
       await escrow.connect(seller).registerTrade(tradeA2, offerA, buyer.address, ethers.parseEther('1.5'))
 
       const offerB = offerKeyFor('offer-audit-B', seller2.address)
-      await escrow.connect(seller2).deposit(offerB, { value: ethers.parseEther('5') })
+      await escrow.connect(seller2).deposit(idOf(offerB), { value: ethers.parseEther('5') })
       const tradeB1 = tradeKeyFor('trade-audit-B1')
       await escrow.connect(seller2).registerTrade(tradeB1, offerB, buyer.address, ethers.parseEther('2'))
 
@@ -902,7 +915,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('multiple simultaneous disputes on DIFFERENT trades of the SAME offer resolve independently', async function () {
       const offerKey = offerKeyFor('offer-audit-multi', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('10') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('10') })
       const t1 = tradeKeyFor('trade-multi-1')
       const t2 = tradeKeyFor('trade-multi-2')
       const t3 = tradeKeyFor('trade-multi-3')
@@ -973,7 +986,7 @@ describe('P2PMeshportEscrowV3', function () {
         try {
           if (action === 'deposit') {
             const s = pick(sellers)
-            await escrow.connect(s).deposit(offerKeys.get(s.address), { value: ethers.parseEther(String(1 + Math.floor(rand() * 3))) })
+            await escrow.connect(s).deposit(idOf(offerKeys.get(s.address)), { value: ethers.parseEther(String(1 + Math.floor(rand() * 3))) })
           } else if (action === 'registerAndRelease') {
             const s = pick(sellers)
             const remaining = await escrow.getRemaining(offerKeys.get(s.address))
@@ -1070,7 +1083,7 @@ describe('P2PMeshportEscrowV3', function () {
       // Behaviorally: even a fully-executed, legitimate role proposal
       // never changes any offer's remaining balance.
       const offerKey = offerKeyFor('offer-rolemanager-safety', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const before = await escrow.getRemaining(offerKey)
       await grantRole('AddPauser', buyer.address)
       const after = await escrow.getRemaining(offerKey)
@@ -1166,7 +1179,7 @@ describe('P2PMeshportEscrowV3', function () {
   describe('FIX 1a: withdrawRemaining is blocked when the offer is frozen', function () {
     it('a Pauser freezes an offer → seller\'s withdrawRemaining reverts with the frozen message', async function () {
       const offerKey = offerKeyFor('offer-frozen-withdraw', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
 
       // Freeze the offer (not any specific trade — offer-level freeze).
       await escrow.connect(pauser).freezeOffer(offerKey)
@@ -1182,7 +1195,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('a frozen offer still allows release() for trades registered before the freeze (release is deliberately exempt)', async function () {
       const offerKey = offerKeyFor('offer-frozen-release', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-frozen-release')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
 
@@ -1224,7 +1237,7 @@ describe('P2PMeshportEscrowV3', function () {
   describe('reserved escrow accounting — a seller can never withdraw funds already committed to an active trade', function () {
     it('the exact scenario from the audit: 100 deposited, 70 reserved by a trade -> seller can withdraw only 30', async function () {
       const offerKey = offerKeyFor('offer-reserved-1', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('100') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('100') })
       const tradeKey = tradeKeyFor('trade-reserved-1')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ethers.parseEther('70'))
 
@@ -1253,7 +1266,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('a second trade can be registered against the remaining available capacity, but a third that would over-commit reverts', async function () {
       const offerKey = offerKeyFor('offer-reserved-2', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('100') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('100') })
       const t1 = tradeKeyFor('trade-reserved-2a')
       const t2 = tradeKeyFor('trade-reserved-2b')
       const t3 = tradeKeyFor('trade-reserved-2c')
@@ -1274,7 +1287,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('release correctly frees the reservation, making that capacity available again for withdrawal or a new trade', async function () {
       const offerKey = offerKeyFor('offer-reserved-3', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('100') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('100') })
       const t1 = tradeKeyFor('trade-reserved-3a')
       await escrow.connect(seller).registerTrade(t1, offerKey, buyer.address, ethers.parseEther('70'))
       await escrow.connect(seller).release(t1)
@@ -1289,7 +1302,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('a disputed REFUND correctly frees the reservation (same as release, just no transfer)', async function () {
       const offerKey = offerKeyFor('offer-reserved-4', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('100') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('100') })
       const tradeKey = tradeKeyFor('trade-reserved-4')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ethers.parseEther('70'))
       await escrow.connect(pauser).freezeTrade(tradeKey)
@@ -1310,7 +1323,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('a disputed RELEASE correctly frees the reservation AND removes the funds from remaining', async function () {
       const offerKey = offerKeyFor('offer-reserved-5', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('100') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('100') })
       const tradeKey = tradeKeyFor('trade-reserved-5')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ethers.parseEther('70'))
       await escrow.connect(pauser).freezeTrade(tradeKey)
@@ -1324,7 +1337,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('reservation persists correctly through a frozen/investigated trade still pending -- funds stay locked, not just during Active', async function () {
       const offerKey = offerKeyFor('offer-reserved-6', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('100') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('100') })
       const tradeKey = tradeKeyFor('trade-reserved-6')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ethers.parseEther('70'))
       await escrow.connect(pauser).freezeTrade(tradeKey)
@@ -1336,7 +1349,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('multiple simultaneous trades: total reserved never exceeds remaining, checked after every operation in a mixed sequence', async function () {
       const offerKey = offerKeyFor('offer-reserved-7', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('10') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('10') })
 
       async function checkInvariant() {
         const e = await escrow.escrows(offerKey)
@@ -1363,7 +1376,7 @@ describe('P2PMeshportEscrowV3', function () {
   describe('cancelTrade — seller reclaims an abandoned registered trade', function () {
     it('seller can cancel their own Active trade, freeing the reservation without moving any value', async function () {
       const offerKey = offerKeyFor('offer-cancel-1', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('100') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('100') })
       const tradeKey = tradeKeyFor('trade-cancel-1')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ethers.parseEther('70'))
       expect(await escrow.getAvailable(offerKey)).to.equal(ethers.parseEther('30'))
@@ -1372,7 +1385,7 @@ describe('P2PMeshportEscrowV3', function () {
       const buyerBefore = await ethers.provider.getBalance(buyer.address)
       await ethers.provider.send('evm_increaseTime', [30 * 60 + 1]); await ethers.provider.send('evm_mine', [])
       const tx = await escrow.connect(seller).cancelTrade(tradeKey)
-      await expect(tx).to.emit(escrow, 'TradeCancelled').withArgs(offerKey, tradeKey, seller.address, ethers.parseEther('70'))
+      await expect(tx).to.emit(escrow, 'TradeCancelled').withArgs(offerKey, tradeKey, seller.address, seller.address, ethers.parseEther('70'))
       const receipt = await tx.wait()
       const gasCost = receipt.gasUsed * receipt.gasPrice
       const sellerAfter = await ethers.provider.getBalance(seller.address)
@@ -1391,7 +1404,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('the freed reservation is immediately usable for a new trade, or withdrawable by the seller', async function () {
       const offerKey = offerKeyFor('offer-cancel-2', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('100') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('100') })
       const t1 = tradeKeyFor('trade-cancel-2a')
       await escrow.connect(seller).registerTrade(t1, offerKey, buyer.address, ethers.parseEther('70'))
       await ethers.provider.send('evm_increaseTime', [30 * 60 + 1]); await ethers.provider.send('evm_mine', [])
@@ -1410,7 +1423,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('reverts if called by anyone other than the trade\'s own seller', async function () {
       const offerKey = offerKeyFor('offer-cancel-3', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-cancel-3')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
 
@@ -1424,7 +1437,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('reverts on a trade that is not Active — frozen, already released, refunded, unknown, or already cancelled', async function () {
       const offerKey = offerKeyFor('offer-cancel-4', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('10') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('10') })
 
       const unknownKey = tradeKeyFor('trade-cancel-4-unknown')
       await expect(escrow.connect(seller).cancelTrade(unknownKey))
@@ -1452,7 +1465,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('does not bypass an in-progress dispute — a live PAUSER freeze always takes priority over the seller cancelling out from under it', async function () {
       const offerKey = offerKeyFor('offer-cancel-5', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-cancel-5')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
       await escrow.connect(pauser).freezeTrade(tradeKey)
@@ -1468,7 +1481,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('respects the global pause switch, same as every other value-adjacent function', async function () {
       const offerKey = offerKeyFor('offer-cancel-6', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-cancel-6')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
       await escrow.connect(pauser).pause()
@@ -1482,7 +1495,7 @@ describe('P2PMeshportEscrowV3', function () {
     const digestSig = async (signer, tradeKey) => signer.signMessage(ethers.getBytes(await escrow.markPaidDigest(tradeKey)))
     async function openTrade(id) {
       const offerKey = offerKeyFor('offer-' + id, seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ONE })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ONE })
       const tradeKey = tradeKeyFor('trade-' + id)
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ONE)
       return { offerKey, tradeKey }
@@ -1535,6 +1548,7 @@ describe('P2PMeshportEscrowV3', function () {
     it('the buyer can walk away from an unpaid trade at any time; the seller can cancel an unpaid one after the window', async function () {
       const a = await openTrade('bp-5a')
       await expect(escrow.connect(buyer).cancelTrade(a.tradeKey)).to.emit(escrow, 'TradeCancelled')
+        .withArgs(a.offerKey, a.tradeKey, buyer.address, seller.address, ONE)
       const b = await openTrade('bp-5b')
       await ethers.provider.send('evm_increaseTime', [30 * 60 + 1]); await ethers.provider.send('evm_mine', [])
       await expect(escrow.connect(seller).cancelTrade(b.tradeKey)).to.emit(escrow, 'TradeCancelled')
@@ -1551,7 +1565,7 @@ describe('P2PMeshportEscrowV3', function () {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296
       }
       const offerKey = offerKeyFor('offer-reserved-fuzz', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('20') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('20') })
       const activeTradeKeys = []
 
       async function checkInvariant() {
@@ -1579,7 +1593,7 @@ describe('P2PMeshportEscrowV3', function () {
             const available = await escrow.getAvailable(offerKey)
             if (available > 0n) await escrow.connect(seller).withdrawRemaining(offerKey)
           } else {
-            await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('1') })
+            await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('1') })
           }
         } catch { /* some attempts legitimately revert -- invariant must still hold */ }
         await checkInvariant()
@@ -1620,7 +1634,7 @@ describe('P2PMeshportEscrowV3', function () {
       const offerKey = offerKeyFor('offer-final-sequence', seller.address)
 
       // Step 1: 100 deposited.
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('100') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('100') })
       expect(await escrow.getRemaining(offerKey)).to.equal(ethers.parseEther('100'))
       expect(await escrow.getReserved(offerKey)).to.equal(0n)
       expect(await escrow.getAvailable(offerKey)).to.equal(ethers.parseEther('100'))
@@ -1661,7 +1675,7 @@ describe('P2PMeshportEscrowV3', function () {
       // and a new trade against it registers and releases correctly --
       // proving the accounting isn't stuck in a bad state after a full
       // deposit/register/withdraw/release cycle down to zero.
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('50') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('50') })
       expect(await escrow.getAvailable(offerKey)).to.equal(ethers.parseEther('50'))
       await expect(escrow.connect(seller).registerTrade(t2, offerKey, buyer.address, ethers.parseEther('50')))
         .to.not.be.reverted
@@ -1673,7 +1687,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('over-registration beyond available capacity fails cleanly with no state change, even mid-sequence', async function () {
       const offerKey = offerKeyFor('offer-final-overreg', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('100') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('100') })
       const t1 = tradeKeyFor('trade-final-overreg-1')
       await escrow.connect(seller).registerTrade(t1, offerKey, buyer.address, ethers.parseEther('70'))
 
@@ -1692,7 +1706,7 @@ describe('P2PMeshportEscrowV3', function () {
       await rejecter.waitForDeployment()
 
       const offerKey = offerKeyFor('offer-final-failedtx', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('100') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('100') })
       const tradeKey = tradeKeyFor('trade-final-failedtx')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, await rejecter.getAddress(), ethers.parseEther('70'))
 
@@ -1728,7 +1742,7 @@ describe('P2PMeshportEscrowV3', function () {
       // Set up an active offer + disputed trade BEFORE the rotation, to
       // prove escrow state and dispute state are untouched by it.
       const offerKey = offerKeyFor('offer-compromise', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('10') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('10') })
       const tradeKey = tradeKeyFor('trade-compromise')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ethers.parseEther('4'))
       await escrow.connect(pauser).freezeTrade(tradeKey)
@@ -1786,7 +1800,7 @@ describe('P2PMeshportEscrowV3', function () {
 
       // Admin A can no longer call ANY admin-only function.
       const anotherOfferKey = offerKeyFor('offer-compromise-2', seller.address)
-      await escrow.connect(seller).deposit(anotherOfferKey, { value: ethers.parseEther('5') })
+      await escrow.connect(seller).deposit(idOf(anotherOfferKey), { value: ethers.parseEther('5') })
       const anotherTradeKey = tradeKeyFor('trade-compromise-2')
       await escrow.connect(seller).registerTrade(anotherTradeKey, anotherOfferKey, buyer.address, ethers.parseEther('2'))
       await escrow.connect(pauser).freezeTrade(anotherTradeKey)
@@ -1931,7 +1945,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('admin rotation does not modify escrow balances or trade state for ANY offer/trade, active or otherwise', async function () {
       const offerKey = offerKeyFor('offer-rotation-noop', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('20') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('20') })
       const activeTrade = tradeKeyFor('trade-rotation-noop-active')
       await escrow.connect(seller).registerTrade(activeTrade, offerKey, buyer.address, ethers.parseEther('5'))
       const frozenTrade = tradeKeyFor('trade-rotation-noop-frozen')
@@ -1972,7 +1986,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('the new admin can perform legitimate admin dispute resolution; the old admin cannot', async function () {
       const offerKey = offerKeyFor('offer-rotation-resolve', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('10') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('10') })
       const tradeKey = tradeKeyFor('trade-rotation-resolve')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ethers.parseEther('6'))
       await escrow.connect(pauser).freezeTrade(tradeKey)
@@ -2297,7 +2311,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('escrow balances and trade state are provably unchanged by role/governance changes — general property, not just for admin rotation', async function () {
       const offerKey = offerKeyFor('offer-timelock-escrow-noop', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('15') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('15') })
       const tradeKey = tradeKeyFor('trade-timelock-escrow-noop')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ethers.parseEther('6'))
 
@@ -2332,7 +2346,7 @@ describe('P2PMeshportEscrowV3', function () {
 
     it('operational actions (freeze/investigate/adminResolve) remain fully IMMEDIATE — the timelock never applies to them', async function () {
       const offerKey = offerKeyFor('offer-timelock-ops-immediate', seller.address)
-      await escrow.connect(seller).deposit(offerKey, { value: ethers.parseEther('5') })
+      await escrow.connect(seller).deposit(idOf(offerKey), { value: ethers.parseEther('5') })
       const tradeKey = tradeKeyFor('trade-timelock-ops-immediate')
       await escrow.connect(seller).registerTrade(tradeKey, offerKey, buyer.address, ethers.parseEther('3'))
 

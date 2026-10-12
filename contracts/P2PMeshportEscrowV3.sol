@@ -43,15 +43,13 @@ import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.s
  * amount first and claiming that offerKey's seller slot for themselves —
  * permanently locking the real seller out of their own offer.
  *
- * Fix: offerKeyFor() (see p2pEscrowContract.ts) now derives the key as
- * `keccak256(abi.encode(offerId, sellerAddress))` instead of just
- * `keccak256(offerId)`. An attacker with a different address fundamentally
- * cannot construct the SAME offerKey the real seller's app computed —
- * doing so would require finding a second preimage of a cryptographic
- * hash, not just being fast in the mempool. The "first depositor becomes
- * seller" logic below is now safe to keep exactly as-is, because only the
- * real seller's own address can ever produce a matching key for their
- * specific offer to begin with.
+ * Fix (V3): the contract derives the key itself, on-chain, from the
+ * caller: deposit(offerId) uses offerKeyOf(offerId, msg.sender) =
+ * keccak256(abi.encode(offerId, msg.sender)). A deposit can therefore only
+ * ever create or top up the CALLER's own key - an attacker depositing the
+ * same offerId lands under a different key entirely. (V2 left this to the
+ * app: it trusted whatever offerKey the caller passed, so anyone who
+ * computed the seller's key could still deposit under it first.)
  *
  * ── Vulnerability 2 (FIXED): release() trusted caller-supplied buyer/amount ──
  * The old release(offerKey, tradeKey, buyer, amount) took buyer and amount
@@ -282,7 +280,8 @@ contract P2PMeshportEscrowV3 is ReentrancyGuard {
     event Released(bytes32 indexed offerKey, bytes32 indexed tradeKey, address indexed buyer, uint256 amount);
     event PayoutDeferred(bytes32 indexed tradeKey, address indexed buyer, uint256 amount);
     event OwedWithdrawn(address indexed buyer, uint256 amount);
-    event TradeCancelled(bytes32 indexed offerKey, bytes32 indexed tradeKey, address indexed seller, uint256 amount);
+    // `cancelledBy`: the seller, the buyer (cancelTradeFor) or the offer's operator.
+    event TradeCancelled(bytes32 indexed offerKey, bytes32 indexed tradeKey, address indexed cancelledBy, address seller, uint256 amount);
     event Withdrawn(bytes32 indexed offerKey, address indexed seller, uint256 amount);
     event AutoAcceptSet(bytes32 indexed offerKey, address indexed operator, uint256 minTrade, uint256 maxTrade);
     event TradeFrozen(bytes32 indexed tradeKey, address indexed by);
@@ -361,12 +360,18 @@ contract P2PMeshportEscrowV3 is ReentrancyGuard {
     }
 
     // ── Deposits ──────────────────────────────────────────────────────────
-    // See the file-header note on offerKeyFor() — offerKey now cryptographically
-    // binds the intended seller's address, so "first depositor becomes seller"
-    // is safe: nobody but the real seller can construct a matching key.
+    // See the file-header note: the key is derived from msg.sender here, so
+    // "first depositor becomes seller" can only ever be the key's own seller.
 
-    function deposit(bytes32 offerKey) external payable whenNotPaused {
-        _deposit(offerKey);
+    /// The escrow key is always derived on-chain from the caller: a deposit can
+    /// only ever create or top up the caller's OWN offer, so nobody can claim
+    /// another seller's key first (front-run) and lock them out of it.
+    function offerKeyOf(bytes32 offerId, address seller) public pure returns (bytes32) {
+        return keccak256(abi.encode(offerId, seller));
+    }
+
+    function deposit(bytes32 offerId) external payable whenNotPaused {
+        _deposit(offerKeyOf(offerId, msg.sender));
     }
 
     // ── Auto-accept (V3) ─────────────────────────────────────────────────
@@ -375,7 +380,8 @@ contract P2PMeshportEscrowV3 is ReentrancyGuard {
     // (depositWithAutoAccept) or later (setAutoAccept); operator 0 turns it
     // off. Only the offer's seller can set it - nobody else can name an
     // operator for someone else's escrow.
-    function depositWithAutoAccept(bytes32 offerKey, address operator, uint256 minTrade, uint256 maxTrade) external payable whenNotPaused {
+    function depositWithAutoAccept(bytes32 offerId, address operator, uint256 minTrade, uint256 maxTrade) external payable whenNotPaused {
+        bytes32 offerKey = offerKeyOf(offerId, msg.sender);
         _deposit(offerKey);
         _setAutoAccept(offerKey, operator, minTrade, maxTrade);
     }
@@ -558,7 +564,7 @@ contract P2PMeshportEscrowV3 is ReentrancyGuard {
 
         t.state = TradeState.Cancelled;
         e.reserved -= t.amount;
-        emit TradeCancelled(t.offerKey, tradeKey, who, t.amount);
+        emit TradeCancelled(t.offerKey, tradeKey, who, t.seller, t.amount);
     }
 
     // ── Buyer marks the trade paid ───────────────────────────────────────
