@@ -17,6 +17,7 @@ import {
   type MerchantIntent, type PaymentView, orderKindOf, orderTitle, orderDisplay } from '@/lib/merchantPay'
 import { AmountHero } from '@/components/ui/AmountHero'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
+import { drawMeshportQr } from '@/lib/qrLogo'
 
 const EXPIRY = [{ label: '15 min', min: 15 }, { label: '1 hour', min: 60 }, { label: '24 hours', min: 1440 }, { label: 'No expiry', min: 0 }]
 const box: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: 'var(--shadow-1)' }
@@ -82,7 +83,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
 
   useEffect(() => {
     if (!qrValue || !canvasRef.current) return
-    import('qrcode').then(Q => Q.toCanvas(canvasRef.current!, qrValue, { width: 220, margin: 2, color: { dark: '#000000', light: '#ffffff' }, errorCorrectionLevel: 'M' })).catch(() => {})
+    drawMeshportQr(canvasRef.current, qrValue, 220).catch(() => {})
   }, [qrValue])
   useEffect(() => (order ? watchPayment(order.code, setLive, 5000) : undefined), [order?.code])
 
@@ -220,7 +221,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <div style={{ background: '#fff', padding: 6, borderRadius: 14, opacity: paid || closed ? 0.35 : 1 }}>
-            <canvas ref={canvasRef} style={{ display: 'block', width: 220, height: 220 }} />
+            <canvas ref={canvasRef} width={220} height={220} style={{ display: 'block' }} />
           </div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, fontSize: 12.5, fontWeight: 700,
             color: paid ? 'var(--success)' : closed ? 'var(--text-secondary)' : 'var(--warning)',

@@ -35,6 +35,7 @@ import { SkeletonRows } from '@/components/ui/Skeleton'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { useLeaveGuard } from '@/lib/leaveGuard'
+import { drawMeshportQr } from '@/lib/qrLogo'
 
 /** Chat text for a request / bill - the chat renders it as a live card. */
 function chatMessageFor(i: MerchantIntent): string {
@@ -525,7 +526,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
 
   useEffect(() => {
     if (!canvasRef.current) return
-    import('qrcode').then(Q => Q.toCanvas(canvasRef.current!, qrValue, { width: 220, margin: 2, color: { dark: '#000000', light: '#ffffff' }, errorCorrectionLevel: 'M' })).catch(() => {})
+    drawMeshportQr(canvasRef.current, qrValue, 220).catch(() => {})
   }, [qrValue])
 
   const message = !intent ? link
@@ -682,7 +683,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
               ))}
             </div>
             {qrMode === 'wallet' && <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}><ChainPicker value={qrChain} onChange={setQrChain} /></div>}
-            <div style={{ background: '#fff', padding: 8, borderRadius: 16 }}><canvas ref={canvasRef} /></div>
+            <div style={{ background: '#fff', padding: 8, borderRadius: 16 }}><canvas ref={canvasRef} width={220} height={220} style={{ display: 'block' }} /></div>
             {qrMode === 'wallet' && walletAddress && dueNow > 0
               ? <WalletPaymentDetails chainId={qrChain} to={walletAddress} amount={dueNow} />
               : <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', maxWidth: 320, lineHeight: 1.45 }}>
