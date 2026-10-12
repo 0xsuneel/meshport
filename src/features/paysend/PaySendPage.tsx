@@ -17,10 +17,9 @@ import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
-import { DesktopAmountInput, quickAmounts } from '@/components/ui/DesktopAmountInput'
+import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { useWalletStore, useAuthStore, useUIStore } from '@/store'
 import { formatAmount, shortenAddress, midShortenAddress, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
-import { amountFontSize } from '@/lib/amountFontSize'
 import { sendUSDC, sendEURC, estimateTransferFee, isValidAddress, confirmTransactionInBackground } from '@/lib/arcService'
 import { classifyFailure, recordFailure, FAILURE_MESSAGES } from '@/lib/failure'
 import { arcRpcJson } from '@/lib/arc'
@@ -1444,25 +1443,8 @@ export function PaySendPage() {
                 </p>
               )}
 
-              {/* Tappable amount display - mobile only. Desktop shows just
-                  the token picker here; the live amount input itself is
-                  the AmountKeypad card right below (no separate display to
-                  tap, it's always there and always editable). */}
-              <div className="flex items-center"
-                onClick={isDesktop || merchantPayCode ? undefined : () => setShowAmountPad(true)}
-                style={{ justifyContent: isDesktop ? 'flex-end' : 'space-between', cursor: isDesktop ? 'default' : 'pointer' }}>
-                {!isDesktop && (
-                  <div className="flex items-baseline gap-0.5">
-                    {/* BUG FIX: both spans below were a fixed 44px no
-                        matter how long `amount` got -- a long cirBTC
-                        amount (8 decimals) would overflow this row instead
-                        of shrinking to fit. */}
-                    <span className="font-bold" style={{ fontSize: amountFontSize(amount, 44), lineHeight: 1, color: amount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 20%, transparent)' }}>{tokenSymbolChar(token)}</span>
-                    <span className="font-bold text-text-primary" style={{ fontSize: amountFontSize(amount, 44), lineHeight: 1 }}>
-                      {amount || '0'}
-                    </span>
-                  </div>
-                )}
+              {/* Token picker, right-aligned above the amount field. */}
+              <div className="flex items-center" style={{ justifyContent: 'flex-end' }}>
                 <div className="flex-shrink-0" style={{ position: 'relative', zIndex: showTokenPicker ? 41 : undefined }}>
                   <button onClick={e => { e.stopPropagation(); if (!merchantPayCode) setShowTokenPicker(v => !v) }}
                     aria-expanded={showTokenPicker} className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full flex-shrink-0 active:opacity-70"
@@ -1492,11 +1474,13 @@ export function PaySendPage() {
                 </div>
               </div>
 
-              {isDesktop ? (
-                <DesktopAmountInput
+                <AmountField
                   value={amount}
                   onChange={raw => { if (merchantPayCode) return; setAmount(sanitizeSendAmount(raw, tokenDisplayDecimals(token))); setAmountError('') }}
-                  autoFocus={!merchantPayCode}
+                  autoFocus={isDesktop && !merchantPayCode}
+                  // Mobile: the same field opens the number pad.
+                  onTap={isDesktop ? undefined : () => setShowAmountPad(true)}
+                  editing={showAmountPad}
                   readOnly={!!merchantPayCode}
                   invalid={!!amountErrorMessage}
                   symbol={tokenSymbolChar(token)}
@@ -1508,8 +1492,10 @@ export function PaySendPage() {
                         onClick: () => { setAmount(parseFloat((maxSpendable * f).toFixed(tokenDisplayDecimals(token))).toString()); setAmountError('') } }))
                     : quickAmounts(QUICK_AMOUNTS, tokenSymbolChar(token), v => { setAmount(v); setAmountError('') }, maxSpendable)}
                 />
-              ) : (
+              {!isDesktop && (
                 <AmountKeypad
+                  // The amount field above has its own Max.
+                  showMax={false}
                   open={showAmountPad}
                   value={amount}
                   onChange={v => { if (merchantPayCode) return; setAmount(v); setAmountError('') }}
@@ -1533,29 +1519,11 @@ export function PaySendPage() {
                 <p role="alert" className="text-[13px] font-semibold text-center" style={{ color: 'var(--danger)' }}>{amountErrorMessage}</p>
               )}
 
-              {/* Available balance (+ Max on desktop, where AmountKeypad's
-                  own internal Max button no longer renders) */}
+              {/* Available balance */}
               <div className="flex items-center justify-between px-1">
                 <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Available Balance</span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold" style={{ color: amountExceedsBalance ? 'var(--danger)' : 'var(--text-primary)' }}>{formatAmount(activeBalance, tokenDisplayDecimals(token))} {token}</span>
-                  {isDesktop && activeBalance > 0 && !merchantPayCode && (
-                    <button
-                      onClick={() => {
-                        const decimals = tokenDisplayDecimals(token)
-                        const maxSendable = Math.max(0, activeBalance - feeReserve)
-                        setAmount(parseFloat(maxSendable.toFixed(decimals)).toString())
-                        setAmountError('')
-                      }}
-                      style={{
-                        padding: '5px 14px', borderRadius: 100, border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)',
-                        background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)', fontSize: 12, fontWeight: 700,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Max
-                    </button>
-                  )}
                 </div>
               </div>
 

@@ -5,7 +5,7 @@ import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
-import { DesktopAmountInput } from '@/components/ui/DesktopAmountInput'
+import { AmountField } from '@/components/ui/AmountField'
 import { TransactionComplete } from '@/components/ui/TransactionComplete'
 import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
@@ -1430,27 +1430,17 @@ export function SwapPage() {
         )}
         {isActive && (
         <div style={{ position: 'relative' }}>
-          {/* You pay - outlined while the number pad is open */}
+          {/* You pay - the amount field rings while the number pad is open */}
           <div className="rounded-3xl" style={{
             padding: '16px 18px 14px', background: 'var(--surface)',
-            border: showAmountPad && !isDesktop ? '1.5px solid color-mix(in srgb, var(--brand-text) 55%, transparent)' : '1px solid var(--border)',
+            border: '1px solid var(--border)',
           }}>
             <div className="flex items-center justify-between">
               <p className="text-[13px] text-text-secondary">You pay</p>
               <p className="text-[13px]" style={{ color: parseFloat(amountIn || '0') > inBalance ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: parseFloat(amountIn || '0') > inBalance ? 600 : undefined }}>Balance {fmtBal(tokenIn.id, inBalance)}</p>
             </div>
             <div className="flex items-center justify-between gap-3" style={{ marginTop: 12 }}>
-              {/* Mobile only - desktop types into the box below. */}
-              {!isDesktop ? (
-                // The whole space left of the token pill opens the keypad, not just the digits.
-                <button onClick={() => setShowAmountPad(v => !v)} aria-label={`Amount in ${tokenIn.id}`}
-                  className="min-w-0 flex-1 flex items-center text-left" style={{ height: 44 }}>
-                  <span className="font-extrabold" style={{ fontSize: amountFontSize(amountIn, 40), lineHeight: 1, letterSpacing: '-1px', color: amountIn ? 'var(--text-primary)' : 'var(--text-muted)' }}>
-                    {amountIn || '0'}
-                  </span>
-                  {showAmountPad && <span aria-hidden="true" className="animate-pulse" style={{ width: 2, height: 34, marginLeft: 3, background: 'var(--brand-text)' }}/>}
-                </button>
-              ) : <span/>}
+              <span/>
               <div className="flex-shrink-0" style={{ position: 'relative', zIndex: pickerFor === 'in' ? 41 : undefined }}>
                 <button onClick={() => setPickerFor(v => v === 'in' ? null : 'in')} aria-expanded={pickerFor === 'in'}
                   className="w-full flex items-center gap-2 rounded-full active:opacity-70 transition-opacity"
@@ -1467,12 +1457,15 @@ export function SwapPage() {
                 </AnimatePresence>
               </div>
             </div>
-            {isDesktop ? (
               <div style={{ marginTop: 12 }}>
-                <DesktopAmountInput
+                <AmountField
                   value={amountIn}
                   onChange={raw => { setAmountIn(sanitizeSwapAmount(raw, swapTokenDecimals(tokenIn.id))); setEstimate(null) }}
                   symbol={swapTokenSymbolChar(tokenIn.id)}
+                  // Mobile: the same field opens the number pad.
+                  onTap={isDesktop ? undefined : () => setShowAmountPad(true)}
+                  editing={showAmountPad && !isDesktop}
+                  invalid={parseFloat(amountIn || '0') > inBalance}
                   ariaLabel={`Amount in ${tokenIn.id}`}
                   // Same fee-safe ceiling as Max everywhere else: USDC pays
                   // Arc's native gas out of this same balance, so the parts
@@ -1481,37 +1474,10 @@ export function SwapPage() {
                   onMax={inBalance > 0 ? () => setSwapPart(1) : undefined}
                 />
               </div>
-            ) : (
-              <div className="flex items-center justify-between gap-3" style={{ marginTop: 12 }}>
-                {/* Tapping the value line under the amount opens the keypad too. */}
-                <span onClick={() => setShowAmountPad(v => !v)} className="text-[13px] flex-1 min-w-0 flex items-center" style={{ color: 'var(--text-muted)', minHeight: 30, cursor: 'pointer' }}>
-                  {swapTokenSymbolChar(tokenIn.id)}{formatAmount(parseFloat(amountIn || '0'), swapTokenDecimals(tokenIn.id))}
-                </span>
-                {inBalance > 0 && (
-                  <div className="flex gap-1.5">
-                    {([['50%', 0.5], ['Max', 1]] as const).map(([label, part]) => (
-                      <button key={label}
-                        onClick={() => {
-                          // Same fee-safe ceiling as Max everywhere else: a
-                          // USDC swap pays Arc's gas out of this balance.
-                          const decimals = swapTokenDecimals(tokenIn.id)
-                          const maxSendable = Math.max(0, inBalance - (tokenIn.id === 'USDC' ? gasNeeded : 0))
-                          setAmountIn(parseFloat(Math.min(inBalance * part, maxSendable).toFixed(decimals)).toString())
-                          setEstimate(null)
-                        }}
-                        className="rounded-full text-xs active:opacity-70"
-                        style={label === 'Max'
-                          ? { height: 30, padding: '0 12px', fontWeight: 700, color: 'var(--brand-text)', background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)' }
-                          : { height: 30, padding: '0 12px', fontWeight: 600, color: 'var(--text-secondary)', background: 'transparent', border: '1px solid var(--border)' }}>
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
             {!isDesktop && (
               <AmountKeypad
+                // The amount field above has its own quick amounts and Max.
+                showMax={false}
                 open={showAmountPad}
                 value={amountIn}
                 onChange={v => { setAmountIn(v); setEstimate(null) }}

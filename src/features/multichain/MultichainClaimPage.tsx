@@ -41,7 +41,7 @@ import { slideStepVariants, MOBILE_SLIDE_TRANSITION, MOBILE_SLIDE_X, MOBILE_TAB_
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
-import { DesktopAmountInput, quickAmounts } from '@/components/ui/DesktopAmountInput'
+import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { supabase } from '@/lib/supabase'
@@ -1942,62 +1942,33 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               {/* Amount, with what arrives and the fees right under it */}
               <div style={{ padding: '16px 18px', borderRadius: 22, background: COLORS.surface,
                 border: `1.5px solid ${claimOver || error ? COLORS.error : keypadOpen ? COLORS.primary : COLORS.border}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 13, color: COLORS.muted }}>Amount (USDC)</span>
-                  {!desktopInput && (
-                    <button
-                      onClick={e => {
-                        e.stopPropagation()
-                        setClaimAmounts(prev => ({ ...prev, [selected!]: parseFloat(selectedChain.claimable.toFixed(2)).toString() }))
-                        setError('')
-                      }}
-                      style={{ height: 30, padding: '0 12px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--brand-text)',
-                        background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)' }}>
-                      Max {formatAmount(selectedChain.claimable)}
-                    </button>
-                  )}
+                <span style={{ fontSize: 13, color: COLORS.muted }}>Amount (USDC)</span>
+                {/* Same field on desktop (typed in) and mobile (opens the keypad). */}
+                <div style={{ marginTop: 8 }}>
+                  <AmountField
+                    value={claimAmounts[selected!] ?? ''}
+                    onChange={v => { setClaimAmounts(prev => ({ ...prev, [selected!]: sanitizeClaimAmount(v) })); setError('') }}
+                    onTap={desktopInput ? undefined : () => { setAmountConfirmed(false); setKeypadOpen(true) }}
+                    editing={keypadOpen}
+                    boxRef={amountBoxRef}
+                    onMax={() => {
+                      setClaimAmounts(prev => ({ ...prev, [selected!]: parseFloat(selectedChain.claimable.toFixed(2)).toString() }))
+                      setError('')
+                    }}
+                    invalid={!!error || claimOver || (claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT)}
+                    ariaLabel="Amount in USDC"
+                    token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
+                    quick={quickAmounts([10, 50, 100], '$', v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') }, selectedChain.claimable)}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5 }}>
+                    <span style={{ color: COLORS.muted }}>Available: {formatAmount(selectedChain.claimable)} USDC</span>
+                    {claimOver ? (
+                      <span style={{ fontWeight: 700, color: COLORS.error }}>Insufficient balance · Max {formatAmount(selectedChain.claimable)}</span>
+                    ) : claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT && (
+                      <span style={{ fontWeight: 700, color: COLORS.error }}>Minimum ${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}</span>
+                    )}
+                  </div>
                 </div>
-                {desktopInput ? (
-                  <div ref={amountBoxRef}>
-                    <DesktopAmountInput
-                      value={claimAmounts[selected!] ?? ''}
-                      onChange={v => { setClaimAmounts(prev => ({ ...prev, [selected!]: sanitizeClaimAmount(v) })); setError('') }}
-                      onMax={() => {
-                        setClaimAmounts(prev => ({ ...prev, [selected!]: parseFloat(selectedChain.claimable.toFixed(2)).toString() }))
-                        setError('')
-                      }}
-                      invalid={!!error || claimOver || (claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT)}
-                      ariaLabel="Amount in USDC"
-                      token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
-                      quick={quickAmounts([10, 50, 100], '$', v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') }, selectedChain.claimable)}
-                    />
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5 }}>
-                      <span style={{ color: COLORS.muted }}>Available: {formatAmount(selectedChain.claimable)} USDC</span>
-                      {claimOver ? (
-                        <span style={{ fontWeight: 700, color: COLORS.error }}>Insufficient balance · Max {formatAmount(selectedChain.claimable)}</span>
-                      ) : claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT && (
-                        <span style={{ fontWeight: 700, color: COLORS.error }}>Minimum ${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}</span>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div ref={amountBoxRef}
-                    onClick={e => { e.stopPropagation(); setAmountConfirmed(false); setKeypadOpen(true) }}
-                    style={{ cursor: 'pointer', marginTop: 6 }}>
-                    <div style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-1.2px', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums',
-                      color: claimAmounts[selected!] ? COLORS.text : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>
-                      {claimAmounts[selected!] || '0'}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
-                      <span style={{ fontSize: 13, color: COLORS.muted }}>USDC</span>
-                      {claimOver ? (
-                        <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.error }}>Insufficient balance · Max {formatAmount(selectedChain.claimable)}</span>
-                      ) : claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT && (
-                        <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.error }}>Minimum ${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}</span>
-                      )}
-                    </div>
-                  </div>
-                )}
                 {!desktopInput && !amountConfirmed && !keypadOpen && !claimAmt && (
                   <p style={{ fontSize: 12, color: COLORS.muted, margin: '6px 0 0' }}>Tap the amount to enter a value</p>
                 )}
@@ -2099,6 +2070,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           {!desktopInput && (
             <div className="keypad-eraser-fix" onClick={e => e.stopPropagation()}>
               <AmountKeypad
+                // The amount field above has its own Max.
+                showMax={false}
                 open={keypadOpen && !showPasscodeSheet}
                 value={claimAmounts[selected!] ?? ''}
                 onChange={v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') }}
