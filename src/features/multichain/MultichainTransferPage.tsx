@@ -1267,9 +1267,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // `silent` skips the loading spinner - used for the periodic background
   // refresh while Review is open, so numbers update in place instead of
   // flashing "Fetching fees…" every poll.
+  // The transfer a fee estimate is for (stored in feeEstimateKey when fetched).
+  const feeRequestKey = `${address}|${numAmount}|${selectedChain}|${selectedSpeed}`
   const fetchFeeEstimate = async (silent = false): Promise<FeeEstimate | null> => {
     if (!numAmount || !address || !senderAddress) return null
-    const requestKey = `${address}|${numAmount}|${selectedChain}|${selectedSpeed}`
+    const requestKey = feeRequestKey
     // Use privateKey if available, otherwise try to restore from mnemonic
     let activeKey = privateKey
     if (!activeKey) {
@@ -1515,7 +1517,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // there (feeChangedNotice) and the numbers update in place.
   useEffect(() => {
     if (step !== 'review') return
-    fetchFeeEstimate().then(r => { if (!r) setFeeEstimate(f => ({ ...f, loading: false })) })
+    // Fees already on screen for this exact transfer (Back, then Continue
+    // again): keep them and refresh quietly - no placeholder flash.
+    const fresh = feeEstimateKey === feeRequestKey && !feeEstimate.approx && !feeEstimate.error
+    fetchFeeEstimate(fresh).then(r => { if (!r) setFeeEstimate(f => ({ ...f, loading: false })) })
     const interval = setInterval(() => {
       fetchFeeEstimate(true)
     }, 20000)
@@ -1538,6 +1543,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // which is where the forwarder service fee actually gets calculated.
   const handleContinue = () => {
     setFeeChangedNotice(''); setPassEntry(''); setPassError('')
+    // Placeholders from Review's very first frame: the fee fetch starts in an
+    // effect after Review renders (and may first restore the key), so without
+    // this the page opened on stale / zero numbers, then bars, then the fees.
+    if (feeEstimateKey !== feeRequestKey) setFeeEstimate(f => ({ ...f, loading: true, error: '', approx: false }))
     setStep('review')
   }
 
@@ -3782,6 +3791,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     <span aria-hidden className="animate-pulse" style={{ display: 'inline-block', width: w, height: 12, borderRadius: 6,
                       background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
                   )
+                  // The same rows while loading and after: decided by the route,
+                  // not by the fee values, so the card never changes height.
+                  const usd = (n: number) => n > 0 ? `${trimTrailingZeros(n.toFixed(4))} USDC` : 'Free'
+                  const forwarderRow = chain.ub || circleForwarderMintsTo(chain.sdk) || feeEstimate.forwarderFee > 0
                   const rows: Array<[string, string | null, string]> = [
                     ['You Send', `${formatAmount(numAmount)} USDC`, 'var(--text-primary)'],
                     // UB/Gateway doesn't bridge (no lock-and-mint) - this
@@ -3790,10 +3803,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     // contradicts the "Circle Gateway" caption right below
                     // this list. CCTP keeps its original "Bridge Fee" label
                     // and value untouched.
-                    ...((loading || feeEstimate.bridgeFee > 0) ? [[chain.ub ? 'Protocol Fee' : 'Bridge Fee', loading ? null : `${trimTrailingZeros(feeEstimate.bridgeFee.toFixed(4))} USDC`, 'var(--warning)'] as [string, string | null, string]] : []),
+                    [chain.ub ? 'Protocol Fee' : 'Bridge Fee', loading ? null : usd(feeEstimate.bridgeFee), feeEstimate.bridgeFee > 0 ? 'var(--warning)' : 'var(--success)'],
                     // The custom ('kit') fee - normally 0, so normally no row.
                     ...((!loading && feeEstimate.kitFee > 0) ? [['Service Fee', `${trimTrailingZeros(feeEstimate.kitFee.toFixed(4))} USDC`, 'var(--warning)'] as [string, string | null, string]] : []),
-                    ...((loading ? chain.ub : feeEstimate.forwarderFee > 0) ? [['Forwarder Fee', loading ? null : `${trimTrailingZeros(feeEstimate.forwarderFee.toFixed(4))} USDC`, 'var(--warning)'] as [string, string | null, string]] : []),
+                    ...(forwarderRow ? [['Forwarder Fee', loading ? null : usd(feeEstimate.forwarderFee), feeEstimate.forwarderFee > 0 ? 'var(--warning)' : 'var(--success)'] as [string, string | null, string]] : []),
                     ['Network Gas', loading ? null : feeEstimate.networkFee > 0 ? `${trimTrailingZeros(feeEstimate.networkFee.toFixed(4))} USDC` : '~$0.01', 'var(--success)'],
                     ['Est. Time', effectiveUb ? '~60s' : '20–90s', 'var(--accent)'],
                   ]
