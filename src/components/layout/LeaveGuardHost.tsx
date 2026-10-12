@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useBlocker } from 'react-router-dom'
-import { leaveGuardLabel, shouldHoldNavigation, useLeaveGuardStore, isLeaveGuarded } from '@/lib/leaveGuard'
+import { leaveGuardLabel, shouldHoldNavigation, useLeaveGuardStore, isLeaveGuarded, isPassingThrough } from '@/lib/leaveGuard'
 
 const BLINK_CLASS = 'mp-leave-blink'
 
@@ -35,7 +35,7 @@ export function LeaveGuardHost() {
   const guarded = label !== null
 
   const blocker = useBlocker(useCallback(
-    ({ currentLocation, nextLocation }) => shouldHoldNavigation(isLeaveGuarded(), currentLocation.pathname, nextLocation.pathname),
+    ({ currentLocation, nextLocation }) => !isPassingThrough() && shouldHoldNavigation(isLeaveGuarded(), currentLocation.pathname, nextLocation.pathname),
     [],
   ))
   const blocked = blocker.state === 'blocked'
@@ -68,6 +68,9 @@ export function LeaveGuardHost() {
     const iv = window.setInterval(apply, 400)
     return () => { window.clearInterval(iv); el?.classList.remove(BLINK_CLASS) }
   }, [alerting])
+
+  // Back (phone button, gesture, browser arrow) is caught in lib/leaveGuard,
+  // ahead of the router, and raised here as `ownAsk`.
 
   // Tab close / refresh: only the browser's own prompt is allowed here.
   useEffect(() => {

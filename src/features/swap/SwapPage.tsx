@@ -271,20 +271,20 @@ function SwapChecklist({ step, error, txHash, progress }: { step: string; error:
 
   const stepDefs = [
     {
-      label: 'Approving token allowance',
+      label: 'Token approval',
       msg: progress.approve === 'skipped' ? 'No separate approval needed'
-        : approveOk ? 'Approval confirmed on Arc'
-        : progress.approve === 'sent' ? 'Approval sent · waiting for confirmation'
+        : approveOk ? 'Confirmed on Arc'
+        : progress.approve === 'sent' ? 'Sent · waiting for Arc'
         : 'On-chain approval for this swap',
       done: approveOk, active: !approveOk,
     },
     {
-      label: 'Submitting swap transaction',
+      label: 'Swap transaction',
       msg: submitOk ? 'Swap broadcast to Arc' : 'Signing & broadcasting',
       done: submitOk, active: approveOk && !submitOk,
     },
     {
-      label: 'Waiting for confirmation',
+      label: 'Arc confirmation',
       msg: confirmOk ? 'Tokens received in wallet' : 'Arc Testnet · ~1s blocks',
       done: confirmOk, active: submitOk && !confirmOk,
     },

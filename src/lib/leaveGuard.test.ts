@@ -48,3 +48,17 @@ describe('requestLeave', () => {
     expect(isLeaveGuarded()).toBe(true)
   })
 })
+
+describe('Back button pass-through', () => {
+  it('lets exactly one chosen Back through', async () => {
+    const { letNextBackThrough, takePassThrough } = await import('./leaveGuard')
+    expect(takePassThrough()).toBe(false)
+    letNextBackThrough()
+    expect(takePassThrough()).toBe(true)
+    expect(takePassThrough()).toBe(false)
+  })
+  it('only counts recent back steps the app made itself', async () => {
+    const { takeAppPop } = await import('./leaveGuard')
+    expect(takeAppPop()).toBe(false)
+  })
+})
