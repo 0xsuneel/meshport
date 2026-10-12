@@ -616,9 +616,11 @@ export function RewardsPage() {
         {overlays}
         {header}
         <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 28, padding: '8px 24px 14px', boxSizing: 'border-box' }}>
-          <div style={{ flex: '1 1 0%', minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {hero}
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: '14px 14px 6px', boxShadow: 'var(--shadow-1)' }}>{tasks}</div>
+          {/* Scrolls when the window is short; the cards keep their full
+              height (flex items would otherwise shrink and cut off Claim USDC). */}
+          <div style={{ flex: '1 1 0%', minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18, padding: 2, margin: -2 }}>
+            <div style={{ flexShrink: 0 }}>{hero}</div>
+            <div style={{ flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: '14px 14px 6px', boxShadow: 'var(--shadow-1)' }}>{tasks}</div>
           </div>
           <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0 }}>{history}</div>
         </div>
