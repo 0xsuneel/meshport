@@ -304,6 +304,12 @@ function unhideChat(convId: string, addr: string | null) {
   localStorage.setItem(hiddenKey(addr), JSON.stringify(m))
 }
 
+/** Desktop: Contact info / Transaction History open as a panel on the right of the conversation. */
+const CHAT_SIDE_PANEL = {
+  position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(400px, 100%)', zIndex: 60,
+  display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--border)', boxShadow: '-16px 0 40px -12px rgba(0,0,0,0.35)',
+} as const
+
 /** Desktop: ChatPay's drawer on the right - amount, passcode, processing and receipt all open in it. */
 const CHAT_PAY_DRAWER_WIDTH = 'min(400px, 90vw)'
 
@@ -5215,10 +5221,12 @@ export function ChatConversationPage() {
             <motion.div key="chat-info" role="dialog" aria-label="Contact info"
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ duration: 0.24, ease: [0.32, 0.72, 0, 1] }}
               className="bg-bg"
-              style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', flexDirection: 'column' }}>
+              // Desktop: a panel on the right of the conversation (like
+              // WhatsApp), the chat list and messages stay in view.
+              style={isDesktop ? CHAT_SIDE_PANEL : { position: 'fixed', inset: 0, zIndex: 60, display: 'flex', flexDirection: 'column' }}>
               <div className="header-row px-5 pt-header pb-2 flex-shrink-0" style={{ gap: 12 }}>
-                <button onClick={closeProfile} className="back-btn" aria-label="Back">
-                  <ArrowLeft className="w-5 h-5 text-text-primary" />
+                <button onClick={closeProfile} className="back-btn" aria-label={isDesktop ? 'Close' : 'Back'}>
+                  {isDesktop ? <X className="w-5 h-5 text-text-primary" /> : <ArrowLeft className="w-5 h-5 text-text-primary" />}
                 </button>
                 <h1 className="text-xl font-bold text-text-primary">Contact info</h1>
               </div>
@@ -5288,7 +5296,7 @@ export function ChatConversationPage() {
             <motion.div key="chat-history" role="dialog" aria-label="Transaction History"
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ duration: 0.24, ease: [0.32, 0.72, 0, 1] }}
               className="bg-bg"
-              style={{ position: 'fixed', inset: 0, zIndex: 61, display: 'flex', flexDirection: 'column' }}>
+              style={isDesktop ? { ...CHAT_SIDE_PANEL, zIndex: 61 } : { position: 'fixed', inset: 0, zIndex: 61, display: 'flex', flexDirection: 'column' }}>
               {historyHeader}
               <div className="flex-1 min-h-0 flex flex-col" style={{ width: '100%', maxWidth: 560, margin: '0 auto' }}>
                 {historyBody}
