@@ -33,7 +33,7 @@ import { DesktopHistoryPanel } from '@/components/ui/DesktopHistoryPanel'
 import { HubPage, HubPageBack } from '@/components/multichain/HubPage'
 import { TrackedMove, type TrackedMoveInfo } from '@/components/multichain/TrackedMove'
 import { fetchCctpProgress } from '@/lib/cctpTracker'
-import { isLeaveGuarded, requestLeave } from '@/lib/leaveGuard'
+import { isLeaveGuarded, requestLeave, useLeaveGuardStore } from '@/lib/leaveGuard'
 
 // Below half a cent a balance shows as "0" - treat it as empty (no "$0 on
 // 1 chain", no highlighted "0 USDC" row).
@@ -347,6 +347,8 @@ export function MultichainPage() {
   // showing its result) the Hub's title bar stops being pinned so the flow can
   // fill the screen; while processing the page also can't be scrolled.
   const [flowFocus, setFlowFocus] = useState<FlowFocus>('none')
+  // Any money-moving step running anywhere (Recover, Claim All, a Bring…).
+  const leaveGuardOn = useLeaveGuardStore(s => Object.keys(s.guards).length > 0)
   const [hubTab, setHubTab]               = useState<HubTab>(() => {
     const t = (location.state as any)?.tab ?? initialQuery.get('tab') ?? (initialQuery.get('claim') || initialQuery.get('chain') ? 'bring' : null)
     return t === 'bring' || t === 'activity' || t === 'recovery' ? t : 'transfer'
@@ -1333,9 +1335,28 @@ export function MultichainPage() {
 
   // ── Desktop: Hub (left) + Multichain Activity (right), each scrolling on
   // its own - same 65/35 layout as Swap and Pay.
+  // While a move is processing (Transfer / Bring in the right-hand panel,
+  // Recover, Claim All…), the Hub column's own controls don't respond: tabs,
+  // Faucet, chain rows, hero toggles. Only the running flow's panel (its
+  // fixed right-hand page, data-hub-page, or a data-leave-guard area) stays
+  // live. Scrolling still works; the sidebar is held by the leave guard.
+  const hubBusy = flowFocus === 'processing' || leaveGuardOn
+  const inLiveFlow = (t: EventTarget | null) =>
+    t instanceof Element && !!t.closest('[data-hub-page], [data-leave-guard]')
+  const holdWhileBusy = (e: React.SyntheticEvent) => {
+    if (!hubBusy || inLiveFlow(e.target)) return
+    if (e.type === 'keydown') {
+      const k = (e as React.KeyboardEvent).key
+      if (k !== 'Enter' && k !== ' ') return
+    }
+    e.preventDefault()
+    e.stopPropagation()
+  }
   return (
     <div style={{ display: 'flex', flex: 1, height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box', background: 'var(--bg)' }}>
-      <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{page}</div>
+      <div className={hubBusy ? 'mp-hub-busy' : undefined} aria-busy={hubBusy || undefined}
+        onClickCapture={holdWhileBusy} onPointerDownCapture={holdWhileBusy} onKeyDownCapture={holdWhileBusy}
+        style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{page}</div>
       <div style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0 }}>
         <DesktopHistoryPanel title={isMerchant ? 'Merchant Activity' : 'Multichain Activity'} onViewAll={() => navigate('/activity?filter=bridge')}>
           {renderActivity(true)}

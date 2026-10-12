@@ -618,6 +618,12 @@ html.mp-locking #root { visibility: hidden; }
 }
 
 /* Typing caret after the amount while the phone keypad is open. */
+/* Desktop Multichain Hub while a move is processing (MultichainPage): the
+   Hub column's controls are held - show it - except inside the running
+   flow's own panel. */
+.mp-hub-busy :is(button, a, input, select, textarea, [role="tab"], [role="button"]):not(:is([data-hub-page], [data-leave-guard]) *) {
+  cursor: not-allowed !important;
+}
 @keyframes mpCaretBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 .mp-amount-caret { display: inline-block; width: 3px; height: 0.82em; margin-left: 4px; vertical-align: -0.06em; border-radius: 2px; background: var(--brand-text); animation: mpCaretBlink 1s steps(1) infinite; }
 @media (prefers-reduced-motion: reduce) { .mp-amount-caret { animation: none; } }
