@@ -531,7 +531,11 @@ function UsernameHint() {
 
 // newChat: the New Chat page (/chat/new) - same data as the list (contacts,
 // existing conversations), shown as its own page.
+// The chat last opened from the list: its row flashes once when you come back.
+let lastOpenedChatId: string | null = null
+
 export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
+  const [flashChatId] = useState(() => { const id = lastOpenedChatId; lastOpenedChatId = null; return id })
   const navigate = useNavigate()
   const user          = useAuthStore(s => s.user)
   const chatWalletAddr = useAuthStore(s => s.walletAddress)
@@ -1233,6 +1237,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                 onClick={() => {
                   if (swallowClick.current) { swallowClick.current = false; return }
                   if (selecting) { toggleSelect(conv.id); return }
+                  if (!isDesktopList) lastOpenedChatId = conv.id
                   navigate(`/chat/${conv.id}`)
                 }}
                 onMouseEnter={() => prefetchChat(conv)}
@@ -1244,9 +1249,8 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
                 onTouchCancel={cancelLongPress}
                 // Touch: long-press (above). Mouse: right-click opens the same menu.
                 onContextMenu={e => { e.preventDefault(); if (!('ontouchstart' in window)) toggleSelect(conv.id) }}
-                className="flex items-center gap-3 px-4 py-3 w-full active:bg-[rgb(var(--text-primary-rgb)/0.05)] transition-colors"
-                style={{ borderBottom: idx < filtered.length-1 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'none',
-                  background: selectedIds.has(conv.id) ? 'color-mix(in srgb, var(--brand) 22%, transparent)' : undefined }}>
+                className={`flex items-center gap-3 px-4 py-3 w-full active:bg-[rgb(var(--text-primary-rgb)/0.05)] transition-colors${conv.id === flashChatId ? ' mp-last-opened' : ''}`}
+                style={{ background: selectedIds.has(conv.id) ? 'color-mix(in srgb, var(--brand) 22%, transparent)' : undefined }}>
                 {/* Avatar - tap to open profile (while selecting: select) */}
                 <div className="relative flex-shrink-0"
                   onClick={e => { if (selecting) return; e.stopPropagation(); navigate(`/chat/${conv.id}`, { state: { openInfo: true } }) }}>
@@ -1309,7 +1313,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
     {/* New chat - floats above the bottom navigation */}
     <motion.button whileTap={{ scale: 0.92 }} onClick={() => navigate('/chat/new')} aria-label="New chat"
       className="rounded-full flex items-center justify-center"
-      style={{ position: 'absolute', right: 18, bottom: isDesktopList ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 92px)', zIndex: 25,
+      style={{ position: 'absolute', right: 18, bottom: isDesktopList ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 64px)', zIndex: 25,
         width: 58, height: 58, background: 'var(--brand)', border: 'none', cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,0.35)' }}>
       <MessageCirclePlus className="w-[27px] h-[27px]" style={{ color: '#fff' }} strokeWidth={2} />
     </motion.button>
