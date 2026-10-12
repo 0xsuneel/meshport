@@ -3,7 +3,7 @@ import { ADMIN_PATH } from '@/lib/adminPath'
 import {
   LayoutDashboard, ToggleLeft, Coins, Link2, Landmark,
   BarChart3, AlertTriangle, ScrollText, Settings, Bell, X, LifeBuoy, Handshake, Wrench,
-  Store, Newspaper,
+  Store, Newspaper, ReceiptText,
 } from 'lucide-react'
 
 const navItems = [
@@ -26,6 +26,7 @@ const navItems = [
   { to: `${ADMIN_PATH}/logs`,         label: 'Logs',           icon: ScrollText },
   { to: `${ADMIN_PATH}/stuck-funds`,  label: 'Stuck Funds',    icon: Wrench },
   { to: `${ADMIN_PATH}/merchants`,    label: 'Merchants',      icon: Store },
+  { to: `${ADMIN_PATH}/orders`,       label: 'Orders',         icon: ReceiptText },
   { to: `${ADMIN_PATH}/support`,      label: 'Support Tickets', icon: LifeBuoy },
   { to: `${ADMIN_PATH}/settings`,     label: 'Settings',      icon: Settings },
 ]
