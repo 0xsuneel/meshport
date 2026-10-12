@@ -732,6 +732,22 @@ export function BulkPayoutPage() {
   }, [step])
   const isExternal   = (r: Recipient) => r.walletAddress === r.username
 
+  // Empties the recipient list and the amount/username entry.
+  const clearEntry = () => {
+    setRecipients([]); setPurpose('')
+    setRowUsername(''); setRowAmount(''); setRowResults([]); setRowPending(null); setRowSelected(false)
+    setAddressMatch(null); setAddressChecking(false)
+  }
+  // The payout is done: clear the entry screen straight away (the results
+  // keep their own copy of who was paid), so it's ready for the next one.
+  useEffect(() => {
+    if (step === 'results') clearEntry()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step])
+  // Desktop: the step column beside Add Recipients - the passcode and the
+  // success flash sit over it, like Transfer's panel.
+  const stepColumnRef = useRef<HTMLDivElement>(null)
+
   // ── Shared content, extracted into variables ──────────────────────────
   // Mobile renders these inside the existing AnimatePresence-stepped single
   // column + fixed bottom bar, completely unchanged. Desktop renders them
@@ -1135,7 +1151,8 @@ export function BulkPayoutPage() {
 
   const resultsContent = (
     <>
-      {bulkFlash && <SuccessFlash title={failCount ? `${successCount} Payments Sent` : 'Payout Successful'} />}
+      {bulkFlash && <SuccessFlash title={failCount ? `${successCount} Payments Sent` : 'Payout Successful'}
+        rect={isDesktop ? stepColumnRef.current?.getBoundingClientRect() ?? null : null} radius={20} />}
       <div className="grid grid-cols-2 gap-3">
         <div className="bg-success/10 border border-success/30 rounded-2xl p-4 text-center">
           <p className="text-3xl font-bold text-success">{successCount}</p>
@@ -1225,12 +1242,7 @@ export function BulkPayoutPage() {
 
   const resultsActionButtons = (
     <div className="flex flex-col gap-2.5">
-      <button onClick={() => {
-          setStep('setup'); setRecipients([]); setResults([])
-          setPurpose('')
-          setRowUsername(''); setRowAmount(''); setRowResults([]); setRowPending(null); setRowSelected(false)
-          setAddressMatch(null); setAddressChecking(false)
-        }}
+      <button onClick={() => { setStep('setup'); setResults([]); clearEntry() }}
         className="w-full py-3.5 rounded-2xl text-white font-bold"
         style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
         New Bulk Payment
@@ -1296,7 +1308,7 @@ export function BulkPayoutPage() {
             {addRecipientsSection}
           </div>
 
-          <div style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto' }}>
+          <div ref={stepColumnRef} style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto' }}>
             <AnimatePresence initial={false} mode="wait">
               {step === 'setup' && (
                 <motion.div key="d-setup" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1435,6 +1447,7 @@ export function BulkPayoutPage() {
             <DesktopTransactionAuthDialog
               onClose={close}
               title="Authorize Bulk Payout"
+              anchor={stepColumnRef.current}
               amountLabel={`$${formatAmount(totalAmount)} USDC`}
               subLabel={`To ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}`}
             >
