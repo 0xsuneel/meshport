@@ -34,9 +34,7 @@ import { ChainScanner } from '@/components/ui/ChainScanner'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { HubPush } from '@/components/multichain/HubPage'
-import { UbProgressTracker } from '@/components/multichain/UbProgressTracker'
 import { MeshLoader } from '@/components/ui/MeshLoader'
-import { TrackDetails, type TrackDetailRow } from '@/components/multichain/TrackDetails'
 import { slideStepVariants, MOBILE_SLIDE_TRANSITION, MOBILE_SLIDE_X, MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION, type NavDirection } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
@@ -55,24 +53,24 @@ import {
   subscribeToClaim,
   kickClaimWorker,
   fetchClaimsForWallet,
-  CLAIM_STEPS,
   type Claim as ServerClaim,
 } from '@/lib/claimService'
-import { ClaimProgressTracker } from '@/components/multichain/ClaimProgressTracker'
 import { isGaslessBridgeAvailable, quoteGaslessBridge, bringFundsGasless } from '@/lib/gaslessBridge'
 import { relayedProviderFor } from '@/lib/relayedProvider'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFilters'
 import { readExternalBalances, refreshScope, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
-import { fetchCctpProgress } from '@/lib/cctpTracker'
+import { fetchCctpProgress, useCctpProgress } from '@/lib/cctpTracker'
 import { ARC_RPCS } from '@/lib/arc'
-import { UB_CLAIM_CHAINS, runUbClaim, ubBringTime, estimateUbClaimFee } from '@/lib/ubClaim'
+import { UB_CLAIM_CHAINS, runUbClaim, ubBringTime, ubClaimEta, estimateUbClaimFee } from '@/lib/ubClaim'
 import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { claimFeeSummary, type SignedClaimFee } from '@/lib/claimFees'
 import { useLeaveGuard } from '@/lib/leaveGuard'
+import { moveSteps, indexFromBringStage, indexFromClaimStatus, indexFromCctpStage } from '@/lib/moveSteps'
+import { MoveProgress } from '@/components/multichain/MoveProgress'
 
 // ─── MeshPort V2 Design System ────────────────────────────────────────────────
 const COLORS = {
@@ -291,6 +289,8 @@ interface ChainProgress {
   txHash?:    string
   mintTxHash?: string
   pct:        number
+  /** Unified Balance: the signed spend is with MeshPort's server. */
+  handedOff?: boolean
 }
 
 type Step =
@@ -310,23 +310,6 @@ function PushIf({ on, screenKey, children }: { on: boolean; screenKey: string; c
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
-// Rows for the "View details" panel under Track Progress.
-function trackDetailRows(p: { route: string; chainId: string; amount: number; createdAt?: string; sourceTx?: string; mintTx?: string }): TrackDetailRow[] {
-  const when = p.createdAt ? new Date(p.createdAt) : null
-  const chainLabel = getMeta(p.chainId).label
-  return [
-    { label: 'Type', value: '↓ Claim to Arc' },
-    { label: 'Route', value: p.route },
-    { label: 'From Chain', value: chainLabel },
-    ...(p.amount > 0 ? [{ label: 'Claimed', value: `$${formatAmount(p.amount)} USDC` }] : []),
-    ...(when ? [
-      { label: 'Date', value: when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
-      { label: 'Time', value: when.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) },
-    ] : []),
-    ...(p.sourceTx ? [{ label: 'Source Tx', value: `${p.sourceTx.slice(0, 10)}…${p.sourceTx.slice(-8)}`, copy: p.sourceTx, href: explorerTxUrl(p.chainId, p.sourceTx) }] : []),
-    ...(p.mintTx ? [{ label: 'Arc Tx', value: `${p.mintTx.slice(0, 10)}…${p.mintTx.slice(-8)}`, copy: p.mintTx, href: arcExplorerTxUrl(p.mintTx) }] : []),
-  ]
-}
 
 export function MultichainClaimPage({ embedded = false, onClose, initialChain, initialBalance, trackClaimId, merchantMode = false, onFocusChange, pushScreens = false }: { embedded?: boolean; onClose?: () => void; initialChain?: string; initialBalance?: number; trackClaimId?: string; merchantMode?: boolean; onFocusChange?: (f: 'none' | 'processing' | 'result') => void
   /** Hub on a phone (inside its Bring page): screens swap at once, and the
@@ -413,8 +396,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const focus = step === 'confirm'
     ? ((confirmPhase === 'processing' || confirmPhase === 'submitted') ? 'processing' : 'result')
     : step === 'failed' ? 'result' : 'none'
-  // After the passcode the bring is on its way: hold Back / sidebar until it lands.
-  useLeaveGuard(focus === 'processing', 'Bring')
+  // After the passcode the bring is on its way: hold Back / sidebar until
+  // MeshPort's server has it ('submitted'), or until it lands when this
+  // device has to finish it.
+  useLeaveGuard(step === 'confirm' && confirmPhase === 'processing', 'Bring')
   useEffect(() => {
     if (!embedded) return
     onFocusChange?.(focus)
@@ -471,6 +456,13 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // Last non-error stage of the first chain - lets the stepper mark the step
   // that actually failed instead of the first one.
   const lastClaimStageRef = useRef<string>('waiting')
+  // The claims row this screen follows (Bring over CCTP), and Circle's view
+  // of its burn - Circle's forwarder mints on Arc before the row's worker
+  // pass catches up, so the checklist moves on as soon as Circle says so.
+  const trackRec = claimRecords[0]
+  const trackClaimRow: ServerClaim | null = trackRec ? (claimsByStatus[trackRec.claimId] ?? trackRec.initialClaim ?? null) : null
+  const trackRowFinal = trackClaimRow?.status === 'completed' || trackClaimRow?.status === 'failed'
+  const bringIris = useCctpProgress(trackClaimRow && !trackRowFinal ? trackClaimRow.sourceChain : undefined, trackClaimRow && !trackRowFinal ? trackClaimRow.txHash : undefined)
   const [showPasscodeSheet, setShowPasscodeSheet] = useState(false)
   const [amountConfirmed, setAmountConfirmed] = useState(false)
   const [keypadOpen,     setKeypadOpen]    = useState(false)
@@ -821,9 +813,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   }, [claimRecords, claimsByStatus])
 
   // Circle's forwarder mints on Arc seconds after attestation, but the row
-  // only flips to 'completed' on claim-worker's next pass - the Track
-  // Progress checklist (ClaimProgressTracker) already shows Completed from
-  // Circle, so the success screen and balances follow the same signal.
+  // only flips to 'completed' on claim-worker's next pass - the progress
+  // checklist (MoveProgress) already moves on from Circle, so the success
+  // screen and balances follow the same signal.
   const [mintedOnArc, setMintedOnArc] = useState<Record<string, true>>({})
   useEffect(() => {
     const pending = claimRecords
@@ -1321,8 +1313,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               chainLabel: getMeta(chain.chainId).label, amount: claimAmount,
               onStep: (stage, msg, pct, extra) => {
                 setChain(chain.chainId, stage, msg, pct, extra)
-                if (stage === 'attesting') {
-                  notifyExternalBalanceChanged(chain.chainId, wallet.addr)
+                if (stage === 'attesting') notifyExternalBalanceChanged(chain.chainId, wallet.addr)
+                // Submitted only once MeshPort's server holds the signed spend.
+                // Finishing on this device (hand-off failed) keeps the screen
+                // in "keep open" until the USDC lands.
+                if (stage === 'attesting' && extra?.handedOff) {
                   setIsSubmitted(true)
                   setConfirmPhase(phase => phase === 'processing' ? 'submitted' : phase)
                 }
@@ -1662,7 +1657,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // The result (success or failure) stays on the screen it came from.
   const lastPushKey = useRef('form')
   const pushKey = step === 'loading' || step === 'select' ? 'form'
-    : step === 'confirm' && confirmPhase === 'tracking' ? 'track'
     : step === 'confirm' && confirmPhase !== 'done' ? 'proc'
     : lastPushKey.current
   lastPushKey.current = pushKey
@@ -2211,42 +2205,40 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             <SuccessFlash title="Claimed Successfully" checkRef={flashCheckRef} viaBiometric={paidViaBiometric} circleReady={flashCircleReady} onCircleReady={() => setFlashCircleReady(true)} rect={isDesktopMq ? flashColumnRect : null} radius={RADII.card} />
           )}
           <AnimatePresence mode="wait">
-          {(confirmPhase === 'processing' || confirmPhase === 'submitted'
-            || (confirmPhase === 'done' && successPhase === 'flash' && lastLivePhase.current !== 'tracking')) && (() => {
-            const isSubmittedNow = confirmPhase === 'submitted' || confirmPhase === 'done'
-            // Stage order: waiting -> gas -> approving -> burning ->
-            // attesting (submitClaim fires here) -> minting -> done/error.
-            // Each step follows a real event of the route this claim takes:
-            //  Gasless (CCTP): sign the USDC authorization → MeshPort's relayer
-            //    burns on the source chain (paying the gas) → claim handed to
-            //    MeshPort, Circle mints on Arc.
-            //  Unified Balance: deposit on the source chain (permit, no
-            //    separate approve tx) → source chain finalizes → sent to Arc.
+          {/* PROCESSING → SUBMITTED → (Track Progress) - the one Multichain
+              progress page (MoveProgress). It never swaps to another screen:
+              Track Progress folds it down to the remaining steps in place, a
+              claim opened from the Hub (?claim=) lands here too, and the
+              success flash + receipt take over once the last step is done. */}
+          {(confirmPhase === 'processing' || confirmPhase === 'submitted' || confirmPhase === 'tracking'
+            || (confirmPhase === 'done' && successPhase === 'flash')) && (() => {
             const cp0 = chainProgress[0]
             const stage = cp0?.stage ?? 'waiting'
             const errored = stage === 'error'
             if (!errored && cp0) lastClaimStageRef.current = stage
             const reached = errored ? lastClaimStageRef.current : stage
-            const ORDER = ['waiting', 'gas', 'approving', 'burning', 'attesting', 'minting', 'done']
-            const at = (st: string) => ORDER.indexOf(reached) >= ORDER.indexOf(st)
+            const chainId = cp0?.chainId ?? trackRec?.chainId
             // Same route decision claimOneChain makes.
             const isUbRoute = !!cp0 && (ubClaimChains.includes(cp0.chainId)
               || (!merchantMode && (claimRoute === 'ub' || !isGaslessBridgeAvailable(cp0.chainId)) && UB_CLAIM_CHAINS.has(toSdkChainId(cp0.chainId))))
-            const srcLabel = cp0 ? getMeta(cp0.chainId).label : 'source chain'
-
-            const raw = isUbRoute ? [
-              { label: 'Deposited',       subtitle: `USDC moved into Unified Balance on ${srcLabel}`, done: at('attesting') },
-              { label: 'Finalized',       subtitle: `${srcLabel} confirmed the deposit`,             done: at('minting') },
-              { label: 'Sent to Arc',     subtitle: 'USDC minted to your Arc wallet',                done: at('done') },
-            ] : [
-              { label: 'Transfer signed', subtitle: 'You authorized the USDC - no gas needed',       done: at('burning') },
-              { label: 'Burned on ' + srcLabel, subtitle: 'MeshPort paid the network fee',          done: at('attesting') },
-              { label: 'Submitted',       subtitle: 'Handed to MeshPort - Circle mints on Arc',      done: isSubmittedNow },
-            ]
-            // Exactly one step is in progress: the first not yet done.
-            const firstOpen = raw.findIndex(x => !x.done)
-            const steps = raw.map((x, i) => ({ ...x, active: !errored && i === firstOpen, failed: errored && i === firstOpen }))
-
+            const route = isUbRoute ? 'ub' : 'cctp'
+            const srcLabel = chainId ? getMeta(chainId).label : 'source chain'
+            const steps = moveSteps({
+              kind: 'bring', route, from: srcLabel, to: 'Arc', amount: formatAmount(displayTotal || trackClaimRow?.amount || 0),
+              fastFinality: isUbRoute && !!chainId && ubClaimEta(toSdkChainId(chainId)) === 'under a minute',
+            })
+            let current = cp0 ? indexFromBringStage(route, reached, cp0.handedOff) : 1
+            if (!isUbRoute && trackClaimRow) current = Math.max(current, indexFromClaimStatus(trackClaimRow.status))
+            if (!isUbRoute && bringIris && bringIris.stage !== 'error') current = Math.max(current, indexFromCctpStage(bringIris.stage))
+            if (confirmPhase === 'done') current = steps.length
+            const failed = errored ? (cp0?.msg || 'Something went wrong')
+              : trackClaimRow?.status === 'failed' ? (trackClaimRow.error || 'This bring needs attention – finish it from Multichain Hub → Recover.')
+              : null
+            const safe = confirmPhase === 'submitted' || confirmPhase === 'tracking' || (isUbRoute && !!cp0?.handedOff)
+            const srcTx = cp0?.txHash || trackClaimRow?.txHash || undefined
+            const mintTx = cp0?.mintTxHash || trackClaimRow?.destinationTxHash || undefined
+            const srcLink = srcTx && chainId ? { hash: srcTx, href: explorerTxUrl(chainId, srcTx) } : undefined
+            const mintLink = mintTx ? { hash: mintTx, href: arcExplorerTxUrl(mintTx) } : undefined
             return (
             <motion.div
               key="claiming-step"
@@ -2254,200 +2246,20 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: confirmPhase === 'done' ? 0 : 0.25 } }}
               transition={{ duration: 0.25 }}
               {...(pushScreens ? INSTANT_STEP : {})}
-              style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
+              style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', padding: '0 12px 12px' }}
             >
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: `${SPACING.xl}px ${SPACING.md}px`, gap: SPACING.md, overflowY: 'auto', minHeight: 0 }}>
-
-                {/* Title row + amount/route card - compact, so the whole
-                    screen fits without scrolling on a phone. The stepper
-                    below still never resets; only its title and the notes
-                    change once the claim is submitted. */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px' }}>
-                  <span style={{ fontSize: 17, fontWeight: 700, color: COLORS.text }}>{isSubmittedNow ? 'Claim Submitted' : 'Bringing funds'}</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 999, background: 'color-mix(in srgb, var(--brand) 18%, transparent)', color: 'var(--accent-text)' }}>To Arc</span>
-                </div>
-                {(() => {
-                  const doneCount = steps.filter(x => x.done).length
-                  const pct = Math.round((doneCount / steps.length) * 100)
-                  const firstChain = chainProgress[0]?.chainId
-                  const fromLabel = chainProgress.length === 1 && firstChain ? getMeta(firstChain).label : `${chainProgress.length} chains`
-                  return (
-                    <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 22, padding: 16, textAlign: 'center' }}>
-                      <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.5px', color: COLORS.text }}>{formatAmount(displayTotal)} USDC</div>
-                      <div style={{ fontSize: 13, color: COLORS.muted, marginTop: 4 }}>{fromLabel} → Arc</div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 14 }}>
-                        {firstChain ? <ChainLogo chainId={firstChain} size={32} /> : null}
-                        <div style={{ flex: 1, maxWidth: 170, height: 6, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
-                          <motion.div initial={false} animate={{ width: `${errored ? pct : Math.max(pct, 8)}%` }} transition={{ duration: 0.5 }}
-                            style={{ height: '100%', background: errored ? 'var(--danger)' : COLORS.primary }} />
-                        </div>
-                        <img src="/logos/chains/arc.svg" alt="Arc" width={32} height={32} style={{ width: 32, height: 32, borderRadius: '50%', display: 'block', flexShrink: 0, background: 'var(--surface)' }} />
-                      </div>
-                      <span style={{ display: 'block', marginTop: 8, fontSize: 12, fontWeight: 600, color: errored ? 'var(--danger)' : 'var(--accent-text)' }}>{pct}%</span>
-                      <p style={{ fontSize: 14, fontWeight: 600, margin: '6px 0 0', color: errored ? 'var(--danger)' : COLORS.text }}>
-                        {errored ? 'Something went wrong' : steps.find(x => x.active)?.subtitle ?? (isSubmittedNow ? 'Handed off to MeshPort' : 'Processing…')}
-                      </p>
-                    </div>
-                  )
-                })()}
-
-                {/* Stepper - same checklist throughout, never resets */}
-                <div style={{
-                  background: COLORS.surface, border: `1px solid ${COLORS.border}`,
-                  borderRadius: 22, padding: '14px 18px 16px 16px',
-                }}>
-                  <p style={{ fontSize: 12, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px' }}>Progress</p>
-                  {steps.map((s, i) => {
-                    const isLast = i === steps.length - 1
-                    return (
-                      <div key={s.label} style={{ display: 'flex', gap: 12 }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                          <div style={{
-                            width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            background: s.done ? 'color-mix(in srgb, var(--success) 15%, transparent)' : s.failed ? 'color-mix(in srgb, var(--danger) 15%, transparent)' : s.active ? 'color-mix(in srgb, var(--brand) 15%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)',
-                            border: s.done ? `1.5px solid ${COLORS.success}` : s.failed ? '1.5px solid var(--danger)' : s.active ? `1.5px solid ${COLORS.primary}` : '1.5px solid var(--border)',
-                          }}>
-                            {s.done ? (
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={COLORS.success} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="20 6 9 17 4 12"/>
-                              </svg>
-                            ) : s.failed ? (
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                            ) : s.active ? (
-<MeshLoader size={15} label="In progress" />
-                            ) : null}
-                          </div>
-                          {!isLast && (
-                            <div style={{ width: 1.5, flex: 1, minHeight: 22, margin: '2px 0', background: s.done ? COLORS.success : 'var(--border)' }}/>
-                          )}
-                        </div>
-                        <div style={{ paddingBottom: isLast ? 0 : 18 }}>
-                          <p style={{ fontSize: 14, fontWeight: 500, margin: '0 0 2px', color: s.done ? COLORS.success : s.failed ? 'var(--danger)' : s.active ? COLORS.text : COLORS.muted }}>
-                            {s.label}
-                          </p>
-                          <p style={{ fontSize: 12, margin: 0, color: COLORS.muted }}>{s.subtitle}</p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                {isSubmittedNow ? (
-                  <motion.div
-                    initial={{ opacity: 0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity: 1, y: 0 }} transition={{ ...MOBILE_TAB_FADE_TRANSITION, delay: 0.1 }}
-                    style={{ fontSize: 12.5, lineHeight: 1.5, color: 'var(--accent-text)', padding: '10px 12px', borderRadius: 14,
-                      background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-                    ✓ Safe to leave - MeshPort finishes this claim on its servers and you'll get a notification.
-                  </motion.div>
-                ) : null}
-              </div>
-
-              {/* Pinned action bar - always visible. Before submission the
-                  wallet is still signing on this device, so only a note;
-                  after it, the claim runs server-side and the user can go. */}
-              <div style={{ flexShrink: 0, padding: `${SPACING.md}px ${SPACING.md}px calc(env(safe-area-inset-bottom, 0px) + ${SPACING.lg}px)`, borderTop: `1px solid ${COLORS.border}`, background: 'var(--bg)' }}>
-                {isSubmittedNow ? (
-                  <div style={{ display: 'flex', gap: SPACING.sm }}>
-                    <button
-                      onClick={() => navigate('/multichain', { state: { tab: 'activity' } })}
-                      style={{ flex: 1, minWidth: 0, padding: 14, borderRadius: 999, border: `1.5px solid ${COLORS.primary}`, background: 'transparent', fontSize: 14.5, fontWeight: 700, color: 'var(--accent-text)', cursor: 'pointer' }}
-                    >
-                      View in Hub
-                    </button>
-                    <button
-                      onClick={() => setConfirmPhase('tracking')}
-                      style={{ flex: 1, minWidth: 0, padding: 14, borderRadius: 999, border: 'none', fontSize: 14.5, fontWeight: 700, color: '#fff', background: COLORS.primary, cursor: 'pointer' }}
-                    >
-                      Track Progress
-                    </button>
-                  </div>
-                ) : (
-                  <p style={{ fontSize: 12, color: COLORS.muted, textAlign: 'center', margin: 0 }}>
-                    Please wait - don't close this screen until the claim is submitted.
-                  </p>
-                )}
-              </div>
+              <MoveProgress
+                kind="bring" route={route} fromLabel={chainProgress.length > 1 ? `${chainProgress.length} chains` : srcLabel} toLabel="Arc"
+                amount={displayTotal || trackClaimRow?.amount || 0}
+                steps={steps} current={current} failed={failed} safe={safe}
+                loading={!cp0 && !trackClaimRow}
+                txs={isUbRoute ? [srcLink, undefined, undefined, mintLink] : [undefined, srcLink, undefined, mintLink]}
+                holdText="Please wait – don't close this screen until the bring is submitted."
+                onViewHub={() => navigate('/multichain', { state: { tab: 'activity' } })}
+              />
             </motion.div>
             )
           })()}
-
-          {/* TRACKING - same page, driven entirely by Supabase Realtime */}
-          {(confirmPhase === 'tracking'
-            || (confirmPhase === 'done' && successPhase === 'flash' && lastLivePhase.current === 'tracking')) && (
-            <motion.div
-              key="claim-tracking-step"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: confirmPhase === 'done' ? 0 : 0.25 } }}
-              transition={{ duration: 0.25 }}
-              {...(pushScreens ? INSTANT_STEP : {})}
-              style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', padding: `${SPACING.md}px ${SPACING.md}px`, flexShrink: 0 }}>
-                {!isDesktop && (
-                  <button onClick={() => navigate('/multichain', { state: { tab: 'bring' } })} style={{ position: 'absolute', left: SPACING.md, background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: COLORS.text, display: 'flex', alignItems: 'center' }}>
-                    <ArrowLeft className="w-5 h-5"/>
-                  </button>
-                )}
-                <span style={{ fontSize: 17, fontWeight: 700, color: COLORS.text }}>Track Progress</span>
-              </div>
-
-              <div style={{ flex: 1, overflowY: 'auto', padding: `${SPACING.md}px ${SPACING.md}px ${SPACING.xl}px`, display: 'flex', flexDirection: 'column', gap: SPACING.md }}>
-                <p style={{ fontSize: 13, color: COLORS.muted, margin: 0, textAlign: 'center' }}>
-                  <span style={{ fontWeight: 600, color: COLORS.text }}>${formatAmount(displayTotal)} USDC</span> · You may safely leave this page at any time.
-                </p>
-                {claimRecords.map(({ chainId, claimId, initialClaim }) => (
-                  <div key={claimId}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm }}>
-                      <ChainLogo chainId={chainId} size={28}/>
-                      <span style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>{getMeta(chainId).label}</span>
-                    </div>
-                    <ClaimProgressTracker claimId={claimId} initialClaim={initialClaim}/>
-                    <div style={{ marginTop: SPACING.sm }}>
-                      <TrackDetails rows={trackDetailRows({
-                        route: 'CCTP', chainId,
-                        amount: initialClaim?.amount ?? Number(claimAmounts[chainId] || 0),
-                        createdAt: initialClaim?.createdAt,
-                        sourceTx: initialClaim?.txHash,
-                      })} />
-                    </div>
-                  </div>
-                ))}
-                {ubClaimChains.map(chainId => {
-                  const cp = chainProgress.find(p => p.chainId === chainId)
-                  if (!cp) return null
-                  return (
-                    <div key={`ub-${chainId}`}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm }}>
-                        <ChainLogo chainId={chainId} size={28}/>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: COLORS.text }}>{getMeta(chainId).label}</span>
-                      </div>
-                      <UbProgressTracker progress={cp} chainLabel={getMeta(chainId).label} />
-                      <div style={{ marginTop: SPACING.sm }}>
-                        <TrackDetails rows={trackDetailRows({
-                          route: 'Unified Balance', chainId,
-                          amount: Number(claimAmounts[chainId] || 0),
-                          sourceTx: cp.txHash,
-                          mintTx: cp.mintTxHash,
-                        })} />
-                      </div>
-                    </div>
-                  )
-                })}
-                {claimRecords.length === 0 && ubClaimChains.length === 0 && (
-                  <p style={{ fontSize: 13, color: COLORS.muted, margin: 0, textAlign: 'center' }}>Preparing your claim…</p>
-                )}
-              </div>
-
-              <div style={{ flexShrink: 0, display: 'flex', gap: SPACING.sm, padding: `${SPACING.md}px ${SPACING.xl}px ${SPACING.xl}px` }}>
-                <button onClick={() => navigate('/multichain', { state: { tab: 'activity' } })} style={{ flex: 1, padding: `${SPACING.md}px`, borderRadius: RADII.button, border: `1px solid ${COLORS.border}`, background: 'transparent', fontSize: 13, fontWeight: 600, color: COLORS.muted, cursor: 'pointer' }}>
-                  View in Hub
-                </button>
-                <button onClick={() => navigate('/')} style={{ flex: 1, padding: `${SPACING.md}px`, borderRadius: RADII.button, border: '1px solid color-mix(in srgb, black 12%, transparent)', fontSize: 13, fontWeight: 600, color: '#fff', background: COLORS.primary, cursor: 'pointer' }}>
-                  Go Home
-                </button>
-              </div>
-            </motion.div>
-          )}
 
           {/* DONE - full-screen flash → hero-card takeover, identical
               mechanic to SwapPage's completed-swap screen: the whole
@@ -2479,11 +2291,14 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               ? usdc(fees.meshport + fees.circle)
               : `${usdc(fees.meshport + fees.circle)} + up to ${usdc(fees.circleCap)}`
             const circleFeeLabel = fees.final ? usdc(fees.circle) : `Up to ${usdc(fees.circle + fees.circleCap)} (final once it arrives)`
-            // Process checklist - same stages Track Progress shows
-            // (Submitted excluded there too, already confirmed on the
-            // screen before it), all rendered as already-done since this
-            // only ever mounts after the claim has actually succeeded.
-            const processSteps = CLAIM_STEPS.filter(s => s.key !== 'submitted')
+            // Process checklist - the same four steps the progress page
+            // showed, all done (this only mounts once the bring landed).
+            const doneUb = fromChainIds.some(id => ubClaimChains.includes(id))
+            const processSteps = moveSteps({
+              kind: 'bring', route: doneUb ? 'ub' : 'cctp',
+              from: fromChainIds.length === 1 ? getMeta(fromChainIds[0]).label : `${fromChainIds.length} chains`, to: 'Arc',
+              amount: formatAmount(displayTotal),
+            })
 
             return (
             <motion.div key="done-step" style={{ flex: 1, position: 'relative', minHeight: 0 }}>
@@ -2535,7 +2350,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     ...(txHash ? [{ label: 'Transaction Hash', value: shortHash, onCopy: () => copyClaimHash(txHash), copied: hashCopied }] : []),
                     { label: 'Time', value: timeLabel },
                   ]}
-                  steps={processSteps.map(s => s.subtitle)}
+                  steps={processSteps.map(s => s.done)}
                   detailRows={[
                     { label: 'Status', value: 'Confirmed', positive: true },
                     { label: 'From', value: fromLabel },

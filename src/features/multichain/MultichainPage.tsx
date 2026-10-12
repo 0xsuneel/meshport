@@ -31,9 +31,8 @@ import { ChainScanner } from '@/components/ui/ChainScanner'
 import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpinner'
 import { DesktopHistoryPanel } from '@/components/ui/DesktopHistoryPanel'
 import { HubPage, HubPageBack } from '@/components/multichain/HubPage'
-import { UbProgressTracker, type UbTrackerProgress } from '@/components/multichain/UbProgressTracker'
-import { TrackDetails, type TrackDetailRow } from '@/components/multichain/TrackDetails'
-import { useCctpProgress, fetchCctpProgress } from '@/lib/cctpTracker'
+import { TrackedMove, type TrackedMoveInfo } from '@/components/multichain/TrackedMove'
+import { fetchCctpProgress } from '@/lib/cctpTracker'
 import { isLeaveGuarded, requestLeave } from '@/lib/leaveGuard'
 
 // Below half a cent a balance shows as "0" - treat it as empty (no "$0 on
@@ -186,104 +185,21 @@ function hubItemTitle(item: ActivityItem): string {
   return item.type === 'claim' ? `Claim from ${chain}` : `Transfer to ${chain}`
 }
 
-// Track Progress for a UB claim opened from Hub Activity. Follows the
-// server row (ub_claim_intents) live: waiting → Verifying, submitted →
-// Settling, completed → Completed.
-function HubUbTracker({ item }: { item: ActivityItem }) {
-  const initial: UbTrackerProgress = item.ubHeld
-    ? { stage: 'error', txHash: item.sourceTxHash || 'held' }
-    : { stage: 'attesting', txHash: item.sourceTxHash }
-  const [progress, setProgress] = useState<UbTrackerProgress>(initial)
-
-  useEffect(() => {
-    if (!item.ubIntentId) return
-    let stop = false
-    const load = async () => {
-      try {
-        // SUPABASE REDUCTION: replaced direct supabase.from('ub_claim_intents')
-        // with the /api/bridge-relay?ub_intent_status= proxy so the client
-        // never needs the Supabase anon key for this read.
-        const r = await fetch(`/api/bridge-relay?ub_intent_status=${encodeURIComponent(item.ubIntentId!)}`, { credentials: 'include' })
-        const json = r.ok ? await r.json().catch(() => null) : null
-        const st = json?.status as string | undefined
-        if (stop || !st) return
-        setProgress(
-          st === 'completed' ? { stage: 'done', txHash: item.sourceTxHash }
-          : st === 'submitted' ? { stage: 'minting', txHash: item.sourceTxHash }
-          : st === 'failed' || st === 'expired' ? { stage: 'error', txHash: item.sourceTxHash || 'held' }
-          : { stage: 'attesting', txHash: item.sourceTxHash },
-        )
-      } catch { /* keep last state */ }
-    }
-    load()
-    const iv = setInterval(load, 10_000)
-    return () => { stop = true; clearInterval(iv) }
-  }, [item.ubIntentId])
-
-  return <UbProgressTracker progress={progress} chainLabel={item.chainLabel || item.chain} />
-}
-
-// Track Progress screen for a UB claim opened from Hub Activity - same
-// layout and buttons as the CCTP Track Progress screen, with the claim's
-// details tucked behind "View details".
-function HubUbTrackView({ item, onBack, onViewInHub, onHome }: {
-  item: ActivityItem; onBack: () => void; onViewInHub: () => void; onHome: () => void
-}) {
-  const chain = item.chainLabel || item.chain
-  const claimed = item.claimedAmount
-  // The arrived amount is only known once it lands. Before that the fee is
-  // unknown too - say so, rather than showing the claimed amount as if it
-  // were what arrives (and no fee).
-  const arrived = item.arrivedAmount
-  const fee = claimed != null && arrived != null ? claimed - arrived : null
-  const when = new Date(item.timestamp)
-  const src = item.sourceTxHash
-  const rows: TrackDetailRow[] = [
-    { label: 'Type', value: '↓ Claim to Arc' },
-    { label: 'Route', value: 'Unified Balance' },
-    { label: 'From Chain', value: chain },
-    ...(claimed != null ? [{ label: 'Claimed', value: `$${formatAmount(claimed)} USDC` }] : []),
-    ...(fee != null && fee > 0.000001 ? [{ label: 'Fee', value: `-$${formatAmount(fee)} USDC` }]
-      : fee == null && claimed != null ? [{ label: 'Fee', value: 'Shown once it arrives' }] : []),
-    arrived != null
-      ? { label: 'Arrived', value: `$${formatAmount(arrived)} USDC` }
-      : { label: 'Arriving', value: claimed != null ? `$${formatAmount(claimed)} USDC, less fees` : `$${formatAmount(item.amount)} USDC` },
-    { label: 'Date', value: when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
-    { label: 'Time', value: when.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) },
-    ...(src ? [{ label: 'Source Tx', value: `${src.slice(0, 10)}…${src.slice(-8)}`, copy: src, href: explorerTxUrl(item.chain, src) }] : []),
-  ]
-  return (
-    <div style={{ margin: '0 -12px', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', padding: '16px' }}>
-        <button onClick={onBack} aria-label="Back" style={{ position: 'absolute', left: 18, background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-primary)', display: 'flex', alignItems: 'center' }}>
-          <ArrowLeft className="w-5 h-5 text-text-primary" />
-        </button>
-        <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Track Progress</span>
-      </div>
-      <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, textAlign: 'center' }}>
-          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>${formatAmount(claimed ?? arrived ?? item.amount)} USDC</span> · You may safely leave this page at any time.
-        </p>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <img src={chainLogoSrc(item.chain)} alt="" width={28} height={28} style={{ borderRadius: '50%' }}
-              onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{chain}</span>
-          </div>
-          <HubUbTracker item={item} />
-        </div>
-        <TrackDetails rows={rows} />
-      </div>
-      <div style={{ display: 'flex', gap: 12, padding: '16px 24px 24px' }}>
-        <button onClick={onViewInHub} style={{ flex: 1, padding: 16, borderRadius: 16, border: '1px solid var(--border)', background: 'transparent', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-          View in Hub
-        </button>
-        <button onClick={onHome} style={{ flex: 1, padding: 16, borderRadius: 16, border: '1px solid color-mix(in srgb, black 12%, transparent)', fontSize: 13, fontWeight: 600, color: '#fff', background: 'var(--brand)', cursor: 'pointer' }}>
-          Go Home
-        </button>
-      </div>
-    </div>
-  )
+// A running move from Activity, in the shape the shared progress page follows.
+function trackedInfo(item: ActivityItem, arrivedMint?: string): TrackedMoveInfo {
+  return {
+    kind: item.type === 'claim' ? 'bring' : 'transfer',
+    route: item.route === 'ub' ? 'ub' : 'cctp',
+    chain: item.chain,
+    chainLabel: item.chainLabel || item.chain,
+    amount: item.claimedAmount ?? item.amount,
+    recipient: item.type === 'transfer' ? item.destinationAddress : undefined,
+    sourceTxHash: item.sourceTxHash && item.sourceTxHash !== 'held' ? item.sourceTxHash : undefined,
+    destinationTxHash: arrivedMint || item.destinationTxHash,
+    ubIntentId: item.ubIntentId,
+    arrivedAmount: item.arrivedAmount,
+    timestamp: item.timestamp,
+  }
 }
 
 // A CCTP move's burn: claims burn on the external chain, transfers on Arc.
@@ -292,80 +208,6 @@ const cctpBurnChain = (item: ActivityItem) => (item.type === 'claim' ? item.chai
 const isTrackableCctp = (item: ActivityItem) =>
   item.status === 'pending' && item.route !== 'ub' && !item.isRecovery && !item.chainReceipt && !item.autoConvert
   && !!item.sourceTxHash && /^0x[0-9a-fA-F]{64}$/.test(item.sourceTxHash)
-
-// Track Progress for a CCTP transfer or claim, read live from Circle (not
-// from a server row): Burned → Attested → Minting → Completed.
-function HubCctpTrackView({ item, onBack, onHome, onDone }: {
-  item: ActivityItem; onBack: () => void; onHome: () => void
-  onDone: (id: string, mintTxHash?: string) => void
-}) {
-  const isClaim = item.type === 'claim'
-  const chain = item.chainLabel || item.chain
-  const from = isClaim ? chain : 'Arc'
-  const to = isClaim ? 'Arc' : chain
-  const p = useCctpProgress(cctpBurnChain(item), item.sourceTxHash, item.destinationTxHash)
-  const done = p?.stage === 'done'
-  useEffect(() => { if (done) onDone(item.id, p?.mintTxHash) }, [done]) // eslint-disable-line react-hooks/exhaustive-deps
-  const progress: UbTrackerProgress = !p ? { stage: 'burning' }
-    : p.stage === 'error' ? { stage: 'error', msg: p.msg } : { stage: p.stage }
-  // Before Circle answers the status is unknown - keep the steps neutral.
-  const loading = !p
-  const when = new Date(item.timestamp)
-  const src = item.sourceTxHash
-  const mint = p?.mintTxHash || item.destinationTxHash
-  const srcHref = isClaim ? explorerTxUrl(item.chain, src) : arcExplorerTxUrl(src)
-  const mintHref = mint ? (isClaim ? arcExplorerTxUrl(mint) : explorerTxUrl(item.chain, mint)) : null
-  const rows: TrackDetailRow[] = [
-    { label: 'Type', value: isClaim ? '↓ Claim to Arc' : '↑ Transfer from Arc' },
-    { label: 'Route', value: 'CCTP' },
-    { label: 'From', value: from },
-    { label: 'To', value: to },
-    { label: 'Amount', value: `$${formatAmount(item.amount)} USDC` },
-    { label: 'Date', value: when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
-    { label: 'Time', value: when.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) },
-    ...(src ? [{ label: 'Burn Tx', value: `${src.slice(0, 10)}…${src.slice(-8)}`, copy: src, href: srcHref }] : []),
-    ...(mint ? [{ label: 'Mint Tx', value: `${mint.slice(0, 10)}…${mint.slice(-8)}`, copy: mint, href: mintHref }] : []),
-  ]
-  // Same four steps as every other Track Progress screen.
-  const steps = [
-    { label: 'Bridging',  subtitle: `Burn confirmed on ${from}` },
-    { label: 'Verifying', subtitle: p?.delayReason ? `Circle is holding it (${p.delayReason.replace(/_/g, ' ')})` : 'Circle attested the transfer' },
-    { label: 'Settling',  subtitle: `Funds landing on ${to}` },
-    { label: 'Completed', subtitle: 'Balance updated' },
-  ]
-  return (
-    <div style={{ margin: '0 -12px', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', padding: '16px' }}>
-        <button onClick={onBack} aria-label="Back" style={{ position: 'absolute', left: 18, background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-primary)', display: 'flex', alignItems: 'center' }}>
-          <ArrowLeft className="w-5 h-5 text-text-primary" />
-        </button>
-        <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Track Progress</span>
-      </div>
-      <div style={{ padding: '16px 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, textAlign: 'center' }}>
-          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>${formatAmount(item.amount)} USDC</span> · {from} → {to} · You may safely leave this page at any time.
-        </p>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <img src={chainLogoSrc(item.chain)} alt="" width={28} height={28} style={{ borderRadius: '50%' }}
-              onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{chain}</span>
-          </div>
-          <UbProgressTracker progress={progress} chainLabel={chain} steps={steps} loading={loading} />
-        </div>
-        <TrackDetails rows={rows} />
-      </div>
-      <div style={{ display: 'flex', gap: 12, padding: '16px 24px 24px' }}>
-        <button onClick={onBack} style={{ flex: 1, padding: 16, borderRadius: 16, border: '1px solid var(--border)', background: 'transparent', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', cursor: 'pointer' }}>
-          View in Hub
-        </button>
-        <button onClick={onHome} style={{ flex: 1, padding: 16, borderRadius: 16, border: '1px solid color-mix(in srgb, black 12%, transparent)', fontSize: 13, fontWeight: 600, color: '#fff', background: 'var(--brand)', cursor: 'pointer' }}>
-          Go Home
-        </button>
-      </div>
-    </div>
-  )
-}
 
 // One logo per distinct chain for the scanning animation.
 const SCAN_LOGOS = [...new Set(Object.values(CHAIN_LOGO_FILE))].map(f => ({ src: `/logos/chains/${f}.svg`, alt: f }))
@@ -534,10 +376,10 @@ export function MultichainPage() {
   }
   // Device/browser back while a claim form or Track Progress is open inline
   // closes it (back to the Bring Funds list) instead of leaving the Hub.
-  // A Unified Balance claim followed from Hub Activity (no `claims` row, so
-  // it gets its own Track Progress view - same layout as CCTP's).
+  // A Unified Balance claim followed from Hub Activity (no `claims` row -
+  // TrackedMove follows its server intent).
   const [trackUb, setTrackUb] = useState<ActivityItem | null>(null)
-  // A pending CCTP transfer/claim opened from Activity, tracked live from Circle.
+  // A pending CCTP transfer/claim opened from Activity, followed live from Circle (TrackedMove).
   const [trackCctp, setTrackCctp] = useState<ActivityItem | null>(null)
   // Moves the tracker has seen arrive, before the server row catches up.
   const [arrived, setArrived] = useState<Record<string, string | undefined>>({})
@@ -1076,8 +918,8 @@ export function MultichainPage() {
                       setHubTab(item.type === 'claim' ? 'bring' : 'transfer')
                       window.scrollTo?.({ top: 0, behavior: 'smooth' })
                     } else if (isPending && item.route === 'ub') {
-                      // UB claims have no `claims` row - open their own
-                      // Track Progress (same screen layout as CCTP's).
+                      // UB claims have no `claims` row - TrackedMove follows
+                      // their server intent on the same progress page.
                       setClaimChain(null)
                       setTrackUb(item)
                       setHubTab('bring')
@@ -1242,14 +1084,19 @@ export function MultichainPage() {
         </div>
         </motion.div>
 
-        {/* Track Progress opened from Recent History. Desktop: in the
-            right-hand panel like every Transfer / Bring step, with the Hub
-            left as it was. Phone: in place of the tab's content. */}
+        {/* A running move opened from Recent History: the same progress page
+            the flow shows. Desktop: in the right-hand panel like every
+            Transfer / Bring step, with the Hub left as it was. Phone: in
+            place of the tab's content. */}
+        {/* A running move tapped in Activity opens the same progress page the
+            flow itself shows (desktop: right-hand panel; phone: in place). */}
         {trackCctp && (hubTab === 'transfer' || hubTab === 'bring') && inTrackPanel((
-          <HubCctpTrackView item={trackCctp}
-            onBack={() => { setTrackCctp(null); if (!isDesktop) setHubTab('activity') }}
-            onHome={() => navigate('/')}
-            onDone={markArrived} />
+          <div style={{ margin: isDesktop ? 0 : '0 -12px', padding: '0 12px 12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+            <TrackedMove key={trackCctp.id} info={trackedInfo(trackCctp, arrived[trackCctp.id])} backIcon={isDesktop ? 'close' : 'back'}
+              onClose={() => { setTrackCctp(null); if (!isDesktop) setHubTab('activity') }}
+              onViewHub={() => { setTrackCctp(null); setHubTab('activity') }}
+              onArrived={mint => markArrived(trackCctp.id, mint)} />
+          </div>
         ))}
 
         {hubTab === 'transfer' && (!trackCctp || isDesktop) && (
@@ -1261,10 +1108,11 @@ export function MultichainPage() {
         )}
 
         {hubTab === 'bring' && !trackCctp && trackUb && inTrackPanel((
-          <HubUbTrackView item={trackUb}
-            onBack={() => { setTrackUb(null); if (!isDesktop) setHubTab('activity') }}
-            onViewInHub={() => { setTrackUb(null); if (!isDesktop) setHubTab('activity') }}
-            onHome={() => navigate('/')} />
+          <div style={{ margin: isDesktop ? 0 : '0 -12px', padding: '0 12px 12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+            <TrackedMove key={trackUb.id} info={trackedInfo(trackUb)} backIcon={isDesktop ? 'close' : 'back'}
+              onClose={() => { setTrackUb(null); if (!isDesktop) setHubTab('activity') }}
+              onViewHub={() => { setTrackUb(null); setHubTab('activity') }} />
+          </div>
         ))}
 
         {hubTab === 'bring' && !trackCctp && !trackUb && trackClaim && inTrackPanel((

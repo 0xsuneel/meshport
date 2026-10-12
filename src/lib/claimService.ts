@@ -186,7 +186,7 @@ export function fetchProcessingClaims(walletAddress: string): Promise<Claim[]> {
 // unsubscribing only stops the UI from listening, it does NOT stop the
 // worker from continuing to process the claim server-side.
 //
-// IMPORTANT: multiple components (e.g. the claim page AND ClaimProgressTracker)
+// IMPORTANT: multiple components (e.g. the claim page AND TrackedMove)
 // can legitimately subscribe to the same claimId at the same time. Supabase
 // Realtime does not allow calling `.on()` again on a channel that has already
 // called `.subscribe()`, so a naive "new channel per call" approach throws
@@ -365,20 +365,4 @@ export function subscribeToWalletClaims(
   }
 }
 
-export const CLAIM_STEPS: Array<{ key: ClaimStatus; label: string; subtitle: string }> = [
-  { key: 'submitted', label: 'Submitted', subtitle: 'Claim received' },
-  { key: 'bridging',  label: 'Bridging',  subtitle: 'Burn confirmed on the source chain' },
-  { key: 'verifying', label: 'Verifying', subtitle: 'Circle attested the transfer' },
-  { key: 'settling',  label: 'Settling',  subtitle: 'Funds landing on Arc' },
-  { key: 'completed', label: 'Completed', subtitle: 'Balance updated' },
-]
-
-// Steps shown on the "Track Progress" panel - Submitted is intentionally
-// excluded there since it's already been confirmed (checkmarked) on the
-// screen right before Track Progress is reached.
-export const TRACK_PROGRESS_STEPS = CLAIM_STEPS.filter(s => s.key !== 'submitted')
-
-export function stepIndex(status: ClaimStatus): number {
-  if (status === 'failed') return -1
-  return CLAIM_STEPS.findIndex(s => s.key === status)
-}
+// The claim's checklist lives in lib/moveSteps (shared with Transfer).
