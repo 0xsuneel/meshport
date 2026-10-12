@@ -1440,7 +1440,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(passEntry, { silent: true })).catch(() => {})
     const { verifyPasscode } = await import('@/lib/security')
     if (!await verifyPasscode(passEntry, storedPasscode!)) {
-      setPassError('Incorrect passcode'); setPassEntry(''); return
+      setPassError('Incorrect passcode. Try again.'); setPassEntry(''); return
     }
     const enteredPasscode = passEntry
     setPassError(''); setPassEntry('')
@@ -2118,7 +2118,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   <div style={{ textAlign: 'center', marginBottom: 28 }}>
                     <p style={{ fontSize: 12, color: COLORS.muted, margin: '6px 0 0' }}>
                       {passError
-                        ? <span role="alert" style={{ color: COLORS.error }}>Incorrect passcode. Try again.</span>
+                        ? <span role="alert" style={{ color: COLORS.error }}>{passError}</span>
                         : `Confirm claim of $${formatAmount(selectedTotal)} USDC`}
                     </p>
                   </div>
@@ -2132,7 +2132,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                       onComplete={(_, viaBiometric) => { setPaidViaBiometric(!!viaBiometric); handlePasscodeConfirm() }}
                     />
                   </div>
-                  {passError && <p role="alert" style={{ fontSize: 12, color: COLORS.error, textAlign: 'center', marginTop: 16 }}>{passError}</p>}
                 </>
               )
 
@@ -2141,6 +2140,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   <DesktopTransactionAuthDialog
                     onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
                     title="Authorize Claim"
+                    placement={embedded ? 'panel' : 'center'}
                     amountLabel={`$${formatAmount(selectedTotal)} USDC`}
                     subLabel={`From ${selectedChain ? getMeta(selectedChain.chainId).label : 'Multichain'}`}
                   >

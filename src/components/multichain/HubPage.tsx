@@ -11,6 +11,13 @@ import { DESKTOP_QUERY } from '@/lib/motion'
 // open on top of the first: the one underneath shifts left and dims behind a
 // plain black veil (an opacity fade - never a CSS filter, which Android
 // re-rasterises every frame and shows as flicker).
+/** Desktop: the Hub's right-hand panel, where every Transfer / Bring step opens. */
+export const HUB_PANEL_WIDTH = 'min(460px, 100vw)'
+/** The panel's own box, for screens drawn outside HubPage (Transfer's review and processing). */
+export const HUB_PANEL_BOX = {
+  position: 'fixed', top: 0, right: 0, bottom: 0, width: HUB_PANEL_WIDTH,
+  background: 'var(--bg)', borderLeft: '1px solid var(--border)', boxShadow: '-16px 0 40px -12px rgba(0,0,0,0.35)',
+} as const
 const EASE = [0.32, 0.72, 0, 1] as const
 const OPEN_S = 0.3
 const BACK_S = 0.25
@@ -43,7 +50,7 @@ function Panel({ behind, level, header, footer, children }: {
       exit={{ opacity: 0, x: 24, transition: { duration: reduce ? 0 : 0.12, ease: [0.4, 0, 1, 1] } }}
       transition={{ duration: reduce ? 0 : 0.18, ease: EASE }}
       style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 30 + level * 2, width: 'min(460px, 100vw)',
+        position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 30 + level * 2, width: HUB_PANEL_WIDTH,
         background: 'var(--bg)', display: 'flex', flexDirection: 'column', overflow: 'hidden',
         borderLeft: '1px solid var(--border)', boxShadow: '-16px 0 40px -12px rgba(0,0,0,0.35)',
       }}>

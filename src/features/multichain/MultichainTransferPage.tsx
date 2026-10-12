@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
-import { HubPage, HubPageBack } from '@/components/multichain/HubPage'
+import { HubPage, HubPageBack, HUB_PANEL_BOX } from '@/components/multichain/HubPage'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
@@ -794,7 +794,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       ? desktopColumnRef.current
       : (flowRootRef.current?.closest('[data-hub-page], [data-flow-scroller]') as HTMLElement | null) ?? flowRootRef.current
     if (target) setFlashColumnRect(target.getBoundingClientRect())
-  }, [successPhase, isDesktop, isDesktopMq])
+  // Re-measured on reaching success: before that the flow isn't the
+  // right-hand panel yet, so it would measure the Hub column instead.
+  }, [successPhase, isDesktop, isDesktopMq, step === 'success'])
 
   // Measured in a layout effect (before paint) so the traveling checkmark is
   // already on screen in the receipt's very first frame - no frame where
@@ -3218,7 +3220,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     <div ref={flowRootRef} className={`relative flex flex-col bg-bg ${isDesktop || embedded ? 'h-full' : 'h-screen'}`}
       // Hub on a phone: processing → result is a full page over Review.
       data-hub-page={procPage ? '' : undefined}
-      style={procPage ? { position: 'fixed', inset: 0, zIndex: 45, maxWidth: 430, margin: '0 auto', background: 'transparent' } : undefined}>
+      // Desktop: the same screens in the Hub's right-hand panel.
+      style={procPage ? (isDesktopMq ? { ...HUB_PANEL_BOX, zIndex: 45 } : { position: 'fixed', inset: 0, zIndex: 45, maxWidth: 430, margin: '0 auto', background: 'transparent' }) : undefined}>
       {/* Desktop-only compact "Success" header (same padding/size as
           MultichainClaimPage's own done-step header) - the success step
           had no header at all before, so its content started right at
@@ -3777,7 +3780,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   )}
                 </>
               ) : (
-                <button onClick={() => { setStep('confirm'); setPassEntry(''); setPassError('') }} className="w-full py-3.5 rounded-xl bg-brand text-text-primary font-semibold shadow-elevation-2">Try Again</button>
+                <button onClick={() => { setStep('confirm'); setPassEntry(''); setPassError('') }} className="w-full py-3.5 rounded-xl bg-brand font-semibold shadow-elevation-2" style={{ color: '#fff' }}>Try Again</button>
               )}
             </motion.div>
             )
@@ -3829,7 +3832,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // Phone / tablet: a full page in the app's 430px column. Desktop: a
         // centred card over the Hub, so the sidebar and header stay visible.
         <motion.div key="mt-review-page"
-          {...(isDesktopMq
+          {...(isDesktopMq && sheetMode
+            // Hub on desktop: the review opens in the right-hand panel, on top of the form.
+            ? { initial: { opacity: 0, x: 24 }, animate: { opacity: 1, x: 0 }, exit: { opacity: 0, transition: { duration: 0.12 } }, transition: { duration: 0.18, ease: [0.32, 0.72, 0, 1] },
+                className: 'overflow-y-auto',
+                style: { ...HUB_PANEL_BOX, zIndex: 34 } }
+            : isDesktopMq
             ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.2 },
                 onClick: () => { if (step === 'review') { setStep('form'); setFeeChangedNotice('') } },
                 className: 'fixed inset-0 z-40 flex items-center justify-center p-6',
@@ -3849,7 +3857,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 style: { background: 'var(--bg)', maxWidth: 430, marginLeft: 'auto', marginRight: 'auto',
                   paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' } })}>
           <motion.div
-            {...(isDesktopMq
+            {...(isDesktopMq && sheetMode
+              ? { className: 'px-5 py-4 flex flex-col', style: { minHeight: '100%' } }
+              : isDesktopMq
               ? { initial: { y: 24, opacity: 0 }, animate: { y: 0, opacity: 1 }, exit: { y: 16, opacity: 0 }, transition: { duration: 0.26, ease: [0.32, 0.72, 0, 1] },
                   onClick: (e: React.MouseEvent) => e.stopPropagation(),
                   className: 'w-full overflow-y-auto px-5 py-4',
@@ -3914,7 +3924,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     ...((!loading && feeEstimate.kitFee > 0) ? [['Service Fee', `${trimTrailingZeros(feeEstimate.kitFee.toFixed(4))} USDC`, 'var(--warning)'] as [string, string | null, string]] : []),
                     ...((loading ? chain.ub : feeEstimate.forwarderFee > 0) ? [['Forwarder Fee', loading ? null : `${trimTrailingZeros(feeEstimate.forwarderFee.toFixed(4))} USDC`, 'var(--warning)'] as [string, string | null, string]] : []),
                     ['Network Gas', loading ? null : feeEstimate.networkFee > 0 ? `${trimTrailingZeros(feeEstimate.networkFee.toFixed(4))} USDC` : '~$0.01', 'var(--success)'],
-                    ['Est. Time', '<30s', 'var(--accent)'],
+                    ['Est. Time', effectiveUb ? '~60s' : '20–90s', 'var(--accent)'],
                   ]
                   return (
                     <>
@@ -3994,6 +4004,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           <DesktopTransactionAuthDialog
             onClose={closeSheet}
             title="Authorize Transfer"
+            placement={embedded ? 'panel' : 'center'}
             amountLabel={`$${formatAmount(numAmount)} USDC`}
             subLabel={`To ${chain.name}`}
           >
