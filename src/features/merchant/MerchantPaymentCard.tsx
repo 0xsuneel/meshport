@@ -236,16 +236,16 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
         </span>
         {orderTitle(orderKind, number, { paid, received: paid && isMine })}{v.merchantName ? ` · ${v.merchantName}` : ''}
       </>}
+      // The title already says paid / expired / cancelled and the subtitle
+      // shows the amount and order number - rows only add what they don't.
       rows={[
-        { label: 'Status', value: statusText, positive: paid },
-        { label: isBill ? 'Total' : 'Amount', value: `$${formatAmount(v.amount)} USDC` },
-        ...(v.received > 0 ? [{ label: isMine ? 'Received' : 'Paid', value: `$${formatAmount(v.received)} USDC`, positive: true }] : []),
+        ...(!paid && !closed || statusText !== STATUS_LABEL[v.status] ? [{ label: 'Status', value: statusText, positive: paid }] : []),
+        ...(v.received > 0 && Math.abs(v.received - v.amount) > 0.000001 ? [{ label: isMine ? 'Received' : 'Paid', value: `$${formatAmount(v.received)} USDC`, positive: true }] : []),
         ...(!paid && !closed && due > 0 ? [{ label: 'Still due', value: `$${formatAmount(due)} USDC` }] : []),
         ...(hash ? [{ label: 'Transaction Hash', value: `${hash.slice(0, 6)}…${hash.slice(-4)}` }] : []),
         ...(when(v.paidAt ?? payment?.createdAt) ? [{ label: paid ? 'Paid on' : 'Time', value: when(v.paidAt ?? payment?.createdAt)! }] : []),
       ]}
       detailRows={[
-        { label: 'Order', value: `#${number}` },
         ...(v.merchantName || v.merchantUsername ? [{ label: 'Merchant', value: v.merchantName || `${v.merchantUsername}.arc` }] : []),
         ...(v.customerUsername ? [{ label: 'Customer', value: `${v.customerUsername.replace(/\.arc$/i, '')}.arc` }] : []),
         ...(isBill && v.items?.length
