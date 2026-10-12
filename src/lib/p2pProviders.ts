@@ -91,7 +91,8 @@ export interface EscrowProvider {
    * createOffer() in p2pService.ts BEFORE the offer row is ever inserted -
    * if this fails, no offer gets created at all.
    */
-  depositForOffer(offerId: string, amountUsdc: number): Promise<{ success: boolean; txHash?: string; message: string }>
+  /** `autoAccept` (escrow V3): name the relayer as the ad's operator in the same deposit, with the ad's per-trade limits. */
+  depositForOffer(offerId: string, amountUsdc: number, autoAccept?: { operator: string; minAmount: number; maxAmount: number }): Promise<{ success: boolean; txHash?: string; message: string }>
   /**
    * The seller-for-this-trade deposits USDC for a BUY offer's trade, at
    * acceptance time. Called from createTrade() in p2pService.ts BEFORE the
@@ -120,13 +121,15 @@ export interface EscrowProvider {
 }
 
 const RealContractEscrowProvider: EscrowProvider = {
-  async depositForOffer(offerId, amountUsdc) {
+  async depositForOffer(offerId, amountUsdc, autoAccept) {
     try {
       const { useAuthStore } = await import('../store')
       const { privateKey } = useAuthStore.getState()
       if (!privateKey) return { success: false, message: "Couldn't access your wallet on this device to deposit escrow." }
-      const { depositToEscrow } = await import('./p2pEscrowContract')
-      const txHash = await depositToEscrow(privateKey, offerId, amountUsdc)
+      const { depositToEscrow, depositToEscrowWithAutoAccept } = await import('./p2pEscrowContract')
+      const txHash = autoAccept
+        ? await depositToEscrowWithAutoAccept(privateKey, offerId, amountUsdc, autoAccept.minAmount, autoAccept.maxAmount, autoAccept.operator)
+        : await depositToEscrow(privateKey, offerId, amountUsdc)
       return { success: true, txHash, message: 'Escrow deposit confirmed on-chain.' }
     } catch (e: any) {
       return { success: false, message: e?.message ?? 'Escrow deposit failed - please try again.' }
@@ -323,9 +326,9 @@ const provider = async () => {
 }
 
 export const escrowProvider: EscrowProvider = {
-  async depositForOffer(offerId, amountUsdc) {
+  async depositForOffer(offerId, amountUsdc, autoAccept) {
     const blocked = await assertNotPaused(); if (blocked) return noteP2PFailure(blocked, 'deposit_offer', amountUsdc, { offerId })
-    return noteP2PFailure(await (await provider()).depositForOffer(offerId, amountUsdc), 'deposit_offer', amountUsdc, { offerId })
+    return noteP2PFailure(await (await provider()).depositForOffer(offerId, amountUsdc, autoAccept), 'deposit_offer', amountUsdc, { offerId })
   },
   async depositForTrade(tradeId, amountUsdc) {
     const blocked = await assertNotPaused(); if (blocked) return noteP2PFailure(blocked, 'deposit_trade', amountUsdc, { tradeId })

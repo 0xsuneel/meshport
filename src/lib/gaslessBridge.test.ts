@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, vi, afterEach } from 'vitest'
 import { createRequire } from 'module'
 import { bridgeNonce, checkQuote, isGaslessBridgeAvailable, gaslessRouter, FORWARD_HOOK, ARC_DOMAIN, GASLESS_CHAINS, type BridgeParams } from './gaslessBridge'
 import { CHAINS as RELAYER_CHAINS, checkRelayable } from '../../api/bridge-relay'
@@ -110,6 +110,43 @@ describe('relayer: only relay-safe calls are accepted', () => {
   })
   it('rejects anything else (e.g. a USDC transfer)', async () => {
     expect(await checkRelayable(USDC, await enc('transfer', [OTHER, 1n]), ME)).not.toBeNull()
+  })
+})
+
+describe('relayer: P2P escrow V3 calls', () => {
+  const ME = '0x05d00ab75bcbe15450143f810cd5e5164ee126e0'
+  const OTHER = '0x1111111111111111111111111111111111111111'
+  const ESCROW = '0x2222222222222222222222222222222222222222'
+  const K = ('0x' + '11'.repeat(32)) as `0x${string}`
+  const abi = [
+    { type: 'function', name: 'registerTrade', stateMutability: 'nonpayable', outputs: [], inputs: [
+      { name: 'tradeKey', type: 'bytes32' }, { name: 'offerKey', type: 'bytes32' }, { name: 'buyer', type: 'address' }, { name: 'amount', type: 'uint256' }] },
+    { type: 'function', name: 'cancelTradeFor', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'tradeKey', type: 'bytes32' }, { name: 'signature', type: 'bytes' }] },
+    { type: 'function', name: 'cancelTrade', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'tradeKey', type: 'bytes32' }] },
+    { type: 'function', name: 'release', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'tradeKey', type: 'bytes32' }] },
+  ] as const
+  const enc = async (fn: string, args: unknown[]) => (await import('viem')).encodeFunctionData({ abi, functionName: fn as any, args: args as any })
+  const prev = process.env.P2P_ESCROW_CONTRACT
+  beforeAll(() => { process.env.P2P_ESCROW_CONTRACT = ESCROW })
+  afterAll(() => { process.env.P2P_ESCROW_CONTRACT = prev })
+
+  it('registers a trade only for the signed-in buyer, only on the escrow', async () => {
+    expect(await checkRelayable(ESCROW, await enc('registerTrade', [K, K, ME, 1n]), ME)).toBeNull()
+    expect(await checkRelayable(ESCROW, await enc('registerTrade', [K, K, OTHER, 1n]), ME)).toMatch(/own wallet/)
+    expect(await checkRelayable(OTHER, await enc('registerTrade', [K, K, ME, 1n]), ME)).not.toBeNull()
+  })
+  it('relays the buyer\'s signed cancel and the seller\'s cancel only on the escrow', async () => {
+    expect(await checkRelayable(ESCROW, await enc('cancelTradeFor', [K, '0x01']), ME)).toBeNull()
+    expect(await checkRelayable(ESCROW, await enc('cancelTrade', [K]), ME)).toBeNull()
+    expect(await checkRelayable(OTHER, await enc('cancelTrade', [K]), ME)).not.toBeNull()
+  })
+  it('never relays a release', async () => {
+    expect(await checkRelayable(ESCROW, await enc('release', [K]), ME)).not.toBeNull()
+  })
+  it('the selectors the relay checks for are the real ones', async () => {
+    const { toFunctionSelector } = await import('viem')
+    expect(toFunctionSelector('cancelTrade(bytes32)')).toBe('0x7cfb41b8')
+    expect(toFunctionSelector('registerTrade(bytes32,bytes32,address,uint256)')).toBe('0x74b1edd7')
   })
 })
 
