@@ -14,13 +14,15 @@
 // element is).
 import { motion } from 'framer-motion'
 import { type ReactNode } from 'react'
-import { Outlet, useParams } from 'react-router-dom'
+import { Outlet, useLocation, useParams } from 'react-router-dom'
 import { MessageCircle } from 'lucide-react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 
 export function ChatDesktopSplit({ list }: { list: ReactNode }) {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const { id } = useParams<{ id?: string }>()
+  const privacy = useLocation().pathname.replace(/\/$/, '') === '/chat/privacy'
+  const panelKey = privacy ? 'privacy' : id
 
   if (!isDesktop) return <Outlet />
 
@@ -30,10 +32,10 @@ export function ChatDesktopSplit({ list }: { list: ReactNode }) {
         {list}
       </div>
       <div style={{ flex: 1, minWidth: 0, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-        {id ? (
+        {panelKey ? (
           // Only this column changes when another chat is opened (like
           // WhatsApp): the conversation eases in, the list stays put.
-          <motion.div key={id} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }}
+          <motion.div key={panelKey} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
             style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <Outlet />

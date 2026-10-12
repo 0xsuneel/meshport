@@ -51,10 +51,10 @@ const RELOAD_ON_RECONNECT = /^\/((activity|news)(\/[^/]+)?|recent-paid|notificat
 
 // Desktop: Chat is one page with the list and the open conversation side by
 // side (ChatDesktopSplit) - opening another chat must not replay the whole
-// page's transition, only the conversation column animates. /chat/new and
-// /chat/privacy are their own pages.
+// page's transition, only the conversation column animates (Chat privacy
+// opens in that column too). /chat/new is its own page.
 const desktopPageKey = (path: string) =>
-  /^\/chat(\/(?!new$|privacy$)[^/]+)?\/?$/.test(path) ? '/chat' : path
+  /^\/chat(\/(?!new$)[^/]+)?\/?$/.test(path) ? '/chat' : path
 
 export function AppLayout() {
   const location = useLocation()
