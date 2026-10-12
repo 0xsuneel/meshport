@@ -5693,17 +5693,24 @@ export function ChatConversationPage() {
               // Desktop: processing and the receipt stay in the pay drawer on
               // the right (where the amount was entered), not a popup in the
               // middle of the window.
-              <motion.div key="pay-run-dim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              // Straight from the PIN dialog: the light dim and the drawer are
+              // there at once. Fading them in while the dialog's dark dim
+              // faded out left a moment with no dim at all - the whole window
+              // flashed brighter than either step, then dimmed again.
+              <motion.div key="pay-run-dim" initial={prevPayStep === 'confirm' ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 onClick={closeStep2}
                 style={{ position: 'fixed', inset: 0, zIndex: 140, background: 'rgba(0,0,0,0.15)' }} />,
-              <motion.div key="pay-run-drawer" data-leave-guard={payStep === 'processing' ? '' : undefined} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.12 } }}
+              <motion.div key="pay-run-drawer" data-leave-guard={payStep === 'processing' ? '' : undefined} initial={prevPayStep === 'confirm' ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.12 } }}
                 onClick={e => e.stopPropagation()}
                 style={{
                   position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 141, width: CHAT_PAY_DRAWER_WIDTH,
                   background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: 'var(--shadow-3)',
                   display: 'flex', flexDirection: 'column', justifyContent: payStep === 'processing' ? 'center' : undefined, overflowY: 'auto',
                 }}>
-                <div className="relative flex flex-col" style={{ flex: payStep === 'processing' ? undefined : 1, minHeight: payStep === 'processing' ? 320 : 0 }}>{step2Content}</div>
+                {/* The receipt card gets room inside the drawer (it touched both
+                    edges and the window's edge). */}
+                <div className="relative flex flex-col" style={{ flex: payStep === 'processing' ? undefined : 1, minHeight: payStep === 'processing' ? 320 : 0,
+                  ...(payStep === 'success' && paySuccessPhase === 'collapsed' ? { padding: 16, justifyContent: 'center' } : {}) }}>{step2Content}</div>
               </motion.div>,
             ] : [
                 // Keyed siblings (not a fragment) so AnimatePresence tracks the
