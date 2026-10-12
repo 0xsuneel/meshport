@@ -1532,3 +1532,110 @@ export async function markTradePaidOnChain(privateKey: string, tradeId: string):
   if (!r.ok || !out?.txHash) throw new Error(out?.error || 'Could not confirm the payment on-chain')
   return out.txHash
 }
+
+
+// ── V3 auto-accept: instant orders, no seller tap ────────────────────────
+// P2PMeshportEscrowV3 lets a sell ad's seller name an operator (MeshPort's
+// relayer) in the same transaction that deposits. The relayer then registers
+// each trade the moment a buyer orders - for that buyer's own wallet only,
+// within the ad's per-trade limits (checked on-chain). It can never release
+// or withdraw. Turned on with VITE_P2P_ESCROW_AUTO_ACCEPT=1 once
+// VITE_P2P_ESCROW_CONTRACT points at a V3 deployment.
+export const ESCROW_AUTO_ACCEPT_ENABLED = (import.meta.env.VITE_P2P_ESCROW_AUTO_ACCEPT as string || '').trim() === '1'
+
+const AUTO_ACCEPT_ABI = [
+  { type: 'function', name: 'depositWithAutoAccept', stateMutability: 'payable', outputs: [], inputs: [
+    { name: 'offerKey', type: 'bytes32' }, { name: 'operator', type: 'address' }, { name: 'minTrade', type: 'uint256' }, { name: 'maxTrade', type: 'uint256' }] },
+  { type: 'function', name: 'setAutoAccept', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'offerKey', type: 'bytes32' }, { name: 'operator', type: 'address' }, { name: 'minTrade', type: 'uint256' }, { name: 'maxTrade', type: 'uint256' }] },
+  { type: 'function', name: 'registerTrade', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'tradeKey', type: 'bytes32' }, { name: 'offerKey', type: 'bytes32' }, { name: 'buyer', type: 'address' }, { name: 'amount', type: 'uint256' }] },
+  { type: 'function', name: 'cancelTradeFor', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'tradeKey', type: 'bytes32' }, { name: 'signature', type: 'bytes' }] },
+  { type: 'function', name: 'cancelTrade', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'tradeKey', type: 'bytes32' }] },
+] as const
+
+let operatorCache: Promise<string | null> | null = null
+/** The relayer address that auto-accepts orders (public address, from the relay). */
+export function getAutoAcceptOperator(): Promise<string | null> {
+  if (!operatorCache) {
+    operatorCache = fetch('/api/bridge-relay?p2p_operator=1')
+      .then(r => r.ok ? r.json() : null)
+      .then((j: any) => (typeof j?.operator === 'string' && /^0x[0-9a-fA-F]{40}$/.test(j.operator) ? j.operator : null))
+      .catch(() => null)
+    // Don't keep a failed lookup: the next ad retries.
+    void operatorCache.then(o => { if (!o) operatorCache = null })
+  }
+  return operatorCache
+}
+
+async function sendAutoAcceptTx(privateKey: string, functionName: 'depositWithAutoAccept' | 'setAutoAccept', args: readonly unknown[], value = 0n): Promise<Hash> {
+  if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
+  const account = privateKeyToAccount(privateKey as `0x${string}`)
+  const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 250 })
+  const walletClient = createWalletClient({ account, transport: arcTransport() })
+  const data = encodeFunctionData({ abi: AUTO_ACCEPT_ABI, functionName, args: args as any })
+  const [nonce, gasEstimate] = await Promise.all([
+    publicClient.getTransactionCount({ address: account.address, blockTag: 'pending' }),
+    publicClient.estimateGas({ account: account.address, to: CONTRACT_ADDRESS, data, value }),
+  ])
+  const hash = await walletClient.sendTransaction({
+    to: CONTRACT_ADDRESS, data, value, gas: (gasEstimate * 130n) / 100n,
+    maxFeePerGas: parseGwei('25'), maxPriorityFeePerGas: parseGwei('1'), chain: ARC_CHAIN_INLINE, nonce,
+  } as unknown as Parameters<typeof walletClient.sendTransaction>[0])
+  const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 30000 })
+  if (receipt.status !== 'success') throw new Error(`${functionName}: transaction ${hash} was mined but reverted on-chain`)
+  return hash
+}
+
+/** Sell ad on V3: deposit and turn on auto-accept for the ad's per-trade limits, one transaction. */
+export async function depositToEscrowWithAutoAccept(privateKey: string, offerId: string, amountUsdc: number, minTradeUsdc: number, maxTradeUsdc: number, operator: string): Promise<Hash> {
+  const sellerAddress = privateKeyToAccount(privateKey as `0x${string}`).address
+  return sendAutoAcceptTx(privateKey, 'depositWithAutoAccept',
+    [offerKeyFor(offerId, sellerAddress), operator as `0x${string}`, toNativeUnits(minTradeUsdc), toNativeUnits(maxTradeUsdc)], toNativeUnits(amountUsdc))
+}
+
+/** The seller changed the ad's limits: keep the on-chain auto-accept limits the same. */
+export async function setAutoAcceptLimits(privateKey: string, offerId: string, minTradeUsdc: number, maxTradeUsdc: number, operator: string): Promise<Hash> {
+  const sellerAddress = privateKeyToAccount(privateKey as `0x${string}`).address
+  return sendAutoAcceptTx(privateKey, 'setAutoAccept',
+    [offerKeyFor(offerId, sellerAddress), operator as `0x${string}`, toNativeUnits(minTradeUsdc), toNativeUnits(maxTradeUsdc)])
+}
+
+async function relayEscrowCall(data: `0x${string}`, fallbackError: string, extra: Record<string, string> = {}): Promise<string> {
+  const { authApiHeaders } = await import('./supabase')
+  const r = await fetch('/api/bridge-relay', {
+    method: 'POST', headers: await authApiHeaders(),
+    body: JSON.stringify({ action: 'call', chain: 'Arc_Testnet', to: CONTRACT_ADDRESS, data, ...extra }),
+  })
+  const out = await r.json().catch(() => null) as { txHash?: string; error?: string; pending?: boolean } | null
+  if (!r.ok || !out?.txHash) throw new Error(out?.error || fallbackError)
+  return out.txHash
+}
+
+/**
+ * Buyer side of an instant order: the relayer (the ad's operator) registers
+ * the trade for the BUYER's own wallet - the relay refuses any other buyer
+ * address, and the contract refuses amounts outside the ad's limits.
+ */
+export async function registerTradeViaOperator(offerId: string, sellerAddress: string, tradeId: string, buyerAddress: string, amountUsdc: number): Promise<string> {
+  if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
+  const data = encodeFunctionData({ abi: AUTO_ACCEPT_ABI, functionName: 'registerTrade',
+    args: [tradeKeyFor(tradeId), offerKeyFor(offerId, sellerAddress), buyerAddress as `0x${string}`, toNativeUnits(amountUsdc)] })
+  // The relay checks this against the real order row before registering.
+  return relayEscrowCall(data, 'Could not start the order on-chain', { p2pTradeId: tradeId })
+}
+
+/** Buyer cancels an unpaid order gas-free: signs cancelDigest(tradeKey), the relayer submits it. */
+export async function cancelTradeAsBuyerOnChain(privateKey: string, tradeId: string): Promise<string> {
+  if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
+  const { keccak256, encodeAbiParameters, toBytes } = await import('viem')
+  const key = tradeKeyFor(tradeId)
+  // Must match P2PMeshportEscrowV3.cancelDigest().
+  const digest = keccak256(encodeAbiParameters(
+    [{ type: 'address' }, { type: 'uint256' }, { type: 'bytes32' }, { type: 'bytes32' }],
+    [CONTRACT_ADDRESS as `0x${string}`, 5042002n, keccak256(toBytes('MESHPORT_P2P_CANCEL')), key],
+  ))
+  const signature = await privateKeyToAccount(privateKey as `0x${string}`).signMessage({ message: { raw: digest } })
+  return relayEscrowCall(encodeFunctionData({ abi: AUTO_ACCEPT_ABI, functionName: 'cancelTradeFor', args: [key, signature] }), 'Could not cancel the order on-chain')
+}

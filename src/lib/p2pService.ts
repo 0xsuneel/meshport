@@ -87,6 +87,17 @@ export interface P2POffer {
   escrowDepositTxHash?: string
   escrowWithdrawTxHash?: string
   escrowBalance?: number
+  // Escrow V3: trades on this ad start on-chain the moment a buyer orders
+  // (the relayer registers them) - no seller confirmation step.
+  autoAccept: boolean
+  // 'floating' = the live FX rate x (1 + floatMarginPct/100); the database
+  // sets every trade's price from it (p2p_offer_live_price).
+  priceType: 'fixed' | 'floating'
+  floatMarginPct?: number
+  autoReply?: string
+  // The seller's saved payment accounts this ad accepts (pay-to details are
+  // private - see fetchTradePayTo).
+  paymentMethodIds: string[]
   createdAt: string
   updatedAt: string
   username?: string
@@ -107,6 +118,7 @@ export interface P2PTrade {
   amountFiat: number
   currency: string
   paymentMethod: string
+  paymentMethodId?: string
   status: TradeStatus
   expiresAt: string
   txHash?: string
@@ -149,6 +161,11 @@ function offerFromRow(r: any): P2POffer {
     offerExpiresAt: r.offer_expires_at ?? undefined,
     escrowDepositTxHash: r.escrow_deposit_tx_hash ?? undefined, escrowWithdrawTxHash: r.escrow_withdraw_tx_hash ?? undefined,
     escrowBalance: r.escrow_balance != null ? parseFloat(r.escrow_balance) : undefined,
+    autoAccept: !!r.auto_accept,
+    priceType: r.price_type === 'floating' ? 'floating' : 'fixed',
+    floatMarginPct: r.float_margin_pct != null ? Number(r.float_margin_pct) : undefined,
+    autoReply: r.auto_reply ?? undefined,
+    paymentMethodIds: r.payment_method_ids ?? [],
     createdAt: r.created_at, updatedAt: r.updated_at,
     username: r.username, displayName: r.display_name, avatarUrl: r.avatar_url,
   }
@@ -159,7 +176,7 @@ function tradeFromRow(r: any): P2PTrade {
     id: r.id, offerId: r.offer_id, offerType: r.offer_type, buyerId: r.buyer_id, buyerWallet: r.buyer_wallet,
     sellerId: r.seller_id, sellerWallet: r.seller_wallet, amountUsdc: parseFloat(r.amount_usdc),
     pricePerUsdc: parseFloat(r.price_per_usdc), amountFiat: parseFloat(r.amount_fiat), currency: r.currency,
-    paymentMethod: r.payment_method, status: r.status, expiresAt: r.expires_at, txHash: r.tx_hash ?? undefined,
+    paymentMethod: r.payment_method, paymentMethodId: r.payment_method_id ?? undefined, status: r.status, expiresAt: r.expires_at, txHash: r.tx_hash ?? undefined,
     cancelReason: r.cancel_reason ?? undefined, adminFrozen: !!r.admin_frozen,
     disputeStatus: r.dispute_status ?? 'none', disputeReason: r.dispute_reason ?? undefined, adminNote: r.admin_note ?? undefined,
     createdAt: r.created_at, paymentSentAt: r.payment_sent_at ?? undefined,
@@ -266,6 +283,8 @@ export async function createOffer(p: {
   paymentMethods: string[]; countryRegion: string; terms?: string
   offerExpiresInHours?: number
   tradeWindowMinutes?: number
+  priceType?: 'fixed' | 'floating'; floatMarginPct?: number
+  autoReply?: string; paymentMethodIds?: string[]
 }): Promise<{ offer: P2POffer | null; error?: string }> {
   // Both checks at once (createTrade already does this).
   const [banned, enabled] = await Promise.all([isUserBanned(p.userId), isP2PEnabled()])
@@ -301,12 +320,27 @@ export async function createOffer(p: {
   let escrowBalance: number | null = null
   const offerId = crypto.randomUUID()
 
+  if (p.priceType === 'floating' && !(p.floatMarginPct !== undefined && p.floatMarginPct >= -20 && p.floatMarginPct <= 20)) {
+    return { offer: null, error: 'Floating margin must be between -20% and +20%.' }
+  }
+  // Escrow V3: sell ads let MeshPort's relayer start each order on-chain the
+  // moment a buyer orders (no seller tap), within the ad's own limits.
+  let autoAccept: { operator: string; minAmount: number; maxAmount: number } | undefined
+  if (p.offerType === 'sell') {
+    const { ESCROW_AUTO_ACCEPT_ENABLED, getAutoAcceptOperator } = await import('./p2pEscrowContract')
+    if (ESCROW_AUTO_ACCEPT_ENABLED) {
+      const operator = await getAutoAcceptOperator()
+      if (!operator) return { offer: null, error: 'Instant orders are unavailable right now - please try again in a minute.' }
+      autoAccept = { operator, minAmount: p.minAmount, maxAmount: p.maxAmount }
+    }
+  }
+
   if (p.offerType === 'sell') {
     const { escrowProvider } = await import('./p2pProviders')
     // Deposit the TOTAL the seller wants to sell, not just the per-trade
     // ceiling - see this function's own header on why these are now two
     // separate numbers (p2p_offers_total_amount migration).
-    const depositResult = await escrowProvider.depositForOffer(offerId, p.totalAmount)
+    const depositResult = await escrowProvider.depositForOffer(offerId, p.totalAmount, autoAccept)
     if (!depositResult.success) {
       return { offer: null, error: `Escrow deposit failed: ${depositResult.message}` }
     }
@@ -327,6 +361,9 @@ export async function createOffer(p: {
       total_amount: p.totalAmount, trade_window_minutes: tradeWindowMinutes,
       payment_methods: p.paymentMethods, country_region: p.countryRegion, terms: p.terms ?? null,
       offer_expires_at: offerExpiresAt, escrow_deposit_tx_hash: escrowDepositTxHash, escrow_balance: escrowBalance,
+      auto_accept: !!autoAccept, price_type: p.priceType ?? 'fixed',
+      float_margin_pct: p.priceType === 'floating' ? p.floatMarginPct : null,
+      auto_reply: p.autoReply?.trim() || null, payment_method_ids: p.paymentMethodIds ?? [],
     }),
   })
   if (!res.ok) return { offer: null, error: 'Could not create offer - please try again.' }
@@ -377,7 +414,10 @@ export async function createOffer(p: {
 export async function updateOfferDetails(
   offer: P2POffer,
   userId: string,
-  updates: { pricePerUsdc?: number; minAmount?: number; maxAmount?: number; paymentMethods?: string[]; terms?: string },
+  updates: {
+    pricePerUsdc?: number; minAmount?: number; maxAmount?: number; paymentMethods?: string[]; terms?: string
+    priceType?: 'fixed' | 'floating'; floatMarginPct?: number; autoReply?: string; paymentMethodIds?: string[]
+  },
 ): Promise<{ success: boolean; message: string }> {
   if (offer.userId !== userId) return { success: false, message: 'You can only edit your own offers.' }
   if (offer.status !== 'active') return { success: false, message: 'Only active offers can be edited.' }
@@ -408,7 +448,32 @@ export async function updateOfferDetails(
     fields.payment_methods = updates.paymentMethods
   }
   if (updates.terms !== undefined) fields.terms = updates.terms || null
+  if (updates.priceType !== undefined) {
+    if (updates.priceType === 'floating' && !(updates.floatMarginPct !== undefined && updates.floatMarginPct >= -20 && updates.floatMarginPct <= 20)) {
+      return { success: false, message: 'Floating margin must be between -20% and +20%.' }
+    }
+    fields.price_type = updates.priceType
+    fields.float_margin_pct = updates.priceType === 'floating' ? updates.floatMarginPct : null
+  }
+  if (updates.autoReply !== undefined) fields.auto_reply = updates.autoReply.trim() || null
+  if (updates.paymentMethodIds !== undefined) fields.payment_method_ids = updates.paymentMethodIds
   if (Object.keys(fields).length === 0) return { success: true, message: 'Nothing to update.' }
+
+  // Instant-order ad (escrow V3): the relayer may only start orders within
+  // the limits stored on-chain, so new limits go on-chain first (seller-signed).
+  if (offer.autoAccept && (fields.min_amount !== offer.minAmount || fields.max_amount !== offer.maxAmount) && fields.min_amount !== undefined) {
+    try {
+      const { useAuthStore } = await import('../store')
+      const { privateKey } = useAuthStore.getState()
+      if (!privateKey) return { success: false, message: "Couldn't access your wallet on this device to update the ad's limits." }
+      const { getAutoAcceptOperator, setAutoAcceptLimits } = await import('./p2pEscrowContract')
+      const operator = await getAutoAcceptOperator()
+      if (!operator) return { success: false, message: 'Could not update the limits right now - please try again.' }
+      await setAutoAcceptLimits(privateKey, offer.id, fields.min_amount as number, fields.max_amount as number, operator)
+    } catch (e: any) {
+      return { success: false, message: `Could not update the limits on-chain: ${e?.message ?? 'please try again'}` }
+    }
+  }
 
   const res = await fetch(
     `${SUPA_URL}/rest/v1/p2p_offers?id=eq.${offer.id}&user_id=eq.${userId}&status=eq.active`,
@@ -951,6 +1016,8 @@ function formatTradeWindow(minutes: number): string {
 
 export async function createTrade(p: {
   offer: P2POffer; acceptingUserId: string; acceptingWallet: string; amountUsdc: number
+  /** The seller's account the buyer will pay (sell ads: one the ad lists; buy ads: the accepting seller's own). */
+  paymentMethodId?: string; paymentMethodName?: string
 }): Promise<{ trade: P2PTrade | null; error?: string }> {
   if (p.offer.userId === p.acceptingUserId) {
     return { trade: null, error: "You can't accept your own offer." }
@@ -1018,7 +1085,8 @@ export async function createTrade(p: {
       id: tradeId, offer_id: p.offer.id, offer_type: p.offer.offerType, buyer_id: buyerId, buyer_wallet: buyerWallet.toLowerCase(),
       seller_id: sellerId, seller_wallet: sellerWallet.toLowerCase(), amount_usdc: p.amountUsdc,
       price_per_usdc: p.offer.pricePerUsdc, amount_fiat: amountFiat, currency: p.offer.currency,
-      payment_method: p.offer.paymentMethods[0] ?? 'Bank Transfer (Demo)', expires_at: expiresAt,
+      payment_method: p.paymentMethodName ?? p.offer.paymentMethods[0] ?? 'Bank Transfer', expires_at: expiresAt,
+      payment_method_id: p.paymentMethodId ?? null,
       status: isOfferCreatorSeller ? 'awaiting_seller_confirmation' : 'waiting_for_buyer',
     }),
   })
@@ -1124,6 +1192,26 @@ export async function createTrade(p: {
     // moment the trade row above was inserted, reliably and without the
     // wrong-type bug (see this function's own history for that bug).
     return { trade }
+  }
+
+  // Instant order (escrow V3): the ad's operator - MeshPort's relayer -
+  // registers the trade for this buyer right now; no seller tap. The relay
+  // only accepts this buyer's own wallet, and the contract only amounts
+  // within the seller's limits. If it fails, nothing is left behind.
+  if (p.offer.autoAccept) {
+    try {
+      const { registerTradeViaOperator } = await import('./p2pEscrowContract')
+      // (trade.tx_hash is the RELEASE hash - the registration hash isn't stored there.)
+      await registerTradeViaOperator(p.offer.id, p.offer.walletAddress, trade.id, buyerWallet, p.amountUsdc)
+      await updateTradeStatusIf(trade.id, ['awaiting_seller_confirmation'], { status: 'waiting_for_buyer' })
+    } catch (e: any) {
+      await fetch(`${SUPA_URL}/rest/v1/p2p_trades?id=eq.${trade.id}`, { method: 'DELETE', headers: await authHeaders() }).catch(() => {})
+      await supabase.rpc('release_p2p_offer_lock', { p_offer_id: p.offer.id, p_trade_id: trade.id, p_amount: p.amountUsdc }).then(() => {}, () => {})
+      return { trade: null, error: `Could not start the order: ${e?.message ?? 'please try again'}` }
+    }
+    await sendTradeMessage(trade.id, 'system', `Order started - pay ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC within ${formatTradeWindow(tradeWindowMinutes)}. The seller's USDC is locked in escrow.`, true)
+    if (p.offer.autoReply) await sendTradeMessage(trade.id, 'system', `Seller: ${p.offer.autoReply}`, true)
+    return { trade: { ...trade, status: 'waiting_for_buyer' } }
   }
 
   // Sell-offer trade: nothing on-chain has happened yet for this trade
@@ -1768,6 +1856,13 @@ async function releaseAbandonedSellReservation(trade: P2PTrade): Promise<boolean
       const { privateKey, walletAddress } = useAuthStore.getState()
       if (privateKey && walletAddress && walletAddress.toLowerCase() === trade.sellerWallet.toLowerCase()) {
         await cancelTradeOnChain(privateKey, trade.id)
+        return true
+      }
+      // Escrow V3: the buyer cancels their own unpaid order gas-free (signed,
+      // relayed) - no admin review needed.
+      const { ESCROW_AUTO_ACCEPT_ENABLED, cancelTradeAsBuyerOnChain } = await import('./p2pEscrowContract')
+      if (ESCROW_AUTO_ACCEPT_ENABLED && privateKey && walletAddress && walletAddress.toLowerCase() === trade.buyerWallet.toLowerCase()) {
+        await cancelTradeAsBuyerOnChain(privateKey, trade.id)
         return true
       }
     }
@@ -2693,4 +2788,100 @@ export async function adminUnbanUser(userId: string): Promise<void> {
   await fetch(`${SUPA_URL}/rest/v1/p2p_banned_users?user_id=eq.${encodeURIComponent(userId)}`, {
     method: 'DELETE', headers: await authHeaders(),
   })
+}
+
+// ── Saved payment accounts (pay-to details) ─────────────────────────────
+// Private: only the owner reads them (RLS). The other party of a live trade
+// sees the ONE account chosen for that trade through fetchTradePayTo().
+export interface P2PPaymentMethod {
+  id: string
+  method: string           // 'UPI', 'IMPS', 'Bank Transfer', ...
+  holderName: string
+  details: Record<string, string> // e.g. { upi_id } or { account, ifsc, bank }
+}
+
+/** Display line for an account, e.g. "Ravi Kumar · ravi@okaxis" (masks long account numbers). */
+export function paymentMethodSummary(m: Pick<P2PPaymentMethod, 'holderName' | 'details'>, mask = true): string {
+  const d = m.details ?? {}
+  const acct = d.account ? (mask && d.account.length > 4 ? `••${d.account.slice(-4)}` : d.account) : ''
+  return [m.holderName, d.upi_id, d.bank, acct, d.ifsc ? `IFSC ${d.ifsc}` : '', d.iban, d.email, d.phone].filter(Boolean).join(' · ')
+}
+
+const pmFromRow = (r: any): P2PPaymentMethod => ({ id: r.id, method: r.method, holderName: r.holder_name, details: r.details ?? {} })
+
+export async function fetchMyPaymentMethods(userId: string): Promise<P2PPaymentMethod[]> {
+  const { data, error } = await supabase.from('p2p_payment_methods').select('id,method,holder_name,details')
+    .eq('user_id', userId).is('deleted_at', null).order('created_at', { ascending: true })
+  if (error) return []
+  return (data ?? []).map(pmFromRow)
+}
+
+export async function savePaymentMethod(userId: string, m: { id?: string; method: string; holderName: string; details: Record<string, string> }): Promise<{ method: P2PPaymentMethod | null; error?: string }> {
+  const method = m.method.trim(), holderName = m.holderName.trim()
+  if (!method || !holderName) return { method: null, error: 'Enter the method and the account holder name.' }
+  const details = Object.fromEntries(Object.entries(m.details).map(([k, v]) => [k, String(v ?? '').trim()]).filter(([, v]) => v))
+  if (Object.keys(details).length === 0) return { method: null, error: 'Enter the account details buyers pay to.' }
+  const row = { user_id: userId, method, holder_name: holderName, details, updated_at: new Date().toISOString() }
+  const q = m.id
+    ? supabase.from('p2p_payment_methods').update(row).eq('id', m.id).eq('user_id', userId).select('id,method,holder_name,details').single()
+    : supabase.from('p2p_payment_methods').insert(row).select('id,method,holder_name,details').single()
+  const { data, error } = await q
+  if (error || !data) return { method: null, error: 'Could not save this payment method - please try again.' }
+  return { method: pmFromRow(data) }
+}
+
+/** Soft delete - a live trade that points at it keeps showing it. */
+export async function deletePaymentMethod(userId: string, id: string): Promise<boolean> {
+  const { error } = await supabase.from('p2p_payment_methods').update({ deleted_at: new Date().toISOString() }).eq('id', id).eq('user_id', userId)
+  return !error
+}
+
+/** Where the buyer sends fiat for this trade (buyer/seller of the trade only). */
+export async function fetchTradePayTo(tradeId: string): Promise<{ method: string; holderName: string; details: Record<string, string> } | null> {
+  const { data, error } = await supabase.rpc('p2p_trade_pay_to', { p_trade_id: tradeId })
+  const row = Array.isArray(data) ? data[0] : data
+  if (error || !row) return null
+  return { method: row.method, holderName: row.holder_name, details: row.details ?? {} }
+}
+
+// ── Live FX (floating prices) ───────────────────────────────────────────
+// p2p_fx_rates is refreshed by the database every 15 minutes; the database
+// also prices every new trade from it, so this is display only.
+export async function fetchFxRates(currencies: string[]): Promise<Record<string, { rate: number; updatedAt: string }>> {
+  const list = [...new Set(currencies.map(c => c.toUpperCase()))]
+  if (!list.length) return {}
+  const { data } = await supabase.from('p2p_fx_rates').select('currency,usd_rate,updated_at').in('currency', list)
+  return Object.fromEntries((data ?? []).map((r: any) => [r.currency, { rate: Number(r.usd_rate), updatedAt: r.updated_at }]))
+}
+
+/** The price a new order on this ad gets now - same rule as the database's p2p_offer_live_price. */
+export function offerLivePrice(offer: Pick<P2POffer, 'priceType' | 'floatMarginPct' | 'pricePerUsdc' | 'currency'>, rates: Record<string, { rate: number }>): number | null {
+  if (offer.priceType !== 'floating') return offer.pricePerUsdc
+  const r = rates[offer.currency.toUpperCase()]?.rate
+  if (!r || offer.floatMarginPct === undefined) return null
+  return Math.round(r * (1 + offer.floatMarginPct / 100) * 100) / 100
+}
+
+// ── Merchant stats for the market list ──────────────────────────────────
+export interface MerchantStats { orders: number; completionPct: number | null; avgReleaseSeconds: number | null }
+export async function fetchMerchantStats(userIds: string[]): Promise<Map<string, MerchantStats>> {
+  const ids = [...new Set(userIds)].filter(Boolean)
+  const out = new Map<string, MerchantStats>()
+  if (!ids.length) return out
+  const { data } = await supabase.rpc('p2p_merchant_stats', { p_user_ids: ids })
+  for (const r of (data ?? []) as any[]) {
+    out.set(r.user_id, {
+      orders: Number(r.orders ?? 0),
+      completionPct: r.completion_pct != null ? Number(r.completion_pct) : null,
+      avgReleaseSeconds: r.avg_release_seconds != null ? Number(r.avg_release_seconds) : null,
+    })
+  }
+  return out
+}
+
+/** The accounts a sell ad accepts, for the buyer's picker: id + method name only. */
+export async function fetchOfferPaymentOptions(offerId: string): Promise<{ id: string; method: string }[]> {
+  const { data, error } = await supabase.rpc('p2p_offer_payment_options', { p_offer_id: offerId })
+  if (error) return []
+  return ((data ?? []) as any[]).map(r => ({ id: r.id, method: r.method }))
 }

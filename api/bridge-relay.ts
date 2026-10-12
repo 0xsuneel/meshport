@@ -265,7 +265,22 @@ const RELAYABLE_ABI = [
     { name: 'message', type: 'bytes' }, { name: 'attestation', type: 'bytes' }] },
   { type: 'function', name: 'markPaidFor', stateMutability: 'nonpayable', outputs: [], inputs: [
     { name: 'tradeKey', type: 'bytes32' }, { name: 'signature', type: 'bytes' }] },
+  // P2P escrow V3 (auto-accept) - see contracts/P2PMeshportEscrowV3.sol.
+  { type: 'function', name: 'registerTrade', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'tradeKey', type: 'bytes32' }, { name: 'offerKey', type: 'bytes32' }, { name: 'buyer', type: 'address' }, { name: 'amount', type: 'uint256' }] },
+  { type: 'function', name: 'cancelTradeFor', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'tradeKey', type: 'bytes32' }, { name: 'signature', type: 'bytes' }] },
+  { type: 'function', name: 'cancelTrade', stateMutability: 'nonpayable', outputs: [], inputs: [{ name: 'tradeKey', type: 'bytes32' }] },
 ] as const
+
+const P2P_TRADES_ABI = [{ type: 'function', name: 'trades', stateMutability: 'view', inputs: [{ name: '', type: 'bytes32' }], outputs: [
+  { name: 'offerKey', type: 'bytes32' }, { name: 'seller', type: 'address' }, { name: 'buyer', type: 'address' }, { name: 'amount', type: 'uint256' },
+  { name: 'state', type: 'uint8' }, { name: 'investigatedApproveRelease', type: 'bool' }, { name: 'frozenBy', type: 'address' },
+  { name: 'investigatedBy', type: 'address' }, { name: 'resolvedBy', type: 'address' }, { name: 'buyerPaid', type: 'bool' }, { name: 'registeredAt', type: 'uint64' }] }] as const
+
+function p2pEscrowAddress(): string {
+  return (process.env.P2P_ESCROW_CONTRACT || process.env.VITE_P2P_ESCROW_CONTRACT || '').trim().toLowerCase()
+}
 
 /**
  * Checks that `to`/`data` is one of the relayable calls. Returns null when it
@@ -287,7 +302,27 @@ export async function checkRelayable(to: string, data: `0x${string}`, caller: st
   if (call.functionName === 'receiveMessage') return target === MESSAGE_TRANSMITTER_V2 ? null : 'This call cannot be relayed'
   // P2P buyer marking a trade paid (signature checked by the escrow contract).
   if (call.functionName === 'markPaidFor') {
-    const escrow = (process.env.P2P_ESCROW_CONTRACT || process.env.VITE_P2P_ESCROW_CONTRACT || '').trim().toLowerCase()
+    const escrow = p2pEscrowAddress()
+    return escrow && target === escrow ? null : 'This call cannot be relayed'
+  }
+  // P2P V3 instant order: the relayer (the ad's auto-accept operator)
+  // registers a trade, but only for the signed-in buyer's own wallet. The
+  // contract checks the amount against the seller's own limits.
+  if (call.functionName === 'registerTrade') {
+    const escrow = p2pEscrowAddress()
+    if (!escrow || target !== escrow) return 'This call cannot be relayed'
+    if (String(call.args[2]).toLowerCase() !== caller) return 'You can only order for your own wallet'
+    return null
+  }
+  // Buyer's gas-free cancel: the contract checks the buyer's signature.
+  if (call.functionName === 'cancelTradeFor') {
+    const escrow = p2pEscrowAddress()
+    return escrow && target === escrow ? null : 'This call cannot be relayed'
+  }
+  // Operator cancel of an unpaid, past-window trade - only when the
+  // trade's own seller asks (checked on-chain in relayCall below).
+  if (call.functionName === 'cancelTrade') {
+    const escrow = p2pEscrowAddress()
     return escrow && target === escrow ? null : 'This call cannot be relayed'
   }
   return 'This call cannot be relayed'
@@ -356,6 +391,32 @@ function allowRelay(wallet: string): boolean {
   return true
 }
 
+// cancelTrade(bytes32) - see the seller check in relayCall.
+const CANCEL_TRADE_SELECTOR = '0x7cfb41b8'
+// registerTrade(bytes32,bytes32,address,uint256) - see checkP2PRegistration.
+const REGISTER_TRADE_SELECTOR = '0x74b1edd7'
+
+/** A relayed registerTrade must match a real, open order row (null = ok). */
+async function checkP2PRegistration(tradeId: string, data: `0x${string}`, caller: string): Promise<string | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(tradeId)) return 'Missing order'
+  const { decodeFunctionData, keccak256, toBytes, parseUnits } = await import('viem')
+  const call = decodeFunctionData({ abi: RELAYABLE_ABI, data }) as any
+  if (String(call.args[0]).toLowerCase() !== keccak256(toBytes(tradeId)).toLowerCase()) return 'Order does not match'
+  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
+  const svcKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
+  if (!supabaseUrl || !svcKey) return 'Server misconfigured'
+  const r = await fetch(`${supabaseUrl}/rest/v1/p2p_trades?id=eq.${tradeId}&select=buyer_wallet,status,amount_usdc,offer:p2p_offers(auto_accept)&limit=1`,
+    { headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` } })
+  const t = ((await r.json().catch(() => [])) as any[])[0]
+  if (!t) return 'Unknown order'
+  if (String(t.buyer_wallet).toLowerCase() !== caller) return 'You can only order for your own wallet'
+  if (t.status !== 'awaiting_seller_confirmation') return 'This order is no longer waiting to start'
+  if (!t.offer?.auto_accept) return 'This ad does not start orders instantly'
+  // Escrow amounts are native USDC (18 decimals) - see p2pEscrowContract toNativeUnits.
+  if (BigInt(call.args[3]) !== parseUnits(String(t.amount_usdc), 18)) return 'Order amount does not match'
+  return null
+}
+
 async function relayCall(req: VercelRequest, res: VercelResponse) {
   const { chain, to, data } = (req.body ?? {}) as any
   const chainKey = CHAIN_ALIASES[chain] ?? String(chain || '')
@@ -368,6 +429,19 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
   const cl = await callClients(chainKey)
   if (!cl) return res.status(400).json({ error: 'This chain is not supported' })
   if (!cl.wallet) return res.status(503).json({ error: 'Relayer is not configured' })
+  if (data.slice(0, 10).toLowerCase() === REGISTER_TRADE_SELECTOR) {
+    // Only for a real order: the trade row must exist, be this buyer's, still
+    // awaiting registration, on an instant-order ad, for this exact amount.
+    const why = await checkP2PRegistration(String((req.body as any)?.p2pTradeId ?? ''), data, caller)
+    if (why) return res.status(400).json({ error: why })
+  }
+  if (data.slice(0, 10).toLowerCase() === CANCEL_TRADE_SELECTOR) {
+    // Only the trade's seller may ask the relayer to cancel it.
+    try {
+      const t = await cl.pub.readContract({ address: to, abi: P2P_TRADES_ABI, functionName: 'trades', args: [`0x${data.slice(10, 74)}`] })
+      if (String(t[1]).toLowerCase() !== caller) return res.status(403).json({ error: 'Only the seller can cancel this order' })
+    } catch { return res.status(400).json({ error: 'Unknown order' }) }
+  }
 
   // Simulate first: an already-used or invalid signature/attestation never costs gas.
   try { await cl.pub.call({ account: cl.wallet.account, to, data }) }
@@ -429,6 +503,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // ── GET actions ──────────────────────────────────────────────────────
     if (req.method === 'GET') {
+      // ── p2p_operator: the relayer's PUBLIC address, which sellers name as
+      // their sell ad's auto-accept operator (escrow V3). Address only.
+      if (req.query.p2p_operator) {
+        let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
+        if (key && !key.startsWith('0x')) key = '0x' + key
+        if (!/^0x[0-9a-fA-F]{64}$/.test(key)) return res.status(503).json({ error: 'Relayer is not configured' })
+        const { privateKeyToAccount } = await import('viem/accounts')
+        res.setHeader('Cache-Control', 'public, max-age=300')
+        return res.status(200).json({ operator: privateKeyToAccount(key as `0x${string}`).address })
+      }
       // ── ub_intent_status: replaces supabase.from('ub_claim_intents') in client ──
       // MultichainPage used to hit Supabase directly with the anon key just to
       // read intent status. This action proxies that read through the service key
