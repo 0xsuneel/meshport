@@ -19,7 +19,7 @@ import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { notifyRewardBulk } from '@/lib/notifications'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
-import { DesktopAmountInput, quickAmounts } from '@/components/ui/DesktopAmountInput'
+import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { formatAmount, shortenAddress, midShortenAddress, trimTrailingZeros } from '@/lib/utils'
 import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { hasAnyActivityForTx } from '@/lib/ActivityService'
@@ -903,28 +903,23 @@ export function BulkPayoutPage() {
           {!isDesktop && (
             <div className="space-y-2">
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Amount (USDC)</div>
-              <div ref={bulkAmountBoxRef} onClick={openBulkAmountPad} role="button" aria-label="Enter amount"
-                style={{ padding: '14px 16px', borderRadius: 16, cursor: 'pointer',
-                  background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-                  border: `1px solid ${showBulkAmountPad ? 'color-mix(in srgb, var(--brand) 60%, transparent)' : 'var(--border)'}` }}>
-                <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1.15,
-                  color: rowAmount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>
-                  {rowAmount || '0.00'}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, gap: 8 }}>
-                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>USDC</span>
-                  {(parseFloat(rowAmount) || 0) > remainingForNext + 1e-9 ? (
-                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)' }}>
-                      Insufficient balance · Max {formatAmount(Math.floor(remainingForNext * 100) / 100)}
-                    </span>
-                  ) : balance > 0 && (
-                    <button onClick={e => { e.stopPropagation(); setRowAmount(trimTrailingZeros((Math.floor(remainingForNext * 100) / 100).toFixed(2))) }}
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand-text)' }}>
-                      Max: {formatAmount(Math.floor(remainingForNext * 100) / 100)}
-                    </button>
-                  )}
-                </div>
-              </div>
+              <AmountField
+                value={rowAmount}
+                onChange={raw => setRowAmount(sanitizeBulkAmount(raw))}
+                onTap={openBulkAmountPad}
+                editing={showBulkAmountPad}
+                boxRef={bulkAmountBoxRef}
+                invalid={(parseFloat(rowAmount) || 0) > remainingForNext + 1e-9}
+                ariaLabel="Amount in USDC"
+                token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
+                onMax={balance > 0 ? () => setRowAmount(trimTrailingZeros((Math.floor(remainingForNext * 100) / 100).toFixed(2))) : undefined}
+                quick={quickAmounts([10, 50, 100], '$', setRowAmount, remainingForNext)}
+              />
+              {(parseFloat(rowAmount) || 0) > remainingForNext + 1e-9 && (
+                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)', margin: 0 }}>
+                  Insufficient balance · Max {formatAmount(Math.floor(remainingForNext * 100) / 100)}
+                </p>
+              )}
               <button onClick={() => { setShowBulkAmountPad(false); handleRowAdd() }}
                 disabled={!rowAmount || parseFloat(rowAmount) <= 0 || parseFloat(rowAmount) > remainingForNext + 1e-9}
                 className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand-text rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition-all">
@@ -933,15 +928,15 @@ export function BulkPayoutPage() {
             </div>
           )}
           {isDesktop ? (
-            <DesktopAmountInput
+            <AmountField
               id="bulk-amount-input"
               value={rowAmount}
               onChange={raw => setRowAmount(sanitizeBulkAmount(raw))}
               autoFocus={false}
               ariaLabel="Amount in USDC"
               token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
-              onMax={balance > 0 ? () => setRowAmount(parseFloat(balance.toFixed(2)).toString()) : undefined}
-              quick={quickAmounts([10, 50, 100], '$', setRowAmount, balance)}
+              onMax={balance > 0 ? () => setRowAmount(trimTrailingZeros((Math.floor(remainingForNext * 100) / 100).toFixed(2))) : undefined}
+              quick={quickAmounts([10, 50, 100], '$', setRowAmount, remainingForNext)}
             />
           ) : null}
           {isDesktop && (

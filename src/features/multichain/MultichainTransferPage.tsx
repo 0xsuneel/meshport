@@ -34,7 +34,7 @@ import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
-import { DesktopAmountInput, quickAmounts } from '@/components/ui/DesktopAmountInput'
+import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { sheetDrag } from '@/lib/sheetDrag'
@@ -3113,43 +3113,27 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     : <span>Exact fees are shown on the next screen</span>
   const formAmount = (
     <div style={{ padding: '16px 18px', borderRadius: 22, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
-      border: `1.5px solid ${amountBad ? 'var(--danger)' : showAmountPad ? 'var(--brand)' : 'var(--border)'}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Amount (USDC)</span>
-        {!desktopInput && (
-          <button onClick={e => { e.stopPropagation(); setMaxAmount() }}
-            style={{ height: 30, padding: '0 12px', borderRadius: 999, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--brand-text)', whiteSpace: 'nowrap',
-              background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 40%, transparent)' }}>
-            Max {formatAmount(Math.max(0, balance - feeReserveEstimate))}
-          </button>
-        )}
+      border: `1.5px solid ${amountBad ? 'var(--danger)' : 'var(--border)'}` }}>
+      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Amount (USDC)</span>
+      {/* Same field on desktop (typed in) and mobile (opens the keypad). */}
+      <div style={{ marginTop: 8 }}>
+        <AmountField
+          value={amount}
+          onChange={v => setAmount(sanitizeMultichainAmount(v))}
+          onTap={desktopInput ? undefined : () => setShowAmountPad(true)}
+          editing={amountFocus}
+          boxRef={amountBoxRef}
+          onMax={setMaxAmount}
+          invalid={amountBad}
+          ariaLabel="Amount in USDC"
+          token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
+          quick={quickAmounts([10, 50, 100], '$', setAmount, Math.max(0, balance - feeReserveEstimate))}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5, color: 'var(--text-secondary)' }}>
+          <span>Balance: {formatAmount(balance)} USDC</span>
+          {feeLine}
+        </div>
       </div>
-      {desktopInput ? (
-        <div ref={amountBoxRef} style={{ marginTop: 8 }}>
-          <DesktopAmountInput
-            value={amount}
-            onChange={v => setAmount(sanitizeMultichainAmount(v))}
-            onMax={setMaxAmount}
-            invalid={amountBad}
-            ariaLabel="Amount in USDC"
-            token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
-            quick={quickAmounts([10, 50, 100], '$', setAmount, Math.max(0, balance - feeReserveEstimate))}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5, color: 'var(--text-secondary)' }}>
-            <span>Balance: {formatAmount(balance)} USDC</span>
-            {feeLine}
-          </div>
-        </div>
-      ) : (
-        <div ref={amountBoxRef} onClick={() => setShowAmountPad(true)} style={{ cursor: 'pointer', marginTop: 8 }}>
-          <div style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-1.2px', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums',
-            color: amount ? 'var(--text-primary)' : 'color-mix(in srgb, var(--text-primary) 25%, transparent)' }}>
-            {amount || '0'}
-            {amountFocus && <span aria-hidden="true" className="mp-amount-caret"/>}
-          </div>
-          <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-secondary)' }}>{feeLine}</div>
-        </div>
-      )}
     </div>
   )
   const amountKeypad = (
