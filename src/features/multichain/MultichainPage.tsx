@@ -385,12 +385,12 @@ export function MultichainPage() {
   const [arrived, setArrived] = useState<Record<string, string | undefined>>({})
   const markArrived = (id: string, mintTxHash?: string) =>
     setArrived(prev => (id in prev ? prev : { ...prev, [id]: mintTxHash }))
-  const bringSubOpen = hubTab === 'bring' && !!(claimChain || trackClaim || trackUb)
+  const bringSubOpen = (hubTab === 'bring' && !!claimChain) || !!(trackClaim || trackUb || trackCctp)
   useEffect(() => {
     if (!bringSubOpen) return
     let poppedByBack = false
     window.history.pushState({ ...(window.history.state ?? {}), mpHubSub: true }, '')
-    const close = () => { setClaimChain(null); setTrackUb(null); closeTracking() }
+    const close = () => { setClaimChain(null); setTrackUb(null); setTrackCctp(null); closeTracking() }
     const onPop = () => {
       // A bring is processing in this panel: keep it open (put the entry
       // back), blink and ask; Leave closes it with the on-screen path.
@@ -827,7 +827,7 @@ export function MultichainPage() {
   // Desktop: always visible in the right column, like Swap/Pay history.
   // Desktop: a Track Progress view opens in the right-hand panel (HubPage)
   // like the Transfer / Bring steps; on a phone it stays in place.
-  const inTrackPanel = (node: React.ReactNode) => isDesktop ? <HubPage open>{node}</HubPage> : node
+  const inTrackPanel = (node: React.ReactNode) => <HubPage open>{node}</HubPage>
   const renderActivity = (inPanel: boolean) => (
         <div style={inPanel ? { padding: 12 } : undefined}>
 
@@ -915,14 +915,14 @@ export function MultichainPage() {
                       setClaimChain(null)
                       setTrackUb(null)
                       setTrackCctp(item)
-                      setHubTab(item.type === 'claim' ? 'bring' : 'transfer')
+                      if (isDesktop) setHubTab(item.type === 'claim' ? 'bring' : 'transfer')
                       window.scrollTo?.({ top: 0, behavior: 'smooth' })
                     } else if (isPending && item.route === 'ub') {
                       // UB claims have no `claims` row - TrackedMove follows
                       // their server intent on the same progress page.
                       setClaimChain(null)
                       setTrackUb(item)
-                      setHubTab('bring')
+                      if (isDesktop) setHubTab('bring')
                       window.scrollTo?.({ top: 0, behavior: 'smooth' })
                     } else if (isPending && item.type === 'claim' && !item.isRecovery) {
                       // Deep-link straight into Track Progress for THIS claim -
@@ -941,7 +941,7 @@ export function MultichainPage() {
                       // Opens Track Progress inline under Bring Funds (no page change).
                       setClaimChain(null)
                       setTrackClaim(item.id)
-                      setHubTab('bring')
+                      if (isDesktop) setHubTab('bring')
                       window.scrollTo?.({ top: 0, behavior: 'smooth' })
                     } else if (isPending && !item.isRecovery) {
                       setHubTab('transfer')
@@ -1084,14 +1084,12 @@ export function MultichainPage() {
         </div>
         </motion.div>
 
-        {/* A running move opened from Recent History: the same progress page
-            the flow shows. Desktop: in the right-hand panel like every
-            Transfer / Bring step, with the Hub left as it was. Phone: in
-            place of the tab's content. */}
         {/* A running move tapped in Activity opens the same progress page the
-            flow itself shows (desktop: right-hand panel; phone: in place). */}
-        {trackCctp && (hubTab === 'transfer' || hubTab === 'bring') && inTrackPanel((
-          <div style={{ margin: isDesktop ? 0 : '0 -12px', padding: '0 12px 12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+            flow itself shows, as a page of its own: on a phone it slides in
+            full screen over the Hub (Back returns to Activity), on desktop
+            it opens in the right-hand panel. */}
+        {trackCctp && inTrackPanel((
+          <div style={{ padding: '0 12px 12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
             <TrackedMove key={trackCctp.id} info={trackedInfo(trackCctp, arrived[trackCctp.id])} backIcon={isDesktop ? 'close' : 'back'}
               onClose={() => { setTrackCctp(null); if (!isDesktop) setHubTab('activity') }}
               onViewHub={() => { setTrackCctp(null); setHubTab('activity') }}
@@ -1107,18 +1105,18 @@ export function MultichainPage() {
           </div>
         )}
 
-        {hubTab === 'bring' && !trackCctp && trackUb && inTrackPanel((
-          <div style={{ margin: isDesktop ? 0 : '0 -12px', padding: '0 12px 12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+        {!trackCctp && trackUb && inTrackPanel((
+          <div style={{ padding: '0 12px 12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
             <TrackedMove key={trackUb.id} info={trackedInfo(trackUb)} backIcon={isDesktop ? 'close' : 'back'}
               onClose={() => { setTrackUb(null); if (!isDesktop) setHubTab('activity') }}
               onViewHub={() => { setTrackUb(null); setHubTab('activity') }} />
           </div>
         ))}
 
-        {hubTab === 'bring' && !trackCctp && !trackUb && trackClaim && inTrackPanel((
-          <div style={{ margin: isDesktop ? 0 : '0 -12px', minHeight: flowFocused && !isDesktop ? '100dvh' : undefined }}>
+        {!trackCctp && !trackUb && trackClaim && inTrackPanel((
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <Suspense fallback={<InlineSpinner />}>
-              <ClaimSheetBody key={`track-${trackClaim}`} embedded trackClaimId={trackClaim} onClose={closeTracking} merchantMode={isMerchant} onFocusChange={setFlowFocus} />
+              <ClaimSheetBody key={`track-${trackClaim}`} embedded trackClaimId={trackClaim} onClose={closeTracking} merchantMode={isMerchant} />
             </Suspense>
           </div>
         ))}
@@ -1146,7 +1144,7 @@ export function MultichainPage() {
           </HubPage>
         )}
 
-        {hubTab === 'bring' && (isDesktop || (!trackCctp && !trackUb && !trackClaim)) && (() => {
+        {hubTab === 'bring' && (() => {
           const chainCard = (
           // Merchants: shown inside the Ledger's "Chains" tab (already a card).
           <div style={isMerchant ? undefined : { ...cardS, borderRadius: 20, padding: isDesktop ? 20 : 18 }}>
