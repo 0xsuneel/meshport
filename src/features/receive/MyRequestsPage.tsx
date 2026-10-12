@@ -5,7 +5,9 @@
 // shows who paid, how much, when and the transaction.
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Clock, Plus, XCircle, PieChart } from 'lucide-react'
+import { ArrowLeft, Plus } from 'lucide-react'
+import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
+import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { useAuthStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
 import { listMyIntents, subscribeMerchantPayments, orderLabel, orderKindOf, orderTitle, expiryText, STATUS_LABEL, type MerchantIntent } from '@/lib/merchantPay'
@@ -59,6 +61,8 @@ export function MyRequestsPage() {
   const [items, setItems] = useState<MerchantIntent[] | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [open, setOpen] = useState<MerchantIntent | null>(null)
+  const listFlash = useReturnFlash()
+  const closeOpen = () => { if (open) listFlash.closed(open.id); setOpen(null) }
 
   const load = useCallback(async () => {
     try {
@@ -84,7 +88,7 @@ export function MyRequestsPage() {
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 90 }}>
       <div className="header-row sticky top-0 z-20 backdrop-blur-md bg-bg/95 gap-3 px-5 pt-header pb-header">
-        <button onClick={() => (open ? setOpen(null) : navigate('/receive'))} className="back-btn" aria-label="Back">
+        <button onClick={() => (open ? closeOpen() : navigate('/receive'))} className="back-btn" aria-label="Back">
           <ArrowLeft className="w-5 h-5 text-text-primary" />
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -95,7 +99,7 @@ export function MyRequestsPage() {
 
       <div style={{ padding: '0 16px', maxWidth: 560, margin: '0 auto' }}>
         {open ? (
-          <RequestQrPanel key={open.code} initialOrder={open} withCustomer={isMerchant} onClose={() => { setOpen(null); void load() }} onNewRequest={newRequest} />
+          <RequestQrPanel key={open.code} initialOrder={open} withCustomer={isMerchant} onClose={() => { closeOpen(); void load() }} onNewRequest={newRequest} />
         ) : (
           <>
             <div role="tablist" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
@@ -133,34 +137,21 @@ export function MyRequestsPage() {
                 </button>
               </div>
             ) : (
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden' }}>
-                {shown.map((i, k) => {
+              <div>
+                {shown.map(i => {
                   const bucket = requestBucket(i)
                   const st = requestStatus(i)
                   const line = statusLine(i)
-                  const tint = bucket === 'paid' ? 'var(--success)' : bucket === 'closed' ? 'var(--text-secondary)' : st === 'partially_paid' ? 'var(--brand-text)' : 'var(--warning)'
-                  const Icon = bucket === 'paid' ? CheckCircle2 : bucket === 'closed' ? XCircle : st === 'partially_paid' ? PieChart : Clock
                   const who = i.customerUsername && bucket === 'waiting' ? ` · ${i.customerUsername.replace(/\.arc$/i, '')}.arc` : ''
                   return (
-                    <button key={i.id} onClick={() => setOpen(i)}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left',
-                        borderTop: k ? '1px solid var(--border)' : 'none', color: 'var(--text-primary)' }}>
-                      <span style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: `color-mix(in srgb, ${tint} 12%, transparent)` }}>
-                        <Icon size={17} color={tint} />
-                      </span>
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {orderTitle(orderKindOf(i), orderLabel(i))}{who}
-                        </span>
-                        <span style={{ display: 'block', fontSize: 11.5, marginTop: 2, color: line.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {line.text}
-                        </span>
-                      </span>
-                      <span style={{ fontSize: 14, fontWeight: 700, flexShrink: 0, color: bucket === 'paid' ? 'var(--success)' : bucket === 'closed' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
+                    <HistoryRow key={i.id} flash={i.id === listFlash.flashId}
+                      onClick={() => { listFlash.opened(); setOpen(i) }}
+                      icon={<HistoryIcon tone={bucket === 'paid' ? 'in' : bucket === 'closed' ? 'muted' : st === 'partially_paid' ? 'out' : 'pending'} icon="receive" />}
+                      title={`${orderTitle(orderKindOf(i), orderLabel(i))}${who}`}
+                      meta={<span style={{ color: line.color }}>{line.text}</span>}
+                      right={<div style={{ fontSize: 14, fontWeight: 700, color: bucket === 'paid' ? 'var(--success)' : bucket === 'closed' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
                         {bucket === 'paid' ? '+' : ''}${formatAmount(bucket === 'paid' ? (i.received || i.amount) : i.amount)}
-                      </span>
-                    </button>
+                      </div>} />
                   )
                 })}
               </div>

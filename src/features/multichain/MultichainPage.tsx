@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import { ActionIcon } from '@/components/ui/ActionIcon'
+import { HistoryIcon } from '@/components/ui/HistoryRow'
 import { CHAIN_LOGO_FILE, chainLogoSrc } from '@/lib/chainLogos'
 import { RecoveryPanel } from './MultichainRecoveryPage'
 // Transfer and claim forms render inline under the Hub's tabs (no page change).
@@ -1094,29 +1094,12 @@ export function MultichainPage() {
                     }
                   }}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px',
+                    display: 'flex', alignItems: 'center', gap: 12, padding: inPanel ? '11px 16px' : '11px 4px',
                     cursor: 'pointer',
                   }}>
-                  {/* Icon - status-based, static (no animation). Processing
-                      Claims is the only place with a live spinner; Activity
-                      just reflects current state at a glance. */}
-                  <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-                    background: isRecovery ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : isFailed ? 'color-mix(in srgb, var(--danger) 10%, transparent)' : isPending ? 'color-mix(in srgb, var(--warning) 10%, transparent)' : isClaim ? 'color-mix(in srgb, var(--success) 10%, transparent)' : 'color-mix(in srgb, var(--brand) 10%, transparent)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {/* Same icon family as the action buttons and Activity. */}
-                    {isPending || isRecovery ? (
-                      <ActionIcon name="clock" size={18} color="var(--warning)" />
-                    ) : isFailed ? (
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <circle cx="8" cy="8" r="6.2" stroke="var(--danger)" strokeWidth="1.4"/>
-                        <path d="M6.2 6.2l3.6 3.6M9.8 6.2l-3.6 3.6" stroke="var(--danger)" strokeWidth="1.4" strokeLinecap="round"/>
-                      </svg>
-                    ) : isClaim ? (
-                      <ActionIcon name="receive" size={18} color="var(--success)" />
-                    ) : (
-                      <ActionIcon name="hub" size={18} color="var(--brand-text)" />
-                    )}
-                  </div>
+                  {/* Same icon as Activity: a spinning ring while it's processing. */}
+                  <HistoryIcon tone={isRecovery ? 'attention' : isFailed ? 'failed' : isPending ? 'pending' : isClaim ? 'in' : 'out'}
+                    icon={isClaim ? 'receive' : 'hub'} />
 
                   {/* Details */}
                   <div style={{ flex: 1, minWidth: 0 }}>

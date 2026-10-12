@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
-import { Gift, Star, Info, X } from 'lucide-react'
+import { Info } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import {
   fetchUserPoints, claimPointsAsUSDC, fetchClaimsHistory, fetchPointHistory,
@@ -12,6 +12,9 @@ import { timeAgo, formatAmount } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { AmountField } from '@/components/ui/AmountField'
+import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
+import type { ActionIconName } from '@/components/ui/ActionIcon'
+import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { P2PSheet } from '@/features/p2p/p2pUi'
 import { PopupOpen } from '@/hooks/usePopupOpen'
@@ -53,12 +56,12 @@ function claimColor(v: ClaimView): string {
 
 // The five actions that earn points once a day each (rewards.ts
 // REWARD_ACTION_TYPES; the point row's reason is `tx_reward:<type>`).
-const TASKS: { type: string; icon: string; label: string; done: string; path: string }[] = [
-  { type: 'pay_send', icon: '💸', label: 'Send a payment', done: 'Payment sent', path: '/pay-send' },
-  { type: 'swap', icon: '🔄', label: 'Make a swap', done: 'Swap made', path: '/swap' },
-  { type: 'chatpay', icon: '💬', label: 'Pay in chat', done: 'Paid in chat', path: '/chat' },
-  { type: 'multichain_transfer', icon: '🌐', label: 'Multichain transfer', done: 'Multichain transfer', path: '/multichain' },
-  { type: 'bulkpay', icon: '📦', label: 'Bulk payment', done: 'Bulk payment sent', path: '/bulk-payout' },
+const TASKS: { type: string; icon: string; action: ActionIconName; label: string; done: string; path: string }[] = [
+  { type: 'pay_send', icon: '💸', action: 'pay', label: 'Send a payment', done: 'Payment sent', path: '/pay-send' },
+  { type: 'swap', icon: '🔄', action: 'swap', label: 'Make a swap', done: 'Swap made', path: '/swap' },
+  { type: 'chatpay', icon: '💬', action: 'pay', label: 'Pay in chat', done: 'Paid in chat', path: '/chat' },
+  { type: 'multichain_transfer', icon: '🌐', action: 'hub', label: 'Multichain transfer', done: 'Multichain transfer', path: '/multichain' },
+  { type: 'bulkpay', icon: '📦', action: 'bulk', label: 'Bulk payment', done: 'Bulk payment sent', path: '/bulk-payout' },
 ]
 const taskOf = (reason: string) => TASKS.find(t => reason === `tx_reward:${t.type}`)
 
@@ -240,6 +243,7 @@ export function RewardsPage() {
   const [claimsHistory, setClaimsHistory]   = useState<ClaimRecord[]>([])
   // Tapping a claimed reward opens its receipt.
   const [claimReceipt, setClaimReceipt] = useState<ClaimRecord | null>(null)
+  const claimFlash = useReturnFlash()
   const [pointHistory, setPointHistory]     = useState<PointRecord[]>([])
   const [dailyClaimedPoints, setDailyClaimedPoints] = useState(0)
   const [showEarnInfo, setShowEarnInfo] = useState(false)
@@ -447,16 +451,11 @@ export function RewardsPage() {
     ) : earnedRows.map(p => {
       const t = taskOf(p.reason)
       return (
-        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isDesktop ? '10px 16px' : '10px 18px' }}>
-          <div style={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0, background: 'color-mix(in srgb, var(--brand) 16%, transparent)' }}>
-            {t ? t.icon : <Star className="w-4 h-4 text-brand-text" />}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <b style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>{t ? t.done : 'Points earned'}</b>
-            <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{timeAgo(p.created_at)}</span>
-          </div>
-          <b style={{ fontSize: 13.5, color: 'var(--brand-text)' }}>+{p.points} pts</b>
-        </div>
+        <HistoryRow key={p.id} inPanel={isDesktop}
+          icon={<HistoryIcon tone="out" icon={t ? t.action : 'rewards'} />}
+          title={t ? t.done : 'Points earned'}
+          meta={<><span style={{ color: 'var(--success)', fontWeight: 600 }}>Earned</span> · {timeAgo(p.created_at)}</>}
+          right={<div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>+{p.points} pts</div>} />
       )
     })
   ) : (
@@ -465,19 +464,15 @@ export function RewardsPage() {
     ) : claimsHistory.map(claim => {
       const v = claimView(claim.status, claim.created_at); const c = claimColor(v)
       return (
-        <div key={claim.id} role="button" onClick={() => setClaimReceipt(claim)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isDesktop ? '10px 16px' : '10px 18px', cursor: 'pointer' }}>
-          <div style={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: `color-mix(in srgb, ${c} 15%, transparent)` }}>
-            {v === 'failed' ? <X className="w-4 h-4 text-danger" /> : <Gift className="w-4 h-4" style={{ color: c }} />}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <b style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: v === 'failed' ? 'var(--danger)' : 'var(--text-primary)' }}>{claimLabel(v)}</b>
-            <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{timeAgo(claim.created_at)}</span>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <b style={{ display: 'block', fontSize: 13.5, color: c, textDecoration: v === 'failed' ? 'line-through' : 'none' }}>{v === 'success' ? '+' : ''}${formatAmount(claim.usdc_received)}</b>
-            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{v === 'success' ? `−${claim.points_claimed.toLocaleString()} pts` : v === 'failed' ? 'Points kept' : 'Processing'}</span>
-          </div>
-        </div>
+        <HistoryRow key={claim.id} inPanel={isDesktop} flash={claim.id === claimFlash.flashId}
+          onClick={() => { claimFlash.opened(); setClaimReceipt(claim) }}
+          icon={<HistoryIcon tone={v === 'failed' ? 'failed' : v === 'pending' ? 'pending' : 'in'} icon="rewards" />}
+          title={claimLabel(v)}
+          meta={<><span style={{ color: c, fontWeight: 600 }}>{v === 'success' ? 'Completed' : v === 'failed' ? 'Failed · points kept' : 'Processing'}</span> · {timeAgo(claim.created_at)}</>}
+          right={<>
+            <div style={{ fontSize: 14, fontWeight: 700, color: c, textDecoration: v === 'failed' ? 'line-through' : 'none' }}>{v === 'success' ? '+' : ''}${formatAmount(claim.usdc_received)}</div>
+            {v === 'success' && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>−{claim.points_claimed.toLocaleString()} pts</div>}
+          </>} />
       )
     })
   )
@@ -558,7 +553,7 @@ export function RewardsPage() {
 
   const overlays = (
     <>
-      {claimReceipt && <RewardClaimReceipt claim={claimReceipt} onClose={() => setClaimReceipt(null)} />}
+      {claimReceipt && <RewardClaimReceipt claim={claimReceipt} onClose={() => { claimFlash.closed(claimReceipt.id); setClaimReceipt(null) }} />}
       {howItWorks}
       {sheet}
       <AnimatePresence>
