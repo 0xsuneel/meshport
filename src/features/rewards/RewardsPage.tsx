@@ -1,17 +1,20 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
-import {Gift, Star, CheckCircle, Loader2, Lock, ExternalLink, Info, X} from 'lucide-react'
-import { Card } from '@/components/ui/Card'
-import {useAuthStore} from '@/store'
+import { Gift, Star, Info, X } from 'lucide-react'
+import { useAuthStore } from '@/store'
 import {
   fetchUserPoints, claimPointsAsUSDC, fetchClaimsHistory, fetchPointHistory,
   fetchDailyClaimedPoints, getDailyClaimedOnChain, pointsToUSDC, MIN_CLAIM_POINTS, MAX_CLAIM_POINTS, POINTS_PER_TX, MAX_DAILY_POINTS, MAX_DAILY_EARN_POINTS,
 } from '@/lib/rewards'
 import { timeAgo, formatAmount } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton } from '@/components/ui/DesktopHistoryPanel'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { AmountField } from '@/components/ui/AmountField'
+import { MeshLoader } from '@/components/ui/MeshLoader'
+import { P2PSheet } from '@/features/p2p/p2pUi'
+import { PopupOpen } from '@/hooks/usePopupOpen'
 
 interface ClaimRecord {
   id: string; points_claimed: number; usdc_received: number
@@ -42,11 +45,22 @@ function claimView(status: string | null | undefined, createdAt?: string | null)
   return 'failed'
 }
 function claimLabel(v: ClaimView): string {
-  return v === 'success' ? 'Reward Claimed' : v === 'failed' ? 'Reward Claim Failed' : 'Claim Processing…'
+  return v === 'success' ? 'Reward claimed' : v === 'failed' ? 'Claim failed' : 'Claim processing…'
 }
 function claimColor(v: ClaimView): string {
   return v === 'success' ? 'var(--success)' : v === 'failed' ? 'var(--danger)' : 'var(--text-secondary)'
 }
+
+// The five actions that earn points once a day each (rewards.ts
+// REWARD_ACTION_TYPES; the point row's reason is `tx_reward:<type>`).
+const TASKS: { type: string; icon: string; label: string; done: string; path: string }[] = [
+  { type: 'pay_send', icon: '💸', label: 'Send a payment', done: 'Payment sent', path: '/pay-send' },
+  { type: 'swap', icon: '🔄', label: 'Make a swap', done: 'Swap made', path: '/swap' },
+  { type: 'chatpay', icon: '💬', label: 'Pay in chat', done: 'Paid in chat', path: '/chat' },
+  { type: 'multichain_transfer', icon: '🌐', label: 'Multichain transfer', done: 'Multichain transfer', path: '/multichain' },
+  { type: 'bulkpay', icon: '📦', label: 'Bulk payment', done: 'Bulk payment sent', path: '/bulk-payout' },
+]
+const taskOf = (reason: string) => TASKS.find(t => reason === `tx_reward:${t.type}`)
 
 // A claimed reward reopened as the receiver's receipt: points in, USDC out
 // to this wallet on Arc.
@@ -80,6 +94,139 @@ function RewardClaimReceipt({ claim, onClose }: { claim: ClaimRecord; onClose: (
   )
 }
 
+// ── Claim progress: MeshPort's logo while it runs, a check that travels down
+// the steps as each REALLY finishes (rewards.ts onStep), then a drawn check.
+type StepKey = 'check' | 'approve' | 'send'
+const STEPS: { key: StepKey; label: string }[] = [
+  { key: 'check', label: 'Checking your points' },
+  { key: 'approve', label: 'Approving your reward' },
+  { key: 'send', label: 'Sending USDC on Arc' },
+]
+const STEP_H = 40
+const CLAIM_PROGRESS_CSS = `
+@keyframes rwOkIn{0%{transform:scale(0)}70%{transform:scale(1.08)}100%{transform:scale(1)}}
+@keyframes rwDraw{from{stroke-dashoffset:60}to{stroke-dashoffset:0}}
+@keyframes rwFade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes rwTickIn{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.rw-ok{animation:rwOkIn .45s cubic-bezier(.32,.72,0,1) both}
+.rw-ok path{stroke-dasharray:60;stroke-dashoffset:60;animation:rwDraw .45s .25s ease-out forwards}
+.rw-fade{animation:rwFade .35s .2s ease-out both}
+.rw-tick{animation:rwTickIn .25s ease-out both}
+.rw-trav{transition:transform .55s cubic-bezier(.32,.72,0,1)}
+@media (prefers-reduced-motion: reduce){.rw-ok,.rw-ok path,.rw-fade,.rw-tick{animation:none;stroke-dashoffset:0}.rw-trav{transition:none}}
+`
+export interface ClaimProgress {
+  points: number; usdc: number
+  done: StepKey[]; times: Partial<Record<StepKey, number>>
+  phase: 'running' | 'success' | 'failed'
+  error?: string; txHash?: string | null; usdcReceived?: number
+}
+
+function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgress; balanceLeft: number; onClose: () => void; onRetry: () => void }) {
+  const doneIdx = p.done.length // steps finished
+  const failedIdx = p.phase === 'failed' ? Math.min(doneIdx, STEPS.length - 1) : -1
+  const travIdx = Math.min(doneIdx, STEPS.length - 1)
+  const ok = p.phase === 'success'
+  const dim = 'color-mix(in srgb, var(--text-primary) 45%, transparent)'
+  return (
+    <>
+      <PopupOpen />
+      <style>{CLAIM_PROGRESS_CSS}</style>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 22 }}>
+        <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }} transition={{ duration: 0.22 }}
+          role="dialog" aria-live="polite" aria-label="Claiming reward"
+          style={{ width: '100%', maxWidth: 380, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 26, padding: '26px 22px 22px', textAlign: 'center', boxShadow: 'var(--shadow-3)' }}>
+          {/* Logo → result */}
+          <div style={{ position: 'relative', width: 96, height: 96, margin: '0 auto' }}>
+            {p.phase === 'running' && <div style={{ position: 'absolute', inset: 8 }}><MeshLoader size={80} label="Claiming" /></div>}
+            {ok && (
+              <div className="rw-ok" style={{ position: 'absolute', inset: 6, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 0 12px color-mix(in srgb, var(--success) 14%, transparent)' }}>
+                <svg viewBox="0 0 84 84" style={{ position: 'absolute', inset: 0 }}><path d="M25 43 L37 55 L60 31" stroke="#fff" strokeWidth={7} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </div>
+            )}
+            {p.phase === 'failed' && (
+              <div className="rw-ok" style={{ position: 'absolute', inset: 6, borderRadius: '50%', background: 'var(--danger)', color: '#fff', fontSize: 38, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 12px color-mix(in srgb, var(--danger) 14%, transparent)' }}>!</div>
+            )}
+          </div>
+          <div style={{ marginTop: 14 }}>
+            {p.phase === 'running' && <>
+              <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)' }}>${formatAmount(p.usdc)} USDC</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 4 }}>Claiming {p.points.toLocaleString()} pts to your wallet</div>
+            </>}
+            {ok && <div className="rw-fade">
+              <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--success)' }}>+${formatAmount(p.usdcReceived ?? p.usdc)} USDC</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 4 }}>Sent to your MeshPort wallet</div>
+            </div>}
+            {p.phase === 'failed' && <div className="rw-fade">
+              <div style={{ fontSize: 21, fontWeight: 800, color: 'var(--text-primary)' }}>Claim didn't go through</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 4 }}>Your {p.points.toLocaleString()} pts were not deducted.</div>
+            </div>}
+          </div>
+
+          {/* Steps with the travelling check */}
+          <div style={{ position: 'relative', textAlign: 'left', margin: '18px 0 0' }}>
+            <div style={{ position: 'absolute', left: 13, top: 12, width: 2, height: STEP_H * (STEPS.length - 1), background: 'var(--border)' }} />
+            <div style={{ position: 'absolute', left: 13, top: 12, width: 2, height: STEP_H * Math.min(doneIdx, STEPS.length - 1), background: 'var(--success)', transition: 'height .55s cubic-bezier(.32,.72,0,1)' }} />
+            {p.phase === 'running' && (
+              <div className="rw-trav" aria-hidden style={{ position: 'absolute', left: 0, top: 6, width: 28, height: 28, borderRadius: '50%', zIndex: 3, transform: `translateY(${travIdx * STEP_H}px)`,
+                background: 'var(--success)', color: '#fff', fontWeight: 900, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 0 5px color-mix(in srgb, var(--success) 22%, transparent), 0 4px 14px color-mix(in srgb, var(--success) 45%, transparent)' }}>✓</div>
+            )}
+            {STEPS.map((s, i) => {
+              const isDone = i < doneIdx
+              const isFailed = i === failedIdx
+              const t = p.times[s.key]
+              return (
+                <div key={s.key} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, height: STEP_H, fontSize: 13.5 }}>
+                  <span style={{ width: 28, display: 'flex', justifyContent: 'center', flexShrink: 0, position: 'relative', zIndex: 2 }}>
+                    {isDone ? (
+                      <span className="rw-tick" style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--success)', color: '#fff', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</span>
+                    ) : isFailed ? (
+                      <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--danger)', color: '#fff', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</span>
+                    ) : (
+                      <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--surface)', border: '2px solid var(--border)' }} />
+                    )}
+                  </span>
+                  <span style={{ color: isFailed ? 'var(--danger)' : isDone || i === doneIdx ? 'var(--text-primary)' : dim, fontWeight: i === doneIdx && p.phase === 'running' ? 600 : 500 }}>{s.label}</span>
+                  {isDone && t != null && <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--text-secondary)' }}>{t < 1000 ? `${(t / 1000).toFixed(1)}s` : `${(t / 1000).toFixed(1)}s`}</span>}
+                </div>
+              )
+            })}
+          </div>
+
+          {p.phase === 'running' && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 14 }}>Keep the app open - this takes a few seconds</div>}
+          {ok && (
+            <div className="rw-fade">
+              <div style={{ textAlign: 'left', marginTop: 14, padding: '8px 12px', borderRadius: 14, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
+                <Line k="Points used" v={`${p.points.toLocaleString()} pts`} />
+                <Line k="Balance left" v={`${balanceLeft.toLocaleString()} pts`} />
+                {p.txHash && <Line k="Transaction" v={<a href={arcExplorerTxUrl(p.txHash)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-text)', textDecoration: 'none' }}>{p.txHash.slice(0, 6)}…{p.txHash.slice(-4)} ↗</a>} />}
+              </div>
+              <button onClick={onClose} style={{ width: '100%', border: 'none', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', marginTop: 16, cursor: 'pointer' }}>Done</button>
+            </div>
+          )}
+          {p.phase === 'failed' && (
+            <div className="rw-fade">
+              {p.error && <div role="alert" style={{ textAlign: 'left', marginTop: 14, padding: '10px 12px', borderRadius: 14, fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>{p.error}</div>}
+              <button onClick={onRetry} style={{ width: '100%', border: 'none', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', marginTop: 16, cursor: 'pointer' }}>Try again</button>
+              <button onClick={onClose} style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 14, padding: 13, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', background: 'transparent', marginTop: 8, cursor: 'pointer' }}>Close</button>
+            </div>
+          )}
+        </motion.div>
+      </motion.div>
+    </>
+  )
+}
+
+function Line({ k, v }: { k: string; v: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12.5, padding: '5px 0' }}>
+      <span style={{ color: 'var(--text-secondary)' }}>{k}</span><b style={{ color: 'var(--text-primary)', fontWeight: 600, textAlign: 'right' }}>{v}</b>
+    </div>
+  )
+}
+
 export function RewardsPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const user = useAuthStore(s => s.user)
@@ -99,9 +246,12 @@ export function RewardsPage() {
   const [loading, setLoading]               = useState(true)
   const [claiming, setClaiming]             = useState(false)
   const [claimError, setClaimError]         = useState<string | null>(null)
-  const [claimSuccess, setClaimSuccess]     = useState<{ usdcReceived: number; txHash: string | null } | null>(null)
   // claimPoints: how many points user wants to claim - defaults to all
   const [claimPoints, setClaimPoints]       = useState<number>(0)
+  const [claimInput, setClaimInput]         = useState('')
+  const [showClaimSheet, setShowClaimSheet] = useState(false)
+  const [progress, setProgress]             = useState<ClaimProgress | null>(null)
+  const [historyTab, setHistoryTab]         = useState<'earned' | 'claimed'>('earned')
 
   const userId = user?.id && !user.id.startsWith('usr_')
     ? user.id
@@ -118,7 +268,7 @@ export function RewardsPage() {
       walletAddress ? getDailyClaimedOnChain(walletAddress) : Promise.resolve(0),
     ])
     // The contract's own daily counter is the real source of truth for the
-    // 200/day cap - it's independent of Supabase's reward_claims bookkeeping,
+    // 1000/day cap - it's independent of Supabase's reward_claims bookkeeping,
     // which only counts claims THIS app saw succeed end-to-end. A claim that
     // landed on-chain but whose DB update step failed would undercount here,
     // showing a claim option that's guaranteed to fail again. Taking the max
@@ -129,9 +279,9 @@ export function RewardsPage() {
     setClaimsHistory(claims as ClaimRecord[])
     setPointHistory(history as PointRecord[])
     setDailyClaimedPoints(dailyClaimed)
-    // Cap to what's both available AND within daily limit AND the new
-    // per-claim ceiling (MAX_CLAIM_POINTS - a single claim transaction can
-    // never redeem more than this, independent of balance or daily limit).
+    // Cap to what's both available AND within daily limit AND the per-claim
+    // ceiling (MAX_CLAIM_POINTS - a single claim transaction can never redeem
+    // more than this, independent of balance or daily limit).
     const dailyRemaining = Math.max(0, MAX_DAILY_POINTS - dailyClaimed)
     const maxClaimable = Math.min(pts.totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
     setClaimPoints(maxClaimable >= MIN_CLAIM_POINTS ? maxClaimable : MIN_CLAIM_POINTS)
@@ -139,6 +289,21 @@ export function RewardsPage() {
   }, [userId, walletAddress])
 
   useEffect(() => { load() }, [load])
+
+  const dailyRemaining = Math.max(0, MAX_DAILY_POINTS - dailyClaimedPoints)
+  const maxClaimable = Math.min(totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
+  const effectiveClaimPoints = Math.max(0, Math.min(claimPoints, maxClaimable))
+  const claimableUSDC = pointsToUSDC(effectiveClaimPoints)
+  const dailyCapHit = totalPoints >= MIN_CLAIM_POINTS && dailyRemaining < MIN_CLAIM_POINTS && dailyClaimedPoints > 0
+  const canOpenClaim = !!userId && !!walletAddress && maxClaimable >= MIN_CLAIM_POINTS && !loading
+  const typedPoints = parseInt(claimInput || '0', 10) || 0
+  const claimOk = typedPoints >= MIN_CLAIM_POINTS && typedPoints <= maxClaimable
+
+  const openClaim = () => {
+    setClaimError(null)
+    setClaimInput(String(maxClaimable))
+    setShowClaimSheet(true)
+  }
 
   const handleClaim = async () => {
     setClaimError(null)
@@ -155,19 +320,20 @@ export function RewardsPage() {
         activePrivateKey = useAuthStore.getState().privateKey
       } catch (e) { console.error('[Rewards] restore key failed:', e) }
     }
-    if (!activePrivateKey) {
-      { useAuthStore.getState().lock(); window.location.href = '/auth/lock'; return }
-      return
-    }
+    if (!activePrivateKey) { useAuthStore.getState().lock(); window.location.href = '/auth/lock'; return }
 
-    const pointsToUse = Math.min(claimPoints, totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
+    const pointsToUse = Math.min(typedPoints, totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
     if (pointsToUse < MIN_CLAIM_POINTS) {
       setClaimError(`Select at least ${MIN_CLAIM_POINTS} points${dailyRemaining < MIN_CLAIM_POINTS ? ` (daily limit: ${dailyRemaining} pts remaining today)` : ''}`)
       return
     }
 
+    setShowClaimSheet(false)
     setClaiming(true)
-    setClaimSuccess(null)
+    const started = Date.now()
+    let last = started
+    setClaimPoints(pointsToUse)
+    setProgress({ points: pointsToUse, usdc: pointsToUSDC(pointsToUse), done: [], times: {}, phase: 'running' })
 
     const result = await claimPointsAsUSDC({
       userId,
@@ -175,443 +341,273 @@ export function RewardsPage() {
       walletAddress,
       privateKey: activePrivateKey,
       points: pointsToUse,
+      onStep: s => {
+        const now = Date.now(), took = now - last
+        last = now
+        setProgress(p => p && p.phase === 'running' && !p.done.includes(s) ? { ...p, done: [...p.done, s], times: { ...p.times, [s]: took } } : p)
+      },
     })
 
     if (result.error) {
-      setClaimError(result.error)
+      setProgress(p => p ? { ...p, phase: 'failed', error: result.error ?? undefined } : p)
       setClaiming(false)
       return
     }
-
-    setClaimSuccess({ usdcReceived: result.usdcReceived, txHash: result.txHash })
+    // Let the travelling check land on the last step before the result.
+    await new Promise(r => setTimeout(r, Math.max(0, 650 - (Date.now() - last))))
+    setProgress(p => p ? { ...p, done: ['check', 'approve', 'send'], phase: 'success', txHash: result.txHash, usdcReceived: result.usdcReceived } : p)
     setTotalPoints(prev => Math.max(0, prev - pointsToUse))
-
-    // Reward claim tracked in Supabase reward_claims - shown in Rewards page only
-
     await load()
+    setHistoryTab('claimed')
     setClaiming(false)
   }
 
-  const dailyRemaining = Math.max(0, MAX_DAILY_POINTS - dailyClaimedPoints)
-  // MAX_CLAIM_POINTS: new per-claim ceiling (2026-09-17) - independent of
-  // both balance and the on-chain daily limit, see rewards.ts's own comment.
-  const maxClaimable = Math.min(totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
-  const canClaim = maxClaimable >= MIN_CLAIM_POINTS && !!userId && !!walletAddress && !claiming && !loading
-  const effectiveClaimPoints = Math.min(claimPoints, maxClaimable)
-  const claimableUSDC = pointsToUSDC(effectiveClaimPoints)
-  // Slider only useful when maxClaimable > MIN_CLAIM_POINTS
-  const showSlider = maxClaimable > MIN_CLAIM_POINTS
-  const dailyCapHit = totalPoints >= MIN_CLAIM_POINTS && dailyRemaining < MIN_CLAIM_POINTS && dailyClaimedPoints > 0
-
-  // Points balance card content - held in a variable so it renders
-  // identically whether it's the top of the single mobile column or the
-  // top of the desktop left column, never duplicated.
-  const pointsCardBody = (
-    <>
-      <div className="w-16 h-16 bg-brand/20 rounded-full flex items-center justify-center mx-auto mb-3">
-        <Star className="w-8 h-8 text-brand-text" />
-      </div>
-      {loading ? (
-        <Loader2 className="w-8 h-8 text-brand-text animate-spin mx-auto" />
-      ) : (
-        <>
-          <p className="text-4xl font-bold text-text-primary">{totalPoints.toLocaleString()}</p>
-          <p className="text-sm text-text-secondary mt-1">MeshPort Points</p>
-          <p className="text-xs text-text-secondary mt-1">
-            {lifetimePoints > 0 ? `${lifetimePoints} lifetime points earned` : 'Send payments to earn points'}
-          </p>
-          {totalPoints >= MIN_CLAIM_POINTS && (
-            <p className="text-xs text-success mt-2 font-medium">
-              ≈ ${formatAmount(pointsToUSDC(totalPoints))} USDC claimable
-            </p>
-          )}
-        </>
-      )}
-    </>
-  )
-
-  // Claim card content - same variable-not-duplicated reasoning, top of
-  // the single mobile column or top of the desktop right column.
-  const claimCardBody = (
-    <>
-      {!userId ? (
-        <div className="flex items-center gap-3 py-2">
-          <Lock className="w-5 h-5 text-text-secondary" />
-          <p className="text-sm text-text-secondary">Login to claim rewards</p>
-        </div>
-
-      ) : totalPoints < MIN_CLAIM_POINTS ? (
-        <div className="text-center py-3 space-y-2">
-          <p className="text-sm text-text-secondary">
-            You need <span className="text-text-primary font-semibold">{MIN_CLAIM_POINTS} points</span> to claim
-          </p>
-          <p className="text-xs text-text-muted">
-            You have {totalPoints} pts - {MIN_CLAIM_POINTS - totalPoints} more needed
-          </p>
-          <div className="w-full bg-surface rounded-full h-2">
-            <div className="bg-brand h-2 rounded-full transition-all"
-              style={{ width: `${Math.min(100, (totalPoints / MIN_CLAIM_POINTS) * 100)}%` }} />
-          </div>
-        </div>
-
-      ) : dailyCapHit ? (
-        <div className="text-center py-3 space-y-2">
-          <p className="text-sm text-warning font-medium">Daily claim limit reached</p>
-          <p className="text-xs text-text-secondary">
-            You've claimed {dailyClaimedPoints}/{MAX_DAILY_POINTS} points today.
-            Your {totalPoints} pts will be claimable again tomorrow.
-          </p>
-        </div>
-
-      ) : (
-        <>
-          {/* Amount row */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-text-secondary">You will receive</span>
-            <span className="text-lg font-bold text-success">${formatAmount(claimableUSDC)} USDC</span>
-          </div>
-
-          {/* Points selector */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-text-secondary">
-              <span>{effectiveClaimPoints} pts selected</span>
-              <button
-                onClick={() => setClaimPoints(maxClaimable)}
-                className="font-bold text-brand-text bg-brand/15 border border-brand/40 px-3 py-1.5 rounded-lg text-xs active:scale-95 transition-transform">
-                MAX - {maxClaimable} pts
-              </button>
-            </div>
-
-            {/* Only show slider when there's a range to select */}
-            {showSlider && (
-              <input
-                type="range"
-                min={MIN_CLAIM_POINTS}
-                max={maxClaimable}
-                value={effectiveClaimPoints}
-                onChange={e => setClaimPoints(Number(e.target.value))}
-                className="w-full h-2 accent-brand cursor-pointer"
-              />
-            )}
-
-            {/* Number input - always visible */}
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={MIN_CLAIM_POINTS}
-                max={maxClaimable}
-                value={effectiveClaimPoints}
-                onChange={e => {
-                  const v = parseInt(e.target.value) || MIN_CLAIM_POINTS
-                  setClaimPoints(Math.max(MIN_CLAIM_POINTS, Math.min(maxClaimable, v)))
-                }}
-                className="flex-1 bg-surface border border-border rounded-xl px-3 py-2 text-text-primary text-sm text-center focus:outline-none focus:border-brand"
-              />
-              <span className="text-xs text-text-secondary">pts</span>
-            </div>
-          </div>
-
-          {dailyRemaining < totalPoints && (
-            <p className="text-xs text-warning/70 text-center">
-              Daily limit: {dailyClaimedPoints}/{MAX_DAILY_POINTS} pts claimed today
-            </p>
-          )}
-
-          {/* Claim button */}
-          <button
-            onClick={handleClaim}
-            disabled={!canClaim}
-            className={`w-full py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-              canClaim
-                ? 'bg-brand text-white border border-black/10 active:scale-95'
-                : 'bg-[rgb(var(--text-primary-rgb)/0.05)] text-text-muted cursor-not-allowed'
-            }`}>
-            {claiming
-              ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
-              : `Claim ${effectiveClaimPoints} pts → $${formatAmount(claimableUSDC)} USDC`}
-          </button>
-        </>
-      )}
-
-      {/* Success */}
-      {claimSuccess && (
-        <div className="p-3 bg-success/10 border border-success/30 rounded-2xl space-y-1">
-          <div className="flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-success" />
-            <p className="text-sm font-semibold text-success">
-              Claimed! +${formatAmount(claimSuccess.usdcReceived)} USDC sent to your wallet
-            </p>
-          </div>
-          {claimSuccess.txHash && (
-            <a href={arcExplorerTxUrl(claimSuccess.txHash)}
-              target="_blank" rel="noopener noreferrer"
-              className="text-xs text-brand-text flex items-center gap-1 ml-6">
-              <ExternalLink className="w-3 h-3" /> View on ArcScan
-            </a>
-          )}
-        </div>
-      )}
-
-      {/* Error */}
-      {claimError && (
-        <div role="alert" className="p-3 bg-danger/10 border border-danger/30 rounded-2xl">
-          <p className="text-sm text-danger font-medium">Could not claim</p>
-          <p className="text-xs text-danger/80 mt-0.5">{claimError}</p>
-        </div>
-      )}
-    </>
-  )
-
+  // Today's tasks (UTC day - the same boundary rewards.ts uses for earning).
+  const todayUtc = new Date().toISOString().slice(0, 10)
+  const doneToday = new Set(pointHistory.filter(p => p.points > 0 && p.created_at.slice(0, 10) === todayUtc).map(p => p.reason))
+  const earnedToday = TASKS.filter(t => doneToday.has(`tx_reward:${t.type}`)).length * POINTS_PER_TX
   const earnedRows = pointHistory.filter(p => p.points > 0)
+  const newUser = !loading && totalPoints < MIN_CLAIM_POINTS && claimsHistory.length === 0
+
+  // ── Pieces ─────────────────────────────────────────────────────────────
+  const hero = newUser ? (
+    // First claim not reached yet: progress ring to 100 pts.
+    <div style={{ textAlign: 'center', padding: '6px 16px 0' }}>
+      <div style={{ width: 150, height: 150, borderRadius: '50%', margin: '0 auto',
+        background: `conic-gradient(var(--success) 0 ${Math.min(100, (totalPoints / MIN_CLAIM_POINTS) * 100)}%, color-mix(in srgb, var(--text-primary) 7%, transparent) 0 100%)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 124, height: 124, borderRadius: '50%', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+          <b style={{ fontSize: 28, color: 'var(--text-primary)' }}>{totalPoints}</b>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>of {MIN_CLAIM_POINTS} pts</span>
+        </div>
+      </div>
+      <p style={{ fontSize: 14, margin: '12px 0 0', color: 'var(--text-primary)' }}><b>{MIN_CLAIM_POINTS - totalPoints} more points</b> to your first USDC claim</p>
+      <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+        Each task below earns +{POINTS_PER_TX} pts once a day · {MIN_CLAIM_POINTS} pts = ${formatAmount(pointsToUSDC(MIN_CLAIM_POINTS))} USDC
+      </p>
+    </div>
+  ) : (
+    <div style={{ margin: isDesktop ? 0 : '0 16px', borderRadius: 22, padding: 18, color: '#fff', position: 'relative', overflow: 'hidden',
+      background: 'radial-gradient(120% 140% at 100% 0%, #2FB5A7 0%, #12665F 45%, #0B3F3B 100%)', boxShadow: isDesktop ? 'var(--shadow-1)' : undefined }}>
+      <div aria-hidden style={{ position: 'absolute', right: -12, top: -18, width: 86, height: 86, borderRadius: '50%',
+        background: 'radial-gradient(circle at 35% 35%, #FFE7A3, #F5A524 60%, #B8730B)', opacity: 0.9, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 34, fontWeight: 900, color: '#7a4b06', boxShadow: 'inset -6px -8px 0 rgba(0,0,0,.12)' }}>P</div>
+      <div style={{ fontSize: 12.5, opacity: 0.85 }}>Points balance</div>
+      <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.5px', marginTop: 2 }}>
+        {loading ? '…' : totalPoints.toLocaleString()} <span style={{ fontSize: 15, fontWeight: 600, opacity: 0.85 }}>pts</span>
+      </div>
+      <div style={{ fontSize: 13, opacity: 0.9, marginTop: 2 }}>
+        ≈ ${formatAmount(pointsToUSDC(totalPoints))} USDC{lifetimePoints > 0 ? ` · ${lifetimePoints.toLocaleString()} earned all-time` : ''}
+      </div>
+      <button onClick={openClaim} disabled={!canOpenClaim || claiming}
+        style={{ width: '100%', marginTop: 14, padding: '11px 0', borderRadius: 12, border: 'none', background: '#fff', color: '#0B3F3B', fontSize: 14.5, fontWeight: 800,
+          cursor: canOpenClaim ? 'pointer' : 'default', opacity: canOpenClaim && !claiming ? 1 : 0.6 }}>
+        {claiming ? 'Claiming…' : dailyCapHit ? 'Daily claim limit reached' : 'Claim USDC'}
+      </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, opacity: 0.85, marginTop: 10, gap: 8 }}>
+        <span>Claimed today {dailyClaimedPoints.toLocaleString()} / {MAX_DAILY_POINTS.toLocaleString()} pts</span>
+        <span>1,000 pts = ${formatAmount(pointsToUSDC(1000))}</span>
+      </div>
+    </div>
+  )
+
+  const tasks = (
+    <div>
+      <div style={{ padding: isDesktop ? '0 2px 6px' : '18px 18px 6px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <b style={{ fontSize: 15, color: 'var(--text-primary)' }}>Today's tasks</b>
+        <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>{earnedToday} / {MAX_DAILY_EARN_POINTS} pts</span>
+      </div>
+      <div style={{ margin: isDesktop ? '4px 2px 8px' : '4px 18px 8px', height: 6, borderRadius: 999, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${(earnedToday / MAX_DAILY_EARN_POINTS) * 100}%`, background: 'linear-gradient(90deg, var(--success), #2FB5A7)', borderRadius: 999, transition: 'width .4s' }} />
+      </div>
+      {TASKS.map(t => {
+        const done = doneToday.has(`tx_reward:${t.type}`)
+        return (
+          <div key={t.type} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isDesktop ? '9px 2px' : '9px 18px' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', flexShrink: 0 }}>{t.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b style={{ display: 'block', fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 600 }}>{t.label}</b>
+              <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>+{POINTS_PER_TX} pts</span>
+            </div>
+            {done ? (
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--success)' }}>✓ Done</span>
+            ) : (
+              <button onClick={() => navigate(t.path)} style={{ fontSize: 12.5, fontWeight: 700, padding: '6px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
+                background: 'color-mix(in srgb, var(--brand) 16%, transparent)', color: 'var(--brand-text)' }}>Go</button>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  const historyRows = historyTab === 'earned' ? (
+    earnedRows.length === 0 ? (
+      <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px' }}>Points you earn will show here.</p>
+    ) : earnedRows.map(p => {
+      const t = taskOf(p.reason)
+      return (
+        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isDesktop ? '10px 16px' : '10px 18px' }}>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0, background: 'color-mix(in srgb, var(--brand) 16%, transparent)' }}>
+            {t ? t.icon : <Star className="w-4 h-4 text-brand-text" />}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <b style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>{t ? t.done : 'Points earned'}</b>
+            <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{timeAgo(p.created_at)}</span>
+          </div>
+          <b style={{ fontSize: 13.5, color: 'var(--brand-text)' }}>+{p.points} pts</b>
+        </div>
+      )
+    })
+  ) : (
+    claimsHistory.length === 0 ? (
+      <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px' }}>Your USDC claims will show here.</p>
+    ) : claimsHistory.map(claim => {
+      const v = claimView(claim.status, claim.created_at); const c = claimColor(v)
+      return (
+        <div key={claim.id} role="button" onClick={() => setClaimReceipt(claim)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isDesktop ? '10px 16px' : '10px 18px', cursor: 'pointer' }}>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: `color-mix(in srgb, ${c} 15%, transparent)` }}>
+            {v === 'failed' ? <X className="w-4 h-4 text-danger" /> : <Gift className="w-4 h-4" style={{ color: c }} />}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <b style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: v === 'failed' ? 'var(--danger)' : 'var(--text-primary)' }}>{claimLabel(v)}</b>
+            <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{timeAgo(claim.created_at)}</span>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <b style={{ display: 'block', fontSize: 13.5, color: c, textDecoration: v === 'failed' ? 'line-through' : 'none' }}>{v === 'success' ? '+' : ''}${formatAmount(claim.usdc_received)}</b>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{v === 'success' ? `−${claim.points_claimed.toLocaleString()} pts` : v === 'failed' ? 'Points kept' : 'Processing'}</span>
+          </div>
+        </div>
+      )
+    })
+  )
+
+  const history = (
+    <div style={isDesktop ? { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, boxShadow: 'var(--shadow-1)', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' } : undefined}>
+      <div style={{ display: 'flex', gap: 20, padding: isDesktop ? '12px 16px 0' : '14px 18px 0', borderBottom: '1px solid var(--border)', fontSize: 14 }}>
+        {(['earned', 'claimed'] as const).map(t => (
+          <button key={t} onClick={() => setHistoryTab(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 0 9px', fontSize: 14,
+            fontWeight: historyTab === t ? 700 : 500, color: historyTab === t ? 'var(--text-primary)' : 'var(--text-secondary)',
+            borderBottom: `2px solid ${historyTab === t ? 'var(--text-primary)' : 'transparent'}`, marginBottom: -1 }}>
+            {t === 'earned' ? 'Earned' : 'Claimed'}
+          </button>
+        ))}
+      </div>
+      <div style={isDesktop ? { overflowY: 'auto', flex: 1, minHeight: 0, padding: '4px 0' } : { padding: '4px 0 24px' }}>
+        {loading ? <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px' }}>Loading…</p> : historyRows}
+      </div>
+    </div>
+  )
+
+  // How it works - the earning and redeeming rules.
+  const howItWorks = (
+    <P2PSheet open={showEarnInfo} onClose={() => setShowEarnInfo(false)} title="How rewards work" id="rw-how">
+      <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 10px' }}>Each of these earns +{POINTS_PER_TX} pts, once per day (resets at 00:00 UTC):</p>
+      {TASKS.map(t => (
+        <div key={t.type} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0' }}>
+          <span style={{ fontSize: 18, width: 28, textAlign: 'center' }}>{t.icon}</span>
+          <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>{t.label}</span>
+          <span style={{ fontSize: 12.5, color: 'var(--brand-text)', fontWeight: 700 }}>+{POINTS_PER_TX}</span>
+        </div>
+      ))}
+      <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: 'color-mix(in srgb, var(--brand) 8%, transparent)', fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        <b style={{ color: 'var(--text-primary)' }}>Redeem:</b> 1,000 pts = ${formatAmount(pointsToUSDC(1000))} USDC, sent to your Arc wallet.
+        {' '}{MIN_CLAIM_POINTS}–{MAX_CLAIM_POINTS.toLocaleString()} pts per claim, up to {MAX_DAILY_POINTS.toLocaleString()} pts a day. Earn up to {MAX_DAILY_EARN_POINTS} pts a day.
+      </div>
+    </P2PSheet>
+  )
+
+  // Claim sheet - pick the points, see the USDC.
+  const sheet = (
+    <P2PSheet open={showClaimSheet} onClose={() => setShowClaimSheet(false)} title="Claim USDC" id="rw-claim">
+      <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', margin: '-6px 0 12px' }}>Balance {totalPoints.toLocaleString()} pts</div>
+      <AmountField
+        value={claimInput}
+        onChange={raw => setClaimInput(raw.replace(/\D/g, '').slice(0, 5))}
+        symbol=""
+        token={{ label: 'pts' }}
+        invalid={claimInput !== '' && !claimOk}
+        ariaLabel="Points to claim"
+        autoFocus={isDesktop}
+        quick={[100, 250, 500].filter(v => v < maxClaimable).map(v => ({ label: String(v), onClick: () => setClaimInput(String(v)) }))}
+        onMax={() => setClaimInput(String(maxClaimable))}
+        onEnter={() => { if (claimOk) handleClaim() }}
+      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, padding: '12px 14px', borderRadius: 14, background: 'color-mix(in srgb, var(--success) 10%, transparent)' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>You receive</span>
+        <b style={{ fontSize: 20, color: 'var(--success)' }}>${formatAmount(pointsToUSDC(claimOk ? typedPoints : 0))} USDC</b>
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <Line k="Rate" v={`1,000 pts = $${formatAmount(pointsToUSDC(1000))}`} />
+        <Line k="Left to claim today" v={`${dailyRemaining.toLocaleString()} pts`} />
+        <Line k="Per claim" v={`${MIN_CLAIM_POINTS} – ${MAX_CLAIM_POINTS.toLocaleString()} pts`} />
+        <Line k="Sent to" v="Your Arc wallet" />
+      </div>
+      {claimInput !== '' && !claimOk && (
+        <p role="alert" style={{ fontSize: 12.5, color: 'var(--danger)', margin: '8px 0 0' }}>
+          {typedPoints < MIN_CLAIM_POINTS ? `Claim at least ${MIN_CLAIM_POINTS} pts` : `You can claim up to ${maxClaimable.toLocaleString()} pts now`}
+        </p>
+      )}
+      {claimError && <p role="alert" style={{ fontSize: 12.5, color: 'var(--danger)', margin: '8px 0 0' }}>{claimError}</p>}
+      <button onClick={handleClaim} disabled={!claimOk || claiming}
+        style={{ width: '100%', border: 'none', borderRadius: 14, padding: 15, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', marginTop: 14, cursor: 'pointer', opacity: !claimOk || claiming ? 0.45 : 1 }}>
+        Claim ${formatAmount(pointsToUSDC(claimOk ? typedPoints : 0))} USDC
+      </button>
+    </P2PSheet>
+  )
+
+  const overlays = (
+    <>
+      {claimReceipt && <RewardClaimReceipt claim={claimReceipt} onClose={() => setClaimReceipt(null)} />}
+      {howItWorks}
+      {sheet}
+      <AnimatePresence>
+        {progress && (
+          <ClaimProgressCard key="rw-progress" p={progress} balanceLeft={totalPoints}
+            onClose={() => setProgress(null)}
+            onRetry={() => { setProgress(null); openClaim() }} />
+        )}
+      </AnimatePresence>
+    </>
+  )
+
+  const header = (
+    <div className="header-row sticky top-0 z-20 backdrop-blur-md bg-bg/95 flex-shrink-0 gap-3 px-5 pt-header pb-header">
+      <h1 className="text-xl font-bold text-text-primary">Rewards</h1>
+      <button onClick={() => setShowEarnInfo(true)}
+        className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
+        style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', color: 'var(--brand-text)', border: 'none', cursor: 'pointer' }}>
+        <Info className="w-3.5 h-3.5" /> How it works
+      </button>
+    </div>
+  )
+
+  if (isDesktop) {
+    // Desktop: balance + today's tasks (left), history (right).
+    return (
+      <div className="flex flex-col bg-bg overflow-hidden h-full">
+        {overlays}
+        {header}
+        <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 28, padding: '8px 24px 14px', boxSizing: 'border-box' }}>
+          <div style={{ flex: '1 1 0%', minWidth: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {hero}
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: '14px 14px 6px', boxShadow: 'var(--shadow-1)' }}>{tasks}</div>
+          </div>
+          <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0 }}>{history}</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    // Desktop: h-full (not h-screen) so this root's height matches the
-    // space AppLayout's desktop shell actually gives it (below
-    // DesktopHeader), not the full 100vh - otherwise the two-column split
-    // below would be taller than the visible area. Mobile keeps h-screen,
-    // matching its own single-pane shell exactly. overflow-hidden stays
-    // for both: desktop's own two columns each manage their own scroll
-    // internally (DesktopHistoryPanel + the height:100% row), same as
-    // Swap/Multichain Transfer.
-    <div className={`flex flex-col bg-bg overflow-hidden ${isDesktop ? 'h-full' : 'h-screen'}`}>
-      {claimReceipt && <RewardClaimReceipt claim={claimReceipt} onClose={() => setClaimReceipt(null)} />}
-      <div className="header-row sticky top-0 z-20 backdrop-blur-md bg-bg/95 flex-shrink-0 gap-3 px-5 pt-header pb-header" style={{ position: 'relative' }}>
-        <h1 className="text-xl font-bold text-text-primary">Rewards</h1>
-        {/* How to Earn button */}
-        <button
-          onClick={() => setShowEarnInfo(v => !v)}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold"
-          style={{ background: 'color-mix(in srgb, var(--brand) 15%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)', color: 'var(--accent-text)' }}
-        >
-          <Info className="w-3.5 h-3.5" />
-          How to Earn
-        </button>
-
-        {/* Dropdown panel */}
-        {showEarnInfo && (
-          <>
-            {/* Backdrop to close */}
-            <div onClick={() => setShowEarnInfo(false)} style={{ position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', zIndex: 40 }} />
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 6px)', right: 20, zIndex: 50,
-              width: 260, background: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: 16, padding: '14px 0',
-              boxShadow: 'var(--shadow-3)',
-            }}>
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px 10px', borderBottom: '1px solid var(--border)' }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>How to Earn</span>
-                <button onClick={() => setShowEarnInfo(false)} style={{ color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Earn items */}
-              {/* BUG FIX (2026-09-17): rewritten for the new per-action-type
-                  earning rule (see rewards.ts's own header comment) - was
-                  "+20 pts per transaction/transfer/swap/batch", which is no
-                  longer true (repeating the same action again the same day
-                  earns nothing now). Also added ChatPay, which earns points
-                  identically to the other four but was missing from this
-                  list entirely. */}
-              {[
-                { icon: '💸', label: 'Pay Send',             desc: `+${POINTS_PER_TX} pts (once per day)` },
-                { icon: '💬', label: 'ChatPay',               desc: `+${POINTS_PER_TX} pts (once per day)` },
-                { icon: '🌐', label: 'Multichain Transfer',  desc: `+${POINTS_PER_TX} pts (once per day)` },
-                { icon: '🔄', label: 'Swap',                 desc: `+${POINTS_PER_TX} pts (once per day)` },
-                { icon: '📦', label: 'Bulk Payment',         desc: `+${POINTS_PER_TX} pts (once per day)` },
-              ].map(item => (
-                <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px' }}>
-                  <span style={{ fontSize: 18, width: 28, textAlign: 'center', flexShrink: 0 }}>{item.icon}</span>
-                  <div>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{item.label}</p>
-                    <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>{item.desc}</p>
-                  </div>
-                </div>
-              ))}
-
-              {/* Daily limit */}
-              <div style={{ margin: '10px 14px 0', padding: '10px 12px', background: 'color-mix(in srgb, var(--warning) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 20%, transparent)', borderRadius: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                  <Star className="w-3.5 h-3.5" style={{ color: 'var(--warning)', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--warning)' }}>Daily Limit</span>
-                </div>
-                {/* BUG FIX (2026-09-17): was MAX_DAILY_POINTS (1000) / 10 txs -
-                    the OLD per-transaction cap. The new earn cap is
-                    MAX_DAILY_EARN_POINTS (100): 5 action types, once each. */}
-                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>Max {MAX_DAILY_EARN_POINTS} pts / 5 actions per day</p>
-              </div>
-
-              {/* NEW (2026-09-17): "How to Earn" only ever explained earning -
-                  added a Redeem section so the same panel also answers "how
-                  much is a point worth" and "how many can I cash out at
-                  once", using the same MIN/MAX_CLAIM_POINTS and
-                  USDC_PER_1000_PTS the claim UI itself enforces below, so
-                  this can never drift out of sync with the real limits. */}
-              <div style={{ margin: '8px 14px 0', padding: '10px 12px', background: 'color-mix(in srgb, var(--brand) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 20%, transparent)', borderRadius: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                  <Gift className="w-3.5 h-3.5" style={{ color: 'var(--brand-text)', flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand-text)' }}>Redeem</span>
-                </div>
-                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>
-                  1000 pts = ${formatAmount(pointsToUSDC(1000))} USDC · {MIN_CLAIM_POINTS}–{MAX_CLAIM_POINTS} pts per claim
-                </p>
-              </div>
-            </div>
-          </>
-        )}
-      </div>
-
-      {isDesktop ? (
-        // Desktop: left column = available points (top) + earned points
-        // history (bottom); right column = claiming (top) + claimed
-        // history (bottom) - same full-bleed/no-maxWidth-cap, height:100%,
-        // trimmed-bottom-padding spacing treatment as Swap's 2-column
-        // desktop layout, so both columns reach down close to the
-        // viewport's bottom edge instead of stopping short of it.
-        <div style={{ display: 'flex', height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
-          <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ flexShrink: 0 }}>
-              <Card className="p-6 text-center bg-brand/10 border-brand/20">
-                {pointsCardBody}
-              </Card>
-            </div>
-            <div style={{ flex: 1, minHeight: 0 }}>
-              <DesktopHistoryPanel title="Earned Points History">
-                {loading ? (
-                  <DesktopHistorySkeleton />
-                ) : earnedRows.length === 0 ? (
-                  <DesktopHistoryEmpty label="Points you earn from payments, transfers, and swaps will appear here" />
-                ) : (
-                  earnedRows.map((p, i) => (
-                    <div key={p.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px',
-                      borderTop: i === 0 ? 'none' : '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)',
-                    }}>
-                      <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, background: 'color-mix(in srgb, var(--brand) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Star className="w-4 h-4 text-brand-text" />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>Points Earned</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{timeAgo(p.created_at)}</div>
-                      </div>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)', flexShrink: 0 }}>+{p.points} pts</div>
-                    </div>
-                  ))
-                )}
-              </DesktopHistoryPanel>
-            </div>
-          </div>
-
-          <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ flexShrink: 0 }}>
-              <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3">Claim Rewards</p>
-              <Card className="p-4 space-y-4">
-                {claimCardBody}
-              </Card>
-            </div>
-            <div style={{ flex: 1, minHeight: 0 }}>
-              <DesktopHistoryPanel title="Claimed History">
-                {loading ? (
-                  <DesktopHistorySkeleton />
-                ) : claimsHistory.length === 0 ? (
-                  <DesktopHistoryEmpty label="Your claimed rewards will appear here" />
-                ) : (
-                  claimsHistory.map((claim, i) => (
-                    <div key={claim.id} role="button" onClick={() => setClaimReceipt(claim)} style={{
-                      cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px',
-                      borderTop: i === 0 ? 'none' : '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)',
-                    }}>
-                      {(() => { const v = claimView(claim.status, claim.created_at); const c = claimColor(v); return (<>
-                      <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, background: `color-mix(in srgb, ${c} 15%, transparent)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {v === 'failed' ? <X className="w-4 h-4 text-danger" /> : <Gift className="w-4 h-4" style={{ color: c }} />}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: v === 'failed' ? 'var(--danger)' : 'var(--text-primary)' }}>{claimLabel(v)}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{timeAgo(claim.created_at)}</div>
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: 14, fontWeight: 700, color: c, textDecoration: v === 'failed' ? 'line-through' : 'none' }}>{v === 'success' ? '+' : ''}${formatAmount(claim.usdc_received)} USDC</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{v === 'success' ? `-${claim.points_claimed} pts` : v === 'failed' ? 'Points not deducted' : 'Processing'}</div>
-                      </div>
-                      </>) })()}
-                    </div>
-                  ))
-                )}
-              </DesktopHistoryPanel>
-            </div>
-          </div>
-        </div>
-      ) : (
+    <div className="flex flex-col bg-bg overflow-hidden h-screen">
+      {overlays}
+      {header}
       <div className="flex-1 overflow-y-auto">
-      <div className="px-4 space-y-4 pb-8">
-
-        {/* Points balance card */}
-        <Card className="p-6 text-center bg-brand/10 border-brand/20">
-          {pointsCardBody}
-        </Card>
-
-        {/* Claim section */}
-        <div>
-          <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3">Claim Rewards</p>
-          <Card className="p-4 space-y-4">
-            {claimCardBody}
-          </Card>
-        </div>
-
-        {/* Recent activity */}
-        <div>
-          <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-3">Recent Activity</p>
-          {loading ? (
-            <div className="text-center py-8">
-              <Loader2 className="w-6 h-6 text-text-muted animate-spin mx-auto" />
-            </div>
-          ) : pointHistory.length === 0 && claimsHistory.length === 0 ? (
-            <div className="text-center py-10 bg-surface rounded-2xl border border-border">
-              <Gift className="w-10 h-10 text-text-muted mx-auto mb-2" />
-              <p className="text-text-secondary text-sm">No rewards activity yet</p>
-              <p className="text-text-muted text-xs mt-1">Send a payment to earn your first points</p>
-            </div>
-          ) : (
-            <div className="bg-surface rounded-2xl border border-border divide-y divide-border">
-              {claimsHistory.slice(0, 5).map(claim => (
-                <div key={claim.id} role="button" onClick={() => setClaimReceipt(claim)} className="flex items-center gap-3 px-4 py-3 cursor-pointer">
-                  {(() => { const v = claimView(claim.status, claim.created_at); const c = claimColor(v); return (<>
-                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: `color-mix(in srgb, ${c} 20%, transparent)` }}>
-                    {v === 'failed' ? <X className="w-4 h-4 text-danger" /> : <Gift className="w-4 h-4" style={{ color: c }} />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium" style={{ color: v === 'failed' ? 'var(--danger)' : 'var(--text-primary)' }}>{claimLabel(v)}</p>
-                    <p className="text-xs text-text-secondary">{timeAgo(claim.created_at)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold" style={{ color: c, textDecoration: v === 'failed' ? 'line-through' : 'none' }}>{v === 'success' ? '+' : ''}${formatAmount(claim.usdc_received)} USDC</p>
-                    <p className="text-xs text-text-muted">{v === 'success' ? `-${claim.points_claimed} pts` : v === 'failed' ? 'Points not deducted' : 'Processing'}</p>
-                  </div>
-                  </>) })()}
-                </div>
-              ))}
-              {earnedRows.slice(0, 5).map(p => (
-                <div key={p.id} className="flex items-center gap-3 px-4 py-3">
-                  <div className="w-9 h-9 bg-brand/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <Star className="w-4 h-4 text-brand-text" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-text-primary">Points Earned</p>
-                    <p className="text-xs text-text-secondary">{timeAgo(p.created_at)}</p>
-                  </div>
-                  <p className="text-sm font-bold text-brand-text">+{p.points} pts</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
+        {hero}
+        {tasks}
+        {history}
       </div>
-      </div>
-      )}
     </div>
   )
 }

@@ -297,8 +297,11 @@ export async function claimPointsAsUSDC(params: {
   walletAddress: string
   privateKey: string
   points: number
+  /** Progress for the claim screen: called as each real step finishes. */
+  onStep?: (step: 'check' | 'approve' | 'send') => void
 }): Promise<{ txHash: string | null; usdcReceived: number; error: string | null }> {
   const { userId, username, walletAddress, privateKey, points } = params
+  const step = (s: 'check' | 'approve' | 'send') => { try { params.onStep?.(s) } catch { /* display only */ } }
 
   if (points < MIN_CLAIM_POINTS) {
     return { txHash: null, usdcReceived: 0, error: `Minimum ${MIN_CLAIM_POINTS} points required to claim` }
@@ -332,6 +335,7 @@ export async function claimPointsAsUSDC(params: {
   }
 
   const usdcAmount = pointsToUSDC(points)
+  step('check')
 
   // A claim that failed goes to Activity as a failed "Reward claim" row with
   // its exact reason (lib/failure.ts). Uncertain outcomes are not recorded.
@@ -408,6 +412,7 @@ export async function claimPointsAsUSDC(params: {
         return { txHash: null, usdcReceived: 0, error: `Claim signing failed: ${msg}. Your points are safe.` }
       }
       const claimSignature = signData.signature as `0x${string}`
+      step('approve')
       try { localStorage.setItem(pendingKey, JSON.stringify({ claimId: claimIdBytes32, points })) } catch { /* private mode */ }
 
       try {
@@ -454,6 +459,7 @@ export async function claimPointsAsUSDC(params: {
         } as unknown as Parameters<typeof walletClient.sendTransaction>[0])
         const receipt = await publicClient.waitForTransactionReceipt({ hash })
         if (receipt.status === 'reverted') throw new Error('Contract call reverted')
+        step('send')
 
         // Use the amount the contract ACTUALLY paid out (RewardClaimed event,
         // micro-USDC) instead of trusting the client-side rate constant, so the
