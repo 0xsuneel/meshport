@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 
-const BASE_FONT = 36
+const FULL_FONT = 36
+const COMPACT_FONT = 28
 const MIN_FONT = 14
 
 export interface QuickAmount { label: string; onClick: () => void; disabled?: boolean }
@@ -14,7 +15,7 @@ export interface QuickAmount { label: string; onClick: () => void; disabled?: bo
 //     the page's AmountKeypad sheet, `editing` while that sheet is up.
 export function AmountField({
   value, onChange, onMax, ariaLabel, invalid = false, autoFocus = true, readOnly = false, id,
-  symbol = '$', token, tokenPicker, quick = [], onTap, editing = false, boxRef,
+  symbol = '$', token, tokenPicker, quick = [], onTap, editing = false, boxRef, onEnter, compact = false,
 }: {
   value: string
   /** Raw text as typed; the caller sanitizes it. */
@@ -41,6 +42,10 @@ export function AmountField({
   editing?: boolean
   /** The field itself (the keypad lift keeps it in view). */
   boxRef?: Ref<HTMLDivElement>
+  /** Desktop: Enter in the field (e.g. submit the form). */
+  onEnter?: () => void
+  /** Smaller field, e.g. while the phone keyboard is up for another input. */
+  compact?: boolean
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [focused, setFocused] = useState(false)
@@ -52,6 +57,7 @@ export function AmountField({
   // size and scale down until it fits (long cirBTC amounts, big numbers).
   const roomRef = useRef<HTMLDivElement>(null)
   const measureRef = useRef<HTMLSpanElement>(null)
+  const BASE_FONT = compact ? COMPACT_FONT : FULL_FONT
   const [fontSize, setFontSize] = useState(BASE_FONT)
   useLayoutEffect(() => {
     const room = roomRef.current, measure = measureRef.current
@@ -65,7 +71,7 @@ export function AmountField({
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(fit) : null
     ro?.observe(room)
     return () => ro?.disconnect()
-  }, [value, symbol])
+  }, [value, symbol, BASE_FONT])
   const buttons: (QuickAmount & { max?: boolean })[] = [...quick, ...(onMax ? [{ label: 'Max', onClick: onMax, max: true }] : [])]
   const digits = { fontSize, fontWeight: 700, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' as const }
 
@@ -77,7 +83,7 @@ export function AmountField({
         aria-label={tapMode ? ariaLabel : undefined}
         onClick={tapMode ? (readOnly ? undefined : e => { e.stopPropagation(); onTap() }) : () => inputRef.current?.focus()}
         style={{
-          display: 'flex', alignItems: 'center', gap: 12, minHeight: 76, padding: '12px 14px 12px 20px', boxSizing: 'border-box',
+          display: 'flex', alignItems: 'center', gap: 12, minHeight: compact ? 56 : 76, padding: compact ? '8px 12px 8px 16px' : '12px 14px 12px 20px', boxSizing: 'border-box',
           borderRadius: 16, cursor: readOnly ? 'default' : tapMode ? 'pointer' : 'text',
           background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
           border: `1.5px solid ${active ? ring : 'transparent'}`,
@@ -105,6 +111,7 @@ export function AmountField({
               readOnly={readOnly}
               value={value}
               onChange={e => onChange(e.target.value)}
+              onKeyDown={onEnter ? e => { if (e.key === 'Enter') onEnter() } : undefined}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               placeholder="0.00"

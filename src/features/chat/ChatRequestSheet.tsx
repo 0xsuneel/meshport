@@ -2,12 +2,11 @@
 // optional note. Creates a real payment request (an order) and posts it as
 // the live 💸 Payment request card - they pay it right in the chat, and it
 // turns Paid for them and Payment received for you.
-// Same layout as the chat's Pay sheet: person, amount box, quick amounts,
-// keypad (phone), Cancel / Request. Typing the note hides the keypad, so
+// Same layout as the chat's Pay sheet: person, amount field with quick
+// amounts, keypad (phone), Cancel / Request. Typing the note hides the keypad, so
 // the amount, note and button stay above the phone keyboard.
 import { useEffect, useRef, useState } from 'react'
-import { TokenLogo } from '@/components/ui/TokenLogo'
-import { amountFontSize } from '@/lib/amountFontSize'
+import { AmountField } from '@/components/ui/AmountField'
 import { formatAmount } from '@/lib/utils'
 import { ChatSheet, SheetPerson } from './ChatSheet'
 
@@ -68,35 +67,27 @@ export function ChatRequestSheet({ open, onClose, isDesktop, name, username, ava
   }
 
   const compact = !isDesktop && typingNote
+  // Same amount field as Pay / ChatPay: typed on desktop; on the phone the
+  // keypad below is always up, so the field shows as being filled in.
   const amountBox = (
-    <div className="rounded-2xl flex items-center justify-between gap-3"
-      style={{ background: 'var(--bg)', border: '1px solid var(--border)', padding: compact ? '10px 14px' : '14px 16px' }}>
-      <div className="min-w-0 flex-1">
-        {isDesktop ? (
-          <div className="flex items-baseline">
-            <span style={{ fontSize: 36, fontWeight: 800, color: amount ? 'var(--text-primary)' : 'var(--text-muted)' }}>$</span>
-            <input autoFocus inputMode="decimal" value={amount} placeholder="0" aria-label="Amount to request in USDC"
-              onChange={e => set(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void submit() }}
-              className="flex-1 min-w-0 bg-transparent outline-none text-text-primary"
-              style={{ border: 'none', fontSize: 36, fontWeight: 800, letterSpacing: '-0.5px', fontVariantNumeric: 'tabular-nums' }} />
-          </div>
-        ) : (
-          <div aria-label="Amount to request in USDC" className="flex items-baseline" style={{ fontSize: compact ? 28 : amountFontSize(amount, 38), fontWeight: 800, letterSpacing: '-0.5px', lineHeight: 1.05 }}>
-            <span style={{ color: amount ? 'var(--text-primary)' : 'var(--text-muted)' }}>$</span>
-            <span style={{ fontVariantNumeric: 'tabular-nums', color: amount ? 'var(--text-primary)' : 'var(--text-muted)' }}>{amount || '0'}</span>
-          </div>
-        )}
-        {!compact && (
-          <p className="text-[12.5px] mt-1" style={{ color: tooBig ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: tooBig ? 600 : 500 }}>
-            {tooBig ? `Up to $${formatAmount(MAX_REQUEST)} per request` : 'They pay it right here in chat'}
-          </p>
-        )}
-      </div>
-      <span className="flex items-center gap-2 flex-shrink-0 rounded-full pl-1.5 pr-3 py-1.5"
-        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-        <TokenLogo token="USDC" size={22} />
-        <span className="text-[14px] font-bold text-text-primary">USDC</span>
-      </span>
+    <div>
+      <AmountField
+        value={amount}
+        onChange={set}
+        onTap={isDesktop ? undefined : () => {}}
+        editing={!isDesktop && !typingNote}
+        onEnter={() => void submit()}
+        compact={compact}
+        invalid={tooBig}
+        ariaLabel="Amount to request in USDC"
+        token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
+        quick={compact ? [] : QUICK.map(v => ({ label: `$${v}`, onClick: () => set(v) }))}
+      />
+      {!compact && (
+        <p className="text-[12.5px] mt-2" style={{ color: tooBig ? 'var(--danger)' : 'var(--text-secondary)', fontWeight: tooBig ? 600 : 500 }}>
+          {tooBig ? `Up to $${formatAmount(MAX_REQUEST)} per request` : 'They pay it right here in chat'}
+        </p>
+      )}
     </div>
   )
 
@@ -113,23 +104,6 @@ export function ChatRequestSheet({ open, onClose, isDesktop, name, username, ava
           enterKeyHint="done"
           className="w-full rounded-[14px] px-3.5 py-3 text-[14.5px] text-text-primary outline-none placeholder:text-text-muted"
           style={{ background: 'var(--bg)', border: `1px solid ${typingNote ? 'var(--brand-text)' : 'var(--border)'}` }} />
-
-        {!compact && (
-          <div className="grid grid-cols-4 gap-2">
-            {QUICK.map(v => {
-              const on = amount === v
-              return (
-                <button key={v} type="button" onClick={() => set(v)}
-                  className="rounded-full text-[13.5px] font-bold active:scale-95 transition-transform"
-                  style={{ height: 36, border: `1px solid ${on ? 'var(--brand-text)' : 'var(--border)'}`,
-                    background: on ? 'color-mix(in srgb, var(--brand) 18%, transparent)' : 'transparent',
-                    color: on ? 'var(--brand-text)' : 'var(--text-secondary)' }}>
-                  ${v}
-                </button>
-              )
-            })}
-          </div>
-        )}
 
         {!isDesktop && !compact && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, width: '100%', maxWidth: 320, margin: '2px auto 0' }}>
