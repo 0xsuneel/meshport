@@ -43,6 +43,9 @@ import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useLeaveGuard } from '@/lib/leaveGuard'
+import { moveSteps, indexFromStepStates } from '@/lib/moveSteps'
+import { MoveProgress } from '@/components/multichain/MoveProgress'
+import { TrackedMove, type TrackedMoveInfo } from '@/components/multichain/TrackedMove'
 
 // Derive Arc chain key from env so a mainnet build targets Arc mainnet.
 // All 'Arc_Testnet' literals in this file are replaced with this constant -
@@ -564,6 +567,27 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const { showToastMessage } = useUIStore()
 
   const [step, setStep] = useState<MCStep>('form')
+
+  // ─── Resume an in-flight transfer after a refresh ───────────────────────
+  // The burn is irreversible the moment it confirms (funds have already
+  // left Arc) - a refresh right after that must never look like nothing
+  // happened, or someone could reasonably retry and double-send. The marker
+  // saved at the burn reopens the same progress page (TrackedMove), followed
+  // live through Circle by the burn hash until it lands, then its receipt.
+  const [resumed, setResumed] = useState<TrackedMoveInfo | null>(() => {
+    const marker = getResumableOperation('multichain_transfer')
+    if (!marker || !/^0x[0-9a-fA-F]{64}$/.test(marker.txHash)) return null
+    const ctx = marker.context as Record<string, any>
+    const dest = String(ctx.destinationChain ?? '')
+    const known = ALL_CHAINS.find(c => c.sdk === dest || c.id === dest)
+    return {
+      kind: 'transfer', route: 'cctp', chain: known?.sdk ?? dest, chainLabel: known?.name ?? (dest || 'destination'),
+      amount: Number(ctx.amount ?? 0), recipient: ctx.destinationAddress as string | undefined,
+      sourceTxHash: marker.txHash, timestamp: marker.startedAt,
+    }
+  })
+  const closeResumed = () => { clearResumableOperation('multichain_transfer'); setResumed(null) }
+  const showResumed = !!resumed && step === 'form'
   // Wake the RPC proxy as soon as the confirm step opens (cold-start off the critical path).
   useEffect(() => {
     if (step === 'confirm') import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
@@ -573,9 +597,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // title bar and this view is scrolled to the very top of the screen; the Hub
   // locks scrolling while processing and frees it again for the result.
   const flowRootRef = useRef<HTMLDivElement>(null)
-  const focus = step === 'broadcasting' ? 'processing' : (step === 'success' || step === 'failed') ? 'result' : 'none'
-  // After the passcode the transfer is on its way: hold Back / sidebar until it lands.
-  useLeaveGuard(step === 'broadcasting', 'Transfer')
+  const focus = step === 'broadcasting' || showResumed ? 'processing' : (step === 'success' || step === 'failed') ? 'result' : 'none'
   useEffect(() => {
     if (!embedded) return
     onFocusChange?.(focus)
@@ -618,7 +640,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }, [inBackableStep])
   // Hub on a phone: processing and its result open as a full page that
   // slides in from the right, like the form and Review before them.
-  const procPage = sheetMode && (step === 'broadcasting' || step === 'success' || step === 'failed')
+  const procPage = sheetMode && (step === 'broadcasting' || step === 'success' || step === 'failed' || showResumed)
   const pageSlide = useAnimationControls()
   useLayoutEffect(() => {
     if (!sheetMode) return
@@ -649,64 +671,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     }
   }, [sheetBackable])
 
-  // ─── Resume an in-flight transfer after a refresh ───────────────────────
-  // The burn is irreversible the moment it confirms (funds have already
-  // left Arc) - a refresh right after that must never look like nothing
-  // happened, or someone could reasonably retry and double-send. There's no
-  // reliable way to rebuild the full multi-step bridge UI (fee estimate,
-  // per-step timestamps, etc.) from just a tx hash after a fresh mount, so
-  // this deliberately shows a plain "checking" state and a toast with the
-  // real outcome - reusing the same `activity` (type 'bridge') row this
-  // page already writes the moment the burn confirms - rather than trying
-  // to fake the detailed step-by-step screen.
-  const [resumingTransfer, setResumingTransfer] = useState(false)
-  useEffect(() => {
-    const marker = getResumableOperation('multichain_transfer')
-    if (!marker) return
-    const ctx = marker.context as Record<string, any>
-    setResumingTransfer(true)
-
-    let cancelled = false
-    let attempts = 0
-    const wallet = (ctx.walletAddress as string | undefined) || senderAddress
-    const poll = async () => {
-      if (cancelled || !wallet) return
-      attempts++
-      try {
-        const records = await fetchActivity(wallet, { activityType: 'bridge', limit: 20 })
-        const match = records.find(r => (r.txHash || '').toLowerCase() === marker.txHash.toLowerCase())
-        if (cancelled) return
-        if (match) {
-          if (match.status === 'completed') {
-            clearResumableOperation('multichain_transfer')
-            setResumingTransfer(false)
-            showToastMessage(`Your transfer of ${trimTrailingZeros(Number(ctx.amount ?? 0).toFixed(4))} USDC to ${ctx.destinationChain || 'the destination chain'} completed.`, 'success')
-            return
-          }
-          if (match.status === 'failed') {
-            clearResumableOperation('multichain_transfer')
-            setResumingTransfer(false)
-            showToastMessage('Your last transfer failed - see Activity for details.', 'error')
-            return
-          }
-        }
-      } catch {}
-      if (attempts >= 10) {
-        // Still pending after a reasonable window - CCTP attestation can
-        // genuinely take a few minutes, so this is expected, not an error.
-        // Stop polling rather than doing so forever in the background;
-        // the marker (and the real activity row) are both still there for
-        // the next visit or an explicit Activity check.
-        setResumingTransfer(false)
-        showToastMessage('Still confirming your last transfer - check Activity for the latest status.', 'info')
-        return
-      }
-      setTimeout(poll, 3000)
-    }
-    poll()
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   // ── Success screen - same full-screen flash → hero-card takeover
   // MultichainClaimPage uses for a completed claim, reused here so a
@@ -1175,6 +1139,15 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     : availableMechanisms[0] === 'ub'
 
   const chain = { ...baseChain, ub: effectiveUb }
+
+  // Safe to leave once the burn is on Arc and Circle's forwarder mints: from
+  // there Circle and transfer-worker finish it without this screen. A Unified
+  // Balance transfer, or one MeshPort's relayer mints, is driven from here to
+  // the end - so the leave guard holds until it finishes.
+  const transferSafe = step === 'broadcasting' && !chain.ub && circleForwarderMintsTo(chain.sdk)
+    && bridgeSteps.some(s => s.name === 'burn' && s.status === 'done')
+    && !bridgeSteps.some(s => s.status === 'error')
+  useLeaveGuard(step === 'broadcasting' && !transferSafe, 'Transfer')
 
   // ── Ticker for elapsed time display ──────────────────────────────────────────
   const startTicker = () => {
@@ -2943,6 +2916,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const showStepTimeout = !!activeStep && activeStepElapsed > stepWarnThreshold
   const stepInfoHint = activeStep ? (STEP_INFO_HINT[activeStep.name] ?? '') : ''
   const stepTimeoutHint = activeStep ? (STEP_TIMEOUT_HINT[activeStep.name] ?? '') : ''
+  // The shared progress page's view of this transfer (see lib/moveSteps).
+  const transferForwarder = !chain.ub && circleForwarderMintsTo(chain.sdk)
+  const transferStepTexts = moveSteps({
+    kind: 'transfer', route: chain.ub ? 'ub' : 'cctp', from: 'Arc', to: chain.name,
+    amount: formatAmount(numAmount), recipient: address ? `${address.slice(0, 6)}…${address.slice(-4)}` : undefined,
+    forwarder: transferForwarder,
+  })
+  const transferStepIndex = indexFromStepStates(bridgeSteps.map(s => s.status))
 
   // Held in a variable (not returned directly) so the exact same JSX renders
   // either as the whole page (mobile) or as the left column of the desktop
@@ -3287,23 +3268,16 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         )}
         <AnimatePresence initial={false} mode="wait">
 
-          {resumingTransfer && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', margin: '10px 2px',
-              borderRadius: 12, background: 'color-mix(in srgb, var(--brand) 10%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--brand) 25%, transparent)',
-            }}>
-              <div style={{
-                width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
-                border: '2px solid color-mix(in srgb, var(--brand) 30%, transparent)', borderTopColor: 'var(--brand)',
-                animation: 'spin 0.8s linear infinite',
-              }} />
-              <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>Checking your last transfer…</span>
-            </div>
+          {showResumed && (
+            <motion.div key="resumed" initial={false} style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+              <TrackedMove info={resumed!} onClose={closeResumed} backIcon={isDesktopMq ? 'close' : 'back'}
+                onViewHub={() => { closeResumed(); navigate('/multichain', { state: { tab: 'activity' } }) }}
+                onArrived={() => clearResumableOperation('multichain_transfer')} />
+            </motion.div>
           )}
 
           {/* ── FORM ─────────────────────────────────────────────────────── */}
-          {(step === 'form' || step === 'review' || step === 'confirm') && (
+          {!showResumed && (step === 'form' || step === 'review' || step === 'confirm') && (
             <motion.div key="form" initial={false}
               animate={(step === 'review' || step === 'confirm') ? { opacity: 0, y: '-28%' } : { opacity: 1, y: 0 }}
               exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }} className={isDesktop ? "space-y-[9px] pt-1" : "space-y-2.5 pt-1"}>
@@ -3341,108 +3315,28 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             </motion.div>
           )}
 
-          {/* ── BROADCASTING ──────────────────────────────────────────────────── */}
+          {/* ── BROADCASTING ──────────────────────────────────────────────────
+               The one Multichain progress page (MoveProgress): the real SDK
+               steps from the first one, Track Progress in place, "safe to
+               leave" once Circle's forwarder will finish it. It also stays up
+               underneath the success flash (portaled on top) so the screen is
+               never blank while the flash's circle grows. ── */}
           {(step === 'broadcasting' || (step === 'success' && successPhase === 'flash')) && (
-            // Full-height processing view. It also stays up underneath the
-            // success flash (portaled on top) so the screen is never blank
-            // while the flash's circle grows; it's dropped the instant the
-            // receipt takes over. Everything fits one screen, and the
-            // action bar is pinned to the bottom (sticky inside this scroller)
-            // so it can never slide below the fold.
             <motion.div key="broadcasting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION}
-              style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 12, paddingTop: 12 }}>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 4px' }}>
-                <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Transferring</span>
-                <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, padding: '5px 10px', borderRadius: 999, background: 'color-mix(in srgb, var(--brand) 18%, transparent)', color: 'var(--accent-text)' }}>
-                  {chain.ub ? 'Unified Balance' : 'CCTP v2'}
-                </span>
-              </div>
-
-              {/* Amount, route and live progress. The bar and percentage are
-                  driven every frame by the rAF loop above (tankBarRef /
-                  tankPercentRef); a stalled or errored transfer freezes them
-                  where they are rather than draining, so the visual never
-                  implies funds vanished. */}
-              {(() => {
-                const color = ringErrored ? 'var(--danger)' : 'var(--brand)'
-                return (
-                  <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 22, padding: 16, textAlign: 'center' }}>
-                    <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)' }}>{formatAmount(numAmount)} USDC</div>
-                    <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4, overflowWrap: 'anywhere' }}>
-                      Arc → {chain.name}{address ? ` · ${address.slice(0, 6)}…${address.slice(-4)}` : ''}
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 14 }}>
-                      <ChainLogoImg id="arc" size={32} />
-                      <div style={{ flex: 1, maxWidth: 170, height: 6, borderRadius: 4, background: 'var(--border)', overflow: 'hidden' }}>
-                        <div ref={tankBarRef} style={{ width: `${ringPercent}%`, height: '100%', background: color }} />
-                      </div>
-                      <ChainLogoImg id={chain.id} size={32} />
-                    </div>
-                    <span ref={tankPercentRef} style={{ display: 'block', marginTop: 8, fontSize: 12, fontWeight: 600, color }}>{ringPercent}%</span>
-                    <p style={{ fontSize: 14, fontWeight: 600, margin: '6px 0 0', color: ringErrored ? 'var(--danger)' : 'var(--text-primary)', overflowWrap: 'anywhere' }}>
-                      {ringErrored ? (bridgeSteps.find(s => s.status === 'error')?.message || 'Something went wrong')
-                        : activeStep?.message || bridgeSteps[bridgeSteps.length - 1]?.message || 'Processing…'}
-                    </p>
-                  </div>
-                )
-              })()}
-
-              {/* The real bridge steps, with each leg's hash (tap → explorer)
-                  and a live timer on the step in progress. Wait / timeout
-                  notes sit inside this card so nothing drops off screen. */}
-              {bridgeSteps.length > 0 && (
-                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 22, padding: '14px 16px' }}>
-                  <p style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px' }}>Progress</p>
-                  {bridgeSteps.map((s, i) => {
-                    const done = s.status === 'done'
-                    const active = s.status === 'active'
-                    const errored = s.status === 'error'
-                    const href = s.txHash
-                      ? (s.name === 'mint' || s.name === 'spend' ? explorerTxUrl(chain.sdk, s.txHash) : arcExplorerTxUrl(s.txHash))
-                      : null
-                    const shortTx = s.txHash ? `${s.txHash.slice(0, 10)}…${s.txHash.slice(-6)}` : ''
-                    const dot = done ? 'var(--success)' : errored ? 'var(--danger)' : active ? 'var(--brand)' : 'var(--border-strong)'
-                    const isLast = i === bridgeSteps.length - 1
-                    return (
-                      // Same stepper as Bring: circle + connector line on the
-                      // left (turns green once the step is done), text right.
-                      <div key={s.name + i} style={{ display: 'flex', gap: 12, alignItems: 'stretch', fontSize: 12 }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-                          <span style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            border: `1.5px solid ${done || errored || active ? dot : 'var(--border)'}`,
-                            background: done ? 'color-mix(in srgb, var(--success) 15%, transparent)' : errored ? 'color-mix(in srgb, var(--danger) 15%, transparent)' : active ? 'color-mix(in srgb, var(--brand) 15%, transparent)' : 'color-mix(in srgb, var(--text-primary) 4%, transparent)' }}>
-                            {done ? (
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                            ) : errored ? (
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                            ) : active ? (
-                              <MeshLoader size={15} label="In progress" />
-                            ) : null}
-                          </span>
-                          {!isLast && (
-                            <div style={{ width: 1.5, flex: 1, minHeight: 18, margin: '2px 0', background: done ? 'var(--success)' : 'var(--border)' }} />
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1, paddingTop: 2, paddingBottom: isLast ? 0 : 14 }}>
-                          <span style={{ fontSize: 13, color: done ? 'var(--success)' : errored ? 'var(--danger)' : active ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: 600 }}>{s.label}</span>
-                          {shortTx ? (
-                            href ? (
-                              <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-text)', fontFamily: 'monospace', textDecoration: 'none' }}>{shortTx}</a>
-                            ) : (
-                              <span style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>{shortTx}</span>
-                            )
-                          ) : (
-                            <span style={{ color: errored ? 'var(--danger)' : 'var(--text-secondary)' }}>
-                              {done ? 'Confirmed' : active ? 'In progress…' : errored ? 'Failed' : 'Waiting'}
-                            </span>
-                          )}
-                        </div>
-                        {active && <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--accent-text)', flexShrink: 0, paddingTop: 3 }}>{Math.floor(activeStepElapsed / 60)}:{String(activeStepElapsed % 60).padStart(2, '0')}</span>}
-                      </div>
-                    )
-                  })}
-
+              style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+              <MoveProgress
+                kind="transfer" route={chain.ub ? 'ub' : 'cctp'}
+                fromLabel="Arc" toLabel={chain.name} amount={numAmount}
+                steps={transferStepTexts}
+                current={transferStepIndex}
+                failed={bridgeSteps.find(s => s.status === 'error')?.message || null}
+                safe={transferSafe}
+                activeElapsed={activeStep ? activeStepElapsed : undefined}
+                txs={bridgeSteps.map(s => s.txHash
+                  ? { hash: s.txHash, href: s.name === 'mint' || s.name === 'spend' ? explorerTxUrl(chain.sdk, s.txHash) : arcExplorerTxUrl(s.txHash) }
+                  : undefined)}
+                onViewHub={() => navigate('/multichain', { state: { tab: 'activity' } })}
+                notes={<>
                   {/* Normal-range wait - calm/informational, not a warning. */}
                   {showStepInfo && (
                     <div className="flex items-start gap-2 p-3 mt-2 bg-brand/10 border border-brand/20 rounded-xl">
@@ -3463,30 +3357,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                       </div>
                     </div>
                   )}
-                </div>
-              )}
-
-              {activeStep && estLabel && !showStepInfo && !showStepTimeout && (
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-2xl text-xs"
-                  style={{ color: 'var(--accent-text)', background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-                  <Clock className="w-3.5 h-3.5 flex-shrink-0" />
-                  {activeStep.name === 'attestation' ? 'Circle attestation usually takes 20–90 seconds' : `Estimated time for this step: ${estLabel}`}
-                </div>
-              )}
-
-              <div style={{ flex: 1 }} />
-
-              {/* Pinned note. A transfer is signed and tracked in this browser,
-                  so the screen must stay open until it finishes - no way out
-                  of this screen is offered while it runs. */}
-              <div style={{
-                position: 'sticky', bottom: 0, margin: '0 -12px -12px', padding: '12px 16px calc(env(safe-area-inset-bottom, 0px) + 16px)',
-                background: 'var(--bg)', borderTop: '1px solid var(--border)',
-              }}>
-                <p className="text-xs text-text-secondary text-center" style={{ margin: 0 }}>
-                  Keep this screen open until the {chain.ub ? 'transfer' : 'bridge'} finishes - your funds are safe.
-                </p>
-              </div>
+                </>}
+              />
             </motion.div>
           )}
 
@@ -3795,7 +3667,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       {/* ── Hub (phone): the form as a full page that slides in from the
           right. Review opens the same way on top; the passcode, amount
           keypad and chain picker open above them. ── */}
-      {sheetMode && (step === 'form' || step === 'review' || step === 'confirm') && (
+      {sheetMode && !showResumed && (step === 'form' || step === 'review' || step === 'confirm') && (
         <HubPage open={formSheet === 1} behind={step !== 'form'}
           header={
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 12px' }}>

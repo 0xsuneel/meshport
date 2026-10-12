@@ -94,7 +94,11 @@ const CONFIRM_TIMEOUT_MS = 30 * 60 * 1000
 const POLL_MS = 10_000
 const POLL_MINTING_MS = 2_000
 type Stage = 'approving' | 'attesting' | 'minting' | 'done' | 'error'
-type StepFn = (stage: Stage, msg: string, pct: number, extra?: { txHash?: string; mintTxHash?: string }) => void
+type StepFn = (stage: Stage, msg: string, pct: number, extra?: {
+  txHash?: string; mintTxHash?: string
+  /** MeshPort's server (ub-claim-worker) has the signed spend: safe to leave. */
+  handedOff?: boolean
+}) => void
 
 function hashOf(r: any): string | undefined {
   // realTxHash: a relayed deposit/mint reports a hash that only the relayer's tx has on-chain.
@@ -350,7 +354,7 @@ async function runUbClaimInner(params: {
   }
   if (serverId && params.detach) return
   if (serverId) {
-    onStep('attesting', `Waiting for ${chainLabel} to finalize (${ubClaimEta(sdkChainId)}). MeshPort finishes this automatically - you can close the app.`, 50, { txHash: depositTx })
+    onStep('attesting', `Waiting for ${chainLabel} to finalize (${ubClaimEta(sdkChainId)}). MeshPort finishes this automatically - you can close the app.`, 50, { txHash: depositTx, handedOff: true })
     await followServerClaim(serverId, chainLabel, depositTx, onStep)
     return
   }
