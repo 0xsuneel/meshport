@@ -722,6 +722,9 @@ export function SwapPage() {
   // effect below takes over once step === 'confirming'. A requestId guards
   // against a stale response landing after the amount/tokens changed again.
   const liveQuoteReqId = useRef(0)
+  // When the quote on screen was fetched; Review refreshes it at once if older.
+  const quoteAtRef = useRef(0)
+  const QUOTE_FRESH_MS = 15_000
   const wasAmountPadOpen = useRef(false)
   const prevTokenPairRef = useRef({ in: tokenIn.id, out: tokenOut.id })
 
@@ -758,7 +761,11 @@ export function SwapPage() {
     // (the debounced-typing effect / keypad-close effect) re-fires this once
     // amountIn/tokenIn/tokenOut change again, and separately whenever
     // privateKey itself becomes available (see the effect below).
-    if (!privateKey || !walletAddress) return
+    // Read live: this callback is only rebuilt when the inputs change, so a
+    // closed-over privateKey stays null after the wallet loads and the
+    // "retry once the wallet is ready" effect below silently did nothing.
+    const auth = useAuthStore.getState()
+    if (!auth.privateKey || !auth.walletAddress) return
     const myReqId = ++liveQuoteReqId.current
     setLiveQuoteLoading(true)
     try {
@@ -769,6 +776,7 @@ export function SwapPage() {
       const gasFee = (est.gasFees ?? []).reduce((s: number, f: any) => s + (parseFloat(f.amount) || 0), 0)
       const freshTotalFees = (est.fees ?? []).reduce((s: number, f: any) => s + (parseFloat(f.amount) || 0), 0)
       totalFeesRef.current = freshTotalFees
+      quoteAtRef.current = Date.now()
       setEstimate({ estimatedOutput: est.estimatedOutput, stopLimit: est.stopLimit, fees: est.fees ?? [], gasFee })
     } catch (e: any) {
       if (liveQuoteReqId.current !== myReqId) return // amount/token changed since this fired - drop it
@@ -785,8 +793,9 @@ export function SwapPage() {
     } finally {
       if (liveQuoteReqId.current === myReqId) setLiveQuoteLoading(false)
     }
+  // Slippage is part of the quote (its "at least" amount): a change re-quotes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amountIn, tokenIn, tokenOut])
+  }, [amountIn, tokenIn, tokenOut, slippage, callProxy])
 
   useEffect(() => {
     const justClosed = wasAmountPadOpen.current && !showAmountPad
@@ -846,7 +855,7 @@ export function SwapPage() {
     if (!amt || amt <= 0 || tokenIn.id === tokenOut.id) return
     const t = setTimeout(() => { runLiveQuote() }, 500)
     return () => clearTimeout(t)
-  }, [amountIn, tokenIn, tokenOut, step, runLiveQuote])
+  }, [amountIn, tokenIn, tokenOut, slippage, step, runLiveQuote])
 
   // ── Fetch (and keep fresh) the quote while Review ('confirming') is open ──
   // This is the ONLY place the swap quote/fee is calculated. It fires once
@@ -878,12 +887,16 @@ export function SwapPage() {
           }
         }
         totalFeesRef.current = freshTotalFees
+        quoteAtRef.current = Date.now()
         setEstimate({ estimatedOutput: est.estimatedOutput, stopLimit: est.stopLimit, fees: est.fees ?? [], gasFee })
       } catch {
         // Silent refresh failures don't disturb what's already on screen -
         // the person can still confirm against the last good quote.
       }
     }
+    // The quote Review opened with may have been fetched a while ago on the
+    // form: refresh it now (in place, no spinner) rather than 20s from now.
+    if (Date.now() - quoteAtRef.current > QUOTE_FRESH_MS) void fetchQuote(true)
     const interval = setInterval(() => fetchQuote(true), 20000)
     return () => { cancelled = true; clearInterval(interval) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -933,6 +946,7 @@ export function SwapPage() {
       const gasFee = (est.gasFees ?? []).reduce((s: number, f: any) => s + (parseFloat(f.amount) || 0), 0)
       const freshTotalFees = (est.fees ?? []).reduce((s: number, f: any) => s + (parseFloat(f.amount) || 0), 0)
       totalFeesRef.current = freshTotalFees
+      quoteAtRef.current = Date.now()
       setEstimate({ estimatedOutput: est.estimatedOutput, stopLimit: est.stopLimit, fees: est.fees ?? [], gasFee })
       setStep('confirming')
     } catch (e: any) {
@@ -944,6 +958,7 @@ export function SwapPage() {
 
   // Real on-chain progress for the checklist (see SwapProgress in
   // swapService.ts) - replaces the old fixed "approve after 5s" timer.
+  const confirmLockRef = useRef(false)
   const [swapProgress, setSwapProgress] = useState<SwapProgressState>(INITIAL_SWAP_PROGRESS)
   const onSwapProgress = useCallback((p: SwapProgress) => setSwapProgress(prev => applySwapProgress(prev, p)), [])
 
@@ -1253,6 +1268,13 @@ export function SwapPage() {
   }, [callProxy, onSwapProgress, tokenIn, tokenOut, amountIn, slippage, estimate, walletAddress])
 
   const handleConfirm = async () => {
+    // One confirm, one swap: a double tap on Confirm Swap (or a repeated
+    // keypad / biometric completion) ran this twice before the sheet closed,
+    // starting two swaps. Released when this attempt ends without swapping,
+    // or when the swap itself has finished (done / failed).
+    if (confirmLockRef.current) return
+    confirmLockRef.current = true
+    try {
     if (storedPasscode) {
       if (passEntry.length < 6) { setPassError('Enter your 6-digit passcode'); return }
       const { verifyPasscode } = await import('@/lib/security')
@@ -1278,7 +1300,11 @@ export function SwapPage() {
     // right now is what they saw and confirmed against. We execute against
     // that quote rather than firing another SDK call from the passcode
     // sheet.
-    setPassEntry(''); setPassError(''); setShowPasscodeSheet(false); await executeSwap()
+    setPassEntry(''); setPassError(''); setShowPasscodeSheet(false)
+    await executeSwap()
+    } finally {
+      confirmLockRef.current = false
+    }
   }
 
   const flip = () => {
@@ -1288,6 +1314,12 @@ export function SwapPage() {
 
   const totalFees = (estimate?.fees ?? []).reduce((s, f) => s + parseFloat(f.amount || '0'), 0)
   const isActive  = ['idle','estimating'].includes(step)
+  // A valid amount whose quote is on its way (the 500ms typing debounce, or
+  // the fetch itself): shown as loading, never as a grey "0" that then
+  // turns into a spinner and back - and the rate line keeps its place.
+  const validQuoteInput = parseFloat(amountIn || '0') > 0 && tokenIn.id !== tokenOut.id
+  const quotePending = isActive && validQuoteInput && !estimate && !error && !!privateKey && !!walletAddress
+  const quoteLoading = step === 'estimating' || liveQuoteLoading || quotePending
 
   // Gas on Arc is always paid in native USDC, no matter which token is
   // being swapped - a EURC/cirBTC → USDC swap still needs leftover native
@@ -1514,7 +1546,7 @@ export function SwapPage() {
             </div>
             <div className="flex items-center justify-between gap-3" style={{ marginTop: 12 }}>
               <div className="min-w-0 flex items-center" style={{ height: 44 }}>
-                {(step === 'estimating' || liveQuoteLoading)
+                {quoteLoading
                   ? <RefreshCw className="w-5 h-5 text-[var(--brand)] animate-spin"/>
                   : estimate
                   ? <span className="font-extrabold" style={{ fontSize: amountFontSize(estimate.estimatedOutput.amount, 40), lineHeight: 1, letterSpacing: '-1px', color: 'var(--brand-text)' }}>
@@ -1539,7 +1571,7 @@ export function SwapPage() {
                 </AnimatePresence>
               </div>
             </div>
-            {estimate && !(step === 'estimating' || liveQuoteLoading) && (
+            {estimate && !quoteLoading && (
               <p className="text-[13px]" style={{ marginTop: 12, color: 'var(--text-muted)' }}>
                 {swapTokenSymbolChar(tokenOut.id)}{formatAmount(parseFloat(estimate.estimatedOutput.amount), swapTokenDecimals(tokenOut.id))}
               </p>
@@ -1549,14 +1581,24 @@ export function SwapPage() {
         )}
 
         {/* Rate and fee, one quiet line under the cards */}
-        {isActive && estimate && (
-          <div className="flex items-center justify-between text-[13px]" style={{ padding: '0 6px', color: 'var(--text-secondary)' }}>
-            <span>
-              1 {tokenIn.id} = {trimTrailingZeros((parseFloat(estimate.estimatedOutput.amount)/parseFloat(amountIn)).toFixed(
-                tokenOut.id === 'cirBTC' ? 8 : 4
-              ))} {tokenOut.id}
-            </span>
-            <span>Fee ~${formatAmount(totalFees)}</span>
+        {isActive && (estimate || quoteLoading) && (
+          <div className="flex items-center justify-between text-[13px]" style={{ padding: '0 6px', color: 'var(--text-secondary)', minHeight: 20 }}>
+            {estimate && !quoteLoading ? (
+              <>
+                <span>
+                  1 {tokenIn.id} = {trimTrailingZeros((parseFloat(estimate.estimatedOutput.amount)/parseFloat(amountIn)).toFixed(
+                    tokenOut.id === 'cirBTC' ? 8 : 4
+                  ))} {tokenOut.id}
+                </span>
+                <span>Fee ~${formatAmount(totalFees)}</span>
+              </>
+            ) : (
+              // Same line, placeholder bars, while the quote loads.
+              <>
+                <span aria-hidden className="animate-pulse" style={{ width: 130, height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
+                <span aria-hidden className="animate-pulse" style={{ width: 70, height: 12, borderRadius: 6, background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)' }} />
+              </>
+            )}
           </div>
         )}
 
@@ -1845,7 +1887,7 @@ export function SwapPage() {
             disabled={!canReview}
             className="w-full py-4 rounded-2xl text-base font-bold text-white disabled:opacity-35 transition-opacity"
             style={{ background:'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)', boxShadow: canReview ? 'var(--shadow-2)' : 'none' }}>
-            {(step === 'estimating' || liveQuoteLoading) ? 'Getting quote...' : `Swap ${tokenIn.id} → ${tokenOut.id}`}
+            {quoteLoading ? 'Getting quote...' : `Swap ${tokenIn.id} → ${tokenOut.id}`}
           </motion.button>
           </div>
         )}
