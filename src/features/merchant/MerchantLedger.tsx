@@ -25,6 +25,7 @@ import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransaction
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { SHEET_PANEL } from '@/lib/motion'
+import { ClaimAllScreen, type ClaimAllChain } from './ClaimAllScreen'
 import { lastClaimAllAt, CLAIM_ALL_COOLDOWN_MS, CLAIM_ALL_MIN_CHAIN, type ClaimAllStep } from '@/lib/ubClaim'
 import { merchantQrChain, MERCHANT_QR_EXTERNAL } from '@/lib/merchantQr'
 import { ChainPicker, WalletPaymentDetails } from './MerchantQrPanel'
@@ -322,7 +323,12 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
   const [pinError, setPinError] = useState(false)
   const [running, setRunning] = useState(false)
   const [steps, setSteps] = useState<Record<string, ClaimAllStep>>({})
-  const [result, setResult] = useState<string | null>(null)
+  // The chains of the current run (snapshot - the scan list refreshes under
+  // it) and whether its tracking screen is up. Retry re-runs only `retryIds`.
+  const [runChains, setRunChains] = useState<ClaimAllChain[]>([])
+  const [screenOpen, setScreenOpen] = useState(false)
+  const [retryIds, setRetryIds] = useState<string[] | null>(null)
+  const navigate = useNavigate()
 
   useEffect(() => { if (walletAddress) lastClaimAllAt(walletAddress).then(setLast).catch(() => setLast(0)) }, [walletAddress])
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t) }, [])
@@ -336,11 +342,16 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
   const nextAt = last && cooldownOn ? last + cooldownHours * 3_600_000 : 0
   const waitText = !cooldownOn ? 'Available any time' : `Available every ${cooldownHours} hour${cooldownHours === 1 ? '' : 's'}`
   const ready = last !== null && now >= nextAt
-  const label = (id: string) => due.find(c => c.chainId === id)?.label ?? (chains ?? []).find(c => c.chainId === id)?.label ?? id.split('_')[0]
 
-  const run = async (passcode?: string) => {
+  // `only`: Retry - just the chains that failed in this run (any time, the
+  // Claim All wait doesn't apply); otherwise every chain that's due.
+  const run = async (passcode?: string, only?: string[]) => {
     if (!walletAddress) return
-    setRunning(true); setSteps({}); setResult(null)
+    const list = only ? runChains.filter(c => only.includes(c.chainId)) : due.map(c => ({ chainId: c.chainId, label: c.label, balance: c.balance }))
+    if (list.length === 0) return
+    if (only) setSteps(prev => { const next = { ...prev }; only.forEach(id => delete next[id]); return next })
+    else { setRunChains(list); setSteps({}) }
+    setRunning(true); setScreenOpen(true)
     try {
       let key = useAuthStore.getState().privateKey
       if (!key) {
@@ -352,31 +363,39 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
       const { merchantClaimAll } = await import('@/lib/ubClaim')
       const r = await merchantClaimAll({
         walletAddress, privateKey: key,
-        chains: due.map(c => ({ chainId: c.chainId, balance: c.balance })),
+        chains: list.map(c => ({ chainId: c.chainId, balance: c.balance })),
         onStep: s => setSteps(prev => ({ ...prev, [s.chainId]: s })),
       })
-      const moved = r.cctp
-      if (moved > 0) setLast(Date.now())
-      setResult(moved > 0
-        ? `$${formatAmount(moved)} USDC is on its way to Arc.${r.failed.length ? ` ${r.failed.length} chain${r.failed.length === 1 ? '' : 's'} didn't go through - see above.` : ''}`
-        : 'Nothing was claimed - see the messages above.')
+      if (r.cctp > 0 && !only) setLast(Date.now())
       onClaimed?.()
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Claim All failed', 'error')
+      const msg = e instanceof Error ? e.message : 'Claim All failed'
+      // Chains that never started show the reason instead of "Waiting".
+      setSteps(prev => {
+        const next = { ...prev }
+        list.forEach(c => { if (!next[c.chainId] || next[c.chainId].state === 'working') next[c.chainId] = { chainId: c.chainId, state: 'error', msg } })
+        return next
+      })
     }
     setRunning(false)
   }
 
   const tap = () => {
     if (!ready || running || due.length === 0) return
+    setRetryIds(null)
     if (storedPasscode) { setPin(''); setPinError(false); setPinOpen(true) } else void run()
+  }
+  const retry = (ids: string[]) => {
+    if (running || ids.length === 0) return
+    setRetryIds(ids)
+    if (storedPasscode) { setScreenOpen(false); setPin(''); setPinError(false); setPinOpen(true) } else void run(undefined, ids)
   }
   const confirmPin = async (entered: string) => {
     if (!storedPasscode) return
     const { verifyPasscode } = await import('@/lib/security')
     if (!await verifyPasscode(entered, storedPasscode)) { setPinError(true); setPin(''); return }
     setPinOpen(false); setPin('')
-    void run(entered)
+    void run(entered, retryIds ?? undefined)
   }
 
   const scanning = chains === undefined
@@ -392,7 +411,9 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
       onChange={v => { setPin(v); setPinError(false) }}
       onComplete={p => { void confirmPin(p) }} />
   )
-  const confirmText = pinError ? 'Incorrect passcode. Try again.' : `Confirm Claim All of $${formatAmount(total)} USDC`
+  const pinAmount = retryIds ? runChains.filter(c => retryIds.includes(c.chainId)).reduce((t, c) => t + c.balance, 0) : total
+  const confirmText = pinError ? 'Incorrect passcode. Try again.' : `Confirm ${retryIds ? 'retry' : 'Claim All'} of $${formatAmount(pinAmount)} USDC`
+  const hasRun = runChains.length > 0 && Object.keys(steps).length > 0
 
   return (
     <div style={{ ...card, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -412,22 +433,27 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
           ...(enabled ? {} : { background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }) }}>
         {btnText}
       </button>
-      {Object.keys(steps).length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {Object.values(steps).map(st => (
-            <div key={st.chainId} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12 }}>
-              <b style={{ color: 'var(--text-primary)', flexShrink: 0 }}>{label(st.chainId)}</b>
-              <span style={{ textAlign: 'right', color: st.state === 'error' ? 'var(--danger, #D64545)' : st.state === 'done' ? 'var(--success)' : 'var(--text-secondary)' }}>{st.msg}</span>
-            </div>
-          ))}
-        </div>
+      {hasRun && !screenOpen && (
+        <button onClick={() => setScreenOpen(true)}
+          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--brand-text)', textAlign: 'left' }}>
+          {running ? 'Claiming… view progress ›' : 'View last Claim All ›'}
+        </button>
       )}
-      {result && <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{result}</div>}
+
+      <AnimatePresence>
+        {screenOpen && hasRun && (
+          <ClaimAllScreen key="claim-all" chains={runChains} steps={steps} running={running}
+            onClose={() => setScreenOpen(false)}
+            onRetry={retry}
+            onTrack={id => { setScreenOpen(false); navigate(`/multichain?claim=${encodeURIComponent(id)}`, { state: { tab: 'bring', trackClaimId: id } }) }}
+            onViewHub={() => { setScreenOpen(false); navigate('/multichain', { state: { tab: 'activity' } }) }} />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {pinOpen && (isDesktop ? (
-          <DesktopTransactionAuthDialog key="pin" onClose={() => setPinOpen(false)} title="Confirm Claim All"
-            amountLabel={`$${formatAmount(total)} USDC`} subLabel={pinError ? <span role="alert" style={{ color: 'var(--danger, #D64545)' }}>Incorrect passcode. Try again.</span> : 'To your Arc balance'}>
+          <DesktopTransactionAuthDialog key="pin" onClose={() => setPinOpen(false)} title={retryIds ? 'Confirm retry' : 'Confirm Claim All'}
+            amountLabel={`$${formatAmount(pinAmount)} USDC`} subLabel={pinError ? <span role="alert" style={{ color: 'var(--danger, #D64545)' }}>Incorrect passcode. Try again.</span> : 'To your Arc balance'}>
             {keypad}
           </DesktopTransactionAuthDialog>
         ) : (

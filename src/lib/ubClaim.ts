@@ -696,7 +696,8 @@ export async function lastClaimAllAt(walletAddress: string): Promise<number> {
   try { return Number(localStorage.getItem(claimAllKey(walletAddress)) || 0) || 0 } catch { return 0 }
 }
 
-export type ClaimAllStep = { chainId: string; state: 'working' | 'done' | 'error'; msg: string }
+/** One chain's progress in Claim All; `claimId` (once sent) opens its Track Progress. */
+export type ClaimAllStep = { chainId: string; state: 'working' | 'done' | 'error'; msg: string; claimId?: string }
 let claimingAll = false
 
 export async function merchantClaimAll(p: {
@@ -707,7 +708,7 @@ export async function merchantClaimAll(p: {
 }): Promise<{ cctp: number; failed: string[] }> {
   if (claimingAll) throw new Error('Claim All is already running')
   claimingAll = true
-  const step = (chainId: string, state: ClaimAllStep['state'], msg: string) => p.onStep?.({ chainId, state, msg })
+  const step = (chainId: string, state: ClaimAllStep['state'], msg: string, claimId?: string) => p.onStep?.({ chainId, state, msg, claimId })
   const out = { cctp: 0, failed: [] as string[] }
   try {
     const [{ isGaslessBridgeAvailable, bringFundsGasless }, { submitClaim }] = await Promise.all([
@@ -723,9 +724,9 @@ export async function merchantClaimAll(p: {
           onStatus: msg => step(c.chainId, 'working', msg === 'Submitting…' || msg === 'Confirming…' ? 'MeshPort is sending the transfer…' : msg),
         })
         // The claim is the burned amount: MeshPort's fee was taken before the burn.
-        await submitClaim({ walletAddress: p.walletAddress, sourceChain: c.chainId, amount: Math.max(0, amount - r.fee), txHash: r.txHash })
+        const claim = await submitClaim({ walletAddress: p.walletAddress, sourceChain: c.chainId, amount: Math.max(0, amount - r.fee), txHash: r.txHash })
         out.cctp += amount
-        step(c.chainId, 'done', 'On its way to Arc · a few minutes')
+        step(c.chainId, 'done', 'On its way to Arc · a few minutes', claim.claimId)
       } catch (e) {
         out.failed.push(c.chainId)
         step(c.chainId, 'error', (e instanceof Error ? e.message : 'Claim failed').slice(0, 90))
