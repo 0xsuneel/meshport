@@ -1512,14 +1512,12 @@ function ChatPaymentReceipt({ msg, sent, peer, onClose }: { msg: any; sent: bool
         <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: sent ? 'var(--text-primary)' : 'var(--success)', marginBottom: 4 }}>{sent ? '-' : '+'}{amount}</span>
         {sent ? <>Sent to {peer} in chat</> : <>From {peer} in chat</>}
       </>}
+      // The header shows the amount and who it was with; the title the outcome.
       rows={[
-        { label: 'Amount', value: amount, positive: !sent },
-        { label: sent ? 'To' : 'From', value: peer, positive: true },
         ...(hash ? [{ label: 'Transaction Hash', value: `${hash.slice(0, 6)}…${hash.slice(-4)}` }] : []),
         { label: 'Time', value: new Date(msg.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
       ]}
       detailRows={[
-        { label: 'Status', value: sent ? 'Delivered' : 'Received', positive: true },
         { label: 'Network', value: 'Arc Testnet' },
       ]}
       fullHash={hash || undefined}
@@ -5640,7 +5638,6 @@ export function ChatConversationPage() {
                   style={{ flex: 1, minHeight: 0, height: 'auto', padding: 0, background: 'transparent' }}
                   title={payPending ? 'Payment Submitted' : 'Payment Sent'}
                   subtitle={payPending ? <>Still confirming on Arc. Activity updates when it lands.</> : <>Delivered in your chat</>}
-                  bubble={<>Sent {amountLabel} to {toLabel} ✓✓</>}
                   pill={payPending ? undefined : `Completed in ${elapsedSeconds} Seconds`}
                   rows={[
                     { label: 'Amount', value: amountLabel },
@@ -5649,7 +5646,6 @@ export function ChatConversationPage() {
                     { label: 'Time', value: timeLabel },
                   ]}
                   detailRows={[
-                    { label: 'Status', value: payPending ? 'Confirming' : 'Delivered', positive: !payPending },
                     { label: 'Network', value: 'Arc Testnet' },
                     { label: 'Network Fee', value: payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free' },
                   ]}

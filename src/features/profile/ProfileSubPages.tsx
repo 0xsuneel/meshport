@@ -1031,7 +1031,6 @@ export function EditProfilePage() {
         // themselves stay a comfortable readable width, centered inside it.
         <div style={{ padding: '20px 24px 14px' }}>
           <div className="bg-surface border border-border rounded-3xl" style={{ padding: '32px 24px 28px' }}>
-            <h2 className="text-lg font-bold text-text-primary text-center mb-2">Edit Profile</h2>
             <div className="space-y-5" style={{ maxWidth: 420, margin: '0 auto' }}>
               {formFields}
             </div>

@@ -207,7 +207,7 @@ function HistoryDetail({ r, onClose }: { r: SwapRecord; onClose: () => void }) {
       onClose={onClose}
       status={ok ? 'success' : 'failed'}
       title={ok ? 'Swap Successful!' : 'Swap Failed'}
-      subtitle={ok ? <>{fmtIn} became {fmtOut}</> : <>{fmtIn} → {tOut.id} did not complete</>}
+      subtitle={ok ? <>{tIn.id} → {tOut.id} on Arc</> : <>The swap to {tOut.id} did not complete</>}
       rows={[
         { label: 'You Paid', value: fmtIn },
         { label: 'You Received', value: fmtOut, positive: ok },
@@ -215,7 +215,6 @@ function HistoryDetail({ r, onClose }: { r: SwapRecord; onClose: () => void }) {
         { label: 'Time', value: new Date(r.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
       ]}
       detailRows={[
-        { label: 'Status', value: ok ? 'Confirmed' : 'Failed', positive: ok },
         { label: 'Rate', value: `1 ${r.tokenIn} ≈ ${rate} ${r.tokenOut}` },
         { label: 'Network', value: 'Arc Testnet' },
       ]}
@@ -1774,7 +1773,7 @@ export function SwapPage() {
             <SuccessReceipt
               style={isDesktop ? undefined : { height: 'auto', flex: 1 }}
               title="Swap Successful!"
-              subtitle={<>{fmtIn} became {fmtOut}</>}
+              subtitle={<>{tokenIn.id} → {tokenOut.id} on Arc</>}
               pill={`Completed in ${swapElapsedSeconds} Seconds`}
               rows={[
                 { label: 'You Paid', value: fmtIn },
@@ -1783,7 +1782,6 @@ export function SwapPage() {
                 { label: 'Time', value: timeLabel },
               ]}
               detailRows={[
-                { label: 'Status', value: 'Confirmed', positive: true },
                 ...(inNum > 0 && outNum > 0 ? [{ label: 'Rate', value: `1 ${tokenIn.id} = ${trimTrailingZeros((outNum / inNum).toFixed(4))} ${tokenOut.id}` }] : []),
                 { label: 'Total Fees', value: `~$${formatAmount(totalFees)}` },
                 { label: 'Network', value: 'Arc Testnet' },

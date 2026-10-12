@@ -3422,21 +3422,17 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                     { label: 'Done', onClick: () => navigate('/multichain'), primary: true },
                   ]}
                   title="Transfer Complete"
-                  subtitle={<>{fmtAmount} moved from Arc to {chain.name}</>}
+                  subtitle={<>Moved from Arc to {chain.name}</>}
                   pill={`Completed in ${transferElapsedSeconds} Seconds`}
                   rows={[
                     { label: 'You Sent', value: fmtAmount },
                     { label: 'Recipient Received', value: `${formatAmount(successInfo?.receiverGets || 0)} USDC`, positive: true },
-                    { label: 'Destination Chain', value: chain.name, positive: true },
                     ...(address ? [{ label: 'Recipient', value: `${address.slice(0, 6)}…${address.slice(-4)}` }] : []),
                     ...(txHash ? [{ label: 'Transaction Hash', value: shortHash, onCopy: () => copyTransferHash(txHash), copied: hashCopied }] : []),
                     { label: 'Time', value: timeLabel },
                   ]}
                   steps={processSteps.map(s => s.label)}
                   detailRows={[
-                    { label: 'Status', value: 'Confirmed', positive: true },
-                    { label: 'From', value: 'Arc Testnet' },
-                    { label: 'Destination Chain', value: chain.name },
                     { label: 'Bridge', value: chain.ub ? 'Circle Gateway' : 'Circle CCTP' },
                     { label: 'Total Fees', value: totalFeesLabel },
                   ]}

@@ -828,15 +828,13 @@ function MerchantPaymentReceipt({ p, orderNumber, note, onViewOrder, onClose }: 
         <span style={{ display: 'block', fontSize: 20, fontWeight: 800, color: 'var(--success)', marginBottom: 4 }}>+${formatAmount(p.amount)} USDC</span>
         From {from}{orderNumber ? ` · ${orderNumber}` : ''}
       </>}
+      // The header shows the amount, who paid and the order; the title the outcome.
       rows={[
-        { label: 'Amount', value: `$${formatAmount(p.amount)} USDC`, positive: true },
-        { label: 'From', value: from, positive: true },
-        { label: 'Status', value: paymentStageLabel(p), positive: !arriving },
+        ...(arriving ? [{ label: 'Status', value: paymentStageLabel(p) }] : []),
         ...(p.txHash ? [{ label: 'Transaction Hash', value: `${p.txHash.slice(0, 6)}…${p.txHash.slice(-4)}` }] : []),
         { label: 'Time', value: new Date(p.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
       ]}
       detailRows={[
-        ...(orderNumber ? [{ label: 'For', value: orderNumber }] : []),
         { label: 'Route', value: routeLabel(p.chain) || 'Arc' },
         { label: 'Sender wallet', value: short(p.from) },
         ...(p.matchedBy ? [{ label: 'Matched by', value: p.matchedBy === 'watcher' ? 'Direct deposit' : p.matchedBy === 'merchant' ? 'You (checked a transaction)' : 'Customer' }] : []),

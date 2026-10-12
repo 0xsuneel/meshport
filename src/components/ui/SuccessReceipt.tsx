@@ -182,7 +182,11 @@ export function SuccessReceipt({
     return () => clearTimeout(t)
   }, [revealed, celebrate, status])
 
-  const hasMore = !!(steps?.length || detailRows?.length || fullHash || links?.length || linksNote)
+  // A hash already shown in a row (with its copy button) isn't shown again as
+  // a "Full hash" block, nor under its explorer link.
+  const hashInRows = [...rows, ...(detailRows ?? [])].some(r => /hash|\btx\b/i.test(r.label))
+  const showFullHash = !!fullHash && !hashInRows
+  const hasMore = !!(steps?.length || detailRows?.length || showFullHash || links?.length || linksNote)
   const hasActions = !!actions?.length
   const h5 = { fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', margin: '10px 0 2px' } as const
 
@@ -310,7 +314,7 @@ export function SuccessReceipt({
                       {detailRows.map(r => <Row key={r.label} row={r} />)}
                     </>
                   )}
-                  {fullHash && (
+                  {showFullHash && (
                     <>
                       <h5 style={h5}>Full hash</h5>
                       <span style={{ display: 'block', fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 11, wordBreak: 'break-all', lineHeight: 1.5, color: 'var(--text-secondary)', padding: '8px 0 4px' }}>{fullHash}</span>
@@ -328,7 +332,7 @@ export function SuccessReceipt({
                           }}>
                           <span>
                             <b style={{ display: 'block', fontSize: 13 }}>{l.title}</b>
-                            <small style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{[l.explorer, l.hash && shortHash(l.hash)].filter(Boolean).join(' · ')}</small>
+                            <small style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>{[l.explorer, l.hash && !hashInRows && !showFullHash && shortHash(l.hash)].filter(Boolean).join(' · ')}</small>
                           </span>
                           <ExternalLink size={16} color="var(--text-secondary)" />
                         </a>
