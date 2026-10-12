@@ -14,7 +14,7 @@ import { parseUnits } from 'viem'
 import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
-import { copyToClipboard, timeAgo, trimTrailingZeros } from '@/lib/utils'
+import { copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { readArcBalanceOrThrow, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT, EXTERNAL_SCAN_PROGRESS_EVENT } from '@/blockchain/BlockchainManager'
 import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpinner'
 import { notifyPaymentReceived, notifyPaymentReceivedFromAddress, notifyBulkPaymentReceived } from '@/lib/notifications'
@@ -34,7 +34,8 @@ import { activityLabel, activitySign, type ActivityRecord } from '@/lib/Activity
 // Claimed from / Transfer to / P2P Sell Order Cancelled, including
 // self-transfer "Self" labeling) instead of a second, drifting copy of
 // the same logic via the older activityLabel() map.
-import { deriveActivityRow, DetailSheet } from '@/features/activity/ActivityPage'
+import { ActivityRow, DetailSheet } from '@/features/activity/ActivityPage'
+import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { SearchField } from '@/components/ui/SearchField'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
@@ -2423,6 +2424,7 @@ export function HomePage() {
   // own DetailSheet popup instead, same as tapping a row on the Activity
   // page itself does - "View all" still correctly navigates to /activity.
   const [selectedActivity, setSelectedActivity] = useState<ActivityRecord | null>(null)
+  const recentFlash = useReturnFlash()
   // Home's real scroll container (below) is its own overflowY:'auto' div,
   // not the window - MyQrCard's scroll-linked reveal needs this ref to
   // measure element positions against the actual scrolling element.
@@ -3943,37 +3945,10 @@ export function HomePage() {
             </div>
             {homeRecentActivity.length === 0 ? (
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', textAlign: 'center', padding: '20px 0' }}>No recent activity</p>
-            ) : homeRecentActivity.slice(0, 8).map((r, i) => {
-              const sign = activitySign(r.activityType, r.metadata?.direction)
-              const color = sign === '+' ? 'var(--success)' : sign === '-' ? 'var(--danger)' : 'var(--text-secondary)'
-              const { title: rowTitle } = deriveActivityRow(r)
-              return (
-                <div key={r.id} onClick={() => setSelectedActivity(r)} style={{
-                  display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0',
-                  borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'none',
-                  cursor: 'pointer',
-                }}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                    background: sign === '+' ? 'color-mix(in srgb, var(--success) 12%, transparent)' : 'color-mix(in srgb, var(--danger) 12%, transparent)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                      {sign === '+'
-                        ? <path d="M12 2L2 12M2 12H8M2 12V6" stroke="var(--success)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        : <path d="M2 12L12 2M12 2H6M12 2V8" stroke="var(--danger)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>}
-                    </svg>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {rowTitle}
-                    </div>
-                    <div style={{ fontSize: 10.5, color: 'var(--text-secondary)', marginTop: 1 }}>{timeAgo(r.createdAt)}</div>
-                  </div>
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color, flexShrink: 0 }}>{sign}{fmt(r.amount, r.tokenSymbol)} {r.tokenSymbol}</div>
-                </div>
-              )
-            })}
+            ) : homeRecentActivity.slice(0, 8).map((r, i, list) => (
+              <ActivityRow key={r.id} record={r} isFirst={i === 0} isLast={i === list.length - 1}
+                onSelect={() => { recentFlash.opened(); setSelectedActivity(r) }} flash={r.id === recentFlash.flashId} />
+            ))}
           </div>
         </div>
         </div>
@@ -4090,7 +4065,7 @@ export function HomePage() {
       )}
 
       {selectedActivity && (
-        <DetailSheet record={selectedActivity} onClose={() => setSelectedActivity(null)} />
+        <DetailSheet record={selectedActivity} onClose={() => { recentFlash.closed(selectedActivity.id); setSelectedActivity(null) }} />
       )}
     </div>
   )

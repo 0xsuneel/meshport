@@ -11,7 +11,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Search,
-  ArrowDownToLine, ArrowUpFromLine,
 } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -22,6 +21,8 @@ import {
 } from '@/lib/p2pService'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { SkeletonCards } from '@/components/ui/Skeleton'
+import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
+import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { AnimatePresence } from 'framer-motion'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 
@@ -147,6 +148,7 @@ export function P2PHistoryPage() {
   const [search, setSearch] = useState('')
   // Tapping a trade opens it as a receipt (see TradeReceipt).
   const [receiptTrade, setReceiptTrade] = useState<P2PTrade | null>(null)
+  const receiptFlash = useReturnFlash()
 
   const load = useCallback(async () => {
     if (!user?.id) { setLoading(false); return }
@@ -223,7 +225,7 @@ export function P2PHistoryPage() {
           counterparty={cp?.displayName || cp?.username || 'Trader'}
           counterpartyWallet={cp?.walletAddress || (isBuyer ? t.sellerWallet : t.buyerWallet)}
           onOpenTrade={() => { setReceiptTrade(null); navigate(`/p2p/trade/${t.id}`) }}
-          onClose={() => setReceiptTrade(null)} />
+          onClose={() => { receiptFlash.closed(t.id); setReceiptTrade(null) }} />
       })()}
       </AnimatePresence>
 
@@ -240,34 +242,19 @@ export function P2PHistoryPage() {
           const meta = badgeMeta(t)
           const cp = counterparties.get(isBuyer ? t.sellerId : t.buyerId)
 
+          const done = t.status === 'completed' || t.status === 'released'
+          const tone = t.disputeStatus === 'open' ? 'attention' : done ? (isBuyer ? 'in' : 'out')
+            : t.status === 'cancelled' || t.status === 'expired' ? 'muted' : 'pending'
           return (
-            <div key={t.id} style={{ background: COLORS.surface, borderRadius: 16, marginBottom: 10, border: `1px solid ${COLORS.border}`, overflow: 'hidden' }}>
-              <div onClick={() => setReceiptTrade(t)} style={{ padding: 14, cursor: 'pointer' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    {isBuyer ? <ArrowDownToLine size={13} color={COLORS.success} /> : <ArrowUpFromLine size={13} color={COLORS.error} />}
-                    <span style={{ fontSize: 13, fontWeight: 700, color: isBuyer ? COLORS.success : COLORS.error }}>{isBuyer ? 'Buy' : 'Sell'}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: meta.color, background: `color-mix(in srgb, ${meta.color} 10%, transparent)`, padding: '3px 9px', borderRadius: 10 }}>
-                      {meta.label}
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 8 }}>
-                  <div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: COLORS.text }}>{t.amountUsdc} USDC</div>
-                    <div style={{ fontSize: 11.5, color: COLORS.muted, marginTop: 2 }}>{currencySymbol(t.currency)}{t.amountFiat} {t.currency} · {t.pricePerUsdc}/USDC</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 11.5, color: COLORS.text }}>{cp?.displayName || cp?.username || 'Trader'}</div>
-                    <div style={{ fontSize: 10.5, color: COLORS.muted, marginTop: 2 }}>{fmtDate(t.createdAt)}</div>
-                  </div>
-                </div>
-              </div>
-
-            </div>
+            <HistoryRow key={t.id} flash={t.id === receiptFlash.flashId}
+              onClick={() => { receiptFlash.opened(); setReceiptTrade(t) }}
+              icon={<HistoryIcon tone={tone} icon="p2p" />}
+              title={`${isBuyer ? 'Bought' : 'Sold'} USDC${cp ? ` · ${cp.displayName || cp.username}` : ''}`}
+              sub={`${currencySymbol(t.currency)}${t.amountFiat} ${t.currency} · ${t.pricePerUsdc}/USDC`}
+              meta={<><span style={{ color: meta.color, fontWeight: 600 }}>{meta.label}</span> · {fmtDate(t.createdAt)}</>}
+              right={<div style={{ fontSize: 14, fontWeight: 700, color: done && isBuyer ? 'var(--success)' : 'var(--text-primary)' }}>
+                {done ? (isBuyer ? '+' : '-') : ''}{t.amountUsdc} USDC
+              </div>} />
           )
         })}
       </div>

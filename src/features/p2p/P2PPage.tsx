@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { PopupDim } from '@/components/ui/PopupDim'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import {
-  ArrowLeft, TrendingUp, TrendingDown, Search, Filter, Plus,
+  ArrowLeft, Search, Filter, Plus,
   Clock, CheckCircle2, Star, Send, Paperclip, X as XIcon, History, Pencil, PlusCircle, Trash2,
 } from 'lucide-react'
 import { useAuthStore, useUIStore, useP2PTradesCountStore, useWalletStore } from '@/store'
@@ -45,6 +45,8 @@ import {
 import { MerchantLine, MethodTag, PaymentMethodPicker, PaymentMethodSheet, PAYMENT_METHOD_TYPES } from './p2pUi'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { SkeletonCards } from '@/components/ui/Skeleton'
+import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
+import { useReturnFlash } from '@/hooks/useReturnFlash'
 
 export const COLORS = {
   bg: 'var(--bg)', surface: 'var(--surface)', surfaceSecondary: 'var(--surface)',
@@ -246,6 +248,7 @@ export function P2PHubPage() {
   // just completed shows up without a page refresh.
   const [p2pHistory, setP2pHistory] = useState<P2PTrade[]>([])
   const [p2pHistoryLoaded, setP2pHistoryLoaded] = useState(false)
+  const historyFlash = useReturnFlash('p2p-hub-history')
   useEffect(() => {
     if (!isDesktop || !user?.id) return
     let cancelled = false
@@ -530,36 +533,21 @@ export function P2PHubPage() {
           ) : p2pHistory.length === 0 ? (
             <DesktopHistoryEmpty label="Your P2P trades will show up here" />
           ) : (
-            p2pHistory.map((t, i) => {
+            p2pHistory.map(t => {
               const isBuyer = t.buyerId === user?.id
               const done = t.status === 'completed'
               const dead = t.status === 'cancelled' || t.status === 'expired'
               const statusColor = done ? 'var(--success)' : dead ? 'var(--text-secondary)' : 'var(--warning)'
               const statusLabel = done ? 'Completed' : dead ? (t.status === 'expired' ? 'Expired' : 'Cancelled') : 'In progress'
               return (
-                <div key={t.id} onClick={() => navigate(`/p2p/trade/${t.id}`)} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', cursor: 'pointer',
-                  borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'none',
-                }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                    background: `color-mix(in srgb, ${statusColor} 12%, transparent)`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {isBuyer
-                      ? <TrendingDown size={14} color={statusColor} />
-                      : <TrendingUp size={14} color={statusColor} />}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {isBuyer ? 'Bought' : 'Sold'} USDC
-                    </div>
-                    <div style={{ fontSize: 11, color: statusColor, marginTop: 1 }}>
-                      {statusLabel} · {timeAgo(t.completedAt || t.createdAt)}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', flexShrink: 0 }}>
-                    {trimTrailingZeros(t.amountUsdc.toFixed(2))} USDC
-                  </div>
-                </div>
+                <HistoryRow key={t.id} inPanel flash={t.id === historyFlash.flashId}
+                  onClick={() => { historyFlash.leaving(t.id); navigate(`/p2p/trade/${t.id}`) }}
+                  icon={<HistoryIcon tone={done ? (isBuyer ? 'in' : 'out') : dead ? 'muted' : 'pending'} icon="p2p" />}
+                  title={`${isBuyer ? 'Bought' : 'Sold'} USDC`}
+                  meta={<><span style={{ color: statusColor, fontWeight: 600 }}>{statusLabel}</span> · {timeAgo(t.completedAt || t.createdAt)}</>}
+                  right={<div style={{ fontSize: 14, fontWeight: 700, color: done ? (isBuyer ? 'var(--success)' : 'var(--text-primary)') : 'var(--text-secondary)' }}>
+                    {done ? (isBuyer ? '+' : '-') : ''}{trimTrailingZeros(t.amountUsdc.toFixed(2))} USDC
+                  </div>} />
               )
             })
           )}
@@ -2505,6 +2493,7 @@ export function P2PMyTradesPage() {
   const user = useAuthStore(s => s.user)
   const [trades, setTrades] = useState<P2PTrade[]>(() => myTradesCache.get(user?.id ?? '') ?? [])
   const [loading, setLoading] = useState(() => !myTradesCache.has(user?.id ?? ''))
+  const tradesFlash = useReturnFlash('p2p-my-trades')
 
   useEffect(() => {
     if (!user?.id) { setLoading(false); return }
@@ -2541,16 +2530,20 @@ export function P2PMyTradesPage() {
           </div>
         ) : trades.map(t => {
           const isBuyer = t.buyerId === user?.id
-          const meta = statusMeta(isTradeExpired(t) ? 'expired' : t.status)
+          const st = isTradeExpired(t) ? 'expired' : t.status
+          const meta = statusMeta(st)
+          const done = st === 'completed' || st === 'released'
+          const tone = done ? (isBuyer ? 'in' : 'out') : st === 'cancelled' || st === 'expired' ? 'muted' : 'pending'
           return (
-            <div key={t.id} onClick={() => navigate(`/p2p/trade/${t.id}`)} style={{ background: COLORS.surface, borderRadius: 16, padding: 14, marginBottom: 10, border: `1px solid ${COLORS.border}`, cursor: 'pointer' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: isBuyer ? COLORS.success : COLORS.error }}>{isBuyer ? 'Buying' : 'Selling'} USDC</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: meta.color }}>{meta.label}</span>
-              </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, marginTop: 6 }}>{t.amountUsdc} USDC</div>
-              <div style={{ fontSize: 11.5, color: COLORS.muted, marginTop: 2 }}>{currencySymbol(t.currency)}{t.amountFiat} · {t.paymentMethod}</div>
-            </div>
+            <HistoryRow key={t.id} flash={t.id === tradesFlash.flashId}
+              onClick={() => { tradesFlash.leaving(t.id); navigate(`/p2p/trade/${t.id}`) }}
+              icon={<HistoryIcon tone={tone} icon="p2p" />}
+              title={`${isBuyer ? 'Buying' : 'Selling'} USDC`}
+              sub={`${currencySymbol(t.currency)}${t.amountFiat} · ${t.paymentMethod}`}
+              meta={<><span style={{ color: meta.color, fontWeight: 600 }}>{meta.label}</span> · {timeAgo(t.completedAt || t.createdAt)}</>}
+              right={<div style={{ fontSize: 14, fontWeight: 700, color: done && isBuyer ? 'var(--success)' : 'var(--text-primary)' }}>
+                {done ? (isBuyer ? '+' : '-') : ''}{t.amountUsdc} USDC
+              </div>} />
           )
         })}
       </div>

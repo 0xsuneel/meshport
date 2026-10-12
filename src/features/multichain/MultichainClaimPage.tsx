@@ -43,6 +43,8 @@ import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
+import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
+import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { formatAmount, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
@@ -429,6 +431,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const [claimHistory, setClaimHistory] = useState<ServerClaim[]>([])
   const [claimHistoryLoaded, setClaimHistoryLoaded] = useState(false)
   const [claimHistDetail, setClaimHistDetail] = useState<ServerClaim | null>(null)
+  const claimFlash = useReturnFlash()
   useEffect(() => {
     if (!isDesktop || !walletAddress) return
     let cancelled = false
@@ -2629,37 +2632,20 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           ) : claimHistory.length === 0 ? (
             <DesktopHistoryEmpty label="Funds you claim from other chains will show up here" />
           ) : (
-            claimHistory.map((c, i) => {
+            claimHistory.map(c => {
               const failed = c.status === 'failed'
               const pending = !failed && c.status !== 'completed'
               const chainLabel = (c.sourceChain || 'Unknown chain').replace(/_/g, ' ')
               const statusColor = failed ? 'var(--danger)' : pending ? 'var(--warning)' : 'var(--success)'
               return (
-                <div key={c.id} onClick={() => setClaimHistDetail(c)} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', cursor: 'pointer',
-                  borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'none',
-                }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                    background: `color-mix(in srgb, ${statusColor} 12%, transparent)`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-                      <path d="M12 2L2 12M2 12H8M2 12V6" stroke={statusColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      From {chainLabel}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
-                      {failed ? <span style={{ color: 'var(--danger)' }}>Failed</span>
-                        : pending ? <span style={{ color: 'var(--warning)' }}>In progress</span>
-                        : timeAgo(c.completedAt || c.createdAt)}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: statusColor, flexShrink: 0 }}>
+                <HistoryRow key={c.id} inPanel flash={c.id === claimFlash.flashId}
+                  onClick={() => { claimFlash.opened(); setClaimHistDetail(c) }}
+                  icon={<HistoryIcon tone={failed ? 'failed' : pending ? 'pending' : 'in'} icon="receive" />}
+                  title={`From ${chainLabel}`}
+                  meta={<><span style={{ color: statusColor, fontWeight: 600 }}>{failed ? 'Failed' : pending ? 'In progress' : 'Completed'}</span> · {timeAgo(c.completedAt || c.createdAt)}</>}
+                  right={<div style={{ fontSize: 14, fontWeight: 700, color: failed ? 'var(--danger)' : 'var(--success)', textDecoration: failed ? 'line-through' : undefined }}>
                     +{formatAmount(c.arrivedAmount ?? c.amount)} USDC
-                  </div>
-                </div>
+                  </div>} />
               )
             })
           )}
@@ -2678,7 +2664,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           const mintHref = arcExplorerTxUrl(c.destinationTxHash)
           return (
             <DesktopHistoryDetail
-              onClose={() => setClaimHistDetail(null)}
+              onClose={() => { claimFlash.closed(c.id); setClaimHistDetail(null) }}
               title="Claim Details"
               icon={<svg width="20" height="20" viewBox="0 0 14 14" fill="none"><path d="M12 2L2 12M2 12H8M2 12V6" stroke={statusColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
               iconColor={statusColor}

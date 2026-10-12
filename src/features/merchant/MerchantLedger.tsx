@@ -7,7 +7,7 @@
 // only the merchant-pay Edge Function changes after verifying on-chain.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Copy, Share2, MessageCircle, QrCode, Search, Users, Clock, CheckCircle2, XCircle } from 'lucide-react'
+import { ArrowLeft, Copy, Share2, MessageCircle, QrCode, Search, Users, CheckCircle2 } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useSettingsStore } from '@/store/settingsStore'
 import { formatAmount, timeAgo, copyToClipboard } from '@/lib/utils'
@@ -19,6 +19,8 @@ import {
   type MerchantIntent, type MerchantPayment, type UnmatchedDeposit, type ChainReceipt, orderKindOf, orderTitle, orderDisplay } from '@/lib/merchantPay'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { HistoryIcon } from '@/components/ui/HistoryRow'
+import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { PopupDim } from '@/components/ui/PopupDim'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
@@ -156,13 +158,19 @@ export function customersOf(payments: MerchantPayment[]): Customer[] {
   return [...map.values()].sort((a, b) => b.last.localeCompare(a.last))
 }
 
+type LedgerTab = 'requests' | 'customers' | 'chains'
+let lastLedgerTab: LedgerTab = 'chains'
+
 function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, onClaimed, onOpenRequest, onOpenCustomer, ledgerBalance, ledgerChains }: {
   loaded: boolean; intents: MerchantIntent[]; payments: MerchantPayment[]; chains?: React.ReactNode
   ledgerBalance?: number; ledgerChains?: number
   receipts: ChainReceipt[]; claimChains?: ClaimChain[]; onClaimed?: () => void
   onOpenRequest: (code: string) => void; onOpenCustomer: (key: string) => void
 }) {
-  const [tab, setTab] = useState<'requests' | 'customers' | 'chains'>('chains')
+  // Back from a request or customer: same tab, and that row flashes.
+  const listFlash = useReturnFlash('merchant-ledger')
+  const [tab, setTabState] = useState<LedgerTab>(() => (listFlash.flashId ? lastLedgerTab : 'chains'))
+  const setTab = (t: LedgerTab) => { lastLedgerTab = t; setTabState(t) }
   const walletAddress = useAuthStore(s => s.walletAddress)
   const [q, setQ] = useState('')
   const [showAllReq, setShowAllReq] = useState(false)
@@ -193,10 +201,11 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
   const divider = <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--border)', margin: '8px 0' }} />
   const requestRow = (i: MerchantIntent) => (
     <Row key={i.id}
-      icon={i.status === 'paid' ? <CheckCircle2 size={16} color="var(--success)" /> : ['expired', 'cancelled', 'failed'].includes(i.status) ? <XCircle size={16} color="var(--text-secondary)" /> : <Clock size={16} color="var(--warning)" />}
+      icon={<HistoryIcon tone={i.status === 'paid' ? 'in' : i.status === 'failed' ? 'failed' : ['expired', 'cancelled'].includes(i.status) ? 'muted' : 'pending'} icon="receive" />}
       title={`${i.kind === 'invoice' ? 'Bill · ' : ''}$${formatAmount(i.amount)} USDC${i.note ? ' · ' + i.note : ''}`}
       sub={`${orderDisplay(i)} · ${i.customerUsername ? i.customerUsername + '.arc · ' : ''}${i.status === 'paid' && i.completedByMerchant ? 'Completed by you' : STATUS_LABEL[i.status]}${i.sourceChain ? ' · ' + routeLabel(i.sourceChain) : ''} · ${timeAgo(i.createdAt)}`}
-      onClick={() => onOpenRequest(i.code)} amountColor={i.status === 'paid' ? 'var(--success)' : undefined} />
+      flash={i.id === listFlash.flashId}
+      onClick={() => { listFlash.leaving(i.id); onOpenRequest(i.code) }} amountColor={i.status === 'paid' ? 'var(--success)' : undefined} />
   )
   const more = (shown: number, total: number, open: boolean, toggle: () => void) => total > shown || open ? (
     <button onClick={toggle} style={{ ...btnGhost, border: 'none', padding: '6px', color: 'var(--brand-text)', fontSize: 12.5 }}>
@@ -281,8 +290,9 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
           {!loaded ? <SkeletonRows count={4} className="px-0" /> : customers.length === 0 ? <Empty text={needle ? 'No customer matches this username or address.' : 'Customers who pay you will show here.'} /> : (
             <>
               {custList.map(c => (
-                <Row key={c.key} icon={<Users size={16} color="var(--brand-text)" />} title={c.name}
-                  sub={`$${formatAmount(c.total)} received · ${c.count} transaction${c.count === 1 ? '' : 's'} · last ${timeAgo(c.last)}`} onClick={() => onOpenCustomer(c.key)} />
+                <Row key={c.key} icon={<span style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--brand) 10%, transparent)' }}><Users size={17} color="var(--brand-text)" /></span>} title={c.name}
+                  flash={c.key === listFlash.flashId}
+                  sub={`$${formatAmount(c.total)} received · ${c.count} transaction${c.count === 1 ? '' : 's'} · last ${timeAgo(c.last)}`} onClick={() => { listFlash.leaving(c.key); onOpenCustomer(c.key) }} />
               ))}
               {more(LIMIT, customers.length, showAllCust, () => setShowAllCust(v => !v))}
             </>
@@ -314,7 +324,6 @@ const fmtWhen = (iso: string) => {
 function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?: () => void }) {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const storedPasscode = useAuthStore(s => s.passcode)
-  const { showToastMessage } = useUIStore()
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const [last, setLast] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
@@ -487,6 +496,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
   code: string; intent: MerchantIntent | null; payments: MerchantPayment[]; onBack: () => void; onChanged: () => void
 }) {
   const [receiptFor, setReceiptFor] = useState<MerchantPayment | null>(null)
+  const payFlash = useReturnFlash()
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
   const { showToastMessage } = useUIStore()
@@ -698,14 +708,14 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
       {payments.length > 0 && (
         <Section title="Payments">
           {payments.map(p => (
-            <Row key={p.id} icon={<CheckCircle2 size={16} color="var(--success)" />}
-              title={`+$${formatAmount(p.amount)} USDC`}
+            <Row key={p.id} icon={<HistoryIcon tone="in" icon="receive" />}
+              title={`+$${formatAmount(p.amount)} USDC`} flash={p.id === payFlash.flashId}
               sub={`${p.customerUsername ? p.customerUsername + '.arc' : short(p.from)} · ${routeLabel(p.chain)} · ${paymentStageLabel(p)}${p.matchedBy === 'watcher' ? ' · direct deposit' : ''}`}
-              onClick={() => setReceiptFor(p)} amountColor="var(--success)" />
+              onClick={() => { payFlash.opened(); setReceiptFor(p) }} amountColor="var(--success)" />
           ))}
         </Section>
       )}
-      {receiptFor && <MerchantPaymentReceipt p={receiptFor} orderNumber={intent ? orderTitle(orderKindOf(intent), orderLabel(intent)) : null} note={intent?.note ?? null} onClose={() => setReceiptFor(null)} />}
+      {receiptFor && <MerchantPaymentReceipt p={receiptFor} orderNumber={intent ? orderTitle(orderKindOf(intent), orderLabel(intent)) : null} note={intent?.note ?? null} onClose={() => { payFlash.closed(receiptFor.id); setReceiptFor(null) }} />}
 
       {!done && (
         <>
@@ -753,6 +763,7 @@ function CustomerDetail({ keyId, payments, intents, onBack, onRequest, onOpenReq
   onBack: () => void; onRequest: (customer?: string) => void; onOpenRequest: (code: string) => void
 }) {
   const [receiptFor, setReceiptFor] = useState<MerchantPayment | null>(null)
+  const payFlash = useReturnFlash()
   const mine = payments.filter(p => customerKey(p) === keyId)
   const username = keyId.startsWith('u:') ? keyId.slice(2) : null
   const name = username ? `${username}.arc` : keyId.length > 2 && !isBridgeReceipt({ from: keyId.slice(2) }) ? short(keyId.slice(2)) : MINT_SENDER
@@ -776,10 +787,10 @@ function CustomerDetail({ keyId, payments, intents, onBack, onRequest, onOpenReq
         {mine.map(p => {
           const it = intentById.get(p.intentId)
           return (
-            <Row key={p.id} icon={<CheckCircle2 size={16} color="var(--success)" />}
-              title={`+$${formatAmount(p.amount)} USDC`}
+            <Row key={p.id} icon={<HistoryIcon tone="in" icon="receive" />}
+              title={`+$${formatAmount(p.amount)} USDC`} flash={p.id === payFlash.flashId}
               sub={`${paymentStageLabel(p)} · ${routeLabel(p.chain)}${it?.note ? ' · ' + it.note : ''} · ${timeAgo(p.createdAt)}`}
-              onClick={() => setReceiptFor(p)} amountColor="var(--success)" />
+              onClick={() => { payFlash.opened(); setReceiptFor(p) }} amountColor="var(--success)" />
           )
         })}
       </Section>
@@ -787,7 +798,7 @@ function CustomerDetail({ keyId, payments, intents, onBack, onRequest, onOpenReq
         const it = intentById.get(receiptFor.intentId)
         return <MerchantPaymentReceipt p={receiptFor} orderNumber={it ? orderTitle(orderKindOf(it), orderLabel(it)) : null} note={it?.note ?? null}
           onViewOrder={it ? () => { setReceiptFor(null); onOpenRequest(it.code) } : undefined}
-          onClose={() => setReceiptFor(null)} />
+          onClose={() => { payFlash.closed(receiptFor.id); setReceiptFor(null) }} />
       })()}
     </div>
   )
@@ -849,7 +860,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <div>
       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{title}</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</div>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>{children}</div>
     </div>
   )
 }
@@ -859,11 +870,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function Empty({ text }: { text: string }) {
   return <div style={{ padding: 14, textAlign: 'center', fontSize: 13, color: 'var(--text-secondary)', borderRadius: 14, border: '1px dashed var(--border)' }}>{text}</div>
 }
-function Row({ icon, title, sub, onClick, amountColor }: { icon: React.ReactNode; title: string; sub: string; onClick?: () => void; amountColor?: string }) {
+// A list row like Activity's: no card or divider, the round history icon;
+// `flash` = the row you just came back from.
+function Row({ icon, title, sub, onClick, amountColor, flash }: { icon: React.ReactNode; title: string; sub: string; onClick?: () => void; amountColor?: string; flash?: boolean }) {
   return (
-    <button onClick={onClick} disabled={!onClick}
-      style={{ ...card, width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', textAlign: 'left', cursor: onClick ? 'pointer' : 'default' }}>
-      <span style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>{icon}</span>
+    <button onClick={onClick} disabled={!onClick} className={flash ? 'mp-last-opened' : undefined}
+      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px', textAlign: 'left', cursor: onClick ? 'pointer' : 'default',
+        background: 'none', border: 'none', color: 'inherit', font: 'inherit' }}>
+      {icon}
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: amountColor ?? 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span>
         <span style={{ display: 'block', fontSize: 12, color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</span>

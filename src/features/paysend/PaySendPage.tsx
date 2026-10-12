@@ -37,6 +37,8 @@ import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
+import { ActivityRow } from '@/features/activity/ActivityPage'
+import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { sheetDrag } from '@/lib/sheetDrag'
@@ -1176,6 +1178,7 @@ export function PaySendPage() {
   const [payHistory, setPayHistory] = useState<ActivityRecord[]>([])
   const [payHistoryLoaded, setPayHistoryLoaded] = useState(false)
   const [payHistDetail, setPayHistDetail] = useState<ActivityRecord | null>(null)
+  const payFlash = useReturnFlash()
   useEffect(() => {
     if (!isDesktop || !senderStoredAddress) return
     let cancelled = false
@@ -1915,33 +1918,10 @@ export function PaySendPage() {
           ) : payHistory.length === 0 ? (
             <DesktopHistoryEmpty label="Payments you send will show up here" />
           ) : (
-            payHistory.map((r, i) => {
-              const toLabel = ((r.metadata?.toUsername as string | undefined) || '').replace(/\.arc$/, '')
-                || (r.counterpartyAddress ? shortenAddress(r.counterpartyAddress) : 'Unknown recipient')
-              return (
-                <div key={r.id} onClick={() => setPayHistDetail(r)} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', cursor: 'pointer',
-                  borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'none',
-                }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                    background: 'color-mix(in srgb, var(--danger) 12%, transparent)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-                      <path d="M2 12L12 2M12 2H6M12 2V8" stroke="var(--danger)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {toLabel}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>{timeAgo(r.createdAt)}</div>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--danger)', flexShrink: 0 }}>
-                    -{formatAmount(r.amount, 8)} {r.tokenSymbol}
-                  </div>
-                </div>
-              )
-            })
+            payHistory.map((r, i, list) => (
+              <ActivityRow key={r.id} record={r} isFirst={i === 0} isLast={i === list.length - 1} inPanel
+                onSelect={() => { payFlash.opened(); setPayHistDetail(r) }} flash={r.id === payFlash.flashId} />
+            ))
           )}
         </DesktopHistoryPanel>
       </div>
@@ -1952,7 +1932,7 @@ export function PaySendPage() {
             || (r.counterpartyAddress ? shortenAddress(r.counterpartyAddress) : 'Unknown recipient')
           return (
             <DesktopHistoryDetail
-              onClose={() => setPayHistDetail(null)}
+              onClose={() => { payFlash.closed(r.id); setPayHistDetail(null) }}
               title="Payment Details"
               icon={<svg width="20" height="20" viewBox="0 0 14 14" fill="none"><path d="M2 12L12 2M12 2H6M12 2V8" stroke="var(--danger)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
               iconColor="var(--danger)"

@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { TokenMenu } from '@/components/ui/TokenMenu'
-import { ActionIcon } from '@/components/ui/ActionIcon'
+import { HistoryIcon } from '@/components/ui/HistoryRow'
 import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
@@ -169,19 +169,8 @@ function SwapHistoryItem({ r, onOpen, flash, inPanel }: { r: SwapRecord; onOpen:
       display: 'flex', alignItems: 'center', gap: 12, padding: inPanel ? '11px 16px' : '11px 4px',
       cursor: 'pointer',
     }}>
-      <div style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-        background: isFailed ? 'color-mix(in srgb, var(--danger) 10%, transparent)' : 'color-mix(in srgb, var(--success) 10%, transparent)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {isFailed ? (
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="6.2" stroke="var(--danger)" strokeWidth="1.4"/>
-            <path d="M6.2 6.2l3.6 3.6M9.8 6.2l-3.6 3.6" stroke="var(--danger)" strokeWidth="1.4" strokeLinecap="round"/>
-          </svg>
-        ) : (
-          // Same Swap icon as the action buttons.
-          <ActionIcon name="swap" size={18} color="var(--success)" />
-        )}
-      </div>
+      {/* Same icon as Activity's swap rows. */}
+      <HistoryIcon tone={isFailed ? 'failed' : 'out'} icon="swap" />
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>

@@ -354,10 +354,12 @@ const paidOrderTitle = (md: any, number: string, received: boolean) => {
   return orderTitle(kind, number, received ? { received: true } : { paid: true })
 }
 
-export function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
+export function ActivityRow({ record, isFirst, isLast, onSelect, flash, inPanel }: {
   record: ActivityRecord; isFirst: boolean; isLast: boolean; onSelect: () => void
   /** The row whose details were just closed - flashes once. */
   flash?: boolean
+  /** Inside a desktop history panel (16px sides, like Swap's). */
+  inPanel?: boolean
 }) {
   const {
     metadata, amount, tokenSymbol, createdAt,
@@ -372,7 +374,7 @@ export function ActivityRow({ record, isFirst, isLast, onSelect, flash }: {
   return (
     <div onClick={onSelect} data-activity-id={record.id} className={flash ? 'mp-last-opened' : undefined} style={{
       // A clean list: no card or divider lines, rows sit on the page.
-      display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px',
+      display: 'flex', alignItems: 'center', gap: 12, padding: inPanel ? '11px 16px' : '11px 4px',
       cursor: 'pointer',
     }}>
       {/* Icon */}

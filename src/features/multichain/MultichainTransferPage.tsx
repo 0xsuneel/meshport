@@ -36,6 +36,8 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
+import { ActivityRow } from '@/features/activity/ActivityPage'
+import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
@@ -827,6 +829,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const [transferHistory, setTransferHistory] = useState<ActivityRecord[]>([])
   const [transferHistoryLoaded, setTransferHistoryLoaded] = useState(false)
   const [transferHistDetail, setTransferHistDetail] = useState<ActivityRecord | null>(null)
+  const transferFlash = useReturnFlash()
   useEffect(() => {
     if (!isDesktop || !senderAddress) return
     let cancelled = false
@@ -4037,35 +4040,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           ) : transferHistory.length === 0 ? (
             <DesktopHistoryEmpty label="Transfers you send across chains will show up here" />
           ) : (
-            transferHistory.map((r, i) => {
-              const failed = r.status === 'failed'
-              const chainLabel = (r.destinationChain || 'Unknown chain').replace(/_/g, ' ')
-              return (
-                <div key={r.id} onClick={() => setTransferHistDetail(r)} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', cursor: 'pointer',
-                  borderTop: i > 0 ? '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'none',
-                }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
-                    background: failed ? 'color-mix(in srgb, var(--danger) 12%, transparent)' : 'color-mix(in srgb, var(--brand) 12%, transparent)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-                      <path d="M2 12L12 2M12 2H6M12 2V8" stroke={failed ? 'var(--danger)' : 'var(--brand)'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      To {chainLabel}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>
-                      {failed ? <span style={{ color: 'var(--danger)' }}>Failed</span> : <>{timeAgo(r.createdAt)}</>}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: failed ? 'var(--danger)' : 'var(--text-primary)', flexShrink: 0 }}>
-                    -{formatAmount(r.amount)} {r.tokenSymbol}
-                  </div>
-                </div>
-              )
-            })
+            transferHistory.map((r, i, list) => (
+              <ActivityRow key={r.id} record={r} isFirst={i === 0} isLast={i === list.length - 1} inPanel
+                onSelect={() => { transferFlash.opened(); setTransferHistDetail(r) }} flash={r.id === transferFlash.flashId} />
+            ))
           )}
         </DesktopHistoryPanel>
       </div>
@@ -4076,7 +4054,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           const chainLabel = (r.destinationChain || 'Unknown chain').replace(/_/g, ' ')
           return (
             <DesktopHistoryDetail
-              onClose={() => setTransferHistDetail(null)}
+              onClose={() => { transferFlash.closed(r.id); setTransferHistDetail(null) }}
               title="Transfer Details"
               icon={<svg width="20" height="20" viewBox="0 0 14 14" fill="none"><path d="M2 12L12 2M12 2H6M12 2V8" stroke={failed ? 'var(--danger)' : 'var(--brand)'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
               iconColor={failed ? 'var(--danger)' : 'var(--brand)'}
