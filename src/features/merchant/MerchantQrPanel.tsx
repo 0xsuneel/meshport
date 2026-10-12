@@ -14,6 +14,7 @@ import {
   createPaymentRequest, watchPayment, orderLabel, STATUS_LABEL, orderChainPayLink,
   type MerchantIntent, type PaymentView, orderKindOf, orderTitle, orderDisplay } from '@/lib/merchantPay'
 import { MERCHANT_QR_EXTERNAL, MERCHANT_QR_NETWORK_NAME, merchantQrChain } from '@/lib/merchantQr'
+import { drawMeshportQr } from '@/lib/qrLogo'
 import { AmountHero } from '@/components/ui/AmountHero'
 
 
@@ -93,7 +94,7 @@ export function MerchantQrPanel() {
 
   useEffect(() => {
     if (!uri || !canvasRef.current) return
-    import('qrcode').then(Q => Q.toCanvas(canvasRef.current!, uri, { width: 220, margin: 2, color: { dark: '#000000', light: '#ffffff' }, errorCorrectionLevel: 'H' })).catch(() => {})
+    drawMeshportQr(canvasRef.current, uri, 220).catch(() => {})
   }, [uri])
 
   useEffect(() => (order ? watchPayment(order.code, setLive, 5000) : undefined), [order?.code])
@@ -168,9 +169,7 @@ export function MerchantQrPanel() {
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <div style={{ position: 'relative', background: '#fff', padding: 6, borderRadius: 14, opacity: paid || closed ? 0.35 : 1 }}>
-            <canvas ref={canvasRef} style={{ display: 'block', width: 220, height: 220 }} />
-            <img src={c.logo} alt="" width={34} height={34}
-              style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', borderRadius: '50%', background: '#fff', padding: 3 }} />
+            <canvas ref={canvasRef} width={220} height={220} style={{ display: 'block' }} />
           </div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999, fontSize: 12.5, fontWeight: 700,
             color: paid ? 'var(--success)' : closed ? 'var(--text-secondary)' : 'var(--warning)',
