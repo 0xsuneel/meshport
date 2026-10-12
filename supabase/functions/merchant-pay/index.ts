@@ -355,6 +355,12 @@ const ZERO = '0x0000000000000000000000000000000000000000'
 // A CCTP mint counts as the merchant's own transfer if they sent from Arc to
 // that chain within this window (the mint lands minutes after the burn).
 const OWN_TRANSFER_WINDOW_MS = 6 * 3600_000
+// The merchant's Transfer Funds is written to activity only once it has
+// arrived, so its mint can be scanned a few seconds before that row exists
+// (seen: Base receipt 21:40:21, activity row 21:40:26 -> wrongly "from a
+// bridge"). An unexplained mint younger than this is left for the next run
+// (cron, every minute) instead of being recorded as someone else's payment.
+const OWN_TRANSFER_HOLD_MS = 5 * 60_000
 // Circle Gateway wallet + minter (same on every EVM testnet).
 const GATEWAY_CONTRACTS = new Set(['0x0077777d7eba4688bdef3e311b846f25870a19b9', '0x0022222abe238cc2c7bb1f21003f0a260052475b'])
 
@@ -435,6 +441,8 @@ async function watchDeposits() {
       const logs = f.logs
       scanned += 1
       const blockTime = new Map<string, number>()
+      // Lowest block holding a mint we couldn't explain yet: rescanned next run.
+      let holdBlock: number | null = null
       for (const log of logs ?? []) {
         const to = ('0x' + String(log.topics?.[2]).slice(-40)).toLowerCase()
         const from = ('0x' + String(log.topics?.[1]).slice(-40)).toLowerCase()
@@ -522,10 +530,24 @@ async function watchDeposits() {
           // Own transfer: the merchant sent USDC from Arc to this chain lately.
           let sender = from
           if (minted) {
-            const { data: own } = await db.from('activity').select('id')
+            // Exactly this mint as the arrival of one of the merchant's own transfers…
+            const { data: exact } = await db.from('activity').select('id')
+              .eq('activity_type', 'bridge').eq('destination_tx_hash', tx).ilike('wallet_address', to).limit(1)
+            // …or a recent own transfer to this chain (older rows without the arrival hash).
+            const { data: own } = exact?.length ? { data: exact } : await db.from('activity').select('id')
               .eq('wallet_address', to).eq('activity_type', 'bridge')
               .in('destination_chain', [chainId, chainId === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : chainId])
               .gte('created_at', new Date(Date.now() - OWN_TRANSFER_WINDOW_MS).toISOString()).limit(1)
+            if (!own?.length) {
+              // Held only with a known block time - an unreadable one must never stall the cursor.
+              const b = await rpc(chain.rpcs, 'eth_getBlockByNumber', [log.blockNumber, false]).catch(() => null)
+              const minedAt = b?.timestamp ? parseInt(b.timestamp, 16) * 1000 : NaN
+              if (Number.isFinite(minedAt) && Date.now() - minedAt < OWN_TRANSFER_HOLD_MS) {
+                const bn = parseInt(String(log.blockNumber), 16)
+                if (Number.isFinite(bn)) holdBlock = holdBlock == null ? bn : Math.min(holdBlock, bn)
+                continue
+              }
+            }
             sender = own?.length ? to : ZERO
           }
           await db.from('merchant_chain_receipts').upsert({
@@ -534,7 +556,8 @@ async function watchDeposits() {
           }, { onConflict: 'source_chain,tx_hash,merchant_wallet', ignoreDuplicates: true })
         }
       }
-      await db.from('merchant_deposit_cursors').upsert({ chain: chainId, last_block: toBlock, updated_at: new Date().toISOString() })
+      // A held mint's block is read again next run (every write above is idempotent).
+      await db.from('merchant_deposit_cursors').upsert({ chain: chainId, last_block: holdBlock != null ? holdBlock - 1 : toBlock, updated_at: new Date().toISOString() })
     } catch (e) {
       console.error('[merchant-pay/watch]', chainId, e instanceof Error ? e.message : e)
     }
