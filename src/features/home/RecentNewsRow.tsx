@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { motion, useReducedMotion } from 'framer-motion'
 import type { NavigateFunction } from 'react-router-dom'
 import { useAuthStore } from '@/store'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { fetchRecentContacts, recentInitial, recentShortName, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
 import { NewsArt } from '@/features/news/NewsArt'
 import { useReconnectCount } from '@/lib/connectivity'
@@ -30,8 +31,10 @@ const QUEUE_STEP_MS = 2600
 const NEWS_STEP_MS = 5000
 
 function Box({ title, onViewAll, children }: { title: string; onViewAll?: () => void; children: ReactNode }) {
+  // Desktop: the same drop shadow as Home's other desktop cards.
+  const isDesktop = useMediaQuery('(min-width: 980px)')
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 10, minWidth: 0 }}>
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 10, minWidth: 0, boxShadow: isDesktop ? 'var(--shadow-1)' : undefined }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4, marginBottom: 4 }}>
         <span style={{ fontSize: 'min(15px, 4.2vw)', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', flexShrink: 0 }}>{title}</span>
         {onViewAll && (
