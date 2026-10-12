@@ -8,7 +8,7 @@ import { useReconnectCount } from '@/lib/connectivity'
 import { fetchHomeNews, readCachedHomeNews, NEWS_SOURCE_LABEL, NEWS_SOURCE_TINT, type NewsItem } from '@/lib/news'
 
 // ── Home: Recent + News, side by side ───────────────────────────────────────
-// Two equal boxes under the feature banner (mobile Home), each with a 64px
+// Two equal boxes under the feature banner (Home, desktop and mobile), each with a 64px
 // content row.
 //
 // Recent: the last 5 people you paid. One sits in front on the right; the rest
