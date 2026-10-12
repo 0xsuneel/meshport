@@ -13,6 +13,7 @@ import { useCallback, useState } from 'react'
 import { PopupOpen } from '@/hooks/usePopupOpen'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 
 export type FlipPhase = 'processing' | 'success' | 'error'
 
@@ -38,6 +39,9 @@ const INITIAL_STATE: FlipState = { open: false, phase: 'processing', processingL
  */
 export function useProcessingFlip() {
   const [flipState, setFlipState] = useState<FlipState>(INITIAL_STATE)
+  // Every P2P action that moves money or escrow state: hold Back / sidebar
+  // while it's in flight.
+  useLeaveGuard(flipState.open && flipState.phase === 'processing', 'Transaction')
 
   const runFlip = useCallback(async <T extends { success: boolean; message: string }>(
     processingLabel: string,
@@ -102,7 +106,7 @@ export function ProcessingFlipCard({ open, phase, processingLabel, title, messag
               style={{ position: 'relative', width: 280, minHeight: 200, transformStyle: 'preserve-3d' }}
             >
               {/* Front face - processing */}
-              <div style={{
+              <div data-leave-guard={phase === 'processing' ? '' : undefined} style={{
                 position: 'absolute', inset: 0, backfaceVisibility: 'hidden',
                 ...glassCardStyle, borderRadius: 20,
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',

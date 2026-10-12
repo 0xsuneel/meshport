@@ -14,6 +14,7 @@ import {
   displayOrderNumber, } from '@/lib/merchantPay'
 import { MERCHANT_QR_NETWORK_NAME } from '@/lib/merchantQr'
 import { ARC_CHAIN_KEY } from '@/lib/chainExplorers'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 
 type Props = {
   /** Recipient wallet on Arc. */
@@ -35,6 +36,9 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
   const [wallets, setWallets] = useState<BrowserWallet[] | null>(null)
   const [typed, setTyped] = useState('')
   const [step, setStep] = useState<'idle' | 'working' | 'confirming' | 'done'>('idle')
+  // From the wallet prompt until the payment is recorded: hold Back / links.
+  const busy = step === 'working' || step === 'confirming'
+  useLeaveGuard(busy, 'Payment')
   const [error, setError] = useState('')
   const [hash, setHash] = useState('')
 
@@ -99,7 +103,7 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
   const pageUrl = typeof window !== 'undefined' ? window.location.href.replace(/[?&]stay=1/, '') : ''
 
   return (
-    <div style={box}>
+    <div style={box} data-leave-guard={busy ? '' : undefined}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Wallet size={18} color="var(--brand-text)" />
         <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Pay from your wallet</span>

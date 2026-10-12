@@ -42,6 +42,7 @@ import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 
 // Derive Arc chain key from env so a mainnet build targets Arc mainnet.
 // All 'Arc_Testnet' literals in this file are replaced with this constant -
@@ -573,6 +574,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // locks scrolling while processing and frees it again for the result.
   const flowRootRef = useRef<HTMLDivElement>(null)
   const focus = step === 'broadcasting' ? 'processing' : (step === 'success' || step === 'failed') ? 'result' : 'none'
+  // After the passcode the transfer is on its way: hold Back / sidebar until it lands.
+  useLeaveGuard(step === 'broadcasting', 'Transfer')
   useEffect(() => {
     if (!embedded) return
     onFocusChange?.(focus)

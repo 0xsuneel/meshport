@@ -27,6 +27,7 @@ import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 
 type LocalContact = DbUser & { isFavorite?: boolean }
 
@@ -59,6 +60,8 @@ export function ContactsPage() {
 
   // Payment modal
   const [payStep, setPayStep] = useState<'closed' | 'form' | 'confirm' | 'processing' | 'success'>('closed')
+  // After the passcode the payment is on-chain: hold Back / sidebar until it lands.
+  useLeaveGuard(payStep === 'processing', 'Payment')
   // Synchronous double-submit guard (payStep only flips after async work).
   const payInFlightRef = useRef(false)
   // Broadcast but not confirmed within the send's wait - "submitted", not success.
@@ -768,14 +771,14 @@ export function ContactsPage() {
           )
           return isDesktop ? (
             <DesktopDialogFrame onClose={closePay} maxWidth={440}>
-              <div className="max-h-[80vh] overflow-y-auto">{payContent}</div>
+              <div data-leave-guard={payStep === 'processing' ? '' : undefined} className="max-h-[80vh] overflow-y-auto">{payContent}</div>
             </DesktopDialogFrame>
           ) : (
             <>
               <motion.div transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="absolute inset-0 bg-black/70 z-40"
                 onClick={closePay} />
-              <motion.div {...sheetDrag('ct-pay', closePay)}
+              <motion.div {...sheetDrag('ct-pay', closePay)} data-leave-guard={payStep === 'processing' ? '' : undefined}
                 initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}
                 transition={SHEET_SPRING}
                 className="absolute bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-3xl max-h-[85vh] overflow-y-auto">

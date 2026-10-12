@@ -37,6 +37,7 @@ import { useKeyboardOpen } from '@/hooks/useKeyboardOpen'
 
 import { ARC_EXPLORER } from '@/lib/chainExplorers'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 const USDC_DECIMALS   = 6
 
 // ── Multicall3 (canonical deterministic deployment, same address on every EVM chain) ──
@@ -136,6 +137,8 @@ export function BulkPayoutPage() {
   const { showToastMessage } = useUIStore()
 
   const [step, setStep] = useState<Step>('setup')
+  // While the payout is sending, hold Back / sidebar until every row has a result.
+  useLeaveGuard(step === 'processing', 'Bulk payout')
   // Setup ⇄ Review slide like pages (forward from the right, back from the left).
   const stepDir = useStepDirection(step, ['setup', 'review', 'processing', 'results'] as const)
   const [showHowItWorks, setShowHowItWorks] = useState(false)
@@ -1324,7 +1327,7 @@ export function BulkPayoutPage() {
             {addRecipientsSection}
           </div>
 
-          <div ref={stepColumnRef} style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto' }}>
+          <div ref={stepColumnRef} data-leave-guard={step === 'processing' ? '' : undefined} style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', borderRadius: 20 }}>
             <AnimatePresence initial={false} mode="wait">
               {step === 'setup' && (
                 <motion.div key="d-setup" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1380,7 +1383,7 @@ export function BulkPayoutPage() {
 
         {/* ══════════════════ PROCESSING ══════════════════ */}
         {step === 'processing' && (
-          <motion.div key="processing" initial={false} className="px-4 py-16 text-center space-y-6">
+          <motion.div key="processing" initial={false} data-leave-guard="" className="px-4 py-16 text-center space-y-6">
             {processingContent}
           </motion.div>
         )}

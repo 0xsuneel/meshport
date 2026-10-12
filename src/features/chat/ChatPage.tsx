@@ -67,6 +67,7 @@ import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { SkeletonRows, SkeletonChat } from '@/components/ui/Skeleton'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
+import { useLeaveGuard } from '@/lib/leaveGuard'
 
 // ─── Hidden chats helpers - wallet-scoped so Wallet A hidden chats never bleed into Wallet B
 // Chat pay sheets (phone): closing slides the sheet down; moving to the
@@ -2684,6 +2685,8 @@ export function ChatConversationPage() {
 
   // ── In-chat payment modal state ──────────────────────────────────────────
   const [payStep, setPayStep] = useState<'closed' | 'form' | 'confirm' | 'processing' | 'success'>('closed')
+  // After the passcode the payment is on-chain: hold Back / other chats / sidebar until it lands.
+  useLeaveGuard(payStep === 'processing', 'Payment')
   // The step before this one: moving between the amount and Review sheets
   // swaps the sheet's content in place (no slide down and back up).
   const prevPayStepRef = useRef(payStep)
@@ -5698,7 +5701,7 @@ export function ChatConversationPage() {
               <motion.div key="pay-run-dim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 onClick={closeStep2}
                 style={{ position: 'fixed', inset: 0, zIndex: 140, background: 'rgba(0,0,0,0.15)' }} />,
-              <motion.div key="pay-run-drawer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.12 } }}
+              <motion.div key="pay-run-drawer" data-leave-guard={payStep === 'processing' ? '' : undefined} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.12 } }}
                 onClick={e => e.stopPropagation()}
                 style={{
                   position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 141, width: CHAT_PAY_DRAWER_WIDTH,
@@ -5726,6 +5729,7 @@ export function ChatConversationPage() {
                   // is the popup, so the wrapper drops its own surface/border.
                   <div key="chat-pay-center" className="absolute inset-0 z-50 flex items-center justify-center px-4 pointer-events-none">
                     <motion.div initial={DIALOG_CARD.initial} animate={DIALOG_CARD.animate} exit={DIALOG_CARD.exit} transition={DIALOG_CARD.transition}
+                      data-leave-guard={payStep === 'processing' ? '' : undefined}
                       className="relative w-full flex flex-col overflow-hidden pointer-events-auto"
                       style={{
                         maxWidth: 420, borderRadius: 30,

@@ -4,6 +4,7 @@ import { PageTransition } from '@/components/ui/PageTransition'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY } from '@/lib/motion'
 import { useFrameScrollGuard, useVisibleFrame, visibleFrame } from '@/hooks/useVisibleViewportHeight'
+import { LeaveGuardHost } from './LeaveGuardHost'
 
 // AuthShell - wraps public, pre-login pages (login/register flow, the
 // public payment link, legal pages) so they get the same phone-width
@@ -77,6 +78,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         <PageTransition locationKey={pageKey}>
           {children}
         </PageTransition>
+        <LeaveGuardHost />
       </div>
     </div>
   )
