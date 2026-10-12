@@ -229,8 +229,30 @@ export type UnmatchedDeposit = {
   reason: 'multiple_orders' | 'amount_mismatch'
 }
 
+// "My" lists filter on the signed-in login explicitly instead of trusting RLS
+// alone: RLS also lets admins read every merchant's rows (mpi_admin, mp_admin,
+// mud_admin, mcr_select_own), so an admin's My requests / Ledger showed other
+// accounts' orders. Each filter mirrors that table's own-row policy.
+async function myAuthUid(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession()
+  return data.session?.user?.id ?? null
+}
+
+/** Wallets of my approved merchant applications (as stored and lowercased). */
+async function myMerchantWallets(uid: string): Promise<string[]> {
+  const { data } = await supabase.from('merchant_applications').select('wallet_address')
+    .eq('auth_uid', uid).eq('status', 'approved')
+  const raw = (data ?? []).map((r: any) => r.wallet_address).filter(Boolean) as string[]
+  return [...new Set([...raw, ...raw.map(w => w.toLowerCase())])]
+}
+
 export async function listUnmatchedDeposits(): Promise<UnmatchedDeposit[]> {
-  const { data } = await supabase.from('merchant_unmatched_deposits').select('*').eq('status', 'needs_review').order('created_at', { ascending: false }).limit(50)
+  const uid = await myAuthUid()
+  if (!uid) return []
+  const wallets = await myMerchantWallets(uid)
+  if (!wallets.length) return []
+  const { data } = await supabase.from('merchant_unmatched_deposits').select('*').in('merchant_wallet', wallets)
+    .eq('status', 'needs_review').order('created_at', { ascending: false }).limit(50)
   return (data ?? []).map((r: any) => ({
     id: r.id, chain: r.source_chain, txHash: r.tx_hash, from: r.from_address, amount: Number(r.amount),
     candidateCodes: Array.isArray(r.candidate_codes) ? r.candidate_codes : [], createdAt: r.created_at,
@@ -276,12 +298,19 @@ export async function createPaymentRequest(p: { amount: number; customer?: strin
 }
 
 export async function listMyIntents(limit = 200): Promise<MerchantIntent[]> {
-  const { data } = await supabase.from('merchant_payment_intents').select('*').order('created_at', { ascending: false }).limit(limit)
+  const uid = await myAuthUid()
+  if (!uid) return []
+  const { data } = await supabase.from('merchant_payment_intents').select('*').eq('merchant_auth_uid', uid)
+    .order('created_at', { ascending: false }).limit(limit)
   return (data ?? []).map(mapIntent)
 }
 
 export async function listMyPayments(limit = 500): Promise<MerchantPayment[]> {
-  const { data } = await supabase.from('merchant_payments').select('*').order('created_at', { ascending: false }).limit(limit)
+  const uid = await myAuthUid()
+  if (!uid) return []
+  // Payments on my own orders (mp_select_own), via the intent_id foreign key.
+  const { data } = await supabase.from('merchant_payments').select('*, merchant_payment_intents!inner(merchant_auth_uid)')
+    .eq('merchant_payment_intents.merchant_auth_uid', uid).order('created_at', { ascending: false }).limit(limit)
   return (data ?? []).map((r: any) => ({
     id: r.id, intentId: r.intent_id, chain: r.source_chain, txHash: r.tx_hash, from: r.from_address, amount: Number(r.amount),
     method: r.method, status: r.status, customerUsername: r.customer_username, createdAt: r.created_at,
@@ -529,7 +558,12 @@ export const isOwnReceipt = (r: Pick<ChainReceipt, 'from'>, ownWallet: string | 
 export const isBridgeReceipt = (r: Pick<ChainReceipt, 'from'>) => r.from?.toLowerCase() === ZERO_ADDRESS
 
 export async function listChainReceipts(limit = 50): Promise<ChainReceipt[]> {
-  const { data } = await supabase.from('merchant_chain_receipts').select('*').order('created_at', { ascending: false }).limit(limit)
+  const uid = await myAuthUid()
+  if (!uid) return []
+  const wallets = await myMerchantWallets(uid)
+  if (!wallets.length) return []
+  const { data } = await supabase.from('merchant_chain_receipts').select('*').in('merchant_wallet', wallets)
+    .order('created_at', { ascending: false }).limit(limit)
   return (data ?? []).map((r: any) => ({
     id: r.id, chain: r.source_chain, txHash: r.tx_hash, from: r.from_address ?? null, amount: Number(r.amount),
     orderNumber: r.order_number ?? null, status: r.status, createdAt: r.created_at, convertedAt: r.converted_at ?? null,
