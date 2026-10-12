@@ -5639,7 +5639,7 @@ export function ChatConversationPage() {
                 <SuccessReceipt
                   style={{ flex: 1, minHeight: 0, height: 'auto', padding: 0, background: 'transparent' }}
                   title={payPending ? 'Payment Submitted' : 'Payment Sent'}
-                  subtitle={payPending ? <>Still confirming on Arc. Activity updates when it lands.</> : <>Delivered in your chat with {toLabel}</>}
+                  subtitle={payPending ? <>Still confirming on Arc. Activity updates when it lands.</> : <>Delivered in your chat</>}
                   bubble={<>Sent {amountLabel} to {toLabel} ✓✓</>}
                   pill={payPending ? undefined : `Completed in ${elapsedSeconds} Seconds`}
                   rows={[
@@ -5650,7 +5650,6 @@ export function ChatConversationPage() {
                   ]}
                   detailRows={[
                     { label: 'Status', value: payPending ? 'Confirming' : 'Delivered', positive: !payPending },
-                    { label: 'Chat', value: toLabel },
                     { label: 'Network', value: 'Arc Testnet' },
                     { label: 'Network Fee', value: payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free' },
                   ]}
