@@ -120,6 +120,7 @@ const AdminLogsPage            = lazyRetry(() => import('./features/admin/LogsPa
 const AdminSupportTicketsPage  = lazyRetry(() => import('./features/admin/SupportTicketsPage').then(m => ({ default: m.SupportTicketsPage })), 'AdminSupportTicketsPage')
 const AdminSettingsPage        = lazyRetry(() => import('./features/admin/AdminSettingsPage').then(m => ({ default: m.AdminSettingsPage })), 'AdminSettingsPage')
 const AdminMerchantsPage       = lazyRetry(() => import('./features/admin/MerchantApplicationsPage').then(m => ({ default: m.MerchantApplicationsPage })), 'AdminMerchantsPage')
+const AdminOrdersPage          = lazyRetry(() => import('./features/admin/OrdersPage').then(m => ({ default: m.OrdersPage })), 'AdminOrdersPage')
 const MerchantPayPage         = lazyRetry(() => import('./features/merchant/MerchantPayPage').then(m => ({ default: m.MerchantPayPage })), 'MerchantPayPage')
 const MerchantApplyPage         = lazyRetry(() => import('./features/merchant/MerchantApplyPage').then(m => ({ default: m.MerchantApplyPage })), 'MerchantApplyPage')
 const AdminStuckFundsPage      = lazyRetry(() => import('./features/admin/StuckFundsPage').then(m => ({ default: m.StuckFundsPage })), 'AdminStuckFundsPage')
@@ -398,6 +399,7 @@ const router = createBrowserRouter([
       { path: 'support',     element: <AdminSupportTicketsPage /> },
       { path: 'stuck-funds', element: <AdminStuckFundsPage /> },
       { path: 'merchants',   element: <AdminMerchantsPage /> },
+      { path: 'orders',      element: <AdminOrdersPage /> },
       { path: 'settings',    element: <AdminSettingsPage /> },
     ],
   },

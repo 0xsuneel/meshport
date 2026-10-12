@@ -305,17 +305,55 @@ export async function listMyIntents(limit = 200): Promise<MerchantIntent[]> {
   return (data ?? []).map(mapIntent)
 }
 
+// ─── Admin panel only ─────────────────────────────────────────────────────────
+// Every account's requests and bills, for Admin → Orders. Readable only by
+// admins (RLS mpi_admin / mp_admin). The normal app never calls these - an
+// admin's own My requests / Ledger use the listMy* functions above.
+export type AdminOrder = MerchantIntent & {
+  merchantUsername: string | null; merchantName: string | null; merchantWallet: string
+}
+
+export async function adminListOrders(limit = 500): Promise<AdminOrder[]> {
+  const { data, error } = await supabase.from('merchant_payment_intents').select('*')
+    .order('created_at', { ascending: false }).limit(limit)
+  if (error) throw new Error(error.message)
+  const rows = data ?? []
+  const ids = [...new Set(rows.map((r: any) => r.merchant_user_id).filter(Boolean))]
+  const names = new Map<string, string>()
+  if (ids.length) {
+    const { data: users } = await supabase.from('users').select('id, username').in('id', ids)
+    for (const u of users ?? []) if (u.username) names.set(String(u.id), u.username)
+  }
+  return rows.map((r: any) => ({
+    ...mapIntent(r),
+    merchantUsername: names.get(String(r.merchant_user_id)) ?? null,
+    merchantName: r.merchant_name ?? null,
+    merchantWallet: r.merchant_wallet,
+  }))
+}
+
+export async function adminListOrderPayments(intentId: string): Promise<MerchantPayment[]> {
+  const { data, error } = await supabase.from('merchant_payments').select('*').eq('intent_id', intentId)
+    .order('created_at', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []).map(mapPayment)
+}
+
 export async function listMyPayments(limit = 500): Promise<MerchantPayment[]> {
   const uid = await myAuthUid()
   if (!uid) return []
   // Payments on my own orders (mp_select_own), via the intent_id foreign key.
   const { data } = await supabase.from('merchant_payments').select('*, merchant_payment_intents!inner(merchant_auth_uid)')
     .eq('merchant_payment_intents.merchant_auth_uid', uid).order('created_at', { ascending: false }).limit(limit)
-  return (data ?? []).map((r: any) => ({
+  return (data ?? []).map(mapPayment)
+}
+
+function mapPayment(r: any): MerchantPayment {
+  return {
     id: r.id, intentId: r.intent_id, chain: r.source_chain, txHash: r.tx_hash, from: r.from_address, amount: Number(r.amount),
     method: r.method, status: r.status, customerUsername: r.customer_username, createdAt: r.created_at,
     orderNumber: r.order_number ?? null, matchedBy: r.matched_by ?? null,
-  }))
+  }
 }
 
 /** An open bill / payment request between me and the other person in a chat. */
