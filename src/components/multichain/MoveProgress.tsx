@@ -22,7 +22,7 @@ export interface MoveTx { hash: string; href?: string | null }
 
 export function MoveProgress({
   kind, route, fromLabel, toLabel, amount, steps, current, failed, safe, activeElapsed, txs, notes,
-  holdText, onViewHub, onBack, backIcon = 'back', loading = false, details,
+  holdText, onViewHub, onBack, backIcon = 'back', loading = false, details, trackButton = true,
 }: {
   kind: MoveKind; route: MoveRoute
   fromLabel: string; toLabel: string
@@ -48,6 +48,8 @@ export function MoveProgress({
   /** Status not known yet: keep every step neutral instead of guessing. */
   loading?: boolean
   details?: TrackDetailRow[]
+  /** Offer Track Progress (the live flow). Off when the page itself is the tracker (opened from Hub Activity). */
+  trackButton?: boolean
 }) {
   const [focus, setFocus] = useState(false)
   const [showDone, setShowDone] = useState(false)
@@ -184,7 +186,7 @@ export function MoveProgress({
                 View in Hub
               </button>
             )}
-            {running && (
+            {running && trackButton && (
               <button onClick={toggleFocus} aria-pressed={focus}
                 style={{ flex: 1, minWidth: 0, padding: 14, borderRadius: 999, border: 'none', background: 'var(--brand)', fontSize: 14.5, fontWeight: 700, color: '#fff', cursor: 'pointer' }}>
                 {focus ? 'Show all' : 'Track Progress'}
