@@ -20,7 +20,6 @@ import { Search, Send, ArrowLeft, CheckCheck, Paperclip, Image, FileText, File, 
 import { motion, AnimatePresence } from 'framer-motion'
 import { PopupDim } from '@/components/ui/PopupDim'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { Avatar } from '@/components/ui/Avatar'
 import { Sheet } from '@/components/ui/Sheet'
@@ -304,6 +303,9 @@ function unhideChat(convId: string, addr: string | null) {
   const m = getHiddenChatsMap(addr); delete m[convId]
   localStorage.setItem(hiddenKey(addr), JSON.stringify(m))
 }
+
+/** Desktop: ChatPay's drawer on the right - amount, passcode, processing and receipt all open in it. */
+const CHAT_PAY_DRAWER_WIDTH = 'min(400px, 90vw)'
 
 // ─── ChatPay token display helpers ──────────────────────────────────────────
 // USDC/EURC are both ~$1-pegged, so 3 decimals used to read fine - but that
@@ -5533,7 +5535,7 @@ export function ChatConversationPage() {
                 onClick={e => e.stopPropagation()}
                 style={{
                   position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 141,
-                  width: 400, maxWidth: '90%', overflowY: 'auto',
+                  width: CHAT_PAY_DRAWER_WIDTH, overflowY: 'auto',
                   background: 'var(--surface)', borderLeft: '1px solid var(--border)',
                   boxShadow: 'var(--shadow-3)',
                 }}
@@ -5656,18 +5658,17 @@ export function ChatConversationPage() {
               </>
             )
 
-            // Desktop's PIN moment specifically gets the premium
-            // DesktopTransactionAuthDialog (its own amount+recipient
-            // summary replaces the "Review Payment" card step2Content
-            // shows on mobile) - processing/success keep the plain
-            // DesktopDialogFrame + the exact same step2Content mobile
-            // uses, unchanged, since neither of those states is a PIN
-            // entry moment.
+            // Desktop's PIN moment gets DesktopTransactionAuthDialog (its own
+            // amount + recipient summary replaces the "Review Payment" card
+            // step2Content shows on mobile), centred in the pay drawer's
+            // column; processing / success show step2Content in the drawer.
             if (isDesktop && payStep === 'confirm') {
               return (
                 <DesktopTransactionAuthDialog
                   onClose={closeStep2}
                   title="Authorize Payment"
+                  // In the pay drawer's column on the right, like the amount step.
+                  placement="panel" panelWidth={CHAT_PAY_DRAWER_WIDTH}
                   amountLabel={`${formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} ${payToken}`}
                   subLabel={`To ${recipientClean}.arc`}
                 >
@@ -5682,11 +5683,23 @@ export function ChatConversationPage() {
                 </DesktopTransactionAuthDialog>
               )
             }
-            return isDesktop ? (
-              <DesktopDialogFrame onClose={closeStep2} maxWidth={440}>
-                <div className="relative flex flex-col max-h-[80vh]">{step2Content}</div>
-              </DesktopDialogFrame>
-            ) : [
+            return isDesktop ? [
+              // Desktop: processing and the receipt stay in the pay drawer on
+              // the right (where the amount was entered), not a popup in the
+              // middle of the window.
+              <motion.div key="pay-run-dim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={closeStep2}
+                style={{ position: 'fixed', inset: 0, zIndex: 140, background: 'rgba(0,0,0,0.15)' }} />,
+              <motion.div key="pay-run-drawer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                onClick={e => e.stopPropagation()}
+                style={{
+                  position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 141, width: CHAT_PAY_DRAWER_WIDTH,
+                  background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: 'var(--shadow-3)',
+                  display: 'flex', flexDirection: 'column', justifyContent: payStep === 'processing' ? 'center' : undefined, overflowY: 'auto',
+                }}>
+                <div className="relative flex flex-col" style={{ flex: payStep === 'processing' ? undefined : 1, minHeight: payStep === 'processing' ? 320 : 0 }}>{step2Content}</div>
+              </motion.div>,
+            ] : [
                 // Keyed siblings (not a fragment) so AnimatePresence tracks the
                 // backdrop, the PIN sheet and the centred card separately. As
                 // one fragment, swapping sheet -> card mid-flow left the exit

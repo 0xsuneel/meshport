@@ -21,7 +21,7 @@ import { type ReactNode } from 'react'
 import { HUB_PANEL_WIDTH } from '@/components/multichain/HubPage'
 
 export function DesktopTransactionAuthDialog({
-  onClose, title, amountLabel, subLabel, accent = 'var(--brand)', maxWidth = 420, placement = 'center', anchor, children,
+  onClose, title, amountLabel, subLabel, accent = 'var(--brand)', maxWidth = 420, placement = 'center', panelWidth = HUB_PANEL_WIDTH, anchor, children,
 }: {
   onClose: () => void
   title: string
@@ -36,6 +36,8 @@ export function DesktopTransactionAuthDialog({
   /** 'panel': centred in the right-hand panel (Multichain Hub's Transfer / Bring
    *  flows, see HubPage), so every step of those flows stays in that column. */
   placement?: 'center' | 'panel'
+  /** Width of that right-hand panel (default: the Hub's). */
+  panelWidth?: string
   /** Centre over this element instead (e.g. the page's flow column beside
    *  its Recent History panel), so the dialog sits over what it authorizes. */
   anchor?: HTMLElement | null
@@ -55,7 +57,7 @@ export function DesktopTransactionAuthDialog({
       <div style={{
         position: 'absolute',
         ...(box ? { top: box.top, left: box.left, width: box.width, height: box.height }
-          : { top: 0, bottom: 0, right: 0, ...(placement === 'panel' ? { width: HUB_PANEL_WIDTH } : { left: 0 }) }),
+          : { top: 0, bottom: 0, right: 0, ...(placement === 'panel' ? { width: panelWidth } : { left: 0 }) }),
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: placement === 'panel' ? 20 : 24, pointerEvents: 'none',
       }}>
       <motion.div
