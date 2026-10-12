@@ -115,7 +115,10 @@ export function MerchantPayPage() {
               </div>
             </div>
           )}
-          <p className="text-xs font-semibold" style={{ color: statusColor }}>{STATUS_LABEL[view.status]}</p>
+          {/* Paid / arriving / expired / cancelled get their own card below. */}
+          {!['paid', 'processing', 'expired', 'cancelled'].includes(view.status) && (
+            <p className="text-xs font-semibold" style={{ color: statusColor }}>{STATUS_LABEL[view.status]}</p>
+          )}
           {['pending', 'partially_paid', 'payment_detected'].includes(view.status) && expiryText(view.expiresAt) && (
             <p className="text-xs font-semibold" style={{ color: 'var(--warning)' }}>{expiryText(view.expiresAt)}</p>
           )}
@@ -131,14 +134,14 @@ export function MerchantPayPage() {
             <p className="text-base font-bold text-text-primary">{view.completedByMerchant ? 'Order completed' : 'Payment received'}</p>
             <p className="text-sm text-text-secondary">{view.completedByMerchant
               ? `${view.merchantName ?? 'The merchant'} marked this order as completed.`
-              : `$${formatAmount(view.received)} USDC to ${view.merchantName}`}</p>
+              : 'Confirmed on-chain.'}</p>
           </div>
         )}
         {view.status === 'processing' && (
           <div className="bg-surface border border-border rounded-3xl p-6 flex flex-col items-center gap-2 text-center">
             <Clock className="w-12 h-12 text-warning" />
             <p className="text-base font-bold text-text-primary">Payment sent</p>
-            <p className="text-sm text-text-secondary">Your ${formatAmount(view.received)} USDC reached {view.merchantName}. It’s being moved to their main balance - nothing more to do.</p>
+            <p className="text-sm text-text-secondary">It reached {view.merchantName} and is being moved to their main balance - nothing more to do.</p>
           </div>
         )}
         {(view.status === 'expired' || view.status === 'cancelled') && (

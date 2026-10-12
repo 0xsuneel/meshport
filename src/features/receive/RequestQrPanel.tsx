@@ -226,7 +226,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
             color: paid ? 'var(--success)' : closed ? 'var(--text-secondary)' : 'var(--warning)',
             background: paid ? 'color-mix(in srgb, var(--success) 14%, transparent)' : closed ? 'color-mix(in srgb, var(--text-primary) 6%, transparent)' : 'color-mix(in srgb, var(--warning) 14%, transparent)' }}>
             {paid ? <CheckCircle2 size={14} /> : <Clock size={14} />}
-            {paid ? 'Payment received' : STATUS_LABEL[st]}
+            {paid ? 'Payment received' : st === 'expired' && closed && when(order.expiresAt) ? `Expired · ${when(order.expiresAt)}` : STATUS_LABEL[st]}
           </div>
           {open && (
             <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.45, maxWidth: 300 }}>
@@ -251,7 +251,6 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
         )}
         {closed && (
           <div>
-            {kv('Status', st === 'expired' && order.expiresAt ? `Expired · ${when(order.expiresAt)}` : STATUS_LABEL[st], 'var(--text-secondary)')}
             {when(order.createdAt) && kv('Created', when(order.createdAt))}
           </div>
         )}
