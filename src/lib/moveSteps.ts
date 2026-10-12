@@ -50,29 +50,32 @@ export function moveSteps(p: {
   const { kind, route, from, to, amount } = p
   const usdc = `${amount} USDC`
   const toWho = p.recipient ? ` to ${p.recipient}` : ''
+  // Texts never restate the step's own name: "upcoming" says what the step
+  // is for, "done" says what it achieved. "You can close the app" lives in
+  // the page's Safe to leave note, not here.
   if (kind === 'transfer' && route === 'cctp') return [
-    { label: 'Approve USDC', upcoming: `Let Circle's bridge use ${usdc} on Arc`, active: 'Approving on Arc…', done: 'Approved on Arc', eta: 'under a second' },
-    { label: 'Burn on Arc', upcoming: `Burn ${usdc} on Arc`, active: `Burning ${usdc} on Arc…`, done: 'Burned on Arc', eta: 'under a second' },
-    { label: 'Circle attestation', upcoming: 'Circle signs the burn', active: 'Circle is signing the burn…', done: 'Circle signed the burn', eta: '20–90 seconds' },
-    { label: `Mint on ${to}`, upcoming: `USDC minted${toWho}`, active: p.forwarder === false ? `MeshPort is minting on ${to}…` : `Circle's forwarder is minting on ${to}…`, done: `Arrived on ${to}`, eta: 'under a minute' },
+    { label: 'Approve USDC', upcoming: `Let Circle's bridge use ${usdc} on Arc`, active: 'Approving on Arc…', done: "Circle's bridge can use the USDC", eta: 'under a second' },
+    { label: 'Burn on Arc', upcoming: 'Sends the USDC out of Arc', active: `Burning ${usdc} on Arc…`, done: 'USDC left your Arc wallet', eta: 'under a second' },
+    { label: 'Circle attestation', upcoming: 'Circle confirms the burn', active: 'Circle is signing the burn…', done: 'Circle signed the burn', eta: '20–90 seconds' },
+    { label: `Mint on ${to}`, upcoming: `USDC minted${toWho}`, active: p.forwarder === false ? `MeshPort is minting on ${to}…` : `Circle's forwarder is minting on ${to}…`, done: `USDC arrived${toWho}`, eta: 'under a minute' },
   ]
   if (kind === 'transfer') return [
-    { label: 'Deposit on Arc', upcoming: `Move ${usdc} into Unified Balance`, active: `Moving ${usdc} into Unified Balance on Arc…`, done: 'In Unified Balance on Arc', eta: 'under a second' },
-    { label: 'Sign transfer', upcoming: `Sign the transfer to ${to}`, active: 'Signing the transfer…', done: 'Signed', eta: 'a second or two' },
-    { label: 'Circle Gateway approval', upcoming: 'Circle Gateway approves it', active: 'Circle Gateway is approving the transfer…', done: 'Circle Gateway approved it', eta: 'a few seconds' },
-    { label: `Mint on ${to}`, upcoming: `USDC minted${toWho}`, active: `Minting on ${to}…`, done: `Arrived on ${to}`, eta: 'under a minute' },
+    { label: 'Deposit on Arc', upcoming: `Move ${usdc} into Unified Balance`, active: `Moving ${usdc} into Unified Balance on Arc…`, done: 'USDC is in your Unified Balance', eta: 'under a second' },
+    { label: 'Sign transfer', upcoming: `Authorize the move to ${to}`, active: 'Signing the transfer…', done: `Move to ${to} authorized`, eta: 'a second or two' },
+    { label: 'Circle Gateway approval', upcoming: 'Circle checks your Unified Balance', active: 'Circle Gateway is approving the transfer…', done: 'Approved by Circle Gateway', eta: 'a few seconds' },
+    { label: `Mint on ${to}`, upcoming: `USDC minted${toWho}`, active: `Minting on ${to}…`, done: `USDC arrived${toWho}`, eta: 'under a minute' },
   ]
   if (route === 'cctp') return [
-    { label: `Sign on ${from}`, upcoming: `Approve ${usdc} – no gas needed`, active: 'Signing – no gas needed…', done: 'Signed', eta: 'a second' },
-    { label: `Burn on ${from}`, upcoming: `MeshPort burns ${usdc} on ${from}`, active: `MeshPort is burning ${usdc} on ${from}…`, done: `Burned on ${from} · MeshPort paid the gas`, eta: 'a few seconds' },
-    { label: 'Circle attestation', upcoming: 'Circle signs the burn', active: 'Circle is signing the burn…', done: 'Circle signed the burn', eta: '20–90 seconds' },
-    { label: 'Mint on Arc', upcoming: 'USDC lands in your Arc wallet', active: "Circle's forwarder is minting on Arc…", done: 'Arrived on Arc', eta: 'a few seconds' },
+    { label: `Sign on ${from}`, upcoming: `Approve ${usdc} – no gas needed`, active: 'Signing – no gas needed…', done: 'Authorized – no gas needed', eta: 'a second' },
+    { label: `Burn on ${from}`, upcoming: 'MeshPort sends it and pays the gas', active: `MeshPort is burning ${usdc} on ${from}…`, done: 'MeshPort paid the gas', eta: 'a few seconds' },
+    { label: 'Circle attestation', upcoming: 'Circle confirms the burn', active: 'Circle is signing the burn…', done: 'Circle signed the burn', eta: '20–90 seconds' },
+    { label: 'Mint on Arc', upcoming: 'USDC lands in your Arc wallet', active: "Circle's forwarder is minting on Arc…", done: 'USDC is in your Arc wallet', eta: 'a few seconds' },
   ]
   return [
-    { label: `Deposit on ${from}`, upcoming: `Move ${usdc} into Unified Balance`, active: `Moving ${usdc} into Unified Balance on ${from}…`, done: `Deposited on ${from}`, eta: 'under a minute' },
-    { label: 'Sign transfer', upcoming: 'Sign the transfer to Arc', active: 'Signing and handing it to MeshPort…', done: 'Handed to MeshPort', eta: 'a second or two' },
-    { label: `${from} finality`, upcoming: `${from} makes the deposit final`, active: `Waiting for ${from} to make the deposit final. You can close the app.`, done: `Final on ${from}`, eta: p.fastFinality ? 'under a minute' : 'up to 15 minutes' },
-    { label: 'Mint on Arc', upcoming: 'USDC lands in your Arc wallet', active: 'Circle Gateway is sending to your Arc wallet…', done: 'Arrived on Arc', eta: 'a few seconds' },
+    { label: `Deposit on ${from}`, upcoming: `Move ${usdc} into Unified Balance`, active: `Moving ${usdc} into Unified Balance on ${from}…`, done: 'USDC is in your Unified Balance', eta: 'under a minute' },
+    { label: 'Sign transfer', upcoming: 'Authorize the move to Arc', active: 'Signing and handing it to MeshPort…', done: 'MeshPort finishes the rest', eta: 'a second or two' },
+    { label: `${from} finality`, upcoming: 'Needed before Circle Gateway can send it', active: `Waiting for ${from} to make the deposit final…`, done: `${from} confirmed the deposit`, eta: p.fastFinality ? 'under a minute' : 'up to 15 minutes' },
+    { label: 'Mint on Arc', upcoming: 'USDC lands in your Arc wallet', active: 'Circle Gateway is sending to your Arc wallet…', done: 'USDC is in your Arc wallet', eta: 'a few seconds' },
   ]
 }
 

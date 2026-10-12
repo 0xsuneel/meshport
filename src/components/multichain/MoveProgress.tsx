@@ -122,7 +122,10 @@ export function MoveProgress({
           const active = !loading && i === at && !errored
           const bad = !loading && i === at && errored
           const tx = done ? txs?.[i] : undefined
-          const text = done ? s.done : active ? s.active : bad ? failed! : s.upcoming
+          // The amount card already says what's happening now, how long it
+          // usually takes and what failed - the running step only repeats
+          // that while the card is folded away (Track Progress).
+          const text = done ? s.done : active ? (focus ? s.active : '') : bad ? (focus ? failed! : 'Didn’t finish') : s.upcoming
           const isLast = i === n - 1
           return (
             <div key={s.label} style={{ display: 'flex', gap: 12 }}>
@@ -149,11 +152,11 @@ export function MoveProgress({
                   <span style={{ fontSize: 14, fontWeight: 600, color: done ? 'var(--success)' : bad ? 'var(--danger)' : active ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{s.label}</span>
                   {active && (
                     <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 600, color: 'var(--accent-text)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                      {activeElapsed != null && activeElapsed > 0 ? `${Math.floor(activeElapsed / 60)}:${String(activeElapsed % 60).padStart(2, '0')}` : s.eta}
+                      {activeElapsed != null && activeElapsed > 0 ? `${Math.floor(activeElapsed / 60)}:${String(activeElapsed % 60).padStart(2, '0')}` : focus ? s.eta : ''}
                     </span>
                   )}
                 </div>
-                <p style={{ fontSize: 12.5, lineHeight: 1.4, margin: '2px 0 0', color: bad ? 'var(--danger)' : active ? 'var(--text-secondary)' : 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{text}</p>
+                {text && <p style={{ fontSize: 12.5, lineHeight: 1.4, margin: '2px 0 0', color: bad ? 'var(--danger)' : 'var(--text-secondary)', overflowWrap: 'anywhere' }}>{text}</p>}
                 {tx && (tx.href
                   ? <a href={tx.href} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 3, fontSize: 11.5, fontFamily: 'monospace', color: 'var(--accent-text)', textDecoration: 'none' }}>{tx.hash.slice(0, 10)}…{tx.hash.slice(-6)} ↗</a>
                   : <span style={{ display: 'inline-block', marginTop: 3, fontSize: 11.5, fontFamily: 'monospace', color: 'var(--text-secondary)' }}>{tx.hash.slice(0, 10)}…{tx.hash.slice(-6)}</span>)}
