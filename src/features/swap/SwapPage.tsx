@@ -78,6 +78,9 @@ interface SwapRecord {
 
 // History is now stored in Supabase activity table (no localStorage)
 // SwapPage shows recent history loaded from ActivityService
+// Desktop: keeps a step's main button in view at the bottom of the scrolling column.
+const STICKY_CTA = { position: 'sticky', bottom: 0, zIndex: 5, background: 'var(--bg)', paddingBottom: 12 } as const
+
 function addToHistory(_r: SwapRecord, _w: string | null) { /* noop - Supabase handles this */ }
 function loadHistory(_w: string | null): SwapRecord[] { return [] }
 function saveHistory(_h: SwapRecord[], _w: string | null) { /* noop */ }
@@ -1604,7 +1607,7 @@ export function SwapPage() {
             so the flash never grows over an empty screen. */}
         {(step === 'confirming' || step === 'swapping' || (step === 'done' && (successPhase === 'flash' || !heroCheckEl))) && (
           <motion.div key="conf" initial={false} data-leave-guard={step === 'swapping' ? '' : undefined}
-            className="space-y-3" style={{ position: 'relative', overflow: 'hidden', borderRadius: 24, padding: 2 }}>
+            className="space-y-3" style={{ position: 'relative', overflow: 'clip', borderRadius: 24, padding: 2 }}>
 
             <p className="text-center text-sm font-bold text-text-primary" style={{ position: 'relative' }}>
               {step === 'confirming' ? 'Review swap' : 'Swapping…'}
@@ -1722,7 +1725,7 @@ export function SwapPage() {
 
             {step === 'confirming' ? (
               /* Confirm (full width), then a quiet way back to edit */
-              <div className="flex flex-col items-stretch" style={{ position: 'relative', gap: 6, paddingTop: 12 }}>
+              <div className="flex flex-col items-stretch" style={{ position: 'relative', gap: 6, paddingTop: 12, ...(isDesktop ? STICKY_CTA : {}) }}>
                 <button onClick={() => { setQuoteChangedNotice(''); setPassEntry(''); setPassError(''); setShowPasscodeSheet(true) }}
                   disabled={gasShortfall > 0 || !estimate}
                   className="w-full rounded-2xl text-base font-bold text-white active:scale-[0.98] transition-transform disabled:opacity-40 disabled:active:scale-100"
@@ -1834,6 +1837,9 @@ export function SwapPage() {
 
         {/* CTA */}
         {isActive && (
+          // Desktop: pinned to the bottom of the scrolling column so it stays
+          // in view on a short window.
+          <div style={isDesktop ? STICKY_CTA : undefined}>
           <motion.button whileTap={{ scale:.98 }}
             onClick={() => { setPassEntry(''); setPassError(''); handleReview() }}
             disabled={!canReview}
@@ -1841,6 +1847,7 @@ export function SwapPage() {
             style={{ background:'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)', boxShadow: canReview ? 'var(--shadow-2)' : 'none' }}>
             {(step === 'estimating' || liveQuoteLoading) ? 'Getting quote...' : `Swap ${tokenIn.id} → ${tokenOut.id}`}
           </motion.button>
+          </div>
         )}
 
         {/* ── Swap History ──────────────────────────────────────────────── */}
