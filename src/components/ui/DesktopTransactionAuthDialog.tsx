@@ -18,9 +18,10 @@ import { createPortal } from 'react-dom'
 import { DIALOG_CARD } from '@/lib/motion'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { type ReactNode } from 'react'
+import { HUB_PANEL_WIDTH } from '@/components/multichain/HubPage'
 
 export function DesktopTransactionAuthDialog({
-  onClose, title, amountLabel, subLabel, accent = 'var(--brand)', maxWidth = 420, children,
+  onClose, title, amountLabel, subLabel, accent = 'var(--brand)', maxWidth = 420, placement = 'center', children,
 }: {
   onClose: () => void
   title: string
@@ -32,6 +33,9 @@ export function DesktopTransactionAuthDialog({
   subLabel: ReactNode
   accent?: string
   maxWidth?: number
+  /** 'panel': centred in the right-hand panel (Multichain Hub's Transfer / Bring
+   *  flows, see HubPage), so every step of those flows stays in that column. */
+  placement?: 'center' | 'panel'
   children: ReactNode
 }) {
   usePopupOpen()
@@ -40,13 +44,14 @@ export function DesktopTransactionAuthDialog({
       // A portal still delivers events to its React ancestors: stop them so
       // a click here can't also trigger the page's own handlers.
       onClick={e => { e.stopPropagation(); onClose() }}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 100,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-      }}
+      style={{ position: 'fixed', inset: 0, zIndex: 100 }}
     >
       {/* A plain dim, no backdrop blur - see usePopupOpen. Only the dim fades (PopupDim). */}
       <PopupDim background="rgba(0,0,0,0.6)" />
+      <div style={{
+        position: 'absolute', top: 0, bottom: 0, right: 0, ...(placement === 'panel' ? { width: HUB_PANEL_WIDTH } : { left: 0 }),
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: placement === 'panel' ? 20 : 24, pointerEvents: 'none',
+      }}>
       <motion.div
         onClick={e => e.stopPropagation()}
         initial={DIALOG_CARD.initial}
@@ -54,7 +59,7 @@ export function DesktopTransactionAuthDialog({
         exit={DIALOG_CARD.exit}
         transition={DIALOG_CARD.transition}
         style={{
-          position: 'relative', width: '100%', maxWidth, maxHeight: '85vh', overflowY: 'auto',
+          position: 'relative', width: '100%', maxWidth, maxHeight: '85vh', overflowY: 'auto', pointerEvents: 'auto',
           background: 'var(--surface)', border: `1px solid color-mix(in srgb, ${accent} 25%, var(--border))`, borderRadius: 22,
           boxShadow: `0 0 0 1px color-mix(in srgb, ${accent} 12%, transparent), var(--shadow-3)`,
         }}
@@ -100,6 +105,7 @@ export function DesktopTransactionAuthDialog({
           </div>
         </div>
       </motion.div>
+      </div>
     </div>,
     document.body,
   )
