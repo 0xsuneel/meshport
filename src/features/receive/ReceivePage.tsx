@@ -9,11 +9,9 @@ import { useAuthStore, useUIStore } from '@/store'
 import { Card } from '@/components/ui/Card'
 import { shortenAddress, copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { TokenLogo, type TokenLogoSymbol } from '@/components/ui/TokenLogo'
 import { drawQrLogo } from '@/lib/qrLogo'
 
 const APP_URL = 'https://meshport.xyz'
-const RECEIVE_TOKENS: TokenLogoSymbol[] = ['USDC', 'EURC', 'cirBTC']
 
 interface CopyRowProps {
   label: string
@@ -165,16 +163,6 @@ export function ReceivePage() {
         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>My QR</span>
       </div>
 
-      {/* The tokens this QR accepts - the payer picks one on the pay page. */}
-      <div aria-label="Accepts" style={{ display: 'flex', gap: 6, width: '100%' }}>
-        {RECEIVE_TOKENS.map(t => (
-          <span key={t} className="flex-1 flex items-center justify-center gap-1.5 rounded-full"
-            style={{ height: 32, fontSize: 13, fontWeight: 700, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text-primary)' }}>
-            <TokenLogo token={t} size={18} />{t}
-          </span>
-        ))}
-      </div>
-
       <div className="relative" style={{
         width: 242, height: 242, borderRadius: 12, background: '#DEE6E8',
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
@@ -279,7 +267,7 @@ export function ReceivePage() {
     <div className="p-3 bg-surface rounded-2xl border border-border flex items-start gap-2">
       <Lightbulb className="w-4 h-4 text-text-secondary flex-shrink-0 mt-0.5" />
       <p className="text-xs text-text-secondary flex-1">
-        One QR for every token - whoever scans it with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) picks USDC, EURC or cirBTC on your payment page
+        Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) - it opens your payment page on Arc
       </p>
     </div>
   )
