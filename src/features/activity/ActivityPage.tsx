@@ -18,8 +18,12 @@ import { orderTitle, displayOrderNumber, type OrderKind } from '@/lib/merchantPa
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { TokenMenu } from '@/components/ui/TokenMenu'
+import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
+import { fetchPointHistory, rewardsUserId, rewardTaskOf } from '@/lib/rewards'
 
-const FILTERS: { id: ActivityType | 'all' | 'p2p' | 'merchant'; label: string }[] = [
+type ActivityTab = ActivityType | 'all' | 'p2p' | 'merchant' | 'rewards'
+
+const FILTERS: { id: ActivityTab; label: string }[] = [
   { id: 'all',     label: 'All'       },
   { id: 'send',    label: 'Sent'      },
   { id: 'receive', label: 'Received'  },
@@ -27,6 +31,7 @@ const FILTERS: { id: ActivityType | 'all' | 'p2p' | 'merchant'; label: string }[
   { id: 'bridge',  label: 'Multichain'},
   { id: 'bulk',    label: 'Bulk'      },
   { id: 'p2p',     label: 'P2P'       },
+  { id: 'rewards', label: 'Rewards'   },
   // Approved merchants only (hidden for everyone else in the filter sheet).
   { id: 'merchant', label: 'Merchant' },
 ]
@@ -735,16 +740,22 @@ function groupByDate(records: ActivityRecord[]) {
   return ['Today','Yesterday','This Week','Earlier'].filter(l => groups[l]?.length).map(l => ({ label: l, items: groups[l] }))
 }
 
+/** A rewards claim paid out as USDC (newer rows say so; older ones only carry the sender name). */
+function isRewardClaim(r: ActivityRecord): boolean {
+  const md: any = (r as any).metadata ?? {}
+  return r.activityType === 'receive' && (md.receiveKind === 'reward_claim' || !!SYSTEM_LABELS[md.fromUsername])
+}
+
 // ── Filter menu ───────────────────────────────────────────────────────────────
 // Floats down from the filter icon next to Search, same look as the Pay /
 // Swap token picker (TokenMenu). "All" is the default on load/reset.
 const FILTER_ICONS: Record<string, ActionIconName> = {
-  all: 'clock', send: 'pay', receive: 'receive', swap: 'swap', bridge: 'hub', bulk: 'bulk', p2p: 'p2p', merchant: 'insights',
+  all: 'clock', send: 'pay', receive: 'receive', swap: 'swap', bridge: 'hub', bulk: 'bulk', p2p: 'p2p', rewards: 'rewards', merchant: 'insights',
 }
 function FilterMenu({ anchor, active, onSelect, onClose }: {
   anchor: HTMLElement | null
-  active: ActivityType | 'all' | 'p2p' | 'merchant'
-  onSelect: (id: ActivityType | 'all' | 'p2p' | 'merchant') => void
+  active: ActivityTab
+  onSelect: (id: ActivityTab) => void
   onClose: () => void
 }) {
   const isMerchant = useMerchant().isMerchant
@@ -755,7 +766,7 @@ function FilterMenu({ anchor, active, onSelect, onClose }: {
   return createPortal(
     <div style={{ position: 'fixed', top: r.top, left: r.left, width: r.width, height: r.height, zIndex: 60 }}>
     <TokenMenu width={200} ariaLabel="Filter activity" selected={active} onClose={onClose}
-      onSelect={id => onSelect(id as ActivityType | 'all' | 'p2p' | 'merchant')}
+      onSelect={id => onSelect(id as ActivityTab)}
       options={FILTERS.filter(f => f.id !== 'merchant' || isMerchant).map(f => ({
         id: f.id, label: f.label,
         icon: (
@@ -787,11 +798,12 @@ export function ActivityPage() {
   const [searchParams] = useSearchParams()
   const walletAddress = useAuthStore(s => s.walletAddress)
   const userId = useAuthStore(s => s.user?.id)
-  const [activeTab, setActiveTab] = useState<ActivityType | 'all' | 'p2p' | 'merchant'>(
+  const [activeTab, setActiveTab] = useState<ActivityTab>(
     searchParams.get('filter') === 'bridge' ? 'bridge'
       : searchParams.get('filter') === 'p2p' ? 'p2p'
       : searchParams.get('filter') === 'swap' ? 'swap'
       : searchParams.get('filter') === 'merchant' ? 'merchant'
+      : searchParams.get('filter') === 'rewards' ? 'rewards'
       : 'all'
   )
   // Opened from elsewhere (e.g. Home's asset history) with one transaction
@@ -812,6 +824,16 @@ export function ActivityPage() {
     if (flashId) listScrollRef.current?.querySelector(`[data-activity-id="${CSS.escape(flashId)}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [flashId])
   const [filterOpen, setFilterOpen] = useState(false)
+  // Rewards filter: points earned (point_transactions - not money, never in
+  // the activity ledger) or rewards claimed as USDC (activity receives).
+  const [rewardsTab, setRewardsTab] = useState<'earned' | 'claimed'>(() => (searchParams.get('rewards') === 'claimed' ? 'claimed' : 'earned'))
+  const [earned, setEarned] = useState<{ id: string; points: number; reason: string; created_at: string }[] | null>(null)
+  useEffect(() => {
+    if (activeTab !== 'rewards' || earned) return
+    const uid = rewardsUserId(userId, walletAddress)
+    if (!uid) { setEarned([]); return }
+    fetchPointHistory(uid, 200).then(rows => setEarned((rows as any[]).filter(p => p.points > 0))).catch(() => setEarned([]))
+  }, [activeTab, earned, userId, walletAddress])
   const filterBtnRef = useRef<HTMLButtonElement>(null)
   const [searchInput, setSearchInput] = useState('')
   // Search box tucks away while scrolling down the list, back on scroll up.
@@ -841,7 +863,7 @@ export function ActivityPage() {
     backfillP2PActivity(userId, walletAddress).then(() => refresh())
   }, [userId, walletAddress])
 
-  const handleTabChange = useCallback((tab: ActivityType | 'all' | 'p2p' | 'merchant') => {
+  const handleTabChange = useCallback((tab: ActivityTab) => {
     setActiveTab(tab)
     // For bridge/p2p tabs: pass a special value; useActivity/fetchActivity will handle it
     if (tab === 'all') setFilter(undefined)
@@ -849,6 +871,8 @@ export function ActivityPage() {
     else if (tab === 'p2p') setFilter('p2p' as ActivityType)        // handled below in fetchActivity
     // 'merchant' isn't an activity_type - fetch everything and narrow client-side (displayed below).
     else if (tab === 'merchant') setFilter(undefined)
+    // Rewards claimed to USDC are receives; narrowed client-side below.
+    else if (tab === 'rewards') setFilter('receive')
     else setFilter(tab as ActivityType)
   }, [setFilter])
 
@@ -885,9 +909,11 @@ export function ActivityPage() {
     if (activeTab === 'bulk')    return r.activityType === 'bulk'
     if (activeTab === 'bridge')  return r.activityType === 'claim' || r.activityType === 'bridge' || r.activityType === 'withdraw'
     if (activeTab === 'p2p')     return r.activityType === 'p2p_sell_order' || r.activityType === 'p2p_refund' || r.activityType === 'p2p_purchase'
+    if (activeTab === 'rewards') return isRewardClaim(r)
     return true
   })
 
+  const showEarned = activeTab === 'rewards' && rewardsTab === 'earned'
   const deduped = dedupeAndSortActivityRecords(displayed)
   const sorted = deduped
   const groups = groupByDate(sorted)
@@ -942,6 +968,33 @@ export function ActivityPage() {
 
       {/* Body */}
       <div ref={listScrollRef} className="flex-1 overflow-y-auto pb-6">
+        {activeTab === 'rewards' && (
+          <div className="px-4 lg:max-w-[1100px] lg:mx-auto" style={{ display: 'flex', gap: 20, borderBottom: '1px solid var(--border)', marginTop: 4 }}>
+            {(['earned', 'claimed'] as const).map(t => (
+              <button key={t} onClick={() => setRewardsTab(t)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 0 9px', fontSize: 14,
+                fontWeight: rewardsTab === t ? 700 : 500, color: rewardsTab === t ? 'var(--text-primary)' : 'var(--text-secondary)',
+                borderBottom: `2px solid ${rewardsTab === t ? 'var(--text-primary)' : 'transparent'}`, marginBottom: -1 }}>
+                {t === 'earned' ? 'Points earned' : 'Claimed USDC'}
+              </button>
+            ))}
+          </div>
+        )}
+        {showEarned && (
+          <div className="px-4 pt-2 lg:max-w-[900px] lg:mx-auto">
+            {earned === null ? <SkeletonCards className="pt-2" /> : earned.length === 0 ? (
+              <p className="text-center text-sm text-text-muted py-16">Points you earn will show here.</p>
+            ) : earned.map(p => {
+              const t = rewardTaskOf(p.reason)
+              return (
+                <HistoryRow key={p.id}
+                  icon={<HistoryIcon tone="out" icon={t ? t.action : 'rewards'} />}
+                  title={t ? t.done : 'Points earned'}
+                  meta={<><span style={{ color: 'var(--success)', fontWeight: 600 }}>Earned</span> · {timeAgo(p.created_at)}</>}
+                  right={<div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-text)' }}>+{p.points} pts</div>} />
+              )
+            })}
+          </div>
+        )}
         {loading && records.length === 0 && <SkeletonCards className="px-4 pt-4" />}
 
         {error && !loading && (
@@ -951,7 +1004,7 @@ export function ActivityPage() {
           </div>
         )}
 
-        {!loading && !error && deduped.length === 0 && (
+        {!showEarned && !loading && !error && deduped.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-2">
             <p className="text-text-secondary font-semibold">No activity yet</p>
             <p className="text-sm text-text-muted text-center px-8">Your transactions will appear here.</p>
@@ -962,7 +1015,7 @@ export function ActivityPage() {
             the exact same `groups` data and onSelect handler - no
             duplicated fetching/filtering, just a different markup shape. */}
         <div className="lg:hidden">
-          {!loading && groups.map(group => (
+          {!showEarned && !loading && groups.map(group => (
             <div key={group.label} className="px-4 mb-4">
               <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 mt-4 px-1">{group.label}</p>
               <div>
@@ -976,7 +1029,7 @@ export function ActivityPage() {
           ))}
         </div>
 
-        {!loading && (
+        {!showEarned && !loading && (
           <div className="hidden lg:block px-4 lg:max-w-[1100px] lg:mx-auto">
             {groups.map(group => (
               <div key={group.label} className="mb-6">
@@ -1019,7 +1072,7 @@ export function ActivityPage() {
           {loadingMore && <Loader2 className="w-5 h-5 text-text-muted animate-spin" />}
         </div>
 
-        {!loading && records.length > 0 && (
+        {!showEarned && !loading && records.length > 0 && (
           <p className="text-center text-[11px] text-text-muted pb-2">{records.length} records</p>
         )}
       </div>

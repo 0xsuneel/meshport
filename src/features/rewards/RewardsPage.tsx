@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
@@ -6,14 +7,14 @@ import { Info } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import {
   fetchUserPoints, claimPointsAsUSDC, fetchClaimsHistory, fetchPointHistory,
-  fetchDailyClaimedPoints, getDailyClaimedOnChain, pointsToUSDC, MIN_CLAIM_POINTS, MAX_CLAIM_POINTS, POINTS_PER_TX, MAX_DAILY_POINTS, MAX_DAILY_EARN_POINTS,
+  fetchDailyClaimedPoints, getDailyClaimedOnChain, rewardsUserId, REWARD_TASKS, rewardTaskOf, pointsToUSDC, MIN_CLAIM_POINTS, MAX_CLAIM_POINTS, POINTS_PER_TX, MAX_DAILY_POINTS, MAX_DAILY_EARN_POINTS,
 } from '@/lib/rewards'
 import { timeAgo, formatAmount } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { AmountField } from '@/components/ui/AmountField'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
-import type { ActionIconName } from '@/components/ui/ActionIcon'
+import { ActionIcon } from '@/components/ui/ActionIcon'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { P2PSheet } from '@/features/p2p/p2pUi'
@@ -56,14 +57,10 @@ function claimColor(v: ClaimView): string {
 
 // The five actions that earn points once a day each (rewards.ts
 // REWARD_ACTION_TYPES; the point row's reason is `tx_reward:<type>`).
-const TASKS: { type: string; icon: string; action: ActionIconName; label: string; done: string; path: string }[] = [
-  { type: 'pay_send', icon: '💸', action: 'pay', label: 'Send a payment', done: 'Payment sent', path: '/pay-send' },
-  { type: 'swap', icon: '🔄', action: 'swap', label: 'Make a swap', done: 'Swap made', path: '/swap' },
-  { type: 'chatpay', icon: '💬', action: 'pay', label: 'Pay in chat', done: 'Paid in chat', path: '/chat' },
-  { type: 'multichain_transfer', icon: '🌐', action: 'hub', label: 'Multichain transfer', done: 'Multichain transfer', path: '/multichain' },
-  { type: 'bulkpay', icon: '📦', action: 'bulk', label: 'Bulk payment', done: 'Bulk payment sent', path: '/bulk-payout' },
-]
-const taskOf = (reason: string) => TASKS.find(t => reason === `tx_reward:${t.type}`)
+// The latest 20 of each history here; See all opens Activity → Rewards.
+const HISTORY_LIMIT = 20
+const TASKS = REWARD_TASKS
+const taskOf = rewardTaskOf
 
 // A claimed reward reopened as the receiver's receipt: points in, USDC out
 // to this wallet on Arc.
@@ -123,6 +120,42 @@ export interface ClaimProgress {
   done: StepKey[]; times: Partial<Record<StepKey, number>>
   phase: 'running' | 'success' | 'failed'
   error?: string; txHash?: string | null; usdcReceived?: number
+}
+
+/** How rewards work, in the token picker's floating panel style (TokenMenu). */
+function HowItWorksMenu({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (<>
+    <div aria-hidden onClick={e => { e.stopPropagation(); onClose() }} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+    <motion.div role="dialog" aria-label="How rewards work"
+      initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
+      style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 'min(300px, calc(100vw - 32px))', zIndex: 41, transformOrigin: 'top right',
+        display: 'flex', flexDirection: 'column', gap: 2, padding: 4, borderRadius: 22,
+        background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 12px 28px rgba(0,0,0,0.3)' }}>
+      <div style={{ padding: '8px 10px 4px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+        Once a day each (resets 00:00 UTC)
+      </div>
+      {TASKS.map(t => (
+        <div key={t.type} className="flex items-center gap-2" style={{ height: 38, padding: '0 12px 0 4px', borderRadius: 999 }}>
+          <span className="flex items-center justify-center rounded-full flex-shrink-0"
+            style={{ width: 30, height: 30, background: 'color-mix(in srgb, var(--brand) 16%, transparent)' }}>
+            <ActionIcon name={t.action} size={17} color="var(--brand-text)" />
+          </span>
+          <span className="text-[15px] font-bold" style={{ flex: 1, minWidth: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.label}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)' }}>+{POINTS_PER_TX}</span>
+        </div>
+      ))}
+      <div style={{ margin: '4px 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, var(--brand) 10%, transparent)', fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+        <b style={{ color: 'var(--text-primary)' }}>1,000 pts = ${formatAmount(pointsToUSDC(1000))} USDC</b>, sent to your Arc wallet.
+        {' '}{MIN_CLAIM_POINTS}–{MAX_CLAIM_POINTS.toLocaleString()} pts per claim, up to {MAX_DAILY_POINTS.toLocaleString()} a day. Earn up to {MAX_DAILY_EARN_POINTS} pts a day.
+      </div>
+    </motion.div>
+  </>)
 }
 
 function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgress; balanceLeft: number; onClose: () => void; onRetry: () => void }) {
@@ -247,6 +280,7 @@ export function RewardsPage() {
   const [pointHistory, setPointHistory]     = useState<PointRecord[]>([])
   const [dailyClaimedPoints, setDailyClaimedPoints] = useState(0)
   const [showEarnInfo, setShowEarnInfo] = useState(false)
+  const howBtnRef = useRef<HTMLButtonElement>(null)
   const [loading, setLoading]               = useState(true)
   const [claiming, setClaiming]             = useState(false)
   const [claimError, setClaimError]         = useState<string | null>(null)
@@ -257,9 +291,7 @@ export function RewardsPage() {
   const [progress, setProgress]             = useState<ClaimProgress | null>(null)
   const [historyTab, setHistoryTab]         = useState<'earned' | 'claimed'>('earned')
 
-  const userId = user?.id && !user.id.startsWith('usr_')
-    ? user.id
-    : walletAddress ? `wallet_${walletAddress.toLowerCase().slice(2, 18)}` : null
+  const userId = rewardsUserId(user?.id, walletAddress)
 
   const load = useCallback(async () => {
     if (!userId) { setLoading(false); return }
@@ -428,7 +460,7 @@ export function RewardsPage() {
         const done = doneToday.has(`tx_reward:${t.type}`)
         return (
           <div key={t.type} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isDesktop ? '9px 2px' : '9px 18px' }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', flexShrink: 0 }}>{t.icon}</div>
+            <HistoryIcon tone={done ? 'in' : 'out'} icon={t.action} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <b style={{ display: 'block', fontSize: 13.5, color: 'var(--text-primary)', fontWeight: 600 }}>{t.label}</b>
               <span style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>+{POINTS_PER_TX} pts</span>
@@ -448,7 +480,7 @@ export function RewardsPage() {
   const historyRows = historyTab === 'earned' ? (
     earnedRows.length === 0 ? (
       <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px' }}>Points you earn will show here.</p>
-    ) : earnedRows.map(p => {
+    ) : earnedRows.slice(0, HISTORY_LIMIT).map(p => {
       const t = taskOf(p.reason)
       return (
         <HistoryRow key={p.id} inPanel={isDesktop}
@@ -461,7 +493,7 @@ export function RewardsPage() {
   ) : (
     claimsHistory.length === 0 ? (
       <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px' }}>Your USDC claims will show here.</p>
-    ) : claimsHistory.map(claim => {
+    ) : claimsHistory.slice(0, HISTORY_LIMIT).map(claim => {
       const v = claimView(claim.status, claim.created_at); const c = claimColor(v)
       return (
         <HistoryRow key={claim.id} inPanel={isDesktop} flash={claim.id === claimFlash.flashId}
@@ -490,27 +522,26 @@ export function RewardsPage() {
       </div>
       <div style={isDesktop ? { overflowY: 'auto', flex: 1, minHeight: 0, padding: '4px 0' } : { padding: '4px 0 24px' }}>
         {loading ? <p style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 13, padding: '24px 16px' }}>Loading…</p> : historyRows}
+        {!loading && (historyTab === 'earned' ? earnedRows.length : claimsHistory.length) > 0 && (
+          <button onClick={() => navigate(`/activity?filter=rewards&rewards=${historyTab}`)}
+            style={{ display: 'block', margin: '6px auto 4px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--brand-text)', padding: '8px 12px' }}>
+            See all
+          </button>
+        )}
       </div>
     </div>
   )
 
-  // How it works - the earning and redeeming rules.
-  const howItWorks = (
-    <P2PSheet open={showEarnInfo} onClose={() => setShowEarnInfo(false)} title="How rewards work" id="rw-how">
-      <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 10px' }}>Each of these earns +{POINTS_PER_TX} pts, once per day (resets at 00:00 UTC):</p>
-      {TASKS.map(t => (
-        <div key={t.type} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0' }}>
-          <span style={{ fontSize: 18, width: 28, textAlign: 'center' }}>{t.icon}</span>
-          <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)' }}>{t.label}</span>
-          <span style={{ fontSize: 12.5, color: 'var(--brand-text)', fontWeight: 700 }}>+{POINTS_PER_TX}</span>
-        </div>
-      ))}
-      <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: 'color-mix(in srgb, var(--brand) 8%, transparent)', fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-        <b style={{ color: 'var(--text-primary)' }}>Redeem:</b> 1,000 pts = ${formatAmount(pointsToUSDC(1000))} USDC, sent to your Arc wallet.
-        {' '}{MIN_CLAIM_POINTS}–{MAX_CLAIM_POINTS.toLocaleString()} pts per claim, up to {MAX_DAILY_POINTS.toLocaleString()} pts a day. Earn up to {MAX_DAILY_EARN_POINTS} pts a day.
-      </div>
-    </P2PSheet>
-  )
+  // How it works - the earning and redeeming rules, floating down from the
+  // pill like the token picker (TokenMenu's panel), portalled over the page
+  // at the pill's spot (the sticky blurred header would clip it otherwise).
+  const howRect = showEarnInfo ? howBtnRef.current?.getBoundingClientRect() : undefined
+  const howItWorks = howRect ? createPortal(
+    <div style={{ position: 'fixed', top: howRect.top, left: howRect.left, width: howRect.width, height: howRect.height, zIndex: 60 }}>
+      <HowItWorksMenu onClose={() => setShowEarnInfo(false)} />
+    </div>,
+    document.body,
+  ) : null
 
   // Claim sheet - pick the points, see the USDC.
   const sheet = (
@@ -569,7 +600,7 @@ export function RewardsPage() {
   const header = (
     <div className="header-row sticky top-0 z-20 backdrop-blur-md bg-bg/95 flex-shrink-0 gap-3 px-5 pt-header pb-header">
       <h1 className="text-xl font-bold text-text-primary">Rewards</h1>
-      <button onClick={() => setShowEarnInfo(true)}
+      <button ref={howBtnRef} onClick={() => setShowEarnInfo(o => !o)} aria-expanded={showEarnInfo}
         className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"
         style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', color: 'var(--brand-text)', border: 'none', cursor: 'pointer' }}>
         <Info className="w-3.5 h-3.5" /> How it works

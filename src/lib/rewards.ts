@@ -24,6 +24,7 @@
  * Treasury: Admin funds with USDC; users claim on-chain
  */
 
+import type { ActionIconName } from '@/components/ui/ActionIcon'
 import { createPublicClient, createWalletClient } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { supabase } from './supabase'
@@ -588,6 +589,22 @@ export async function fetchDailyClaimedPoints(userId: string): Promise<number> {
 }
 
 // ─── Fetch claims history ─────────────────────────────────────────────────────
+/** The daily tasks that earn points (reason `tx_reward:<type>`), with their action icon. */
+export const REWARD_TASKS: { type: string; action: ActionIconName; label: string; done: string; path: string }[] = [
+  { type: 'pay_send', action: 'pay', label: 'Send a payment', done: 'Payment sent', path: '/pay-send' },
+  { type: 'swap', action: 'swap', label: 'Make a swap', done: 'Swap made', path: '/swap' },
+  { type: 'chatpay', action: 'chat', label: 'Pay in chat', done: 'Paid in chat', path: '/chat' },
+  { type: 'multichain_transfer', action: 'hub', label: 'Multichain transfer', done: 'Multichain transfer', path: '/multichain' },
+  { type: 'bulkpay', action: 'bulk', label: 'Bulk payment', done: 'Bulk payment sent', path: '/bulk-payout' },
+]
+export const rewardTaskOf = (reason: string) => REWARD_TASKS.find(t => reason === `tx_reward:${t.type}`)
+
+/** The id rewards rows are stored under: the profile id, or (older wallets) one derived from the address. */
+export function rewardsUserId(profileId: string | null | undefined, walletAddress: string | null | undefined): string | null {
+  if (profileId && !profileId.startsWith('usr_')) return profileId
+  return walletAddress ? `wallet_${walletAddress.toLowerCase().slice(2, 18)}` : null
+}
+
 export async function fetchClaimsHistory(userId: string) {
   const { data } = await supabase
     .from('reward_claims')
@@ -599,12 +616,12 @@ export async function fetchClaimsHistory(userId: string) {
 }
 
 // ─── Fetch point transactions history ─────────────────────────────────────────
-export async function fetchPointHistory(userId: string) {
+export async function fetchPointHistory(userId: string, limit = 50) {
   const { data } = await supabase
     .from('point_transactions')
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
-    .limit(50)
+    .limit(limit)
   return data || []
 }
