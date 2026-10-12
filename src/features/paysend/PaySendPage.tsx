@@ -11,8 +11,8 @@ import {
   ArrowLeft, Wallet,
   AlertCircle, Loader2, CheckCircle2, QrCode,
 } from 'lucide-react'
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
-import { slideStepVariants, MOBILE_SLIDE_TRANSITION } from '@/lib/motion'
+import { motion, AnimatePresence } from 'framer-motion'
+import { MOBILE_SLIDE_TRANSITION } from '@/lib/motion'
 import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { PinKeypad } from '@/components/ui/PinKeypad'
@@ -140,9 +140,6 @@ export function PaySendPage() {
   })[0]
   const [screen, setScreen] = useState<Screen>(() => initialRecipient ? 'amount' : 'search')
   const [direction, setDirection] = useState<'forward' | 'back'>('forward')
-  // Same useReducedMotion() pattern already used in PageTransition.tsx/
-  // AuthShell.tsx, applied here to the wizard-step slides below.
-  const reduceMotion = useReducedMotion()
   const goForward = (s: Screen) => { setDirection('forward'); setScreen(s) }
   const goBack2   = (s: Screen) => { setDirection('back');    setScreen(s) }
   const [recipient, setRecipient] = useState<Recipient | null>(initialRecipient)
@@ -808,6 +805,56 @@ export function PaySendPage() {
     else navigate('/')
   }
 
+  // ─── Phone / browser Back steps through Pay's own screens ───────────────
+  // Search → amount → review are one route, so Back used to leave Pay (Home)
+  // even from Review. Each in-page screen entered adds a history entry; Back
+  // then takes the same step as the on-screen arrow (Review → amount → search),
+  // and the on-screen arrow drops the entry it leaves. Steps that leave Pay
+  // (an amount screen opened from Home / Contacts / Chat / a link) add none.
+  // While a payment is processing the leave guard holds Back first; Leave,
+  // or Back on the result, exits Pay instead of returning to the amount.
+  const rtNow = locationState.returnTo
+  const amountExitsPay = !!merchantPayCode || rtNow === '/' || rtNow === 'contacts' || rtNow === '/recent-paid'
+    || rtNow === '/payment-link' || (rtNow === 'chat' && !!returnConvId)
+  const inPageDepth = screen === 'review' ? (amountExitsPay ? 1 : 2) : screen === 'amount' && !amountExitsPay ? 1 : 0
+  const pushedStepsRef = useRef(0)
+  const ignoreNextPopRef = useRef(false)
+  const backStateRef = useRef({ screen, busyOrDone: false })
+  backStateRef.current = { screen, busyOrDone: isProcessing || isDone }
+  useEffect(() => {
+    if (isProcessing || isDone) return // the entries stay until Pay is left
+    while (pushedStepsRef.current < inPageDepth) {
+      window.history.pushState({ ...(window.history.state ?? {}), mpPayStep: pushedStepsRef.current + 1 }, '')
+      pushedStepsRef.current += 1
+    }
+    if (pushedStepsRef.current > inPageDepth) {
+      // Went back with the on-screen arrow: drop the entries it left.
+      const n = pushedStepsRef.current - inPageDepth
+      pushedStepsRef.current = inPageDepth
+      ignoreNextPopRef.current = true
+      window.history.go(-n)
+    }
+  }, [inPageDepth, isProcessing, isDone])
+  useEffect(() => {
+    const onPop = () => {
+      if (ignoreNextPopRef.current) { ignoreNextPopRef.current = false; return }
+      if (pushedStepsRef.current === 0) return
+      pushedStepsRef.current -= 1
+      const { screen: cur, busyOrDone } = backStateRef.current
+      if (busyOrDone) {
+        // Leave (while processing) or Back on the result: out of Pay.
+        const dest = returnTo === 'contacts' ? '/contacts' : returnTo === 'chat' && returnConvId ? `/chat/${returnConvId}` : '/'
+        navigate(dest, { replace: true })
+        return
+      }
+      if (cur === 'review') goBack2('amount')
+      else if (cur === 'amount') goBack2('search')
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const sendInFlightRef = useRef(false)
 
   // RESILIENCE FIX (2026-09-17, explicit product requirement: Pay must
@@ -1214,15 +1261,15 @@ export function PaySendPage() {
   const flow = (
     <div data-leave-guard={isProcessing ? '' : undefined} className={`flex flex-col ${isDesktop ? 'h-full' : 'h-screen overflow-hidden'}`} style={{ background: 'var(--bg)', borderRadius: isDesktop ? 20 : undefined }}>
       {/* Search → amount → review push like pages (ScreenPush), so two
-          screens are never seen through each other mid-change. Desktop
-          keeps its own slide. */}
-      <ScreenPush screenKey={isDesktop ? 'desktop' : screen} back={direction === 'back'}>
+          screens are never seen through each other mid-change. Desktop:
+          ScreenPush's quick fade in place, same as Swap. */}
+      <ScreenPush screenKey={screen} back={direction === 'back'}>
       <AnimatePresence initial={false} mode="popLayout">
 
         {/* ══════════════ SCREEN 1 - SEARCH RECIPIENT ══════════════ */}
         {screen === 'search' && (
           <motion.div key="search"
-            {...(reduceMotion || !isDesktop ? INSTANT_SCREEN : slideStepVariants(direction))}
+            {...INSTANT_SCREEN}
             transition={MOBILE_SLIDE_TRANSITION}
             className="flex flex-col h-full">
 
@@ -1411,7 +1458,7 @@ export function PaySendPage() {
         {/* ══════════════ SCREEN 2 - ENTER AMOUNT ══════════════ */}
         {screen === 'amount' && recipient && (
           <motion.div key="amount"
-            {...(reduceMotion || !isDesktop ? INSTANT_SCREEN : slideStepVariants(direction))}
+            {...INSTANT_SCREEN}
             transition={MOBILE_SLIDE_TRANSITION}
             className="flex flex-col h-full">
 
@@ -1596,7 +1643,7 @@ export function PaySendPage() {
         {/* ══════════════ SCREEN 3 - REVIEW + INLINE STATES ══════════════ */}
         {screen === 'review' && recipient && (
           <motion.div key="review"
-            {...(reduceMotion || !isDesktop ? INSTANT_SCREEN : slideStepVariants(direction))}
+            {...INSTANT_SCREEN}
             transition={MOBILE_SLIDE_TRANSITION}
             className="flex flex-col h-full">
 
