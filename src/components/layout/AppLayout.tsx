@@ -48,6 +48,14 @@ function isNoNavRoute(pathname: string) {
 // Read-only pages that are safe to re-mount when the connection comes back.
 const RELOAD_ON_RECONNECT = /^\/((activity|news)(\/[^/]+)?|recent-paid|notifications|rewards|insights|profile|about|feature-guide|p2p|p2p\/(my-offers|my-trades|history))\/?$/
 
+
+// Desktop: Chat is one page with the list and the open conversation side by
+// side (ChatDesktopSplit) - opening another chat must not replay the whole
+// page's transition, only the conversation column animates. /chat/new and
+// /chat/privacy are their own pages.
+const desktopPageKey = (path: string) =>
+  /^\/chat(\/(?!new$|privacy$)[^/]+)?\/?$/.test(path) ? '/chat' : path
+
 export function AppLayout() {
   const location = useLocation()
   // Back online → pages that only show data load it again by themselves
@@ -621,7 +629,7 @@ export function AppLayout() {
               header just scrolled away with everything else). */}
           <div data-desktop-content="" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {holdForWallet ? null : (
-              <PageTransition locationKey={location.pathname}>
+              <PageTransition locationKey={desktopPageKey(location.pathname)}>
                 <Outlet key={reloadKey} />
               </PageTransition>
             )}
