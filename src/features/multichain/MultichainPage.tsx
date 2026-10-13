@@ -23,7 +23,8 @@ import { moveBreakdown, formatFee, formatMoveAmount, type MoveBreakdown } from '
 import { subscribeToWalletClaims, type Claim as ServerClaim } from '@/lib/claimService'
 import { useSettingsStore } from '@/store/settingsStore'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
-import { readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
+import { readExternalBalances, readExternalChainBalance, refreshScope, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
+import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { motion } from 'framer-motion'
 import { useSharedKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
@@ -543,13 +544,20 @@ export function MultichainPage() {
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'claims', filter: `wallet_address=eq.${walletAddress.toLowerCase()}` },
           (payload: any) => {
             if (payload.new?.status === 'completed' && payload.old?.status !== 'completed' && payload.new?.source_chain) {
+              // Refresh the source chain's external balance (drop stale aggregate cache too).
               refreshOneChain(payload.new.source_chain)
+              refreshScope({ kind: 'external', wallet: walletAddress, chains: [payload.new.source_chain] })
+              // Refresh the Arc balance - the mint landed, so the "Available to Transfer"
+              // figure should update immediately rather than waiting for the next poll.
+              refreshBalancesAfterTx(walletAddress)
             }
           })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'activity', filter: `wallet_address=eq.${walletAddress.toLowerCase()}` },
           (payload: any) => {
             if (payload.new?.activity_type === 'bridge' && payload.new?.status === 'completed' && payload.old?.status !== 'completed' && payload.new?.destination_chain) {
+              // Refresh the destination chain's external balance and drop the aggregate.
               refreshOneChain(payload.new.destination_chain)
+              refreshScope({ kind: 'external', wallet: walletAddress, chains: [payload.new.destination_chain] })
             }
           })
         .subscribe()
