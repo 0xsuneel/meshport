@@ -98,28 +98,8 @@ export function RecentPaidPage() {
     navigate(`/pay?to=${encodeURIComponent(recentSendTarget(p))}`, { state: { returnTo: '/recent-paid' } })
   }
 
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 90 }}>
-      {/* Header */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 20,
-        background: 'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter: 'blur(20px)',
-        paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))',
-        paddingBottom: 18, paddingLeft: 20, paddingRight: 20,
-        minHeight: 44, boxSizing: 'border-box',
-        display: 'flex', alignItems: 'center', gap: 12,
-      }}>
-        {!isDesktop && (
-          <button onClick={() => navigate(backTo)} className="back-btn">
-            <ArrowLeft className="w-5 h-5 text-text-primary" />
-          </button>
-        )}
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px' }}>Recent</div>
-        </div>
-      </div>
-
-      <div style={{ padding: '16px 20px' }}>
+  const list = (
+    <>
         {loading ? (
           // Skeleton
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -203,6 +183,83 @@ export function RecentPaidPage() {
             ))}
           </div>
         )}
+    </>
+  )
+
+  if (!isDesktop) {
+    return (
+      <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 90 }}>
+      {/* Header */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 20,
+        background: 'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter: 'blur(20px)',
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))',
+        paddingBottom: 18, paddingLeft: 20, paddingRight: 20,
+        minHeight: 44, boxSizing: 'border-box',
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}>
+        {!isDesktop && (
+          <button onClick={() => navigate(backTo)} className="back-btn">
+            <ArrowLeft className="w-5 h-5 text-text-primary" />
+          </button>
+        )}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px' }}>Recent</div>
+        </div>
+      </div>
+
+        <div style={{ padding: '16px 20px' }}>
+          {list}
+        </div>
+      </div>
+    )
+  }
+
+  // Desktop: the list at a readable width on the left, a summary on the right
+  // (total sent, people, most paid) - the same 65/35 split as Swap and
+  // Activity, instead of one list stretched across the whole page.
+  const others = people.filter(p => !p.isSelf)
+  const totalSent = others.reduce((sum, p) => sum + (p.total_sent || 0), 0)
+  const mostPaid = [...others].sort((a, b) => b.total_sent - a.total_sent).slice(0, 3)
+  const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16 }
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
+      <div style={{ display: 'flex', gap: 24, padding: '20px 24px 40px', alignItems: 'flex-start' }}>
+        <div style={{ flex: '65 1 0%', minWidth: 0 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px', marginBottom: 16 }}>Recent</div>
+          {list}
+        </div>
+        <aside style={{ flex: '35 1 0%', minWidth: 0, position: 'sticky', top: 20, marginTop: 44, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {(loading || others.length > 0) && (
+            <div style={{ ...card, display: 'flex' }}>
+              {([['Total sent', `$${formatAmount(totalSent)}`], ['People', String(others.length)]] as const).map(([k, v], i) => (
+                <div key={k} style={{ flex: 1, padding: '14px 16px', borderLeft: i ? '1px solid var(--border)' : 'none' }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{k}</div>
+                  {loading
+                    ? <div style={{ width: 70, height: 20, borderRadius: 6, marginTop: 6, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }} />
+                    : <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginTop: 2 }}>{v}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+          {!loading && mostPaid.length > 0 && (
+            <div style={{ ...card, padding: '14px 16px 6px' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>Most paid</div>
+              {mostPaid.map((p, i) => (
+                <div key={p.wallet_address} onClick={() => goSend(p)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', cursor: 'pointer',
+                    borderBottom: i < mostPaid.length - 1 ? '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' : 'none' }}>
+                  <Avatar person={p} size={34} color={COLORS[people.indexOf(p) % COLORS.length]} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.isSelf ? 'You' : (p.display_name || shortName(p))}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.times_sent} payment{p.times_sent === 1 ? '' : 's'}</div>
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>${formatAmount(p.total_sent)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </aside>
       </div>
     </div>
   )
