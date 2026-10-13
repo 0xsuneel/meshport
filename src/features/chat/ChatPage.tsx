@@ -73,9 +73,7 @@ import { useLeaveGuard } from '@/lib/leaveGuard'
 // Chat pay sheets (phone): closing slides the sheet down; moving to the
 // other pay step leaves at once, so the sheet's content just swaps in place.
 const PAY_SHEET_LEAVE = {
-  // Closing (or the passcode sheet dropping back to the amount sheet) slides
-  // down; moving on to processing swaps at once.
-  leave: (next: string) => next === 'closed' || next === 'form' ? SHEET_EXIT : { opacity: 0, transition: { duration: 0 } },
+  leave: (next: string) => next === 'closed' ? SHEET_EXIT : { opacity: 0, transition: { duration: 0 } },
 }
 
 function hiddenKey(addr: string | null) {
@@ -5329,8 +5327,7 @@ export function ChatConversationPage() {
         )}
       </AnimatePresence>
       <AnimatePresence custom={payStep}>
-        {/* Phone: the amount sheet stays up (dimmed) behind the passcode sheet. */}
-        {(payStep === 'form' || (!isDesktop && payStep === 'confirm')) && (() => {
+        {payStep === 'form' && (() => {
           const formContent = (
               <div className="px-5 pt-4 pb-6 space-y-3">
                 {/* Header */}
@@ -5585,28 +5582,18 @@ export function ChatConversationPage() {
               {payStep === 'confirm' && (
                 <div className="px-5 pt-3 flex-1 flex flex-col" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + 20px)' }}>
                   <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-text-primary">{isDesktop ? 'Review Payment' : 'Enter Passcode'}</h2>
+                    <h2 className="text-lg font-bold text-text-primary">Review Payment</h2>
                     <button onClick={() => setPayStep('form')} className="p-2 rounded-full hover:bg-[rgb(var(--text-primary-rgb)/0.10)] text-text-secondary"><X className="w-5 h-5" /></button>
                   </div>
-                  {/* Phone: the amount sheet stays visible behind this one, so a
-                      one-line summary is enough here; desktop keeps the full review. */}
-                  {!isDesktop ? (
-                    <p className="text-[13px] text-text-secondary mt-0.5">
-                      Pay <span className="font-semibold text-text-primary">{formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} {payToken}</span> to <span className="font-semibold text-link">{recipientClean}.arc</span>
-                      {billPay ? <> · {displayOrderNumber(billPay.number)}</> : null}
-                      {' · Fee '}<span className="text-success font-semibold">{payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free'}</span>
-                    </p>
-                  ) : (
                   <div className="bg-surface rounded-2xl border border-border mt-2">
-                      <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Recipient</span><span className="text-sm font-semibold text-link">{recipientClean}.arc</span></div>
-                      {billPay && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">{billPay.kind === 'bill' ? 'Bill' : billPay.kind === 'merchant_request' ? 'Requested Payment' : 'Request'}</span><span className="text-sm font-semibold text-text-primary">{displayOrderNumber(billPay.number)}</span></div>}
-                      <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Amount</span><span className="text-sm font-bold text-text-primary">{formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} {payToken}</span></div>
-                      <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Network Fee</span><span className="text-sm font-semibold text-success">{payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free'}</span></div>
-                      {payNote && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Note</span><span className="text-sm text-text-primary truncate max-w-[60%]">{payNote}</span></div>}
-                    </div>
-                  )}
-                  <div className={isDesktop ? "space-y-1 mt-auto pt-2" : "space-y-1 pt-4"}>
-                    {isDesktop && <p className="text-xs font-medium text-text-secondary text-center">Enter passcode to confirm</p>}
+                    <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Recipient</span><span className="text-sm font-semibold text-link">{recipientClean}.arc</span></div>
+                    {billPay && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">{billPay.kind === 'bill' ? 'Bill' : billPay.kind === 'merchant_request' ? 'Requested Payment' : 'Request'}</span><span className="text-sm font-semibold text-text-primary">{displayOrderNumber(billPay.number)}</span></div>}
+                    <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Amount</span><span className="text-sm font-bold text-text-primary">{formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} {payToken}</span></div>
+                    <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Network Fee</span><span className="text-sm font-semibold text-success">{payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free'}</span></div>
+                    {payNote && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Note</span><span className="text-sm text-text-primary truncate max-w-[60%]">{payNote}</span></div>}
+                  </div>
+                  <div className="space-y-1 mt-auto pt-2">
+                    <p className="text-xs font-medium text-text-secondary text-center">Enter passcode to confirm</p>
                     <PinKeypad
                       value={payPassEntry}
                       onChange={v => setPayPassEntry(v)}
@@ -5734,18 +5721,14 @@ export function ChatConversationPage() {
                 // one fragment, swapping sheet -> card mid-flow left the exit
                 // unfinished and the invisible backdrop stayed over the chat,
                 // blocking every tap after "Back to Chat".
-                payStep === 'confirm' ? [
-                  // Dims the amount sheet underneath; tap it to go back to the amount.
-                  <motion.div key="chat-pay-pin-dim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SHEET_BACKDROP.transition}
-                    onClick={() => { setPayStep('form'); setPayPassEntry('') }}
-                    className="absolute inset-0 z-50 bg-black/45" />,
-                  <motion.div key="chat-pay-sheet" {...sheetDrag('chat-pay-2', () => { setPayStep('form'); setPayPassEntry('') })} initial={{ y: '100%' }} animate={{ y: 0 }}
+                payStep === 'confirm' ? (
+                  <motion.div key="chat-pay-sheet" {...sheetDrag('chat-pay-2', closeStep2)} initial={prevPayStep === 'form' ? false : { y: '100%' }} animate={{ y: 0 }}
                     custom={payStep} variants={PAY_SHEET_LEAVE} exit="leave"
                     transition={SHEET_SPRING}
-                    className="absolute bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-3xl max-h-[92dvh] overflow-y-auto flex flex-col">
+                    className="absolute bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-3xl h-[70vh] overflow-y-auto flex flex-col">
                     {step2Content}
-                  </motion.div>,
-                ] : (
+                  </motion.div>
+                ) : (
                   // Processing + success open as a card centred in the chat
                   // (not a bottom sheet). On success the receipt card itself
                   // is the popup, so the wrapper drops its own surface/border.
