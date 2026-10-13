@@ -278,7 +278,8 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
     : (new Date(u.readyAt).getTime() <= now ? 'ready to complete' : `ready ${new Date(u.readyAt).toLocaleString()}`)
 
   return (
-    <div style={showHeader
+    // While a recovery runs this panel stays live; the rest of the app is held.
+    <div data-leave-guard={busy !== null ? '' : undefined} style={showHeader
       ? { padding: 20, maxWidth: 640, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 12 }
       : { display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

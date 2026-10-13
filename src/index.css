@@ -626,6 +626,11 @@ html.mp-locking #root { visibility: hidden; }
 .mp-hub-busy :is(button, a, input, select, textarea, [role="tab"], [role="button"]):not(:is([data-hub-page], [data-leave-guard]) *) {
   cursor: not-allowed !important;
 }
+/* Desktop while a flow is processing (LeaveGuardHost): everything outside the
+   running flow's panel is held - show it. */
+.mp-app-busy :is(button, a, input, select, textarea, label, summary, [role="button"], [role="tab"], [role="menuitem"], [role="link"], [tabindex]):not(:is([data-leave-guard], [data-hub-page], [data-leave-ask]) *):not([data-leave-guard], [data-hub-page], [data-leave-ask]) {
+  cursor: not-allowed !important;
+}
 @keyframes mpCaretBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
 .mp-amount-caret { display: inline-block; width: 3px; height: 0.82em; margin-left: 4px; vertical-align: -0.06em; border-radius: 2px; background: var(--brand-text); animation: mpCaretBlink 1s steps(1) infinite; }
 @media (prefers-reduced-motion: reduce) { .mp-amount-caret { animation: none; } }
