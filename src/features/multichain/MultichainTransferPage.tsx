@@ -3288,7 +3288,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           {/* ── FORM ─────────────────────────────────────────────────────── */}
           {!showResumed && (step === 'form' || step === 'review' || step === 'confirm') && (
             <motion.div key="form" initial={false}
-              animate={(step === 'review' || step === 'confirm') ? { opacity: 0, y: '-28%' } : { opacity: 1, y: 0 }}
+              // Phone: the form pushes up behind Review. Hub on desktop: Review
+              // opens in the right-hand panel, so the Hub card stays put under
+              // the dim (as with Bring) instead of vanishing.
+              animate={(step === 'review' || step === 'confirm') && !(isDesktopMq && sheetMode) ? { opacity: 0, y: '-28%' } : { opacity: 1, y: 0 }}
               exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }} className={isDesktop ? "space-y-[9px] pt-1" : "space-y-2.5 pt-1"}>
 
               {/* ── Transfer Out form (Arc Bridge layout, MeshPort brand) ── */}
