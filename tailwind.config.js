@@ -33,6 +33,9 @@ export default {
       lg: '980px',
       xl: '1280px',
       '2xl': '1536px',
+      // Short screens (iPhone SE, small Androids with the browser bars
+      // showing): `short:` tightens vertical spacing so a page still fits.
+      short: { raw: '(max-height: 700px)' },
     },
     extend: {
       colors: {

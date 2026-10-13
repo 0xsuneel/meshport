@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MOBILE_SLIDE_TRANSITION } from '@/lib/motion'
+import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { PinKeypad } from '@/components/ui/PinKeypad'
@@ -163,6 +164,8 @@ export function PaySendPage() {
   // Amount screen
   const [amount, setAmount] = useState(() => initialRecipient ? (searchParams.get('amount') || '') : '')
   const [showAmountPad, setShowAmountPad] = useState(false)
+  const amountBoxRef = useRef<HTMLDivElement>(null)
+  const keypadLift = useKeypadLift(showAmountPad && screen === 'amount', amountBoxRef, !isDesktop)
   // Optional message the payer adds on the amount page (saved with the payment).
   const [note, setNote] = useState('')
   const [amountError, setAmountError] = useState('')
@@ -1470,7 +1473,12 @@ export function PaySendPage() {
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto px-5 pb-4 space-y-5">
+            <div className="flex-1 overflow-y-auto px-5 pb-4">
+            {/* Glides up with the number pad on short phones so the amount
+                stays in view above it (useKeypadLift). The pad itself sits
+                outside this moved box - a transform would break its fixed
+                position. */}
+            <motion.div animate={{ y: -keypadLift }} initial={false} transition={KEYPAD_SPRING} className="space-y-5">
 
               {/* Recipient card */}
               <div className="flex items-center gap-3 p-3.5 rounded-2xl" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
@@ -1504,6 +1512,7 @@ export function PaySendPage() {
                 </p>
               )}
 
+              <div ref={amountBoxRef}>
               <AmountField
                 value={amount}
                 onChange={raw => { if (merchantPayCode) return; setAmount(sanitizeSendAmount(raw, tokenDisplayDecimals(token))); setAmountError('') }}
@@ -1551,27 +1560,7 @@ export function PaySendPage() {
                       onClick: () => { setAmount(parseFloat((maxSpendable * f).toFixed(tokenDisplayDecimals(token))).toString()); setAmountError('') } }))
                   : quickAmounts(QUICK_AMOUNTS, tokenSymbolChar(token), v => { setAmount(v); setAmountError('') }, maxSpendable)}
               />
-              {!isDesktop && (
-                <AmountKeypad
-                  // The amount field above has its own Max.
-                  showMax={false}
-                  open={showAmountPad}
-                  value={amount}
-                  onChange={v => { if (merchantPayCode) return; setAmount(v); setAmountError('') }}
-                  balance={activeBalance}
-                  token={token}
-                  quickAmounts={QUICK_AMOUNTS}
-                  // feeReserve/maxSpendable are computed once above from the
-                  // fee cached at page-open - Max, this keypad's own Done
-                  // button, and the footer's Preview button all validate
-                  // against the same fee-safe ceiling.
-                  feeReserve={feeReserve}
-                  onClose={() => setShowAmountPad(false)}
-                  doneLabel="Done"
-                  onDone={() => setShowAmountPad(false)}
-                  error={amountErrorMessage}
-                />
-              )}
+              </div>
               {/* Too much: shown here too once the keypad (which shows it while
                   open) is closed, so it's never just a dimmed Review button. */}
               {amountErrorMessage && (isDesktop || !showAmountPad) && (
@@ -1602,7 +1591,29 @@ export function PaySendPage() {
                   </div>
                 </div>
               )}
+            </motion.div>
             </div>
+              {!isDesktop && (
+                <AmountKeypad
+                  // The amount field above has its own Max.
+                  showMax={false}
+                  open={showAmountPad}
+                  value={amount}
+                  onChange={v => { if (merchantPayCode) return; setAmount(v); setAmountError('') }}
+                  balance={activeBalance}
+                  token={token}
+                  quickAmounts={QUICK_AMOUNTS}
+                  // feeReserve/maxSpendable are computed once above from the
+                  // fee cached at page-open - Max, this keypad's own Done
+                  // button, and the footer's Preview button all validate
+                  // against the same fee-safe ceiling.
+                  feeReserve={feeReserve}
+                  onClose={() => setShowAmountPad(false)}
+                  doneLabel="Done"
+                  onDone={() => setShowAmountPad(false)}
+                  error={amountErrorMessage}
+                />
+              )}
 
             {/* Back + Preview footer - the keypad sheet has its own "Review"
                 button while it's open, but once it's dismissed (tap outside,

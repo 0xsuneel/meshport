@@ -28,7 +28,7 @@ import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
-import {formatAmount, trimTrailingZeros} from '@/lib/utils'
+import {formatAmount, trimTrailingZeros, cn} from '@/lib/utils'
 import { AmountField } from '@/components/ui/AmountField'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isCoinEnabled } from '@/lib/featureFilters'
@@ -2285,6 +2285,8 @@ export function ChatConversationPage() {
   // Desktop users type on a physical keyboard - the pay-flow's inline
   // tap-grid below is a mobile-only affordance.
   const isDesktop = useMediaQuery('(min-width: 980px)')
+  // Short phones (SE, small Androids with browser bars): smaller pay keys.
+  const shortPhone = useMediaQuery('(max-height: 700px)')
 
   const _initMsgs = _cachedMessages[id || ''] || []
   const _initFirstUnreadId = user?.id ? (_initMsgs.find(m => !m.is_read && m.sender_id !== user.id)?.id || null) : null
@@ -4992,7 +4994,7 @@ export function ChatConversationPage() {
           </button>
 
           {/* Text input box */}
-          <div className="flex-1 flex items-end gap-2 bg-surface border border-border rounded-3xl px-3.5 py-3 min-h-[48px]">
+          <div className="flex-1 min-w-0 flex items-end gap-2 bg-surface border border-border rounded-3xl px-3.5 py-3 min-h-[48px]">
             <textarea
               ref={messageInputRef}
               value={messageText}
@@ -5001,7 +5003,7 @@ export function ChatConversationPage() {
               onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() } }}
               onFocus={() => { if (showAttach && attachMode === 'attachments') setShowAttach(false) }}
               placeholder={recipientClean ? `Message ${recipientClean}.arc` : 'Message'}
-              className="flex-1 bg-transparent text-text-primary placeholder-text-secondary text-[15px] focus:outline-none resize-none leading-[22px] max-h-[110px] transition-[height] duration-150"
+              className="flex-1 min-w-0 w-0 bg-transparent text-text-primary placeholder-text-secondary text-[15px] focus:outline-none resize-none leading-[22px] max-h-[110px] transition-[height] duration-150"
               style={{ height: '22px', minHeight: '22px' }}
             />
           </div>
@@ -5432,7 +5434,7 @@ export function ChatConversationPage() {
                     clipped or stacked behind/under anything else in this sheet.
                     Mobile only - desktop's live input above needs no on-screen grid. */}
                 {!isDesktop && showAmountPad && !payLocked && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, maxWidth: 320, margin: '4px auto 0' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: shortPhone ? 8 : 10, maxWidth: 320, margin: '4px auto 0' }}>
                     {['1','2','3','4','5','6','7','8','9','.','0','del'].map((key, i) => (
                       <button
                         key={i}
@@ -5451,7 +5453,7 @@ export function ChatConversationPage() {
                           setPayError('')
                         }}
                         style={{
-                          height: 56, borderRadius: 12, width: '100%',
+                          height: shortPhone ? 46 : 56, borderRadius: 12, width: '100%',
                           background: 'var(--surface)',
                           border: '1px solid var(--border)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -5487,8 +5489,9 @@ export function ChatConversationPage() {
                   <p role="alert" className="text-sm text-danger text-center">Insufficient balance</p>
                 ) : null}
 
-                {/* Cancel + Pay buttons */}
-                <div className="flex gap-3 pt-1">
+                {/* Cancel + Pay buttons - pinned to the sheet's bottom on phones
+                    so they stay reachable when the keypad fills a short screen. */}
+                <div className={cn("flex gap-3 pt-1", !isDesktop && "sticky bottom-0 z-[1] bg-surface pb-1")}>
                   <button onClick={() => { setPayStep('closed'); setPayAmount(''); setPayError(''); setShowAmountPad(false) }}
                     className="flex-1 py-3.5 rounded-2xl text-[15px] font-semibold active:scale-95 transition-transform"
                     style={{ background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)', color: 'var(--text-secondary)' }}>
@@ -5557,7 +5560,7 @@ export function ChatConversationPage() {
               <motion.div {...sheetDrag('chat-pay', closeForm)} initial={prevPayStep === 'confirm' ? false : { y: '100%' }} animate={{ y: 0 }}
                 custom={payStep} variants={PAY_SHEET_LEAVE} exit="leave"
                 transition={SHEET_SPRING}
-                className="absolute bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-3xl h-[70vh] overflow-y-auto">
+                className="absolute bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-3xl h-[70vh] [@media(max-height:700px)]:h-[92dvh] overflow-y-auto">
                 {formContent}
               </motion.div>
             </>

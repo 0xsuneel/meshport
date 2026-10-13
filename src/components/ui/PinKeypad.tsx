@@ -77,6 +77,10 @@ export function PinKeypad({
   // mobile-only affordance. Same value/onChange/onComplete contract either
   // way, so every caller of this component needs zero changes.
   const isDesktop = useMediaQuery('(min-width: 980px)')
+  // Short phones (SE, small Androids with browser bars): shorter keys and a
+  // tighter gap under the dots, so the whole pad fits with its page.
+  const short = useMediaQuery('(max-height: 700px)')
+  const keyH = short ? 48 : 56
   const walletAddress = useAuthStore(s => s.walletAddress)
   const biometricEnabled = useAuthStore(s => s.biometricEnabled)
   const storedPasscodeHash = useAuthStore(s => s.passcode)
@@ -212,7 +216,7 @@ export function PinKeypad({
       <div className="w-full">
         {/* Same height as dots (46) + number pad (4×56 + 3×10) */}
         <BiometricFirst Icon={Icon} label={label} trying={biometricTrying || autoPending} onTry={tryBiometric}
-          onUsePasscode={() => { setAutoPending(false); setMode('pin') }} height={300} />
+          onUsePasscode={() => { setAutoPending(false); setMode('pin') }} height={short ? 254 : 300} />
       </div>
     )
   }
@@ -221,7 +225,7 @@ export function PinKeypad({
     <div className="w-full">
       {/* Dot progress indicators */}
       <motion.div
-        className="flex items-center justify-center gap-3 mb-8"
+        className={`flex items-center justify-center gap-3 ${short ? 'mb-5' : 'mb-8'}`}
         animate={shake ? { x: [0, -8, 8, -8, 8, 0] } : { x: 0 }}
         transition={{ duration: 0.4 }}
       >
@@ -290,17 +294,17 @@ export function PinKeypad({
           (when available) fills the grid's empty bottom-left cell instead
           of sitting in a separate button above - tap it to try again after
           the automatic prompt was cancelled or failed. */}
-      <div className="grid grid-cols-3 gap-2.5 max-w-[320px] mx-auto">
+      <div className={`grid grid-cols-3 ${short ? 'gap-2' : 'gap-2.5'} max-w-[320px] mx-auto`}>
         {KEYS.map((key, i) => {
           if (key === '') {
-            if (!canUseBiometric) return <div key={i} style={{ height: 56 }} />
+            if (!canUseBiometric) return <div key={i} style={{ height: keyH }} />
             return (
               <button
                 key={i}
                 onClick={tryBiometric}
                 disabled={biometricTrying}
                 className="w-full flex items-center justify-center mp-key"
-                style={{ height: 56, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand-text)' }}
+                style={{ height: keyH, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand-text)' }}
                 aria-label={`Use ${label}`}
               >
                 <motion.div
@@ -318,7 +322,7 @@ export function PinKeypad({
                 key={i}
                 onClick={() => handleKey('del')}
                 className="w-full flex items-center justify-center mp-key"
-                style={{ height: 56, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
+                style={{ height: keyH, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-secondary)' }}
                 aria-label="Delete"
               >
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -334,7 +338,7 @@ export function PinKeypad({
               key={i}
               onClick={() => handleKey(key)}
               className="w-full flex items-center justify-center text-2xl font-semibold text-text-primary mp-key"
-              style={{ height: 56, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}
+              style={{ height: keyH, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}
             >
               {key}
             </button>
