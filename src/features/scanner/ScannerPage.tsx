@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { SHEET_BACKDROP, DIALOG_CARD } from '@/lib/motion'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import {Zap, Camera, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, Flashlight} from 'lucide-react'
+import {Zap, Camera, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, Flashlight, X} from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PopupDim } from '@/components/ui/PopupDim'
 import { Button } from '@/components/ui/Button'
@@ -15,13 +15,22 @@ import jsQR from 'jsqr'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { takePrewarmedCamera, openCameraStream } from '@/lib/scannerPrewarm'
 
-export function ScannerPage() {
+/** Opened inside a panel (Pay / Transfer on desktop) instead of as its own
+ *  page: the result goes back through these callbacks, no navigation. */
+export interface EmbeddedScan {
+  wallet: boolean
+  onClose: () => void
+  onWallet?: (address: string) => void
+  onPay?: (compound: string, amount: string | null, token: string | null) => void
+}
+
+export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { setSendRecipient } = useUIStore()
   // mode=wallet → only accept EVM addresses, return to returnTo path
-  const walletMode = searchParams.get('mode') === 'wallet'
+  const walletMode = embedded ? embedded.wallet : searchParams.get('mode') === 'wallet'
   // Only our own in-app pages - never a value that could leave the app
   // (e.g. "/\\evil.com" resolves to another site).
   const returnTo   = ['/pay', '/multichain'].includes(searchParams.get('returnTo') || '') ? searchParams.get('returnTo')! : '/pay'
@@ -467,6 +476,14 @@ export function ScannerPage() {
     if (!resolvedUser) return
     stopCamera()
 
+    if (embedded) {
+      if (walletMode) embedded.onWallet?.(resolvedUser.wallet_address)
+      else embedded.onPay?.(resolvedUser.username
+        ? `${resolvedUser.username}|${resolvedUser.wallet_address}|${resolvedUser.display_name}|${resolvedUser.avatar_url || ''}`
+        : resolvedUser.wallet_address, scannedAmount, scannedToken)
+      return
+    }
+
     if (walletMode) {
       // Wallet-only mode - navigate back to multichain send with address pre-filled
       navigate(`${returnTo}?scannedAddress=${encodeURIComponent(resolvedUser.wallet_address)}`)
@@ -503,8 +520,8 @@ export function ScannerPage() {
   }
 
   const card = (
-    <div className={`flex flex-col bg-black relative overflow-hidden ${isDesktop ? 'rounded-3xl' : 'h-screen'}`}
-      style={isDesktop ? { height: '100%', width: alignLeft ? 640 : '100%', maxWidth: alignLeft ? 640 : undefined } : undefined}>
+    <div className={`flex flex-col bg-black relative overflow-hidden ${isDesktop || embedded ? 'rounded-3xl' : 'h-screen'}`}
+      style={embedded ? { height: '100%', width: '100%' } : isDesktop ? { height: '100%', width: alignLeft ? 640 : '100%', maxWidth: alignLeft ? 640 : undefined } : undefined}>
       {/* Camera viewfinder */}
       <div className="flex-1 relative flex items-center justify-center bg-black">
         <video
@@ -522,6 +539,12 @@ export function ScannerPage() {
         {/* Header */}
         <div className="header-row absolute top-0 left-0 right-0 justify-between px-5 pt-header pb-header bg-gradient-to-b from-black/60 to-transparent z-10">
           <span className="text-white font-semibold">Scan QR Code</span>
+          {embedded && (
+            <button onClick={() => { stopCamera(); embedded.onClose() }} aria-label="Close scanner"
+              className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.14)' }}>
+              <X className="w-5 h-5 text-white" />
+            </button>
+          )}
         </div>
 
         {/* Scanner frame + Upload QR / Torch - only when actively scanning */}
@@ -670,6 +693,7 @@ export function ScannerPage() {
   // and below the fold. alignLeft (opened from a page with its own 2-column
   // layout, e.g. Pay's search screen) keeps the card pinned to the left
   // edge at a fixed width instead of stretching full-bleed.
+  if (embedded) return card
   if (isDesktop) {
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '20px 24px 14px', alignItems: alignLeft ? 'flex-start' : 'stretch', minHeight: 0 }}>

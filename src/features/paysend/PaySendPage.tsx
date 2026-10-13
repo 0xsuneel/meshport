@@ -14,6 +14,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { MOBILE_SLIDE_TRANSITION } from '@/lib/motion'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
+import { PanelScanner } from '@/features/scanner/PanelScanner'
 import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { PinKeypad } from '@/components/ui/PinKeypad'
@@ -164,6 +165,8 @@ export function PaySendPage() {
   // Amount screen
   const [amount, setAmount] = useState(() => initialRecipient ? (searchParams.get('amount') || '') : '')
   const [showAmountPad, setShowAmountPad] = useState(false)
+  // Desktop: the QR scanner open over the search column (PanelScanner).
+  const [scanAnchor, setScanAnchor] = useState<HTMLElement | null>(null)
   const amountBoxRef = useRef<HTMLDivElement>(null)
   const keypadLift = useKeypadLift(showAmountPad && screen === 'amount', amountBoxRef, !isDesktop)
   // Optional message the payer adds on the amount page (saved with the payment).
@@ -1271,10 +1274,25 @@ export function PaySendPage() {
 
         {/* ══════════════ SCREEN 1 - SEARCH RECIPIENT ══════════════ */}
         {screen === 'search' && (
-          <motion.div key="search"
+          <motion.div key="search" data-pay-search=""
             {...INSTANT_SCREEN}
             transition={MOBILE_SLIDE_TRANSITION}
             className="flex flex-col h-full">
+            {/* Desktop: the QR scanner opens over this column only, not the whole screen. */}
+            {scanAnchor && (
+              <PanelScanner anchor={scanAnchor} wallet={false}
+                onClose={() => setScanAnchor(null)}
+                onPay={(compound, scanAmount, scanToken) => {
+                  setScanAnchor(null)
+                  resolveCompoundAsync(compound).then(r => {
+                    if (!r) return
+                    setRecipient(r)
+                    if (scanToken === 'EURC' || scanToken === 'cirBTC' || scanToken === 'USDC') setToken(scanToken)
+                    if (scanAmount) setAmount(scanAmount)
+                    goForward('amount')
+                  })
+                }} />
+            )}
 
             <div className="header-row sticky top-0 z-20 gap-3 px-5 pt-header pb-header flex-shrink-0">
               {!isDesktop && (
@@ -1308,7 +1326,7 @@ export function PaySendPage() {
                 wrap
               />
               {isDesktop && (
-                <button onClick={() => { prewarmCamera(); navigate('/scanner?align=left') }} aria-label="Scan QR code"
+                <button onClick={e => { setScanAnchor(e.currentTarget.closest('[data-pay-search]') as HTMLElement | null); prewarmCamera() }} aria-label="Scan QR code"
                   className="flex items-center justify-center flex-shrink-0 rounded-2xl"
                   style={{ width: 50, height: 50, background: 'var(--surface)', border: '1px solid var(--border)' }}>
                   <QrCode className="w-5 h-5" style={{ color: 'var(--text-secondary)' }} />

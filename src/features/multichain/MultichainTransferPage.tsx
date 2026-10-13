@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
+import { PanelScanner } from '@/features/scanner/PanelScanner'
 import { ubFeeBreakdown, ubSpendAmount, ubQuoteFees } from '@/lib/transferFees'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/motion'
 import { useStepDirection } from '@/hooks/useStepDirection'
@@ -554,6 +555,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     return routerNavigate(to, opts)
   }) as ReturnType<typeof useNavigate>, [embedded, onClose, routerNavigate])
   const [searchParams] = useSearchParams()
+
+  // Desktop: the QR scanner open over the Transfer panel (PanelScanner).
+  const [scanAnchor, setScanAnchor] = useState<HTMLElement | null>(null)
 
   // Pre-fill address if returning from scanner
   useEffect(() => {
@@ -3069,7 +3073,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
           spellCheck={false} autoComplete="off" autoCapitalize="off" autoCorrect="off" enterKeyHint="done"
         />
-        <button onClick={() => { prewarmCamera(); navigate('/scanner?mode=wallet&returnTo=/multichain') }} aria-label="Scan QR"
+        <button onClick={e => {
+            prewarmCamera()
+            // Desktop: scan inside this panel, not the whole screen. Phones keep the scanner page.
+            if (isDesktopMq) { setScanAnchor((e.currentTarget.closest('[data-hub-page]') as HTMLElement | null) ?? (e.currentTarget.closest('[data-flow-scroller]') as HTMLElement | null) ?? document.body); return }
+            navigate('/scanner?mode=wallet&returnTo=/multichain')
+          }} aria-label="Scan QR"
           className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
           style={{ background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
           <QrCode className="w-[18px] h-[18px] text-text-secondary"/>
@@ -3706,6 +3715,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           sheet pattern used in Send/Pay - drag handle, title, one subtitle
           line, then PinKeypad directly. No summary card or fee breakdown
           here; that's all already shown on the Review page underneath. ── */}
+      {scanAnchor && (
+        <PanelScanner anchor={scanAnchor} wallet onClose={() => setScanAnchor(null)}
+          onWallet={addr => { setScanAnchor(null); handleAddressChange(addr) }} />
+      )}
+
       {/* ── REVIEW page - rises from the bottom and stays (the form pushes up
           behind it); Back reverses it. The passcode sheet opens on top.
           In the Hub on a phone it slides in from the right like the form
