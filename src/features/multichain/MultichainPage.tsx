@@ -19,6 +19,7 @@ import { MerchantLedger } from '@/features/merchant/MerchantLedger'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { formatAmount, timeAgo, copyToClipboard } from '@/lib/utils'
+import { moveBreakdown, formatFee, formatMoveAmount, type MoveBreakdown } from '@/lib/moveFees'
 import { subscribeToWalletClaims, type Claim as ServerClaim } from '@/lib/claimService'
 import { useSettingsStore } from '@/store/settingsStore'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
@@ -96,6 +97,8 @@ interface ActivityItem {
   // show both explicitly when a real fee made them differ.
   claimedAmount?: number
   arrivedAmount?: number
+  /** CCTP bring: MeshPort's fee taken before the burn, when recorded. */
+  meshportFee?: number
   chain: string
   chainLabel: string
   timestamp: number
@@ -152,6 +155,14 @@ function markOwnClaims(items: ActivityItem[]): ActivityItem[] {
   })
 }
 
+/** Bring / Transfer: what was sent, what landed and the fees, once the arrived amount is known. */
+function hubMove(item: ActivityItem): MoveBreakdown | null {
+  if (item.isRecovery || item.chainReceipt || item.status !== 'success') return null
+  return item.type === 'transfer'
+    ? moveBreakdown('transfer', { amount: item.amount, arrivedAmount: item.arrivedAmount })
+    : moveBreakdown('bring', { amount: item.amount, arrivedAmount: item.arrivedAmount, claimedAmount: item.claimedAmount, meshportFee: item.meshportFee })
+}
+
 /** Status line for a merchant's payment on another chain (Hub only). */
 function chainReceiptLabel(item: ActivityItem): string | null {
   if (!item.chainReceipt) return null
@@ -198,6 +209,7 @@ function trackedInfo(item: ActivityItem, arrivedMint?: string): TrackedMoveInfo 
     destinationTxHash: arrivedMint || item.destinationTxHash,
     ubIntentId: item.ubIntentId,
     arrivedAmount: item.arrivedAmount,
+    meshportFee: item.meshportFee,
     timestamp: item.timestamp,
   }
 }
@@ -594,6 +606,7 @@ export function MultichainPage() {
             amount:     displayAmount,
             claimedAmount: c.amount,
             arrivedAmount: c.arrivedAmount ?? undefined,
+            meshportFee: c.meshportFee ?? undefined,
             chain:      c.sourceChain,
             chainLabel: label || 'Chain',
             timestamp:  new Date(c.createdAt).getTime(),
@@ -658,6 +671,8 @@ export function MultichainPage() {
           // Real row status - pending transfers stay trackable, failed ones show as failed.
           status:     item.status === 'failed' ? 'failed' : item.status === 'pending' ? 'pending' : 'success',
           amount:     item.amount ?? 0,
+          // What the receiver got after Circle's / Gateway's fee (filled in by transfer-worker).
+          arrivedAmount: item.arrivedAmount ?? undefined,
           chain:      item.metadata?.destinationChain || item.destinationChain || item.metadata?.toChain || item.toChain || item.metadata?.sourceChain || item.sourceChain || '',
           chainLabel: (() => {
             const raw = item.metadata?.destinationChain || item.destinationChain || item.metadata?.toChain || item.toChain || item.metadata?.chain || item.chain || item.metadata?.sourceChain || item.sourceChain || ''
@@ -989,6 +1004,15 @@ export function MultichainPage() {
                           : `-$${formatAmount(item.amount)}`
                       }
                     </div>
+                    {(() => {
+                      const move = hubMove(item)
+                      return move ? (<>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+                          {isClaim ? `Sent $${formatMoveAmount(move.sent)}` : `Got $${formatMoveAmount(move.received)}`}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>Fee {formatFee(move.fees)}</div>
+                      </>) : null
+                    })()}
                     {isPending && (
                       <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 2 }}>Tap to view →</div>
                     )}
@@ -1277,8 +1301,8 @@ export function MultichainPage() {
         const sourceHref      = isRecoveredClaim ? null : isClaimItem ? externalExplorerUrl(it.sourceTxHash) : arcExplorerTxUrl(it.sourceTxHash)
         const destinationHref = isClaimItem ? arcExplorerTxUrl(it.destinationTxHash) : externalExplorerUrl(it.destinationTxHash)
         const chainName = it.chainLabel || it.chain || '-'
-        const feeWasDeducted = isClaimItem && it.claimedAmount != null && it.arrivedAmount != null
-          && Math.abs(it.claimedAmount - it.arrivedAmount) > 0.000001
+        const move = hubMove(it)
+        const netFeeLabel = it.route === 'ub' ? 'Gateway fee' : 'Circle fee'
         const status = it.status === 'success' ? 'success' : it.status === 'failed' ? 'failed' : 'pending'
         const doneTitle = it.isRecovery ? 'Refunded to Arc' : it.merchant ? (it.chainReceipt ? 'Payment Received' : it.ownClaim ? 'Moved to Arc (Own)' : 'Moved to Arc') : isClaimItem ? 'Funds Arrived' : 'Transfer Complete'
         const title = status === 'success' ? doneTitle : status === 'failed' ? (isClaimItem ? 'Claim Failed' : 'Transfer Failed') : 'Processing…'
@@ -1304,7 +1328,11 @@ export function MultichainPage() {
             // The header shows the amount and "Claim from / Transfer to <chain>",
             // the title the outcome - rows add only what those don't.
             rows={[
-              ...(feeWasDeducted ? [{ label: 'Claimed', value: `$${formatAmount(it.claimedAmount!)} USDC` }] : []),
+              ...(move ? [
+                { label: 'You sent', value: `$${formatMoveAmount(move.sent)} USDC` },
+                { label: isClaimItem ? 'You received' : 'Receiver got', value: `$${formatMoveAmount(move.received)} USDC`, positive: true },
+                { label: 'Fees paid', value: formatFee(move.fees) },
+              ] : []),
               ...(it.merchant && walletAddress ? [{ label: 'Paid to', value: `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`, onCopy: copyRow('Paid to', walletAddress), copied: rowCopied === 'Paid to' }] : []),
               ...(primaryHash && !isRecoveredClaim ? [hashRow('Transaction Hash', primaryHash)] : []),
               { label: 'Time', value: new Date(it.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
@@ -1314,7 +1342,10 @@ export function MultichainPage() {
               ...(it.merchant && !it.isRecovery ? [{ label: 'Type', value: `Moved to Arc from ${it.chainLabel || it.chain} Ledger` }] : []),
               ...(isClaimItem && it.route ? [{ label: 'Route', value: it.route === 'ub' ? 'Unified Balance' : 'CCTP' }] : []),
               ...(it.recoveredVia ? [{ label: 'Recovered', value: `Via ${it.recoveredVia.toUpperCase()}` }] : []),
-              ...(feeWasDeducted ? [{ label: 'Fee', value: `-$${formatAmount(it.claimedAmount! - it.arrivedAmount!)} USDC` }] : []),
+              ...(move && move.meshportFee > 0 ? [
+                { label: 'MeshPort fee', value: formatFee(move.meshportFee) },
+                { label: netFeeLabel, value: formatFee(move.networkFee) },
+              ] : move && move.fees > 0 ? [{ label: netFeeLabel, value: formatFee(move.networkFee) }] : []),
               // The summary row above already shows one of these two.
               ...(it.sourceTxHash && !isRecoveredClaim && it.sourceTxHash !== primaryHash ? [hashRow(isClaimItem ? 'Source Tx (Burn)' : 'Source Tx (Arc)', it.sourceTxHash)] : []),
               ...(it.destinationTxHash && it.destinationTxHash !== primaryHash ? [hashRow(isClaimItem ? 'Destination Tx (Arc Mint)' : 'Destination Tx (Arrival)', it.destinationTxHash)] : []),

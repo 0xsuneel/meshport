@@ -375,6 +375,7 @@ type Claim = {
   source_chain: string
   amount: number
   arrived_amount: number | null
+  meshport_fee?: number | null
   tx_hash: string
   bridge_tx_hash: string | null
   message_hash: string | null
@@ -772,7 +773,7 @@ async function recordClaimActivity(supabase: SupabaseClient, claim: Claim, statu
         destination_chain: 'Arc_Testnet',
         status,
         explorer_url:      `${base}/tx/${txHash}`,
-        metadata:          { claimed_amount: claim.amount },
+        metadata:          { claimed_amount: claim.amount, ...(claim.meshport_fee != null ? { meshport_fee: Number(claim.meshport_fee) } : {}) },
       }, { onConflict: 'tx_hash,wallet_address', ignoreDuplicates: true })
     if (error) console.error(`[claim-worker] recordClaimActivity failed for ${claim.id}:`, error.message)
   } catch (e) {

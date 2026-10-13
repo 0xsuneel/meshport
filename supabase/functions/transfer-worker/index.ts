@@ -38,7 +38,7 @@ function json(body: unknown, status = 200): Response {
 // scanning across every one of these chains. Reused here rather than
 // re-deriving a second, possibly-drifted copy.
 const DEST_CHAINS: Record<string, { rpcs: string[]; usdc: string }> = {
-  Ethereum_Sepolia:    { rpcs: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://rpc.sepolia.org'], usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238' },
+  Ethereum_Sepolia:    { rpcs: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.drpc.org', 'https://rpc.sepolia.org'], usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238' },
   Base_Sepolia:        { rpcs: ['https://base-sepolia-rpc.publicnode.com', 'https://sepolia.base.org'], usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' },
   Arbitrum_Sepolia:    { rpcs: ['https://arbitrum-sepolia-rpc.publicnode.com', 'https://sepolia-rollup.arbitrum.io/rpc'], usdc: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d' },
   Optimism_Sepolia:    { rpcs: ['https://optimism-sepolia-rpc.publicnode.com', 'https://sepolia.optimism.io'], usdc: '0x5fd84259d66Cd46123540766Be93DFE6D43130D7' },
@@ -232,6 +232,7 @@ const TRANSFER_TIMEOUT_MS  = 6 * 60 * 60 * 1000 // was 60min - confirmed live vi
 type Transfer = {
   id: string
   wallet_address: string
+  counterparty_address?: string | null
   tx_hash: string
   destination_tx_hash: string | null
   destination_chain: string
@@ -359,7 +360,8 @@ async function advanceTransfer(supabase: SupabaseClient, t: Transfer) {
     // amount-fuzzy scan below as a backstop (in case forwardState is ever
     // unavailable for a given message) and normal timeout handling.
 
-    const result = await findMintByAmount(latest.destination_chain, latest.wallet_address, Number(latest.amount))
+    // A transfer to someone else mints to them, not to the sender.
+    const result = await findMintByAmount(latest.destination_chain, latest.counterparty_address || latest.wallet_address, Number(latest.amount))
     let claimed = false
     const skippedAlreadyUsed: string[] = []
     for (const mint of result.matches) {
@@ -430,6 +432,51 @@ async function fetchDueTransfers(supabase: SupabaseClient, transferId?: string):
   const { data, error } = await supabase.rpc('fetch_and_lock_due_transfers', { p_stale_cutoff: cutoff, p_limit: 200 })
   if (error) { console.error('[transfer-worker] fetch error (sweep)', error.message); return [] }
   return (data ?? []) as Transfer[]
+}
+
+// ── What the receiver actually got ────────────────────────────────────────
+// Transfers finished by the app (Unified Balance, or a mint MeshPort's
+// relayer submitted) are written as completed with the mint hash but no
+// arrived amount, so Activity could only show what was sent. Read it from
+// the mint itself: the USDC that tx sent to the receiver. A mint that sent
+// them nothing readable is flagged so it isn't re-read every minute.
+const DEST_ALIASES: Record<string, string> = { Polygon_Amoy_Testnet: 'Polygon_Sepolia' }
+async function fillArrivedAmounts(supabase: SupabaseClient): Promise<number> {
+  const since = new Date(Date.now() - 30 * 24 * 3600_000).toISOString()
+  const { data, error } = await supabase.from('activity')
+    .select('id, wallet_address, counterparty_address, destination_chain, destination_tx_hash, metadata')
+    .eq('activity_type', 'bridge').eq('status', 'completed')
+    .is('arrived_amount', null).not('destination_tx_hash', 'is', null)
+    .is('metadata->>arrived_unknown', null)
+    .gte('created_at', since).order('created_at', { ascending: false }).limit(25)
+  if (error) { console.error('[transfer-worker] arrived fill fetch failed:', error.message); return 0 }
+  let filled = 0
+  await Promise.all((data ?? []).map(async (t: any) => {
+    const chain = DEST_CHAINS[DEST_ALIASES[t.destination_chain] ?? t.destination_chain]
+    if (!chain) return
+    // A lagging node answers null for a mined tx - ask each one in turn.
+    let receipt: any = null
+    for (const url of chain.rpcs) {
+      try { receipt = await rpcCall([url], 'eth_getTransactionReceipt', [t.destination_tx_hash]) } catch { /* next */ }
+      if (receipt) break
+    }
+    if (!receipt) return // not found yet - try again next run
+    const to = String(t.counterparty_address || t.wallet_address).toLowerCase()
+    let units = 0n
+    for (const l of receipt.logs ?? []) {
+      if (String(l.address).toLowerCase() !== chain.usdc.toLowerCase()) continue
+      if (l.topics?.[0] !== TRANSFER_TOPIC0 || l.topics.length !== 3) continue
+      if (('0x' + String(l.topics[2]).slice(26)).toLowerCase() !== to) continue
+      try { units += BigInt(l.data) } catch { /* skip */ }
+    }
+    const update = units > 0n
+      ? { arrived_amount: Number(units) / 1e6 }
+      : { metadata: { ...(t.metadata ?? {}), arrived_unknown: true } }
+    const { error: upErr } = await supabase.from('activity').update(update).eq('id', t.id).is('arrived_amount', null)
+    if (upErr) console.error(`[transfer-worker] arrived fill ${t.id} failed:`, upErr.message)
+    else if (units > 0n) filled++
+  }))
+  return filled
 }
 
 async function processPass(supabase: SupabaseClient, transferId?: string): Promise<number> {
@@ -558,5 +605,6 @@ Deno.serve(async (req: Request) => {
   }
 
   const totalProcessed = await processPass(supabase)
-  return json({ success: true, mode, totalProcessed, idleExit: totalProcessed === 0 })
+  const arrivedFilled = await fillArrivedAmounts(supabase).catch(e => { console.error('[transfer-worker] arrived fill threw:', serializeError(e)); return 0 })
+  return json({ success: true, mode, totalProcessed, arrivedFilled, idleExit: totalProcessed === 0 })
 })

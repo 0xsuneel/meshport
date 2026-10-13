@@ -56,6 +56,12 @@ import {
   type Claim as ServerClaim,
 } from '@/lib/claimService'
 import { isGaslessBridgeAvailable, quoteGaslessBridge, bringFundsGasless } from '@/lib/gaslessBridge'
+import { moveBreakdown, formatFee, formatMoveAmount } from '@/lib/moveFees'
+
+/** A finished bring: what was sent (MeshPort's fee included), what arrived, and the fees. */
+const claimMove = (c: ServerClaim) => c.status === 'completed'
+  ? moveBreakdown('bring', { amount: c.amount, arrivedAmount: c.arrivedAmount, claimedAmount: c.amount, meshportFee: c.meshportFee })
+  : null
 import { relayedProviderFor } from '@/lib/relayedProvider'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFilters'
@@ -1342,8 +1348,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
           // Burn confirmed on-chain - record the claim and show "Claim
           // Submitted" right away.
-          const handOffBurn = (cid: string, txHash: string, amount: number) => {
-            submitClaim({ walletAddress: wallet.addr, sourceChain: cid, amount, txHash }).then(res => {
+          const handOffBurn = (cid: string, txHash: string, amount: number, meshportFee = 0) => {
+            submitClaim({ walletAddress: wallet.addr, sourceChain: cid, amount, txHash, meshportFee }).then(res => {
               if (res.success && res.claimId) {
                 setClaimRecords(prev =>
                   prev.some(r => r.chainId === cid) ? prev : [...prev, { chainId: cid, claimId: res.claimId! }]
@@ -1379,7 +1385,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           setChain(chain.chainId, 'attesting', 'Burn confirmed - Circle processing…', 65, { txHash: r.txHash })
           notifyExternalBalanceChanged(chain.chainId, wallet.addr)
           // The claim is the burned amount: MeshPort's fee was taken before the burn.
-          handOffBurn(chain.chainId, r.txHash, Math.max(0, claimAmount - r.fee))
+          handOffBurn(chain.chainId, r.txHash, Math.max(0, claimAmount - r.fee), r.fee)
           return { chainId: chain.chainId, amount: claimAmount }
 
         } catch (e: any) {
@@ -2475,8 +2481,18 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   icon={<HistoryIcon tone={failed ? 'failed' : pending ? 'pending' : 'in'} icon="receive" />}
                   title={`From ${chainLabel}`}
                   meta={<><span style={{ color: statusColor, fontWeight: 600 }}>{failed ? 'Failed' : pending ? 'In progress' : 'Completed'}</span> · {timeAgo(c.completedAt || c.createdAt)}</>}
-                  right={<div style={{ fontSize: 14, fontWeight: 700, color: failed ? 'var(--danger)' : 'var(--success)', textDecoration: failed ? 'line-through' : undefined }}>
-                    +{formatAmount(c.arrivedAmount ?? c.amount)} USDC
+                  right={<div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: failed ? 'var(--danger)' : 'var(--success)', textDecoration: failed ? 'line-through' : undefined }}>
+                      +{formatAmount(c.arrivedAmount ?? c.amount)} USDC
+                    </div>
+                    {(() => {
+                      const move = claimMove(c)
+                      return move ? (
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+                          Sent {formatMoveAmount(move.sent)} · Fee {formatFee(move.fees)}
+                        </div>
+                      ) : null
+                    })()}
                   </div>} />
               )
             })
@@ -2504,6 +2520,18 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               amountColor={statusColor}
               rows={[
                 { label: 'From', value: chainLabel },
+                ...(() => {
+                  const move = claimMove(c)
+                  return move ? [
+                    { label: 'You sent', value: `${formatMoveAmount(move.sent)} USDC` },
+                    { label: 'You received', value: `${formatMoveAmount(move.received)} USDC` },
+                    { label: 'Fees paid', value: formatFee(move.fees) },
+                    ...(move.meshportFee > 0 ? [
+                      { label: 'MeshPort fee', value: formatFee(move.meshportFee) },
+                      { label: 'Circle fee', value: formatFee(move.networkFee) },
+                    ] : []),
+                  ] : []
+                })(),
                 { label: 'Time', value: failed ? '-' : timeAgo(c.completedAt || c.createdAt) },
                 { label: 'Status', value: failed ? 'Failed' : pending ? 'In progress' : 'Completed' },
                 ...(c.txHash ? [{ label: 'Tx Hash', value: `${c.txHash.slice(0, 8)}…${c.txHash.slice(-6)}` }] : []),

@@ -728,7 +728,7 @@ export async function merchantClaimAll(p: {
           onStatus: msg => step(c.chainId, 'working', msg === 'Submitting…' || msg === 'Confirming…' ? 'MeshPort is sending the transfer…' : msg),
         })
         // The claim is the burned amount: MeshPort's fee was taken before the burn.
-        const claim = await submitClaim({ walletAddress: p.walletAddress, sourceChain: c.chainId, amount: Math.max(0, amount - r.fee), txHash: r.txHash })
+        const claim = await submitClaim({ walletAddress: p.walletAddress, sourceChain: c.chainId, amount: Math.max(0, amount - r.fee), txHash: r.txHash, meshportFee: r.fee })
         out.cctp += amount
         step(c.chainId, 'done', 'On its way to Arc · a few minutes', claim.claimId)
       } catch (e) {

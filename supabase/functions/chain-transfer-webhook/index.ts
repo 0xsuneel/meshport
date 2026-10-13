@@ -16,6 +16,7 @@ import { createClient, SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 import { createVerify, createPublicKey, type KeyObject } from 'node:crypto'
 import { isKnownInternalContract } from '../_shared/knownInternalContracts.ts'
 import { findCorrelatedTrackedFeature } from '../_shared/trackedFeatureCorrelation.ts'
+import { CCTP_DOMAINS } from '../_shared/chains.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin':  '*',
@@ -152,6 +153,28 @@ async function notifyClaimComplete(
   }
 }
 
+// MessageReceived(address,uint32,bytes32,bytes32,uint32,bytes) on Arc's MessageTransmitterV2.
+const MESSAGE_RECEIVED_TOPIC = '0xff48c13eda96b1cceacc6b9edeedc9e9db9d6226afbc30146b720c19d3addb1c'
+
+/** Source domain and burned amount (6-decimal units) of a CCTP mint on Arc, or null. */
+async function cctpMintSource(txHash: string): Promise<{ domain: number; burned: bigint } | null> {
+  try {
+    const receipt = await arcRpc('eth_getTransactionReceipt', [txHash])
+    const log = (receipt?.logs ?? []).find((l: any) => l.topics?.[0] === MESSAGE_RECEIVED_TOPIC)
+    if (!log) return null
+    // data: sourceDomain, sender, offset of messageBody, then its length and bytes.
+    const d = String(log.data).slice(2)
+    const domain = Number(BigInt('0x' + d.slice(0, 64)))
+    const off = Number(BigInt('0x' + d.slice(128, 192))) * 2
+    const body = d.slice(off + 64)
+    // BurnMessageV2: version(4) burnToken(32) mintRecipient(32) amount(32) …
+    const burned = BigInt('0x' + body.slice(68 * 2, 100 * 2))
+    return { domain, burned }
+  } catch {
+    return null
+  }
+}
+
 // Returns the completed claim's id, or null if no matching claim was found
 // (a plain external USDC mint unrelated to any tracked claim - always
 // possible, always safe to leave to the existing scan-based backstops).
@@ -167,6 +190,19 @@ async function tryCompleteClaimFromMint(
       .order('created_at', { ascending: true })
     if (error) { console.error('[chain-transfer-webhook] claims lookup failed:', error.message); return null }
     if (!candidates?.length) return null
+
+    // The mint's own CCTP message says which chain it came from and how much
+    // was burned. Without it, a mint could be matched to another in-flight
+    // claim of a similar size (a Polygon mint once completed a Base claim,
+    // and Activity showed the Polygon amount). No readable message (not a
+    // CCTP mint, or the RPC failed): leave it to claim-worker.
+    const src = await cctpMintSource(mintTxHash)
+    if (!src) return null
+    const sameSource = candidates.filter(c =>
+      CCTP_DOMAINS[c.source_chain === 'Polygon_Amoy_Testnet' ? 'Polygon_Sepolia' : c.source_chain] === src.domain
+      && BigInt(Math.round(Number(c.amount) * 1e6)) === src.burned)
+    if (sameSource.length !== 1) return null
+    candidates.splice(0, candidates.length, ...sameSource)
 
     // ── 2026-09-20 ambiguous-match guard ────────────────────────────────
     // This matches by wallet+amount only, same as claim-worker's own
@@ -220,7 +256,7 @@ async function tryCompleteClaimFromMint(
       })
       .eq('id', best.id)
       .neq('status', 'completed')
-      .select('id, tx_hash, amount, source_chain, wallet_address')
+      .select('id, tx_hash, amount, source_chain, wallet_address, meshport_fee')
       .maybeSingle()
     if (updErr) {
       // A duplicate-key hit here (code 23505 on destination_tx_hash) means
@@ -259,7 +295,8 @@ async function tryCompleteClaimFromMint(
           destination_chain:    'Arc_Testnet',
           status:               'completed',
           explorer_url:         `${base}/tx/${burnTxHash}`,
-          metadata:             { claimed_amount: Number(updated.amount), reconciled_from: 'chain-transfer-webhook' },
+          metadata:             { claimed_amount: Number(updated.amount), reconciled_from: 'chain-transfer-webhook',
+                                  ...(updated.meshport_fee != null ? { meshport_fee: Number(updated.meshport_fee) } : {}) },
         }, { onConflict: 'tx_hash,wallet_address' })
       if (actErr) console.error('[chain-transfer-webhook] activity upsert failed:', actErr.message)
     }

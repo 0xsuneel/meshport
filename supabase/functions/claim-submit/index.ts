@@ -61,6 +61,10 @@ Deno.serve(async (req: Request) => {
   const walletAddress = (body?.walletAddress ?? '').toString().trim()
   const sourceChain    = (body?.sourceChain ?? '').toString().trim()
   const amount         = Number(body?.amount)
+  // MeshPort's fee for a gasless bring, for display only (Activity shows the
+  // fees the person paid). Not trusted for anything that moves money.
+  const feeIn          = Number(body?.meshportFee)
+  const meshportFee    = Number.isFinite(feeIn) && feeIn > 0 ? Math.min(feeIn, 5) : null
   // Lowercase for consistency with wallet_address (already lowercased below)
   // and with activity.tx_hash (always lowercased in ActivityService.saveActivity).
   // Without this, a claim's tx_hash here could differ only in case from the
@@ -129,6 +133,7 @@ Deno.serve(async (req: Request) => {
         tx_hash:             txHash,
         status:              'submitted',
         arc_balance_before:  arcBalanceBefore,
+        meshport_fee:        meshportFee,
       })
       .select('id')
       .single()

@@ -54,6 +54,8 @@ export interface Claim {
   userNotifiedAt: string | null
   // 'cctp' | 'ub' when the claim was finished through Recover (see cctp-recovery).
   recoveredVia: string | null
+  /** MeshPort's fee taken before the burn (gasless brings), when recorded. */
+  meshportFee: number | null
 }
 
 function mapRow(row: any): Claim {
@@ -77,6 +79,7 @@ function mapRow(row: any): Claim {
     createdAt:          row.created_at,
     updatedAt:          row.updated_at,
     userNotifiedAt:     row.user_notified_at ?? null,
+    meshportFee:        row.meshport_fee != null ? Number(row.meshport_fee) : null,
   }
 }
 
@@ -86,6 +89,8 @@ export async function submitClaim(params: {
   sourceChain:   string
   amount:        number
   txHash:        string
+  /** MeshPort's fee taken on the source chain before the burn (USDC). */
+  meshportFee?:  number
 }): Promise<{ success: boolean; claimId?: string; error?: string }> {
   try {
     await ensureAnonSession()
