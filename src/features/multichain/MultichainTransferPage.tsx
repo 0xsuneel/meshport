@@ -3113,12 +3113,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const overBalance = numAmount > balance
   const amountBad = belowMin || overBalance
   const feeLine = overBalance
-    ? <span style={{ fontWeight: 700, color: 'var(--danger)' }}>Insufficient balance · Max {formatAmount(Math.max(0, balance - feeReserveEstimate))} USDC</span>
+    ? <span style={{ fontWeight: 700, color: 'var(--danger)' }}>Max {formatAmount(Math.max(0, balance - feeReserveEstimate))} USDC</span>
     : belowMin
     ? <span style={{ fontWeight: 700, color: 'var(--danger)' }}>Minimum ${MIN_AMOUNT}</span>
     // feeReserveEstimate is only Max's safety margin, not a fee - real fees
     // are priced on Review, so no number is shown here.
-    : <span>Exact fees are shown on the next screen</span>
+    : <span>Fees on next step</span>
   const formAmount = (
     <div style={{ padding: '16px 18px', borderRadius: 22, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
       border: `1.5px solid ${amountBad ? 'var(--danger)' : 'var(--border)'}` }}>
@@ -3138,8 +3138,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           quick={quickAmounts([10, 50, 100], '$', setAmount, Math.max(0, balance - feeReserveEstimate))}
         />
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 8, fontSize: 12.5, color: 'var(--text-secondary)' }}>
-          <span>Balance: {formatAmount(balance)} USDC</span>
-          {feeLine}
+          {/* One line each: short labels, no wrapping (they used to break onto two lines). */}
+          <span style={{ whiteSpace: 'nowrap' }}>Balance: {formatAmount(balance)} USDC</span>
+          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, textAlign: 'right' }}>{feeLine}</span>
         </div>
       </div>
     </div>
