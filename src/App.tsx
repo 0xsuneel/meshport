@@ -426,6 +426,7 @@ const router = createBrowserRouter([
         ],
       },
       { path: 'activity',                   element: <ActivityPage /> },
+      { path: 'notifications',              element: <FeatureGate feature="notifications_enabled"><NotificationsPage /></FeatureGate> },
       {
         // Settings and its pages - desktop: a Settings menu beside the page
         // (SettingsDesktopSplit); phones: exactly the pages as before.
@@ -442,7 +443,6 @@ const router = createBrowserRouter([
           { path: 'backup', element: <FeatureGate feature="backup_wallet_enabled"><BackupPage /></FeatureGate> },
           { path: 'edit-profile', element: <EditProfilePage /> },
           { path: 'merchant', element: <MerchantApplyPage /> },
-          { path: 'notifications', element: <FeatureGate feature="notifications_enabled"><NotificationsPage /></FeatureGate> },
         ],
       },
       { path: 'insights',                   element: <InsightsPage /> },

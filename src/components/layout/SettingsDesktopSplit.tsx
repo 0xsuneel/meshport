@@ -1,13 +1,13 @@
 // SettingsDesktopSplit.tsx
 // Pathless layout route around Settings (/profile) and its pages (Security,
-// Appearance, Backup, Merchant, Notifications, Help, Feature Guide, About,
+// Appearance, Backup, Merchant, Help, Feature Guide, About,
 // Terms) - the same idea as ChatDesktopSplit. Phones: renders <Outlet/> only,
 // exactly as before. Desktop: a Settings menu column stays on the left and
 // the chosen page opens beside it, every page in the same left-aligned width
 // (.mp-settings-pane in index.css), instead of each page picking its own.
 import { motion } from 'framer-motion'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Shield, Palette, Store, Upload, Key, Bell, HelpCircle, BookOpen, Info, FileText, User } from 'lucide-react'
+import { Shield, Palette, Store, Upload, Key, HelpCircle, BookOpen, Info, FileText, User } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useAuthStore } from '@/store'
@@ -15,7 +15,7 @@ import { useMerchant } from '@/lib/merchant'
 import { Avatar } from '@/components/ui/Avatar'
 
 /** Paths that open inside the Settings split (desktop). */
-export const SETTINGS_PATHS = ['/profile', '/edit-profile', '/security', '/appearance', '/backup', '/merchant', '/notifications', '/help-support', '/feature-guide', '/about', '/terms-privacy']
+export const SETTINGS_PATHS = ['/profile', '/edit-profile', '/security', '/appearance', '/backup', '/merchant', '/help-support', '/feature-guide', '/about', '/terms-privacy']
 export const isSettingsPath = (path: string) => SETTINGS_PATHS.some(p => path === p || path.startsWith(p + '/'))
 
 function Item({ icon, label, path, active, onClick }: { icon: ReactNode; label: string; path: string; active: boolean; onClick: (p: string) => void }) {
@@ -78,7 +78,6 @@ export function SettingsDesktopSplit() {
           <Item icon={walletSource === 'import-privkey' ? <Key size={17} /> : <Upload size={17} />} label="Backup & Recovery" path="/backup" active={is('/backup')} onClick={go} />
         )}
         <Item icon={<Store size={17} />} label={merchant.status === 'approved' ? 'Merchant account' : 'Apply for merchant'} path="/merchant" active={is('/merchant')} onClick={go} />
-        <Item icon={<Bell size={17} />} label="Notifications" path="/notifications" active={is('/notifications')} onClick={go} />
 
         <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '14px 10px 4px' }}>Support</p>
         <Item icon={<HelpCircle size={17} />} label="Help & Support" path="/help-support" active={is('/help-support')} onClick={go} />
