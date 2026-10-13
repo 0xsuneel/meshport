@@ -155,6 +155,22 @@ export function AppLayout() {
     return () => arcDepositWatcher.stop()
   }, [walletAddress])
 
+  // Money received: update the balance on whatever page is open (Pay, Swap,
+  // the Hub…), not only Home. USDC is re-read until the chain shows the new
+  // amount; EURC / cirBTC pages re-read on BALANCES_STALE_EVENT.
+  useEffect(() => {
+    if (!walletAddress) return
+    const onDeposit = (e: Event) => {
+      const token = String((e as CustomEvent).detail?.tokenSymbol || 'USDC').toUpperCase()
+      import('@/lib/balanceRefresh').then(({ refreshBalancesAfterTx, BALANCES_STALE_EVENT }) => {
+        if (token === 'USDC') refreshBalancesAfterTx(walletAddress)
+        else window.dispatchEvent(new CustomEvent(BALANCES_STALE_EVENT, { detail: { address: walletAddress } }))
+      }).catch(() => {})
+    }
+    window.addEventListener('meshport:arc-deposit', onDeposit)
+    return () => window.removeEventListener('meshport:arc-deposit', onDeposit)
+  }, [walletAddress])
+
   // ── PHASE 6 - resume policy (proposal §19) ────────────────────────────────
   // On return to the foreground, refresh only what the elapsed absence
   // justifies: nothing under 5 min, {arc}+{claims} at 5 min, plus {external}
