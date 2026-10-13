@@ -4623,6 +4623,17 @@ export function ChatConversationPage() {
                 </div>
               )}
             </button>
+            {/* Pay, one tap from the header (the same sheet as + → Pay). */}
+            {otherUser?.id && otherUser.id !== user?.id && (
+              <button onClick={() => { setShowAttach(false); messageInputRef.current?.blur(); handlePay() }}
+                className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-white active:scale-90 transition-transform"
+                style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}
+                title={`Pay ${otherHandle}`} aria-label={`Pay ${otherHandle}`}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7Z"/>
+                </svg>
+              </button>
+            )}
             <button onClick={() => setMsgSearchOpen(true)}
               className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}
               title="Search in conversation" aria-label="Search in conversation">
