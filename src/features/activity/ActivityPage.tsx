@@ -856,7 +856,7 @@ export function ActivityPage() {
     if (!uid) { setEarned([]); return }
     fetchPointHistory(uid, 200).then(rows => setEarned((rows as any[]).filter(p => p.points > 0))).catch(() => setEarned([]))
   }, [activeTab, earned, userId, walletAddress])
-  const filterBtnRef = useRef<HTMLButtonElement>(null)
+  const filterBtnRef = useRef<HTMLDivElement>(null)
   const [searchInput, setSearchInput] = useState('')
   // Search box tucks away while scrolling down the list, back on scroll up.
   const listScrollRef = useRef<HTMLDivElement>(null)
@@ -965,26 +965,35 @@ export function ActivityPage() {
           </button>
         </div>
         <div className="px-4 lg:max-w-[900px] lg:mx-auto" style={{ ...collapseStyle(searchHidden, 72), paddingBottom: searchHidden ? 0 : 12 }}>
-          <SearchField value={searchInput} onChange={setSearchInput} placeholder="Search username, wallet, or tx hash"
+          <SearchField value={searchInput} onChange={setSearchInput} ariaLabel="Search username, wallet, or tx hash"
+            // Longest first - the box shows the longest that fits beside the Filter chip.
+            placeholder={['Search username, wallet, or tx hash', 'Username, wallet or tx hash', 'Username, wallet, tx hash', 'Name, wallet, tx hash', 'Name, wallet, hash', 'Search']}
             onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)}
-            trailing={<>
-            <div className="w-px h-5 flex-shrink-0" style={{ background: 'color-mix(in srgb, var(--text-primary) 12%, transparent)' }} />
-            <button ref={filterBtnRef} onClick={() => setFilterOpen(o => !o)} aria-label="Filter" aria-expanded={filterOpen}
-              className="flex-shrink-0 flex items-center justify-center relative w-7 h-7 -mr-1 rounded-full active:scale-90 transition-transform">
-              {/* Two-line filter icon (was SlidersHorizontal's 3 rows) - same
-                  slider-row visual language, one row fewer, per request. */}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                style={{ color: activeTab === 'all' ? 'var(--text-secondary)' : 'var(--brand)' }}>
-                <line x1="3" y1="7" x2="21" y2="7" />
-                <circle cx="15" cy="7" r="2.25" fill="var(--surface)" />
-                <line x1="3" y1="17" x2="21" y2="17" />
-                <circle cx="9" cy="17" r="2.25" fill="var(--surface)" />
-              </svg>
-              {activeTab !== 'all' && (
-                <span style={{ position: 'absolute', top: 2, right: 2, width: 7, height: 7, borderRadius: '50%', background: 'var(--brand)' }} />
-              )}
-            </button>
-            </>} />
+            trailing={(() => {
+              // "≡ Filter" chip; with a filter on it turns teal, names it, and its ✕ clears back to All.
+              const on = activeTab !== 'all'
+              const label = on ? (FILTERS.find(f => f.id === activeTab)?.label ?? 'Filter') : 'Filter'
+              return (
+                <div ref={filterBtnRef} className="flex-shrink-0 flex items-center rounded-full"
+                  style={{ height: 34, background: on ? 'var(--brand)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)', color: on ? '#fff' : 'var(--text-primary)' }}>
+                  <button type="button" onClick={() => setFilterOpen(o => !o)} aria-label={on ? `Filter: ${label}` : 'Filter'} aria-expanded={filterOpen}
+                    className="h-full flex items-center gap-1.5 active:opacity-70"
+                    style={{ padding: on ? '0 4px 0 12px' : '0 13px 0 12px', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden>
+                      <path d="M4 6h16M4 12h11M4 18h6" />
+                    </svg>
+                    {label}
+                  </button>
+                  {on && (
+                    <button type="button" onClick={() => { setFilterOpen(false); handleTabChange('all') }} aria-label="Clear filter"
+                      className="h-full flex items-center active:opacity-70"
+                      style={{ padding: '0 11px 0 4px', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', opacity: 0.85 }}>
+                      <X className="w-3.5 h-3.5" strokeWidth={2.6} />
+                    </button>
+                  )}
+                </div>
+              )
+            })()} />
         </div>
       </div>
 
