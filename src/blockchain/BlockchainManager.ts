@@ -47,7 +47,7 @@ import { getClient } from './ProviderManager'
 import { getArcBalance, peekArcBalance, fetchArcBalanceRaw } from './arcBalanceReader'
 import type { ArcAsset } from './arcBalanceReader'
 import {
-  externalBalanceReader, externalBalanceTotal, readChainUSDCBalance, patchCachedChainBalance,
+  externalBalanceReader, externalBalanceTotal, readChainUSDCBalance, patchCachedChainBalance, lastKnownChainBalance,
 } from './externalBalanceReader'
 import type { ChainBalanceResult, ExternalBalancesResult } from './externalBalanceReader'
 export { EXTERNAL_SCAN_PROGRESS_EVENT, currentScanningChain } from './externalBalanceReader'
@@ -158,16 +158,50 @@ export const EXTERNAL_BALANCE_EVENT = 'meshport:external-balance'
 
 /**
  * Call right after this app moved USDC on an external chain (bridge burn,
- * Gateway deposit). Re-reads that chain now and once more a few seconds
- * later (an RPC can lag the confirming block), updates the cache and tells
- * every open page - no waiting for the claim to finish or the next scan.
+ * Gateway deposit, transfer arrival). Updates the cache and tells every open
+ * page - no waiting for the claim to finish or the next scan.
+ *
+ * `spent`: USDC that just left this chain. The balance drops by it at once
+ * (same as refreshBalancesAfterTx does for Arc), then the chain's own figure
+ * replaces it. A public RPC can answer from a block before the transaction
+ * (Ethereum Sepolia: 12s blocks), so while the read still shows the old
+ * balance it is retried instead of being written over the new one - a stale
+ * answer used to stick until the next full scan.
  */
-export function notifyExternalBalanceChanged(chain: string, wallet: string): void {
-  const read = () => readExternalChainBalance(chain as ChainId, wallet).then(balance => {
+const EXTERNAL_RETRY_GAPS_MS = [2_000, 3_000, 5_000, 8_000, 12_000]
+// One drop per move: the UB route reports 'attesting' twice for one deposit.
+const pendingDrops = new Map<string, number>()
+
+export function notifyExternalBalanceChanged(chain: string, wallet: string, opts: { spent?: number } = {}): void {
+  const key = `${normalizeAddress(wallet).toLowerCase()}:${chain}`
+  const emit = (balance: number) => {
+    patchCachedChainBalance(wallet, chain, balance)
     window.dispatchEvent(new CustomEvent(EXTERNAL_BALANCE_EVENT, { detail: { chainId: chain, balance } }))
-  }).catch(() => {})
-  read()
-  setTimeout(read, 4_000)
+  }
+
+  const before = lastKnownChainBalance(wallet, chain)
+  // A drop for this move is already shown and being confirmed.
+  if ((pendingDrops.get(key) ?? 0) > Date.now()) return
+  const optimistic = !!opts.spent && opts.spent > 0 && before !== undefined
+  if (optimistic) {
+    pendingDrops.set(key, Date.now() + 60_000)
+    emit(Math.max(0, before - opts.spent!))
+  }
+
+  let attempt = 0
+  const read = async () => {
+    try {
+      const balance = await readChainUSDCBalance(chain, normalizeAddress(wallet))
+      const changed = before === undefined || Math.abs(balance - before) > 1e-9
+      // Still the pre-transaction figure: keep the instant one while retrying;
+      // after the last try the chain's answer wins whatever it is.
+      if (changed || !optimistic || attempt >= EXTERNAL_RETRY_GAPS_MS.length) emit(balance)
+      if (changed || before === undefined) { pendingDrops.delete(key); return }
+    } catch { /* keep what's shown; try again */ }
+    if (attempt < EXTERNAL_RETRY_GAPS_MS.length) setTimeout(read, EXTERNAL_RETRY_GAPS_MS[attempt++])
+    else pendingDrops.delete(key)
+  }
+  void read()
 }
 
 // ─── Transactions ───────────────────────────────────────────────────────────

@@ -1319,7 +1319,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               chainLabel: getMeta(chain.chainId).label, amount: claimAmount,
               onStep: (stage, msg, pct, extra) => {
                 setChain(chain.chainId, stage, msg, pct, extra)
-                if (stage === 'attesting') notifyExternalBalanceChanged(chain.chainId, wallet.addr)
+                if (stage === 'attesting') notifyExternalBalanceChanged(chain.chainId, wallet.addr, { spent: claimAmount })
                 // Submitted only once MeshPort's server holds the signed spend.
                 // Finishing on this device (hand-off failed) keeps the screen
                 // in "keep open" until the USDC lands.
@@ -1388,7 +1388,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           setClaimFees(prev => ({ ...prev, [chain.chainId]: { meshport: r.fee, circleCap: r.maxFee } }))
           setIsSubmitted(true)
           setChain(chain.chainId, 'attesting', 'Burn confirmed - Circle processing…', 65, { txHash: r.txHash })
-          notifyExternalBalanceChanged(chain.chainId, wallet.addr)
+          notifyExternalBalanceChanged(chain.chainId, wallet.addr, { spent: claimAmount })
           // The claim is the burned amount: MeshPort's fee was taken before the burn.
           handOffBurn(chain.chainId, r.txHash, Math.max(0, claimAmount - r.fee), r.fee)
           return { chainId: chain.chainId, amount: claimAmount }
