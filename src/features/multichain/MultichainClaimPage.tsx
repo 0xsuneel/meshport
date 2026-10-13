@@ -1573,6 +1573,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     setClaimRoute(id)
   }
   const cctpFeeText = claimEstimateIsLive && !feeEstimate.loading && !feeEstimate.error ? `up to ${fmtFee(feeEstimate.totalFee)}` : 'a few cents'
+  // Short money for the one-line fee warning: $1.1, $0.03 (never "$0" for a real fee).
+  const shortFee = (n: number) => n > 0 && n < 0.01 ? '<$0.01' : `$${trimTrailingZeros(n.toFixed(2))}`
+  const cctpFeeShort = claimEstimateIsLive && !feeEstimate.loading && !feeEstimate.error ? shortFee(feeEstimate.totalFee) : 'a few cents'
   const ubHighWarning = (ubFeeHigh || ubFeeTooHigh) && cctpAvailable && selected
     ? `Unified Balance fee is high: Circle charges ${ubFee.approx ? 'up to' : 'about'} ${fmtFee(ubFee.total)} to move USDC out of ${getMeta(selected).label}'s Unified Balance${ubFeeTooHigh ? ' - more than this amount' : ''}. CCTP costs ${cctpFeeText}${effectiveRoute === 'cctp' ? ', so CCTP is selected.' : '.'}`
     : ''
@@ -2017,19 +2020,35 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
                     {effectiveRoute === 'ub' ? <path d="M13 2L4 14h7l-1 8 9-12h-7z"/> : <path d="M4 8h14l-3-3M20 16H6l3 3"/>}
                   </svg>
-                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: COLORS.muted }}>
+                  <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: COLORS.muted, alignSelf: 'center' }}>
+                    {/* One short line - the long version pushed the fee warning and
+                        the Bring button off shorter screens. */}
                     {effectiveRoute === 'ub'
-                      ? <><b style={{ color: COLORS.text, fontWeight: 600 }}>Unified Balance · Slow · {ubBringTime(selectedSdkId)}.</b> Your USDC goes into your Unified Balance, then to your Arc wallet. Circle's Gateway fee is taken when it's sent to Arc. If you leave before it finishes, finish it from Multichain Hub → Recover.</>
-                      : <><b style={{ color: COLORS.text, fontWeight: 600 }}>CCTP · Fast · {CCTP_BRING_TIME} · Gasless.</b> Circle burns your USDC on {getMeta(selectedChain.chainId).label} and mints the same amount on Arc.</>}
+                      ? <><b style={{ color: COLORS.text, fontWeight: 600 }}>Via Unified Balance</b> · finish in Recover if you leave</>
+                      : <><b style={{ color: COLORS.text, fontWeight: 600 }}>Burn & mint</b> · fast, gasless, arrives on Arc</>}
                   </p>
                 </div>
               </div>
 
+              {/* High Unified Balance fee: one line, with a one-tap switch to CCTP
+                  while Unified Balance is picked. The full sentence stays as the
+                  accessible description. */}
               {ubHighWarning && (
-                <div role="status" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 12, fontSize: 12.5, lineHeight: 1.45,
+                <div role="status" aria-label={ubHighWarning} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '8px 8px 8px 12px', borderRadius: 12, fontSize: 13, lineHeight: 1.35,
                   color: COLORS.text, background: 'color-mix(in srgb, var(--warning) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--warning) 35%, transparent)' }}>
                   <span aria-hidden style={{ color: 'var(--warning)', fontWeight: 700 }}>!</span>
-                  <span>{ubHighWarning}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    {effectiveRoute === 'ub'
+                      ? <>Fee {shortFee(ubFee.total)} is high · CCTP {cctpFeeShort}</>
+                      : <>Unified Balance fee {shortFee(ubFee.total)} is high · using CCTP</>}
+                  </span>
+                  {effectiveRoute === 'ub' && (
+                    <button onClick={e => { e.stopPropagation(); pickRoute('cctp') }}
+                      style={{ flexShrink: 0, minHeight: 30, padding: '0 12px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700,
+                        background: 'var(--warning)', color: '#1A1205' }}>
+                      Use CCTP
+                    </button>
+                  )}
                 </div>
               )}
 
