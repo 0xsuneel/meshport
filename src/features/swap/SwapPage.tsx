@@ -12,6 +12,7 @@ import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { ScreenPush } from '@/components/ui/ScreenPush'
+import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import type { SwapProgress } from '@/lib/swapService'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -426,6 +427,10 @@ function SwapChecklist({ step, error, txHash, progress }: { step: string; error:
 // ── Main SwapPage ─────────────────────────────────────────────────────────────
 export function SwapPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
+  // Short phones (SE, small Androids with browser bars): the main button
+  // sticks to the bottom like desktop, so it's never below the fold.
+  const shortPhone = useMediaQuery('(max-height: 700px)')
+  const stickyCta = isDesktop || shortPhone
   const navigate  = useNavigate()
   const privateKey = useAuthStore(s => s.privateKey)
   const walletAddress = useAuthStore(s => s.walletAddress)
@@ -448,6 +453,8 @@ export function SwapPage() {
   }, [settingsLoaded, settingsMap])
   const [amountIn,     setAmountIn]     = useState('')
   const [showAmountPad, setShowAmountPad] = useState(false)
+  const amountBoxRef = useRef<HTMLDivElement>(null)
+  const keypadLift = useKeypadLift(showAmountPad, amountBoxRef, !isDesktop)
   const [estimate,     setEstimate]     = useState<Estimate|null>(null)
   // True only while a debounced live quote (fetched as the person types the
   // amount, before they've tapped Swap) is in flight. Kept separate from
@@ -1493,7 +1500,11 @@ export function SwapPage() {
       <ScreenPush screenKey={swapScreen} back={swapScreen === 'form'} style={isDesktop ? undefined : { minHeight: '100%' }}>
       {/* Phone success: this column fills the screen so the receipt card can
           sit in the middle with equal space above and below. */}
-      <div className={cn("px-4 pt-4 pb-8 space-y-3", !isDesktop && step === 'done' && successPhase === 'collapsed' && "flex-1 flex flex-col")}>
+      {/* Glides up with the number pad on short phones so "You pay" stays in
+          view above it (useKeypadLift; the pad is portalled, so this
+          transform doesn't move it). */}
+      <motion.div animate={{ y: -keypadLift }} initial={false} transition={KEYPAD_SPRING}
+        className={cn("px-4 pt-4 pb-8 space-y-3", !isDesktop && step === 'done' && successPhase === 'collapsed' && "flex-1 flex flex-col")}>
 
         {/* Settings panel */}
         {/* Closing it on the form animates; leaving the form (Swap → Review)
@@ -1537,7 +1548,7 @@ export function SwapPage() {
         {isActive && (
         <div style={{ position: 'relative' }}>
           {/* You pay - the amount field rings while the number pad is open */}
-          <div className="rounded-3xl" style={{
+          <div ref={amountBoxRef} className="rounded-3xl" style={{
             padding: '16px 18px 14px', background: 'var(--surface)',
             border: '1px solid var(--border)',
           }}>
@@ -1816,7 +1827,7 @@ export function SwapPage() {
 
             {step === 'confirming' ? (
               /* Confirm (full width), then a quiet way back to edit */
-              <div className="flex flex-col items-stretch" style={{ position: 'relative', gap: 6, paddingTop: 12, ...(isDesktop ? STICKY_CTA : {}) }}>
+              <div className="flex flex-col items-stretch" style={{ position: 'relative', gap: 6, paddingTop: 12, ...(stickyCta ? STICKY_CTA : {}) }}>
                 <button onClick={() => { setQuoteChangedNotice(''); setPassEntry(''); setPassError(''); setShowPasscodeSheet(true) }}
                   disabled={gasShortfall > 0 || !estimate}
                   className="w-full rounded-2xl text-base font-bold text-white active:scale-[0.98] transition-transform disabled:opacity-40 disabled:active:scale-100"
@@ -1930,7 +1941,7 @@ export function SwapPage() {
         {isActive && (
           // Desktop: pinned to the bottom of the scrolling column so it stays
           // in view on a short window.
-          <div style={isDesktop ? STICKY_CTA : undefined}>
+          <div style={stickyCta ? STICKY_CTA : undefined}>
           <motion.button whileTap={{ scale:.98 }}
             onClick={() => { setPassEntry(''); setPassError(''); handleReview() }}
             disabled={!canReview}
@@ -1981,7 +1992,7 @@ export function SwapPage() {
           </div>
         )}
 
-      </div>
+      </motion.div>
       </ScreenPush>
       </div>
 

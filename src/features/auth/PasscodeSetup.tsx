@@ -9,10 +9,11 @@ import { useAuthStore, useUIStore } from '@/store'
 import { hashPasscode, verifyPasscode, getPasscodeLockoutRemainingMs, clearPasscodeLockout } from '@/lib/security'
 import { hasBiometricRegistered, verifyBiometricAndGetPasscode, biometricLabel, isBiometricSupported, wasBiometricOfferSkippedRecently } from '@/lib/biometric'
 import { afterSplash } from '@/lib/splash'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 
 function PasscodeDots({ filled, error }: { filled: number; error: boolean }) {
   return (
-    <div className="flex items-center justify-center gap-4 my-8">
+    <div className="flex items-center justify-center gap-4 my-8 short:my-5">
       {Array.from({ length: 6 }).map((_, i) => (
         <motion.div key={i}
           animate={error ? { x: [0,-8,8,-6,6,0] } : { scale: filled > i ? 1.1 : 1 }}
@@ -35,11 +36,14 @@ function NumPad({ onPress, onBiometric, showBiometric, biometricTrying, Biometri
   biometricTrying?: boolean
   BiometricIcon?: ComponentType<{ className?: string }>
 }) {
+  // Shorter keys on short phones so the pad fits with the page around it.
+  const short = useMediaQuery('(max-height: 700px)')
+  const keyH = short ? 48 : 56
   return (
-    <div className="grid grid-cols-3 gap-2.5 w-full max-w-xs mx-auto">
+    <div className="grid grid-cols-3 gap-2.5 short:gap-2 w-full max-w-xs mx-auto">
       {['1','2','3','4','5','6','7','8','9','biometric','0','⌫'].map((k, i) => {
         if (k === 'biometric') {
-          if (!showBiometric || !BiometricIcon) return <div key={i} style={{ height: 56 }} />
+          if (!showBiometric || !BiometricIcon) return <div key={i} style={{ height: keyH }} />
           return (
             // Plain button, not motion.button - same reasoning as
             // PinKeypad's biometric key: WebKit is notably stricter than
@@ -49,7 +53,7 @@ function NumPad({ onPress, onBiometric, showBiometric, biometricTrying, Biometri
             // going through Framer Motion's gesture-recognition wrapper.
             <button key={i} onClick={onBiometric} disabled={biometricTrying}
               className="flex items-center justify-center text-brand-text mp-key"
-              style={{ height: 56, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}
+              style={{ height: keyH, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}
               aria-label="Use biometric unlock">
               <motion.div
                 animate={biometricTrying ? { scale: [1, 1.18, 1], opacity: [1, 0.55, 1] } : { scale: 1, opacity: 1 }}
@@ -65,7 +69,7 @@ function NumPad({ onPress, onBiometric, showBiometric, biometricTrying, Biometri
             className={`mp-key flex items-center justify-center text-2xl font-semibold ${
               k === '⌫' ? 'text-text-secondary' : 'text-text-primary'
             }`}
-            style={{ height: 56, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            style={{ height: keyH, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}>
             {k === '⌫'
               ? <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
@@ -252,7 +256,7 @@ export function PasscodeSetupPage() {
     : 'Enter your passcode again to confirm'
 
   return (
-    <div className="flex flex-col h-full bg-bg px-6 py-12">
+    <div className="flex flex-col h-full overflow-y-auto bg-bg px-6 py-12 short:py-5">
       <button onClick={handleBack} className="back-btn" style={{marginBottom:14}}>
         <ArrowLeft className="w-5 h-5 text-text-primary" />
       </button>
@@ -263,8 +267,8 @@ export function PasscodeSetupPage() {
       </div>
 
       <div className="flex-1 flex flex-col items-center">
-        <div className="text-center mt-6 mb-2">
-          <div className="w-16 h-16 bg-brand/15 rounded-3xl flex items-center justify-center mx-auto mb-4">
+        <div className="text-center mt-6 short:mt-2 mb-2">
+          <div className="w-16 h-16 short:w-12 short:h-12 bg-brand/15 rounded-3xl flex items-center justify-center mx-auto mb-4 short:mb-2">
             <svg className="w-8 h-8 text-brand-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
@@ -286,7 +290,7 @@ export function PasscodeSetupPage() {
             pushes the keypad down, and the keypad stays mounted (just
             disabled) while the passcode is saved - swapping it out for text
             made the whole screen jump right before moving on. */}
-        <div className="h-6 mb-2 flex items-center justify-center">
+        <div className="h-6 mb-2 short:mb-0 flex items-center justify-center">
           <AnimatePresence mode="popLayout" initial={false}>
             {errorMsg ? (
               <motion.p key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -302,7 +306,7 @@ export function PasscodeSetupPage() {
           <NumPad onPress={(k) => pressRef.current(k)} />
         </div>
 
-        <p className="text-xs text-text-muted text-center mt-8 px-4">
+        <p className="text-xs text-text-muted text-center mt-8 short:mt-4 px-4">
           Stored securely on this device. Cannot be recovered if lost.
         </p>
       </div>
@@ -312,6 +316,7 @@ export function PasscodeSetupPage() {
 
 // ─── Lock Screen ──────────────────────────────────────────────────────────────
 export function PasscodeLockPage() {
+  const short = useMediaQuery('(max-height: 700px)')
   const navigate = useNavigate()
   const location = useLocation()
   // Where to send the user once they unlock - e.g. a shared payment link
@@ -513,9 +518,11 @@ export function PasscodeLockPage() {
   const handleSignOut = () => { logout(); navigate('/auth', { replace: true }) }
 
   return (
-    <div className="flex flex-col h-full bg-bg px-6 py-safe">
-      <div className="flex-1 flex flex-col items-center justify-center gap-2">
-        <MeshPortLogo className="w-20 h-20 mx-auto mb-2" splashTarget />
+    <div className="flex flex-col h-full overflow-y-auto bg-bg px-6 py-safe">
+      {/* my-auto centres it, and lets it scroll from the top (never cut off
+          above) if a very short screen still can't fit it all. */}
+      <div className="my-auto flex flex-col items-center gap-2 py-4">
+        <MeshPortLogo className="w-20 h-20 short:w-16 short:h-16 mx-auto mb-2" splashTarget />
         <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">MeshPort</h2>
         <p className="text-text-secondary text-[14px] leading-[1.5]">
           {noPasscode ? `Signed in as ${displayName}` : mode === 'bio' ? `Unlock with ${label === 'Fingerprint' ? 'your fingerprint' : label === 'Biometric' ? 'biometrics' : label}` : 'Enter passcode to unlock'}
@@ -537,7 +544,7 @@ export function PasscodeLockPage() {
             {/* Same space as dots + status line + number pad, so "Use
                 passcode" swaps in place without the logo moving. */}
             <BiometricFirst Icon={BiometricIcon} label={label} trying={biometricTrying || autoPending} onTry={tryBiometric}
-              onUsePasscode={() => { setAutoPending(false); setMode("pin") }} height={374} />
+              onUsePasscode={() => { setAutoPending(false); setMode("pin") }} height={short ? 314 : 374} />
             <button onClick={handleSignOut} className="mt-6 text-text-muted text-sm hover:text-text-secondary transition-colors">
               Sign out
             </button>

@@ -10,6 +10,7 @@
  * only how `open` gets set to true (see each call site).
  */
 import { useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { SHEET_SPRING, SHEET_BACKDROP } from '@/lib/motion'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -93,6 +94,9 @@ export function AmountKeypad({
   // Desktop users type on a physical keyboard - the tap-grid below is a
   // mobile-only affordance. Same value/onChange contract either way.
   const isDesktop = useMediaQuery('(min-width: 980px)')
+  // Short phones (iPhone SE, small Androids with the browser bars showing):
+  // smaller keys so the sheet leaves room for the amount above it.
+  const short = useMediaQuery('(max-height: 700px)')
 
   // Opening the keypad closes the phone's own keyboard. On iPhone, tapping
   // the amount box doesn't take focus away from a text field typed in just
@@ -239,7 +243,7 @@ export function AmountKeypad({
         onClick={onDone}
         disabled={!canProceed}
         style={{
-          width: '100%', padding: '15px', borderRadius: 16,
+          width: '100%', padding: short && !isDesktop ? '13px' : '15px', borderRadius: 16,
           border: 'none', fontSize: 15, fontWeight: 700, cursor: 'pointer',
           background: canProceed ? 'var(--brand)' : 'color-mix(in srgb, var(--text-primary) 12%, transparent)',
           color: canProceed ? '#FFFFFF' : 'var(--text-secondary)',
@@ -299,7 +303,10 @@ export function AmountKeypad({
     )
   }
 
-  return (
+  // Portalled to <body>: a page can then glide its form up above the sheet
+  // with a transform (useKeypadLift) without that transform breaking the
+  // sheet's fixed position.
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -335,11 +342,11 @@ export function AmountKeypad({
               borderRadius: '28px 28px 0 0',
               borderTop: '1px solid var(--border)',
               boxShadow: 'var(--shadow-3)',
-              padding: '10px 24px 32px',
+              padding: short ? '8px 20px calc(env(safe-area-inset-bottom, 0px) + 16px)' : '10px 24px 32px',
             }}
           >
             {/* Handle */}
-            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)', margin: '4px auto 14px' }} />
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)', margin: short ? '2px auto 10px' : '4px auto 14px' }} />
 
             {errorMaxRow}
 
@@ -347,13 +354,13 @@ export function AmountKeypad({
                 cell (no dead space around a small circle), matching the
                 Paytm-style reference. Every key is a real, full-size tap
                 target instead of a 60px circle floating inside a wider cell. */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, maxWidth: 320, margin: '0 auto 14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: short ? 8 : 10, maxWidth: 320, margin: short ? '0 auto 10px' : '0 auto 14px' }}>
               {KEYS.map((key, i) => (
                 <button
                   key={i}
                   onClick={() => handleKey(key)}
                   style={{
-                    height: 56, borderRadius: 14, width: '100%',
+                    height: short ? 46 : 56, borderRadius: 14, width: '100%',
                     background: 'var(--surface)',
                     border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center',
                     cursor: 'pointer', fontSize: key === '.' ? 28 : 24, fontWeight: 600, color: key === 'del' ? 'var(--text-secondary)' : 'var(--text-primary)',
@@ -382,6 +389,7 @@ export function AmountKeypad({
           </motion.div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   )
 }
