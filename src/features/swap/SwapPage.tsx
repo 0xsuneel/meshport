@@ -25,7 +25,6 @@ import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isCoinEnabled } from '@/lib/featureFilters'
 import { estimateTransferFee } from '@/lib/arcService'
-import { arcRpcJson } from '@/lib/arc'
 import { formatAmount, cn, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { hasAnyActivityForTx } from '@/lib/ActivityService'
@@ -36,7 +35,8 @@ import { DesktopHistoryPanel, DesktopHistoryEmpty } from '@/components/ui/Deskto
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { ARC_EXPLORER } from '@/lib/chainExplorers'
-import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
+import { refreshBalancesAfterTx, BALANCES_STALE_EVENT } from '@/lib/balanceRefresh'
+import { readArcBalanceOrThrow } from '@/blockchain/BlockchainManager'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 
 // ── Token definitions ─────────────────────────────────────────────────────────
@@ -689,27 +689,35 @@ export function SwapPage() {
     }).catch(() => {})
   }, [walletAddress])
 
-  // Fetch EURC (and cirBTC when contract known) balances via eth_call
-  useEffect(() => {
+  // EURC / cirBTC balances. A failed read keeps what's shown (never $0).
+  // `untilChanged`: after a swap, read again for ~12s until the chain shows a
+  // new figure - an RPC node can answer from the block before the swap.
+  const tokenBalsRef = useRef(tokenBals)
+  tokenBalsRef.current = tokenBals
+  const refreshOtherTokens = useCallback((untilChanged = false) => {
     if (!walletAddress) return
-    const fetchErc20 = async (contract: string, decimals: number): Promise<number> => {
-      if (!contract) return 0
-      try {
-        const padded = walletAddress.toLowerCase().replace('0x','').padStart(64,'0')
-        const json = await arcRpcJson({ jsonrpc:'2.0', id:1, method:'eth_call',
-          params:[{ to: contract, data: '0x70a08231' + padded }, 'latest'] }, 6000)
-        const hex = json?.result
-        if (!hex || hex === '0x' || hex === '0x0') return 0
-        return Number(BigInt(hex)) / Math.pow(10, decimals)
-      } catch { return 0 }
+    const before = { EURC: tokenBalsRef.current.EURC, cirBTC: tokenBalsRef.current.cirBTC }
+    const gaps = untilChanged ? [0, 1500, 2500, 3500, 5000] : [0]
+    let i = 0
+    const read = async () => {
+      const opts = { ttlMs: 0, staleMs: 0 }
+      const [eurc, cirbtc] = await Promise.all([
+        readArcBalanceOrThrow(walletAddress, 'EURC', opts).catch(() => null),
+        CIRBTC_CONTRACT ? readArcBalanceOrThrow(walletAddress, 'CIRBTC', opts).catch(() => null) : Promise.resolve(null),
+      ])
+      setTokenBals(b => ({ ...b, ...(eurc != null ? { EURC: eurc } : {}), ...(cirbtc != null ? { cirBTC: cirbtc } : {}) }))
+      const changed = (eurc != null && Math.abs(eurc - before.EURC) > 1e-12) || (cirbtc != null && Math.abs(cirbtc - before.cirBTC) > 1e-12)
+      if (!changed && ++i < gaps.length) setTimeout(read, gaps[i])
     }
-    Promise.all([
-      fetchErc20(EURC_CONTRACT,   6),
-      fetchErc20(CIRBTC_CONTRACT, 8),
-    ]).then(([eurc, cirbtc]) => {
-      setTokenBals(b => ({ ...b, EURC: eurc, cirBTC: cirbtc }))
-    })
+    void read()
   }, [walletAddress])
+  useEffect(() => { refreshOtherTokens() }, [refreshOtherTokens])
+  // Something changed balances elsewhere (EURC / cirBTC received, a payment…).
+  useEffect(() => {
+    const onStale = () => refreshOtherTokens(true)
+    window.addEventListener(BALANCES_STALE_EVENT, onStale)
+    return () => window.removeEventListener(BALANCES_STALE_EVENT, onStale)
+  }, [refreshOtherTokens])
 
   // Helper: get balance for tokenIn
   const inBalance = tokenBals[tokenIn.id] ?? 0
@@ -1263,26 +1271,8 @@ export function SwapPage() {
           refreshBalancesAfterTx(walletAddress)
           const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
           readUSDCBalanceOrThrow(walletAddress ?? '').then(newUSDC => setTokenBals(b => ({ ...b, USDC: newUSDC }))).catch(() => {})
-          // Also refresh EURC + cirBTC after swap
-          if (walletAddress) {
-            const pad = walletAddress.toLowerCase().replace('0x','').padStart(64,'0')
-            const fetchErc20 = async (contract: string, decimals: number) => {
-              if (!contract) return 0
-              try {
-                const j = await arcRpcJson({ jsonrpc:'2.0', id:1, method:'eth_call',
-                  params:[{ to: contract, data: '0x70a08231' + pad }, 'latest'] }, 6000)
-                const hex = j?.result
-                if (!hex || hex === '0x' || hex === '0x0') return 0
-                return Number(BigInt(hex)) / Math.pow(10, decimals)
-              } catch { return 0 }
-            }
-            Promise.all([
-              fetchErc20(EURC_CONTRACT,   6),
-              fetchErc20(CIRBTC_CONTRACT, 8),
-            ]).then(([eurc, cirbtc]) => {
-              setTokenBals(b => ({ ...b, EURC: eurc, cirBTC: cirbtc }))
-            })
-          }
+          // EURC + cirBTC: re-read until the swap shows (BALANCES_STALE_EVENT from
+          // refreshBalancesAfterTx above triggers refreshOtherTokens(true)).
         } catch {}
       })()
       const elapsedMs = swapStartRef.current ? Date.now() - swapStartRef.current : 0

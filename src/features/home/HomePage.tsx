@@ -2210,7 +2210,12 @@ export function HomePage() {
   // A payment / swap / transfer just finished (lib/balanceRefresh.ts): read
   // EURC and cirBTC again too (USDC is refreshed by the helper itself).
   useEffect(() => {
-    const onStale = () => { refreshBalanceForToken('EURC'); refreshBalanceForToken('CIRBTC') }
+    // Read now, and again shortly after: an RPC node can still answer from
+    // the block before the transaction landed.
+    const onStale = () => {
+      refreshBalanceForToken('EURC'); refreshBalanceForToken('CIRBTC')
+      setTimeout(() => { refreshBalanceForToken('EURC'); refreshBalanceForToken('CIRBTC') }, 4000)
+    }
     window.addEventListener(BALANCES_STALE_EVENT, onStale)
     return () => window.removeEventListener(BALANCES_STALE_EVENT, onStale)
   // eslint-disable-next-line react-hooks/exhaustive-deps
