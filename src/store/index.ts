@@ -329,7 +329,11 @@ export const useAuthStore = create<AuthStore>()(
         // local state clear above still happens instantly, same UX as
         // before - this just also does the part that was silently missing.
         import('@/lib/supabase').then(({ supabase }) => {
-          supabase.auth.signOut().catch((e) => console.warn('[logout] supabase.auth.signOut failed:', e))
+          // scope 'local': ends THIS device's session only. The default
+          // ('global') revoked every session of the account, so signing out
+          // on one device signed the person out everywhere - their phone or
+          // PC then lost access a few hours later, on its next token refresh.
+          supabase.auth.signOut({ scope: 'local' }).catch((e) => console.warn('[logout] supabase.auth.signOut failed:', e))
         }).catch(() => {})
 
         // Clear auth state
