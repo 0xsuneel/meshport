@@ -3707,7 +3707,7 @@ export function HomePage() {
              to mobile's layout (its children render exactly as if they
              were direct children of the flex-col stack above, unchanged)
              - it only becomes a real flex row at `lg:`. */}
-        <div className="contents lg:flex lg:col-start-1 lg:row-start-1 lg:items-stretch lg:gap-4 lg:min-w-0">
+        <div className="contents lg:flex lg:col-start-1 lg:row-start-1 lg:self-stretch lg:items-stretch lg:gap-4 lg:min-w-0">
         {/* ── LEFT COLUMN - Balance / Multichain Hub / Pay&Receive / Recent /
              Assets, all in ONE grid cell (col-start-1, row-start-1) stacked
              internally via flexbox. Keeping every left-column piece in a
@@ -3928,8 +3928,14 @@ export function HomePage() {
               items-stretch above) instead of wherever its own N rows of
               content happen to end. Internally scrollable so extra items
               beyond what fits are still reachable rather than overflowing. */}
+          {/* Sized by the row, never by its own rows: absolutely filled, so a
+              long list scrolls inside instead of pushing the card past the
+              Insights column's bottom (the row is as tall as the taller of
+              column 1 and Insights). */}
+          <div style={{ flex: 1, minHeight: 240, position: 'relative' }}>
           <div style={{
-            display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflowY: 'auto',
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column', overflowY: 'auto',
             background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
             padding: '12px 14px', boxShadow: 'var(--shadow-1)',
           }}>
@@ -3943,6 +3949,7 @@ export function HomePage() {
               <ActivityRow key={r.id} record={r} isFirst={i === 0} isLast={i === list.length - 1}
                 onSelect={() => { recentFlash.opened(); setSelectedActivity(r) }} flash={r.id === recentFlash.flashId} />
             ))}
+          </div>
           </div>
         </div>
         </div>
