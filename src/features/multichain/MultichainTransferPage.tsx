@@ -1,101 +1,4 @@
-import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
-import { prewarmCamera } from '@/lib/scannerPrewarm'
-import { PanelScanner } from '@/features/scanner/PanelScanner'
-import { ubFeeBreakdown, ubSpendAmount, ubQuoteFees } from '@/lib/transferFees'
-import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/motion'
-import { useStepDirection } from '@/hooks/useStepDirection'
-import { createPortal } from 'react-dom'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import { PinKeypad } from '@/components/ui/PinKeypad'
-import { AmountKeypad } from '@/components/ui/AmountKeypad'
-import { HubPage, HubPageBack, HUB_PANEL_BOX } from '@/components/multichain/HubPage'
-import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
-import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
-import { SuccessFlash } from '@/components/ui/SuccessFlash'
-import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
-import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
-import {
-  ArrowLeft, QrCode, Lock, CheckCircle, XCircle, AlertCircle, Loader2, ChevronDown, Clock,
-} from 'lucide-react'
-import { motion, AnimatePresence, useAnimationControls } from 'framer-motion'
-import { MeshLoader } from '@/components/ui/MeshLoader'
-import { MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
-import { useWalletStore, useAuthStore, useUIStore } from '@/store'
-import { awardTransactionPoints } from '@/lib/rewards'
-import { notifyRewardMultichain } from '@/lib/notifications'
-import { formatAmount, shortenAddress, midShortenAddress, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
-import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
-import { useSettingsStore } from '@/store/settingsStore'
-import { isChainEnabledForTransfer, resolveChainMechanism, resolveAvailableMechanisms } from '@/lib/featureFilters'
-import { ARC_EXPLORER, explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
-import { ARC_RPCS, ARC_NETWORK } from '@/lib/arc'
-import { circleForwarderMintsTo, noteForwarderMintFailed } from '@/lib/chainRpcs'
-import { gatewaySelfMintsTo, forwarderMintRetry, getUnifiedBalances, UB_MIN_SWEEP } from '@/lib/ubClaim'
-import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
-import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
-import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
-import { AmountField, quickAmounts } from '@/components/ui/AmountField'
-import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
-import { ActivityRow, activityMove } from '@/features/activity/ActivityPage'
-import { formatFee, formatMoveAmount } from '@/lib/moveFees'
-import { useReturnFlash } from '@/hooks/useReturnFlash'
-import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
-import { sheetDrag } from '@/lib/sheetDrag'
-import { revealFlow } from '@/lib/revealFlow'
-import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
-import { useLeaveGuard } from '@/lib/leaveGuard'
-import { moveSteps, indexFromStepStates } from '@/lib/moveSteps'
-import { MoveProgress } from '@/components/multichain/MoveProgress'
-import { TrackedMove, type TrackedMoveInfo } from '@/components/multichain/TrackedMove'
-
-// Derive Arc chain key from env so a mainnet build targets Arc mainnet.
-// All 'Arc_Testnet' literals in this file are replaced with this constant -
-// same pattern ubClaim.ts, swapService.ts, and ubFundRecovery.ts use.
-const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) === 'mainnet'
-  ? 'Arc'
-  : 'Arc_Testnet'
-
-// Digit/decimal sanitizing for the desktop "Amount" native input (mirrors
-// AmountKeypad's own internal sanitizer, which isn't exported) - max one
-// '.', capped at 2 typed decimal places.
-
-/** Speed tag on a route button. Out of Arc both routes are Fast: Arc is final
- *  in under a second, so neither waits for source finality. */
-function SpeedTag({ fast, on }: { fast: boolean; on: boolean }) {
-  return (
-    <span style={{ fontSize: 10, fontWeight: 700, lineHeight: '14px', padding: '0 6px', borderRadius: 999, flexShrink: 0,
-      color: on ? '#fff' : fast ? 'var(--success)' : 'var(--warning)',
-      background: on ? 'rgba(255,255,255,0.2)' : `color-mix(in srgb, ${fast ? 'var(--success)' : 'var(--warning)'} 14%, transparent)` }}>
-      {fast ? 'Fast' : 'Slow'}
-    </span>
-  )
-}
-
-function sanitizeMultichainAmount(raw: string): string {
-  let cleaned = raw.replace(/[^\d.]/g, '')
-  const firstDot = cleaned.indexOf('.')
-  if (firstDot !== -1) cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '')
-  const [intPart, decPart] = cleaned.split('.')
-  if (decPart !== undefined) cleaned = intPart + '.' + decPart.slice(0, 2)
-  return cleaned
-}
-
-// ── Module-level caches - survive re-renders, reset only on full page reload ──
-// Caching the three heavy SDK packages eliminates the 500ms–1s dynamic-import
-// penalty from the signing hot-path on every bridge attempt.
-interface SdkModules {
-  AppKit: any
-  KitError: any
-  createEthersAdapterFromPrivateKey: any
-  JsonRpcProvider: any
-  FallbackProvider: any
-}
-let _sdkModules: SdkModules | null = null
-let _sdkLoading = false
-const _sdkCallbacks: Array<() => void> = []
-
-/** Load (or return cached) SDK modules. Safe to call from multiple places. */
+2/** Load (or return cached) SDK modules. Safe to call from multiple places. */
 async function loadSdkModules(): Promise<SdkModules> {
   if (_sdkModules) return _sdkModules
   if (_sdkLoading) {
@@ -2162,6 +2065,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         try {
           // Drops at once by the amount sent, then the chain's figure (retried while stale).
           refreshBalancesAfterTx(senderAddress, { spent: numAmount })
+          // Destination chain just received USDC — update the Hub's external balance instantly.
+          const destChainId = chain.sdk || chain.name || selectedChain
+          refreshScope({ kind: 'external', wallet: senderAddress, chains: [destChainId] })
+          notifyExternalBalanceChanged(destChainId, senderAddress)
         } catch {}
 
         try {
@@ -2700,6 +2607,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       try {
         // Drops at once by the amount sent, then the chain's figure (retried while stale).
         refreshBalancesAfterTx(senderAddress, { spent: numAmount })
+        // Destination chain just received USDC — update the Hub's external balance instantly.
+        const destChainId = chain.sdk || chain.name || selectedChain
+        refreshScope({ kind: 'external', wallet: senderAddress, chains: [destChainId] })
+        notifyExternalBalanceChanged(destChainId, senderAddress)
       } catch {}
 
       // Award points - fire-and-forget, same as the Activity.bridge() call
