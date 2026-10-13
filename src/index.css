@@ -666,3 +666,11 @@ html.mp-locking #root { visibility: hidden; }
 .mp-settings-pane > * { width: 100%; }
 .mp-settings-pane [class*="lg:max-w-"] { max-width: none !important; margin-left: 0 !important; margin-right: 0 !important; }
 .mp-settings-pane > * > .header-row { padding-left: 20px; padding-right: 20px; }
+
+/* Light theme: chain logos drawn in white / near-white (made for dark
+   backgrounds) disappear on white. World and Sonic become dark; Codex and
+   XDC (pale cream / pale cyan) are deepened so they keep their colour. */
+:root[data-theme="light"] img[src$="/logos/chains/world.svg"],
+:root[data-theme="light"] img[src$="/logos/chains/sonic.svg"] { filter: brightness(0.18); }
+:root[data-theme="light"] img[src$="/logos/chains/codex.svg"],
+:root[data-theme="light"] img[src$="/logos/chains/xdc.svg"] { filter: brightness(0.62) saturate(1.8); }
