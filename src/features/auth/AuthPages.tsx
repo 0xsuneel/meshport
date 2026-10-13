@@ -268,7 +268,7 @@ export function GoogleAuthPage() {
         return
       }
       if (resolved.kind === 'conflict') {
-        await supabase.auth.signOut().catch(() => {})
+        await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
         setError(ACCOUNT_CONFLICT_MESSAGE)
         setTimeout(() => navigate('/auth', { replace: true }), 5000)
         return
@@ -404,7 +404,7 @@ export function EmailOTPPage() {
       return
     }
     if (resolved.kind === 'conflict') {
-      await supabase.auth.signOut().catch(() => {})
+      await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
       setLoading(false)
       setError(ACCOUNT_CONFLICT_MESSAGE)
       return

@@ -81,14 +81,14 @@ export async function adminSignIn(email: string, password: string): Promise<{ er
   if (!data.user) return { error: 'Login failed' }
   const admin = await isAdminUser(data.user.id)
   if (!admin) {
-    await supabase.auth.signOut()
+    await supabase.auth.signOut({ scope: 'local' })
     return { error: 'This account does not have admin access.' }
   }
   return { error: null }
 }
 
 export async function adminSignOut(): Promise<void> {
-  await supabase.auth.signOut()
+  await supabase.auth.signOut({ scope: 'local' })
 }
 
 export async function getCurrentAdminEmail(): Promise<string | null> {
