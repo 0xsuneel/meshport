@@ -756,8 +756,8 @@ export function BulkPayoutPage() {
   // Desktop: the step column beside Add Recipients - the passcode and the
   // success flash sit over it, like Transfer's panel.
   const stepColumnRef = useRef<HTMLDivElement>(null)
-  // Desktop: Add Recipients is held while the payout runs and its results show.
-  const recipientsHeld = isDesktop && (step === 'processing' || step === 'results')
+  // Desktop: Add Recipients is held while the payout runs.
+  const recipientsHeld = isDesktop && step === 'processing'
   const recipientsColRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const el = recipientsColRef.current
@@ -1342,11 +1342,13 @@ export function BulkPayoutPage() {
               its own flex-1/min-h-0 structure), so the recipient list is
               the ONE genuine scroll region, and the input form above it
               stays fixed/visible while it scrolls. */}
-          {/* Held while the payout runs and while its results show: nothing in
-              Add Recipients responds (made inert, dimmed, not-allowed cursor)
-              until New Bulk Payment / Retry / Back to Home is chosen, so a tap
-              here can't pull the results away or start editing mid-payout. */}
-          <div aria-busy={recipientsHeld || undefined} title={step === 'processing' ? 'Payout in progress' : undefined}
+          {/* While the payout runs, nothing in Add Recipients responds (inert,
+              dimmed, not-allowed cursor). Once the results show, a tap
+              anywhere here closes them and goes back to entry (Purpose
+              panel), ready for the next payout - no need to press New Bulk
+              Payment first. Failed recipients stay listed for a retry. */}
+          <div aria-busy={recipientsHeld || undefined} title={recipientsHeld ? 'Payout in progress' : undefined}
+            onPointerDownCapture={() => { if (step === 'results') { setStep('setup'); setResults([]) } }}
             style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', cursor: recipientsHeld ? 'not-allowed' : undefined }}>
             <div ref={recipientsColRef} style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 16,
               opacity: recipientsHeld ? 0.55 : 1, transition: 'opacity 0.2s ease' }}>
