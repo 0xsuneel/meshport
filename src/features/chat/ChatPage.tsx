@@ -76,6 +76,15 @@ const PAY_SHEET_LEAVE = {
   leave: (next: string) => next === 'closed' ? SHEET_EXIT : { opacity: 0, transition: { duration: 0 } },
 }
 
+// Desktop pay drawer + its dim: closing animates; moving on to processing
+// (where the run drawer takes over in place) removes them at once.
+const DRAWER_LEAVE_SLIDE = {
+  leave: (next: string) => next === 'closed' ? { x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } } : { opacity: 0, transition: { duration: 0 } },
+}
+const DRAWER_LEAVE_FADE = {
+  leave: (next: string) => next === 'closed' ? { opacity: 0, transition: { duration: 0.12, ease: 'easeIn' } } : { opacity: 0, transition: { duration: 0 } },
+}
+
 function hiddenKey(addr: string | null) {
   return addr ? `meshport_hidden_chats_${addr.toLowerCase()}` : 'meshport_hidden_chats_anon'
 }
@@ -5327,7 +5336,8 @@ export function ChatConversationPage() {
         )}
       </AnimatePresence>
       <AnimatePresence custom={payStep}>
-        {payStep === 'form' && (() => {
+        {/* Desktop: the amount drawer stays up, under the PIN dialog's dim. */}
+        {(payStep === 'form' || (isDesktop && payStep === 'confirm')) && (() => {
           const formContent = (
               <div className="px-5 pt-4 pb-6 space-y-3">
                 {/* Header */}
@@ -5533,9 +5543,12 @@ export function ChatConversationPage() {
               <motion.div key="pay-form-dim"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1, transition: { duration: 0.18, ease: 'easeOut' } }}
-                exit={{ opacity: 0, transition: { duration: 0.12, ease: 'easeIn' } }}
+                // Closing fades; on to processing it goes at once (the run
+                // drawer's own dim is already there - no double dim).
+                custom={payStep} variants={DRAWER_LEAVE_FADE} exit="leave"
                 onClick={closeForm}
-                style={{ position: 'fixed', inset: 0, zIndex: 140, background: 'rgba(0,0,0,0.15)' }} />
+                // Under the PIN dialog (z 100) while it's open.
+                style={{ position: 'fixed', inset: 0, zIndex: payStep === 'confirm' ? 98 : 140, background: 'rgba(0,0,0,0.15)' }} />
               <motion.div
                 key="pay-form-drawer"
                 initial={{ x: '100%' }}
@@ -5543,10 +5556,10 @@ export function ChatConversationPage() {
                 // less damping) - a dismiss should feel quicker than the
                 // arrival, not mirror it 1:1.
                 animate={{ x: 0, transition: { duration: 0.34, ease: [0.32, 0.72, 0, 1] } }}
-                exit={{ x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
+                custom={payStep} variants={DRAWER_LEAVE_SLIDE} exit="leave"
                 onClick={e => e.stopPropagation()}
                 style={{
-                  position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 141,
+                  position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: payStep === 'confirm' ? 99 : 141,
                   width: CHAT_PAY_DRAWER_WIDTH, overflowY: 'auto',
                   background: 'var(--surface)', borderLeft: '1px solid var(--border)',
                   boxShadow: 'var(--shadow-3)',
@@ -5674,7 +5687,8 @@ export function ChatConversationPage() {
             if (isDesktop && payStep === 'confirm') {
               return (
                 <DesktopTransactionAuthDialog
-                  onClose={closeStep2}
+                  // Back to the amount drawer underneath (still open).
+                  onClose={() => { setPayStep('form'); setPayPassEntry('') }}
                   title="Authorize Payment"
                   // In the pay drawer's column on the right, like the amount step.
                   placement="panel" panelWidth={CHAT_PAY_DRAWER_WIDTH}
