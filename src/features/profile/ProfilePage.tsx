@@ -285,15 +285,14 @@ export function ProfilePage() {
         // cap), gap/padding treatment as Swap's 2-column layout - no root-
         // level overflow-hidden either (same clipping bug fixed on Swap/
         // Pay/Multichain Claim/Bulk Pay), each column scrolls on its own.
-        <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
-          <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
+        // Desktop: the Settings menu (Wallet / Support pages) is the column
+        // beside this one (SettingsDesktopSplit), so this pane is the profile
+        // itself: card, Sign Out, footer.
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px 14px', boxSizing: 'border-box' }}>
+          <div className="space-y-6">
             {userCardSection}
-            {walletSection}
             {signOutSection}
             {footerSection}
-          </div>
-          <div style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto' }}>
-            {supportSection}
           </div>
         </div>
       ) : (

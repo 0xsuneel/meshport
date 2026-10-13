@@ -1,3 +1,4 @@
+import { isSettingsPath } from '@/components/layout/SettingsDesktopSplit'
 import { useEffect, useRef, useState } from 'react'
 import { primeHomeBootstrap } from '@/lib/homeBootstrap'
 import { preloadScanner } from '@/lib/scannerPrewarm'
@@ -55,7 +56,9 @@ const RELOAD_ON_RECONNECT = /^\/((activity|news)(\/[^/]+)?|recent-paid|notificat
 // page's transition, only the conversation column animates (Chat privacy
 // and New chat open in that column too).
 const desktopPageKey = (path: string) =>
-  /^\/chat(\/[^/]+)?\/?$/.test(path) ? '/chat' : path
+  /^\/chat(\/[^/]+)?\/?$/.test(path) ? '/chat'
+  // Settings pages open beside the Settings menu (SettingsDesktopSplit): only that column animates.
+  : isSettingsPath(path.replace(/\/$/, '')) ? '/profile' : path
 
 export function AppLayout() {
   const location = useLocation()

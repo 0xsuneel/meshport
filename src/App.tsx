@@ -6,6 +6,7 @@ import { markSplashDone } from './lib/splash'
 import { useOnReconnect, isSlowNetwork, whenNetworkOk } from './lib/connectivity'
 import { AppLayout } from './components/layout/AppLayout'
 import { AuthShell } from './components/layout/AuthShell'
+import { SettingsDesktopSplit } from '@/components/layout/SettingsDesktopSplit'
 import { ChatDesktopSplit } from './components/layout/ChatDesktopSplit'
 import { ADMIN_PATH } from './lib/adminPath'
 import { lazyRetry } from './lib/lazyRetry'
@@ -425,6 +426,25 @@ const router = createBrowserRouter([
         ],
       },
       { path: 'activity',                   element: <ActivityPage /> },
+      {
+        // Settings and its pages - desktop: a Settings menu beside the page
+        // (SettingsDesktopSplit); phones: exactly the pages as before.
+        element: <SettingsDesktopSplit />,
+        children: [
+          { path: 'profile', element: <ProfilePage /> },
+          { path: 'feature-guide', element: <FeatureGuidePage /> },
+          { path: 'about', element: <AboutPage /> },
+          { path: 'terms-privacy', element: <TermsPrivacyPage /> },
+          { path: 'help-support', element: <HelpSupportPage /> },
+          { path: 'security', element: <SecurityPage /> },
+          { path: 'appearance', element: <AppearancePage /> },
+          { path: 'security/change-passcode', element: <ChangePasscodePage /> },
+          { path: 'backup', element: <FeatureGate feature="backup_wallet_enabled"><BackupPage /></FeatureGate> },
+          { path: 'edit-profile', element: <EditProfilePage /> },
+          { path: 'merchant', element: <MerchantApplyPage /> },
+          { path: 'notifications', element: <FeatureGate feature="notifications_enabled"><NotificationsPage /></FeatureGate> },
+        ],
+      },
       { path: 'insights',                   element: <InsightsPage /> },
       { path: 'pay',                        element: <FeatureGate feature="pay_send_enabled"><PaySendPage /></FeatureGate> },
       { path: 'pay-send',                   element: <RenamedPathRedirect from="/pay-send" to="/pay" /> },
@@ -458,19 +478,7 @@ const router = createBrowserRouter([
       { path: 'p2p/my-offers',              element: <P2PMyOffersPage /> },
       { path: 'p2p/my-trades',              element: <P2PMyTradesPage /> },
       { path: 'p2p/history',                element: <P2PHistoryPage /> },
-      { path: 'profile',                    element: <ProfilePage /> },
-      { path: 'feature-guide',              element: <FeatureGuidePage /> },
-      { path: 'about',                      element: <AboutPage /> },
-      { path: 'terms-privacy',              element: <TermsPrivacyPage /> },
-      { path: 'help-support',               element: <HelpSupportPage /> },
-      { path: 'security',                   element: <SecurityPage /> },
-      { path: 'appearance',                 element: <AppearancePage /> },
       { path: 'swap',                        element: <FeatureGate feature="swap_enabled"><SwapPage /></FeatureGate> },
-      { path: 'security/change-passcode',    element: <ChangePasscodePage /> },
-      { path: 'backup',                     element: <FeatureGate feature="backup_wallet_enabled"><BackupPage /></FeatureGate> },
-      { path: 'edit-profile',               element: <EditProfilePage /> },
-      { path: 'merchant',                   element: <MerchantApplyPage /> },
-      { path: 'notifications',              element: <FeatureGate feature="notifications_enabled"><NotificationsPage /></FeatureGate> },
       { path: 'activity/:id',               element: <TransactionDetailPage /> },
     ],
   },

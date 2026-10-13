@@ -6,6 +6,7 @@
 // import BottomNav's mobile-only concerns (unread realtime subscription,
 // Android back-button interception) - those stay exactly where they are.
 import { useLocation, useNavigate } from 'react-router-dom'
+import { isSettingsPath } from './SettingsDesktopSplit'
 import { NavIcon, type NavIconName } from './navIcons'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { HomeIcon, ChatsIcon, RewardsIcon, ActivityIcon, getActiveTabId } from './BottomNav'
@@ -43,7 +44,8 @@ export function DesktopSidebar() {
   const hub = useHubLabel()
   const location = useLocation()
   const navigate = useNavigate()
-  const activeId = getActiveTabId(location.pathname, items)
+  // Every Settings page (Security, Appearance, About…) keeps Settings highlighted.
+  const activeId = isSettingsPath(location.pathname.replace(/\/$/, '')) ? 'settings' : getActiveTabId(location.pathname, items)
   const unreadChats = useChatUnreadStore(s => s.unreadChats)
 
   // Ongoing P2P trades count - the red dot on the P2P nav item.
