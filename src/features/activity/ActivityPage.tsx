@@ -398,7 +398,6 @@ export function ActivityRow({ record, isFirst, isLast, onSelect, flash, inPanel 
 
   const rowIcon = activityRowIcon(record)
   const oneLine: React.CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }
-  const move = activityMove(record)
 
   return (
     <div onClick={onSelect} data-activity-id={record.id} className={flash ? 'mp-last-opened' : undefined} style={{
@@ -487,19 +486,6 @@ export function ActivityRow({ record, isFirst, isLast, onSelect, flash, inPanel 
           <div style={{ fontSize: 14, fontWeight: 700, color: amountColor, textDecoration: isFailed && !isRecovery ? 'line-through' : undefined, ...oneLine }}>
             {amountPrefix}{formatAmt(isSwap ? (metadata.amountIn ?? amount) : amount, isSwap ? (metadata.tokenIn || tokenSymbol) : tokenSymbol)} {(isSwap ? metadata.tokenIn : null) || tokenSymbol || 'USDC'}
           </div>
-          {/* Bring: the amount above is what arrived - show what was sent.
-              Transfer: the amount above is what was sent - show what the
-              receiver got. Both with the fees paid in between. */}
-          {move && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontVariantNumeric: 'tabular-nums', ...oneLine }}>
-              {isTransfer ? `Got ${formatMoveAmount(move.received)}` : `Sent ${formatMoveAmount(move.sent)}`}
-            </div>
-          )}
-          {move && (
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums', ...oneLine }}>
-              Fee {formatFee(move.fees)}
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -1133,14 +1119,6 @@ export function ActivityPage() {
                             {row.isSwap
                               ? `+${formatAmt(row.metadata.amountOut ?? 0, row.metadata.tokenOut)} ${row.metadata.tokenOut || '?'}`
                               : `${row.amountPrefix}${formatAmt(row.amount, row.tokenSymbol)} ${row.tokenSymbol || 'USDC'}`}
-                            {(() => {
-                              const move = activityMove(item)
-                              return move ? (
-                                <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-                                  {row.isTransfer ? `Got ${formatMoveAmount(move.received)}` : `Sent ${formatMoveAmount(move.sent)}`} · Fee {formatFee(move.fees)}
-                                </div>
-                              ) : null
-                            })()}
                           </td>
                         </tr>
                       )
