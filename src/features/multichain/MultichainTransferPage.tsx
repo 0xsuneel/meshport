@@ -3050,9 +3050,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           {effectiveUb ? <path d="M13 2L4 14h7l-1 8 9-12h-7z"/> : <path d="M4 8h14l-3-3M20 16H6l3 3"/>}
         </svg>
         <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: 'var(--text-secondary)' }}>
+          {/* One short line, same style as Bring Funds. */}
           {effectiveUb
-            ? <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Unified Balance · Fast · ~60s.</b> Sent through Circle Gateway; the recipient gets native USDC on {chain.name}.</>
-            : <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>CCTP · Fast · 20–90s.</b> Circle burns the USDC on Arc and mints the same amount on {chain.name}.</>}
+            ? <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Via Circle Gateway</b> · ~60s · native USDC</>
+            : <><b style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Burn & mint</b> · 20–90s · native USDC</>}
         </p>
       </div>
     </div>
