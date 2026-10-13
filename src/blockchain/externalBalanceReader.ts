@@ -298,6 +298,11 @@ export function externalBalanceTotal(
   return externalBalanceReader(walletAddress, settings, settingsLoaded).then(r => r.total)
 }
 
+/** Last balance read (or patched) for this wallet on this chain, if any. */
+export function lastKnownChainBalance(walletAddress: string, chainId: string): number | undefined {
+  return lastKnown.get(`${normalizeAddress(walletAddress).toLowerCase()}:${chainId}`)
+}
+
 // Every aggregate-scan key written, so a single-chain read can patch them.
 const scanKeys = new Set<string>()
 
