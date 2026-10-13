@@ -8,7 +8,7 @@ import { isLiveStatusNotice, newsDate, NEWS_SOURCE_TINT, type NewsItem } from '@
 //   stack - small thumbnail (Updates list): icon over a one-word label
 //   hero  - article header: large icon and label
 
-type Variant = 'row' | 'stack' | 'hero'
+type Variant = 'row' | 'stack' | 'hero' | 'thumb'
 
 function Glyph({ item, size }: { item: NewsItem; size: number }) {
   const s = { width: size, height: size, display: 'block' as const }
@@ -63,7 +63,7 @@ function labels(item: NewsItem): { title: string; sub: string | null; live: bool
 
 export function NewsArt({ item, variant, children }: { item: NewsItem; variant: Variant; children?: ReactNode }) {
   const { title, sub, live } = labels(item)
-  const tile = variant === 'hero' ? 64 : variant === 'stack' ? 30 : 28
+  const tile = variant === 'hero' ? 64 : variant === 'stack' ? 30 : variant === 'thumb' ? 26 : 28
   const glyph = Math.round(tile * 0.62)
   const tileEl = (
     <span style={{ width: tile, height: tile, borderRadius: tile * 0.3, background: '#fff', flex: 'none',
@@ -104,6 +104,12 @@ export function NewsArt({ item, variant, children }: { item: NewsItem; variant: 
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '0 6px' }}>
           {tileEl}
           {subEl || <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{title}</span>}
+        </div>
+      )}
+      {variant === 'thumb' && (
+        // A small square beside a headline: just the source's mark.
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {tileEl}
         </div>
       )}
       {variant === 'hero' && (

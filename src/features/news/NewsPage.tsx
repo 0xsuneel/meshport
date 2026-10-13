@@ -35,7 +35,7 @@ export function newsMeta(it: NewsItem, withSource = true): string {
     it.read_minutes ? `${it.read_minutes} min read` : null].filter(Boolean).join(' · ')
 }
 
-export function NewsCover({ item, style, children, variant = 'stack' }: { item: NewsItem; style?: React.CSSProperties; children?: ReactNode; variant?: 'stack' | 'hero' }) {
+export function NewsCover({ item, style, children, variant = 'stack' }: { item: NewsItem; style?: React.CSSProperties; children?: ReactNode; variant?: 'stack' | 'hero' | 'thumb' }) {
   const [ok, setOk] = useState(true)
   return (
     <div style={{ position: 'relative', overflow: 'hidden', background: NEWS_SOURCE_TINT[item.source], ...style }}>
