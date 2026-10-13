@@ -259,9 +259,10 @@ export const useAuthStore = create<AuthStore>()(
         try {
           for (let i = localStorage.length - 1; i >= 0; i--) {
             const k = localStorage.key(i)
-            if (k?.startsWith('meshport_social_dv_') || k?.startsWith('meshport_social_secured_')) localStorage.removeItem(k)
+            if (k?.startsWith('meshport_social_dv_') || k?.startsWith('meshport_social_secured_') || k?.startsWith('meshport_activity_cache_')) localStorage.removeItem(k)
           }
         } catch { /* storage blocked */ }
+        import('@/hooks/useActivity').then(({ clearActivityCache }) => clearActivityCache()).catch(() => {})
         // Merchant status is per account - drop the cached one.
         import('@/lib/merchant').then(({ resetMerchant }) => resetMerchant()).catch(() => {})
 
