@@ -756,6 +756,15 @@ export function BulkPayoutPage() {
   // Desktop: the step column beside Add Recipients - the passcode and the
   // success flash sit over it, like Transfer's panel.
   const stepColumnRef = useRef<HTMLDivElement>(null)
+  // Desktop: Add Recipients is held while the payout runs and its results show.
+  const recipientsHeld = isDesktop && (step === 'processing' || step === 'results')
+  const recipientsColRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = recipientsColRef.current
+    if (!el) return
+    el.inert = recipientsHeld
+    if (recipientsHeld && el.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
+  }, [recipientsHeld])
 
   // ── Shared content, extracted into variables ──────────────────────────
   // Mobile renders these inside the existing AnimatePresence-stepped single
@@ -1333,8 +1342,16 @@ export function BulkPayoutPage() {
               its own flex-1/min-h-0 structure), so the recipient list is
               the ONE genuine scroll region, and the input form above it
               stays fixed/visible while it scrolls. */}
-          <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {addRecipientsSection}
+          {/* Held while the payout runs and while its results show: nothing in
+              Add Recipients responds (made inert, dimmed, not-allowed cursor)
+              until New Bulk Payment / Retry / Back to Home is chosen, so a tap
+              here can't pull the results away or start editing mid-payout. */}
+          <div aria-busy={recipientsHeld || undefined} title={step === 'processing' ? 'Payout in progress' : undefined}
+            style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', cursor: recipientsHeld ? 'not-allowed' : undefined }}>
+            <div ref={recipientsColRef} style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 16,
+              opacity: recipientsHeld ? 0.55 : 1, transition: 'opacity 0.2s ease' }}>
+              {addRecipientsSection}
+            </div>
           </div>
 
           <div ref={stepColumnRef} data-leave-guard={step === 'processing' ? '' : undefined} style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', borderRadius: 20 }}>
