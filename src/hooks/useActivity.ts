@@ -55,6 +55,34 @@ const PAGE_SIZE = 100
  */
 const ONCHAIN_POLL_MS = 60_000
 
+// ── Last-seen list, shown instantly on the next visit ──────────────────────
+// Opening Activity used to wait on the server every time (skeleton until
+// the first page arrived). The first page of each view is kept - in memory
+// for every filter, and on this device for the unfiltered list - shown at
+// once, then refreshed from the server in the background. Cleared on logout.
+export const ACTIVITY_CACHE_PREFIX = 'meshport_activity_cache_'
+const memCache = new Map<string, ActivityRecord[]>()
+const cacheKey = (wallet: string, filter?: string, search?: string) => `${wallet.toLowerCase()}|${filter ?? 'all'}|${search ?? ''}`
+function readCache(wallet: string, filter?: string, search?: string): ActivityRecord[] | null {
+  const key = cacheKey(wallet, filter, search)
+  const hit = memCache.get(key)
+  if (hit) return hit
+  if (filter || search) return null
+  try {
+    const raw = localStorage.getItem(ACTIVITY_CACHE_PREFIX + wallet.toLowerCase())
+    const list = raw ? JSON.parse(raw) : null
+    if (Array.isArray(list)) { memCache.set(key, list); return list }
+  } catch { /* storage blocked / bad JSON */ }
+  return null
+}
+function writeCache(wallet: string, filter: string | undefined, search: string | undefined, list: ActivityRecord[]) {
+  memCache.set(cacheKey(wallet, filter, search), list)
+  if (filter || search) return
+  try { localStorage.setItem(ACTIVITY_CACHE_PREFIX + wallet.toLowerCase(), JSON.stringify(list.slice(0, PAGE_SIZE))) } catch { /* quota */ }
+}
+/** Logout: forget every cached list. */
+export function clearActivityCache() { memCache.clear() }
+
 function onchainTxToActivityRecord(walletAddress: string, tx: OnchainReceivedTx): ActivityRecord {
   return {
     id:                  `onchain_${tx.txHash}`,
@@ -189,11 +217,11 @@ export interface UseActivityResult {
 }
 
 export function useActivity(walletAddress: string | null): UseActivityResult {
-  const [records,     setRecords]     = useState<ActivityRecord[]>([])
+  const [records,     setRecords]     = useState<ActivityRecord[]>(() => (walletAddress && readCache(walletAddress)) || [])
   // Current records for event handlers (state updaters may run later).
   const recordsRef = useRef<ActivityRecord[]>([])
   recordsRef.current = records
-  const [loading,     setLoading]     = useState(true)
+  const [loading,     setLoading]     = useState(() => !(walletAddress && readCache(walletAddress)))
   const [loadingMore, setLoadingMore] = useState(false)
   const [error,       setError]       = useState('')
   const [hasMore,     setHasMore]     = useState(true)
@@ -223,7 +251,12 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
   // ── Initial load ───────────────────────────────────────────────────────────
   const load = useCallback(async (reset = false) => {
     if (!walletAddress) return
-    if (reset) { setLoading(true); offsetRef.current = 0; cursorRef.current = null }
+    if (reset) {
+      offsetRef.current = 0; cursorRef.current = null
+      // Show the last-seen list for this view at once; the fetch below refreshes it.
+      const cached = readCache(walletAddress, filter, search || undefined)
+      if (cached) { setRecords(cached); setLoading(false) } else setLoading(true)
+    }
     // The error is cleared only once a load succeeds (below). Clearing it up
     // front made a failing load-more flip the page between the empty state
     // and the error every frame or two.
@@ -261,6 +294,7 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
         // dedupes by hash, so once the real row lands this is a no-op.
         const buffered = getRecentArcDeposits()
         setRecords(buffered.length ? mergeOnchainIntoRecords(walletAddress, data, buffered) : data)
+        writeCache(walletAddress, filter, search || undefined, data)
       } else {
         setRecords(prev => {
           const existingIds = new Set(prev.map(r => r.id))
