@@ -1,6 +1,7 @@
 // Chat photos & files (WhatsApp-style): photo bubbles that keep their shape
 // while loading, upload / download progress rings, file bubbles with size and
 // type, the "send photos" preview screen, and the full-screen photo viewer.
+import { SendIcon } from '@/components/ui/SendIcon'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { X, Loader2 } from 'lucide-react'
@@ -273,7 +274,7 @@ export function MediaPreview({ items, recipient, onChange, onAddMore, onClose, o
         </label>
         <button type="button" aria-label={`Send ${items.length} photo${items.length === 1 ? '' : 's'}`} onClick={() => onSend(items, hd)}
           style={{ position: 'relative', width: 50, height: 50, borderRadius: '50%', border: 'none', background: 'var(--brand)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4l17.5-7.5a1 1 0 000-1.8L3.4 3.6a1 1 0 00-1.4 1.1L4 11l9 1-9 1-2 6.3a1 1 0 001.4 1.1z" /></svg>
+          <SendIcon size={21} style={{ marginLeft: 2 }} />
           {items.length > 1 && <span style={{ position: 'absolute', top: -4, right: -4, width: 20, height: 20, borderRadius: '50%', background: '#fff', color: '#000', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{items.length}</span>}
         </button>
       </div>

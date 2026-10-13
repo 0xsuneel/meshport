@@ -6,6 +6,7 @@
 // My ads. USDC moves through the escrow contract on Arc; the fiat payment
 // happens between the two people, outside the app.
 
+import { SendIcon } from '@/components/ui/SendIcon'
 import { PopupOpen } from '@/hooks/usePopupOpen'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { safeStorageUrl, openExternal } from '@/lib/safeUrl'
@@ -17,7 +18,7 @@ import { PopupDim } from '@/components/ui/PopupDim'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import {
   ArrowLeft, Search, Filter, Plus,
-  Clock, CheckCircle2, Star, Send, Paperclip, X as XIcon, History, Pencil, PlusCircle, Trash2,
+  Clock, CheckCircle2, Star, Paperclip, X as XIcon, History, Pencil, PlusCircle, Trash2,
 } from 'lucide-react'
 import { useAuthStore, useUIStore, useP2PTradesCountStore, useWalletStore } from '@/store'
 import { PinKeypad } from '@/components/ui/PinKeypad'
@@ -1616,7 +1617,7 @@ export function P2PTradePage() {
             <Header title={title} onBack={goBack} right={
               <button onClick={() => { const el = scrollRef.current; if (el) { nearBottom.current = true; el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }) } }} aria-label="Chat"
                 style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', padding: 6, display: 'flex' }}>
-                <Send size={18} color={COLORS.text} />
+                <SendIcon size={18} color={COLORS.text} />
                 {unread > 0 && <span style={{ position: 'absolute', top: 0, right: 0, minWidth: 15, height: 15, borderRadius: 999, background: '#EF4444', color: '#fff', fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{unread}</span>}
               </button>
             } />
@@ -1879,7 +1880,7 @@ export function P2PTradePage() {
           disabled={uploadingProof || (!input.trim() && !proofFile)} aria-label="Send"
           style={{ width: 42, height: 42, flexShrink: 0, borderRadius: '50%', background: COLORS.primary, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: uploadingProof ? 'default' : 'pointer', opacity: uploadingProof || (!input.trim() && !proofFile) ? 0.5 : 1, transition: 'opacity 0.15s' }}>
-          <Send size={17} color="#fff" />
+          <SendIcon size={18} color="#fff" style={{ marginLeft: 2 }} />
         </button>
       </div>
 
