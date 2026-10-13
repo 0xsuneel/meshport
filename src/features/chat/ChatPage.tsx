@@ -5047,8 +5047,10 @@ export function ChatConversationPage() {
             style={{ width: 45.5, height: 45.5 }}>
             {sending
               ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7Z"/>
+              // Solid send arrow - not the outlined paper plane, which is the
+              // header's Pay button, so "send message" and "pay" don't look alike.
+              : <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden style={{ marginLeft: 2 }}>
+                  <path d="M3.4 20.4 21 12 3.4 3.6l-.01 6.5L15 12l-11.6 1.9z" fill="currentColor" />
                 </svg>}
           </button>
         </div>
