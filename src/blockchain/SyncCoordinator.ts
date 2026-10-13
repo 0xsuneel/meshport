@@ -97,26 +97,39 @@ export function scopesFor(event: ShadowEvent): RefreshScope[] {
   switch (event.eventType) {
     /**
      * Native-asset credit (Arc USDC, incl. wrapper-routed via 0xffff…fffe).
-     * Touches the wallet's Arc balances and its history. `arc` rather than
-     * `asset` because the native path carries no reliable per-asset key: the
-     * scanner emits assets:['USDC'] for both plain and wrapper routes, and on
-     * Arc USDC IS the native currency, so the whole Arc bucket is the honest
-     * granularity.
+     * On Arc: touches Arc balances + history.
+     * On an EXTERNAL chain (e.g. Ethereum_Sepolia, Base_Sepolia): the deposit
+     * is USDC arriving on that chain - the per-chain cache key AND the aggregate
+     * external scan key both need invalidating so the Hub's "Available to Bring"
+     * figure updates immediately instead of waiting for the 5-minute poll.
+     * Previously this case always returned {kind:'arc'} regardless of chainId,
+     * so external-chain deposits were silently ignored here.
      */
     case 'deposit_detected':
+      if (chain !== ARC) {
+        return [
+          { kind: 'chain', wallet, chain },
+          { kind: 'external', wallet, chains: [chain] },
+          { kind: 'history', wallet },
+        ]
+      }
       return [{ kind: 'arc', wallet }, { kind: 'history', wallet }]
 
     /**
      * ERC-20 credit (EURC / cirBTC). Here the asset IS known, so scope to the
      * single asset key rather than the whole chain - this is the case the
      * `asset` scope exists for.
+     * On an EXTERNAL chain: also drop the aggregate `external:` key so the Hub
+     * total updates without waiting for the next full scan.
      */
     case 'transfer_detected': {
       const asset = firstAsset(event)
-      return [
-        asset ? { kind: 'asset', wallet, chain, asset } : { kind: 'chain', wallet, chain },
-        { kind: 'history', wallet },
-      ]
+      const balanceScope: RefreshScope = asset
+        ? { kind: 'asset', wallet, chain, asset }
+        : { kind: 'chain', wallet, chain }
+      const scopes: RefreshScope[] = [balanceScope, { kind: 'history', wallet }]
+      if (chain !== ARC) scopes.push({ kind: 'external', wallet, chains: [chain] })
+      return scopes
     }
 
     /**
