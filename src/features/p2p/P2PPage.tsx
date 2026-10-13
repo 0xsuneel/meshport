@@ -388,7 +388,8 @@ export function P2PHubPage() {
   // 2-column layout below - never duplicated.
   const flow = (
     <div style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: isDesktop ? 24 : 96 }}>
-      <Header title="P2P" onBack={() => navigate('/')} right={
+      {/* Desktop: history already sits in the P2P History panel on the right. */}
+      <Header title="P2P" onBack={() => navigate('/')} right={isDesktop ? undefined :
         <button onClick={() => navigate('/p2p/history')} style={{ background: 'none', border: 'none', padding: '4px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }} aria-label="Order history">
           <History size={18} color={COLORS.text} />
           <span className="hidden min-[375px]:inline" style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>History</span>

@@ -189,9 +189,23 @@ export function P2PHistoryPage() {
     return rows
   }, [trades, category, search, counterparties, user?.id])
 
-  return (
-    <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: 40 }}>
-      <Header title="Transaction History" onBack={() => navigate('/p2p')} />
+  // Desktop summary beside the list (same 65/35 split as Recent / Activity).
+  const summary = useMemo(() => {
+    const isDone = (t: P2PTrade) => t.status === 'completed' || t.status === 'released'
+    const done = trades.filter(isDone)
+    const usdc = (list: P2PTrade[]) => list.reduce((a, t) => a + (Number(t.amountUsdc) || 0), 0)
+    return {
+      total: trades.length,
+      completed: done.length,
+      open: trades.filter(t => !isDone(t) && t.status !== 'cancelled' && t.status !== 'expired').length,
+      bought: usdc(done.filter(t => t.buyerId === user?.id)),
+      sold: usdc(done.filter(t => t.sellerId === user?.id)),
+    }
+  }, [trades, user?.id])
+
+  const page = (
+    <div style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: 40 }}>
+      <Header title="P2P History" onBack={() => navigate('/p2p')} />
 
       {/* Search */}
       <div style={{ padding: '4px 16px 10px' }}>
@@ -257,6 +271,34 @@ export function P2PHistoryPage() {
           )
         })}
       </div>
+    </div>
+  )
+
+  if (!isDesktop) return page
+
+  const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  const card: React.CSSProperties = { background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16 }
+  return (
+    <div style={{ display: 'flex', gap: 24, height: '100%', minHeight: 0, padding: '0 24px 0 0', background: COLORS.bg }}>
+      <div style={{ flex: '65 1 0%', minWidth: 0, height: '100%' }}>{page}</div>
+      <aside style={{ flex: '35 1 0%', minWidth: 0, paddingTop: 84, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ ...card, display: 'flex' }}>
+          {([['Trades', String(summary.total)], ['Completed', String(summary.completed)], ['In progress', String(summary.open)]] as const).map(([k, v], i) => (
+            <div key={k} style={{ flex: 1, padding: '14px 16px', borderLeft: i ? `1px solid ${COLORS.border}` : 'none' }}>
+              <div style={{ fontSize: 12, color: COLORS.muted }}>{k}</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: COLORS.text, marginTop: 2 }}>{loading ? '–' : v}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ ...card, padding: '6px 16px' }}>
+          {([['Bought', `+${fmt(summary.bought)} USDC`, 'var(--success)'], ['Sold', `-${fmt(summary.sold)} USDC`, COLORS.text]] as const).map(([k, v, c], i) => (
+            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 0', fontSize: 13.5, borderBottom: i === 0 ? `1px solid ${COLORS.border}` : 'none' }}>
+              <span style={{ color: COLORS.muted }}>{k} <span style={{ fontSize: 11.5 }}>(completed)</span></span>
+              <span style={{ fontWeight: 700, color: c }}>{loading ? '–' : v}</span>
+            </div>
+          ))}
+        </div>
+      </aside>
     </div>
   )
 }
