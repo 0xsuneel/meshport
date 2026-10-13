@@ -2698,6 +2698,15 @@ export function ChatConversationPage() {
   useLeaveGuard(payStep === 'processing', 'Payment')
   // The step before this one: moving between the amount and Review sheets
   // swaps the sheet's content in place (no slide down and back up).
+  // Desktop: the amount drawer sits under the PIN dialog while it's open, and
+  // stays under it until the dialog has finished fading out - jumping back on
+  // top at once showed the fading dialog through the drawer (a flicker).
+  const [payDrawerLow, setPayDrawerLow] = useState(false)
+  useEffect(() => {
+    if (payStep === 'confirm') { setPayDrawerLow(true); return }
+    const t = setTimeout(() => setPayDrawerLow(false), 260)
+    return () => clearTimeout(t)
+  }, [payStep])
   const prevPayStepRef = useRef(payStep)
   const prevPayStep = prevPayStepRef.current
   useEffect(() => { prevPayStepRef.current = payStep }, [payStep])
@@ -5548,7 +5557,7 @@ export function ChatConversationPage() {
                 custom={payStep} variants={DRAWER_LEAVE_FADE} exit="leave"
                 onClick={closeForm}
                 // Under the PIN dialog (z 100) while it's open.
-                style={{ position: 'fixed', inset: 0, zIndex: payStep === 'confirm' ? 98 : 140, background: 'rgba(0,0,0,0.15)' }} />
+                style={{ position: 'fixed', inset: 0, zIndex: payStep === 'confirm' || payDrawerLow ? 98 : 140, background: 'rgba(0,0,0,0.15)' }} />
               <motion.div
                 key="pay-form-drawer"
                 initial={{ x: '100%' }}
@@ -5559,7 +5568,7 @@ export function ChatConversationPage() {
                 custom={payStep} variants={DRAWER_LEAVE_SLIDE} exit="leave"
                 onClick={e => e.stopPropagation()}
                 style={{
-                  position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: payStep === 'confirm' ? 99 : 141,
+                  position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: payStep === 'confirm' || payDrawerLow ? 99 : 141,
                   width: CHAT_PAY_DRAWER_WIDTH, overflowY: 'auto',
                   background: 'var(--surface)', borderLeft: '1px solid var(--border)',
                   boxShadow: 'var(--shadow-3)',
@@ -5692,6 +5701,8 @@ export function ChatConversationPage() {
                   title="Authorize Payment"
                   // In the pay drawer's column on the right, like the amount step.
                   placement="panel" panelWidth={CHAT_PAY_DRAWER_WIDTH}
+                  // Over the amount drawer: no half-faded card over its content.
+                  instantExit
                   amountLabel={`${formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} ${payToken}`}
                   subLabel={`To ${recipientClean}.arc`}
                 >
@@ -5717,7 +5728,10 @@ export function ChatConversationPage() {
               <motion.div key="pay-run-dim" initial={prevPayStep === 'confirm' ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 onClick={closeStep2}
                 style={{ position: 'fixed', inset: 0, zIndex: 140, background: 'rgba(0,0,0,0.15)' }} />,
-              <motion.div key="pay-run-drawer" data-leave-guard={payStep === 'processing' ? '' : undefined} initial={prevPayStep === 'confirm' ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.12 } }}
+              <motion.div key="pay-run-drawer" data-leave-guard={payStep === 'processing' ? '' : undefined} initial={prevPayStep === 'confirm' ? false : { opacity: 0 }} animate={{ opacity: 1, x: 0 }}
+                // Closing (Back to Chat) slides it away like the amount drawer;
+                // fading it showed the chat through the half-faded receipt.
+                exit={{ x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
                 onClick={e => e.stopPropagation()}
                 style={{
                   position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 141, width: CHAT_PAY_DRAWER_WIDTH,

@@ -21,7 +21,7 @@ import { type ReactNode } from 'react'
 import { HUB_PANEL_WIDTH } from '@/components/multichain/HubPage'
 
 export function DesktopTransactionAuthDialog({
-  onClose, title, amountLabel, subLabel, accent = 'var(--brand)', maxWidth = 420, placement = 'center', panelWidth = HUB_PANEL_WIDTH, anchor, children,
+  onClose, title, amountLabel, subLabel, accent = 'var(--brand)', maxWidth = 420, placement = 'center', panelWidth = HUB_PANEL_WIDTH, anchor, instantExit = false, children,
 }: {
   onClose: () => void
   title: string
@@ -41,6 +41,9 @@ export function DesktopTransactionAuthDialog({
   /** Centre over this element instead (e.g. the page's flow column beside
    *  its Recent History panel), so the dialog sits over what it authorizes. */
   anchor?: HTMLElement | null
+  /** Card leaves at once (only the dim fades) - for a dialog over a panel
+   *  whose own content would otherwise show through the fading card. */
+  instantExit?: boolean
   children: ReactNode
 }) {
   usePopupOpen()
@@ -64,7 +67,7 @@ export function DesktopTransactionAuthDialog({
         onClick={e => e.stopPropagation()}
         initial={DIALOG_CARD.initial}
         animate={DIALOG_CARD.animate}
-        exit={DIALOG_CARD.exit}
+        exit={instantExit ? { opacity: 0, transition: { duration: 0 } } : DIALOG_CARD.exit}
         transition={DIALOG_CARD.transition}
         style={{
           position: 'relative', width: '100%', maxWidth, maxHeight: '85vh', overflowY: 'auto', pointerEvents: 'auto',

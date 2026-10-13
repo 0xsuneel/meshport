@@ -420,10 +420,10 @@ const router = createBrowserRouter([
           { path: 'chat',                     element: <FeatureGate feature="chat_enabled"><ChatListPage /></FeatureGate> },
           // Desktop: opens in the conversation column, the chat list stays.
           { path: 'chat/privacy',             element: <FeatureGate feature="chat_enabled"><ChatPrivacyPage /></FeatureGate> },
+          { path: 'chat/new',                 element: <FeatureGate feature="chat_enabled"><ChatListPage newChat /></FeatureGate> },
           { path: 'chat/:id',                 element: <FeatureGate feature="chat_enabled"><ChatConversationPage /></FeatureGate> },
         ],
       },
-      { path: 'chat/new',                   element: <FeatureGate feature="chat_enabled"><ChatListPage newChat /></FeatureGate> },
       { path: 'activity',                   element: <ActivityPage /> },
       { path: 'insights',                   element: <InsightsPage /> },
       { path: 'pay',                        element: <FeatureGate feature="pay_send_enabled"><PaySendPage /></FeatureGate> },
