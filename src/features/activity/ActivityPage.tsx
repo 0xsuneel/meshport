@@ -964,7 +964,7 @@ export function ActivityPage() {
             <RefreshCw className={cn('w-4 h-4 text-text-secondary', loading && 'animate-spin')} />
           </button>
         </div>
-        <div className="px-4 lg:max-w-[900px] lg:mx-auto" style={{ ...collapseStyle(searchHidden, 72), paddingBottom: searchHidden ? 0 : 12 }}>
+        <div className="px-4 lg:max-w-[1100px] lg:mx-auto" style={{ ...collapseStyle(searchHidden, 72), paddingBottom: searchHidden ? 0 : 12 }}>
           <SearchField value={searchInput} onChange={setSearchInput} ariaLabel="Search username, wallet, or tx hash"
             // Longest first - the box shows the longest that fits beside the Filter chip.
             placeholder={['Search username, wallet, or tx hash', 'Username, wallet or tx hash', 'Username, wallet, tx hash', 'Name, wallet, tx hash', 'Name, wallet, hash', 'Search']}
@@ -1011,7 +1011,7 @@ export function ActivityPage() {
           </div>
         )}
         {showEarned && (
-          <div className="px-4 pt-2 lg:max-w-[900px] lg:mx-auto">
+          <div className="px-4 pt-2 lg:max-w-[1100px] lg:mx-auto">
             {earned === null ? <SkeletonCards className="pt-2" /> : earned.length === 0 ? (
               <p className="text-center text-sm text-text-muted py-16">Points you earn will show here.</p>
             ) : earned.map(p => {
@@ -1029,7 +1029,7 @@ export function ActivityPage() {
         {loading && records.length === 0 && <SkeletonCards className="px-4 pt-4" />}
 
         {error && !loading && (
-          <div className="mx-4 mt-4 p-4 rounded-2xl" style={{ background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 20%, transparent)' }}>
+          <div className="mx-4 mt-4 p-4 rounded-2xl lg:max-w-[1068px] lg:mx-auto" style={{ background: 'color-mix(in srgb, var(--danger) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 20%, transparent)' }}>
             <p className="text-sm text-danger">{error}</p>
             <button onClick={refresh} className="mt-2 text-xs text-danger underline">Try again</button>
           </div>
