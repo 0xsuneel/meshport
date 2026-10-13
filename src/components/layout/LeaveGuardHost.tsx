@@ -19,6 +19,10 @@ import { useBlocker } from 'react-router-dom'
 import { leaveGuardLabel, shouldHoldNavigation, useLeaveGuardStore, isLeaveGuarded, isPassingThrough } from '@/lib/leaveGuard'
 
 const BLINK_CLASS = 'mp-leave-blink'
+/** On <html> while a desktop flow is processing (cursor rule in index.css). */
+const BUSY_CLASS = 'mp-app-busy'
+/** What stays live while held: the running flow's panel and the Stay/Leave ask. */
+const LIVE_AREAS = '[data-leave-guard], [data-hub-page], [data-leave-ask]'
 
 /** The panel that blinks: a marked flow panel, else the open Hub panel. */
 function findTarget(): HTMLElement | null {
@@ -72,6 +76,34 @@ export function LeaveGuardHost() {
 
   // Back (phone button, gesture, browser arrow) is caught in lib/leaveGuard,
   // ahead of the router, and raised here as `ownAsk`.
+
+  // Desktop: while a flow is processing, everything outside its own panel
+  // (sidebar, top bar, other columns) is held - a not-allowed cursor and no
+  // response to clicks or Enter/Space - instead of each click raising the
+  // Stay/Leave ask. Back (browser arrow / keys) is untouched: it still asks.
+  useEffect(() => {
+    if (!guarded) return
+    const desktop = window.matchMedia('(min-width: 980px)')
+    const root = document.documentElement
+    const sync = () => root.classList.toggle(BUSY_CLASS, desktop.matches)
+    sync()
+    desktop.addEventListener('change', sync)
+    const hold = (e: Event) => {
+      if (!desktop.matches) return
+      if (e instanceof KeyboardEvent && e.key !== 'Enter' && e.key !== ' ') return
+      const t = e.target
+      if (t instanceof Element && t.closest(LIVE_AREAS)) return
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    const kinds = ['click', 'pointerdown', 'mousedown', 'auxclick', 'dblclick', 'keydown'] as const
+    kinds.forEach(k => window.addEventListener(k, hold, true))
+    return () => {
+      root.classList.remove(BUSY_CLASS)
+      desktop.removeEventListener('change', sync)
+      kinds.forEach(k => window.removeEventListener(k, hold, true))
+    }
+  }, [guarded])
 
   // Tab close / refresh: only the browser's own prompt is allowed here.
   useEffect(() => {
@@ -140,7 +172,7 @@ export function LeaveGuardHost() {
       {alerting && !target && <div className={BLINK_CLASS} aria-hidden="true"
         style={{ position: 'fixed', inset: 0, zIndex: 999, pointerEvents: 'none' }} />}
       {asking && (
-        <div role="alertdialog" aria-modal="false" aria-labelledby="mp-leave-title" aria-describedby="mp-leave-body"
+        <div data-leave-ask="" role="alertdialog" aria-modal="false" aria-labelledby="mp-leave-title" aria-describedby="mp-leave-body"
           className="mp-dialog-in"
           style={{
             position: 'fixed', zIndex: 1000, boxSizing: 'border-box', ...cardStyle,
