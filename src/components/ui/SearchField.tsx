@@ -6,12 +6,18 @@ import { useAutoFocus } from '@/hooks/useAutoFocus'
 // search icon, a round clear (✕) button once there's text, and a green focus
 // ring while typing. 16px text so iOS doesn't zoom the page on focus.
 // `trailing` holds a screen's own extra control (e.g. Activity's filter).
+// `placeholder` can be a list, longest first: the longest one that fits the
+// box is shown (in a slightly smaller hint size), so a hint never runs under
+// a trailing control or gets cut mid-word on a narrow phone.
 // `wrap` lets long text (a pasted 0x address) wrap onto more lines instead of
 // scrolling out of view; the box grows to fit.
+/** Hint size when `placeholder` is a list (matches .mp-search-fit in index.css). */
+const HINT_FONT_PX = 14
+
 export function SearchField({ value, onChange, placeholder, autoFocus, onFocus, onBlur, trailing, ariaLabel, wrap }: {
   value: string
   onChange: (v: string) => void
-  placeholder: string
+  placeholder: string | string[]
   autoFocus?: boolean
   onFocus?: () => void
   onBlur?: () => void
@@ -20,6 +26,8 @@ export function SearchField({ value, onChange, placeholder, autoFocus, onFocus, 
   wrap?: boolean
 }) {
   const [focused, setFocused] = useState(false)
+  const hints = Array.isArray(placeholder) ? placeholder : [placeholder]
+  const [hint, setHint] = useState(hints[0])
   const areaRef = useRef<HTMLTextAreaElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   useAutoFocus(wrap ? areaRef : inputRef, !!autoFocus)
@@ -34,13 +42,33 @@ export function SearchField({ value, onChange, placeholder, autoFocus, onFocus, 
     ro.observe(el)
     return () => ro.disconnect()
   }, [value, wrap])
+  // Pick the longest hint that fits the input's current width.
+  const hintKey = hints.join('|')
+  useLayoutEffect(() => {
+    const el = (wrap ? areaRef.current : inputRef.current) as HTMLElement | null
+    const list = hintKey.split('|')
+    if (!el || list.length < 2) { setHint(list[0]); return }
+    const ctx = document.createElement('canvas').getContext('2d')
+    const pick = () => {
+      const cs = getComputedStyle(el)
+      if (!ctx) return
+      ctx.font = `${cs.fontWeight} ${HINT_FONT_PX}px ${cs.fontFamily}`
+      const room = el.clientWidth - 2
+      setHint(list.find(h => ctx.measureText(h).width <= room) ?? list[list.length - 1])
+    }
+    pick()
+    const ro = new ResizeObserver(pick)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [hintKey, wrap])
+  const fitted = hints.length > 1
   const common = {
-    'aria-label': ariaLabel ?? placeholder,
+    'aria-label': ariaLabel ?? hints[0],
     value,
     onFocus: () => { setFocused(true); onFocus?.() },
     onBlur: () => { setFocused(false); onBlur?.() },
-    placeholder,
-    className: 'mp-search-input',
+    placeholder: hint,
+    className: fitted ? 'mp-search-input mp-search-fit' : 'mp-search-input',
   }
   return (
     <div style={{

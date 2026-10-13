@@ -554,6 +554,8 @@ body { overflow-wrap: break-word; }
 .mp-search-input::-webkit-search-results-button,
 .mp-search-input::-webkit-search-results-decoration { -webkit-appearance: none; display: none; }
 .mp-search-input::placeholder { color: var(--text-muted); opacity: 1; }
+/* SearchField with a list of hints: picks the longest that fits at this size. */
+.mp-search-fit::placeholder { font-size: 14px; }
 
 
 /* Frozen picture of the old page during a page/screen push (PageTransition,
