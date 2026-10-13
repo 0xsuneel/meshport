@@ -37,7 +37,8 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
-import { ActivityRow } from '@/features/activity/ActivityPage'
+import { ActivityRow, activityMove } from '@/features/activity/ActivityPage'
+import { formatFee, formatMoveAmount } from '@/lib/moveFees'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { sheetDrag } from '@/lib/sheetDrag'
@@ -3976,6 +3977,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               amountColor={failed ? 'var(--danger)' : 'var(--text-primary)'}
               rows={[
                 { label: 'To', value: chainLabel },
+                ...(() => {
+                  const move = activityMove(r)
+                  return move ? [
+                    { label: 'You sent', value: `${formatMoveAmount(move.sent)} ${r.tokenSymbol}` },
+                    { label: 'Receiver got', value: `${formatMoveAmount(move.received)} ${r.tokenSymbol}` },
+                    { label: 'Fees paid', value: formatFee(move.fees) },
+                  ] : []
+                })(),
                 { label: 'Time', value: timeAgo(r.createdAt) },
                 { label: 'Status', value: failed ? 'Failed' : 'Completed' },
                 ...(r.txHash ? [{ label: 'Tx Hash', value: `${r.txHash.slice(0, 8)}…${r.txHash.slice(-6)}` }] : []),

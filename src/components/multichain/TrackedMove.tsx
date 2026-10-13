@@ -22,6 +22,7 @@ import {
   type MoveKind, type MoveRoute,
 } from '@/lib/moveSteps'
 import { formatAmount } from '@/lib/utils'
+import { moveBreakdown, formatFee, formatMoveAmount } from '@/lib/moveFees'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { circleForwarderMintsTo } from '@/lib/chainRpcs'
 
@@ -42,8 +43,10 @@ export interface TrackedMoveInfo {
   ubIntentId?: string
   /** The move is already recorded as finished. */
   completed?: boolean
-  /** Arrived amount, when known (brings). */
+  /** Arrived amount, when known. */
   arrivedAmount?: number
+  /** Bring: MeshPort's fee taken before the burn, when recorded. */
+  meshportFee?: number
   timestamp?: number
 }
 
@@ -164,7 +167,11 @@ export function TrackedMove({ info, onClose, onViewHub, onArrived, backIcon = 'b
   if (done) {
     const srcHref = info.sourceTxHash ? (kind === 'transfer' ? arcExplorerTxUrl(info.sourceTxHash) : explorerTxUrl(info.chain, info.sourceTxHash)) : null
     const mintHref = mintTx ? (kind === 'transfer' ? explorerTxUrl(info.chain, mintTx) : arcExplorerTxUrl(mintTx)) : null
-    const amountLabel = `${formatAmount(info.amount)} USDC`
+    const move = kind === 'transfer'
+      ? moveBreakdown('transfer', { amount: info.amount, arrivedAmount: info.arrivedAmount })
+      : moveBreakdown('bring', { amount: info.amount, arrivedAmount: info.arrivedAmount, claimedAmount: info.amount, meshportFee: info.meshportFee })
+    // Bring: what left the source chain includes MeshPort's fee.
+    const amountLabel = `${move ? formatMoveAmount(move.sent) : formatAmount(info.amount)} USDC`
     return (
       <div ref={rootRef} style={{ margin: '0 -12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
         {live && travel && !travelDone && <TravelingCheckmark from={travel.from} to={travel.to} toStroke="var(--success)" />}
@@ -176,7 +183,8 @@ export function TrackedMove({ info, onClose, onViewHub, onArrived, backIcon = 'b
           subtitle={kind === 'transfer' ? <>Moved from Arc to {to}</> : <>From {from}, now in your Arc wallet</>}
           rows={[
             { label: kind === 'transfer' ? 'You Sent' : 'Brought', value: amountLabel },
-            ...(info.arrivedAmount != null ? [{ label: 'Received', value: `${formatAmount(info.arrivedAmount)} USDC`, positive: true }] : []),
+            ...(info.arrivedAmount != null ? [{ label: kind === 'transfer' ? 'Receiver got' : 'Received', value: `${formatMoveAmount(info.arrivedAmount)} USDC`, positive: true }] : []),
+            ...(move ? [{ label: 'Fees paid', value: formatFee(move.fees) }] : []),
             ...(info.recipient ? [{ label: 'Recipient', value: shortAddr(info.recipient)! }] : []),
             { label: 'Route', value: route === 'ub' ? 'Unified Balance' : 'CCTP' },
           ]}

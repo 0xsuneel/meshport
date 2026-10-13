@@ -8,6 +8,7 @@ import { useAuthStore, useUIStore } from '@/store'
 import { useActivity } from '@/hooks/useActivity'
 import { ActivityRecord, ActivityType, recoveredViaLabel } from '@/lib/ActivityService'
 import { needsRecovery, failureReason } from '@/lib/failure'
+import { moveBreakdown, formatFee, formatMoveAmount, type MoveBreakdown } from '@/lib/moveFees'
 import { backfillP2PActivity } from '@/lib/p2pService'
 import { cn, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
@@ -361,6 +362,26 @@ const paidOrderTitle = (md: any, number: string, received: boolean) => {
   return orderTitle(kind, number, received ? { received: true } : { paid: true })
 }
 
+/** Bring / Transfer out: what was sent, what landed, and the fees (once known). */
+export function activityMove(record: ActivityRecord): MoveBreakdown | null {
+  const md: any = record.metadata || {}
+  if (record.activityType === 'bridge') {
+    return moveBreakdown('transfer', { amount: record.amount, arrivedAmount: record.arrivedAmount, status: record.status })
+  }
+  if (record.activityType === 'claim') {
+    return moveBreakdown('bring', {
+      amount: record.amount, arrivedAmount: record.arrivedAmount, status: record.status,
+      claimedAmount: md.claimed_amount != null ? Number(md.claimed_amount) : null,
+      meshportFee: md.meshport_fee != null ? Number(md.meshport_fee) : null,
+    })
+  }
+  return null
+}
+
+/** Name for Circle's part of a move's fee: Gateway for Unified Balance, else Circle (CCTP). */
+export const networkFeeLabel = (record: ActivityRecord) =>
+  (record.metadata as any)?.route === 'ub' ? 'Gateway fee' : 'Circle fee'
+
 export function ActivityRow({ record, isFirst, isLast, onSelect, flash, inPanel }: {
   record: ActivityRecord; isFirst: boolean; isLast: boolean; onSelect: () => void
   /** The row whose details were just closed - flashes once. */
@@ -377,6 +398,7 @@ export function ActivityRow({ record, isFirst, isLast, onSelect, flash, inPanel 
 
   const rowIcon = activityRowIcon(record)
   const oneLine: React.CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }
+  const move = activityMove(record)
 
   return (
     <div onClick={onSelect} data-activity-id={record.id} className={flash ? 'mp-last-opened' : undefined} style={{
@@ -465,6 +487,19 @@ export function ActivityRow({ record, isFirst, isLast, onSelect, flash, inPanel 
           <div style={{ fontSize: 14, fontWeight: 700, color: amountColor, textDecoration: isFailed && !isRecovery ? 'line-through' : undefined, ...oneLine }}>
             {amountPrefix}{formatAmt(isSwap ? (metadata.amountIn ?? amount) : amount, isSwap ? (metadata.tokenIn || tokenSymbol) : tokenSymbol)} {(isSwap ? metadata.tokenIn : null) || tokenSymbol || 'USDC'}
           </div>
+          {/* Bring: the amount above is what arrived - show what was sent.
+              Transfer: the amount above is what was sent - show what the
+              receiver got. Both with the fees paid in between. */}
+          {move && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontVariantNumeric: 'tabular-nums', ...oneLine }}>
+              {isTransfer ? `Got ${formatMoveAmount(move.received)}` : `Sent ${formatMoveAmount(move.sent)}`}
+            </div>
+          )}
+          {move && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums', ...oneLine }}>
+              Fee {formatFee(move.fees)}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -621,6 +656,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     : ''
   const isSwapType = type === 'swap'
 
+  const move = activityMove(record)
   const rows = [
     { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Payment received from ${chain || 'other chain'} Ledger` : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
     { label: 'Chain',  value: chain },
@@ -638,6 +674,15 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       { label: 'Amount', value: `$${formatAmt(amount)} ${tokenSymbol || 'USDC'}` },
     ]),
     ...(cpLabel ? [{ label: (type === 'receive' || isBulkReceived) ? 'From' : 'To', value: cpLabel, copy: counterparty || undefined }] : []),
+    ...(move ? [
+      { label: 'You sent', value: `${formatMoveAmount(move.sent)} ${tokenSymbol || 'USDC'}` },
+      { label: isTransfer ? 'Receiver got' : 'You received', value: `${formatMoveAmount(move.received)} ${tokenSymbol || 'USDC'}` },
+      { label: 'Fees paid', value: formatFee(move.fees) },
+      ...(move.meshportFee > 0 ? [
+        { label: 'MeshPort fee', value: formatFee(move.meshportFee) },
+        { label: networkFeeLabel(record), value: formatFee(move.networkFee) },
+      ] : []),
+    ] : []),
     { label: 'Status', value: isFailed ? 'Failed ✗' : isSuccess ? 'Completed ✓' : 'Processing…' },
     { label: 'Date',   value: new Date(createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
     { label: 'Time',   value: new Date(createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) },
@@ -687,7 +732,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   // no To/From row repeating the subtitle (the wallet address goes in the
   // details instead), no Status, and no Type that just restates the title.
   const nameInSubtitle = receiptSubtitle !== title || (isTransfer && !!transferToLabel)
-  const MAIN_LABELS = new Set(['Order', 'Merchant', 'Paid to', 'Purpose', 'Recipients', sourceHashLabel, ...(nameInSubtitle || isSwapType ? [] : ['From', 'To'])])
+  const MAIN_LABELS = new Set(['Order', 'Merchant', 'Paid to', 'Purpose', 'Recipients', 'You sent', 'Receiver got', 'You received', 'Fees paid', 'MeshPort fee', 'Circle fee', 'Gateway fee', sourceHashLabel, ...(nameInSubtitle || isSwapType ? [] : ['From', 'To'])])
   const DROP_LABELS = new Set(['Amount', 'Status', 'Date', 'Time',
     ...(isSwapType || nameInSubtitle ? ['From', 'To'] : []),
     ...((isClaim && isMerchantClaim(record as any)) ? [] : ['Type'])])
@@ -1088,6 +1133,14 @@ export function ActivityPage() {
                             {row.isSwap
                               ? `+${formatAmt(row.metadata.amountOut ?? 0, row.metadata.tokenOut)} ${row.metadata.tokenOut || '?'}`
                               : `${row.amountPrefix}${formatAmt(row.amount, row.tokenSymbol)} ${row.tokenSymbol || 'USDC'}`}
+                            {(() => {
+                              const move = activityMove(item)
+                              return move ? (
+                                <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+                                  {row.isTransfer ? `Got ${formatMoveAmount(move.received)}` : `Sent ${formatMoveAmount(move.sent)}`} · Fee {formatFee(move.fees)}
+                                </div>
+                              ) : null
+                            })()}
                           </td>
                         </tr>
                       )

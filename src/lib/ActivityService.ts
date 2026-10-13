@@ -51,6 +51,8 @@ export interface ActivityRecord {
   tokenAddress?:       string
   amount:              number
   usdValue:            number
+  /** What landed on the other side (Bring: on Arc; Transfer: at the receiver), once known. */
+  arrivedAmount?:      number
   counterpartyAddress?: string
   status:              ActivityStatus
   explorerUrl?:        string
@@ -90,6 +92,7 @@ function fromRow(r: any): ActivityRecord {
     tokenAddress:        r.token_address ?? undefined,
     amount:              parseFloat(r.amount ?? '0'),
     usdValue:            parseFloat(r.usd_value ?? r.amount ?? '0'),
+    arrivedAmount:       r.arrived_amount != null && Number.isFinite(Number(r.arrived_amount)) ? Number(r.arrived_amount) : undefined,
     counterpartyAddress: r.counterparty_address ?? undefined,
     status:              (r.status ?? 'completed') as ActivityStatus,
     explorerUrl:         String(r.tx_hash ?? '').startsWith('fail_')
