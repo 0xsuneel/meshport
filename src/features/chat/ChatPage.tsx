@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
+import { SendIcon } from '@/components/ui/SendIcon'
 import { reachCheck, chatCountChanged, STRANGER_PAY_BLOCKED, BLOCKED_YOU, cachedPrivacy, fetchMyPrivacy, fetchMyRequestIds, fetchBlocked, blockUser, unblockUser, type ChatPrivacy } from '@/lib/privacy'
 import { Ban, Check, Pin, PinOff, Plus } from 'lucide-react'
 import { ActionIcon } from '@/components/ui/ActionIcon'
@@ -16,7 +17,7 @@ import { PinKeypad } from '@/components/ui/PinKeypad'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { SearchField } from '@/components/ui/SearchField'
 import { readPeople, writePeople } from '@/lib/peopleCache'
-import { Search, Send, ArrowLeft, CheckCheck, Paperclip, Image, FileText, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, Trash2, Archive, ArchiveRestore, MessageCirclePlus, ArrowDownToLine, Users, UserPlus, Globe, Clock, Receipt } from 'lucide-react'
+import { Search, ArrowLeft, CheckCheck, Paperclip, Image, FileText, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, Trash2, Archive, ArchiveRestore, MessageCirclePlus, ArrowDownToLine, Users, UserPlus, Globe, Clock, Receipt } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { PopupDim } from '@/components/ui/PopupDim'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -511,12 +512,12 @@ function PersonRow({ person, first, busy, action, onClick }: {
             : { background: 'color-mix(in srgb, var(--brand) 12%, transparent)', color: 'var(--brand-text)' }}>
           {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
             : action === 'Add' ? <><UserPlus className="w-3.5 h-3.5" /> Add</>
-            : <><Send className="w-3.5 h-3.5" /> Message</>}
+            : <><SendIcon size={13} /> Message</>}
         </span>
       ) : (
         <span className="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
           style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)' }}>
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--brand-text)' }} /> : <Send className="w-4 h-4" style={{ color: 'var(--brand-text)' }} />}
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" style={{ color: 'var(--brand-text)' }} /> : <SendIcon size={16} color="var(--brand-text)" style={{ marginLeft: 1 }} />}
         </span>
       )}
     </button>
@@ -1196,7 +1197,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
       ) : filtered.length === 0 && !searchQ ? (
         <div className="text-center py-16 px-5">
           <div className="w-16 h-16 bg-surface rounded-full flex items-center justify-center mx-auto mb-4">
-            <Send className="w-8 h-8 text-text-secondary" />
+            <SendIcon size={28} color="var(--text-secondary)" style={{ marginLeft: 3 }} />
           </div>
           <p className="text-text-secondary font-medium">No conversations yet</p>
           <p className="text-text-muted text-sm mt-1">Start a new conversation below</p>
@@ -5049,9 +5050,7 @@ export function ChatConversationPage() {
               ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               // Solid send arrow - not the outlined paper plane, which is the
               // header's Pay button, so "send message" and "pay" don't look alike.
-              : <svg width="21" height="21" viewBox="0 0 24 24" aria-hidden style={{ marginLeft: 2 }}>
-                  <path d="M3.4 20.4 21 12 3.4 3.6l-.01 6.5L15 12l-11.6 1.9z" fill="currentColor" />
-                </svg>}
+              : <SendIcon size={21} style={{ marginLeft: 2 }} />}
           </button>
         </div>
 
