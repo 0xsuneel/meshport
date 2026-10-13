@@ -8,7 +8,7 @@ import { useAuthStore, useUIStore } from '@/store'
 import { useActivity } from '@/hooks/useActivity'
 import { ActivityRecord, ActivityType, recoveredViaLabel } from '@/lib/ActivityService'
 import { needsRecovery, failureReason } from '@/lib/failure'
-import { moveBreakdown, formatFee, formatMoveAmount, type MoveBreakdown } from '@/lib/moveFees'
+import { moveBreakdown, moveLabels, formatFee, formatMoveAmount, type MoveBreakdown } from '@/lib/moveFees'
 import { backfillP2PActivity } from '@/lib/p2pService'
 import { cn, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
@@ -643,6 +643,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const isSwapType = type === 'swap'
 
   const move = activityMove(record)
+  const moveLbl = moveLabels(isTransfer ? 'transfer' : 'bring', (record as any).counterpartyAddress, (record as any).walletAddress)
   const rows = [
     { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Payment received from ${chain || 'other chain'} Ledger` : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
     { label: 'Chain',  value: chain },
@@ -661,8 +662,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     ]),
     ...(cpLabel ? [{ label: (type === 'receive' || isBulkReceived) ? 'From' : 'To', value: cpLabel, copy: counterparty || undefined }] : []),
     ...(move ? [
-      { label: 'You sent', value: `${formatMoveAmount(move.sent)} ${tokenSymbol || 'USDC'}` },
-      { label: isTransfer ? 'Receiver got' : 'You received', value: `${formatMoveAmount(move.received)} ${tokenSymbol || 'USDC'}` },
+      { label: moveLbl.sent, value: `${formatMoveAmount(move.sent)} ${tokenSymbol || 'USDC'}` },
+      { label: moveLbl.received, value: `${formatMoveAmount(move.received)} ${tokenSymbol || 'USDC'}` },
       { label: 'Fees paid', value: formatFee(move.fees) },
       ...(move.meshportFee > 0 ? [
         { label: 'MeshPort fee', value: formatFee(move.meshportFee) },
@@ -718,7 +719,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   // no To/From row repeating the subtitle (the wallet address goes in the
   // details instead), no Status, and no Type that just restates the title.
   const nameInSubtitle = receiptSubtitle !== title || (isTransfer && !!transferToLabel)
-  const MAIN_LABELS = new Set(['Order', 'Merchant', 'Paid to', 'Purpose', 'Recipients', 'You sent', 'Receiver got', 'You received', 'Fees paid', 'MeshPort fee', 'Circle fee', 'Gateway fee', sourceHashLabel, ...(nameInSubtitle || isSwapType ? [] : ['From', 'To'])])
+  const MAIN_LABELS = new Set(['Order', 'Merchant', 'Paid to', 'Purpose', 'Recipients', 'You claimed', 'You transferred', 'Receiver got', 'You received', 'Fees paid', 'MeshPort fee', 'Circle fee', 'Gateway fee', sourceHashLabel, ...(nameInSubtitle || isSwapType ? [] : ['From', 'To'])])
   const DROP_LABELS = new Set(['Amount', 'Status', 'Date', 'Time',
     ...(isSwapType || nameInSubtitle ? ['From', 'To'] : []),
     ...((isClaim && isMerchantClaim(record as any)) ? [] : ['Type'])])

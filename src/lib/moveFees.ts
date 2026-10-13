@@ -72,3 +72,12 @@ export function formatFee(n: number): string {
 export function formatMoveAmount(n: number): string {
   return n.toFixed(4).replace(/\.?0+$/, '')
 }
+
+/** Row labels for a move's two amounts. Bring: "You claimed" / "You received".
+ *  Transfer: "You transferred", then "You received" when it went to your own
+ *  wallet, else "Receiver got". */
+export function moveLabels(kind: 'bring' | 'transfer', to?: string | null, self?: string | null): { sent: string; received: string } {
+  if (kind === 'bring') return { sent: 'You claimed', received: 'You received' }
+  const toSelf = !!to && !!self && to.toLowerCase() === self.toLowerCase()
+  return { sent: 'You transferred', received: toSelf ? 'You received' : 'Receiver got' }
+}
