@@ -22,7 +22,11 @@
 import { supabase } from '@/lib/supabase'
 import { mapChainEventRow, latencyStats, type ShadowEvent } from './shadowEventMap'
 import { createSyncCoordinator } from './SyncCoordinator'
-import { refreshScope } from './BlockchainManager'
+import { refreshScope, readExternalChainBalance, EXTERNAL_BALANCE_EVENT } from './BlockchainManager'
+import type { ChainId } from './types'
+
+/** Arc chain id literal - duplicated here to keep the import surface small. */
+const ARC_CHAIN = 'arc'
 
 export type { ShadowEvent }
 export { mapChainEventRow, latencyStats }
@@ -202,6 +206,35 @@ class ShadowEventBus {
       (e.eventType === 'deposit_detected' || e.eventType === 'transfer_detected')
     ) {
       window.dispatchEvent(new CustomEvent('meshport:onchain-activity'))
+
+      // ── Instant Hub balance update for external-chain deposits ─────────────
+      // Cache invalidation (via syncCoordinator above) drops the stale entry
+      // so the NEXT read goes to the network - but the Hub's balance state
+      // only updates when something triggers a re-read. Fire a targeted
+      // single-chain RPC read now and dispatch EXTERNAL_BALANCE_EVENT so the
+      // Hub's `onExternal` listener applies the new balance to state immediately,
+      // the same path notifyExternalBalanceChanged uses for post-bring updates.
+      // A second read fires ~4s later (matching notifyExternalBalanceChanged's
+      // own retry) in case the first one races a not-yet-confirmed node.
+      // Skipped for Arc-chain events - those update Arc balance via the arc scope.
+      if (
+        e.walletAddress &&
+        e.chainId &&
+        e.chainId !== ARC_CHAIN
+      ) {
+        const chainId = e.chainId as ChainId
+        const wallet  = e.walletAddress
+        const fireEvent = (balance: number) => {
+          if (typeof window === 'undefined') return
+          try {
+            window.dispatchEvent(new CustomEvent(EXTERNAL_BALANCE_EVENT, { detail: { chainId, balance } }))
+          } catch { /* */ }
+        }
+        readExternalChainBalance(chainId, wallet).then(fireEvent).catch(() => {})
+        setTimeout(() => {
+          readExternalChainBalance(chainId, wallet).then(fireEvent).catch(() => {})
+        }, 4_000)
+      }
     }
 
     for (const l of this.listeners) {
