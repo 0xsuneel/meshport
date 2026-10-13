@@ -38,7 +38,7 @@ import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransaction
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
 import { ActivityRow, activityMove } from '@/features/activity/ActivityPage'
-import { formatFee, formatMoveAmount } from '@/lib/moveFees'
+import { moveLabels, formatFee, formatMoveAmount } from '@/lib/moveFees'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { sheetDrag } from '@/lib/sheetDrag'
@@ -3988,9 +3988,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 { label: 'To', value: chainLabel },
                 ...(() => {
                   const move = activityMove(r)
+                  const lbl = moveLabels('transfer', r.counterpartyAddress, senderAddress)
                   return move ? [
-                    { label: 'You sent', value: `${formatMoveAmount(move.sent)} ${r.tokenSymbol}` },
-                    { label: 'Receiver got', value: `${formatMoveAmount(move.received)} ${r.tokenSymbol}` },
+                    { label: lbl.sent, value: `${formatMoveAmount(move.sent)} ${r.tokenSymbol}` },
+                    { label: lbl.received, value: `${formatMoveAmount(move.received)} ${r.tokenSymbol}` },
                     { label: 'Fees paid', value: formatFee(move.fees) },
                   ] : []
                 })(),

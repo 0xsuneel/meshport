@@ -19,7 +19,7 @@ import { MerchantLedger } from '@/features/merchant/MerchantLedger'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { formatAmount, timeAgo, copyToClipboard } from '@/lib/utils'
-import { moveBreakdown, formatFee, formatMoveAmount, type MoveBreakdown } from '@/lib/moveFees'
+import { moveBreakdown, moveLabels, formatFee, formatMoveAmount, type MoveBreakdown } from '@/lib/moveFees'
 import { subscribeToWalletClaims, type Claim as ServerClaim } from '@/lib/claimService'
 import { useSettingsStore } from '@/store/settingsStore'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
@@ -1310,6 +1310,7 @@ export function MultichainPage() {
         const destinationHref = isClaimItem ? arcExplorerTxUrl(it.destinationTxHash) : externalExplorerUrl(it.destinationTxHash)
         const chainName = it.chainLabel || it.chain || '-'
         const move = hubMove(it)
+        const moveLbl = moveLabels(isClaimItem ? 'bring' : 'transfer', it.destinationAddress, walletAddress)
         const netFeeLabel = it.route === 'ub' ? 'Gateway fee' : 'Circle fee'
         const status = it.status === 'success' ? 'success' : it.status === 'failed' ? 'failed' : 'pending'
         const doneTitle = it.isRecovery ? 'Refunded to Arc' : it.merchant ? (it.chainReceipt ? 'Payment Received' : it.ownClaim ? 'Moved to Arc (Own)' : 'Moved to Arc') : isClaimItem ? 'Funds Arrived' : 'Transfer Complete'
@@ -1337,8 +1338,8 @@ export function MultichainPage() {
             // the title the outcome - rows add only what those don't.
             rows={[
               ...(move ? [
-                { label: 'You sent', value: `$${formatMoveAmount(move.sent)} USDC` },
-                { label: isClaimItem ? 'You received' : 'Receiver got', value: `$${formatMoveAmount(move.received)} USDC`, positive: true },
+                { label: moveLbl.sent, value: `$${formatMoveAmount(move.sent)} USDC` },
+                { label: moveLbl.received, value: `$${formatMoveAmount(move.received)} USDC`, positive: true },
                 { label: 'Fees paid', value: formatFee(move.fees) },
               ] : []),
               ...(it.merchant && walletAddress ? [{ label: 'Paid to', value: `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`, onCopy: copyRow('Paid to', walletAddress), copied: rowCopied === 'Paid to' }] : []),

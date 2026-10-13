@@ -2528,7 +2528,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 ...(() => {
                   const move = claimMove(c)
                   return move ? [
-                    { label: 'You sent', value: `${formatMoveAmount(move.sent)} USDC` },
+                    { label: 'You claimed', value: `${formatMoveAmount(move.sent)} USDC` },
                     { label: 'You received', value: `${formatMoveAmount(move.received)} USDC` },
                     { label: 'Fees paid', value: formatFee(move.fees) },
                     ...(move.meshportFee > 0 ? [
