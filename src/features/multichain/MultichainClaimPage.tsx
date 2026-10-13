@@ -2490,14 +2490,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     <div style={{ fontSize: 14, fontWeight: 700, color: failed ? 'var(--danger)' : 'var(--success)', textDecoration: failed ? 'line-through' : undefined }}>
                       +{formatAmount(c.arrivedAmount ?? c.amount)} USDC
                     </div>
-                    {(() => {
-                      const move = claimMove(c)
-                      return move ? (
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-                          Sent {formatMoveAmount(move.sent)} · Fee {formatFee(move.fees)}
-                        </div>
-                      ) : null
-                    })()}
                   </div>} />
               )
             })

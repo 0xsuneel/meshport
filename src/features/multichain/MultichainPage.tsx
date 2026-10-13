@@ -1012,15 +1012,6 @@ export function MultichainPage() {
                           : `-$${formatAmount(item.amount)}`
                       }
                     </div>
-                    {(() => {
-                      const move = hubMove(item)
-                      return move ? (<>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-                          {isClaim ? `Sent $${formatMoveAmount(move.sent)}` : `Got $${formatMoveAmount(move.received)}`}
-                        </div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>Fee {formatFee(move.fees)}</div>
-                      </>) : null
-                    })()}
                     {isPending && (
                       <div style={{ fontSize: 10, color: 'var(--warning)', marginTop: 2 }}>Tap to view →</div>
                     )}
