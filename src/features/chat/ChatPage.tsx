@@ -5594,7 +5594,10 @@ export function ChatConversationPage() {
               <motion.div {...sheetDrag('chat-pay', closeForm)} initial={prevPayStep === 'confirm' ? false : { y: '100%' }} animate={{ y: 0 }}
                 custom={payStep} variants={PAY_SHEET_LEAVE} exit="leave"
                 transition={SHEET_SPRING}
-                className="absolute bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-3xl h-[70vh] [@media(max-height:700px)]:h-[92dvh] overflow-y-auto">
+                // Fits its content (capped, then scrolls with Cancel/Pay pinned) -
+                // a fixed 70vh left a blank band under the buttons on iPhone.
+                style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+                className="absolute bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-3xl max-h-[92dvh] overflow-y-auto">
                 {formContent}
               </motion.div>
             </>
