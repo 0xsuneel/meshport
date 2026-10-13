@@ -1330,6 +1330,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 // UB has no server row - the arrival on Arc is the success signal.
                 if (stage === 'done') {
                   setConfirmPhase(phase => (phase === 'processing' || phase === 'submitted' || phase === 'tracking') ? 'done' : phase)
+                  // Refresh the Arc balance immediately (mint just landed) and drop
+                  // the stale external aggregate so the Hub hero card updates at once.
+                  refreshBalancesAfterTx(walletAddress)
+                  refreshScope({ kind: 'external', wallet: walletAddress, chains: [chain.chainId] })
+                  notifyExternalBalanceChanged(chain.chainId, walletAddress)
                 }
               },
             }).catch((e: any) => {
