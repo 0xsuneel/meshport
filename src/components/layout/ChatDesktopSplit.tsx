@@ -21,8 +21,9 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 export function ChatDesktopSplit({ list }: { list: ReactNode }) {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const { id } = useParams<{ id?: string }>()
-  const privacy = useLocation().pathname.replace(/\/$/, '') === '/chat/privacy'
-  const panelKey = privacy ? 'privacy' : id
+  const path = useLocation().pathname.replace(/\/$/, '')
+  // Chat privacy and New chat open in the conversation column too.
+  const panelKey = path === '/chat/privacy' ? 'privacy' : path === '/chat/new' ? 'new' : id
 
   if (!isDesktop) return <Outlet />
 
