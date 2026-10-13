@@ -16,9 +16,19 @@ import { ArrowLeft, X } from 'lucide-react'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { TrackDetails, type TrackDetailRow } from './TrackDetails'
 import { formatAmount } from '@/lib/utils'
+import { chainLogoByName } from '@/lib/chainLogos'
 import type { MoveKind, MoveRoute, MoveStepText } from '@/lib/moveSteps'
 
 export interface MoveTx { hash: string; href?: string | null }
+
+/** A chain's logo for the route row; an empty slot of the same size when unknown, so the text stays centred. */
+function RouteLogo({ name }: { name: string }) {
+  const [ok, setOk] = useState(true)
+  const src = chainLogoByName(name)
+  return src && ok
+    ? <img src={src} alt="" aria-hidden width={30} height={30} onError={() => setOk(false)} style={{ flexShrink: 0, display: 'block' }} />
+    : <span aria-hidden style={{ width: 30, height: 30, flexShrink: 0 }} />
+}
 
 export function MoveProgress({
   kind, route, fromLabel, toLabel, amount, steps, current, failed, safe, activeElapsed, txs, notes,
@@ -93,7 +103,15 @@ export function MoveProgress({
       {!focus && (
         <div style={{ ...card, textAlign: 'center' }}>
           <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.5px', color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(amount)} USDC</div>
-          <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>{fromLabel} → {toLabel}</div>
+          {/* Route: from-chain logo at the left edge, "From – To" in the middle,
+              to-chain logo at the right edge. Plain logos, no backdrop. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+            <RouteLogo name={fromLabel} />
+            <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {fromLabel} <span style={{ color: 'var(--text-secondary)', fontWeight: 500 }}>–</span> {toLabel}
+            </div>
+            <RouteLogo name={toLabel} />
+          </div>
           <div style={{ maxWidth: 200, height: 6, borderRadius: 4, background: 'var(--border)', overflow: 'hidden', margin: '14px auto 0' }}>
             <div style={{ width: `${Math.max(pct, loading ? 0 : 6)}%`, height: '100%', background: errored ? 'var(--danger)' : 'var(--brand)', transition: 'width .4s' }} />
           </div>
