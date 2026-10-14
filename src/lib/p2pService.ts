@@ -1089,7 +1089,14 @@ export async function createTrade(p: {
     }),
   })
   if (!res.ok) {
-    return { trade: null, error: 'Could not start trade - please try again.' }
+    // The insert guard (p2p_trades_insert_guard) raises human-readable messages
+    // (price unavailable, payment method not on ad, limits...). Surface those
+    // instead of hiding every failure behind one generic line.
+    let detail = ''
+    try { detail = ((await res.json()) as { message?: string })?.message ?? '' } catch { /* non-JSON body */ }
+    console.error('[createTrade] p2p_trades insert failed', res.status, detail)
+    const known = /^(That payment method|The live price|Amount is outside|You cannot trade|Offer not found)/.test(detail)
+    return { trade: null, error: known ? detail : 'Could not start trade - please try again.' }
   }
   const rows = await res.json()
   const trade = rows[0] ? tradeFromRow(rows[0]) : null
