@@ -529,7 +529,7 @@ export function PaySendPage() {
     return sync
   }
 
-  // ── Pre-warm heavy chunks on mount ──────────────────────────────────────
+  // ── Pre-warm heavy chunks AND serverless endpoints on mount ─────────────
   // The two modules below are the largest dynamic imports on the send
   // critical path. arcService pulls in viem (heavy); payIntentService is
   // imported inside sendUSDC/sendEURC right before the broadcast. Both
@@ -538,10 +538,15 @@ export function PaySendPage() {
   // slow even when Arc's own finality is sub-second. Kicking the imports
   // the instant the component mounts means V8 has parsed and cached them
   // before the user has even entered an amount, let alone their PIN.
+  //
+  // Additionally, the pay-intent Supabase Edge Function and the Arc RPC
+  // relay (Vercel serverless) both cold-start in 500ms–1.5s when idle.
+  // Warming them NOW (on page mount, not on passcode open) means the
+  // actual payment's Edge Function call hits a hot isolate, not a cold one.
   // Fire-and-forget: errors silently ignored, these are pure warm-ups.
   useEffect(() => {
-    import('@/lib/arcService').catch(() => {})
-    import('@/lib/payIntentService').catch(() => {})
+    import('@/lib/arcService').then(m => { m.warmArcRpc() }).catch(() => {})
+    import('@/lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
     import('@/lib/security').catch(() => {})
   }, [])
 
