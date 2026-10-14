@@ -1270,15 +1270,23 @@ function BowedShapeCard({
 }: { children: ReactNode; background: string; cardRef?: RefObject<HTMLDivElement>; fill?: boolean }) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const [size, setSize] = useState<{ w: number; h: number } | null>(null)
+  // Re-measure after EVERY commit, before paint. The old version measured only
+  // once, at mount - and on a Home remount the hero carousel is still 0px wide
+  // at that moment (its own width is measured in the same pass), so the card
+  // kept the generic fallback outline until an async ResizeObserver callback
+  // landed AFTER the first paint: visible as the card edge popping bigger and
+  // then snapping to its real shape. Same-size results bail out (no re-render).
+  const measureNow = (el: HTMLElement) => {
+    const w = el.offsetWidth, h = el.offsetHeight
+    if (w > 0 && h > 0) setSize(prev => (prev && prev.w === w && prev.h === h ? prev : { w, h }))
+  }
+  useLayoutEffect(() => {
+    if (wrapRef.current) measureNow(wrapRef.current)
+  })
   useLayoutEffect(() => {
     const el = wrapRef.current
     if (!el) return
-    // Measure synchronously so the green shape exists on the very first paint.
-    if (el.offsetWidth > 0 && el.offsetHeight > 0) setSize({ w: el.offsetWidth, h: el.offsetHeight })
-    const ro = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect
-      if (width > 0 && height > 0) setSize({ w: width, h: height })
-    })
+    const ro = new ResizeObserver(() => measureNow(el))
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
@@ -1669,10 +1677,15 @@ function MobileHeroCarousel({
   const [heroCardWidth, setHeroCardWidth] = useState(0)
   // Measured before the first paint, so the card never shows up a frame late.
   useLayoutEffect(() => {
-    const measure = () => { if (heroCarouselRef.current) setHeroCardWidth(heroCarouselRef.current.offsetWidth) }
+    const el = heroCarouselRef.current
+    const measure = () => { if (el) setHeroCardWidth(el.offsetWidth) }
     measure()
     window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
+    // The container can change width without a window resize (page slide-in,
+    // Android URL-bar show/hide, a parent finishing layout) - follow it directly.
+    const ro = el ? new ResizeObserver(measure) : null
+    if (el && ro) ro.observe(el)
+    return () => { window.removeEventListener('resize', measure); ro?.disconnect() }
   }, [])
   // PEEK = width of each ghost's visible sliver at rest; PEEK_GAP = blank
   // space between that sliver and the centered card, so the two never
@@ -1701,7 +1714,13 @@ function MobileHeroCarousel({
     const el = heroRowRef.current
     if (el) el.style.willChange = on ? 'transform' : ''
   }
-  useEffect(() => {
+  // useLayoutEffect, not useEffect: on a Home remount heroRowX is created while
+  // CARD_W is still 0 (so it starts at x = PEEK, which shows the whole LEFT
+  // GHOST - the Multichain Hub card - on screen). A passive effect only moved it
+  // to the real rest position AFTER the first paint, so the Hub card flashed
+  // big and then snapped back to its edge sliver. Applying it pre-paint removes
+  // that frame.
+  useLayoutEffect(() => {
     if (heroGestureActive.current) return
     heroRowX.set(HERO_REST_X)
   }, [HERO_REST_X])
@@ -1804,7 +1823,7 @@ function MobileHeroCarousel({
            between each ghost and center. Both ghosts always render "the
            other" card (only 2 cards exist), so whichever way you drag,
            real content - not a placeholder - is what grows into view. ── */}
-      <div ref={heroCarouselRef} style={{ width: '100%', overflow: 'hidden', position: 'relative' }}>
+      <div ref={heroCarouselRef} style={{ width: '100%', overflow: 'hidden', position: 'relative', visibility: CARD_W > 0 ? 'visible' : 'hidden' }}>
         <motion.div
           ref={heroRowRef}
           drag="x"
