@@ -1012,6 +1012,19 @@ function formatTradeWindow(minutes: number): string {
   return `${hours} hour${hours === 1 ? '' : 's'}`
 }
 
+/**
+ * Undo a trade row this same call just inserted, when a later step failed.
+ * p2p_trades has no DELETE policy, so a plain REST DELETE answers 204 but
+ * removes nothing - the failed order then stayed behind as a live order while
+ * the UI said "could not create". This goes through a narrow SECURITY DEFINER
+ * function (p2p_rollback_new_trade) that only removes a just-created, still
+ * unpaid order the caller is a party to.
+ */
+async function rollbackNewTrade(tradeId: string): Promise<void> {
+  try { await supabase.rpc('p2p_rollback_new_trade', { p_trade_id: tradeId }) }
+  catch (e) { console.error('[createTrade] rollback failed', tradeId, e) }
+}
+
 export async function createTrade(p: {
   offer: P2POffer; acceptingUserId: string; acceptingWallet: string; amountUsdc: number
   /** The seller's account the buyer will pay (sell ads: one the ad lists; buy ads: the accepting seller's own). */
@@ -1119,7 +1132,7 @@ export async function createTrade(p: {
     // A genuine race this time - some OTHER buyer's real trade already holds
     // the lock, or the offer's remaining balance can't cover this amount.
     // Roll back the trade row this attempt created.
-    await fetch(`${SUPA_URL}/rest/v1/p2p_trades?id=eq.${trade.id}`, { method: 'DELETE', headers: await authHeaders() }).catch(() => {})
+    await rollbackNewTrade(trade.id)
     return { trade: null, error: lockRow?.reason || lockRpcError?.message || 'This offer was just accepted by someone else or is no longer available.' }
   }
 
@@ -1133,8 +1146,8 @@ export async function createTrade(p: {
   if (p.offer.offerType === 'buy') {
     const depositResult = await escrowProvider.depositForTrade(trade.id, p.amountUsdc)
     if (!depositResult.success) {
-      await fetch(`${SUPA_URL}/rest/v1/p2p_trades?id=eq.${trade.id}`, { method: 'DELETE', headers: await authHeaders() }).catch(() => {})
       await supabase.rpc('release_p2p_offer_lock', { p_offer_id: p.offer.id, p_trade_id: trade.id, p_amount: p.amountUsdc }).then(() => {}, () => {})
+      await rollbackNewTrade(trade.id)
       return { trade: null, error: `Escrow deposit failed: ${depositResult.message}` }
     }
     // Accepting a buy offer makes THIS user the seller for this specific
@@ -1175,8 +1188,8 @@ export async function createTrade(p: {
   if (p.offer.offerType === 'buy') {
     const lockResult = await escrowProvider.lockFunds(trade)
     if (!lockResult.success) {
-      await fetch(`${SUPA_URL}/rest/v1/p2p_trades?id=eq.${trade.id}`, { method: 'DELETE', headers: await authHeaders() }).catch(() => {})
       await supabase.rpc('release_p2p_offer_lock', { p_offer_id: p.offer.id, p_trade_id: trade.id, p_amount: p.amountUsdc }).then(() => {}, () => {})
+      await rollbackNewTrade(trade.id)
       // The deposit above already succeeded and is real money on-chain -
       // best-effort claw it back into the depositor's own wallet rather
       // than leave it stranded in a trade-keyed bucket nothing references
@@ -1210,12 +1223,15 @@ export async function createTrade(p: {
       await registerTradeViaOperator(p.offer.id, p.offer.walletAddress, trade.id, buyerWallet, p.amountUsdc)
       await updateTradeStatusIf(trade.id, ['awaiting_seller_confirmation'], { status: 'waiting_for_buyer' })
     } catch (e: any) {
-      await fetch(`${SUPA_URL}/rest/v1/p2p_trades?id=eq.${trade.id}`, { method: 'DELETE', headers: await authHeaders() }).catch(() => {})
       await supabase.rpc('release_p2p_offer_lock', { p_offer_id: p.offer.id, p_trade_id: trade.id, p_amount: p.amountUsdc }).then(() => {}, () => {})
+      await rollbackNewTrade(trade.id)
       return { trade: null, error: `Could not start the order: ${e?.message ?? 'please try again'}` }
     }
-    await sendTradeMessage(trade.id, 'system', `Order started - pay ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC within ${formatTradeWindow(tradeWindowMinutes)}. The seller's USDC is locked in escrow.`, true)
-    if (p.offer.autoReply) await sendTradeMessage(trade.id, 'system', `Seller: ${p.offer.autoReply}`, true)
+    // Chat lines don't gate the order - send them in the background, in order.
+    void (async () => {
+      await sendTradeMessage(trade.id, 'system', `Order started - pay ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC within ${formatTradeWindow(tradeWindowMinutes)}. The seller's USDC is locked in escrow.`, true)
+      if (p.offer.autoReply) await sendTradeMessage(trade.id, 'system', `Seller: ${p.offer.autoReply}`, true)
+    })()
     return { trade: { ...trade, status: 'waiting_for_buyer' } }
   }
 
@@ -1223,7 +1239,7 @@ export async function createTrade(p: {
   // specifically (the offer's escrow deposit already covers it - this
   // step only REGISTERS which buyer/amount is allowed to draw from it).
   // The seller needs to see this and sign it themselves.
-  await sendTradeMessage(trade.id, 'system', `Trade started - waiting for the seller to confirm on-chain. ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC.`, true)
+  void sendTradeMessage(trade.id, 'system', `Trade started - waiting for the seller to confirm on-chain. ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC.`, true)
   // notifyP2P removed here (2026-09-21) - same reasoning as the buy-offer
   // branch above: the trigger's INSERT case already notified sellerId
   // (the offer owner for a sell offer) when the trade row was created.
