@@ -2711,9 +2711,17 @@ export function ChatConversationPage() {
   const prevPayStepRef = useRef(payStep)
   const prevPayStep = prevPayStepRef.current
   useEffect(() => { prevPayStepRef.current = payStep }, [payStep])
-  // Warm the RPC proxy as soon as the passcode step opens.
+  // Warm the RPC proxy and pay-intent Edge Function when the pay sheet opens.
+  // Previously only warmed at 'confirm' (passcode step) - by then the user
+  // has already typed an amount and is about to tap Send, which is too late:
+  // the Edge Function cold-start (~500ms-1.5s) was landing squarely on
+  // the broadcast leg. Warming at 'form' (sheet opens) gives the full
+  // amount-entry time as a free warm-up window instead.
   useEffect(() => {
-    if (payStep === 'confirm') import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
+    if (payStep === 'form' || payStep === 'confirm') {
+      import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
+      import('@/lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
+    }
   }, [payStep])
   // Broadcast but not yet confirmed - shown as "submitted", not success.
   const [payPending, setPayPending] = useState(false)
@@ -2812,20 +2820,22 @@ export function ChatConversationPage() {
   const stopPayDeleteHold = () => clearPayDeleteTimers()
   useEffect(() => clearPayDeleteTimers, [])
 
-  // ── Pre-warm heavy chunks on ChatConversationPage mount ──────────────────
+  // ── Pre-warm heavy chunks AND serverless endpoints on mount ─────────────
   // arcService (viem) + payIntentService (Supabase edge call) + security
   // (bcrypt/argon) are the three largest dynamic imports on the ChatPay
   // critical path. Cold-parsing them on first use costs 200–600ms each,
   // landing squarely on the PIN-submit → broadcast leg and making every
   // ChatPay feel slow. Importing them the instant the conversation page
-  // mounts (before the user has even opened the pay sheet or typed a PIN)
-  // means V8 has already parsed and cached all three by the time they're
-  // actually needed - the broadcast path becomes purely network-bound
-  // rather than network + module-parse bound.
+  // mounts means V8 has already parsed and cached all three by the time
+  // they're actually needed.
+  //
+  // Beyond module parsing, also kick off the actual serverless warm-up
+  // calls so the pay-intent Edge Function and Arc RPC relay have their
+  // isolates already hot before the user opens the pay sheet at all.
   // Fire-and-forget: errors silently ignored, pure warm-ups.
   useEffect(() => {
-    import('@/lib/arcService').catch(() => {})
-    import('@/lib/payIntentService').catch(() => {})
+    import('@/lib/arcService').then(m => { m.warmArcRpc() }).catch(() => {})
+    import('@/lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
     import('@/lib/security').catch(() => {})
   }, [])
 
