@@ -1657,7 +1657,31 @@ export function PaySendPage() {
                     <p role="alert" className="text-[13px] text-center mb-3" style={{ color: 'var(--danger)' }}>{payBlockedMessage}</p>
                   )}
                   <button
-                    onClick={() => { if (ready) goForward('review') }}
+                    onClick={() => {
+                      if (!ready) return
+                      // PERF FIX: start the preflight (server intent/nonce
+                      // reservation + gas estimate) the instant the user taps
+                      // Review, not when they tap the first PIN digit. This
+                      // gives the full Review→PIN-entry time (~2-5s) as a
+                      // free warm-up window. Previously preparePayment only
+                      // ran at PIN entry, so biometric/Face ID users (who
+                      // skip typing 6 digits) paid the FULL preflight cost
+                      // sequentially after auth - making every biometric pay
+                      // feel exactly as slow as a cold send.
+                      const fromAddr = senderStoredAddress || user?.walletAddress
+                      if (recipient && fromAddr) {
+                        const idempotencyKey = getIdempotencyKey()
+                        import('@/lib/arcService').then(({ preparePayment }) => preparePayment({
+                          token: token === 'EURC' || token === 'cirBTC' ? token : 'USDC',
+                          from: fromAddr,
+                          to: recipient.walletAddress,
+                          amount: numAmount,
+                          idempotencyKey,
+                          recipientUsername: recipient.isUsername ? recipient.display : undefined,
+                        })).catch(() => {})
+                      }
+                      goForward('review')
+                    }}
                     disabled={!ready}
                     className="w-full py-4 rounded-2xl text-[15px] font-bold active:scale-[.98]"
                     style={{
