@@ -94,7 +94,7 @@ const ESCROW_CONTRACTS_LEGACY = (Deno.env.get('P2P_ESCROW_CONTRACTS_LEGACY') ?? 
 
 const USDC_DECIMALS = 18   // native USDC on Arc
 
-// ── V2 selectors (the CURRENT contract, P2PMeshportEscrowV2.sol) ───────────
+// ── V2 selectors (the CURRENT contract, P2PMeshportEscrowV3.sol) ───────────
 // tradeReleased(bytes32) does NOT exist on V2 - that boolean mapping was
 // replaced by the full Trade struct. getTrade(bytes32) is read instead, and
 // this reconciler derives "was it released" from the trade's `state` field

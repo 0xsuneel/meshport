@@ -10,7 +10,7 @@
 //   - 2-day timelock on signer rotation, rate changes, treasury withdrawal
 //     and ownership transfer; two-step ownership transfer
 //
-// Follows the conventions of test/P2PMeshportEscrowV2.test.js:
+// Follows the conventions of test/P2PMeshportEscrowV3.test.js:
 //   const { expect } = require('chai')
 //   const { ethers } = require('hardhat')
 //   Deploys a minimal mock ERC20 alongside the rewards contract — matching

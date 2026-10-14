@@ -61,6 +61,12 @@ vi.mock('@/lib/p2pProviders', () => ({
   paymentProvider: {},
 }))
 
+// Sell ads always name MeshPort's relayer as the instant-order operator.
+vi.mock('@/lib/p2pEscrowContract', async (orig) => ({
+  ...(await orig<any>()),
+  getAutoAcceptOperator: vi.fn(async () => '0x00000000000000000000000000000000000000a1'),
+}))
+
 vi.mock('@/store/settingsStore', () => ({
   useSettingsStore: {
     getState: () => ({ load: vi.fn(async () => {}), isEnabled: () => true }),

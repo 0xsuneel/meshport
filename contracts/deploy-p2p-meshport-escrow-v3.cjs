@@ -1,15 +1,14 @@
 /**
  * P2PMeshportEscrowV3 — Hardhat Deploy Script (2-of-3 role manager multisig)
  *
- * V3 = V2 + per-offer auto-accept operator (instant P2P orders, no seller
- * tap). Deploy exactly like V2 below, then set in Vercel:
- *   VITE_P2P_ESCROW_CONTRACT=<new V3 address>   (new ads use V3)
- *   P2P_ESCROW_CONTRACT=<new V3 address>        (relay allow-list)
- *   VITE_P2P_ESCROW_CONTRACT_V2=<old V2 address> (open V2 ads/trades keep working)
- * The operator is the bridge relayer's address; the app reads it from
- * VITE_P2P_AUTO_ACCEPT_OPERATOR (an address, never a key).
+ * Per-offer auto-accept operator (instant P2P orders, no seller tap).
+ * After deploying, set the new address in Vercel AND Supabase secrets:
+ *   VITE_P2P_ESCROW_CONTRACT=<V3 address>   (app)
+ *   P2P_ESCROW_CONTRACT=<V3 address>        (relay allow-list, background functions)
+ * The operator is the bridge relayer's address; the app asks the relay for
+ * it (/api/bridge-relay?p2p_operator=1), never a key.
  *
- * Deploys the security-hardened V2 escrow contract
+ * Deploys the security-hardened escrow contract
  * (contracts/P2PMeshportEscrowV3.sol). See the contract's own header
  * comment for the full list of what changed — short version: the
  * offer-key front-run hijack is fixed, release() no longer trusts

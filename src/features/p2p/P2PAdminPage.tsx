@@ -604,7 +604,7 @@ export function P2PAdminPage() {
                   <button
                     onClick={() => doCancelOffer(o)}
                     disabled={o.status !== 'active' || cancellingOfferIds.has(o.id)}
-                    title={o.lockedByTradeId ? 'This offer has an active trade - cancel that trade first' : (remainingByOffer.get(o.id) ?? 0) > 0 ? 'This offer still holds escrow - only the seller\'s own wallet can withdraw it on P2PMeshportEscrowV2; Freeze Offer instead to block new trades' : undefined}
+                    title={o.lockedByTradeId ? 'This offer has an active trade - cancel that trade first' : (remainingByOffer.get(o.id) ?? 0) > 0 ? 'This offer still holds escrow - only the seller\'s own wallet can withdraw it on P2PMeshportEscrowV3; Freeze Offer instead to block new trades' : undefined}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px', borderRadius: 10,
                       border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.error, fontSize: 11.5, fontWeight: 600,

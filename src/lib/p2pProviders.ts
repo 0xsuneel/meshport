@@ -149,7 +149,7 @@ const RealContractEscrowProvider: EscrowProvider = {
   },
   /**
    * Registers the trade's buyer/amount on-chain, authoritatively - see
-   * P2PMeshportEscrowV2.sol's own header on why release() no longer trusts
+   * P2PMeshportEscrowV3.sol's own header on why release() no longer trusts
    * caller-supplied buyer/amount. Must succeed before release() can ever
    * be called for this trade; if it fails, createTrade() in p2pService.ts
    * does not create the trade row at all (same "cannot exist without a

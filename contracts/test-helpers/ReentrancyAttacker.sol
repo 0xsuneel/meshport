@@ -2,10 +2,10 @@
 pragma solidity ^0.8.20;
 
 // Test-only, minimal call surface — named distinctly from the real
-// contract (P2PMeshportEscrowV2 itself) specifically because Slither's
+// contract (P2PMeshportEscrowV3 itself) specifically because Slither's
 // missing-inheritance heuristic flagged a false positive ("contract X
 // should inherit from interface X-shaped-name") when this was named
-// IP2PMeshportEscrowV2. This interface only exists so this test-helper
+// IP2PMeshportEscrowV3. This interface only exists so this test-helper
 // attacker contract has something typed to call against; the real
 // contract was never meant to implement it.
 interface IEscrowForReentrancyTest {

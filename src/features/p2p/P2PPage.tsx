@@ -1712,7 +1712,7 @@ export function P2PTradePage() {
                 </div>
               )}
 
-              {/* V2 ads: the seller still accepts each order */}
+              {/* Ads without instant orders: the seller accepts each order */}
               {trade.status === 'awaiting_seller_confirmation' && !expired && isBuyer && (
                 <div style={{ ...card, fontSize: 12.5, color: COLORS.muted, textAlign: 'center' }}>
                   Waiting for the seller to accept this order. You'll be notified - you can pay once it's accepted.
