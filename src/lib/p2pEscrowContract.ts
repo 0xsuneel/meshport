@@ -184,7 +184,7 @@ export function isEscrowContractDeployed(): boolean {
 }
 
 // Minimal ABI - only the functions/events this app actually calls or reads.
-// V2 (P2PMeshportEscrowV2.sol) functions included alongside the legacy ones
+// V2 (P2PMeshportEscrowV3.sol) functions included alongside the legacy ones
 // so this file can talk to either a legacy or a V2 deployment depending on
 // VITE_P2P_ESCROW_CONTRACT - encodeFunctionData only touches whichever
 // entry is referenced by name, so having both in one ABI is harmless.
@@ -198,14 +198,14 @@ const ESCROW_ABI = [
   {
     // release(tradeKey) - buyer/amount come from the trade registered
     // on-chain via registerTrade below, never from caller-supplied
-    // arguments. See P2PMeshportEscrowV2.sol's own header for why.
+    // arguments. See P2PMeshportEscrowV3.sol's own header for why.
     type: 'function', name: 'release', stateMutability: 'nonpayable',
     inputs: [{ name: 'tradeKey', type: 'bytes32' }], outputs: [],
   },
   {
     // Seller-only: releases a registered-but-abandoned trade's reservation
     // back to the offer's available balance (no value moves). Added to the
-    // contract post-launch - see P2PMeshportEscrowV2.sol's own comment on
+    // contract post-launch - see P2PMeshportEscrowV3.sol's own comment on
     // cancelTrade() for why: before this existed, a trade whose buyer
     // never paid had NO seller-callable path back to available funds
     // short of the full Pauser -> Investigator -> Admin dispute sequence.
@@ -283,7 +283,7 @@ const ESCROW_ABI = [
   },
   {
     // Solidity auto-generates this getter for the public `escrows` mapping
-    // (see P2PMeshportEscrowV2.sol) - it's the only way to read an offer's
+    // (see P2PMeshportEscrowV3.sol) - it's the only way to read an offer's
     // `frozen` flag; there's no dedicated `isOfferFrozen()` view function.
     // Used by getOfferFrozenOnChain() below so the admin console can show
     // real on-chain freeze state for the Freeze Offer / Unfreeze Offer
@@ -319,7 +319,7 @@ const ESCROW_ABI = [
   // ── Role manager multisig (2-of-3) - replaces the old onlyAdmin-gated
   // addPauser/removePauser/addInvestigator/removeInvestigator/
   // transferAdmin/cancelAdminTransfer, none of which exist as direct
-  // external functions anymore. See P2PMeshportEscrowV2.sol's own comment
+  // external functions anymore. See P2PMeshportEscrowV3.sol's own comment
   // on why: admin alone used to be able to unilaterally reshape every role
   // over time, which no amount of per-dispute independence checking could
   // fix on its own.
@@ -469,7 +469,7 @@ const ESCROW_ABI = [
  * BUG FIX (front-run hijack): this used to be just keccak256(offerId),
  * with no seller binding - an attacker watching the mempool for a pending
  * deposit could front-run it and claim the offer's seller slot for
- * themselves (see P2PMeshportEscrowV2.sol's own header for the full
+ * themselves (see P2PMeshportEscrowV3.sol's own header for the full
  * writeup). Now includes the intended seller's address in the hash input,
  * so nobody but that specific address can ever construct a matching key -
  * doing otherwise would require a hash second-preimage, not just being
@@ -667,7 +667,7 @@ export async function refundTradeKeyedEscrow(privateKey: string, tradeId: string
 /**
  * Registers a trade's buyer/amount on-chain, authoritatively, BEFORE it can
  * be released - this is what makes release() safe to trust with just a
- * tradeKey (see P2PMeshportEscrowV2.sol's own header on why the old
+ * tradeKey (see P2PMeshportEscrowV3.sol's own header on why the old
  * contract's caller-supplied buyer/amount was a real vulnerability). Called
  * once by the SELLER when a sell-offer trade is created (createTrade() in
  * p2pService.ts) - the seller is the only one who can call this for their
@@ -692,7 +692,7 @@ export async function releaseFromEscrow(privateKey: string, tradeId: string): Pr
  * available balance; moves no value anywhere. Seller-only on-chain, and
  * only works on a trade still in the Active state (reverts if it's
  * Frozen/Investigated/Released/Refunded/Cancelled already - a live
- * dispute always takes priority). See P2PMeshportEscrowV2.sol's own
+ * dispute always takes priority). See P2PMeshportEscrowV3.sol's own
  * comment on cancelTrade() for the full reasoning.
  */
 export async function cancelTradeOnChain(privateKey: string, tradeId: string): Promise<Hash> {
@@ -711,7 +711,7 @@ export async function withdrawRemainingFromEscrow(privateKey: string, offerId: s
  * THEIR OWN on-device wallet key via useAuthStore.
  *
  * CORRECTED: freezeTrade/unfreezeTrade are gated by onlyPauser on
- * P2PMeshportEscrowV2, NOT onlyAdmin - this call reverts unless the
+ * P2PMeshportEscrowV3, NOT onlyAdmin - this call reverts unless the
  * signer's wallet actually holds the Pauser role (granted via the 2-of-3
  * role manager + timelock flow), not merely "is the dashboard admin".
  * Prefer freezeTradeOnChainViaWallet below for the admin panel - it signs
@@ -732,7 +732,7 @@ export async function unfreezeTradeOnChain(privateKey: string, tradeId: string):
  * mirrors the pattern already used for role-manager actions:
  * freeze/investigate/resolve each require a DIFFERENT wallet holding the
  * matching role (Pauser/Investigator/Admin), enforced on-chain with
- * per-dispute independence (see P2PMeshportEscrowV2.sol's own comments on
+ * per-dispute independence (see P2PMeshportEscrowV3.sol's own comments on
  * frozenBy/investigatedBy). A single dashboard session's logged-in key
  * cannot correctly perform all three steps for one trade - nor should it;
  * that would defeat the entire point of separating these roles. Each
@@ -776,7 +776,7 @@ export async function unpauseEscrowViaWallet(): Promise<Hash> {
 
 // ── Role manager multisig (2-of-3) ────────────────────────────────────────
 // Every Pauser/Investigator/Admin role change goes through this - see
-// P2PMeshportEscrowV2.sol's own comment on why admin alone no longer has
+// P2PMeshportEscrowV3.sol's own comment on why admin alone no longer has
 // any direct role-granting power. `privateKey` here is always ONE role
 // manager signer's own key, used transiently to sign exactly one
 // propose/confirm transaction - never persisted, never sent anywhere but
@@ -832,7 +832,7 @@ export async function proposeSignerRotationViaWallet(signerIndex: number, newSig
  * here: TransferAdmin/CancelAdminTransfer are just two more RoleAction
  * values, gated by the identical onlyRoleManagerSigner + 2-of-3 mechanism.
  * The current Admin has NO gating on any of proposeRoleChange/
- * confirmRoleChange/cancelRoleProposal - see P2PMeshportEscrowV2.sol's own
+ * confirmRoleChange/cancelRoleProposal - see P2PMeshportEscrowV3.sol's own
  * comments on this - so a compromised Admin cannot block, veto, or delay
  * any of these calls.
  *
@@ -1115,7 +1115,7 @@ export async function getOfferFrozenOnChain(offerId: string, sellerAddress: stri
  *
  * SECURITY/CORRECTNESS FIX: this used to call the legacy `tradeReleased`
  * mapping directly (P2PMeshportEscrow.sol's own boolean getter) - which
- * does NOT exist on P2PMeshportEscrowV2.sol at all (replaced by the full
+ * does NOT exist on P2PMeshportEscrowV3.sol at all (replaced by the full
  * Trade struct). Once VITE_P2P_ESCROW_CONTRACT points at a V2 deployment,
  * that call would simply fail (function selector mismatch), caught by the
  * try/catch below and returned as null - which fails SAFE (the reconciler
@@ -1189,7 +1189,7 @@ export async function getEscrowAdminAddress(): Promise<string | null> {
 }
 
 // ── INVESTIGATOR / ADMIN dispute-resolution tier ─────────────────────────
-// See P2PMeshportEscrowV2.sol's own header for the full sequence this
+// See P2PMeshportEscrowV3.sol's own header for the full sequence this
 // enforces on-chain: Pauser freezes -> Investigator investigates (records
 // an outcome, never moves funds) -> Admin resolves (moves funds for ONLY
 // that trade, using ONLY its stored data). `privateKey` throughout is
@@ -1519,13 +1519,10 @@ export async function getRecentGovernanceEvents(blockLookback = 43200): Promise<
 
 
 // ── Buyer protection: mark a trade paid, gas-free ────────────────────────
-// Escrow contracts deployed from the current source let the buyer lock in
-// "I've paid" on-chain; after that the seller can no longer cancel the trade
-// (only release it, or a dispute). The buyer often holds no USDC for gas, so
-// they sign a message and MeshPort's relayer submits it. Turned on with
-// VITE_P2P_ESCROW_MARKPAID=1 once VITE_P2P_ESCROW_CONTRACT points at such a
-// deployment (older deployments don't have markPaidFor).
-export const ESCROW_MARK_PAID_ENABLED = (import.meta.env.VITE_P2P_ESCROW_MARKPAID as string || '').trim() === '1'
+// The buyer locks in "I've paid" on-chain; after that the seller can no
+// longer cancel the trade (only release it, or a dispute). The buyer often
+// holds no USDC for gas, so they sign a message and MeshPort's relayer
+// submits it.
 
 const MARK_PAID_ABI = [{
   type: 'function', name: 'markPaidFor', stateMutability: 'nonpayable',
@@ -1536,7 +1533,7 @@ export async function markTradePaidOnChain(privateKey: string, tradeId: string):
   if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
   const { keccak256, encodeAbiParameters, toBytes, encodeFunctionData } = await import('viem')
   const key = tradeKeyFor(tradeId)
-  // Must match P2PMeshportEscrowV2.markPaidDigest().
+  // Must match P2PMeshportEscrowV3.markPaidDigest().
   const digest = keccak256(encodeAbiParameters(
     [{ type: 'address' }, { type: 'uint256' }, { type: 'bytes32' }, { type: 'bytes32' }],
     [CONTRACT_ADDRESS as `0x${string}`, 5042002n, keccak256(toBytes('MESHPORT_P2P_MARK_PAID')), key],
@@ -1559,9 +1556,7 @@ export async function markTradePaidOnChain(privateKey: string, tradeId: string):
 // relayer) in the same transaction that deposits. The relayer then registers
 // each trade the moment a buyer orders - for that buyer's own wallet only,
 // within the ad's per-trade limits (checked on-chain). It can never release
-// or withdraw. Turned on with VITE_P2P_ESCROW_AUTO_ACCEPT=1 once
-// VITE_P2P_ESCROW_CONTRACT points at a V3 deployment.
-export const ESCROW_AUTO_ACCEPT_ENABLED = (import.meta.env.VITE_P2P_ESCROW_AUTO_ACCEPT as string || '').trim() === '1'
+// or withdraw. Every sell ad is created this way.
 
 const AUTO_ACCEPT_ABI = [
   { type: 'function', name: 'depositWithAutoAccept', stateMutability: 'payable', outputs: [], inputs: [

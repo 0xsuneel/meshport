@@ -19,7 +19,7 @@ MetaMask shows the transaction failing during gas estimation, check this
 dropdown first before assuming the contract itself is broken.
 
 Two other things worth checking if a deploy still fails after fixing EVM version:
-- **Constructor args must match the type exactly.** `P2PMeshportEscrowV2`
+- **Constructor args must match the type exactly.** `P2PMeshportEscrowV3`
   takes `address[3]` — in Remix's deploy widget this is one field taking a
   JSON array, e.g. `["0xAAA...","0xBBB...","0xCCC..."]`, not three separate
   fields.
@@ -78,12 +78,12 @@ Call `treasuryBalance()` to see funded USDC.
 
 ---
 
-# P2PMeshportEscrowV2 Contract Deployment
+# P2PMeshportEscrowV3 Contract Deployment
 
 ## Step 1: Compile in Remix IDE
 
 1. Go to https://remix.ethereum.org
-2. New file → paste contents of `P2PMeshportEscrowV2.sol`
+2. New file → paste contents of `P2PMeshportEscrowV3.sol`
 3. Compiler tab → Solidity 0.8.20 → **EVM: Paris** → Compile
    (this is the step that's easy to miss — see the note above)
 4. Copy the compiled bytecode from: Compilation Details → Bytecode → object
@@ -108,7 +108,7 @@ The contract starts with **zero Pausers/Investigators** — nothing is
 auto-granted to the deployer. The three role manager signers must submit
 and confirm (2-of-3) the first `AddPauser`/`AddInvestigator` proposals
 themselves after deployment. See the contract's own header comment and
-`deploy-p2p-meshport-escrow-v2.cjs` for the full role-bootstrap flow if
+`deploy-p2p-meshport-escrow-v3.cjs` for the full role-bootstrap flow if
 deploying via Hardhat instead.
 
 ## Step 3: Configure MeshPort

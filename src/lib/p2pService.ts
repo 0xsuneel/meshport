@@ -49,7 +49,7 @@ export type OfferType = 'buy' | 'sell'
 export type OfferStatus = 'active' | 'paused' | 'completed' | 'cancelled' | 'deleted'
 // 'awaiting_seller_confirmation' - SELL-offer trades only. The contract's
 // registerTrade() can only be signed by the offer's actual escrow
-// depositor (the seller - see P2PMeshportEscrowV2.sol), but createTrade()
+// depositor (the seller - see P2PMeshportEscrowV3.sol), but createTrade()
 // runs on the ACCEPTING buyer's device. A trade starts here and only
 // advances to 'waiting_for_buyer' once the seller's own device signs
 // confirmSellTradeOnChain() below. See that function's own comment for
@@ -327,12 +327,10 @@ export async function createOffer(p: {
   // moment a buyer orders (no seller tap), within the ad's own limits.
   let autoAccept: { operator: string; minAmount: number; maxAmount: number } | undefined
   if (p.offerType === 'sell') {
-    const { ESCROW_AUTO_ACCEPT_ENABLED, getAutoAcceptOperator } = await import('./p2pEscrowContract')
-    if (ESCROW_AUTO_ACCEPT_ENABLED) {
-      const operator = await getAutoAcceptOperator()
-      if (!operator) return { offer: null, error: 'Instant orders are unavailable right now - please try again in a minute.' }
-      autoAccept = { operator, minAmount: p.minAmount, maxAmount: p.maxAmount }
-    }
+    const { getAutoAcceptOperator } = await import('./p2pEscrowContract')
+    const operator = await getAutoAcceptOperator()
+    if (!operator) return { offer: null, error: 'Instant orders are unavailable right now - please try again in a minute.' }
+    autoAccept = { operator, minAmount: p.minAmount, maxAmount: p.maxAmount }
   }
 
   if (p.offerType === 'sell') {
@@ -788,7 +786,7 @@ export async function cancelOfferAndWithdrawEscrow(offer: P2POffer, opts?: { adm
     // admin-triggered cancellation. That comment used to claim this
     // "matches contracts/P2PEscrow.sol's own authorization" (msg.sender ==
     // e.seller || msg.sender == admin) - true of the legacy V1 contract,
-    // but P2PMeshportEscrowV2.sol deliberately REMOVED that admin bypass
+    // but P2PMeshportEscrowV3.sol deliberately REMOVED that admin bypass
     // (see its file header, vulnerability 3: "no withdrawAll/sweep/drain
     // function exists anywhere in this contract"). withdrawRemaining() on
     // V2 is strictly `msg.sender == e.seller` - there is no path for admin
@@ -809,7 +807,7 @@ export async function cancelOfferAndWithdrawEscrow(offer: P2POffer, opts?: { adm
       if (stillEscrowed > 0) {
         return {
           success: false,
-          message: `This offer still holds ${stillEscrowed} USDC in escrow that only the seller's own wallet can withdraw - P2PMeshportEscrowV2 has no admin bypass for offer-level funds (Investigate/Resolve only apply to a registered trade). Use "Freeze Offer" to block new trades against it in the meantime; the seller must cancel it themselves to get the funds back.`,
+          message: `This offer still holds ${stillEscrowed} USDC in escrow that only the seller's own wallet can withdraw - P2PMeshportEscrowV3 has no admin bypass for offer-level funds (Investigate/Resolve only apply to a registered trade). Use "Freeze Offer" to block new trades against it in the meantime; the seller must cancel it themselves to get the funds back.`,
         }
       }
       // Nothing left in escrow - safe to just flip status, no contract
@@ -826,7 +824,7 @@ export async function cancelOfferAndWithdrawEscrow(offer: P2POffer, opts?: { adm
       if (await isEscrowPaused().catch(() => false)) {
         return { success: false, message: 'P2P escrow is currently paused by an admin. Please try again shortly.' }
       }
-      // SECURITY FIX mirror (P2PMeshportEscrowV2.sol): withdrawRemaining()
+      // SECURITY FIX mirror (P2PMeshportEscrowV3.sol): withdrawRemaining()
       // now reverts on-chain if a Pauser has frozen this specific offer -
       // previously a seller could drain a frozen offer's available balance
       // out from under an active dispute/investigation. Check the same
@@ -1144,7 +1142,7 @@ export async function createTrade(p: {
   }
 
   // Registers the trade's buyer/amount on-chain - see p2pProviders.ts's
-  // lockFunds and P2PMeshportEscrowV2.sol's own header for why release()
+  // lockFunds and P2PMeshportEscrowV3.sol's own header for why release()
   // requires this to have happened first.
   //
   // BUG FIX: this used to call lockFunds() unconditionally, right here, on
@@ -1722,7 +1720,7 @@ export async function cancelTrade(trade: P2PTrade, reason: string, actorId: stri
     // reservation stuck forever with no on-chain path back. See
     // releaseAbandonedSellReservation's own comment: it resolves this
     // completely when the CANCELLING device's own key is the trade's
-    // seller (cancelTrade() on P2PMeshportEscrowV2 is seller-only); if
+    // seller (cancelTrade() on P2PMeshportEscrowV3 is seller-only); if
     // not (e.g. the buyer is the one cancelling), the trade is put back
     // where the admin console still looks and flagged via the existing
     // dispute flow instead of being silently orphaned as 'cancelled'.
@@ -1839,7 +1837,7 @@ async function unfreezeTradeOnChainBestEffort(tradeId: string): Promise<void> {
  * still in 'awaiting_seller_confirmation' was never registered on-chain -
  * genuine no-op, nothing to release. One that reached 'waiting_for_buyer'
  * WAS registered (registerTrade already ran via confirmSellTradeOnChain)
- * - cancelTrade() on P2PMeshportEscrowV2 is seller-only, so this only
+ * - cancelTrade() on P2PMeshportEscrowV3 is seller-only, so this only
  * succeeds when THIS device's own unlocked key happens to be the trade's
  * seller (the common case: the seller's own client periodically checks
  * their own trades/offers). Returns false when it can't self-serve (e.g.
@@ -1860,8 +1858,8 @@ async function releaseAbandonedSellReservation(trade: P2PTrade): Promise<boolean
       }
       // Escrow V3: the buyer cancels their own unpaid order gas-free (signed,
       // relayed) - no admin review needed.
-      const { ESCROW_AUTO_ACCEPT_ENABLED, cancelTradeAsBuyerOnChain } = await import('./p2pEscrowContract')
-      if (ESCROW_AUTO_ACCEPT_ENABLED && privateKey && walletAddress && walletAddress.toLowerCase() === trade.buyerWallet.toLowerCase()) {
+      const { cancelTradeAsBuyerOnChain } = await import('./p2pEscrowContract')
+      if (privateKey && walletAddress && walletAddress.toLowerCase() === trade.buyerWallet.toLowerCase()) {
         await cancelTradeAsBuyerOnChain(privateKey, trade.id)
         return true
       }
@@ -1886,7 +1884,7 @@ export async function autoCancelExpiredTrades(userId: string): Promise<void> {
       // adminFetchAllActiveTrades's query entirely, so the trade and its
       // funds would vanish with no queue and no way back.
       //
-      // Fixed at the root via cancelTrade() (P2PMeshportEscrowV2.sol) -
+      // Fixed at the root via cancelTrade() (P2PMeshportEscrowV3.sol) -
       // releaseAbandonedSellReservation() below calls it directly when
       // this device happens to be the seller's own (the common case: the
       // seller's own client runs this sweep on their own trades), which
@@ -2089,11 +2087,11 @@ export async function markPaymentSent(trade: P2PTrade): Promise<{ success: boole
     return { success: false, message: 'Payment has already been marked for this trade.' }
   }
 
-  // Buyer protection (escrows that support it): record "paid" on-chain first.
-  // This fails if the seller never actually locked the USDC for this trade,
-  // and once it succeeds the seller can no longer cancel and withdraw.
-  const escrowMod = await import('./p2pEscrowContract')
-  if (escrowMod.ESCROW_MARK_PAID_ENABLED) {
+  // Buyer protection: record "paid" on-chain first. This fails if the seller
+  // never actually locked the USDC for this trade, and once it succeeds the
+  // seller can no longer cancel and withdraw.
+  {
+    const escrowMod = await import('./p2pEscrowContract')
     const { useAuthStore } = await import('@/store')
     const pk = useAuthStore.getState().privateKey
     if (!pk) return { success: false, message: 'Unlock your wallet and try again.' }
@@ -2410,7 +2408,7 @@ export async function adminFreezeTradeViaWallet(tradeId: string, frozen: boolean
 
 /**
  * GAP FIX: freezeOffer()/unfreezeOffer() have existed on the contract
- * since P2PMeshportEscrowV2 shipped, but nothing in this app ever called
+ * since P2PMeshportEscrowV3 shipped, but nothing in this app ever called
  * them - P2PAdminPage only exposed trade-level Freeze, never offer-level.
  * A Pauser reviewing a suspicious SELL offer (e.g. before a ban clears)
  * had no way to block new trades against it short of the blunt "pause the
@@ -2550,7 +2548,7 @@ export async function adminResolveDispute(trade: P2PTrade, resolution: 'resolved
 // ^ SECURITY BUG (found + fixed with the functions below): the release
 // branch above calls escrowProvider.release(trade), which signs with
 // WHATEVER wallet is logged into the admin dashboard session
-// (useAuthStore). On the deployed P2PMeshportEscrowV2 contract,
+// (useAuthStore). On the deployed P2PMeshportEscrowV3 contract,
 // release(tradeKey) requires msg.sender == the trade's actual SELLER - the
 // dashboard admin essentially never is that seller, so this call reverts
 // on-chain with "only the trade's seller can release it" every time a real

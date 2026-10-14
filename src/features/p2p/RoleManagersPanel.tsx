@@ -1,7 +1,7 @@
 // features/p2p/RoleManagersPanel.tsx
 //
 // The "Role Managers" section of the P2P admin console - the UI for the
-// 2-of-3 role-manager multisig on P2PMeshportEscrowV2.sol.
+// 2-of-3 role-manager multisig on P2PMeshportEscrowV3.sol.
 //
 // ── Key handling ──────────────────────────────────────────────────────────
 // SECURITY FIX: this used to ask each role manager signer to paste their
@@ -106,7 +106,7 @@ export function RoleManagersPanel() {
   const [submitting, setSubmitting] = useState(false)
 
   // Admin, Pauser, Investigator, and Role Manager Signer are mutually
-  // exclusive ON-CHAIN now (see P2PMeshportEscrowV2.sol's role-hierarchy
+  // exclusive ON-CHAIN now (see P2PMeshportEscrowV3.sol's role-hierarchy
   // note) - a proposal granting any one of them to an address that
   // already holds another is guaranteed to revert at executeRoleProposal,
   // AFTER the 2-of-3 confirmations and the full 2-hour timelock have
@@ -712,7 +712,7 @@ export function RoleManagersPanel() {
                         Execute now
                       </button>
                     )}
-                    {/* SECURITY FIX mirror (P2PMeshportEscrowV2.sol cancelRoleProposal):
+                    {/* SECURITY FIX mirror (P2PMeshportEscrowV3.sol cancelRoleProposal):
                         cancellation is now only possible pre-threshold - once 2-of-3
                         is reached (isTimelocked/isReady, executableAfter != 0), the
                         contract permanently rejects cancellation, and a signer who
