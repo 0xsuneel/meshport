@@ -144,10 +144,15 @@ export function BulkPayoutPage() {
   const [showHowItWorks, setShowHowItWorks] = useState(false)
   const [passEntry, setPassEntry] = useState('')
   const [showReviewPinSheet, setShowReviewPinSheet] = useState(false)
-  // Wake the RPC proxy as soon as the confirm step opens (cold-start off the critical path).
+  // Wake the Arc RPC proxy on mount - same pattern as PaySendPage/ChatPage so
+  // the cold-start is already resolved by the time the user reaches Review or
+  // the passcode sheet. The showReviewPinSheet effect kept below is retained
+  // as a belt-and-suspenders re-ping in case the throttle window has expired
+  // by the time the user actually taps Pay.
   useEffect(() => {
-    if (showReviewPinSheet) import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
-  }, [showReviewPinSheet])
+    import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const payoutInFlightRef = useRef(false)
   const [showBulkAmountPad, setShowBulkAmountPad] = useState(false)
   // Mobile: same amount box as Multichain Transfer - tapping it opens the
@@ -1239,7 +1244,13 @@ export function BulkPayoutPage() {
           {resolving ? <><Loader2 className="w-4 h-4 animate-spin" /> Resolving...</> : `Resolve ${recipients.filter(r => r.status !== 'resolved').length} Pending`}
         </button>
       ) : (
-        <button onClick={() => { if (!bulkInsufficient) setStep('review') }} disabled={bulkInsufficient}
+        <button onClick={() => {
+            if (bulkInsufficient) return
+            // Re-ping the RPC proxy now so the warm-up overlaps with the
+            // user reviewing the recipient list before tapping Pay.
+            import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
+            setStep('review')
+          }} disabled={bulkInsufficient}
           className="flex-1 py-3.5 rounded-2xl text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40"
           style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
           Review Payout <Send className="w-4 h-4" />
