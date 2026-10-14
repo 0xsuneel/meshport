@@ -405,8 +405,13 @@ async function checkP2PRegistration(tradeId: string, data: `0x${string}`, caller
   const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
   const svcKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
   if (!supabaseUrl || !svcKey) return 'Server misconfigured'
-  const r = await fetch(`${supabaseUrl}/rest/v1/p2p_trades?id=eq.${tradeId}&select=buyer_wallet,status,amount_usdc,offer:p2p_offers(auto_accept)&limit=1`,
+  const r = await fetch(`${supabaseUrl}/rest/v1/p2p_trades?id=eq.${tradeId}&select=buyer_wallet,status,amount_usdc,offer:p2p_offers!p2p_trades_offer_id_fkey(auto_accept)&limit=1`,
     { headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` } })
+  if (!r.ok) {
+    // A failed lookup (e.g. PostgREST 300 "ambiguous relationship") is NOT a missing order.
+    console.error('[bridge-relay] p2p_trades lookup failed', r.status, await r.text().catch(() => ''))
+    return 'Could not verify this order - please try again'
+  }
   const t = ((await r.json().catch(() => [])) as any[])[0]
   if (!t) return 'Unknown order'
   if (String(t.buyer_wallet).toLowerCase() !== caller) return 'You can only order for your own wallet'
