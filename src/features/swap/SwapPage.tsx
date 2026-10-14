@@ -474,10 +474,6 @@ export function SwapPage() {
   const [passEntry,    setPassEntry]    = useState('')
   const [passError,    setPassError]    = useState('')
   const [showPasscodeSheet, setShowPasscodeSheet] = useState(false)
-  // Wake the RPC proxy as soon as the confirm step opens (cold-start off the critical path).
-  useEffect(() => {
-    if (showPasscodeSheet) import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
-  }, [showPasscodeSheet])
   const [txHash,       setTxHash]       = useState('')
   const [amountOut,    setAmountOut]    = useState('')
   const [slippage,     setSlippage]     = useState(500)
@@ -546,7 +542,7 @@ export function SwapPage() {
   const [estimatedFee, setEstimatedFee] = useState(0.001)
   useEffect(() => { estimateTransferFee(0).then(setEstimatedFee) }, [])
 
-  // ── Pre-warm the Swap SDK on mount ───────────────────────────────────────────
+  // ── Pre-warm the Swap SDK and Arc RPC proxy on mount ─────────────────────────
   // SECURITY FIX (transaction audit): this used to POST a real private key to
   // api/swap-proxy for a throwaway dummy estimate, purely to warm a Vercel
   // container + its require()'d SDK modules before the user typed anything.
@@ -555,8 +551,12 @@ export function SwapPage() {
   // never needs a private key at all. warmSwapSdk() just pre-imports the same
   // heavy SDK modules so the browser's module cache is already populated by
   // the time the user's real first estimate runs.
+  // warmArcRpc() is also fired here (instead of waiting for the passcode
+  // sheet) so the RPC proxy cold-start is off the critical path by the time
+  // the user taps Swap → enters their passcode.
   useEffect(() => {
     import('@/lib/swapService').then(({ warmSwapSdk }) => warmSwapSdk())
+    import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
