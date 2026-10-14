@@ -153,7 +153,10 @@ async function runPreflight(token: PayToken, sender: `0x${string}`, destination:
 // don't pay the cold start. Throttled; failures are ignored.
 let lastWarmAt = 0
 export function warmArcRpc(): void {
-  if (Date.now() - lastWarmAt < 30_000) return
+  // Narrowed from 30s to 10s: the relay (Vercel serverless) cold-starts in
+  // under 1s but its idle TTL is ~10s, so a 30s window left it cold again
+  // between a "passcode screen opened" warm and the actual broadcast.
+  if (Date.now() - lastWarmAt < 10_000) return
   lastWarmAt = Date.now()
   arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }, 4000).catch(() => {})
 }
