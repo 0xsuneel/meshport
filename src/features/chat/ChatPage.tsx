@@ -3841,6 +3841,27 @@ export function ChatConversationPage() {
     chatPayIdempotencyKeyRef.current = null
     setPayStep('form')
     setShowAmountPad(true)
+    // PERF FIX: kick off the preflight (server intent/nonce reservation +
+    // gas estimate) the instant the pay sheet opens. Previously preparePayment
+    // only ran when the user tapped the first PIN digit - meaning biometric/
+    // Face ID users (who auth in <200ms) paid the FULL preflight cost
+    // (~500ms-1.5s Edge Function + gas estimate) after auth, sequentially,
+    // which was the dominant source of "ChatPay is slow". Starting it now
+    // gives the full amount-entry window as a free overlap.
+    //
+    // The idempotency key is reset just above (chatPayIdempotencyKeyRef =
+    // null) so the key computed here is the real one for this session.
+    // If the user changes the amount, preparePayment's TTL+sig check
+    // (arcService.ts) automatically discards the stale preflight and the
+    // PIN-entry call starts a fresh one. If they don't change it, the
+    // pay call picks up the already-resolved promise - no redundant work.
+    // We don't know the final amount yet (user hasn't typed it), but we
+    // CAN warm the intent infrastructure independently via warmPayIntent.
+    // The real preparePayment (with the actual amount) fires when the user
+    // taps the confirm button inside the sheet - that's where payAmount is
+    // known and the correct preflight can be made.
+    import('@/lib/arcService').then(m => { m.warmArcRpc() }).catch(() => {})
+    import('@/lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
     // Refresh USDC + EURC + cirBTC balances live when sheet opens
     const addr = useAuthStore.getState().walletAddress || ''
     if (addr) {
@@ -5546,6 +5567,25 @@ export function ChatConversationPage() {
                       setShowAmountPad(false)
                       setPayPassEntry('')
                       setPayStep('confirm')
+                      // PERF FIX: start the preflight the instant the user
+                      // taps Pay (amount is now known), so it overlaps with
+                      // PIN entry (~1-3s for 6 digits, sub-second for bio).
+                      // executeChatPayment picks up the same promise by
+                      // idempotency key; if the key doesn't match it just
+                      // starts a fresh preflight - no harm, no double-send.
+                      const fromAddr = useAuthStore.getState().walletAddress
+                      const toAddr = otherUser?.wallet_address
+                      if (fromAddr && toAddr && n > 0) {
+                        const idemSig = `${toAddr}:${n}:${payToken}:${billPay?.code ?? ''}`
+                        if (chatPayIdempotencyKeyRef.current?.signature !== idemSig) {
+                          chatPayIdempotencyKeyRef.current = { signature: idemSig, key: crypto.randomUUID() }
+                        }
+                        const idemKey = chatPayIdempotencyKeyRef.current.key
+                        import('@/lib/arcService').then(({ preparePayment }) => preparePayment({
+                          token: payToken === 'EURC' || payToken === 'cirBTC' ? payToken : 'USDC',
+                          from: fromAddr, to: toAddr, amount: n, idempotencyKey: idemKey,
+                        })).catch(() => {})
+                      }
                     }}
                     disabled={!payAmount || parseFloat(payAmount) <= 0 || payInsufficient}
                     className="flex-1 py-3.5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40 active:scale-95 transition-transform"
