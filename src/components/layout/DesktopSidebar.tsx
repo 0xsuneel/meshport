@@ -12,6 +12,7 @@ import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { HomeIcon, ChatsIcon, RewardsIcon, ActivityIcon, getActiveTabId } from './BottomNav'
 import { useChatUnreadStore, useP2PTradesCountStore } from '@/store'
 import { useHubLabel } from '@/lib/merchant'
+import { ArcStudioBadge } from '@/components/ui/ArcStudioBadge'
 
 const items = [
   { id: 'home',             label: 'Home',                path: '/' },
@@ -83,7 +84,7 @@ export function DesktopSidebar() {
         <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>MeshPort</span>
       </div>
 
-      <nav style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 16 }}>
         {items.map(item => {
           const active = activeId === item.id
           const showChatBadge = item.id === 'chat' && unreadChats > 0
@@ -140,6 +141,14 @@ export function DesktopSidebar() {
           )
         })}
       </nav>
+
+      {/* Arc Studio badge - pinned to the bottom, left-aligned (desktop only) */}
+      <div style={{
+        marginTop: 'auto', paddingTop: 14, borderTop: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
+      }}>
+        <ArcStudioBadge width={120} />
+      </div>
     </aside>
   )
 }
