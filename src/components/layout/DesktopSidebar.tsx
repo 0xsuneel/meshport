@@ -147,7 +147,7 @@ export function DesktopSidebar() {
         marginTop: 'auto', paddingTop: 14, borderTop: '1px solid var(--border)',
         display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
       }}>
-        <ArcStudioBadge width={120} />
+        <ArcStudioBadge width={170} />
       </div>
     </aside>
   )
