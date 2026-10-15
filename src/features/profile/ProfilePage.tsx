@@ -12,6 +12,7 @@ import { Sheet } from '@/components/ui/Sheet'
 import { copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useMerchant } from '@/lib/merchant'
+import { ArcStudioBadge } from '@/components/ui/ArcStudioBadge'
 
 export function ProfilePage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -220,14 +221,25 @@ export function ProfilePage() {
     </button>
   )
 
-  const footerSection = (
-    <div className="flex items-center justify-center gap-1.5 pt-2 pb-1">
+  // Desktop: unchanged centered "Built On Arc Testnet" line (the Arc Studio
+  // badge lives in the desktop sidebar instead). Mobile: "Built On Arc
+  // Testnet" on the left, Arc Studio badge on the right.
+  const builtOnArc = (
+    <div className="flex items-center gap-1.5">
       <motion.span
         animate={{ scale: [1, 1.5, 1], opacity: [1, 0.5, 1] }}
         transition={{ duration: 1.1, repeat: Infinity }}
         className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0"
       />
       <p className="text-xs text-text-secondary font-medium">Built On Arc Testnet</p>
+    </div>
+  )
+  const footerSection = isDesktop ? (
+    <div className="flex items-center justify-center pt-2 pb-1">{builtOnArc}</div>
+  ) : (
+    <div className="flex items-center justify-between gap-3 pt-2 pb-1">
+      {builtOnArc}
+      <ArcStudioBadge width={112} />
     </div>
   )
 
