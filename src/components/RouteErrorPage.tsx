@@ -50,6 +50,7 @@ export function RouteErrorPage() {
               ? 'Reload to get the latest version. Your wallet and funds are not affected.'
               : 'Reload the app to continue. Your wallet and funds are not affected.'}
           </p>
+          {!stale && <ErrorDetails error={error} />}
           <button
             onClick={() => { setReloading(true); recoverFromStaleBuild(true) }}
             style={{ marginTop: 6, padding: '11px 26px', borderRadius: 12, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 700, color: '#fff', background: 'var(--brand, #6d5dfc)' }}>
@@ -59,5 +60,26 @@ export function RouteErrorPage() {
       )}
       <style>{'@keyframes mp-spin{to{transform:rotate(360deg)}}'}</style>
     </div>
+  )
+}
+
+// The error itself, behind a tap - so a phone user can screenshot what broke
+// (there is no console on a phone). Message, where, and the first stack lines.
+function ErrorDetails({ error }: { error: unknown }) {
+  const [open, setOpen] = useState(false)
+  const e = error as { message?: string; stack?: string; status?: number; statusText?: string } | null
+  const text = [
+    e?.status ? `${e.status} ${e.statusText ?? ''}` : null,
+    e?.message ?? String(error),
+    window.location.pathname,
+    (e?.stack ?? '').split('\n').slice(1, 5).map(l => l.trim()).join('\n'),
+  ].filter(Boolean).join('\n')
+  return open ? (
+    <pre style={{ margin: 0, maxWidth: 340, maxHeight: 220, overflow: 'auto', textAlign: 'left', fontSize: 11, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+      padding: 10, borderRadius: 10, background: 'rgba(127,127,127,0.12)', color: 'var(--text-secondary, #9a9aa5)' }}>{text}</pre>
+  ) : (
+    <button onClick={() => setOpen(true)} style={{ border: 'none', background: 'none', color: 'var(--text-secondary, #9a9aa5)', fontSize: 12, textDecoration: 'underline', cursor: 'pointer' }}>
+      Details
+    </button>
   )
 }
