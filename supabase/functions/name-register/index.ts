@@ -24,7 +24,9 @@
 //                              contract existed, then closes migration
 //                                                            cron secret only
 //
-// Secrets: NAMES_CONTRACT_ADDRESS (public address of the deployed contract).
+// Secrets: NAMES_CONTRACT_ADDRESS (public address of the deployed contract),
+//          NAMES_ADMIN_ADDRESS (MeshPort admin wallet; gets ownership after
+//          the one-time import).
 // The registrar key lives in Vault (name_registrar_key) and is read through
 // public.name_registrar_key(), executable by the service role only. It is
 // never logged or returned.
@@ -338,8 +340,18 @@ Deno.serve(async (req) => {
       // Existing users are in - from now on every name needs its owner's signature.
       const { request: close } = await pub.simulateContract({ account, address: contract, abi: ABI, functionName: 'closeMigration' })
       const closeHash = await wc.writeContract(close)
-      await pub.waitForTransactionReceipt({ hash: closeHash, timeout: 60_000 }).catch(() => null)
-      return json({ migrated: rows.map(r => r.username), txHash: hash, closeTx: closeHash })
+      await pub.waitForTransactionReceipt({ hash: closeHash, timeout: 60_000 })
+      // Hand the contract to MeshPort's admin wallet (Ownable2Step: it only
+      // becomes owner once that wallet calls acceptOwnership()). The
+      // registrar keeps only its registrar role.
+      let handoverTx: Hex | null = null
+      const admin = (Deno.env.get('NAMES_ADMIN_ADDRESS') ?? '').trim()
+      if (isAddress(admin)) {
+        const { request: handover } = await pub.simulateContract({ account, address: contract, abi: ABI, functionName: 'transferOwnership', args: [getAddress(admin)] })
+        handoverTx = await wc.writeContract(handover)
+        await pub.waitForTransactionReceipt({ hash: handoverTx, timeout: 60_000 }).catch(() => null)
+      }
+      return json({ migrated: rows.map(r => r.username), txHash: hash, closeTx: closeHash, handoverTx, pendingOwner: isAddress(admin) ? getAddress(admin) : null })
     }
 
     return json({ error: 'Unknown action' }, 400)
