@@ -45,6 +45,7 @@ const ChatConversationPage  = lazyRetry(() => import('./features/chat/ChatPage')
 const ActivityPage          = lazyRetry(() => import('./features/activity/ActivityPage').then(m => ({ default: m.ActivityPage })), 'ActivityPage')
 const TransactionDetailPage = lazyRetry(() => import('./features/activity/TransactionDetail').then(m => ({ default: m.TransactionDetailPage })), 'TransactionDetailPage')
 const InsightsPage          = lazyRetry(() => import('./features/insights/InsightsRoute').then(m => ({ default: m.InsightsRoute })), 'InsightsPage')
+const BusinessPage          = lazyRetry(() => import('./features/business/BusinessPage').then(m => ({ default: m.BusinessPage })), 'BusinessPage')
 const RewardsPage           = lazyRetry(() => import('./features/rewards/RewardsPage').then(m => ({ default: m.RewardsPage })), 'RewardsPage')
 const AssetPage             = lazyRetry(() => import('./features/home/AssetPage').then(m => ({ default: m.AssetPage })), 'AssetPage')
 const RecentPaidPage        = lazyRetry(() => import('./features/recent/RecentPaidPage').then(m => ({ default: m.RecentPaidPage })), 'RecentPaidPage')
@@ -451,6 +452,7 @@ const router = createBrowserRouter([
       { path: 'receive',                    element: <FeatureGate feature="receive_enabled"><ReceivePage /></FeatureGate> },
       { path: 'receive/requests',           element: <FeatureGate feature="receive_enabled"><MyRequestsPage /></FeatureGate> },
       { path: 'rewards',                    element: <FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate> },
+      { path: 'business',                   element: <BusinessPage /> },
       { path: 'recent-paid',                element: <RecentPaidPage /> },
       { path: 'asset/:token',               element: <AssetPage /> },
       { path: 'news',                       element: <NewsPage /> },

@@ -1011,6 +1011,8 @@ export function ImportWalletPage() {
 }
 
 // ─── Claim Username ───────────────────────────────────────────────────────────
+const STORE_TYPES = ['Retail / Kirana', 'Food & café', 'Online shop', 'Services', 'Freelancer', 'Other']
+
 export function ClaimUsernamePage() {
   const navigate = useNavigate()
   const setUsername = useAuthStore(s => s.setUsername)
@@ -1021,6 +1023,13 @@ export function ClaimUsernamePage() {
   const username = useAuthStore(s => s.username)
   const { showToastMessage } = useUIStore()
   const [handle, setHandle] = useState('')
+  // Business sign-up: the username is the store's handle (sharmachai.arc),
+  // plus a store name customers see.
+  const signupKind = getSignupKind() ?? 'personal'
+  const isBusiness = signupKind === 'business'
+  const [storeName, setStoreName] = useState('')
+  const [storeType, setStoreType] = useState(STORE_TYPES[0])
+  const [onchainStep, setOnchainStep] = useState<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
   const [statusMsg, setStatusMsg] = useState('')
   const [loading, setLoading] = useState(false)
@@ -1095,6 +1104,7 @@ export function ClaimUsernamePage() {
 
   const handleClaim = async () => {
     if (status !== 'available' || !walletAddress || !handle) return
+    if (isBusiness && storeName.trim().length < 2) { showToastMessage('Enter your store name', 'error'); return }
     setLoading(true)
 
     // Final availability check against Supabase
@@ -1131,9 +1141,30 @@ export function ClaimUsernamePage() {
     } else if (user) {
       setUser({ ...user, username: handle + '.arc', walletAddress })
     }
+    // Business: send the merchant application now, so review starts at once.
+    if (isBusiness) {
+      try { await applyForMerchant({ businessName: storeName.trim(), businessType: storeType }) }
+      catch (e) { console.warn('[Claim] merchant application:', e instanceof Error ? e.message : e) }
+    }
+
+    // Register the name on Arc (signed by this wallet, gas paid by MeshPort).
+    // Never blocks sign-up: a failure is retried by the server.
+    setOnchainStep('Registering ' + handle + '.arc on Arc…')
+    const onchain = await Promise.race([
+      registerNameOnchain({ walletAddress, name: handle, kind: signupKind, displayName: isBusiness ? storeName.trim() : '' })
+        .catch(() => ({ status: 'failed' as const })),
+      new Promise<{ status: 'pending' }>(r => setTimeout(() => r({ status: 'pending' }), 35_000)),
+    ])
+    setOnchainStep(null)
+    setSignupKind(null)
+
     setUsername(handle)
     setLoading(false)
-    showToastMessage(`${handle}.arc claimed! Welcome to MeshPort 🎉`, 'success')
+    showToastMessage(
+      onchain.status === 'registered'
+        ? `${handle}.arc is yours, registered on Arc 🎉`
+        : `${handle}.arc claimed! It’s being registered on Arc`,
+      'success')
     // replace: true removes /auth/claim-username from history - back button skips it
     navigate(getAndClearReturnTo() || '/', { replace: true })
   }
@@ -1151,8 +1182,8 @@ export function ClaimUsernamePage() {
           <div className="w-16 h-16 bg-brand/20 rounded-3xl flex items-center justify-center mx-auto mb-4">
             <AtSign className="w-8 h-8 text-brand-text" />
           </div>
-          <h2 className="text-2xl font-bold text-text-primary">Claim Your Username</h2>
-          <p className="text-text-secondary mt-2">Your permanent MeshPort identity</p>
+          <h2 className="text-2xl font-bold text-text-primary">{isBusiness ? 'Claim your store username' : 'Claim Your Username'}</h2>
+          <p className="text-text-secondary mt-2">{isBusiness ? 'Customers find and pay your store with it' : 'Your permanent MeshPort identity'}</p>
           {!walletAddress && (
             <div className="mt-3 p-3 bg-danger/10 border border-danger/30 rounded-2xl flex items-start gap-2 text-left">
               <AlertTriangle className="w-4 h-4 text-danger flex-shrink-0 mt-0.5" />
@@ -1164,9 +1195,28 @@ export function ClaimUsernamePage() {
           )}
         </div>
         <div className="space-y-4">
+          {isBusiness && (
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="store-name" className="block text-sm font-semibold text-text-primary mb-1.5">Store name</label>
+                <input id="store-name" value={storeName} onChange={e => setStoreName(e.target.value.slice(0, 64))}
+                  placeholder="e.g. Sharma Chai Corner" maxLength={64}
+                  className="w-full bg-surface border border-border rounded-2xl px-4 py-3.5 text-text-primary placeholder-gray-600 focus:outline-none focus:border-brand text-base" />
+              </div>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Business type">
+                {STORE_TYPES.map(t => (
+                  <button key={t} type="button" onClick={() => setStoreType(t)}
+                    className={`px-3 py-2 rounded-full text-sm font-semibold border ${storeType === t ? 'bg-brand/15 border-brand text-brand-text' : 'bg-surface border-border text-text-secondary'}`}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+              <label htmlFor="store-handle" className="block text-sm font-semibold text-text-primary pt-1">Store username</label>
+            </div>
+          )}
           <div>
             <div className="flex items-center bg-surface border border-border rounded-2xl focus-within:border-brand transition-colors">
-              <input ref={handleRef} value={handle} onChange={e => handleChange(e.target.value)}
+              <input id="store-handle" ref={handleRef} value={handle} onChange={e => handleChange(e.target.value)}
                 placeholder="yourname" maxLength={20}
                 className="flex-1 bg-transparent pl-4 pr-2 py-3.5 text-text-primary placeholder-gray-600 focus:outline-none text-base"
                 autoCapitalize="none" autoCorrect="off" />
@@ -1185,10 +1235,15 @@ export function ClaimUsernamePage() {
             </div>
           </div>
           <div className="text-xs text-text-muted space-y-1 px-1">
-            <p>• 3–20 characters</p><p>• Letters a-z, numbers 0-9, underscore _</p><p>• Cannot be changed later</p>
+            <p>• 3–20 characters</p><p>• Letters a-z, numbers 0-9, underscore _</p><p>• Cannot be changed later · registered on Arc, free</p>
           </div>
-          <Button fullWidth loading={loading} disabled={status !== 'available' || !walletAddress} onClick={handleClaim}>
-            {loading ? 'Saving...' : status === 'available' ? `Claim ${handle}.arc` : 'Claim Username'}
+          {onchainStep && (
+            <p className="text-sm text-text-secondary text-center flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" /> {onchainStep}
+            </p>
+          )}
+          <Button fullWidth loading={loading} disabled={status !== 'available' || !walletAddress || (isBusiness && storeName.trim().length < 2)} onClick={handleClaim}>
+            {loading ? 'Saving...' : status === 'available' ? `Claim ${handle}.arc` : isBusiness ? 'Claim store username' : 'Claim Username'}
           </Button>
         </div>
       </div>

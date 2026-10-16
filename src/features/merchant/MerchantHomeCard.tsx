@@ -28,7 +28,7 @@ export function MerchantHomeCard() {
   const arriving = payments.filter(isArriving)
   const recent = payments.filter(p => !isArriving(p)).slice(0, 3)
   const who = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
-  const openLedger = () => navigate('/multichain', { state: { tab: 'bring' } })
+  const openLedger = () => navigate('/business', { state: { btab: 'settlements' } })
 
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>

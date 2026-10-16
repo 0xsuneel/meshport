@@ -319,13 +319,23 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
   )
 }
 
-export function MultichainPage() {
+/**
+ * mode 'hub'    - /multichain. Normal users: Multichain Hub. Approved
+ *                 merchants: "Cross-chain Transfer" (Transfer / Activity /
+ *                 Recover); their Ledger lives in the Business tab.
+ * mode 'ledger' - the merchant Ledger only (Chains + Claim All), shown inside
+ *                 Business → Settlements. Same claim logic as before.
+ */
+export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {}) {
   useEffect(() => { preloadHubFlows() }, [])
+  const ledgerMode = mode === 'ledger'
   const isDesktop   = useMediaQuery('(min-width: 980px)')
   // Phones narrower than ~400px (SE, small Androids): compact tab labels.
   const narrow      = useMediaQuery('(max-width: 399px)')
   // Approved merchants get the Ledger (CCTP chains, Claim All) instead of Bring Funds.
   const isMerchant  = useMerchant().isMerchant
+  // A merchant on /multichain sees cross-chain transfer only.
+  const merchantTransfer = isMerchant && !ledgerMode
   const navigate    = useNavigate()
   const walletAddress = useAuthStore(s => s.walletAddress)
   const { balance: arcBalance } = useWalletStore()
@@ -363,9 +373,15 @@ export function MultichainPage() {
   // Any money-moving step running anywhere (Recover, Claim All, a Bring…).
   const leaveGuardOn = useLeaveGuardStore(s => Object.keys(s.guards).length > 0)
   const [hubTab, setHubTab]               = useState<HubTab>(() => {
+    if (ledgerMode) return 'bring'
     const t = (location.state as any)?.tab ?? initialQuery.get('tab') ?? (initialQuery.get('claim') || initialQuery.get('chain') ? 'bring' : null)
     return t === 'bring' || t === 'activity' || t === 'recovery' ? t : 'transfer'
   })
+  // Ledger links (Claim All tracking, "open Ledger") reach a merchant's
+  // Business → Settlements, keeping ?claim= / ?chain= so tracking still opens.
+  useEffect(() => {
+    if (merchantTransfer && hubTab === 'bring') navigate('/business' + location.search, { replace: true, state: { btab: 'settlements' } })
+  }, [merchantTransfer, hubTab])
   const [showRecovery, setShowRecovery]   = useState(false)
   // Tab requests arriving while already on the Hub (e.g. the inline transfer
   // form's "Open Recover") - location.state changes without a remount.
@@ -1037,7 +1053,7 @@ export function MultichainPage() {
   const page = (
     <div data-flow-scroller className={isDesktop ? undefined : 'lg:max-w-[900px]'} style={{ flex: 1, overflowY: flowFocus === 'processing' ? 'hidden' : 'auto', overscrollBehavior: flowFocus === 'processing' ? 'none' : undefined, background: 'var(--bg)', paddingBottom: isDesktop ? 90 : 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
       {/* Header */}
-      <div data-scroll-header style={{ position: flowFocused ? 'relative' : 'sticky', top: 0, zIndex: 20, background: 'color-mix(in srgb, var(--bg) 95%, transparent)',
+      {!ledgerMode && <div data-scroll-header style={{ position: flowFocused ? 'relative' : 'sticky', top: 0, zIndex: 20, background: 'color-mix(in srgb, var(--bg) 95%, transparent)',
         backdropFilter: 'blur(20px)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))', paddingBottom: 18,
         paddingLeft: 20, paddingRight: 20, minHeight: 44, boxSizing: 'border-box',
@@ -1048,7 +1064,7 @@ export function MultichainPage() {
           </button>
         )}
         <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px', margin: 0 }}>{isMerchant ? 'Merchant Hub' : 'Multichain Hub'}</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px', margin: 0 }}>{isMerchant ? 'Cross-chain Transfer' : 'Multichain Hub'}</h1>
         </div>
         <button onClick={() => {
           const { walletAddress } = useAuthStore.getState()
@@ -1069,7 +1085,7 @@ export function MultichainPage() {
           </svg>
           Faucet
         </button>
-      </div>
+      </div>}
 
       <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
@@ -1082,13 +1098,13 @@ export function MultichainPage() {
           claimAvailable={isMerchant ? bringRows.reduce((sum, c) => sum + (c.balance >= DUST_USDC ? c.balance : 0), 0) : totalExternal}
           balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} chains={bringRows} />
 
-        {/* Tab strip */}
-        <div role="tablist" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 16,
+        {/* Tab strip (none in the Business Ledger view) */}
+        {!ledgerMode && <div role="tablist" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 16,
           background: 'var(--surface)', border: '1px solid var(--border)' }}>
           {([
             // Short labels on narrow phones so all four tabs stay on one line.
             { id: 'transfer', label: narrow ? 'Transfer' : 'Transfer Funds' },
-            { id: 'bring',    label: isMerchant ? 'Ledger' : narrow ? 'Bring' : 'Bring Funds' },
+            ...(merchantTransfer ? [] : [{ id: 'bring', label: narrow ? 'Bring' : 'Bring Funds' }]),
             ...(isDesktop ? [] : [{ id: 'activity', label: 'Activity', dot: pendingCount > 0 ? 'var(--warning)' : null }]),
             { id: 'recovery', label: 'Recover',  dot: failedCount > 0 ? 'var(--danger)' : null },
           ] as Array<{ id: HubTab; label: string; dot?: string | null }>).map(t => {
@@ -1106,7 +1122,7 @@ export function MultichainPage() {
               </button>
             )
           })}
-        </div>
+        </div>}
         </motion.div>
 
         {/* A running move tapped in Activity opens the same progress page the
@@ -1362,7 +1378,7 @@ export function MultichainPage() {
     </div>
   )
 
-  if (!isDesktop) return page
+  if (!isDesktop || ledgerMode) return page
 
   // ── Desktop: Hub (left) + Multichain Activity (right), each scrolling on
   // its own - same 65/35 layout as Swap and Pay.

@@ -513,6 +513,8 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
 function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; navigate: (p: string) => void; hasOngoingP2P?: boolean }) {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const hub = useHubLabel()
+  // Merchants: Rewards is replaced by the Business tab.
+  const { isMerchant } = useMerchant()
   // Two groups, four across (Money, then Explore).
   const groups: { title: string; actions: { label: string; path: string; icon: React.ReactNode }[] }[] = [
     { title: 'Money', actions: [
@@ -524,7 +526,7 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
     { title: 'Explore', actions: [
       { label: 'Multichain Hub', path: '/multichain', icon: <ActionIcon name="hub" size={27} /> },
       { label: 'P2P',            path: '/p2p',        icon: <ActionIcon name="p2p" size={27} /> },
-      { label: 'Rewards',        path: '/rewards',    icon: <ActionIcon name="rewards" size={27} /> },
+      ...(isMerchant ? [] : [{ label: 'Rewards', path: '/rewards', icon: <ActionIcon name="rewards" size={27} /> }]),
       { label: 'Insights',       path: '/insights',   icon: <ActionIcon name="insights" size={27} /> },
     ] },
   ]

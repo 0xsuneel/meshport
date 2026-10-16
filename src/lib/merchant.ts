@@ -197,10 +197,18 @@ export async function adminReviewMerchant(id: string, status: 'approved' | 'reje
   if (error) throw new Error(error.message)
 }
 
-/** Merchant accounts see the Multichain Hub as "Merchant Hub" (label only). */
+/** Merchant accounts see the Multichain Hub as "Cross-chain Transfer" - their
+ *  Ledger lives in the Business tab (label only). */
 export function hubLabel(label: string, isMerchant: boolean): string {
   if (!isMerchant) return label
-  return label === 'Multichain Hub' ? 'Merchant Hub' : label === 'Insights' ? 'Ledger Insights' : label
+  return label === 'Multichain Hub' ? 'Cross-chain Transfer' : label === 'Insights' ? 'Ledger Insights' : label
+}
+
+/** Business tab instead of Rewards: approved merchants, and businesses whose
+ *  application is still under review (they see its status there). */
+export function useBusinessTab(): boolean {
+  const { isMerchant, status } = useMerchant()
+  return isMerchant || status === 'pending'
 }
 export function useHubLabel(): (label: string) => string {
   const { isMerchant } = useMerchant()
