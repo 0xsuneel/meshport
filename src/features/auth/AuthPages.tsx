@@ -8,7 +8,7 @@ import { useNavigate, Navigate } from 'react-router-dom'
 import {
   Mail, ArrowLeft, Eye, EyeOff, Copy, CheckCircle,
   AlertCircle, AlertTriangle, RefreshCw, XCircle, AtSign, Loader2,
-  Sparkles, Download, Wallet, Lock, Link2, Zap, FileText, KeyRound,
+  Sparkles, Download, Wallet, Lock, Link2, Zap, FileText, KeyRound, Store, User as UserIcon, ChevronRight,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
@@ -24,6 +24,8 @@ import {
 } from '@/lib/supabase'
 import {encryptPrivateKey, storeEncryptedKey, encryptMnemonic, storeEncryptedMnemonic, markWalletBackedUp} from '@/lib/security'
 import { LoadingDots } from '@/components/ui/LoadingDots'
+import { getSignupKind, setSignupKind, registerNameOnchain, type AccountKind } from '@/lib/onchainNames'
+import { applyForMerchant } from '@/lib/merchant'
 import type { User } from '@/types'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -113,9 +115,52 @@ function getAndClearReturnTo(): string | null {
 }
 
 
+// ─── Sign-up: account type ──────────────────────────────────────────────────
+// The very first choice. A business account claims a store username
+// (sharmachai.arc) plus a store name, and its merchant application is sent
+// at the same time. Both kinds are registered on-chain (MeshPortNames).
+function AccountKindPicker({ onChoose }: { onChoose: (k: AccountKind | null) => void }) {
+  const option = (k: AccountKind, icon: React.ReactNode, title: string, text: string) => (
+    <button type="button" onClick={() => onChoose(k)}
+      className="w-full flex items-center gap-4 text-left p-4 rounded-2xl bg-surface border border-border active:scale-[0.98] transition-transform hover:border-brand">
+      <span className="w-12 h-12 rounded-2xl bg-brand/15 text-brand-text flex items-center justify-center flex-shrink-0">{icon}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-base font-bold text-text-primary">{title}</span>
+        <span className="block text-sm text-text-secondary mt-0.5">{text}</span>
+      </span>
+      <ChevronRight className="w-5 h-5 text-text-secondary flex-shrink-0" />
+    </button>
+  )
+  return (
+    <div className="flex flex-col h-full bg-bg px-6 pt-16 pb-8">
+      <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
+        <div className="text-center mb-10">
+          <MeshPortLogo className="w-20 h-20 mx-auto mb-5" />
+          <h1 className="text-3xl font-bold text-text-primary">MeshPort</h1>
+          <p className="text-text-secondary mt-2">How will you use MeshPort?</p>
+        </div>
+        <div className="space-y-3">
+          {option('personal', <UserIcon className="w-6 h-6" />, 'Personal', 'Send, receive and swap USDC with friends')}
+          {option('business', <Store className="w-6 h-6" />, 'Business', 'Accept payments from customers with your shop QR')}
+        </div>
+        <button type="button" onClick={() => onChoose(null)} className="mt-8 text-sm font-semibold text-brand-text text-center">
+          I already have an account
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function LoginPage() {
   const navigate = useNavigate()
   const [agreed, setAgreed] = useState(false)
+  // First screen: what kind of account. "I already have an account" skips
+  // the choice (the account already has its type).
+  const [kind, setKind] = useState<AccountKind | null>(() => getSignupKind())
+  const [choosing, setChoosing] = useState(() => getSignupKind() === null)
+  const choose = (k: AccountKind | null) => { setSignupKind(k); setKind(k); setChoosing(false) }
+
+  if (choosing) return <AccountKindPicker onChoose={choose} />
 
   const handleGoogleLogin = async () => {
     if (!agreed) return
@@ -145,10 +190,19 @@ export function LoginPage() {
   return (
     <div className="flex flex-col h-full bg-bg px-6 pt-16 pb-8">
       <div className="flex-1 flex flex-col items-center justify-center">
-        <div className="text-center mb-10">
-          <MeshPortLogo className="w-20 h-20 mx-auto mb-5" />
-          <h1 className="text-3xl font-bold text-text-primary">MeshPort</h1>
-          <p className="text-text-secondary mt-2">USDC Payments, Made Simple</p>
+        <div className="text-center mb-8">
+          <MeshPortLogo className="w-16 h-16 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-text-primary">
+            {kind === 'business' ? 'Set up your business' : kind === 'personal' ? 'Create your account' : 'Welcome back'}
+          </h1>
+          <p className="text-text-secondary mt-2">
+            {kind === 'business' ? 'Sign in, then claim your store username' : kind === 'personal' ? 'Sign in, then claim your username' : 'Sign in to MeshPort'}
+          </p>
+          <button type="button" onClick={() => { setSignupKind(null); setKind(null); setChoosing(true) }}
+            className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-text px-3 py-1.5 rounded-full bg-brand/10">
+            {kind === 'business' ? <Store className="w-3.5 h-3.5" /> : <UserIcon className="w-3.5 h-3.5" />}
+            {kind === 'business' ? 'Business account' : kind === 'personal' ? 'Personal account' : 'Existing account'} · Change
+          </button>
         </div>
 
         {/* Terms & Privacy - must be explicitly checked before any sign-up
