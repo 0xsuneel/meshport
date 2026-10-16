@@ -9,9 +9,9 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { isSettingsPath } from './SettingsDesktopSplit'
 import { NavIcon, type NavIconName } from './navIcons'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
-import { HomeIcon, ChatsIcon, RewardsIcon, ActivityIcon, getActiveTabId } from './BottomNav'
+import { HomeIcon, ChatsIcon, RewardsIcon, ActivityIcon, BusinessIcon, getActiveTabId } from './BottomNav'
 import { useChatUnreadStore, useP2PTradesCountStore } from '@/store'
-import { useHubLabel } from '@/lib/merchant'
+import { useHubLabel, useBusinessTab } from '@/lib/merchant'
 import { ArcStudioBadge } from '@/components/ui/ArcStudioBadge'
 
 const items = [
@@ -27,6 +27,8 @@ const items = [
   { id: 'activity',         label: 'Activity',            path: '/activity' },
   { id: 'settings',         label: 'Settings',            path: '/profile' },
 ]
+// Merchants: Business takes Rewards' place.
+const businessItems = items.map(i => i.id === 'rewards' ? { id: 'business', label: 'Business', path: '/business' } : i)
 
 // Home, Chats, Rewards, Activity, Settings: same outline icons as the phone bar (navIcons.tsx).
 const sideIcon = (name: NavIconName) => ({ active }: { active: boolean }) =>
@@ -43,10 +45,11 @@ const MultichainHubIcon = actIcon('hub')
 const SettingsIcon = sideIcon('settings')
 export function DesktopSidebar() {
   const hub = useHubLabel()
+  const navItems = useBusinessTab() ? businessItems : items
   const location = useLocation()
   const navigate = useNavigate()
   // Every Settings page (Security, Appearance, About…) keeps Settings highlighted.
-  const activeId = isSettingsPath(location.pathname.replace(/\/$/, '')) ? 'settings' : getActiveTabId(location.pathname, items)
+  const activeId = isSettingsPath(location.pathname.replace(/\/$/, '')) ? 'settings' : getActiveTabId(location.pathname, navItems)
   const unreadChats = useChatUnreadStore(s => s.unreadChats)
 
   // Ongoing P2P trades count - the red dot on the P2P nav item.
@@ -85,7 +88,7 @@ export function DesktopSidebar() {
       </div>
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 16 }}>
-        {items.map(item => {
+        {navItems.map(item => {
           const active = activeId === item.id
           const showChatBadge = item.id === 'chat' && unreadChats > 0
           const showP2PBadge = item.id === 'p2p' && ongoingP2PCount > 0
@@ -116,6 +119,7 @@ export function DesktopSidebar() {
                 {item.id === 'chat'             && <ChatsIcon active={active} />}
                 {item.id === 'activity'         && <ActivityIcon active={active} />}
                 {item.id === 'rewards'          && <RewardsIcon active={active} />}
+                {item.id === 'business'         && <BusinessIcon active={active} />}
                 {item.id === 'settings'         && <SettingsIcon active={active} />}
               </span>
               {hub(item.label)}

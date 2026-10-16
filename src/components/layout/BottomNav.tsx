@@ -4,6 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuthStore, useChatUnreadStore } from '@/store'
 import { NavIcon, type NavIconName } from './navIcons'
+import { Store } from 'lucide-react'
+import { useBusinessTab } from '@/lib/merchant'
 
 // Icons (navIcons.tsx, Phosphor): outline when idle. `filled` (the phone
 // bottom bar) shows the selected tab as the solid version in white on a
@@ -19,6 +21,8 @@ export const HomeIcon = navIcon('home')
 export const ChatsIcon = navIcon('chat')
 export const RewardsIcon = navIcon('rewards')
 export const ActivityIcon = navIcon('activity')
+export const BusinessIcon = ({ active, filled }: NavIconProps) =>
+  <Store size={filled === undefined ? 22 : 24} strokeWidth={active ? 2.3 : 1.8} color={colorOf(active, filled)} />
 const ScannerIcon = () => <NavIcon name="scan" size={28} color="#fff" />
 
 const tabs = [
@@ -28,6 +32,8 @@ const tabs = [
   { id: 'rewards',  label: 'Rewards',  path: '/rewards' },
   { id: 'activity', label: 'Activity', path: '/activity' },
 ]
+// Merchants: Business takes Rewards' place. Everyone else keeps Rewards.
+const businessTabs = tabs.map(t => t.id === 'rewards' ? { id: 'business', label: 'Business', path: '/business' } : t)
 
 // Same "which tab is active" expression BottomNav always used, just given a
 // name so DesktopSidebar can share it exactly instead of hand-copying it.
@@ -43,6 +49,7 @@ export function BottomNav() {
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
   const { unreadChats, setUnreadChats } = useChatUnreadStore()
+  const tabList = useBusinessTab() ? businessTabs : tabs
 
   useEffect(() => {
     if (!user?.id) return
@@ -121,7 +128,7 @@ export function BottomNav() {
   }, [user?.id])
 
   // Tab root paths - back button on any of these goes to Home (or exits if already Home)
-  const TAB_ROOTS = ['/', '/chat', '/scanner', '/rewards', '/activity']
+  const TAB_ROOTS = ['/', '/chat', '/scanner', '/rewards', '/business', '/activity']
 
   useEffect(() => {
     const isTabRoot = TAB_ROOTS.includes(location.pathname)
@@ -145,7 +152,7 @@ export function BottomNav() {
     return () => window.removeEventListener('popstate', handlePop)
   }, [location.pathname])
 
-  const activeTab = getActiveTabId(location.pathname, tabs)
+  const activeTab = getActiveTabId(location.pathname, tabList)
 
   return (
     <div data-bottom-nav="" style={{
@@ -164,7 +171,7 @@ export function BottomNav() {
         position: 'relative',
         overflow: 'visible',
       }}>
-        {tabs.map(tab => {
+        {tabList.map(tab => {
           const isActive = activeTab === tab.id
           const isScanner = tab.id === 'scanner'
           const isChat = tab.id === 'chat'
@@ -214,6 +221,7 @@ export function BottomNav() {
                       {tab.id === 'home'     && <HomeIcon active={isActive} filled />}
                       {tab.id === 'chat'     && <ChatsIcon active={isActive} filled />}
                       {tab.id === 'rewards'  && <RewardsIcon active={isActive} filled />}
+                      {tab.id === 'business' && <BusinessIcon active={isActive} filled />}
                       {tab.id === 'activity' && <ActivityIcon active={isActive} filled />}
                     </motion.div>
                     {badgeCount > 0 && (
