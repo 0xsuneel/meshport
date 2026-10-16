@@ -1143,10 +1143,18 @@ export function ClaimUsernamePage() {
     } else if (user) {
       setUser({ ...user, username: handle + '.arc', walletAddress })
     }
-    // Business: send the merchant application now, so review starts at once.
+    // Business: mark the new account as a business (only allowed right after
+    // sign-up - the database refuses merchant applications from personal
+    // accounts), then send the application so review starts at once.
     if (isBusiness) {
-      try { await applyForMerchant({ businessName: storeName.trim(), businessType: storeType, description: storeReason.trim() }) }
-      catch (e) { console.warn('[Claim] merchant application:', e instanceof Error ? e.message : e) }
+      try {
+        const { data: isBiz } = await supabase.rpc('start_business_account')
+        if (!isBiz) throw new Error('Could not set up the business account')
+        await applyForMerchant({ businessName: storeName.trim(), businessType: storeType, description: storeReason.trim() })
+      } catch (e) {
+        console.warn('[Claim] business account:', e instanceof Error ? e.message : e)
+        showToastMessage('Your business application didn’t go through - send it from Profile → Merchant application', 'error')
+      }
     }
 
     // Register the name on Arc (signed by this wallet, gas paid by MeshPort).

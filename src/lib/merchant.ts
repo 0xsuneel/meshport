@@ -1,7 +1,8 @@
 // src/lib/merchant.ts
 //
-// Merchant accounts. A user applies from Profile → Apply for merchant; an
-// admin approves or rejects it (Admin → Merchants). Only an APPROVED
+// Merchant accounts. Only business accounts (chosen at sign-up) apply - the
+// database refuses applications from personal accounts; an admin approves
+// or rejects it (Admin → Merchants). Only an APPROVED
 // application turns on the merchant flow:
 //   • Multichain Hub: "Bring Funds" becomes "Ledger" (UB and CCTP chains)
 //   • USDC on other chains waits there until the merchant taps Claim All

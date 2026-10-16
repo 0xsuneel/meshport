@@ -263,9 +263,11 @@ Deno.serve(async (req) => {
       const u = await userByWallet(addr)
       if (!u || (u.username ?? '').toLowerCase() !== name) return json({ error: 'Claim the username in MeshPort first' }, 409)
       if (u.name_onchain_status === 'registered') return json({ status: 'registered', txHash: u.name_onchain_tx ?? undefined })
+      // Business is chosen at sign-up (users.account_type, set by
+      // start_business_account) - a signature alone can't make one.
+      if (kindName === 'business' && u.account_type !== 'business') return json({ error: 'Business accounts are chosen at sign-up' }, 403)
 
       await setStatus(u.id, {
-        account_type: kindName,
         store_name: kindName === 'business' ? displayName : u.store_name,
         name_onchain_status: 'pending',
         name_onchain_error: null,
