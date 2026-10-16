@@ -24,9 +24,8 @@
 //                              contract existed, then closes migration
 //                                                            cron secret only
 //
-// Secrets: NAMES_CONTRACT_ADDRESS (public address of the deployed contract),
-//          NAMES_ADMIN_ADDRESS (MeshPort admin wallet; gets ownership after
-//          the one-time import).
+// Optional env overrides: NAMES_CONTRACT_ADDRESS, NAMES_ADMIN_ADDRESS (the
+// admin wallet gets ownership after the one-time import). Defaults below.
 // The registrar key lives in Vault (name_registrar_key) and is read through
 // public.name_registrar_key(), executable by the service role only. It is
 // never logged or returned.
@@ -39,7 +38,6 @@ import {
 import { privateKeyToAccount } from 'npm:viem@2/accounts'
 import { handleOptions, json } from '../_shared/cors.ts'
 import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
-import { ARC_RPCS } from '../_shared/chains.ts'
 import { MESHPORT_NAMES_ABI as ABI } from '../_shared/meshportNamesAbi.ts'
 
 const NAME_RE = /^[a-z0-9_]{3,20}$/
@@ -62,7 +60,11 @@ function serviceKey(): string {
 }
 const db = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey())
 
-const RPC = ARC_RPCS[0] ?? 'https://rpc.testnet.arc.io'
+// Same RPC choice as _shared/chains.ts (authenticated endpoint first), with
+// Arc's public RPC as the last resort.
+const DRPC_KEY = (Deno.env.get('DRPC_KEY') ?? '').trim()
+const RPC = (Deno.env.get('ARC_RPC_URL') ?? '').trim()
+  || (DRPC_KEY ? `https://lb.drpc.live/arc-testnet/${DRPC_KEY}` : 'https://rpc.testnet.arc.io')
 const arc = defineChain({
   id: CHAIN_ID,
   name: 'Arc Testnet',
@@ -71,8 +73,12 @@ const arc = defineChain({
 })
 const pub = createPublicClient({ chain: arc, transport: http(RPC) })
 
+// Public addresses (Arc testnet). The env vars override them for a redeploy.
+const DEFAULT_CONTRACT = '0xba87d216d550e71cef4b0066db8cf66622c9af4b' // MeshPortNames, deployed with Arc Studio
+const DEFAULT_ADMIN = '0x05d00ab75bcbe15450143f810cd5e5164ee126e0'    // sunil.arc - MeshPort admin
+
 function contractAddress(): Address | null {
-  const a = (Deno.env.get('NAMES_CONTRACT_ADDRESS') ?? '').trim()
+  const a = (Deno.env.get('NAMES_CONTRACT_ADDRESS') ?? '').trim() || DEFAULT_CONTRACT
   return isAddress(a) ? getAddress(a) : null
 }
 
@@ -345,7 +351,7 @@ Deno.serve(async (req) => {
       // becomes owner once that wallet calls acceptOwnership()). The
       // registrar keeps only its registrar role.
       let handoverTx: Hex | null = null
-      const admin = (Deno.env.get('NAMES_ADMIN_ADDRESS') ?? '').trim()
+      const admin = (Deno.env.get('NAMES_ADMIN_ADDRESS') ?? '').trim() || DEFAULT_ADMIN
       if (isAddress(admin)) {
         const { request: handover } = await pub.simulateContract({ account, address: contract, abi: ABI, functionName: 'transferOwnership', args: [getAddress(admin)] })
         handoverTx = await wc.writeContract(handover)
