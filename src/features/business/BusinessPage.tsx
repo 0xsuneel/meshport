@@ -8,13 +8,14 @@
 //
 // Reads the same merchant data as before (listMyPayments, live via
 // subscribeMerchantPayments); Settlements is the existing Ledger screen, so
-// claim logic is unchanged. A business still under review sees its status
-// and the personal QR until it's approved.
+// claim logic is unchanged. Business accounts get the whole tab from sign-up;
+// until MeshPort approves them, Overview starts with the "complete your
+// business account" card.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   QrCode, Calculator, Link2, ReceiptText, Inbox, BarChart3, Volume2, VolumeX, Store, ArrowLeftRight,
-  ChevronRight, Clock, CheckCircle2, ExternalLink,
+  Clock, CheckCircle2, ExternalLink,
 } from 'lucide-react'
 import { useAuthStore } from '@/store'
 import { useMerchant } from '@/lib/merchant'
@@ -24,6 +25,7 @@ import { listMyPayments, subscribeMerchantPayments, type MerchantPayment } from 
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, voiceSupported, VOICE_LANGS } from '@/lib/voiceAlerts'
 import { Sheet } from '@/components/ui/Sheet'
 import { MultichainPage } from '@/features/multichain/MultichainPage'
+import { BusinessSetupCard } from './BusinessSetupCard'
 
 type Tab = 'overview' | 'payments' | 'settlements'
 
@@ -51,7 +53,7 @@ const sectionTitle: React.CSSProperties = { fontSize: 15, fontWeight: 700, color
 export function BusinessPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { isMerchant, status, application } = useMerchant()
+  const { isMerchant, status, application, storeName: accountStoreName } = useMerchant()
   const walletAddress = useAuthStore(s => s.walletAddress)
   const voice = useVoiceAlerts()
   const [tab, setTab] = useState<Tab>(() => {
@@ -73,10 +75,10 @@ export function BusinessPage() {
     seen.current = new Set(list.map(p => p.id))
     setPayments(list); setLoaded(true)
   }, [])
-  useEffect(() => { if (isMerchant) void load() }, [isMerchant, load])
-  useEffect(() => (isMerchant && walletAddress ? subscribeMerchantPayments(walletAddress, () => { void load() }) : undefined), [isMerchant, walletAddress, load])
+  useEffect(() => { void load() }, [load])
+  useEffect(() => (walletAddress ? subscribeMerchantPayments(walletAddress, () => { void load() }) : undefined), [walletAddress, load])
 
-  const storeName = application?.businessName || 'Your business'
+  const storeName = application?.businessName || accountStoreName || 'Your business'
   const handle = application?.username ? `${application.username}.arc` : null
   const pendingCount = payments.filter(toSettle).length
 
@@ -93,17 +95,17 @@ export function BusinessPage() {
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
               {isMerchant
                 ? <><CheckCircle2 size={13} color="var(--success)" /> Verified merchant{handle ? ` · ${handle}` : ''}</>
-                : <><Clock size={13} color="var(--warning)" /> Under review{handle ? ` · ${handle}` : ''}</>}
+                : <><Clock size={13} color="var(--warning)" /> {status === 'pending' ? 'Under review' : 'Not verified yet'}{handle ? ` · ${handle}` : ''}</>}
             </div>
           </div>
-          {isMerchant && voiceSupported() && (
+          {voiceSupported() && (
             <button onClick={() => setVoiceOpen(true)} aria-label="Voice alerts"
               style={{ width: 40, height: 40, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-primary)' }}>
               {voice.enabled ? <Volume2 size={19} /> : <VolumeX size={19} />}
             </button>
           )}
         </div>
-        {isMerchant && (
+        {(
           <div role="tablist" style={{ display: 'flex', padding: '0 16px' }}>
             {([['overview', 'Overview'], ['payments', 'Payments'], ['settlements', 'Settlements']] as const).map(([id, text]) => (
               <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
@@ -120,9 +122,7 @@ export function BusinessPage() {
         )}
       </div>
 
-      {!isMerchant ? (
-        <UnderReview status={status} onOpen={p => navigate(p)} />
-      ) : tab === 'settlements' ? (
+      {tab === 'settlements' ? (
         <MultichainPage mode="ledger" />
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px calc(env(safe-area-inset-bottom, 0px) + 28px)' }}>
@@ -157,6 +157,7 @@ function Overview({ payments, loaded, onTab, onOpen, onDetail, onVoice, voiceOn 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <BusinessSetupCard />
       {/* Today's collection */}
       <div style={{ background: 'var(--brand)', color: '#fff', borderRadius: 22, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, opacity: 0.9 }}>
@@ -357,27 +358,6 @@ function VoiceSettings() {
         </div>
       </div>
       <button onClick={() => speakPayment(24, { test: true })} style={bigBtn(true)}><Volume2 size={18} /> Play a test alert</button>
-    </div>
-  )
-}
-
-// ─── Under review ───────────────────────────────────────────────────────────
-function UnderReview({ status, onOpen }: { status: string; onOpen: (p: string) => void }) {
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ ...card, borderColor: 'color-mix(in srgb, var(--warning) 40%, var(--border))', display: 'flex', gap: 12 }}>
-        <Clock size={22} color="var(--warning)" style={{ flexShrink: 0 }} />
-        <div>
-          <b style={{ fontSize: 15, color: 'var(--text-primary)' }}>{status === 'pending' ? 'Your business is under review' : 'Business account'}</b>
-          <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            We'll let you know once it's approved. Then this tab shows your collections, settlements and merchant QR. Until then you can receive with your personal QR.
-          </p>
-        </div>
-      </div>
-      <button onClick={() => onOpen('/receive')} style={bigBtn(true)}><QrCode size={20} /> Show my QR</button>
-      <button onClick={() => onOpen('/merchant')} style={{ ...bigBtn(false), justifyContent: 'space-between' }}>
-        Application details <ChevronRight size={18} />
-      </button>
     </div>
   )
 }

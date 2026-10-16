@@ -4,12 +4,11 @@
 // revoked business apply again, and lets a business whose sign-up
 // application didn't go through send it. Every application needs a reason.
 // Personal accounts don't apply - they see how to open a business account.
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Store, Clock, CheckCircle2, XCircle } from 'lucide-react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { useAuthStore, useUIStore } from '@/store'
-import { supabase } from '@/lib/supabase'
+import { useUIStore } from '@/store'
 import { useMerchant, applyForMerchant } from '@/lib/merchant'
 
 const TYPES = ['Retail store', 'Restaurant / Café', 'Online shop', 'Services', 'Freelancer', 'Other']
@@ -18,21 +17,15 @@ export function MerchantApplyPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
   const { showToastMessage } = useUIStore()
-  const { loaded, status, application } = useMerchant()
+  const { loaded, status, application, accountType, storeName } = useMerchant()
+  // Store name and type typed at sign-up (this device), to prefill the form.
+  const draft = (() => { try { return JSON.parse(localStorage.getItem('meshport_business_draft') || 'null') as { storeName?: string; storeType?: string } | null } catch { return null } })()
   const [reapply, setReapply] = useState(false)
-  const [businessName, setBusinessName] = useState('')
-  const [businessType, setBusinessType] = useState(TYPES[0])
+  const [businessName, setBusinessName] = useState(() => storeName || draft?.storeName || '')
+  const [businessType, setBusinessType] = useState(() => TYPES.find(t => t === draft?.storeType) ?? TYPES[0])
   const [contact, setContact] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
-
-  const walletAddress = useAuthStore(s => s.walletAddress)
-  const [accountType, setAccountType] = useState<'personal' | 'business' | null>(null)
-  useEffect(() => {
-    if (!walletAddress) { setAccountType('personal'); return }
-    supabase.from('users').select('account_type').ilike('wallet_address', walletAddress).limit(1).maybeSingle()
-      .then(({ data }) => setAccountType(data?.account_type === 'business' ? 'business' : 'personal'))
-  }, [walletAddress])
 
   const showForm = (status === 'none' && accountType === 'business') || ((status === 'rejected' || status === 'revoked') && reapply)
   const personalOnly = status === 'none' && accountType === 'personal'
@@ -44,7 +37,8 @@ export function MerchantApplyPage() {
     try {
       await applyForMerchant({ businessName, businessType, contact, description })
       setReapply(false)
-      showToastMessage('Application sent - we’ll let you know once it’s reviewed', 'success')
+      try { localStorage.removeItem('meshport_business_draft') } catch { /* storage unavailable */ }
+      showToastMessage('Sent for review - we’ll let you know once it’s approved', 'success')
     } catch (e) {
       showToastMessage(e instanceof Error ? e.message : 'Could not submit - try again', 'error')
     }
@@ -62,12 +56,12 @@ export function MerchantApplyPage() {
               <ArrowLeft className="w-5 h-5 text-text-primary" />
             </button>
           )}
-          <h1 className="text-xl font-bold text-text-primary">Merchant account</h1>
+          <h1 className="text-xl font-bold text-text-primary">{status === 'none' && accountType === 'business' ? 'Complete your business account' : 'Merchant account'}</h1>
         </div>
       </div>
 
       <div className="px-5 pb-10 pt-2 space-y-5 lg:max-w-[560px]">
-        {!loaded || (status === 'none' && accountType === null) ? (
+        {!loaded ? (
           <div className="text-center py-10 text-sm text-text-secondary">Loading…</div>
         ) : personalOnly ? (
           <div className="bg-surface border border-border rounded-3xl p-6 flex flex-col items-center text-center gap-3">

@@ -33,9 +33,14 @@ export type MerchantApplication = {
   username: string | null
 }
 
-type State = { loaded: boolean; status: MerchantStatus; application: MerchantApplication | null }
+type State = {
+  loaded: boolean; status: MerchantStatus; application: MerchantApplication | null
+  /** Chosen at sign-up. Business accounts get the Business tab at once; the
+   *  merchant application (with its reason) can be completed later. */
+  accountType: 'personal' | 'business'; storeName: string | null
+}
 
-let state: State = { loaded: false, status: 'none', application: null }
+let state: State = { loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null }
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach(l => l())
 const set = (s: State) => { state = s; emit(); if (s.loaded) rememberHint(s.status === 'approved') }
@@ -103,11 +108,14 @@ export function refreshMerchant(): Promise<void> {
   loading = (async () => {
     try {
       const uid = await authUid()
-      if (!uid) { set({ loaded: true, status: 'none', application: null }); return }
-      const { data } = await supabase.from('merchant_applications').select('*')
-        .eq('auth_uid', uid).order('created_at', { ascending: false }).limit(1)
+      if (!uid) { set({ loaded: true, status: 'none', application: null, accountType: 'personal', storeName: null }); return }
+      const [{ data }, { data: me }] = await Promise.all([
+        supabase.from('merchant_applications').select('*').eq('auth_uid', uid).order('created_at', { ascending: false }).limit(1),
+        supabase.from('users').select('account_type, store_name').eq('auth_uid', uid).limit(1).maybeSingle(),
+      ])
       const app = data?.[0] ? mapRow(data[0]) : null
-      set({ loaded: true, status: app?.status ?? 'none', application: app })
+      set({ loaded: true, status: app?.status ?? 'none', application: app,
+        accountType: me?.account_type === 'business' ? 'business' : 'personal', storeName: me?.store_name ?? null })
       if (!app && recheckedUid !== uid) {
         recheckedUid = uid
         setTimeout(() => { loading = null; void refreshMerchant() }, 3000)
@@ -133,7 +141,7 @@ export function refreshMerchant(): Promise<void> {
 /** Clears cached merchant state (sign-out). */
 export function resetMerchant() {
   channel?.unsubscribe(); channel = null; channelUid = null
-  set({ loaded: false, status: 'none', application: null })
+  set({ loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null })
 }
 
 /** True only for an approved merchant. Safe to call from non-React code. */
@@ -206,11 +214,11 @@ export function hubLabel(label: string, isMerchant: boolean): string {
   return label === 'Multichain Hub' ? 'Cross-chain Transfer' : label === 'Insights' ? 'Ledger Insights' : label
 }
 
-/** Business tab instead of Rewards: approved merchants, and businesses whose
- *  application is still under review (they see its status there). */
+/** Business tab instead of Rewards: every business account (from sign-up,
+ *  approved or not yet), and older merchants who applied as personal users. */
 export function useBusinessTab(): boolean {
-  const { isMerchant, status } = useMerchant()
-  return isMerchant || status === 'pending'
+  const { isMerchant, status, accountType } = useMerchant()
+  return isMerchant || status === 'pending' || accountType === 'business'
 }
 export function useHubLabel(): (label: string) => string {
   const { isMerchant } = useMerchant()

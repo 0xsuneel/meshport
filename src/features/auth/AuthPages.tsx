@@ -25,7 +25,7 @@ import {
 import {encryptPrivateKey, storeEncryptedKey, encryptMnemonic, storeEncryptedMnemonic, markWalletBackedUp} from '@/lib/security'
 import { LoadingDots } from '@/components/ui/LoadingDots'
 import { getSignupKind, setSignupKind, registerNameOnchain, type AccountKind } from '@/lib/onchainNames'
-import { applyForMerchant } from '@/lib/merchant'
+import { refreshMerchant } from '@/lib/merchant'
 import type { User } from '@/types'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1011,7 +1011,8 @@ export function ImportWalletPage() {
 }
 
 // ─── Claim Username ───────────────────────────────────────────────────────────
-const STORE_TYPES = ['Retail / Kirana', 'Food & café', 'Online shop', 'Services', 'Freelancer', 'Other']
+// Same list as the merchant application, so it can be prefilled from here.
+const STORE_TYPES = ['Retail store', 'Restaurant / Café', 'Online shop', 'Services', 'Freelancer', 'Other']
 
 export function ClaimUsernamePage() {
   const navigate = useNavigate()
@@ -1029,7 +1030,6 @@ export function ClaimUsernamePage() {
   const isBusiness = signupKind === 'business'
   const [storeName, setStoreName] = useState('')
   const [storeType, setStoreType] = useState(STORE_TYPES[0])
-  const [storeReason, setStoreReason] = useState('')
   const [onchainStep, setOnchainStep] = useState<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
   const [statusMsg, setStatusMsg] = useState('')
@@ -1106,7 +1106,6 @@ export function ClaimUsernamePage() {
   const handleClaim = async () => {
     if (status !== 'available' || !walletAddress || !handle) return
     if (isBusiness && storeName.trim().length < 2) { showToastMessage('Enter your store name', 'error'); return }
-    if (isBusiness && storeReason.trim().length < 10) { showToastMessage('Tell us why you need a business account', 'error'); return }
     setLoading(true)
 
     // Final availability check against Supabase
@@ -1144,16 +1143,16 @@ export function ClaimUsernamePage() {
       setUser({ ...user, username: handle + '.arc', walletAddress })
     }
     // Business: mark the new account as a business (only allowed right after
-    // sign-up - the database refuses merchant applications from personal
-    // accounts), then send the application so review starts at once.
+    // sign-up; the database refuses merchant applications from personal
+    // accounts). The business can use the app at once; Home then asks it to
+    // complete the application (reason) for MeshPort's review.
     if (isBusiness) {
       try {
         const { data: isBiz } = await supabase.rpc('start_business_account')
         if (!isBiz) throw new Error('Could not set up the business account')
-        await applyForMerchant({ businessName: storeName.trim(), businessType: storeType, description: storeReason.trim() })
+        try { localStorage.setItem('meshport_business_draft', JSON.stringify({ storeName: storeName.trim(), storeType })) } catch { /* storage unavailable */ }
       } catch (e) {
         console.warn('[Claim] business account:', e instanceof Error ? e.message : e)
-        showToastMessage('Your business application didn’t go through - send it from Profile → Merchant application', 'error')
       }
     }
 
@@ -1167,6 +1166,7 @@ export function ClaimUsernamePage() {
     ])
     setOnchainStep(null)
     setSignupKind(null)
+    void refreshMerchant()
 
     setUsername(handle)
     setLoading(false)
@@ -1221,13 +1221,6 @@ export function ClaimUsernamePage() {
                   </button>
                 ))}
               </div>
-              <div>
-                <label htmlFor="store-reason" className="block text-sm font-semibold text-text-primary mb-1.5">Why do you need a business account?</label>
-                <textarea id="store-reason" value={storeReason} onChange={e => setStoreReason(e.target.value.slice(0, 500))} rows={3}
-                  placeholder="What you sell and how customers will pay you"
-                  className="w-full bg-surface border border-border rounded-2xl px-4 py-3 text-text-primary placeholder-gray-600 focus:outline-none focus:border-brand text-base resize-none" />
-                <p className="text-xs text-text-muted mt-1">MeshPort reviews every business account before merchant tools turn on.</p>
-              </div>
               <label htmlFor="store-handle" className="block text-sm font-semibold text-text-primary pt-1">Store username</label>
             </div>
           )}
@@ -1259,7 +1252,7 @@ export function ClaimUsernamePage() {
               <Loader2 className="w-4 h-4 animate-spin" /> {onchainStep}
             </p>
           )}
-          <Button fullWidth loading={loading} disabled={status !== 'available' || !walletAddress || (isBusiness && (storeName.trim().length < 2 || storeReason.trim().length < 10))} onClick={handleClaim}>
+          <Button fullWidth loading={loading} disabled={status !== 'available' || !walletAddress || (isBusiness && storeName.trim().length < 2)} onClick={handleClaim}>
             {loading ? 'Saving...' : status === 'available' ? `Claim ${handle}.arc` : isBusiness ? 'Claim store username' : 'Claim Username'}
           </Button>
         </div>
