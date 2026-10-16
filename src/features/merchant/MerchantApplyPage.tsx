@@ -1,12 +1,15 @@
-// Profile → Apply for merchant.
-// Shows the application form, or the current status of the user's latest
-// application (pending / approved / rejected / revoked). A rejected or
-// revoked user keeps the normal flow and may apply again.
-import { useState } from 'react'
+// Profile → Merchant account (business accounts only).
+// A business account applies at sign-up; this page shows that application's
+// status (pending / approved / rejected / revoked), lets a rejected or
+// revoked business apply again, and lets a business whose sign-up
+// application didn't go through send it. Every application needs a reason.
+// Personal accounts don't apply - they see how to open a business account.
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Store, Clock, CheckCircle2, XCircle } from 'lucide-react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { useUIStore } from '@/store'
+import { useAuthStore, useUIStore } from '@/store'
+import { supabase } from '@/lib/supabase'
 import { useMerchant, applyForMerchant } from '@/lib/merchant'
 
 const TYPES = ['Retail store', 'Restaurant / Café', 'Online shop', 'Services', 'Freelancer', 'Other']
@@ -23,10 +26,20 @@ export function MerchantApplyPage() {
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const showForm = status === 'none' || ((status === 'rejected' || status === 'revoked') && reapply)
+  const walletAddress = useAuthStore(s => s.walletAddress)
+  const [accountType, setAccountType] = useState<'personal' | 'business' | null>(null)
+  useEffect(() => {
+    if (!walletAddress) { setAccountType('personal'); return }
+    supabase.from('users').select('account_type').ilike('wallet_address', walletAddress).limit(1).maybeSingle()
+      .then(({ data }) => setAccountType(data?.account_type === 'business' ? 'business' : 'personal'))
+  }, [walletAddress])
+
+  const showForm = (status === 'none' && accountType === 'business') || ((status === 'rejected' || status === 'revoked') && reapply)
+  const personalOnly = status === 'none' && accountType === 'personal'
 
   const submit = async () => {
     if (businessName.trim().length < 2) { showToastMessage('Enter your business name', 'error'); return }
+    if (description.trim().length < 10) { showToastMessage('Tell us why you need a business account', 'error'); return }
     setSubmitting(true)
     try {
       await applyForMerchant({ businessName, businessType, contact, description })
@@ -54,8 +67,16 @@ export function MerchantApplyPage() {
       </div>
 
       <div className="px-5 pb-10 pt-2 space-y-5 lg:max-w-[560px]">
-        {!loaded ? (
+        {!loaded || (status === 'none' && accountType === null) ? (
           <div className="text-center py-10 text-sm text-text-secondary">Loading…</div>
+        ) : personalOnly ? (
+          <div className="bg-surface border border-border rounded-3xl p-6 flex flex-col items-center text-center gap-3">
+            <Store className="w-10 h-10 text-brand-text" />
+            <p className="text-base font-bold text-text-primary">Merchant tools are for business accounts</p>
+            <p className="text-sm text-text-secondary leading-relaxed max-w-[340px]">
+              This is a personal account. To accept payments as a store, create a business account: choose Business on the first sign-up screen and claim your store username.
+            </p>
+          </div>
         ) : showForm ? (
           <>
             <div className="bg-surface border border-border rounded-3xl p-5 flex gap-4 items-start">
@@ -90,9 +111,9 @@ export function MerchantApplyPage() {
                 <input value={contact} onChange={e => setContact(e.target.value)} maxLength={120} placeholder="How can we reach you?" className={input} />
               </div>
               <div>
-                <p className="text-xs font-semibold text-text-secondary mb-2">What do you sell? - optional</p>
+                <p className="text-xs font-semibold text-text-secondary mb-2">Why do you need a business account?</p>
                 <textarea value={description} onChange={e => setDescription(e.target.value)} maxLength={500} rows={3}
-                  placeholder="A short description of your business" className={`${input} resize-none`} />
+                  placeholder="What you sell and how customers will pay you" className={`${input} resize-none`} />
               </div>
               <button onClick={submit} disabled={submitting}
                 className="w-full py-3 rounded-2xl text-white text-sm font-semibold active:scale-95 transition-transform disabled:opacity-60"
@@ -115,15 +136,15 @@ export function MerchantApplyPage() {
             <p className="text-sm text-text-secondary">{application.businessName}{application.businessType ? ` · ${application.businessType}` : ''}</p>
             <p className="text-xs text-text-secondary leading-relaxed max-w-[340px]">
               {status === 'pending' && 'MeshPort is reviewing your application. You’ll get a notification when it’s decided.'}
-              {status === 'approved' && 'Payments on other chains wait there until you tap Claim All in Multichain Hub → Ledger (every 6 hours), or claim one chain at a time.'}
+              {status === 'approved' && 'Your collections, payments and settlements are in the Business tab. Payments on other chains wait in Settlements until you tap Settle now.'}
               {(status === 'rejected' || status === 'revoked') && (application.reviewNote || 'You can keep using MeshPort as usual.')}
             </p>
             <p className="text-[11px] text-text-secondary">Applied {new Date(application.createdAt).toLocaleDateString()}</p>
             {status === 'approved' && (
-              <button onClick={() => navigate('/multichain', { state: { tab: 'bring' } })}
+              <button onClick={() => navigate('/business')}
                 className="mt-2 px-5 py-3 rounded-2xl text-white text-sm font-semibold"
                 style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
-                Open Ledger
+                Open Business
               </button>
             )}
             {(status === 'rejected' || status === 'revoked') && (

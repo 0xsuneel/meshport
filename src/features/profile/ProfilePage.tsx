@@ -155,12 +155,15 @@ export function ProfilePage() {
     <Section title="Wallet">
       <MenuItem icon={<Shield className="w-5 h-5" />} label="Security" color="bg-brand/20 text-brand-text" onClick={() => navigate('/security')} />
       <MenuItem icon={<Palette className="w-5 h-5" />} label="Appearance" color="bg-brand/20 text-brand-text" onClick={() => navigate('/appearance')} />
-      <MenuItem icon={<Store className="w-5 h-5" />}
-        label={merchant.status === 'approved' ? 'Merchant account'
-          : merchant.status === 'pending' ? 'Merchant application · In review'
-          : 'Apply for merchant'}
-        color={merchant.status === 'approved' ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'}
-        onClick={() => navigate('/merchant')} />
+      {/* Business accounts only - personal accounts have no merchant option. */}
+      {merchant.status !== 'none' && (
+        <MenuItem icon={<Store className="w-5 h-5" />}
+          label={merchant.status === 'approved' ? 'Merchant account'
+            : merchant.status === 'pending' ? 'Merchant application · In review'
+            : 'Merchant application'}
+          color={merchant.status === 'approved' ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'}
+          onClick={() => navigate('/merchant')} />
+      )}
 
       {/*
         Backup menu items - rules by wallet type:

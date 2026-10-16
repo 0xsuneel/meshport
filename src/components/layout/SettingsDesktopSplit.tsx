@@ -77,7 +77,9 @@ export function SettingsDesktopSplit() {
         {isWallet && (
           <Item icon={walletSource === 'import-privkey' ? <Key size={17} /> : <Upload size={17} />} label="Backup & Recovery" path="/backup" active={is('/backup')} onClick={go} />
         )}
-        <Item icon={<Store size={17} />} label={merchant.status === 'approved' ? 'Merchant account' : 'Apply for merchant'} path="/merchant" active={is('/merchant')} onClick={go} />
+        {merchant.status !== 'none' && (
+          <Item icon={<Store size={17} />} label={merchant.status === 'approved' ? 'Merchant account' : 'Merchant application'} path="/merchant" active={is('/merchant')} onClick={go} />
+        )}
 
         <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--text-secondary)', margin: '14px 10px 4px' }}>Support</p>
         <Item icon={<HelpCircle size={17} />} label="Help & Support" path="/help-support" active={is('/help-support')} onClick={go} />
