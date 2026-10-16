@@ -1029,6 +1029,7 @@ export function ClaimUsernamePage() {
   const isBusiness = signupKind === 'business'
   const [storeName, setStoreName] = useState('')
   const [storeType, setStoreType] = useState(STORE_TYPES[0])
+  const [storeReason, setStoreReason] = useState('')
   const [onchainStep, setOnchainStep] = useState<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
   const [statusMsg, setStatusMsg] = useState('')
@@ -1105,6 +1106,7 @@ export function ClaimUsernamePage() {
   const handleClaim = async () => {
     if (status !== 'available' || !walletAddress || !handle) return
     if (isBusiness && storeName.trim().length < 2) { showToastMessage('Enter your store name', 'error'); return }
+    if (isBusiness && storeReason.trim().length < 10) { showToastMessage('Tell us why you need a business account', 'error'); return }
     setLoading(true)
 
     // Final availability check against Supabase
@@ -1143,7 +1145,7 @@ export function ClaimUsernamePage() {
     }
     // Business: send the merchant application now, so review starts at once.
     if (isBusiness) {
-      try { await applyForMerchant({ businessName: storeName.trim(), businessType: storeType }) }
+      try { await applyForMerchant({ businessName: storeName.trim(), businessType: storeType, description: storeReason.trim() }) }
       catch (e) { console.warn('[Claim] merchant application:', e instanceof Error ? e.message : e) }
     }
 
@@ -1211,6 +1213,13 @@ export function ClaimUsernamePage() {
                   </button>
                 ))}
               </div>
+              <div>
+                <label htmlFor="store-reason" className="block text-sm font-semibold text-text-primary mb-1.5">Why do you need a business account?</label>
+                <textarea id="store-reason" value={storeReason} onChange={e => setStoreReason(e.target.value.slice(0, 500))} rows={3}
+                  placeholder="What you sell and how customers will pay you"
+                  className="w-full bg-surface border border-border rounded-2xl px-4 py-3 text-text-primary placeholder-gray-600 focus:outline-none focus:border-brand text-base resize-none" />
+                <p className="text-xs text-text-muted mt-1">MeshPort reviews every business account before merchant tools turn on.</p>
+              </div>
               <label htmlFor="store-handle" className="block text-sm font-semibold text-text-primary pt-1">Store username</label>
             </div>
           )}
@@ -1242,7 +1251,7 @@ export function ClaimUsernamePage() {
               <Loader2 className="w-4 h-4 animate-spin" /> {onchainStep}
             </p>
           )}
-          <Button fullWidth loading={loading} disabled={status !== 'available' || !walletAddress || (isBusiness && storeName.trim().length < 2)} onClick={handleClaim}>
+          <Button fullWidth loading={loading} disabled={status !== 'available' || !walletAddress || (isBusiness && (storeName.trim().length < 2 || storeReason.trim().length < 10))} onClick={handleClaim}>
             {loading ? 'Saving...' : status === 'available' ? `Claim ${handle}.arc` : isBusiness ? 'Claim store username' : 'Claim Username'}
           </Button>
         </div>

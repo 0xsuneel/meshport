@@ -170,6 +170,7 @@ export async function applyForMerchant(p: {
 }): Promise<void> {
   const name = p.businessName.trim()
   if (name.length < 2) throw new Error('Enter your business name')
+  if ((p.description ?? '').trim().length < 10) throw new Error('Tell us why you need a business account')
   const { error } = await supabase.from('merchant_applications').insert({
     business_name: name.slice(0, 80),
     business_type: p.businessType?.trim().slice(0, 60) || null,

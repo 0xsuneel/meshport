@@ -225,7 +225,7 @@ function Overview({ payments, loaded, onTab, onOpen, onDetail, onVoice, voiceOn 
           <GridItem icon={<BarChart3 size={22} />} label="Insights" onClick={() => onOpen('/insights')} />
           <GridItem icon={<Volume2 size={22} />} label="Voice alerts" onClick={onVoice} />
           <GridItem icon={<ArrowLeftRight size={22} />} label="Cross-chain" onClick={() => onOpen('/multichain')} />
-          <GridItem icon={<Store size={22} />} label="Profile" onClick={() => onOpen('/profile/merchant')} />
+          <GridItem icon={<Store size={22} />} label="Profile" onClick={() => onOpen('/merchant')} />
         </div>
       </div>
     </div>
@@ -375,7 +375,7 @@ function UnderReview({ status, onOpen }: { status: string; onOpen: (p: string) =
         </div>
       </div>
       <button onClick={() => onOpen('/receive')} style={bigBtn(true)}><QrCode size={20} /> Show my QR</button>
-      <button onClick={() => onOpen('/profile/merchant')} style={{ ...bigBtn(false), justifyContent: 'space-between' }}>
+      <button onClick={() => onOpen('/merchant')} style={{ ...bigBtn(false), justifyContent: 'space-between' }}>
         Application details <ChevronRight size={18} />
       </button>
     </div>
