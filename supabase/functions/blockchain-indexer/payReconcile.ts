@@ -36,7 +36,12 @@ export interface PayWorklistRow {
   isNative: boolean
   tokenAddress: string | null
   tokenSymbol: string | null
+  /** Native USDC sent through a wrapper contract (Arc Memo) - tx.to is this, value 0. */
+  callTarget?: string | null
 }
+
+// Arc's EIP-7708 native emitter: every native USDC movement logs a Transfer here (18 decimals).
+const ARC_NATIVE_EMITTER = '0xfffffffffffffffffffffffffffffffffffffffe'
 
 export interface RawTransaction {
   hash: string
@@ -112,6 +117,42 @@ export function decodePayReceipt(
   }
 
   const blockNumber = Number(BigInt(receipt.blockNumber ?? '0x0'))
+
+  if (row.isNative && row.callTarget) {
+    // Order payment through Arc's Memo contract: the USDC moved inside the
+    // call, so the amount comes from the native emitter's Transfer log.
+    const to = (tx.to ?? '').toLowerCase()
+    if (to !== row.callTarget.toLowerCase()) {
+      return { outcome: 'mismatch', reason: `transaction.to ${to} does not match expected call target ${row.callTarget}` }
+    }
+    for (const log of receipt.logs) {
+      if ((log.address ?? '').toLowerCase() !== ARC_NATIVE_EMITTER) continue
+      if (!Array.isArray(log.topics) || log.topics[0]?.toLowerCase() !== TRANSFER_TOPIC0) continue
+      const decoded: DecodedTransferLog | null = decodeTransferLog(log, 18, ARC_NATIVE_EMITTER)
+      if (!decoded) continue
+      if (decoded.wallet.toLowerCase() !== row.recipientWallet.toLowerCase()) continue
+      if (decoded.from.toLowerCase() !== row.payerWallet.toLowerCase()) continue
+      return {
+        outcome: 'reconciled',
+        event: {
+          chain_id: row.chainId,
+          block_number: blockNumber,
+          tx_hash: row.txHash.toLowerCase(),
+          event_type: 'deposit_detected',
+          wallet_address: row.recipientWallet.toLowerCase(),
+          assets: [row.tokenSymbol ?? 'USDC'],
+          metadata: { recipient: row.recipientWallet.toLowerCase(), sender: from, amount: decoded.amount, via: 'native-transfer-log', reconciled: true, reconciledFrom: 'pay' },
+          status: 'confirmed',
+          log_index: null,
+          contract_address: null,
+          event_signature: null,
+          block_hash: null,
+          transaction_index: null,
+        },
+      }
+    }
+    return { outcome: 'not_found', reason: `no native USDC Transfer to ${row.recipientWallet} in ${row.txHash}` }
+  }
 
   if (row.isNative) {
     const to = (tx.to ?? '').toLowerCase()

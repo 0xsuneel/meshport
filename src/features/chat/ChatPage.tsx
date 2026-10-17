@@ -2854,6 +2854,8 @@ export function ChatConversationPage() {
   // amount + token are fixed and the payment is linked to that bill.
   // number = the order number (ORD-…); older requests fall back to the code.
   const [billPay, setBillPay] = useState<{ code: string; number: string; orderNumber: string | null; amount: number; kind: OrderKind } | null>(null)
+  // Paying an order in USDC: the order rides along on-chain (Arc memo).
+  const chatOrderMemo = () => billPay && payToken === 'USDC' ? { code: billPay.code, label: displayOrderNumber(billPay.number) } : null
   // Set when the pay sheet was opened from a personal payment link card; an
   // amount in the link is fixed (the requester set it).
   const [linkPay, setLinkPay] = useState<{ username: string; amount: string | null } | null>(null)
@@ -4018,7 +4020,7 @@ export function ChatConversationPage() {
       const toAddr = otherUser.wallet_address
       import('@/lib/arcService').then(({ preparePayment }) => preparePayment({
         token: payToken === 'EURC' || payToken === 'cirBTC' ? payToken : 'USDC',
-        from: fromAddr, to: toAddr, amount: numAmount, idempotencyKey,
+        from: fromAddr, to: toAddr, amount: numAmount, idempotencyKey, memo: chatOrderMemo(),
       })).catch(() => {})
     }
 
@@ -4088,7 +4090,7 @@ export function ChatConversationPage() {
         ? sendEURC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey })
         : payToken === 'cirBTC'
         ? sendCirBTC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey })
-        : sendUSDC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey })
+        : sendUSDC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey, memo: chatOrderMemo() })
       ).catch((e: unknown) => { noteFailed(e); throw e })
 
       // The send now waits for the real receipt (waitForConfirmation in
@@ -5583,7 +5585,7 @@ export function ChatConversationPage() {
                         const idemKey = chatPayIdempotencyKeyRef.current.key
                         import('@/lib/arcService').then(({ preparePayment }) => preparePayment({
                           token: payToken === 'EURC' || payToken === 'cirBTC' ? payToken : 'USDC',
-                          from: fromAddr, to: toAddr, amount: n, idempotencyKey: idemKey,
+                          from: fromAddr, to: toAddr, amount: n, idempotencyKey: idemKey, memo: chatOrderMemo(),
                         })).catch(() => {})
                       }
                     }}

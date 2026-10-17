@@ -150,3 +150,27 @@ Deno.test('one attempt failing does not stop the rest of the batch', async () =>
   assertEquals(results.find(r => r.attemptId === rowA.attemptId)?.outcome, 'not_found')
   assertEquals(results.find(r => r.attemptId === rowB.attemptId)?.outcome, 'reconciled')
 })
+
+Deno.test('Memo order payment: tx.to is the Memo contract, amount read from the native emitter Transfer log', () => {
+  const MEMO = '0x5294e9927c3306dcbadb03fe70b92e01ccede505'
+  const row: PayWorklistRow = { ...realNativeRow(), txHash: '0xMemoTx', callTarget: MEMO }
+  const tx: RawTransaction = { hash: row.txHash, from: REAL_PAYER, to: MEMO, value: '0x0' }
+  const logOf = (address: string, amount: bigint) => ({
+    address, topics: [TRANSFER_TOPIC0, pad32(REAL_PAYER), pad32(row.recipientWallet)], data: '0x' + amount.toString(16),
+    transactionHash: row.txHash, blockNumber: '0x10', logIndex: '0x1', blockHash: '0xB', transactionIndex: '0x0',
+  })
+  const receipt: RawReceiptWithLogs = { transactionHash: row.txHash, status: '0x1', blockNumber: '0x10', logs: [
+    logOf('0x3600000000000000000000000000000000000000', 10_000_000n),           // ERC-20 interface log: ignored
+    logOf('0xfffffffffffffffffffffffffffffffffffffffe', 10_000_000_000_000_000_000n), // native emitter, 18 dp
+  ] }
+  const outcome = decodePayReceipt(row, tx, receipt)
+  assertEquals(outcome.outcome, 'reconciled')
+  if (outcome.outcome !== 'reconciled') return
+  assertEquals(outcome.event.event_type, 'deposit_detected')
+  assertEquals(outcome.event.wallet_address, row.recipientWallet)
+  assertEquals((outcome.event.metadata as any).amount, 10)
+
+  // Sent somewhere else than the Memo contract → never accepted.
+  const wrong = decodePayReceipt(row, { ...tx, to: row.recipientWallet }, receipt)
+  assertEquals(wrong.outcome, 'mismatch')
+})

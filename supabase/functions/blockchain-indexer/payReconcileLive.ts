@@ -8,7 +8,7 @@ export function makeLivePayReconcileRepository(supabase: SupabaseClient): PayRec
     async findConfirmedUnreconciledPayAttempts(sinceIso: string): Promise<PayWorklistRow[]> {
       const { data, error } = await supabase
         .from('transaction_attempts')
-        .select('id, chain_id, tx_hash, wallet_address, transaction_intents!inner(feature, token_address, token_symbol, recipient_address)')
+        .select('id, chain_id, tx_hash, wallet_address, transaction_intents!inner(feature, token_address, token_symbol, recipient_address, metadata)')
         .eq('status', 'CONFIRMED')
         .eq('transaction_intents.feature', 'pay')
         .is('chain_events_reconciled_at', null)
@@ -22,7 +22,7 @@ export function makeLivePayReconcileRepository(supabase: SupabaseClient): PayRec
       }
       const out: PayWorklistRow[] = []
       for (const r of (data ?? []) as Array<Record<string, unknown>>) {
-        const intent = r.transaction_intents as { token_address: string | null; token_symbol: string | null; recipient_address: string | null } | null
+        const intent = r.transaction_intents as { token_address: string | null; token_symbol: string | null; recipient_address: string | null; metadata: Record<string, unknown> | null } | null
         if (!intent?.recipient_address) continue
         out.push({
           attemptId: r.id as string,
@@ -33,6 +33,7 @@ export function makeLivePayReconcileRepository(supabase: SupabaseClient): PayRec
           isNative: !intent.token_address,
           tokenAddress: intent.token_address,
           tokenSymbol: intent.token_symbol,
+          callTarget: typeof intent.metadata?.callTarget === 'string' ? intent.metadata.callTarget : null,
         })
       }
       return out

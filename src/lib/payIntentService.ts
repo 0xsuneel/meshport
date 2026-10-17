@@ -58,6 +58,8 @@ export async function createPayIntent(params: {
   tokenSymbol: string | null
   recipientAddress: string
   recipientUsername?: string | null
+  /** Set for an order payment sent through Arc's Memo contract. */
+  callTarget?: string | null
 }): Promise<CreatePayIntentResult> {
   try {
     await ensureAnonSession()

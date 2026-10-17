@@ -1,3 +1,4 @@
+import { displayOrderNumber } from '@/lib/orderLabels'
 import { orderKindOf, orderTitle, paymentOrderTag, type OrderKind } from '@/lib/merchantPay'
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
 import { TokenMenu } from '@/components/ui/TokenMenu'
@@ -225,6 +226,10 @@ export function PaySendPage() {
   // Merchant payment: order number + amount come from the request and
   // can't be edited; the payment is confirmed against both.
   const [merchantOrderNumber, setMerchantOrderNumber] = useState<string | null>(() => searchParams.get('order'))
+  // Paying an order in USDC: the order rides along on-chain (Arc memo).
+  const orderMemo = (t: string) => merchantPayCode && t === 'USDC'
+    ? { code: merchantPayCode, label: displayOrderNumber(merchantOrderNumber || merchantPayCode.slice(0, 6).toUpperCase()) }
+    : null
   const [merchantOrderKind, setMerchantOrderKind] = useState<OrderKind>('request')
   // The order's requester (for the chat card when the recipient came from a
   // link or QR without a username).
@@ -940,7 +945,7 @@ export function PaySendPage() {
         const recipientUsername = recipient.isUsername ? recipient.display : undefined
         import('@/lib/arcService').then(({ preparePayment }) => preparePayment({
           token: token === 'EURC' || token === 'cirBTC' ? token : 'USDC',
-          from: fromAddr, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername,
+          from: fromAddr, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername, memo: orderMemo(token),
         })).catch(() => {})
       }
       // PERF: the "may I pay this person" check is a network round trip that
@@ -1020,7 +1025,7 @@ export function PaySendPage() {
         ? sendEURC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
         : token === 'cirBTC' && arcMod.sendCirBTC
         ? arcMod.sendCirBTC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
-        : sendUSDC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
+        : sendUSDC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername, memo: orderMemo('USDC') })
       ).catch((e: unknown) => { noteFailed(e); throw e })
 
       // The send now waits for the real receipt (see waitForConfirmation in
@@ -1678,6 +1683,7 @@ export function PaySendPage() {
                           amount: numAmount,
                           idempotencyKey,
                           recipientUsername: recipient.isUsername ? recipient.display : undefined,
+                          memo: orderMemo(token),
                         })).catch(() => {})
                       }
                       goForward('review')

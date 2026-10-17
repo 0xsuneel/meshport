@@ -12,7 +12,9 @@
 // Payments are only ever confirmed by the merchant-pay Edge Function, which
 // reads the transaction from the chain. Nothing here marks anything paid.
 
-import { encodeFunctionData, parseUnits, stringToHex, createPublicClient, http, erc20Abi, type Hex } from 'viem'
+import { ARC_MEMO_CONTRACT, memoTransferData as encodeMemoTransfer } from './arcMemo'
+export { ARC_MEMO_CONTRACT, orderMemoId } from './arcMemo'
+import { encodeFunctionData, parseUnits, createPublicClient, http, erc20Abi, type Hex } from 'viem'
 import { supabase } from './supabase'
 import { describeFunctionsError } from './describeFunctionsError'
 import { ARC_EXPLORER, ARC_CHAIN_KEY } from './chainExplorers'
@@ -553,25 +555,9 @@ export async function payArcFromBrowserWallet(w: BrowserWallet, to: string, amou
   return await w.provider.request({ method: 'eth_sendTransaction', params: [{ from, to, value: `0x${value.toString(16)}` }] })
 }
 
-/** Arc's Memo contract - https://docs.arc.io/arc/concepts/transaction-memos */
-export const ARC_MEMO_CONTRACT = '0x5294E9927c3306DcBaDb03fe70b92e01cCede505'
-const MEMO_ABI = [{
-  type: 'function', name: 'memo', stateMutability: 'nonpayable', outputs: [],
-  inputs: [{ name: 'target', type: 'address' }, { name: 'data', type: 'bytes' }, { name: 'memoId', type: 'bytes32' }, { name: 'memoData', type: 'bytes' }],
-}] as const
-
-/** memoId for an order: its code as bytes32 (the watcher reads it back the same way). */
-export function orderMemoId(code: string): Hex {
-  return stringToHex(code.toLowerCase(), { size: 32 })
-}
-
 /** A USDC transfer to `to`, wrapped in Memo.memo(...) with the order attached. */
 export function memoTransferData(to: string, amount: number, memo: { code: string; orderNumber?: string | null }): Hex {
-  const transfer = encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [to as Hex, parseUnits(amount.toFixed(6), 6)] })
-  return encodeFunctionData({
-    abi: MEMO_ABI, functionName: 'memo',
-    args: [ARC_PAY_CHAIN.usdc as Hex, transfer, orderMemoId(memo.code), stringToHex(`MeshPort ${orderDisplay(memo)}`)],
-  })
+  return encodeMemoTransfer(to, amount, { code: memo.code, label: orderDisplay(memo) })
 }
 
 /** Deep links that open a page inside a wallet app's browser. */

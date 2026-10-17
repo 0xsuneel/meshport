@@ -7,6 +7,7 @@ import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts'
 import { arcTransport, arcRpcJson } from './arc'
 import { ARC, ARC_TOKENS, ARC_CHAIN_INLINE as REGISTRY_ARC_CHAIN_INLINE } from '@/blockchain/chains'
 import { isSlowNetwork } from './connectivity'
+import { ARC_MEMO_CONTRACT, memoTransferData, type OrderMemo } from './arcMemo'
 
 // ─── Chain/token constants re-exported from the shared registry ─────────────
 // Definitions moved to src/blockchain/chains.ts (Phase 0 of
@@ -109,23 +110,28 @@ const ERC20_TRANSFER_ABI = [{
   stateMutability: 'nonpayable',
 }] as const
 
-function payTx(token: PayToken, destination: `0x${string}`, amount: number) {
+function payTx(token: PayToken, destination: `0x${string}`, amount: number, memo?: OrderMemo | null) {
   if (token === 'USDC') {
     const amountAtomic = BigInt(Math.round(amount * 1_000_000)) * (10n ** 12n)
-    return { to: destination, value: amountAtomic, data: undefined, amountAtomic, decimals: 18, isNative: true, tokenAddress: null }
+    // An order payment goes through Arc's Memo contract with the order attached
+    // (the USDC still moves from the payer to `destination`).
+    if (memo) {
+      return { to: ARC_MEMO_CONTRACT as `0x${string}`, value: undefined, data: memoTransferData(destination, amount, memo), amountAtomic, decimals: 18, isNative: true, tokenAddress: null, callTarget: ARC_MEMO_CONTRACT as string }
+    }
+    return { to: destination, value: amountAtomic, data: undefined, amountAtomic, decimals: 18, isNative: true, tokenAddress: null, callTarget: null }
   }
   const decimals = token === 'EURC' ? 6 : 8
   const contract = (token === 'EURC' ? ARC_TOKENS.EURC.contract : ARC_TOKENS.cirBTC.contract) as `0x${string}`
   const amountAtomic = parseUnits(toPlainDecimalString(amount, decimals), decimals)
   const data = encodeFunctionData({ abi: ERC20_TRANSFER_ABI, functionName: 'transfer', args: [destination, amountAtomic] })
-  return { to: contract, value: undefined, data, amountAtomic, decimals, isNative: false, tokenAddress: contract as string }
+  return { to: contract, value: undefined, data, amountAtomic, decimals, isNative: false, tokenAddress: contract as string, callTarget: null }
 }
 
-const preflightSig = (token: PayToken, sender: string, destination: string, amountAtomic: bigint) =>
-  `${token}|${sender.toLowerCase()}|${destination.toLowerCase()}|${amountAtomic}`
+const preflightSig = (token: PayToken, sender: string, destination: string, amountAtomic: bigint, memo?: OrderMemo | null) =>
+  `${token}|${sender.toLowerCase()}|${destination.toLowerCase()}|${amountAtomic}|${memo?.code ?? ''}`
 
-async function runPreflight(token: PayToken, sender: `0x${string}`, destination: `0x${string}`, amount: number, idempotencyKey: string, recipientUsername?: string | null): Promise<Preflight> {
-  const tx = payTx(token, destination, amount)
+async function runPreflight(token: PayToken, sender: `0x${string}`, destination: `0x${string}`, amount: number, idempotencyKey: string, recipientUsername?: string | null, memo?: OrderMemo | null): Promise<Preflight> {
+  const tx = payTx(token, destination, amount, memo)
   const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }) })
   const { createPayIntent } = await import('./payIntentService')
   const [balance, intent, gas] = await Promise.all([
@@ -141,6 +147,7 @@ async function runPreflight(token: PayToken, sender: `0x${string}`, destination:
       tokenSymbol: token,
       recipientAddress: destination,
       recipientUsername: recipientUsername ?? null,
+      callTarget: tx.callTarget,
     }),
     publicClient.estimateGas({ account: sender, to: tx.to, value: tx.value, data: tx.data }),
   ])
@@ -161,32 +168,33 @@ export function warmArcRpc(): void {
   arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }, 4000).catch(() => {})
 }
 
-export function preparePayment(params: { token: PayToken; from: string; to: string; amount: number; idempotencyKey: string; recipientUsername?: string | null }): void {
+export function preparePayment(params: { token: PayToken; from: string; to: string; amount: number; idempotencyKey: string; recipientUsername?: string | null; memo?: OrderMemo | null }): void {
   try {
     if (!isAddress(params.from) || !isAddress(params.to) || !(params.amount > 0)) return
     const sender = getAddress(params.from)
     const destination = getAddress(params.to)
-    const sig = preflightSig(params.token, sender, destination, payTx(params.token, destination, params.amount).amountAtomic)
+    const memo = params.token === 'USDC' ? params.memo ?? null : null
+    const sig = preflightSig(params.token, sender, destination, payTx(params.token, destination, params.amount).amountAtomic, memo)
     const existing = preflights.get(params.idempotencyKey)
     if (existing && existing.sig === sig && Date.now() - existing.at < PREFLIGHT_TTL_MS) return
-    const promise = runPreflight(params.token, sender, destination, params.amount, params.idempotencyKey, params.recipientUsername)
+    const promise = runPreflight(params.token, sender, destination, params.amount, params.idempotencyKey, params.recipientUsername, memo)
     promise.catch(() => { /* surfaced (or retried fresh) by the send that consumes it */ })
     preflights.set(params.idempotencyKey, { sig, at: Date.now(), promise })
   } catch { /* purely an optimization - the send runs its own preflight */ }
 }
 
 /** The send's preflight: the early one if it matches exactly, else a fresh one. */
-async function getPreflight(token: PayToken, sender: `0x${string}`, destination: `0x${string}`, amount: number, idempotencyKey: string, recipientUsername?: string | null): Promise<Preflight> {
+async function getPreflight(token: PayToken, sender: `0x${string}`, destination: `0x${string}`, amount: number, idempotencyKey: string, recipientUsername?: string | null, memo?: OrderMemo | null): Promise<Preflight> {
   const early = preflights.get(idempotencyKey)
   preflights.delete(idempotencyKey)
-  const sig = preflightSig(token, sender, destination, payTx(token, destination, amount).amountAtomic)
+  const sig = preflightSig(token, sender, destination, payTx(token, destination, amount).amountAtomic, memo)
   if (early && early.sig === sig && Date.now() - early.at < PREFLIGHT_TTL_MS) {
     try {
       const result = await early.promise
       if (result.intent.success || result.intent.existingTxHash) return result
     } catch { /* fall through to a fresh run - same key, so pay-intent replays the same reservation */ }
   }
-  return runPreflight(token, sender, destination, amount, idempotencyKey, recipientUsername)
+  return runPreflight(token, sender, destination, amount, idempotencyKey, recipientUsername, memo)
 }
 
 // ─── Confirmation before success ─────────────────────────────────────────────
@@ -345,6 +353,8 @@ export async function sendUSDC(params: {
   amount: number
   idempotencyKey?: string
   recipientUsername?: string | null
+  /** Paying a business order: attach it on-chain (Arc Memo contract). */
+  memo?: OrderMemo | null
 }): Promise<SendResult> {
   const account = privateKeyToAccount(params.privateKey as `0x${string}`)
   const senderAddress = account.address
@@ -388,7 +398,7 @@ export async function sendUSDC(params: {
   // previous sequential version of this same function.
   // Usually already resolved: started at PIN entry via preparePayment().
   const { intent: intentResult, gas: gasEstimate, balance } = await getPreflight(
-    'USDC', senderAddress, destination, params.amount, params.idempotencyKey ?? crypto.randomUUID(), params.recipientUsername)
+    'USDC', senderAddress, destination, params.amount, params.idempotencyKey ?? crypto.randomUUID(), params.recipientUsername, params.memo)
   const balanceUsdc = balance ?? 0
 
   // Step 2: Check balance
@@ -448,7 +458,9 @@ export async function sendUSDC(params: {
   // the real tx_hash is persisted server-side as soon as it's out -
   // fire-and-forget: markPayAttemptSubmitted never throws, and its own
   // failure must never block or fail an already-broadcast payment.
-  const sent = await relaySend(account, { to: destination, value: amount18dec, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce },
+  // The same transaction the preflight estimated and the intent expects (payTx).
+  const tx = payTx('USDC', destination, params.amount, params.memo)
+  const sent = await relaySend(account, { to: tx.to, value: tx.value ?? 0n, data: tx.data, gas: (gasEstimate * 120n) / 100n, nonce: serverNonce },
     h => { void markPayAttemptSubmitted(attemptId, h).catch(() => { /* best-effort */ }) })
   const txHash = sent.txHash
 

@@ -15,7 +15,7 @@ export async function findSubmittedAttempts(
 ): Promise<ConfirmableAttempt[]> {
   const { data, error } = await supabase
     .from('transaction_attempts')
-    .select('id, intent_id, chain_id, wallet_address, nonce, tx_hash, transaction_intents!inner(feature, token_address, recipient_address)')
+    .select('id, intent_id, chain_id, wallet_address, nonce, tx_hash, transaction_intents!inner(feature, token_address, recipient_address, metadata)')
     .eq('chain_id', chainId)
     .in('status', ['SUBMITTED', 'CONFIRMING'])
     .eq('transaction_intents.feature', 'pay')
@@ -29,8 +29,10 @@ export async function findSubmittedAttempts(
   }
   const out: ConfirmableAttempt[] = []
   for (const r of (data ?? []) as Array<Record<string, unknown>>) {
-    const intent = (r.transaction_intents as { token_address: string | null; recipient_address: string | null } | null)
-    const expectedTo = intent?.token_address ?? intent?.recipient_address ?? null
+    const intent = (r.transaction_intents as { token_address: string | null; recipient_address: string | null; metadata: Record<string, unknown> | null } | null)
+    // An order payment with an Arc memo is sent to the Memo contract (pay-intent stores it as callTarget).
+    const callTarget = typeof intent?.metadata?.callTarget === 'string' ? intent.metadata.callTarget : null
+    const expectedTo = callTarget ?? intent?.token_address ?? intent?.recipient_address ?? null
     if (!expectedTo) {
       console.error(`[pay-confirmation] attempt ${r.id} skipped: intent has neither token_address nor recipient_address, cannot compute expectedTo`)
       continue
