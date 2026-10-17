@@ -19,7 +19,7 @@ import { useAuthStore, useWalletStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLogoSrc } from '@/lib/chainLogos'
-import { listMyPayments, listMyIntents, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, createPaymentRequest, type MerchantPayment } from '@/lib/merchantPay'
+import { listMyPayments, listMyIntents, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, createPaymentRequest, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
 import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, VOICE_LANGS, type VoiceLang } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockKey } from './settlement'
@@ -28,17 +28,18 @@ import { makePeriod, inPeriod, inPrevious, periodTrend, savedPeriod, savePeriod,
 import { useAutoSettle } from './autoSettle'
 import { CashOutScreen, TeamScreen } from './teamScreens'
 import { PayoutsScreen } from './payoutsScreen'
+import { ToolsScreen, type ToolId } from './toolsScreen'
 import { StaffModePage } from './staffMode'
 import { useUIStore } from '@/store'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
-  BusinessHeader, SetupBanner, OverviewView, PaymentsView, PaymentDetailSheet,
+  BusinessHeader, SetupBanner, HubView, PaymentsView, PaymentDetailSheet,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
-  DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet, BusinessMenuSheet,
+  DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
-type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts'
+type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.method === 'own_transfer' ? 'Your transfer'
@@ -138,15 +139,15 @@ function OwnerBusinessPage() {
   // ── Stores (which store this device works as; null = all) ─────────────
   const [stores, setStores] = useState<Store[]>([])
   const [storeId, setStoreId] = useState<string | null>(activeStoreId)
-  const [intentStore, setIntentStore] = useState<Map<string, string | null>>(new Map())
+  const [intents, setIntents] = useState<MerchantIntent[] | null>(null)
+  const intentStore = useMemo(() => new Map((intents ?? []).map(i => [i.id, i.storeId ?? null] as const)), [intents])
   const [switcher, setSwitcher] = useState(false)
-  const [menu, setMenu] = useState(false)
   const [periodSheet, setPeriodSheet] = useState(false)
   const [payView, setPayView] = useState<'payments' | 'requests'>('payments')
   useEffect(() => { if (tab !== 'payments') setPayView('payments') }, [tab])
   const [payFilter, setPayFilter] = useState<'all' | 'refunded'>('all')
   useEffect(() => { listStores().then(setStores).catch(() => {}) }, [])
-  useEffect(() => { listMyIntents(500).then(l => setIntentStore(new Map(l.map(i => [i.id, i.storeId ?? null])))).catch(() => {}) }, [raw.length])
+  useEffect(() => { listMyIntents(500).then(setIntents).catch(() => setIntents([])) }, [raw.length, tab])
   const activeStore = stores.find(s => s.id === storeId) ?? null
   // Requests and the Shop QR belong to the picked store; with "All stores"
   // they go to the main (default) store.
@@ -209,8 +210,14 @@ function OwnerBusinessPage() {
 
   const [screen, setScreen] = useState<ScreenId | null>(null)
   const open = (id: ScreenId) => () => setScreen(id)
-  const back = () => setScreen(null)
-  const go = (id: ScreenId) => () => { setMenu(false); setScreen(id) }
+  // A screen opened from Business tools goes back to Business tools.
+  const fromTools = useRef(false)
+  const back = () => {
+    if (fromTools.current && screen !== 'tools') { setScreen('tools'); return }
+    fromTools.current = false
+    setScreen(null)
+  }
+  const go = (id: ScreenId) => () => setScreen(id)
 
   const beginSettle = (retry?: string[]) => {
     if (settle.running) { setProgressOpen(true); return }
@@ -331,6 +338,16 @@ function OwnerBusinessPage() {
     : []
   const failedIds = settle.run.filter(r => r.stage === 'failed').map(r => r.id)
 
+  // Open and partly paid orders (Manage orders → Open / Partly paid), in the store being viewed.
+  const pending = useMemo(() => {
+    if (!intents) return null
+    const now = Date.now()
+    const live = intents.filter(i => (i.status === 'pending' || i.status === 'partially_paid')
+      && (!i.expiresAt || Date.parse(i.expiresAt) > now) && (!activeStore || i.storeId === activeStore.id))
+    return { count: live.length, due: live.reduce((t, i) => t + Math.max(0, i.amount - i.received), 0) }
+  }, [intents, activeStore])
+  const openOrders = () => { setPayView('requests'); setTab('payments') }
+
   const rawDetail = detail ? raw.find(p => p.id === detail.id) : undefined
   const detailRefund = detail ? refundOf.get(detail.id) : undefined
   // The payer's history with this business, for the detail's customer card.
@@ -349,7 +366,7 @@ function OwnerBusinessPage() {
           // the line under it is the business account itself.
           <BusinessHeader storeName={activeStore?.name ?? (stores.length > 1 ? 'All stores' : storeName)} handle={handle}
             status={headerStatus} voiceOn={voice.enabled}
-            onVoice={() => setVoiceOpen(true)} onMenu={() => setMenu(true)} onSwitchStore={stores.length ? () => setSwitcher(true) : undefined}
+            onVoice={() => setVoiceOpen(true)} onMenu={() => setScreen('tools')} onSwitchStore={stores.length ? () => setSwitcher(true) : undefined}
             avatarName={storeName} avatarUrl={userAvatar ?? undefined}
             outlet={(activeStore || stores.length > 1) && activeStore?.name !== storeName ? storeName : null} />
         ) : (
@@ -359,13 +376,13 @@ function OwnerBusinessPage() {
             <button type="button" aria-label="Back to overview" onClick={() => { setPayFilter('all'); setTab('overview') }} className="back-btn">
               <ArrowLeft className="w-5 h-5 text-text-primary" />
             </button>
-            <h1 className="header-title">{tab === 'payments' ? 'Payments' : 'Balance'}</h1>
+            <h1 className="header-title">{tab === 'payments' ? 'Manage orders' : 'Manage money'}</h1>
             {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? 'All stores'}</span>}
           </header>
         )}
         {tab === 'payments' && <div className="px-5 pt-2">
-          <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Payments or my requests">
-            {([['payments', 'Payments'], ['requests', 'Orders']] as const).map(([id, label]) => (
+          <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Orders or payments">
+            {([['requests', 'Orders'], ['payments', 'Payments']] as const).map(([id, label]) => (
               <button key={id} type="button" role="tab" aria-selected={payView === id} onClick={() => setPayView(id)}
                 className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${payView === id ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
                 {label}
@@ -378,21 +395,24 @@ function OwnerBusinessPage() {
 
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
         {tab === 'overview' && (
-          <OverviewView loading={!loaded} banner={banner} periodLabel={period.label}
-            collection={{ total: money(today.total), trend: <TrendChip pct={trend} compare={period.compareLabel} tone="onBrand" />, count: today.count, average: money(today.average), customers: today.customers }}
-            toSettle={{ total: money(settle.total), chainCount: settle.due.length, chains: settle.due.map(c => ({ label: c.label, logo: c.logo })),
-              checking: scanning, arcLogo: chainLogoSrc('Arc_Testnet') }}
-            refunded={{ total: money(refundedInPeriod.reduce((s, r) => s + r.amount, 0)), count: refundedInPeriod.length }}
-            recent={payments.slice(0, 4)}
-            onReceive={open('receive')} onCustomers={open('customers')} onPayments={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onBalance={() => setTab('settlements')}
-            onToSettle={() => setTab('settlements')} onRefunded={() => { setPayFilter('refunded'); setTab('payments') }}
-            onSeeAllPayments={() => { setPayFilter('all'); setTab('payments') }} onPayment={setDetail} onPeriod={() => setPeriodSheet(true)} />
+          <HubView loading={!loaded} banner={banner} periodLabel={period.label} onPeriod={() => setPeriodSheet(true)}
+            sales={{ total: money(today.total), trend: <TrendChip pct={trend} compare={period.compareLabel} /> }}
+            pending={pending ? { count: pending.count, due: money(pending.due) } : null}
+            available={money(arcBalance)} onPending={openOrders} onAvailable={() => setTab('settlements')}
+            collect={{ badge: stores.length > 1 ? `${activeStore?.name ?? 'Main store'} QR` : 'Show your QR', tone: 'brand', onClick: open('receive') }}
+            orders={{ badge: !pending ? 'Loading…' : pending.count ? `${pending.count} open` : 'No open orders', tone: pending?.count ? 'warning' : 'neutral', onClick: openOrders }}
+            money={{ badge: settle.total > 0 ? `${money(settle.total)} to settle` : scanning ? 'Checking chains…' : 'All on Arc', tone: settle.total > 0 ? 'brand' : 'neutral', onClick: () => setTab('settlements') }}
+            tools={{ badge: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'}` : isMerchant ? 'Add a store' : 'Profile & help', onClick: open('tools') }}
+            recent={payments.slice(0, 4)} onSeeAll={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onPayment={setDetail} />
         )}
         {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} />}
         {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter}
           loading={!loaded} payments={payList} onPayment={setDetail} />}
         {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out"
-          action={<button type="button" onClick={open('cashout')} className="shrink-0 min-h-[40px] px-4 rounded-xl bg-brand text-white text-[13px] font-semibold active:opacity-90">Cash out</button>} /></div>}
+          action={<span className="flex gap-2 shrink-0">
+            <button type="button" onClick={open('payouts')} className="min-h-[40px] px-3.5 rounded-xl border border-border bg-card text-text-primary text-[13px] font-semibold active:bg-border/30">Pay staff</button>
+            <button type="button" onClick={open('cashout')} className="min-h-[40px] px-3.5 rounded-xl bg-brand text-white text-[13px] font-semibold active:opacity-90">Cash out</button>
+          </span>} /></div>}
         {tab === 'settlements' && (
           <SettlementsView scanning={scanning}
             chains={(settle.allChains ?? []).map(c => ({ id: c.id, label: c.label, logo: c.logo, balance: money(c.balance),
@@ -452,17 +472,24 @@ function OwnerBusinessPage() {
         onToggle={() => setVoiceAlerts({ enabled: !voice.enabled })} onLang={id => setVoiceAlerts({ lang: id as VoiceLang })}
         onTest={() => speakPayment(24, { test: true })} onClose={() => setVoiceOpen(false)} />
 
-      <BusinessMenuSheet open={menu} onClose={() => setMenu(false)} groups={[
-        { title: 'Business', items: [
-          { id: 'reports', label: 'Reports', hint: 'Insights and statement · CSV and PDF', icon: 'insights', onClick: go('reports') },
-          { id: 'payouts', label: 'Payouts', hint: 'Pay staff and suppliers · once or on a repeat', icon: 'payouts', onClick: go('payouts') },
-          { id: 'team', label: 'Stores & staff', hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers', icon: 'stores', onClick: go('team') },
-        ] },
-        { title: 'Account', items: [
-          { id: 'profile', label: 'Business profile', hint: headerStatus === 'verified' ? 'Verified' : 'Complete your application', icon: 'profile', onClick: go('profile') },
-          { id: 'help', label: 'Help & disputes', hint: 'Customer says they paid', icon: 'help', onClick: go('help') },
-        ] },
-      ]} />
+      <ToolsScreen open={screen === 'tools'} onBack={back}
+        onOpen={(id: ToolId) => { if (id === 'voice') { setVoiceOpen(true); return } fromTools.current = true; setScreen(id) }}
+        groups={[
+          { title: 'Business', rows: [
+            { id: 'team', label: 'Stores & staff', hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers' },
+            { id: 'customers', label: 'Customers', hint: 'Everyone who paid, with their history' },
+            { id: 'reports', label: 'Reports', hint: 'Insights and statement · CSV and PDF' },
+          ] },
+          { title: 'Money', rows: [
+            { id: 'payouts', label: 'Payouts', hint: 'Pay staff and suppliers · once or on a repeat' },
+            { id: 'cashout', label: 'Cash out to bank', hint: 'Sell USDC for INR to UPI or bank' },
+          ] },
+          { title: 'Settings', rows: [
+            { id: 'profile', label: 'Business profile', hint: `${headerStatus === 'verified' ? 'Verified' : 'Complete your application'} · name, logo, payment limits` },
+            { id: 'voice', label: 'Voice alerts', hint: voice.enabled ? 'On · speaks each payment' : 'Off' },
+            { id: 'help', label: 'Help & disputes', hint: 'Customer says they paid' },
+          ] },
+        ]} />
 
       <Sheet open={switcher} onClose={() => setSwitcher(false)}>
         <StoreSwitcher stores={[{ id: '', name: 'All stores', handle: `${stores.length} store${stores.length === 1 ? '' : 's'} together`, active: !activeStore, all: true },
@@ -497,7 +524,8 @@ function OwnerBusinessPage() {
 
       <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: qrStore?.id ?? null, canBill: true }}>
       <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
-      <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={storeName} />
+      <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={storeName}
+        shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} />
       <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundOf.has(p.id) && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
         onPayment={p => setDetail(toRow(p))} onChat={u => { setScreen(null); void openChat(u) }} />
       <ReportsScreen open={screen === 'reports'} onBack={back}

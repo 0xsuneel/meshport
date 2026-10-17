@@ -130,7 +130,8 @@ function Done({ icon, top, amount, note, children }: { icon: React.ReactNode; to
 
 // ── Shop QR ──────────────────────────────────────────────────────────────
 
-export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo }: { open: boolean; onBack: () => void; storeName: string; outlet?: string | null; handle: string; payTo?: string }) {
+/** The store's fixed QR: customers scan, type the amount and pay. */
+function ShopQrBody({ active, storeName, outlet, handle, payTo }: { active: boolean; storeName: string; outlet?: string | null; handle: string; payTo?: string }) {
   // payTo: whose pay link (staff mode: the business owner's, never the staff's own).
   // The QR names the outlet (?store=) so each store's payments land in that
   // store; it changes as soon as the owner switches stores.
@@ -138,21 +139,26 @@ export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo }:
   const { storeId } = useContext(RequestMaker)
   const username = payTo ?? own
   const url = `${window.location.origin}/paylink/${username ?? ''}${storeId ? `?store=${storeId}` : ''}`
-  const qr = useQr(open && username ? url : null)
+  const qr = useQr(active && username ? url : null)
   const sticker = usePrint()
   const sub = outlet ? `${outlet} · ${handle}` : handle
   return (
-    <BusinessScreen open={open} title="Shop QR" onBack={onBack}>
-      <div className="flex flex-col items-center text-center px-5 pt-6 gap-5">
-        <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-brand/10 text-brand-text"><Store className="size-5" /></span>
-        <QrCard dataUrl={qr} title={storeName} subtitle={sub} />
-        <p className="text-xs text-text-muted max-w-[260px]">Customers scan, type the amount and pay. USDC from Arc or any CCTP chain is accepted{outlet ? ` and counted for ${outlet}` : ''}.</p>
-        <div className="w-full"><LinkShare url={url} text={`Pay ${storeName} on MeshPort`} /></div>
-        <GhostBtn disabled={!qr} onClick={() => sticker.print(<QrSticker dataUrl={qr} storeName={outlet ? `${storeName} · ${outlet}` : storeName} handle={handle} />)}>
-          <span className="inline-flex items-center gap-2"><Printer className="size-4" /> Print counter sticker</span>
-        </GhostBtn>
-      </div>
+    <div className="flex flex-col items-center text-center px-5 pt-6 pb-6 gap-5">
+      <QrCard dataUrl={qr} title={storeName} subtitle={sub} />
+      <p className="text-xs text-text-muted max-w-[260px]">Customers scan, type the amount and pay. USDC from Arc or any CCTP chain is accepted{outlet ? ` and counted for ${outlet}` : ''}.</p>
+      <div className="w-full"><LinkShare url={url} text={`Pay ${storeName} on MeshPort`} /></div>
+      <GhostBtn disabled={!qr} onClick={() => sticker.print(<QrSticker dataUrl={qr} storeName={outlet ? `${storeName} · ${outlet}` : storeName} handle={handle} />)}>
+        <span className="inline-flex items-center gap-2"><Printer className="size-4" /> Print counter sticker</span>
+      </GhostBtn>
       {sticker.portal}
+    </div>
+  )
+}
+
+export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo }: { open: boolean; onBack: () => void; storeName: string; outlet?: string | null; handle: string; payTo?: string }) {
+  return (
+    <BusinessScreen open={open} title="Shop QR" onBack={onBack}>
+      <ShopQrBody active={open} storeName={storeName} outlet={outlet} handle={handle} payTo={payTo} />
     </BusinessScreen>
   )
 }
@@ -166,7 +172,13 @@ const VALID_FOR = [
 
 const blank = (): BillItem => ({ name: '', qty: 1, price: '' })
 
-export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBack: () => void; storeName: string }) {
+/** Receive: an amount (Charge) or an itemised Bill -> one order with its QR.
+ *  With `shopQr` it is Business → Collect payment: Shop QR · Charge · Bill. */
+export function ReceiveScreen({ open, onBack, storeName, shopQr }: {
+  open: boolean; onBack: () => void; storeName: string
+  shopQr?: { outlet?: string | null; handle: string }
+}) {
+  const [showQr, setShowQr] = useState(!!shopQr)
   const make = useMakeRequest()
   // Cashiers take counter payments only: up to an hour, no named customer, no bills.
   const { canBill, savedItems = true } = useContext(RequestMaker)
@@ -202,11 +214,11 @@ export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBa
 
   useEffect(() => { if (paid) speakPayment(view!.received) }, [paid])
   const reset = () => {
-    setItemised(false); setAmount(''); setNote(''); setRows([blank()]); setCustomer(''); setExpiry('15'); setMore(false); setIntent(null)
+    setItemised(false); setShowQr(!!shopQr); setAmount(''); setNote(''); setRows([blank()]); setCustomer(''); setExpiry('15'); setMore(false); setIntent(null)
   }
   useEffect(() => { if (!open) reset() }, [open])
   // A bill usually goes to someone later: open for 7 days by default.
-  const toggleItems = (on: boolean) => { setItemised(on); setExpiry(on ? '10080' : '15') }
+  const toggleItems = (on: boolean) => { setShowQr(false); setItemised(on); setExpiry(on ? '10080' : '15') }
 
   const press = (k: KeypadKey) => setAmount(a => {
     if (k === 'del') return a.slice(0, -1)
@@ -259,22 +271,30 @@ export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBa
     </BusinessScreen>
   )
 
+  const tabs = [
+    ...(shopQr ? [{ id: 'qr', label: 'Shop QR', on: showQr, pick: () => setShowQr(true) }] : []),
+    { id: 'amount', label: shopQr ? 'Charge' : 'Amount', on: !showQr && !itemised, pick: () => toggleItems(false) },
+    ...(canBill ? [{ id: 'bill', label: shopQr ? 'Bill' : 'Itemised bill', on: !showQr && itemised, pick: () => toggleItems(true) }] : []),
+  ]
   return (
-    <BusinessScreen open={open} title="Receive" onBack={onBack}
-      footer={<PrimaryBtn disabled={!(value > 0) || busy} onClick={create}>
+    <BusinessScreen open={open} title={shopQr ? 'Collect payment' : 'Receive'} onBack={onBack}
+      footer={showQr ? undefined : <PrimaryBtn disabled={!(value > 0) || busy} onClick={create}>
         {busy ? 'Creating…' : value > 0 ? `${itemised ? 'Create bill' : 'Receive'} ${money(value)}` : itemised ? 'Add items' : 'Enter amount'}</PrimaryBtn>}>
-      {canBill && (
+      {tabs.length > 1 && (
         <div className="px-5 pt-4">
-          <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Receive type">
-            {[{ on: false, label: 'Amount' }, { on: true, label: 'Itemised bill' }].map(t => (
-              <button key={t.label} type="button" role="tab" aria-selected={itemised === t.on} onClick={() => toggleItems(t.on)}
-                className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${itemised === t.on ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
+          <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="How to collect">
+            {tabs.map(t => (
+              <button key={t.id} type="button" role="tab" aria-selected={t.on} onClick={t.pick}
+                className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${t.on ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
                 {t.label}
               </button>
             ))}
           </div>
         </div>
       )}
+      {showQr && shopQr ? (
+        <ShopQrBody active={open && showQr} storeName={storeName} outlet={shopQr.outlet} handle={shopQr.handle} />
+      ) : <>
       {itemised ? (
         <div className="flex flex-col gap-5 px-5 pt-5">
           {catalog.length > 0 && (
@@ -316,6 +336,7 @@ export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBa
           </div>
         )}
       </div>
+      </>}
     </BusinessScreen>
   )
 }
@@ -407,7 +428,7 @@ export function RequestsList({ active, storeId }: { active: boolean; storeId?: s
           <div className="flex flex-col items-center text-center py-16">
             <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-surface border border-border mb-3"><Clock className="size-5 text-text-muted" /></span>
             <p className="text-sm font-medium text-text-secondary">{q ? 'No orders match your search' : EMPTY[filter]}</p>
-            {!q && <p className="text-xs text-text-muted mt-1">Amounts and bills you create with Receive show up here.</p>}
+            {!q && <p className="text-xs text-text-muted mt-1">Charges and bills you create in Collect payment show up here.</p>}
           </div>
         ) : (
           <div className="flex flex-col gap-2">
