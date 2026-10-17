@@ -73,7 +73,7 @@ export function StaffModePage() {
           onRefunded={() => toast('Refunds are done by the owner', 'info')}
           onSeeAllPayments={() => setScreen('payments')} onPayment={() => {}} />
       </div>
-      <RequestMaker.Provider value={{ create: p => staffCreateRequest(active.ownerAuthUid, { ...p, storeId: p.storeId ?? active.storeId }), storeId: active.storeId, canBill: manager }}>
+      <RequestMaker.Provider value={{ create: p => staffCreateRequest(active.ownerAuthUid, { ...p, storeId: p.storeId ?? active.storeId }), storeId: active.storeId, canBill: manager, savedItems: false }}>
         <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={active.ownerName} outlet={active.storeName} handle={`${active.ownerUsername}.arc`} payTo={active.ownerUsername} />
         <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={active.ownerName} />
       </RequestMaker.Provider>

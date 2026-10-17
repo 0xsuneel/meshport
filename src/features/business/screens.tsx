@@ -26,6 +26,7 @@ import {
 } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
 import { timeAgo } from '@/lib/utils'
+import { listItems, rememberItems, deleteItem, type SavedItem } from '@/lib/businessItems'
 import { SearchField } from '@/components/ui/SearchField'
 import {
   BusinessScreen, QrCard, AmountKeypad, LiveStatus, ShareLink, Field, TextInput, ChipSelect, BillItemsEditor,
@@ -43,8 +44,8 @@ import { chainLabel } from './settlement'
  *  (createPaymentRequest, for the active store) or, in staff mode, one that
  *  pays the business they work for (staff_create_request). */
 type RequestInput = Parameters<typeof createPaymentRequest>[0]
-export const RequestMaker = createContext<{ create: (p: RequestInput) => Promise<MerchantIntent>; storeId: string | null; canBill: boolean }>({
-  create: createPaymentRequest, storeId: null, canBill: true,
+export const RequestMaker = createContext<{ create: (p: RequestInput) => Promise<MerchantIntent>; storeId: string | null; canBill: boolean; savedItems?: boolean }>({
+  create: createPaymentRequest, storeId: null, canBill: true, savedItems: true,
 })
 function useMakeRequest() {
   const m = useContext(RequestMaker)
@@ -167,7 +168,21 @@ const blank = (): BillItem => ({ name: '', qty: 1, price: '' })
 export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBack: () => void; storeName: string }) {
   const make = useMakeRequest()
   // Cashiers take counter payments only: up to an hour, no named customer, no bills.
-  const { canBill } = useContext(RequestMaker)
+  const { canBill, savedItems = true } = useContext(RequestMaker)
+  // The owner's saved items (products and prices), tapped into a bill.
+  const [catalog, setCatalog] = useState<SavedItem[]>([])
+  const [editItems, setEditItems] = useState(false)
+  useEffect(() => { if (open && savedItems && canBill) listItems().then(setCatalog).catch(() => {}) }, [open, savedItems, canBill])
+  const addSaved = (it: SavedItem) => setRows(rs => {
+    const at = rs.findIndex(r => r.name.trim().toLowerCase() === it.name.toLowerCase())
+    if (at >= 0) return rs.map((r, i) => i === at ? { ...r, qty: r.qty + 1 } : r)
+    const base = rs.length === 1 && !rs[0].name.trim() && !rs[0].price ? [] : rs
+    return [...base, { name: it.name, qty: 1, price: it.price.toFixed(2) }].slice(0, 50)
+  })
+  const removeSaved = async (it: SavedItem) => {
+    setCatalog(c => c.filter(x => x.id !== it.id))
+    await deleteItem(it.id).catch(() => toast('Could not remove', 'error'))
+  }
   const validFor = canBill ? VALID_FOR : VALID_FOR.slice(0, 2)
   const toast = useUIStore(s => s.showToastMessage)
   const [itemised, setItemised] = useState(false)
@@ -207,6 +222,7 @@ export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBa
     try {
       setIntent(await make({ amount: value, ...(itemised ? { items } : {}), note: note || undefined,
         customer: canBill && customer ? customer : undefined, expiresInMinutes: Number(expiry) || null }))
+      if (itemised && savedItems) void rememberItems(items)
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not create the payment', 'error') }
     setBusy(false)
   }
@@ -260,7 +276,23 @@ export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBa
       )}
       {itemised ? (
         <div className="flex flex-col gap-5 px-5 pt-5">
-          <Field label="Items"><BillItemsEditor rows={rows} onChange={r => setRows(r.slice(0, 50))} total={money(value)} /></Field>
+          {catalog.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Saved items</span>
+                <button type="button" onClick={() => setEditItems(e => !e)} className="text-[13px] font-semibold text-brand-text">{editItems ? 'Done' : 'Edit'}</button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {catalog.map(it => (
+                  <button key={it.id} type="button" onClick={() => (editItems ? removeSaved(it) : addSaved(it))}
+                    className={`inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-full border text-[13px] font-semibold ${editItems ? 'border-danger/40 text-danger' : 'border-border bg-surface text-text-primary active:bg-border/30'}`}>
+                    {it.name} <span className={editItems ? '' : 'text-text-muted font-medium'}>{editItems ? '✕' : money(it.price)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <Field label="Items" hint={savedItems && catalog.length === 0 ? 'Items you bill are saved here for next time' : undefined}><BillItemsEditor rows={rows} onChange={r => setRows(r.slice(0, 50))} total={money(value)} /></Field>
           <Field label="Note (optional)"><TextInput value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="Thanks for shopping with us" /></Field>
         </div>
       ) : (
