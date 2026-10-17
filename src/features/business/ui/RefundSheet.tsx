@@ -25,6 +25,10 @@ export interface RefundSheetProps {
   onDestination?: (id: string) => void
   /** Line under the warning, e.g. the fee for a refund on another chain. */
   note2?: string
+  /** Partial refunds: the amount typed (USDC) and the most that can go back. */
+  value?: string
+  onValue?: (v: string) => void
+  max?: number
 }
 
 export function RefundSheet({
@@ -44,7 +48,13 @@ export function RefundSheet({
   destination,
   onDestination,
   note2,
+  value,
+  onValue,
+  max,
 }: RefundSheetProps) {
+  const typed = Number(value)
+  const badAmount = !!onValue && !(typed > 0 && max != null && typed <= max + 1e-9)
+  const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   return (
     <Sheet open={open} onClose={onClose}>
       <div className="flex flex-col px-5 pb-8 pt-2 overflow-y-auto max-h-[88dvh] gap-5">
@@ -64,7 +74,27 @@ export function RefundSheet({
 
         {/* Amount hero */}
         <div className="flex flex-col items-center gap-1 py-2">
-          <p className="display text-4xl font-bold tabular-nums text-danger">{amount}</p>
+          {onValue && max != null ? (
+            <>
+              <label className="flex items-center justify-center gap-0.5 text-danger">
+                <span className="text-4xl font-bold">$</span>
+                <input inputMode="decimal" aria-label="Refund amount" value={value ?? ''}
+                  onChange={e => onValue(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/(\.\d{2})\d+/, '$1'))}
+                  className="w-44 bg-transparent text-4xl font-bold tabular-nums text-danger text-center outline-none" />
+              </label>
+              <div className="flex gap-2 mt-1">
+                {[{ l: 'Full', v: max }, { l: 'Half', v: Math.floor(max * 50) / 100 }].map(o => (
+                  <button key={o.l} type="button" onClick={() => onValue(o.v.toFixed(2))}
+                    className={`min-h-[32px] px-3 rounded-full text-xs font-semibold border ${Math.abs(typed - o.v) < 1e-9 ? 'border-danger bg-danger/10 text-danger' : 'border-border text-text-secondary'}`}>
+                    {o.l} · {fmt(o.v)}
+                  </button>
+                ))}
+              </div>
+              {typed > (max ?? 0) + 1e-9 && <p className="text-xs text-danger mt-1">At most {fmt(max)} - what they paid</p>}
+            </>
+          ) : (
+            <p className="display text-4xl font-bold tabular-nums text-danger">{amount}</p>
+          )}
           <p className="text-sm text-text-muted">
             Refund to <span className="font-medium text-text-secondary">{customer}</span>
           </p>
@@ -140,7 +170,7 @@ export function RefundSheet({
         {/* Confirm */}
         <button
           type="button"
-          disabled={!reason || busy}
+          disabled={!reason || busy || badAmount}
           onClick={onConfirm}
           className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold border-2 border-danger text-danger hover:bg-danger/10 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >
