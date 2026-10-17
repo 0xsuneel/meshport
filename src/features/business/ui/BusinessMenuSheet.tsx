@@ -7,7 +7,7 @@ import {
   Banknote, FileText, BarChart2,
   Store, Users, Mic,
   ShieldCheck, HelpCircle, QrCode,
-  ChevronRight, Clock,
+  ChevronRight, Clock, ArrowLeftRight,
 } from 'lucide-react'
 import { Sheet } from './primitives'
 
@@ -24,6 +24,7 @@ export type MenuIconId =
   | 'help'
   | 'sticker'
   | 'requests'
+  | 'settlements'
 
 export interface MenuItem {
   id: string
@@ -51,6 +52,7 @@ const ICON_MAP: Record<MenuIconId, React.ElementType> = {
   cashout:   Banknote,
   statement: FileText,
   requests: Clock,
+  settlements: ArrowLeftRight,
   insights:  BarChart2,
   stores:    Store,
   staff:     Users,
