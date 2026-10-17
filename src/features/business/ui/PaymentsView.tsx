@@ -27,10 +27,11 @@ export interface PaymentsViewProps {
 }
 
 // The list is grouped by day (Today, Yesterday… headers), so the filter only
-// narrows to longer ranges.
+// narrows to longer ranges. No date picked = every payment; tapping the
+// picked range again clears it.
 export type PeriodChoice = 'all' | 'week' | 'month' | 'custom'
 const PERIODS: { id: PeriodChoice; label: string }[] = [
-  { id: 'all', label: 'All time' }, { id: 'week', label: 'Last 7 days' },
+  { id: 'week', label: 'Last 7 days' },
   { id: 'month', label: 'This month' }, { id: 'custom', label: 'Custom range…' },
 ]
 
@@ -105,7 +106,7 @@ function FilterMenu({ anchor, period, status, onPeriod, onStatus, onClose }: {
           display: 'flex', flexDirection: 'column', gap: 2, padding: 4, borderRadius: 22,
           background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 12px 28px rgba(0,0,0,0.3)' }}>
         <p className="px-3.5 pt-1.5 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Date</p>
-        {PERIODS.map(p => row(period === p.id, p.label, () => { onPeriod(p.id); onClose() }))}
+        {PERIODS.map(p => row(period === p.id, p.label, () => { onPeriod(period === p.id && p.id !== 'custom' ? 'all' : p.id); onClose() }))}
         <div className="mx-3 my-1 border-t border-border" />
         <p className="px-3.5 pt-0.5 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Status</p>
         {FILTERS.map(f => row(status === f.id, f.label, () => { onStatus(f.id); onClose() }))}
