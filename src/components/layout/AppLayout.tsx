@@ -1,5 +1,5 @@
 import { isSettingsPath } from '@/components/layout/SettingsDesktopSplit'
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { primeHomeBootstrap } from '@/lib/homeBootstrap'
 import { preloadScanner } from '@/lib/scannerPrewarm'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -7,6 +7,8 @@ import { BottomNav } from './BottomNav'
 import { DesktopSidebar } from './DesktopSidebar'
 import { DesktopHeader } from './DesktopHeader'
 import { LeaveGuardHost } from './LeaveGuardHost'
+// Business accounts: full-screen "Payment received" on every screen.
+const PaymentReceivedWatcher = lazy(() => import('@/features/business/PaymentReceivedWatcher').then(m => ({ default: m.PaymentReceivedWatcher })))
 import { Toast } from '@/components/ui/Toast'
 import { PushPermissionBanner } from '@/components/ui/PushPermissionBanner'
 import { PageTransition } from '@/components/ui/PageTransition'
@@ -659,6 +661,7 @@ export function AppLayout() {
         <PushPermissionBanner />
         <DeviceKeyNotice />
         <LeaveGuardHost />
+        <Suspense fallback={null}><PaymentReceivedWatcher /></Suspense>
         <ModeToggle />
       </div>
     )
@@ -729,6 +732,7 @@ export function AppLayout() {
         <PushPermissionBanner />
         <DeviceKeyNotice />
         <LeaveGuardHost />
+        <Suspense fallback={null}><PaymentReceivedWatcher /></Suspense>
         <ModeToggle />
       </div>
     </div>

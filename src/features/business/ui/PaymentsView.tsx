@@ -7,19 +7,23 @@ import { Search, CreditCard } from 'lucide-react'
 import type { Payment } from './types'
 import { groupByDay, formatTime } from './types'
 import { Skeleton, ChainLogo, StatusDot, Divider } from './primitives'
+import { ExportButton } from './ExportButton'
 
 export interface PaymentsViewProps {
   loading: boolean
   payments: Payment[]
   onPayment: (p: Payment) => void
+  /** When provided, shows an Export CSV button beside the search box */
+  onExport?: () => void
 }
 
-type Filter = 'all' | 'received' | 'to_settle'
+type Filter = 'all' | 'received' | 'to_settle' | 'refunded'
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'all',       label: 'All' },
   { id: 'received',  label: 'Received' },
   { id: 'to_settle', label: 'To settle' },
+  { id: 'refunded',  label: 'Refunded' },
 ]
 
 function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payment) => void }) {
@@ -54,7 +58,7 @@ function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payme
   )
 }
 
-export function PaymentsView({ loading, payments, onPayment }: PaymentsViewProps) {
+export function PaymentsView({ loading, payments, onPayment, onExport }: PaymentsViewProps) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
 
@@ -75,9 +79,9 @@ export function PaymentsView({ loading, payments, onPayment }: PaymentsViewProps
 
   return (
     <div className="flex flex-col gap-4 pb-8">
-      {/* Search */}
-      <div className="mx-5 mt-2">
-        <div className="flex items-center gap-2 bg-surface border border-border rounded-2xl px-3.5 py-3">
+      {/* Search + optional export */}
+      <div className="mx-5 mt-2 flex items-center gap-2">
+        <div className="flex flex-1 items-center gap-2 bg-surface border border-border rounded-2xl px-3.5 py-3">
           <Search className="size-4 text-text-muted shrink-0" />
           <input
             type="search"
@@ -87,6 +91,7 @@ export function PaymentsView({ loading, payments, onPayment }: PaymentsViewProps
             className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none"
           />
         </div>
+        {onExport && <ExportButton onClick={onExport} />}
       </div>
 
       {/* Filter pills */}

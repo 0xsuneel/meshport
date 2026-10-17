@@ -15,7 +15,7 @@
 // nothing here moves funds out.
 import { useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
-import { Store, Link2, FileText, Clock } from 'lucide-react'
+import { Store, Link2, FileText, Clock, Printer } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, applyForMerchant } from '@/lib/merchant'
 import { chainLogoSrc } from '@/lib/chainLogos'
@@ -27,8 +27,13 @@ import { speakPayment } from '@/lib/voiceAlerts'
 import {
   BusinessScreen, QrCard, AmountKeypad, LiveStatus, ShareLink, Field, TextInput, ChipSelect, BillItemsEditor,
   RequestRow, InsightsChart, RankList, ProfileStatusCard, DetailList, PrimaryBtn, GhostBtn, Skeleton,
-  type KeypadKey, type LiveStatusKind, type BillItem, type RequestStatus, type StatusCardTone,
+  QrSticker, HourChart, StatTriple, StatementView, PrintableStatement, ReceiptCard, HelpView,
+  type KeypadKey, type LiveStatusKind, type BillItem, type RequestStatus, type StatusCardTone, type StatementRange,
 } from './ui'
+import { usePrint } from './printArea'
+import { salesByHour, hourLabel, statementRows, rangeLabel, rangeStart, exportPaymentsCsv } from './reports'
+import type { MerchantRefund } from '@/lib/merchantRefunds'
+import { submitPayment, listUnmatchedDeposits, assignDeposit, type UnmatchedDeposit } from '@/lib/merchantPay'
 import { chainLabel } from './settlement'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -112,6 +117,7 @@ export function ShopQrScreen({ open, onBack, storeName, handle }: { open: boolea
   const username = useAuthStore(s => s.username)
   const url = `${window.location.origin}/paylink/${username ?? ''}`
   const qr = useQr(open && username ? url : null)
+  const sticker = usePrint()
   return (
     <BusinessScreen open={open} title="Shop QR" onBack={onBack}>
       <div className="flex flex-col items-center text-center px-5 pt-6 gap-5">
@@ -119,7 +125,11 @@ export function ShopQrScreen({ open, onBack, storeName, handle }: { open: boolea
         <QrCard dataUrl={qr} title={storeName} subtitle={handle} />
         <p className="text-xs text-text-muted max-w-[260px]">Customers scan with any wallet and type the amount. USDC from any CCTP chain is accepted.</p>
         <div className="w-full"><LinkShare url={url} text={`Pay ${storeName} on MeshPort`} /></div>
+        <GhostBtn disabled={!qr} onClick={() => sticker.print(<QrSticker dataUrl={qr} storeName={storeName} handle={handle} />)}>
+          <span className="inline-flex items-center gap-2"><Printer className="size-4" /> Print counter sticker</span>
+        </GhostBtn>
       </div>
+      {sticker.portal}
     </BusinessScreen>
   )
 }
@@ -353,7 +363,7 @@ export function RequestsScreen({ open, onBack }: { open: boolean; onBack: () => 
 
 // ── Insights ─────────────────────────────────────────────────────────────
 
-export function InsightsScreen({ open, onBack, payments }: { open: boolean; onBack: () => void; payments: MerchantPayment[] }) {
+export function InsightsScreen({ open, onBack, payments, waiting }: { open: boolean; onBack: () => void; payments: MerchantPayment[]; waiting: string }) {
   const data = useMemo(() => {
     const days = [...Array(7)].map((_, k) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (6 - k)); return d })
     const week = payments.filter(p => new Date(p.createdAt) >= days[0])
@@ -363,8 +373,13 @@ export function InsightsScreen({ open, onBack, payments }: { open: boolean; onBa
       for (const p of week) { const k = key(p); const v = m.get(k) ?? { total: 0, count: 0 }; v.total += p.amount; v.count++; m.set(k, v) }
       return [...m.entries()].sort((a, b) => b[1].total - a[1].total)
     }
+    const hours = salesByHour(payments)
+    const peak = hours.indexOf(Math.max(...hours))
     return {
       total, count: week.length,
+      hours: hours.map((v, h) => ({ label: hourLabel(h), value: v, display: money(v) })),
+      peak: hours[peak] > 0 ? `Busiest: ${hourLabel(peak)}` : undefined,
+      buyers: new Set(week.map(p => p.customerUsername || p.from.toLowerCase())).size,
       bars: days.map(d => {
         const v = week.filter(p => new Date(p.createdAt).toDateString() === d.toDateString()).reduce((s, p) => s + p.amount, 0)
         return { label: d.toLocaleDateString([], { weekday: 'short' }), value: v, display: money(v) }
@@ -379,6 +394,12 @@ export function InsightsScreen({ open, onBack, payments }: { open: boolean; onBa
     <BusinessScreen open={open} title="Insights" onBack={onBack}>
       <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
         <InsightsChart total={money(data.total)} sub={`Last 7 days · ${data.count} payments · avg ${money(data.count ? data.total / data.count : 0)}`} bars={data.bars} />
+        <StatTriple items={[
+          { label: 'Average ticket', value: money(data.count ? data.total / data.count : 0) },
+          { label: 'Waiting to settle', value: waiting },
+          { label: 'Customers', value: String(data.buyers), hint: 'last 7 days' },
+        ]} />
+        <HourChart title="Sales by hour" sub="Last 7 days" bars={data.hours} peak={data.peak} />
         <RankList title="Top customers" empty="No customers this week" rows={data.customers} />
         <RankList title="By chain" empty="No payments this week" rows={data.chains} />
       </div>
@@ -442,6 +463,125 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
             ...(application ? [{ label: 'Applied', value: new Date(application.createdAt).toLocaleDateString() }] : []),
           ]} />
         )}
+      </div>
+    </BusinessScreen>
+  )
+}
+
+// ── Statement ────────────────────────────────────────────────────────────
+
+export function StatementScreen({ open, onBack, storeName, handle, payments, refunds, settled, waiting, loading }: {
+  open: boolean; onBack: () => void; storeName: string; handle: string; payments: MerchantPayment[]; refunds: MerchantRefund[]
+  settled: { amount: number; createdAt: string }[]; waiting: number; loading: boolean
+}) {
+  const [range, setRange] = useState<StatementRange>('today')
+  const printer = usePrint()
+  const rows = statementRows({ range, payments, refunds, settled, waiting })
+  const since = rangeStart(range).getTime()
+  const inRange = payments.filter(p => Date.parse(p.createdAt) >= since)
+  const refunded = new Set(refunds.map(r => r.paymentId))
+  const name = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
+  const pdf = () => printer.print(
+    <PrintableStatement storeName={storeName} handle={handle} periodLabel={rangeLabel(range)} rows={rows}
+      payments={inRange.map(p => ({ time: p.createdAt, from: name(p), order: p.orderNumber ?? undefined, chain: chainLabel(p.chain), amount: money(p.amount), status: refunded.has(p.id) ? 'Refunded' : 'Paid' }))} />)
+  return (
+    <BusinessScreen open={open} title="Statement" onBack={onBack}>
+      <div className="px-5 pt-5 pb-6">
+        <StatementView range={range} onRange={setRange} loading={loading} rows={rows} periodLabel={rangeLabel(range)}
+          onCsv={() => exportPaymentsCsv(inRange, storeName, refunds)} onPdf={pdf} />
+      </div>
+      {printer.portal}
+    </BusinessScreen>
+  )
+}
+
+// ── Receipt ──────────────────────────────────────────────────────────────
+
+export function ReceiptScreen({ open, onBack, storeName, handle, payment, refunded }: {
+  open: boolean; onBack: () => void; storeName: string; handle: string; payment: MerchantPayment | null; refunded: boolean
+}) {
+  const printer = usePrint()
+  const { share } = useShare()
+  if (!payment) return <BusinessScreen open={false} title="Receipt" onBack={onBack}>{null}</BusinessScreen>
+  const from = payment.customerUsername ? `${payment.customerUsername}.arc` : `${payment.from.slice(0, 6)}…${payment.from.slice(-4)}`
+  const card = (printable: boolean) => (
+    <ReceiptCard storeName={storeName} handle={handle} amount={money(payment.amount)} from={from} chainLabel={chainLabel(payment.chain)}
+      order={payment.orderNumber ?? undefined} time={payment.createdAt} txHash={payment.txHash} refunded={refunded} printable={printable} />
+  )
+  const text = [`Receipt from ${storeName} (${handle})`, `${money(payment.amount)} USDC${refunded ? ' - refunded' : ''}`,
+    payment.orderNumber ? `Order ${payment.orderNumber}` : '', `Paid by ${from} on ${chainLabel(payment.chain)}`,
+    new Date(payment.createdAt).toLocaleString(), `Transaction ${payment.txHash}`].filter(Boolean).join('\n')
+  return (
+    <BusinessScreen open={open} title="Receipt" onBack={onBack}
+      footer={<div className="grid grid-cols-2 gap-3">
+        <GhostBtn onClick={() => printer.print(card(true))}>Print</GhostBtn>
+        <PrimaryBtn onClick={() => share(text, `${window.location.origin}/paylink/${handle.replace(/\.arc$/, '')}`)}>Send receipt</PrimaryBtn>
+      </div>}>
+      <div className="px-5 pt-5 pb-6 flex justify-center">{card(false)}</div>
+      {printer.portal}
+    </BusinessScreen>
+  )
+}
+
+// ── Help & disputes ──────────────────────────────────────────────────────
+
+const HELP_CHAINS = ['Arc_Testnet', 'Base_Sepolia', 'Ethereum_Sepolia', 'Arbitrum_Sepolia', 'Optimism_Sepolia', 'Polygon_Sepolia', 'Avalanche_Fuji']
+const FAQ = [
+  { q: 'A customer says they paid but nothing shows', a: 'Ask for the transaction hash (it is in their wallet history), pick the chain and the order, then Check & attach. MeshPort reads it from the chain and adds it to the order if it paid your wallet.' },
+  { q: 'A payment came in without an order', a: 'It shows under "Payments without an order". Pick the open order it belongs to and tap Assign.' },
+  { q: 'How do I refund?', a: 'Open the payment in Payments and tap Refund. The USDC goes back to the customer from your Arc balance through the MeshPort refunds contract, once per payment.' },
+  { q: 'When does money from other chains reach Arc?', a: 'When you settle. Settlements moves it over CCTP and MeshPort pays the gas; it usually arrives in a few minutes.' },
+]
+
+export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void }) {
+  const toast = useUIStore(s => s.showToastMessage)
+  const [chain, setChain] = useState('Arc_Testnet')
+  const [txHash, setTxHash] = useState('')
+  const [orders, setOrders] = useState<MerchantIntent[]>([])
+  const [order, setOrder] = useState('')
+  const [unmatched, setUnmatched] = useState<UnmatchedDeposit[]>([])
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ tone: 'success' | 'danger' | 'warning'; title: string; text: string }>()
+
+  const load = () => {
+    listMyIntents(200).then(l => {
+      const open = l.filter(i => OPEN.has(i.status) && !isExpired(i))
+      setOrders(open); setOrder(o => o || open[0]?.code || '')
+    }).catch(() => {})
+    listUnmatchedDeposits().then(setUnmatched).catch(() => setUnmatched([]))
+  }
+  useEffect(() => { if (open) { setResult(undefined); load() } }, [open])
+
+  const check = async () => {
+    if (!/^0x[0-9a-fA-F]{64}$/.test(txHash.trim())) { setResult({ tone: 'warning', title: 'Check the hash', text: 'A transaction hash starts with 0x and has 64 characters after it.' }); return }
+    if (!order) { setResult({ tone: 'warning', title: 'Pick an order', text: 'Choose the open order this payment was for.' }); return }
+    setBusy(true); setResult(undefined)
+    try {
+      const v = await submitPayment(order, chain, txHash.trim(), { merchantVerify: true })
+      setResult(v.status === 'paid' || v.status === 'processing' || v.status === 'partially_paid'
+        ? { tone: 'success', title: 'Payment found', text: `${money(v.received)} attached to ${v.orderNumber ?? 'the order'}.` }
+        : { tone: 'warning', title: 'Still checking', text: 'The transaction is not confirmed yet. Try again in a minute.' })
+      load()
+    } catch (e) {
+      setResult({ tone: 'danger', title: 'Not a payment to you', text: e instanceof Error ? e.message : 'MeshPort could not match this transaction.' })
+    }
+    setBusy(false)
+  }
+  const assign = async (id: string) => {
+    if (!order) { toast('Pick an open order first', 'error'); return }
+    try { await assignDeposit(id, order); toast('Payment assigned', 'success'); load() }
+    catch (e) { toast(e instanceof Error ? e.message : 'Could not assign', 'error') }
+  }
+
+  return (
+    <BusinessScreen open={open} title="Help & disputes" onBack={onBack}>
+      <div className="px-5 pt-5 pb-6">
+        <HelpView chains={HELP_CHAINS.map(id => ({ id, label: chainLabel(id), logo: chainLogoSrc(id) }))} chain={chain} onChain={setChain}
+          txHash={txHash} onTxHash={setTxHash}
+          orders={orders.map(i => ({ code: i.code, label: `${i.orderNumber ?? 'Order'} · ${money(i.amount - i.received)}` }))} order={order} onOrder={setOrder}
+          busy={busy} result={result} onCheck={check}
+          unmatched={unmatched.map(u => ({ id: u.id, amount: money(u.amount), from: `${u.from.slice(0, 6)}…${u.from.slice(-4)}`, chainLabel: chainLabel(u.chain), when: u.createdAt }))}
+          onAssign={id => { void assign(id) }} faq={FAQ} />
       </div>
     </BusinessScreen>
   )
