@@ -85,6 +85,8 @@ export interface OverviewViewProps {
   onBalance?: () => void
   /** All payments (and the business's own requests) */
   onPayments?: () => void
+  /** Everyone who paid, with their history */
+  onCustomers?: () => void
   onToSettle: () => void
   onRefunded: () => void
   onSeeAllPayments: () => void
@@ -106,6 +108,7 @@ export function OverviewView({
   onReceive,
   onBalance,
   onPayments,
+  onCustomers,
   onToSettle,
   onSeeAllPayments,
   onPayment,
@@ -117,6 +120,7 @@ export function OverviewView({
     { icon: 'qr' as const,      label: 'Show QR',  onClick: onShowQr },
     { icon: 'receive' as const, label: 'Receive',  onClick: onReceive },
     ...(onPayments ? [{ icon: 'list' as const, label: 'Payments', onClick: onPayments }] : []),
+    ...(onCustomers ? [{ icon: 'bulk' as const, label: 'Customers', onClick: onCustomers }] : []),
     ...(onBalance ? [{ icon: 'wallet' as const, label: 'Balance', onClick: onBalance }] : []),
   ]
 
