@@ -3,7 +3,7 @@
  * Shows store name, .arc handle, verification badge, voice toggle, and profile.
  */
 import React from 'react'
-import { Mic, MicOff, ShieldCheck, AlertCircle, Clock, User } from 'lucide-react'
+import { Mic, MicOff, ShieldCheck, AlertCircle, Clock, User, ChevronDown } from 'lucide-react'
 import { IconBtn, StatusDot } from './primitives'
 
 export type VerificationStatus = 'verified' | 'review' | 'unverified'
@@ -15,6 +15,7 @@ export interface BusinessHeaderProps {
   voiceOn: boolean
   onVoice: () => void
   onProfile: () => void
+  onSwitchStore?: () => void  // optional — shows chevron when provided
 }
 
 const statusConfig: Record<VerificationStatus, { label: string; Icon: React.ElementType }> = {
@@ -30,6 +31,7 @@ export function BusinessHeader({
   voiceOn,
   onVoice,
   onProfile,
+  onSwitchStore,
 }: BusinessHeaderProps) {
   const { label, Icon } = statusConfig[status]
 
@@ -37,9 +39,20 @@ export function BusinessHeader({
     <header className="flex items-center gap-3 px-5 pt-5 pb-3">
       {/* Left: store name + handle + status */}
       <div className="flex-1 min-w-0">
-        <h1 className="display text-lg font-semibold text-text-primary leading-tight truncate">
-          {storeName}
-        </h1>
+        <button
+          type="button"
+          onClick={onSwitchStore}
+          disabled={!onSwitchStore}
+          className="flex items-center gap-1 disabled:cursor-default group"
+          aria-label={onSwitchStore ? 'Switch store' : undefined}
+        >
+          <h1 className="display text-lg font-semibold text-text-primary leading-tight truncate">
+            {storeName}
+          </h1>
+          {onSwitchStore && (
+            <ChevronDown className="size-4 text-text-muted group-hover:text-text-secondary transition-colors shrink-0" />
+          )}
+        </button>
         <div className="flex items-center gap-1.5 mt-0.5">
           <span className="text-xs text-text-muted font-mono truncate">{handle}</span>
           <span className="text-text-muted opacity-40">·</span>
