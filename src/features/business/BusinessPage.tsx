@@ -245,7 +245,7 @@ function OwnerBusinessPage() {
     : !settle.ready ? `Settle all again in ${inWords(settle.nextAt - Date.now())}`
     : settle.due.length === 0 ? 'Nothing to settle'
     : `Settle all · ${money(settle.total)} to Arc`
-  const settleNote = `Uses CCTP. MeshPort pays the gas.${settle.waitHours ? ` Settle all once every ${settle.waitHours} hour${settle.waitHours === 1 ? '' : 's'};` : ''} settle one chain any time below.`
+  const settleNote = `Uses CCTP. MeshPort pays the gas.${settle.waitHours ? ` Settle all once every ${settle.waitHours} hour${settle.waitHours === 1 ? '' : 's'}; settle one chain any time below.` : ' You can also settle one chain at a time below.'}`
 
   const namedStore = application?.businessName || accountStoreName || null
   const storeName = namedStore || 'Your business'
@@ -261,7 +261,7 @@ function OwnerBusinessPage() {
         : <SetupBanner tone="brand" title="Complete your business account" text={`Tell us why ${storeInText} needs a business account. Once approved, merchant tools turn on.`} action="Complete" onAction={open('profile')} />
 
   // History rows from claims; a tapped one opens in the progress sheet.
-  const historyItems = (history ?? []).filter(c => inPeriod(c.createdAt, period)).slice(0, 30).map(c => ({
+  const historyItems = (history ?? []).slice(0, 30).map(c => ({
     id: c.id, amount: money(c.arrivedAmount ?? c.amount), chainLabels: [chainLabel(c.sourceChain)], when: c.createdAt,
     status: c.status === 'completed' ? 'completed' as const : c.status === 'failed' ? 'failed' as const : 'in_progress' as const,
   }))
@@ -292,10 +292,10 @@ function OwnerBusinessPage() {
               <ArrowLeft className="size-5" />
             </button>
             <h1 className="text-lg font-semibold text-text-primary">{tab === 'payments' ? 'Payments' : 'Balance'}</h1>
-            {stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? 'All stores'}</span>}
+            {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? 'All stores'}</span>}
           </header>
         )}
-        {tab !== 'overview' && <div className="pt-2">
+        {tab === 'payments' && <div className="pt-2">
           <DateRangeBar value={periodSel.id} customLabel={period.id === 'custom' ? period.label : undefined}
             onChange={id => choosePeriod({ ...periodSel, id })} onCustom={() => setRangeSheet({ from: periodSel.from, to: periodSel.to })} />
         </div>}
