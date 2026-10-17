@@ -284,9 +284,13 @@ function OwnerBusinessPage() {
     <div className="flex flex-col h-full min-h-0 bg-bg">
       <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
         {tab === 'overview' ? (
-          <BusinessHeader storeName={storeName} handle={handle} status={headerStatus} voiceOn={voice.enabled}
+          // Title = the store being viewed ("All stores" for the totals);
+          // the line under it is the business account itself.
+          <BusinessHeader storeName={activeStore?.name ?? (stores.length > 1 ? 'All stores' : storeName)} handle={handle}
+            status={headerStatus} voiceOn={voice.enabled}
             onVoice={() => setVoiceOpen(true)} onMenu={() => setMenu(true)} onSwitchStore={stores.length ? () => setSwitcher(true) : undefined}
-            outlet={stores.length > 1 ? (activeStore?.name ?? 'All stores') : null} />
+            avatarName={storeName}
+            outlet={(activeStore || stores.length > 1) && activeStore?.name !== storeName ? storeName : null} />
         ) : (
           // Payments and Settlements open from Overview (See all, the settle
           // bar, the menu) and come back with the arrow - no tab bar.
