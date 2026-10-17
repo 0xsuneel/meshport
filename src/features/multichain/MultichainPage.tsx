@@ -14,7 +14,7 @@ function InlineSpinner() {
 }
 import { UB_CLAIM_CHAINS } from '@/lib/ubClaim'
 import { isGaslessBridgeAvailable } from '@/lib/gaslessBridge'
-import { useMerchant, isMerchantClaim } from '@/lib/merchant'
+import { useMerchant, useBusinessTab, isMerchantClaim } from '@/lib/merchant'
 import { MerchantLedger } from '@/features/merchant/MerchantLedger'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
@@ -227,8 +227,10 @@ const SCAN_LOGOS = [...new Set(Object.values(CHAIN_LOGO_FILE))].map(f => ({ src:
 
 // ── Hero card - ticket style. Left: Available To Transfer (on Arc).
 // Right: Available To Bring (USDC on other chains, with their logos).
-function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null, balanceHidden, onToggleHidden, chains, bringLabel = 'Available To Bring' }: {
+function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null, balanceHidden, onToggleHidden, chains, bringLabel = 'Available To Bring', transferOnly = false }: {
   arcAvailable: number; claimAvailable: number; scanning: boolean; scanChain?: string | null; balanceHidden: boolean; onToggleHidden: () => void; bringLabel?: string
+  /** Business accounts: Available To Transfer only, no other-chain half. */
+  transferOnly?: boolean
   chains: Array<{ id: string; label: string; balance: number }>
 }) {
   const amountSize = (n: number) => {
@@ -287,6 +289,7 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
         <span style={sub}>On Arc</span>
       </div>
 
+      {!transferOnly && <>
       {/* Perforation */}
       <div style={{ width: 0, margin: '14px 0', borderLeft: '2px dashed rgba(255,255,255,0.35)' }} />
 
@@ -315,6 +318,7 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
       {/* Ticket notches */}
       <div style={{ position: 'absolute', left: '50%', top: -9, width: 18, height: 18, marginLeft: -9, borderRadius: '50%', background: 'var(--bg)' }} />
       <div style={{ position: 'absolute', left: '50%', bottom: -9, width: 18, height: 18, marginLeft: -9, borderRadius: '50%', background: 'var(--bg)' }} />
+      </>}
     </div>
   )
 }
@@ -334,8 +338,9 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
   const narrow      = useMediaQuery('(max-width: 399px)')
   // Approved merchants get the Ledger (CCTP chains, Claim All) instead of Bring Funds.
   const isMerchant  = useMerchant().isMerchant
-  // A merchant on /multichain sees cross-chain transfer only.
-  const merchantTransfer = isMerchant && !ledgerMode
+  // A business account on /multichain sees cross-chain transfer only: no
+  // Bring Funds and no other-chain balance (that is settled in Business).
+  const merchantTransfer = useBusinessTab() && !ledgerMode
   const navigate    = useNavigate()
   const walletAddress = useAuthStore(s => s.walletAddress)
   const { balance: arcBalance } = useWalletStore()
@@ -1064,7 +1069,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
           </button>
         )}
         <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px', margin: 0 }}>{isMerchant ? 'Cross-chain Transfer' : 'Multichain Hub'}</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px', margin: 0 }}>{merchantTransfer || isMerchant ? 'Cross-chain Transfer' : 'Multichain Hub'}</h1>
         </div>
         <button onClick={() => {
           const { walletAddress } = useAuthStore.getState()
@@ -1096,7 +1101,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
           style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <HubHeroCard arcAvailable={arcBalance} scanning={scanning} scanChain={scanChain}
           claimAvailable={isMerchant ? bringRows.reduce((sum, c) => sum + (c.balance >= DUST_USDC ? c.balance : 0), 0) : totalExternal}
-          balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} chains={bringRows} />
+          balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} chains={bringRows} transferOnly={merchantTransfer} />
 
         {/* Tab strip (none in the Business Ledger view) */}
         {!ledgerMode && <div role="tablist" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 16,

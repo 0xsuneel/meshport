@@ -1,4 +1,4 @@
-import { useHubLabel, useMerchant } from '@/lib/merchant'
+import { useBusinessTab, useHubLabel, useMerchant } from '@/lib/merchant'
 import { fetchBtcPriceUsd } from '@/lib/btcPrice'
 import { loadAssetSlot, saveAssetSlot } from '@/lib/assetSlot'
 import { handBiometricPasscode } from '@/lib/biometricHandoff'
@@ -2017,6 +2017,7 @@ function FeatureBanner({ height, onOpen }: { height: number; onOpen: (path: stri
 
 export function HomePage() {
   const navigate = useNavigate()
+  const businessAccount = useBusinessTab()
   const user = useAuthStore(s => s.user)
   const username = useAuthStore(s => s.username)
   const walletAddress = useAuthStore(s => s.walletAddress)
@@ -3812,6 +3813,13 @@ export function HomePage() {
               <Sparkline values={balanceTrend} color={todayChange.net >= 0 ? 'var(--success)' : 'var(--danger)'} height={26} fill />
             </div>
           </div>
+        ) : businessAccount ? (
+          // Business accounts: the balance card only - no Cross-chain card
+          // or carousel edges (Cross-chain Transfer is in More actions).
+          <AvailableBalanceCard
+            portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
+            walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+          />
         ) : (
           <MobileHeroCarousel
             portfolioTotal={portfolioTotal}
