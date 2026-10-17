@@ -109,6 +109,7 @@ function OwnerBusinessPage() {
   const loadRefunds = useCallback(() => listMyRefunds().then(setRefunds).catch(() => {}), [])
   useEffect(() => { void loadRefunds(); return subscribeMyRefunds(() => { void loadRefunds() }) }, [loadRefunds])
   const refundOf = useMemo(() => new Map(refunds.map(r => [r.paymentId, r])), [refunds])
+  const refundedIds = useMemo(() => new Set(refundOf.keys()), [refundOf])
 
   // ── Stores (which store this device works as; null = all) ─────────────
   const [stores, setStores] = useState<Store[]>([])
@@ -462,7 +463,7 @@ function OwnerBusinessPage() {
       <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: qrStore?.id ?? null, canBill: true }}>
       <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
       <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={storeName} />
-      <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => !refundOf.has(p.id))}
+      <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw} refundedIds={refundedIds}
         onPayment={p => setDetail(toRow(p))} onChat={u => { setScreen(null); void openChat(u) }} />
       <ReportsScreen open={screen === 'reports'} onBack={back}
         insights={{ payments: storeRaw.filter(p => !refundOf.has(p.id)), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null }}
