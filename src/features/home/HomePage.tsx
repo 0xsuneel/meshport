@@ -1,5 +1,4 @@
 import { useHubLabel, useMerchant } from '@/lib/merchant'
-import { BusinessSetupCard } from '@/features/business/BusinessSetupCard'
 import { fetchBtcPriceUsd } from '@/lib/btcPrice'
 import { loadAssetSlot, saveAssetSlot } from '@/lib/assetSlot'
 import { handBiometricPasscode } from '@/lib/biometricHandoff'
@@ -3865,9 +3864,6 @@ export function HomePage() {
           ))}
         </div>
         )}
-
-        {/* ── BUSINESS SETUP - business accounts until approved ─────────────── */}
-        <BusinessSetupCard />
 
         {/* ── FEATURE BANNERS - promo carousel for what MeshPort can do ─────── */}
         {/* Same width/radius as the old Multichain Hub row, 10% taller. */}

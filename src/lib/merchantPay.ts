@@ -292,7 +292,7 @@ export async function createPaymentRequest(p: { amount: number; customer?: strin
     note: p.note?.trim().slice(0, 140) || null,
     expires_at: p.expiresInMinutes ? new Date(Date.now() + p.expiresInMinutes * 60_000).toISOString() : null,
   }).select('*').single()
-  if (error) throw new Error(/approved merchants/i.test(error.message) ? 'Only approved merchants can send bills.' : error.message)
+  if (error) throw new Error(/business accounts/i.test(error.message) ? 'Only business accounts can send bills.' : error.message)
   markPaymentRequestCreated()
   return mapIntent(data)
 }
@@ -375,7 +375,7 @@ export async function listChatPendingOrders(otherUserId: string): Promise<ChatPe
   }))
 }
 
-// Which users are approved merchants (chat list "Merchant" tag). Cached for
+// Which users are business accounts (chat list "Merchant" tag). Cached for
 // the session; a user's merchant status rarely changes.
 const merchantFlagCache = new Map<string, boolean>()
 export async function fetchMerchantFlags(userIds: string[]): Promise<Set<string>> {
