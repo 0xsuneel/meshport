@@ -111,12 +111,16 @@ function OwnerBusinessPage() {
   // they go to the main (default) store.
   const qrStore = activeStore ?? stores.find(s => s.isDefault) ?? null
   const pickStore = (id: string | null) => { setStoreId(id); setActiveStoreId(id); setSwitcher(false) }
-  const storeRaw = useMemo(() => activeStore ? raw.filter(p => intentStore.get(p.intentId) === activeStore.id) : raw, [raw, activeStore, intentStore])
+  // A payment's store is its order's store; anything without one (taken
+  // before stores, other-chain receipts, plain transfers) is the main store's.
+  const mainStoreId = stores.find(s => s.isDefault)?.id ?? null
+  const storeOf = useCallback((p: MerchantPayment) => intentStore.get(p.intentId) ?? mainStoreId, [intentStore, mainStoreId])
+  const storeRaw = useMemo(() => activeStore ? raw.filter(p => storeOf(p) === activeStore.id) : raw, [raw, activeStore, storeOf])
   const paymentsByStore = useMemo(() => {
     const m = new Map<string, { total: number; count: number }>()
-    for (const p of raw) { const sid = intentStore.get(p.intentId); if (!sid) continue; const v = m.get(sid) ?? { total: 0, count: 0 }; v.total += p.amount; v.count++; m.set(sid, v) }
+    for (const p of raw) { const sid = storeOf(p); if (!sid) continue; const v = m.get(sid) ?? { total: 0, count: 0 }; v.total += p.amount; v.count++; m.set(sid, v) }
     return m
-  }, [raw, intentStore])
+  }, [raw, storeOf])
 
   // ── Date filter (Overview, Payments, Settlements) ─────────────────────
   const [periodSel, setPeriodSel] = useState(savedPeriod)
