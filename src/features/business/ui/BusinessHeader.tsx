@@ -1,9 +1,9 @@
 /**
  * BusinessHeader — top bar of the merchant screen.
- * Shows store name, .arc handle, verification badge, voice toggle, and profile.
+ * Shows store name, .arc handle, verification badge, voice toggle, and menu button.
  */
 import React from 'react'
-import { Mic, MicOff, ShieldCheck, AlertCircle, Clock, User, ChevronDown } from 'lucide-react'
+import { Mic, MicOff, ShieldCheck, AlertCircle, Clock, User, ChevronDown, LayoutGrid } from 'lucide-react'
 import { IconBtn, StatusDot } from './primitives'
 
 export type VerificationStatus = 'verified' | 'review' | 'unverified'
@@ -14,8 +14,12 @@ export interface BusinessHeaderProps {
   status: VerificationStatus
   voiceOn: boolean
   onVoice: () => void
-  onProfile: () => void
-  onSwitchStore?: () => void  // optional — shows chevron when provided
+  /** Replaces the person icon with a grid menu button. Preferred over onProfile. */
+  onMenu?: () => void
+  /** Backwards-compatible — ignored when onMenu is provided. */
+  onProfile?: () => void
+  /** Optional — shows a chevron next to the store name for multi-store switching. */
+  onSwitchStore?: () => void
 }
 
 const statusConfig: Record<VerificationStatus, { label: string; Icon: React.ElementType }> = {
@@ -30,10 +34,13 @@ export function BusinessHeader({
   status,
   voiceOn,
   onVoice,
+  onMenu,
   onProfile,
   onSwitchStore,
 }: BusinessHeaderProps) {
   const { label, Icon } = statusConfig[status]
+  // onMenu takes priority; fall back to onProfile for backwards compat
+  const menuAction = onMenu ?? onProfile
 
   return (
     <header className="flex items-center gap-3 px-5 pt-5 pb-3">
@@ -46,7 +53,7 @@ export function BusinessHeader({
           className="flex items-center gap-1 disabled:cursor-default group"
           aria-label={onSwitchStore ? 'Switch store' : undefined}
         >
-          <h1 className="display text-lg font-semibold text-text-primary leading-tight truncate">
+          <h1 className="text-lg font-semibold text-text-primary leading-tight truncate">
             {storeName}
           </h1>
           {onSwitchStore && (
@@ -64,28 +71,26 @@ export function BusinessHeader({
         </div>
       </div>
 
-      {/* Right: voice toggle + profile */}
+      {/* Right: voice toggle + menu / profile */}
       <div className="flex items-center gap-1 shrink-0">
         <IconBtn
           label={voiceOn ? 'Disable voice alerts' : 'Enable voice alerts'}
           onClick={onVoice}
           className={voiceOn ? 'text-brand-text bg-brand/10' : ''}
         >
-          {voiceOn ? (
-            <Mic className="size-5" />
-          ) : (
-            <MicOff className="size-5" />
-          )}
+          {voiceOn ? <Mic className="size-5" /> : <MicOff className="size-5" />}
         </IconBtn>
 
-        <button
-          type="button"
-          aria-label="Open profile"
-          onClick={onProfile}
-          className="inline-flex items-center justify-center size-11 rounded-2xl text-text-secondary hover:bg-border/30 active:scale-95 transition-all"
-        >
-          <User className="size-5" />
-        </button>
+        {menuAction && (
+          <button
+            type="button"
+            aria-label={onMenu ? 'Business menu' : 'Open profile'}
+            onClick={menuAction}
+            className="inline-flex items-center justify-center size-11 rounded-2xl text-text-secondary hover:bg-border/30 active:scale-95 transition-all"
+          >
+            {onMenu ? <LayoutGrid className="size-5" /> : <User className="size-5" />}
+          </button>
+        )}
       </div>
     </header>
   )
