@@ -387,8 +387,12 @@ async function watchDeposits() {
   // Every approved merchant's address is watched on the other chains, so any
   // payment there (order or not) is recorded and notified ("Payment received
   // on Base"). It stays on that chain until the merchant's auto-convert.
-  const { data: apps } = await db.from('merchant_applications').select('wallet_address').eq('status', 'approved')
-  const merchantWallets = new Set((apps ?? []).map((a: any) => String(a.wallet_address ?? '').toLowerCase()).filter(Boolean))
+  // Business accounts too (approved or not): their Business tab shows these.
+  const [{ data: apps }, { data: biz }] = await Promise.all([
+    db.from('merchant_applications').select('wallet_address').eq('status', 'approved'),
+    db.from('users').select('wallet_address').eq('account_type', 'business').not('wallet_address', 'is', null),
+  ])
+  const merchantWallets = new Set([...(apps ?? []), ...(biz ?? [])].map((a: any) => String(a.wallet_address ?? '').toLowerCase()).filter(Boolean))
   if (intents.length === 0 && merchantWallets.size === 0) return { scanned: 0, matched: 0, review: 0 }
 
   // Customer wallets for orders that name a customer.

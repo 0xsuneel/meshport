@@ -216,6 +216,8 @@ export type MerchantIntent = {
   personal?: boolean | null
   /** Business → Stores: the store it was made for. */
   storeId?: string | null
+  /** 'shop_qr' = opened by a customer from the Shop QR (open amount). */
+  via?: string | null
 }
 export type MerchantPayment = {
   id: string; intentId: string; chain: string; txHash: string; from: string; amount: number
@@ -242,9 +244,12 @@ async function myAuthUid(): Promise<string | null> {
 
 /** Wallets of my approved merchant applications (as stored and lowercased). */
 async function myMerchantWallets(uid: string): Promise<string[]> {
-  const { data } = await supabase.from('merchant_applications').select('wallet_address')
-    .eq('auth_uid', uid).eq('status', 'approved')
-  const raw = (data ?? []).map((r: any) => r.wallet_address).filter(Boolean) as string[]
+  // Approved merchant wallet(s), plus a business account's own wallet.
+  const [{ data }, { data: me }] = await Promise.all([
+    supabase.from('merchant_applications').select('wallet_address').eq('auth_uid', uid).eq('status', 'approved'),
+    supabase.from('users').select('wallet_address').eq('auth_uid', uid).eq('account_type', 'business'),
+  ])
+  const raw = [...(data ?? []), ...(me ?? [])].map((r: any) => r.wallet_address).filter(Boolean) as string[]
   return [...new Set([...raw, ...raw.map(w => w.toLowerCase())])]
 }
 
@@ -273,7 +278,7 @@ function mapIntent(r: any): MerchantIntent {
     customerUsername: r.customer_username, customerWallet: r.customer_wallet, status: expired ? 'expired' : r.status,
     sourceChain: r.source_chain, paymentMethod: r.payment_method, createdAt: r.created_at, expiresAt: r.expires_at, paidAt: r.paid_at,
     kind: r.kind === 'invoice' ? 'invoice' : 'request', personal: typeof r.personal === 'boolean' ? r.personal : null,
-    completedByMerchant: !!r.completed_by_merchant, completedNote: r.completed_note ?? null, storeId: r.store_id ?? null,
+    completedByMerchant: !!r.completed_by_merchant, completedNote: r.completed_note ?? null, storeId: r.store_id ?? null, via: r.via ?? null,
     items: Array.isArray(r.items) ? r.items.map((i: any) => ({ name: i.name, qty: Number(i.qty), price: Number(i.price), total: Number(i.total) })) : null,
   }
 }
@@ -305,7 +310,9 @@ export async function listMyIntents(limit = 200): Promise<MerchantIntent[]> {
   if (!uid) return []
   const { data } = await supabase.from('merchant_payment_intents').select('*').eq('merchant_auth_uid', uid)
     .order('created_at', { ascending: false }).limit(limit)
-  return (data ?? []).map(mapIntent)
+  // Shop QR orders the customer opened but never paid aren't the merchant's
+  // requests - leave them out (paid ones are real orders and stay).
+  return (data ?? []).map(mapIntent).filter(i => i.via !== 'shop_qr' || i.received > 0)
 }
 
 // ─── Admin panel only ─────────────────────────────────────────────────────────

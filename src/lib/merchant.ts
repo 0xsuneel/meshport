@@ -157,6 +157,8 @@ export function isMerchantNow(): boolean {
  */
 export function isMerchantClaim(p: { metadata?: any; createdAt?: string; sourceChain?: string }): boolean {
   if (p.metadata?.merchant) return true
+  // Business accounts: every claim from another chain is a settlement.
+  if (state.accountType === 'business') return !!p.sourceChain && p.sourceChain !== 'Arc_Testnet'
   const approvedAt = state.status === 'approved' ? state.application?.reviewedAt : null
   if (!approvedAt || !p.createdAt || !p.sourceChain || p.sourceChain === 'Arc_Testnet') return false
   return new Date(p.createdAt).getTime() >= new Date(approvedAt).getTime()

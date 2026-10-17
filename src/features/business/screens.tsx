@@ -125,21 +125,25 @@ function Done({ icon, top, amount, note, children }: { icon: React.ReactNode; to
 
 // ── Shop QR ──────────────────────────────────────────────────────────────
 
-export function ShopQrScreen({ open, onBack, storeName, handle, payTo }: { open: boolean; onBack: () => void; storeName: string; handle: string; payTo?: string }) {
+export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo }: { open: boolean; onBack: () => void; storeName: string; outlet?: string | null; handle: string; payTo?: string }) {
   // payTo: whose pay link (staff mode: the business owner's, never the staff's own).
+  // The QR names the outlet (?store=) so each store's payments land in that
+  // store; it changes as soon as the owner switches stores.
   const own = useAuthStore(s => s.username)
+  const { storeId } = useContext(RequestMaker)
   const username = payTo ?? own
-  const url = `${window.location.origin}/paylink/${username ?? ''}`
+  const url = `${window.location.origin}/paylink/${username ?? ''}${storeId ? `?store=${storeId}` : ''}`
   const qr = useQr(open && username ? url : null)
   const sticker = usePrint()
+  const sub = outlet ? `${outlet} · ${handle}` : handle
   return (
     <BusinessScreen open={open} title="Shop QR" onBack={onBack}>
       <div className="flex flex-col items-center text-center px-5 pt-6 gap-5">
         <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-brand/10 text-brand-text"><Store className="size-5" /></span>
-        <QrCard dataUrl={qr} title={storeName} subtitle={handle} />
-        <p className="text-xs text-text-muted max-w-[260px]">Customers scan with any wallet and type the amount. USDC from any CCTP chain is accepted.</p>
+        <QrCard dataUrl={qr} title={storeName} subtitle={sub} />
+        <p className="text-xs text-text-muted max-w-[260px]">Customers scan, type the amount and pay. USDC from Arc or any CCTP chain is accepted{outlet ? ` and counted for ${outlet}` : ''}.</p>
         <div className="w-full"><LinkShare url={url} text={`Pay ${storeName} on MeshPort`} /></div>
-        <GhostBtn disabled={!qr} onClick={() => sticker.print(<QrSticker dataUrl={qr} storeName={storeName} handle={handle} />)}>
+        <GhostBtn disabled={!qr} onClick={() => sticker.print(<QrSticker dataUrl={qr} storeName={outlet ? `${storeName} · ${outlet}` : storeName} handle={handle} />)}>
           <span className="inline-flex items-center gap-2"><Printer className="size-4" /> Print counter sticker</span>
         </GhostBtn>
       </div>
@@ -380,45 +384,70 @@ export function RequestsScreen({ open, onBack }: { open: boolean; onBack: () => 
 
 // ── Insights ─────────────────────────────────────────────────────────────
 
-export function InsightsScreen({ open, onBack, payments, waiting }: { open: boolean; onBack: () => void; payments: MerchantPayment[]; waiting: string }) {
+export function InsightsScreen({ open, onBack, payments, waiting, period, scope }: {
+  open: boolean; onBack: () => void; payments: MerchantPayment[]; waiting: string
+  /** The Business date filter - Insights reads the same range. */
+  period: { from: Date; to: Date; label: string }
+  /** Active store name when the owner has picked one. */
+  scope?: string | null
+}) {
   const data = useMemo(() => {
-    const days = [...Array(7)].map((_, k) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (6 - k)); return d })
-    const week = payments.filter(p => new Date(p.createdAt) >= days[0])
-    const total = week.reduce((s, p) => s + p.amount, 0)
+    const from = period.from.getTime(), to = period.to.getTime()
+    const list = payments.filter(p => { const t = Date.parse(p.createdAt); return t >= from && t < to })
+    const total = list.reduce((s, p) => s + p.amount, 0)
     const rank = (key: (p: MerchantPayment) => string) => {
       const m = new Map<string, { total: number; count: number }>()
-      for (const p of week) { const k = key(p); const v = m.get(k) ?? { total: 0, count: 0 }; v.total += p.amount; v.count++; m.set(k, v) }
+      for (const p of list) { const k = key(p); const v = m.get(k) ?? { total: 0, count: 0 }; v.total += p.amount; v.count++; m.set(k, v) }
       return [...m.entries()].sort((a, b) => b[1].total - a[1].total)
     }
-    const hours = salesByHour(payments)
+    const hours = salesByHour(list)
     const peak = hours.indexOf(Math.max(...hours))
+    // Bars across the range: 3-hour blocks for a day, days up to two weeks,
+    // weeks up to two months, then months.
+    const days = Math.max(1, Math.round((to - from) / 86_400_000))
+    const step = days <= 1 ? 3 * 3_600_000 : days <= 14 ? 86_400_000 : days <= 62 ? 7 * 86_400_000 : 0
+    const buckets: { start: number; end: number; label: string }[] = []
+    if (step) {
+      for (let t = from; t < to; t += step) {
+        const d = new Date(t)
+        buckets.push({ start: t, end: Math.min(t + step, to),
+          label: days <= 1 ? hourLabel(d.getHours()) : days <= 14 ? (days <= 7 ? d.toLocaleDateString([], { weekday: 'short' }) : String(d.getDate()))
+            : d.toLocaleDateString([], { day: 'numeric', month: 'short' }) })
+      }
+    } else {
+      for (let d = new Date(period.from); d.getTime() < to; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+        const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime()
+        buckets.push({ start: d.getTime(), end: Math.min(end, to), label: d.toLocaleDateString([], { month: 'short' }) })
+      }
+    }
     return {
-      total, count: week.length,
+      total, count: list.length,
       hours: hours.map((v, h) => ({ label: hourLabel(h), value: v, display: money(v) })),
       peak: hours[peak] > 0 ? `Busiest: ${hourLabel(peak)}` : undefined,
-      buyers: new Set(week.map(p => p.customerUsername || p.from.toLowerCase())).size,
-      bars: days.map(d => {
-        const v = week.filter(p => new Date(p.createdAt).toDateString() === d.toDateString()).reduce((s, p) => s + p.amount, 0)
-        return { label: d.toLocaleDateString([], { weekday: 'short' }), value: v, display: money(v) }
+      buyers: new Set(list.map(p => p.customerUsername || p.from.toLowerCase())).size,
+      bars: buckets.map(b => {
+        const v = list.filter(p => { const t = Date.parse(p.createdAt); return t >= b.start && t < b.end }).reduce((s, p) => s + p.amount, 0)
+        return { label: b.label, value: v, display: money(v) }
       }),
-      customers: rank(p => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`).slice(0, 5)
+      customers: rank(p => p.customerUsername ? `${p.customerUsername}.arc` : /^0x0{40}$/i.test(p.from) ? 'Bridge payment' : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`).slice(0, 5)
         .map(([name, v]) => ({ id: name, left: name, sub: `${v.count} payment${v.count === 1 ? '' : 's'}`, right: money(v.total) })),
       chains: rank(p => p.chain).map(([id, v]) => ({ id, left: chainLabel(id), logo: chainLogoSrc(id), sub: `${Math.round((v.total / (total || 1)) * 100)}% of sales`, right: money(v.total) })),
     }
-  }, [payments])
+  }, [payments, period.from.getTime(), period.to.getTime()])
 
+  const label = scope ? `${period.label} · ${scope}` : period.label
   return (
     <BusinessScreen open={open} title="Insights" onBack={onBack}>
       <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
-        <InsightsChart total={money(data.total)} sub={`Last 7 days · ${data.count} payments · avg ${money(data.count ? data.total / data.count : 0)}`} bars={data.bars} />
+        <InsightsChart total={money(data.total)} sub={`${label} · ${data.count} payment${data.count === 1 ? '' : 's'}`} bars={data.bars} />
         <StatTriple items={[
           { label: 'Average ticket', value: money(data.count ? data.total / data.count : 0) },
           { label: 'Waiting to settle', value: waiting },
-          { label: 'Customers', value: String(data.buyers), hint: 'last 7 days' },
+          { label: 'Customers', value: String(data.buyers), hint: period.label.toLowerCase() },
         ]} />
-        <HourChart title="Sales by hour" sub="Last 7 days" bars={data.hours} peak={data.peak} />
-        <RankList title="Top customers" empty="No customers this week" rows={data.customers} />
-        <RankList title="By chain" empty="No payments this week" rows={data.chains} />
+        <HourChart title="Sales by hour" sub={period.label} bars={data.hours} peak={data.peak} />
+        <RankList title="Top customers" empty="No customers in this period" rows={data.customers} />
+        <RankList title="By chain" empty="No payments in this period" rows={data.chains} />
       </div>
     </BusinessScreen>
   )

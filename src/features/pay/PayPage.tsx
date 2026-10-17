@@ -9,6 +9,8 @@ import { copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { WalletPayPanel } from './WalletPayPanel'
 import { TokenLogo } from '@/components/ui/TokenLogo'
+import { ShopPayPage } from './ShopPayPage'
+import { getShopInfo, type ShopInfo } from '@/lib/shop'
 
 const APP_URL = 'https://meshport.xyz'
 
@@ -69,13 +71,20 @@ export function PayPage() {
   const [copied, setCopied]       = useState(false)
   const { showToastMessage } = useUIStore()
 
+  // A business username (Shop QR / sticker) opens the shop's amount page
+  // instead, so the payment is recorded as an order for that store.
+  // `?store=` picks the outlet. USDC only; other tokens keep the plain flow.
+  const storeParam = searchParams.get('store')
+  const [shop, setShop] = useState<ShopInfo | null | undefined>(token === 'USDC' ? undefined : null)
+
   useEffect(() => {
-    if (!clean) { setNotFound(true); setLoading(false); return }
+    if (!clean) { setShop(null); setNotFound(true); setLoading(false); return }
+    if (token === 'USDC') getShopInfo(clean, storeParam).then(setShop).catch(() => setShop(null))
     getUserByUsername(clean)
       .then(u => { if (u) { recipientCache.set(clean, u); setRecipient(u) } else setNotFound(true) })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false))
-  }, [clean])
+  }, [clean, storeParam])
 
   const handlePay = () => {
     const walletAddr = recipient?.wallet_address
@@ -96,7 +105,9 @@ export function PayPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (loading) {
+  if (shop) return <ShopPayPage shop={shop} initialAmount={requestedAmount} />
+
+  if (loading || shop === undefined) {
     return (
       <div className="h-full flex items-center justify-center" style={{ background: 'var(--bg)' }}>
         <MeshLoader size={48} />

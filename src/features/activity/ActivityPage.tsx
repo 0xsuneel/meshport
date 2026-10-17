@@ -274,16 +274,16 @@ export function deriveActivityRow(record: ActivityRecord) {
                  : isReceive  ? counterpartyLabel
                  : isSwap     ? swapPair
                  : isBulk     ? bulkSubtitle
-                 : isClaim && metadata.auto_convert && Array.isArray(metadata.chains) ? `From ${metadata.chains.map((c: string) => c.split('_')[0]).join(', ')} Ledger`
-                 : isClaim && isMerchantClaim(record as any) ? `From ${chain || 'other chain'} Ledger`
+                 : isClaim && metadata.auto_convert && Array.isArray(metadata.chains) ? `From ${metadata.chains.map((c: string) => c.split('_')[0]).join(', ')}`
+                 : isClaim && isMerchantClaim(record as any) ? `From ${chain || 'other chain'}`
                  : isClaim    ? (chain || 'External')
                  : isTransfer ? (isSelfTransfer ? 'Self' : counterpartyLabel)
                  : (isP2PSellOrder || isP2PRefund || isP2PPurchase) ? p2pSubtitle
                  : ''
 
   const recoveredTitle = recoveredViaLabel(record)
-  const title = isClaim && metadata.auto_convert ? (status === 'pending' ? 'Ledger funds moving to Arc' : 'Ledger payment received')
-              : isClaim && isMerchantClaim(record as any) ? 'Payment received'
+  const title = isClaim && metadata.auto_convert ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
+              : isClaim && isMerchantClaim(record as any) ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
               : merchantOrder ? paidOrderTitle(metadata, merchantOrder, isReceive)
               : recoveredTitle ? recoveredTitle
               // A rewards claim that didn't go through (lib/rewards.ts).
@@ -645,7 +645,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const move = activityMove(record)
   const moveLbl = moveLabels(isTransfer ? 'transfer' : 'bring', (record as any).counterpartyAddress, (record as any).walletAddress)
   const rows = [
-    { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Payment received from ${chain || 'other chain'} Ledger` : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
+    { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Settlement from ${chain || 'other chain'}` : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
     { label: 'Chain',  value: chain },
     ...(merchantOrderDetail ? [{ label: activityOrderKind(metadata) === 'bill' ? 'Bill' : activityOrderKind(metadata) === 'merchant_request' ? 'Requested Payment' : 'Request', value: displayOrderNumber(merchantOrderDetail) }] : []),
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Merchant', value: String((metadata as any).merchantName) }] : []),

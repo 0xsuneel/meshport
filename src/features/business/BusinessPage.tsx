@@ -86,6 +86,11 @@ function OwnerBusinessPage() {
   }, [walletAddress])
   useEffect(() => { void load() }, [load])
   useEffect(() => (walletAddress ? subscribeMerchantPayments(walletAddress, () => { void load() }) : undefined), [walletAddress, load])
+  // Payments on other chains have no live feed - refresh while the tab is open.
+  useEffect(() => {
+    const t = setInterval(() => { if (document.visibilityState === 'visible') void load() }, 30_000)
+    return () => clearInterval(t)
+  }, [load])
   const [refunds, setRefunds] = useState<MerchantRefund[]>([])
   const loadRefunds = useCallback(() => listMyRefunds().then(setRefunds).catch(() => {}), [])
   useEffect(() => { void loadRefunds(); return subscribeMyRefunds(() => { void loadRefunds() }) }, [loadRefunds])
@@ -97,9 +102,13 @@ function OwnerBusinessPage() {
   const [intentStore, setIntentStore] = useState<Map<string, string | null>>(new Map())
   const [switcher, setSwitcher] = useState(false)
   const [menu, setMenu] = useState(false)
+  const [payFilter, setPayFilter] = useState<'all' | 'refunded'>('all')
   useEffect(() => { listStores().then(setStores).catch(() => {}) }, [])
   useEffect(() => { listMyIntents(500).then(l => setIntentStore(new Map(l.map(i => [i.id, i.storeId ?? null])))).catch(() => {}) }, [raw.length])
   const activeStore = stores.find(s => s.id === storeId) ?? null
+  // Requests and the Shop QR belong to the picked store; with "All stores"
+  // they go to the main (default) store.
+  const qrStore = activeStore ?? stores.find(s => s.isDefault) ?? null
   const pickStore = (id: string | null) => { setStoreId(id); setActiveStoreId(id); setSwitcher(false) }
   const storeRaw = useMemo(() => activeStore ? raw.filter(p => intentStore.get(p.intentId) === activeStore.id) : raw, [raw, activeStore, intentStore])
   const paymentsByStore = useMemo(() => {
@@ -271,7 +280,7 @@ function OwnerBusinessPage() {
       <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
         <BusinessHeader storeName={storeName} handle={handle} status={headerStatus} voiceOn={voice.enabled}
           onVoice={() => setVoiceOpen(true)} onMenu={() => setMenu(true)} onSwitchStore={() => setSwitcher(true)} />
-        <BusinessTabs tab={tab} onTab={setTab} settleCount={settle.due.length} />
+        <BusinessTabs tab={tab} onTab={t => { setPayFilter('all'); setTab(t) }} settleCount={settle.due.length} />
         <div className="pt-2">
           <DateRangeBar value={periodSel.id} customLabel={period.id === 'custom' ? period.label : undefined}
             onChange={id => choosePeriod({ ...periodSel, id })} onCustom={() => setRangeSheet({ from: periodSel.from, to: periodSel.to })} />
@@ -286,10 +295,10 @@ function OwnerBusinessPage() {
             refunded={{ total: money(refundedInPeriod.reduce((s, r) => s + r.amount, 0)), count: refundedInPeriod.length }}
             recent={payments.slice(0, 4)}
             onShowQr={open('qr')} onCharge={open('charge')} onPaymentLink={open('link')} onSendBill={open('bill')} onRequests={open('requests')}
-            onToSettle={() => setTab('settlements')} onRefunded={() => setTab('payments')}
-            onSeeAllPayments={() => setTab('payments')} onPayment={setDetail} />
+            onToSettle={() => setTab('settlements')} onRefunded={() => { setPayFilter('refunded'); setTab('payments') }}
+            onSeeAllPayments={() => { setPayFilter('all'); setTab('payments') }} onPayment={setDetail} />
         )}
-        {tab === 'payments' && <PaymentsView loading={!loaded} payments={payments} onPayment={setDetail} onExport={() => exportPaymentsCsv(periodRaw, storeName, refunds)} />}
+        {tab === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter} loading={!loaded} payments={payments} onPayment={setDetail} onExport={() => exportPaymentsCsv(periodRaw, storeName, refunds)} />}
         {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out" /></div>}
         {tab === 'settlements' && (
           <SettlementsView scanning={scanning}
@@ -386,14 +395,16 @@ function OwnerBusinessPage() {
         chains={settle.due.map(c => ({ label: c.label, logo: c.logo }))}
         onSettle={() => { autoSettle.dismiss(); setTab('settlements'); beginSettle() }} onLater={autoSettle.dismiss} />
 
-      <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: activeStore?.id ?? null, canBill: true }}>
-      <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={activeStore?.name ?? storeName} handle={handle} />
+      <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: qrStore?.id ?? null, canBill: true }}>
+      <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
       <ChargeScreen open={screen === 'charge'} onBack={back} />
       <LinkScreen open={screen === 'link'} onBack={back} storeName={storeName} />
       <BillScreen open={screen === 'bill'} onBack={back} storeName={storeName} />
       <RequestsScreen open={screen === 'requests'} onBack={back} />
-      <InsightsScreen open={screen === 'insights'} onBack={back} payments={raw.filter(p => !refundOf.has(p.id))} waiting={money(settle.total)} />
-      <StatementScreen open={screen === 'statement'} onBack={back} storeName={storeName} handle={handle} payments={raw} refunds={refunds}
+      <InsightsScreen open={screen === 'insights'} onBack={back} payments={storeRaw.filter(p => !refundOf.has(p.id))} waiting={money(settle.total)}
+        period={period} scope={stores.length > 1 ? activeStore?.name : null} />
+      <StatementScreen open={screen === 'statement'} onBack={back} storeName={stores.length > 1 && activeStore ? `${storeName} · ${activeStore.name}` : storeName} handle={handle}
+        payments={storeRaw} refunds={activeStore ? refunds.filter(r => storeRaw.some(p => p.id === r.paymentId)) : refunds}
         settled={(history ?? []).filter(c => c.status === 'completed').map(c => ({ amount: c.arrivedAmount ?? c.amount, createdAt: c.createdAt }))}
         waiting={(chains ?? []).reduce((s, c) => s + c.balance, 0)} loading={!loaded} />
       <ReceiptScreen open={screen === 'receipt'} onBack={back} storeName={storeName} handle={handle} payment={receiptFor} refunded={!!(receiptFor && refundOf.has(receiptFor.id))} />

@@ -1,11 +1,12 @@
 // "Payment received" for business accounts, on every screen: when a new
 // merchant payment lands, a full-screen confirmation shows over whatever the
 // merchant is doing and the voice alert speaks the amount. Mounted once in
-// the app shell.
+// the app shell. Payments on other chains (merchant_chain_receipts, read by
+// the merchant-pay watcher) show the same way.
 import { useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/store'
 import { useBusinessTab } from '@/lib/merchant'
-import { listMyPayments, subscribeMerchantPayments, type MerchantPayment } from '@/lib/merchantPay'
+import { listMyPayments, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, type MerchantPayment } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
 import { PaymentReceivedOverlay } from './ui'
 import { chainLabel } from './settlement'
@@ -23,8 +24,13 @@ export function PaymentReceivedWatcher() {
     if (!business || !wallet) return
     let live = true
     const check = async () => {
-      const list = await listMyPayments(50).catch(() => null)
-      if (!live || !list) return
+      const [paid, receipts] = await Promise.all([listMyPayments(50).catch(() => null), listChainReceipts(30).catch(() => [])])
+      if (!live || !paid) return
+      // Order payments are already in `paid`; own transfers aren't payments.
+      const list: MerchantPayment[] = [...paid, ...receipts.filter(r => !r.orderNumber && !isOwnReceipt(r, wallet)).map(r => ({
+        id: `rcpt_${r.id}`, intentId: '', chain: r.chain, txHash: r.txHash, from: r.from ?? '', amount: r.amount,
+        status: 'confirmed', customerUsername: null, orderNumber: null, createdAt: r.createdAt,
+      }) as unknown as MerchantPayment)]
       if (seen.current) {
         const fresh = list.filter(p => !seen.current!.has(p.id) && Date.now() - Date.parse(p.createdAt) < 10 * 60_000)
         if (fresh.length) { setShown(fresh[0]); fresh.forEach(p => speakPayment(p.amount)) }
@@ -33,7 +39,9 @@ export function PaymentReceivedWatcher() {
     }
     void check()
     const stop = subscribeMerchantPayments(wallet, () => { void check() })
-    return () => { live = false; stop() }
+    // Other-chain receipts have no live feed - look every 20 s.
+    const t = setInterval(() => { if (document.visibilityState === 'visible') void check() }, 20_000)
+    return () => { live = false; stop(); clearInterval(t) }
   }, [business, wallet])
 
   useEffect(() => {
@@ -45,7 +53,7 @@ export function PaymentReceivedWatcher() {
   if (!business) return null
   return (
     <PaymentReceivedOverlay open={!!shown} amount={shown ? money(shown.amount) : ''}
-      from={shown ? (shown.customerUsername ? `${shown.customerUsername}.arc` : `${shown.from.slice(0, 6)}…${shown.from.slice(-4)}`) : ''}
+      from={shown ? (shown.customerUsername ? `${shown.customerUsername}.arc` : (/^0x0{40}$/i.test(shown.from) ? 'a bridge' : `${shown.from.slice(0, 6)}…${shown.from.slice(-4)}`)) : ''}
       chainLabel={shown ? chainLabel(shown.chain) : ''} order={shown?.orderNumber ?? undefined} onDone={() => setShown(null)} />
   )
 }

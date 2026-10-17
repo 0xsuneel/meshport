@@ -15,6 +15,8 @@ export interface PaymentsViewProps {
   onPayment: (p: Payment) => void
   /** When provided, shows an Export CSV button beside the search box */
   onExport?: () => void
+  /** Filter chip selected on open (e.g. 'refunded' from the Overview tile) */
+  initialFilter?: 'all' | 'received' | 'to_settle' | 'refunded'
 }
 
 type Filter = 'all' | 'received' | 'to_settle' | 'refunded'
@@ -58,9 +60,9 @@ function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payme
   )
 }
 
-export function PaymentsView({ loading, payments, onPayment, onExport }: PaymentsViewProps) {
+export function PaymentsView({ loading, payments, onPayment, onExport, initialFilter = 'all' }: PaymentsViewProps) {
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<Filter>('all')
+  const [filter, setFilter] = useState<Filter>(initialFilter)
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase()

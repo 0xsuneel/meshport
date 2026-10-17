@@ -16,7 +16,7 @@ export interface InsightsBar {
 export interface InsightsChartProps {
   total: string   // e.g. "$4,821.00"
   sub: string     // e.g. "This week · 7 days"
-  bars: InsightsBar[]  // exactly 7, last = today
+  bars: InsightsBar[]  // oldest → newest; the last one is highlighted
 }
 
 export function InsightsChart({ total, sub, bars }: InsightsChartProps) {
@@ -46,7 +46,7 @@ export function InsightsChart({ total, sub, bars }: InsightsChartProps) {
                 />
               </div>
               <span
-                className={`text-[9px] font-medium ${isToday ? 'text-brand-text font-semibold' : 'text-text-muted'}`}
+                className={`text-[9px] font-medium whitespace-nowrap ${isToday ? 'text-brand-text font-semibold' : 'text-text-muted'}`}
               >
                 {bar.label}
               </span>
