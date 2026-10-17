@@ -207,8 +207,8 @@ export async function adminReviewMerchant(id: string, status: 'approved' | 'reje
   if (error) throw new Error(error.message)
 }
 
-/** Merchant accounts see the Multichain Hub as "Cross-chain Transfer" - their
- *  Ledger lives in the Business tab (label only). */
+/** Business accounts see the Multichain Hub as "Cross-chain Transfer" - their
+ *  money from other chains is settled in the Business tab (label only). */
 export function hubLabel(label: string, isMerchant: boolean): string {
   if (!isMerchant) return label
   return label === 'Multichain Hub' ? 'Cross-chain Transfer' : label === 'Insights' ? 'Ledger Insights' : label
@@ -221,6 +221,6 @@ export function useBusinessTab(): boolean {
   return isMerchant || status === 'pending' || accountType === 'business'
 }
 export function useHubLabel(): (label: string) => string {
-  const { isMerchant } = useMerchant()
-  return (label: string) => hubLabel(label, isMerchant)
+  const business = useBusinessTab()
+  return (label: string) => hubLabel(label, business)
 }
