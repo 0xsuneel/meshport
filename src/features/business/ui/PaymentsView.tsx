@@ -20,20 +20,7 @@ export interface PaymentsViewProps {
   onExport?: () => void
   /** Filter chip selected on open (e.g. 'refunded' from the Overview tile) */
   initialFilter?: 'all' | 'received' | 'to_settle' | 'refunded'
-  /** Date range, picked from the same Filter menu (like Activity's) */
-  period?: { id: PeriodChoice; label: string }
-  onPeriod?: (id: PeriodChoice) => void
-  onCustomPeriod?: () => void
 }
-
-// The list is grouped by day (Today, Yesterday… headers), so the filter only
-// narrows to longer ranges. No date picked = every payment; tapping the
-// picked range again clears it.
-export type PeriodChoice = 'all' | 'week' | 'month' | 'custom'
-const PERIODS: { id: PeriodChoice; label: string }[] = [
-  { id: 'week', label: 'Last 7 days' },
-  { id: 'month', label: 'This month' }, { id: 'custom', label: 'Custom range…' },
-]
 
 type Filter = 'all' | 'received' | 'to_settle' | 'refunded'
 
@@ -76,11 +63,10 @@ function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payme
   )
 }
 
-// Activity-style filter menu: floats under the search box's Filter chip,
-// with the date range and the status in two short groups.
-function FilterMenu({ anchor, period, status, onPeriod, onStatus, onClose }: {
-  anchor: HTMLElement | null; period: PeriodChoice; status: Filter
-  onPeriod: (id: PeriodChoice) => void; onStatus: (id: Filter) => void; onClose: () => void
+// Activity-style filter menu under the search box's Filter chip: status only
+// (the list is already grouped by day).
+function FilterMenu({ anchor, status, onStatus, onClose }: {
+  anchor: HTMLElement | null; status: Filter; onStatus: (id: Filter) => void; onClose: () => void
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -105,10 +91,6 @@ function FilterMenu({ anchor, period, status, onPeriod, onStatus, onClose }: {
         style={{ position: 'fixed', top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right), width: 210, zIndex: 61, transformOrigin: 'top right',
           display: 'flex', flexDirection: 'column', gap: 2, padding: 4, borderRadius: 22,
           background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 12px 28px rgba(0,0,0,0.3)' }}>
-        <p className="px-3.5 pt-1.5 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Date</p>
-        {PERIODS.map(p => row(period === p.id, p.label, () => { onPeriod(period === p.id && p.id !== 'custom' ? 'all' : p.id); onClose() }))}
-        <div className="mx-3 my-1 border-t border-border" />
-        <p className="px-3.5 pt-0.5 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Status</p>
         {FILTERS.map(f => row(status === f.id, f.label, () => { onStatus(f.id); onClose() }))}
       </motion.div>
     </>,
@@ -116,7 +98,7 @@ function FilterMenu({ anchor, period, status, onPeriod, onStatus, onClose }: {
   )
 }
 
-export function PaymentsView({ loading, payments, onPayment, onExport, initialFilter = 'all', period, onPeriod, onCustomPeriod }: PaymentsViewProps) {
+export function PaymentsView({ loading, payments, onPayment, onExport, initialFilter = 'all' }: PaymentsViewProps) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>(initialFilter)
   const [menu, setMenu] = useState(false)
@@ -143,10 +125,8 @@ export function PaymentsView({ loading, payments, onPayment, onExport, initialFi
       <div className="mx-5 mt-2 flex items-center gap-2">
         <div className="flex-1 min-w-0">
           {(() => {
-            const periodId = period?.id ?? 'all'
-            const on = periodId !== 'all' || filter !== 'all'
-            const label = [periodId !== 'all' ? period?.label : null, filter !== 'all' ? FILTERS.find(f => f.id === filter)?.label : null]
-              .filter(Boolean).join(' · ') || 'Filter'
+            const on = filter !== 'all'
+            const label = on ? FILTERS.find(f => f.id === filter)?.label ?? 'Filter' : 'Filter'
             return (
               <SearchField value={query} onChange={setQuery} ariaLabel="Search payments"
                 placeholder={['Search name, wallet or order', 'Name, wallet, order', 'Search']}
@@ -162,7 +142,7 @@ export function PaymentsView({ loading, payments, onPayment, onExport, initialFi
                       <span className="truncate">{label}</span>
                     </button>
                     {on && (
-                      <button type="button" aria-label="Clear filter" onClick={() => { setFilter('all'); onPeriod?.('all') }}
+                      <button type="button" aria-label="Clear filter" onClick={() => setFilter('all')}
                         className="h-full flex items-center active:opacity-70"
                         style={{ padding: '0 11px 0 4px', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', opacity: 0.85 }}>
                         <X className="w-3.5 h-3.5" strokeWidth={2.6} />
@@ -176,8 +156,7 @@ export function PaymentsView({ loading, payments, onPayment, onExport, initialFi
         {onExport && <ExportButton onClick={onExport} label="CSV" />}
       </div>
       <AnimatePresence>
-        {menu && <FilterMenu key="f" anchor={chipRef.current} period={period?.id ?? 'all'} status={filter}
-          onPeriod={id => (id === 'custom' ? onCustomPeriod?.() : onPeriod?.(id))} onStatus={setFilter} onClose={() => setMenu(false)} />}
+        {menu && <FilterMenu key="f" anchor={chipRef.current} status={filter} onStatus={setFilter} onClose={() => setMenu(false)} />}
       </AnimatePresence>
 
       {/* List */}
