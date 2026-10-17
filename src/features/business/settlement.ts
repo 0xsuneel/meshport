@@ -2,8 +2,9 @@
 // balance. Built only on the CCTP service and the claim service:
 //
 //   readExternalBalances   what is sitting on each CCTP chain
-//   merchantClaimAll       burns on each chain over CCTP (MeshPort's relayer
-//                          pays the gas) and files one claim per chain
+//   merchantClaimAll       Settle all: burns on each chain over CCTP
+//                          (MeshPort's relayer pays the gas), one claim per chain
+//   bringFundsGasless      Settle one chain, any time (like Bring Funds)
 //   claimService           live claim rows: each chain's stage until the
 //                          USDC is minted on Arc, plus the settlement history
 //
@@ -13,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { useAuthStore } from '@/store'
 import { useSettingsStore } from '@/store/settingsStore'
-import { readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
+import { readExternalBalances, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
 import { isGaslessBridgeAvailable } from '@/lib/gaslessBridge'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { subscribeToClaim, subscribeToWalletClaims, type Claim, type ClaimStatus } from '@/lib/claimService'
@@ -26,6 +27,9 @@ const NAMES: Record<string, string> = {
   Linea_Sepolia: 'Linea', World_Chain_Sepolia: 'World Chain', Sonic_Testnet: 'Sonic', Codex_Testnet: 'Codex', Ink_Testnet: 'Ink', Plume_Testnet: 'Plume',
 }
 export const chainLabel = (id: string) => NAMES[id] ?? id.replace(/_(Sepolia|Testnet|Fuji)$/, '').replace(/_/g, ' ')
+
+/** Smallest amount worth settling from one chain (the CCTP fee comes out of it). */
+const SINGLE_MIN = 0.5
 
 export type ChainFunds = { id: string; label: string; logo: string; balance: number }
 export type Stage = 'waiting' | 'sending' | 'bridging' | 'verifying' | 'arrived' | 'failed'
@@ -66,12 +70,14 @@ function useChainFunds() {
     return () => { live = false; window.removeEventListener(EXTERNAL_BALANCE_EVENT, onBalance); stop(); clearInterval(every) }
   }, [wallet, flags, flagsLoaded, tick])
 
-  const chains = useMemo<ChainFunds[] | undefined>(() => balances === null ? undefined
-    : Object.entries(balances).filter(([id, b]) => b > 0 && isGaslessBridgeAvailable(id))
+  // Every CCTP chain that was checked, $0 ones included (shown dimmed).
+  const allChains = useMemo<ChainFunds[] | undefined>(() => balances === null ? undefined
+    : Object.entries(balances).filter(([id]) => isGaslessBridgeAvailable(id))
       .map(([id, balance]) => ({ id, label: chainLabel(id), logo: chainLogoSrc(id), balance }))
-      .sort((a, b) => b.balance - a.balance), [balances])
+      .sort((a, b) => b.balance - a.balance || a.label.localeCompare(b.label)), [balances])
+  const chains = useMemo(() => allChains?.filter(c => c.balance > 0), [allChains])
 
-  return { chains, rescan: useCallback(() => setTick(t => t + 1), []) }
+  return { chains, allChains, rescan: useCallback(() => setTick(t => t + 1), []) }
 }
 
 // ── One settlement run ───────────────────────────────────────────────────
@@ -112,7 +118,7 @@ export async function unlockKey(passcode?: string): Promise<string> {
 export function useSettlement() {
   const wallet = useAuthStore(s => s.walletAddress)
   const passcodeHash = useAuthStore(s => s.passcode)
-  const { chains, rescan } = useChainFunds()
+  const { chains, allChains, rescan } = useChainFunds()
   const [run, dispatch] = useReducer(runReducer, { rows: [], running: false })
   useLeaveGuard(run.running, 'Settle')
 
@@ -160,6 +166,32 @@ export function useSettlement() {
     dispatch({ type: 'end' })
   }
 
+  /** Settle one chain now (no wait between settlements, like Bring Funds). */
+  const settleOne = async (chainId: string, passcode?: string) => {
+    const c = (chains ?? []).find(x => x.id === chainId)
+    if (!wallet || run.running || !c) return
+    dispatch({ type: 'start', rows: [c] })
+    try {
+      if (c.balance < SINGLE_MIN) throw new Error(`Needs at least $${SINGLE_MIN.toFixed(2)} on ${c.label}`)
+      const key = await unlockKey(passcode)
+      const [{ bringFundsGasless }, { submitClaim }] = await Promise.all([import('@/lib/gaslessBridge'), import('@/lib/claimService')])
+      const amount = Math.floor(c.balance * 1e6) / 1e6
+      dispatch({ type: 'row', id: c.id, patch: { stage: 'sending', message: 'Signing…' } })
+      const r = await bringFundsGasless({ chainId: c.id, amountUsdc: amount, privateKey: key, walletAddress: wallet,
+        onStatus: msg => dispatch({ type: 'row', id: c.id, patch: { stage: 'sending', message: msg } }) })
+      notifyExternalBalanceChanged(c.id, wallet, { spent: amount })
+      // The claim is the burned amount: MeshPort's fee was taken before the burn.
+      const claim = await submitClaim({ walletAddress: wallet, sourceChain: c.id, amount: Math.max(0, amount - r.fee), txHash: r.txHash, meshportFee: r.fee })
+      dispatch({ type: 'row', id: c.id, patch: claim.success
+        ? { stage: 'bridging', message: undefined, claimId: claim.claimId ?? undefined }
+        : { stage: 'bridging', message: 'Sent - it will show in history shortly' } })
+      rescan()
+    } catch (e) {
+      dispatch({ type: 'fail', ids: [c.id], message: e instanceof Error ? e.message.slice(0, 120) : 'Settle failed' })
+    }
+    dispatch({ type: 'end' })
+  }
+
   const checkPasscode = async (code: string) => {
     if (!passcodeHash) return true
     const { verifyPasscode } = await import('@/lib/security')
@@ -167,7 +199,7 @@ export function useSettlement() {
   }
 
   return {
-    chains, rescan, due, total,
+    chains, allChains, rescan, due, total, settleOne, singleMin: SINGLE_MIN,
     checked: lastAt !== null, ready: lastAt !== null && now >= nextAt, nextAt, waitHours,
     run: run.rows, running: run.running, needsPasscode: !!passcodeHash,
     checkPasscode, settle,

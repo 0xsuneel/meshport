@@ -40,10 +40,10 @@ function ChainBalanceRow({
   maxAmount: number
 }) {
   const amount = parseFloat(chain.balance.replace(/[^0-9.]/g, ''))
-  const pct = maxAmount > 0 ? Math.max(4, (amount / maxAmount) * 100) : 4
+  const pct = maxAmount > 0 && amount > 0 ? Math.max(4, (amount / maxAmount) * 100) : 0
 
   return (
-    <div className="flex items-center gap-3 py-3">
+    <div className={`flex items-center gap-3 py-3 ${amount > 0 ? '' : 'opacity-50'}`}>
       <ChainLogo src={chain.logo} label={chain.label} size={36} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-1.5">
@@ -59,6 +59,13 @@ function ChainBalanceRow({
           />
         </div>
       </div>
+      {chain.onSettle && (
+        <button type="button" onClick={chain.onSettle} disabled={chain.settleDisabled}
+          aria-label={`Settle ${chain.label} to Arc`}
+          className="shrink-0 min-h-[36px] px-3.5 rounded-full text-xs font-semibold bg-brand text-white active:scale-95 transition-all disabled:bg-border/60 disabled:text-text-muted">
+          Settle
+        </button>
+      )}
     </div>
   )
 }
@@ -225,8 +232,8 @@ export function SettlementsView({
           ) : chains.length === 0 ? (
             <div className="flex flex-col items-center py-8 text-center">
               <ArrowDownToLine className="size-5 text-text-muted mb-2" />
-              <p className="text-sm text-text-secondary font-medium">No balances to settle</p>
-              <p className="text-xs text-text-muted mt-0.5">Receive payments on other chains to see them here</p>
+              <p className="text-sm text-text-secondary font-medium">No chains checked yet</p>
+              <p className="text-xs text-text-muted mt-0.5">Tap refresh to check your balance on each chain</p>
             </div>
           ) : (
             chains.map((chain, i) => (

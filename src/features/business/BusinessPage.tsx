@@ -93,7 +93,7 @@ export function BusinessPage() {
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [progressOpen, setProgressOpen] = useState(false)
   const [historyId, setHistoryId] = useState<string | null>(() => query.get('claim'))
-  const [pin, setPin] = useState<{ kind: 'settle'; retry?: string[] } | { kind: 'refund' } | null>(null)
+  const [pin, setPin] = useState<{ kind: 'settle'; retry?: string[] } | { kind: 'one'; chainId: string } | { kind: 'refund' } | null>(null)
   const [pinError, setPinError] = useState<string | undefined>()
 
   const [screen, setScreen] = useState<ScreenId | null>(null)
@@ -111,8 +111,17 @@ export function BusinessPage() {
     const p = pin
     setPin(null)
     if (p?.kind === 'refund') { void runRefund(code); return }
+    if (p?.kind === 'one') { setProgressOpen(true); void settle.settleOne(p.chainId, code); return }
     setProgressOpen(true)
     void settle.settle(code, p?.kind === 'settle' ? p.retry : undefined)
+  }
+
+  /** Settle one chain (Settlements → On each chain → Settle). */
+  const beginSettleOne = (chainId: string) => {
+    if (settle.running) { setProgressOpen(true); return }
+    if (settle.needsPasscode) { setPinError(undefined); setPin({ kind: 'one', chainId }); return }
+    setProgressOpen(true)
+    void settle.settleOne(chainId)
   }
 
   // ── Refund (MeshPortRefunds on Arc, signed on this device) ────────────
@@ -145,10 +154,10 @@ export function BusinessPage() {
   const scanning = chains === undefined || !settle.checked
   const settleLabel = scanning ? 'Checking chains…'
     : settle.running ? 'Settling…'
-    : !settle.ready ? `Next settle in ${inWords(settle.nextAt - Date.now())}`
+    : !settle.ready ? `Settle all again in ${inWords(settle.nextAt - Date.now())}`
     : settle.due.length === 0 ? 'Nothing to settle'
-    : `Settle ${money(settle.total)} to Arc`
-  const settleNote = `Uses CCTP. MeshPort pays the gas.${settle.waitHours ? ` Once every ${settle.waitHours} hour${settle.waitHours === 1 ? '' : 's'}.` : ''}`
+    : `Settle all · ${money(settle.total)} to Arc`
+  const settleNote = `Uses CCTP. MeshPort pays the gas.${settle.waitHours ? ` Settle all once every ${settle.waitHours} hour${settle.waitHours === 1 ? '' : 's'};` : ''} settle one chain any time below.`
 
   const namedStore = application?.businessName || accountStoreName || null
   const storeName = namedStore || 'Your business'
@@ -203,7 +212,8 @@ export function BusinessPage() {
         {tab === 'payments' && <PaymentsView loading={!loaded} payments={payments} onPayment={setDetail} onExport={() => exportPaymentsCsv(raw, storeName, refunds)} />}
         {tab === 'settlements' && (
           <SettlementsView scanning={scanning}
-            chains={(chains ?? []).map(c => ({ id: c.id, label: c.label, logo: c.logo, balance: money(c.balance) }))}
+            chains={(settle.allChains ?? []).map(c => ({ id: c.id, label: c.label, logo: c.logo, balance: money(c.balance),
+              onSettle: () => beginSettleOne(c.id), settleDisabled: settle.running || c.balance < settle.singleMin }))}
             total={money(settle.total)}
             settle={{ enabled: !scanning && settle.ready && !settle.running && settle.due.length > 0, label: settleLabel, note: settleNote }}
             onSettle={() => beginSettle()} onRefresh={settle.rescan}
@@ -229,6 +239,7 @@ export function BusinessPage() {
 
       <PasscodeSheet open={!!pin} title={pin?.kind === 'refund' ? 'Confirm refund' : 'Confirm settle'}
         subtitle={pin?.kind === 'refund' ? `Send ${refundFor ? money(refundFor.amount) : ''} back to ${refundFor ? who(refundFor) : 'the customer'}`
+          : pin?.kind === 'one' ? `Move ${money((chains ?? []).find(c => c.id === pin.chainId)?.balance ?? 0)} from ${chainLabel(pin.chainId)} to Arc`
           : `Move ${money(pin?.kind === 'settle' && pin.retry ? settle.run.filter(r => pin.retry!.includes(r.id)).reduce((s, r) => s + r.balance, 0) : settle.total)} to your Arc balance`}
         error={pinError} onComplete={code => { void onPin(code) }} onClose={() => setPin(null)} />
 

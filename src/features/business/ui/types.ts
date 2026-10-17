@@ -20,6 +20,9 @@ export interface Chain {
   label: string
   logo: string
   balance: string     // pre-formatted, e.g. "$312.40"
+  /** Settle just this chain (like Bring Funds); absent = no button. */
+  onSettle?: () => void
+  settleDisabled?: boolean
 }
 
 export interface SettlementHistoryItem {
