@@ -60,6 +60,7 @@ function OwnerBusinessPage() {
   const { isMerchant, status, application, storeName: accountStoreName } = useMerchant()
   const walletAddress = useAuthStore(s => s.walletAddress)
   const username = useAuthStore(s => s.username)
+  const userAvatar = useAuthStore(s => s.user?.avatar ?? null)
   const voice = useVoiceAlerts()
 
   const [tab, setTab] = useState<BusinessTab>(() => {
@@ -283,10 +284,10 @@ function OwnerBusinessPage() {
   const settleNote = `Uses CCTP. MeshPort pays the gas.${settle.waitHours ? ` Settle all once every ${settle.waitHours} hour${settle.waitHours === 1 ? '' : 's'}; settle one chain any time below.` : ' You can also settle one chain at a time below.'}`
 
   const handle = `${application?.username || username || 'store'}.arc`
-  // The business is its username; a name it applied with (older
-  // applications) or set on the account is shown when there is one.
+  // The business is its username; the name set in Business profile (or one
+  // from an older application) is shown when there is one.
   const appliedName = application?.businessName && !/\.arc$/i.test(application.businessName) ? application.businessName : null
-  const namedStore = appliedName || accountStoreName || null
+  const namedStore = accountStoreName || appliedName || null
   const storeName = namedStore || handle
   const storeInText = namedStore || 'your business'
   const headerStatus: VerificationStatus = isMerchant ? 'verified' : status === 'pending' ? 'review' : 'unverified'
@@ -330,7 +331,7 @@ function OwnerBusinessPage() {
           <BusinessHeader storeName={activeStore?.name ?? (stores.length > 1 ? 'All stores' : storeName)} handle={handle}
             status={headerStatus} voiceOn={voice.enabled}
             onVoice={() => setVoiceOpen(true)} onMenu={() => setMenu(true)} onSwitchStore={stores.length ? () => setSwitcher(true) : undefined}
-            avatarName={storeName}
+            avatarName={storeName} avatarUrl={userAvatar ?? undefined}
             outlet={(activeStore || stores.length > 1) && activeStore?.name !== storeName ? storeName : null} />
         ) : (
           // Payments and Settlements open from Overview (See all, the settle
