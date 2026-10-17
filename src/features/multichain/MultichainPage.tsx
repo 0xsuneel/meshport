@@ -815,7 +815,10 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
 
   // Use dbActivity as the single source of truth for activity
   // Arrival seen on-chain wins over a row that still says "pending".
-  const allItems: ActivityItem[] = [...dbActivity]
+  // Business accounts: cross-chain transfers (and their recoveries) only -
+  // customer payments and settlements live in the Business tab.
+  const allItems: ActivityItem[] = dbActivity
+    .filter(i => !merchantTransfer || i.type === 'transfer' || i.isRecovery)
     .map(i => (i.status === 'pending' && i.id in arrived
       ? { ...i, status: 'success' as const, destinationTxHash: i.destinationTxHash || arrived[i.id] }
       : i))
