@@ -4,7 +4,7 @@
  * waits on other chains, and recent payments. Every number appears once.
  */
 import React from 'react'
-import { QrCode, ArrowDownLeft, Clock, ReceiptText, ChevronDown, ChevronRight, RotateCcw, CreditCard } from 'lucide-react'
+import { QrCode, ArrowDownLeft, Clock, Wallet, ChevronDown, ChevronRight, RotateCcw, CreditCard } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { Payment, ReactNode } from './types'
 import { formatTime } from './types'
@@ -80,7 +80,8 @@ export interface OverviewViewProps {
   onShowQr: () => void
   /** Amount → counter QR + shareable link for one order */
   onReceive: () => void
-  onSendBill: () => void
+  /** Balance: Arc balance, chains to settle, cash out */
+  onBalance?: () => void
   onRequests?: () => void
   onToSettle: () => void
   onRefunded: () => void
@@ -102,7 +103,7 @@ export function OverviewView({
   recent,
   onShowQr,
   onReceive,
-  onSendBill,
+  onBalance,
   onRequests,
   onToSettle,
   onRefunded,
@@ -115,8 +116,8 @@ export function OverviewView({
   const actions = [
     { Icon: QrCode,      label: 'Show QR',   onClick: onShowQr },
     { Icon: ArrowDownLeft, label: 'Receive',   onClick: onReceive },
-    { Icon: ReceiptText,   label: 'Send bill', onClick: onSendBill },
     ...(onRequests ? [{ Icon: Clock, label: 'Requests', onClick: onRequests }] : []),
+    ...(onBalance ? [{ Icon: Wallet, label: 'Balance', onClick: onBalance }] : []),
   ]
 
   return (
@@ -165,7 +166,7 @@ export function OverviewView({
 
       {/* ── Quick actions ───────────────────────────────────────────────── */}
       <FadeUp delay={0.08} className="mx-5">
-        <div className={`grid gap-2 ${actions.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+        <div className={`grid gap-2 ${actions.length === 4 ? 'grid-cols-4' : actions.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
           {actions.map(({ Icon, label, onClick }) => (
             <button key={label} type="button" onClick={onClick}
               className="flex flex-col items-center gap-2 py-1 active:scale-[0.95] transition-transform">

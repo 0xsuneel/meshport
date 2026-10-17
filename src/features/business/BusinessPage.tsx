@@ -21,13 +21,12 @@ import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/b
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, VOICE_LANGS, type VoiceLang } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockKey } from './settlement'
 import { listMyRefunds, subscribeMyRefunds, refundPayment, chainUsdcBalance, checkRefundableSender, type SenderCheck, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
-import { exportPaymentsCsv } from './reports'
 import { makePeriod, inPeriod, inPrevious, periodTrend, savedPeriod, savePeriod, type PeriodId } from './period'
 import { useAutoSettle } from './autoSettle'
-import { CashOutScreen, StoresScreen, StaffScreen } from './teamScreens'
+import { CashOutScreen, TeamScreen } from './teamScreens'
 import { StaffModePage } from './staffMode'
 import { useUIStore } from '@/store'
-import { RequestMaker, ShopQrScreen, ReceiveScreen, BillScreen, RequestsScreen, InsightsScreen, ProfileScreen, StatementScreen, ReceiptScreen, HelpScreen } from './screens'
+import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
   BusinessHeader, SetupBanner, OverviewView, PaymentsView, PaymentDetailSheet,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
@@ -35,7 +34,7 @@ import {
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
-type ScreenId = 'qr' | 'receive' | 'bill' | 'requests' | 'insights' | 'profile' | 'statement' | 'receipt' | 'help' | 'cashout' | 'stores' | 'staff'
+type ScreenId = 'qr' | 'receive' | 'requests' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
@@ -292,7 +291,7 @@ function OwnerBusinessPage() {
               className="size-11 flex items-center justify-center rounded-2xl text-text-secondary active:bg-border/40 transition-colors">
               <ArrowLeft className="size-5" />
             </button>
-            <h1 className="text-lg font-semibold text-text-primary">{tab === 'payments' ? 'Payments' : 'Settlements'}</h1>
+            <h1 className="text-lg font-semibold text-text-primary">{tab === 'payments' ? 'Payments' : 'Balance'}</h1>
             {stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? 'All stores'}</span>}
           </header>
         )}
@@ -310,12 +309,13 @@ function OwnerBusinessPage() {
               checking: scanning, arcLogo: chainLogoSrc('Arc_Testnet') }}
             refunded={{ total: money(refundedInPeriod.reduce((s, r) => s + r.amount, 0)), count: refundedInPeriod.length }}
             recent={payments.slice(0, 4)}
-            onShowQr={open('qr')} onReceive={open('receive')} onSendBill={open('bill')} onRequests={open('requests')}
+            onShowQr={open('qr')} onReceive={open('receive')} onRequests={open('requests')} onBalance={() => setTab('settlements')}
             onToSettle={() => setTab('settlements')} onRefunded={() => { setPayFilter('refunded'); setTab('payments') }}
             onSeeAllPayments={() => { setPayFilter('all'); setTab('payments') }} onPayment={setDetail} onPeriod={() => setPeriodSheet(true)} />
         )}
-        {tab === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter} loading={!loaded} payments={payments} onPayment={setDetail} onExport={() => exportPaymentsCsv(periodRaw, storeName, refunds)} />}
-        {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out" /></div>}
+        {tab === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter} loading={!loaded} payments={payments} onPayment={setDetail} />}
+        {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out"
+          action={<button type="button" onClick={open('cashout')} className="shrink-0 min-h-[40px] px-4 rounded-xl bg-brand text-white text-[13px] font-semibold active:opacity-90">Cash out</button>} /></div>}
         {tab === 'settlements' && (
           <SettlementsView scanning={scanning}
             chains={(settle.allChains ?? []).map(c => ({ id: c.id, label: c.label, logo: c.logo, balance: money(c.balance),
@@ -371,17 +371,9 @@ function OwnerBusinessPage() {
         onTest={() => speakPayment(24, { test: true })} onClose={() => setVoiceOpen(false)} />
 
       <BusinessMenuSheet open={menu} onClose={() => setMenu(false)} groups={[
-        { title: 'Money', items: [
-          { id: 'settlements', label: 'Settlements', hint: settle.due.length ? `${money(settle.total)} waiting on ${settle.due.length} chain${settle.due.length === 1 ? '' : 's'}` : 'Arc balance, history and auto-settle', icon: 'settlements', onClick: () => { setMenu(false); setTab('settlements') } },
-          { id: 'cashout', label: 'Cash out to bank', hint: 'Sell USDC for ₹ to your UPI or bank', icon: 'cashout', onClick: go('cashout') },
-          { id: 'statement', label: 'Statement', hint: 'Day, week or month · CSV and PDF', icon: 'statement', onClick: go('statement') },
-          { id: 'insights', label: 'Insights', hint: 'Sales by day, hour and customer', icon: 'insights', onClick: go('insights') },
-        ] },
-        { title: 'Store', items: [
-          { id: 'stores', label: 'Stores & outlets', hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'}` : 'Add your outlets', icon: 'stores', onClick: go('stores') },
-          { id: 'staff', label: 'Staff & roles', hint: 'Cashiers and managers', icon: 'staff', onClick: go('staff') },
-          { id: 'sticker', label: 'Shop QR & sticker', hint: 'Show or print your counter QR', icon: 'sticker', onClick: go('qr') },
-          { id: 'voice', label: 'Voice alerts', hint: voice.enabled ? 'On' : 'Off', icon: 'voice', onClick: () => { setMenu(false); setVoiceOpen(true) } },
+        { title: 'Business', items: [
+          { id: 'reports', label: 'Reports', hint: 'Insights and statement · CSV and PDF', icon: 'insights', onClick: go('reports') },
+          { id: 'team', label: 'Stores & staff', hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers', icon: 'stores', onClick: go('team') },
         ] },
         { title: 'Account', items: [
           { id: 'profile', label: 'Business profile', hint: headerStatus === 'verified' ? 'Verified' : 'Complete your application', icon: 'profile', onClick: go('profile') },
@@ -392,7 +384,7 @@ function OwnerBusinessPage() {
       <Sheet open={switcher} onClose={() => setSwitcher(false)}>
         <StoreSwitcher stores={[{ id: '', name: `All stores · ${storeName}`, handle, active: !activeStore },
           ...stores.map(s => ({ id: s.id, name: s.name, handle: s.type ?? 'Store', active: activeStore?.id === s.id }))]}
-          onSwitch={id => pickStore(id || null)} onManage={() => { setSwitcher(false); setScreen('stores') }} />
+          onSwitch={id => pickStore(id || null)} onManage={() => { setSwitcher(false); setScreen('team') }} />
       </Sheet>
 
       <DateRangeSheet open={!!rangeSheet} from={rangeSheet?.from ?? ''} to={rangeSheet?.to ?? ''}
@@ -420,22 +412,20 @@ function OwnerBusinessPage() {
       <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: qrStore?.id ?? null, canBill: true }}>
       <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
       <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={storeName} />
-      <BillScreen open={screen === 'bill'} onBack={back} storeName={storeName} />
       <RequestsScreen open={screen === 'requests'} onBack={back} />
-      <InsightsScreen open={screen === 'insights'} onBack={back} payments={storeRaw.filter(p => !refundOf.has(p.id))} waiting={money(settle.total)}
-        period={period} scope={stores.length > 1 ? activeStore?.name : null} />
-      <StatementScreen open={screen === 'statement'} onBack={back} storeName={stores.length > 1 && activeStore ? `${storeName} · ${activeStore.name}` : storeName} handle={handle}
-        payments={storeRaw} refunds={activeStore ? refunds.filter(r => storeRaw.some(p => p.id === r.paymentId)) : refunds}
-        settled={(history ?? []).filter(c => c.status === 'completed').map(c => ({ amount: c.arrivedAmount ?? c.amount, createdAt: c.createdAt }))}
-        waiting={(chains ?? []).reduce((s, c) => s + c.balance, 0)} loading={!loaded} />
+      <ReportsScreen open={screen === 'reports'} onBack={back}
+        insights={{ payments: storeRaw.filter(p => !refundOf.has(p.id)), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null }}
+        statement={{ storeName: stores.length > 1 && activeStore ? `${storeName} · ${activeStore.name}` : storeName, handle,
+          payments: storeRaw, refunds: activeStore ? refunds.filter(r => storeRaw.some(p => p.id === r.paymentId)) : refunds,
+          settled: (history ?? []).filter(c => c.status === 'completed').map(c => ({ amount: c.arrivedAmount ?? c.amount, createdAt: c.createdAt })),
+          waiting: (chains ?? []).reduce((s, c) => s + c.balance, 0), loading: !loaded }} />
       <ReceiptScreen open={screen === 'receipt'} onBack={back} storeName={storeName} handle={handle} payment={receiptFor} refunded={!!(receiptFor && refundOf.has(receiptFor.id))} />
       <HelpScreen open={screen === 'help'} onBack={back} />
       <ProfileScreen open={screen === 'profile'} onBack={back} handle={handle} />
       </RequestMaker.Provider>
       <CashOutScreen open={screen === 'cashout'} onBack={back} />
-      <StoresScreen open={screen === 'stores'} onBack={back} onChanged={setStores} paymentsByStore={paymentsByStore}
+      <TeamScreen open={screen === 'team'} onBack={back} stores={stores} onChanged={setStores} paymentsByStore={paymentsByStore}
         onQr={id => { pickStore(id); setScreen('qr') }} />
-      <StaffScreen open={screen === 'staff'} onBack={back} stores={stores} />
     </div>
   )
 }

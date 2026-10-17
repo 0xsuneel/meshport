@@ -212,8 +212,10 @@ function CashOutTradeScreen({ tradeId, accounts, onBack, gate }: {
 
 const STORE_TYPES = ['Retail store', 'Restaurant / Café', 'Online shop', 'Services', 'Kiosk / Counter', 'Other']
 
-export function StoresScreen({ open, onBack, onChanged, onQr, paymentsByStore }: {
-  open: boolean; onBack: () => void; onChanged: (stores: Store[]) => void; onQr: (id: string) => void
+type Editing = { title: string; back: () => void } | null
+
+function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore }: {
+  open: boolean; onEditing: (e: Editing) => void; onChanged: (stores: Store[]) => void; onQr: (id: string) => void
   paymentsByStore: Map<string, { total: number; count: number }>
 }) {
   const toast = useUIStore(s => s.showToastMessage)
@@ -221,7 +223,8 @@ export function StoresScreen({ open, onBack, onChanged, onQr, paymentsByStore }:
   const [edit, setEdit] = useState<{ id?: string; name: string; type: string; address: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const load = () => listStores().then(s => { setStores(s); onChanged(s) }).catch(() => setStores([]))
-  useEffect(() => { if (open) void load() }, [open])
+  useEffect(() => { if (open) void load(); else setEdit(null) }, [open])
+  useEffect(() => { onEditing(edit ? { title: edit.id ? 'Edit store' : 'New store', back: () => setEdit(null) } : null) }, [!!edit, edit?.id])
 
   const save = async () => {
     if (!edit) return
@@ -238,8 +241,7 @@ export function StoresScreen({ open, onBack, onChanged, onQr, paymentsByStore }:
   }
 
   return (
-    <BusinessScreen open={open} title={edit ? (edit.id ? 'Edit store' : 'New store') : 'Stores & outlets'} onBack={edit ? () => setEdit(null) : onBack}>
-      <div className="px-5 pt-5 pb-6">
+      <div className="px-5 pt-4 pb-6">
         {edit ? (
           <StoreForm name={edit.name} onName={v => setEdit({ ...edit, name: v })} type={edit.type} types={STORE_TYPES} onType={v => setEdit({ ...edit, type: v })}
             address={edit.address} onAddress={v => setEdit({ ...edit, address: v })} busy={busy} onSave={save}
@@ -255,20 +257,20 @@ export function StoresScreen({ open, onBack, onChanged, onQr, paymentsByStore }:
             onQr={onQr} />
         )}
       </div>
-    </BusinessScreen>
   )
 }
 
 // ── Staff & roles ────────────────────────────────────────────────────────
 
-export function StaffScreen({ open, onBack, stores }: { open: boolean; onBack: () => void; stores: Store[] }) {
+function StaffBody({ open, onEditing, stores }: { open: boolean; onEditing: (e: Editing) => void; stores: Store[] }) {
   const toast = useUIStore(s => s.showToastMessage)
   const [staff, setStaff] = useState<StaffMember[] | null>(null)
   const [edit, setEdit] = useState<{ id?: string; username: string; role: StaffRole; store: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const load = () => listStaff().then(setStaff).catch(() => setStaff([]))
-  useEffect(() => { if (open) void load() }, [open])
+  useEffect(() => { if (open) void load(); else setEdit(null) }, [open])
+  useEffect(() => { onEditing(edit ? { title: edit.id ? 'Edit staff' : 'Invite staff', back: () => setEdit(null) } : null) }, [!!edit, edit?.id])
   const storeName = useMemo(() => new Map(stores.map(s => [s.id, s.name])), [stores])
 
   const save = async () => {
@@ -283,8 +285,7 @@ export function StaffScreen({ open, onBack, stores }: { open: boolean; onBack: (
   }
 
   return (
-    <BusinessScreen open={open} title={edit ? (edit.id ? 'Edit staff' : 'Invite staff') : 'Staff & roles'} onBack={edit ? () => setEdit(null) : onBack}>
-      <div className="px-5 pt-5 pb-6">
+      <div className="px-5 pt-4 pb-6">
         {edit ? (
           <StaffForm username={edit.username} onUsername={v => setEdit({ ...edit, username: v })} role={edit.role} onRole={r => setEdit({ ...edit, role: r })}
             stores={[{ id: '', name: 'All stores' }, ...stores.map(s => ({ id: s.id, name: s.name }))]} store={edit.store} onStore={v => setEdit({ ...edit, store: v })}
@@ -296,6 +297,35 @@ export function StaffScreen({ open, onBack, stores }: { open: boolean; onBack: (
             onRemove={async id => { try { await removeStaff(id); await load() } catch (e) { toast(e instanceof Error ? e.message : 'Could not remove', 'error') } }} />
         )}
       </div>
+  )
+}
+
+// ── Stores & staff (one screen) ──────────────────────────────────────────
+
+export function TeamScreen({ open, onBack, stores, onChanged, onQr, paymentsByStore }: {
+  open: boolean; onBack: () => void; stores: Store[]; onChanged: (stores: Store[]) => void; onQr: (id: string) => void
+  paymentsByStore: Map<string, { total: number; count: number }>
+}) {
+  const [view, setView] = useState<'stores' | 'staff'>('stores')
+  const [editing, setEditing] = useState<Editing>(null)
+  useEffect(() => { if (!open) { setView('stores'); setEditing(null) } }, [open])
+  return (
+    <BusinessScreen open={open} title={editing?.title ?? 'Stores & staff'} onBack={editing?.back ?? onBack}>
+      {!editing && (
+        <div className="px-5 pt-4">
+          <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Stores or staff">
+            {([['stores', 'Stores'], ['staff', 'Staff']] as const).map(([id, label]) => (
+              <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
+                className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${view === id ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {view === 'stores'
+        ? <StoresBody open={open} onEditing={setEditing} onChanged={onChanged} onQr={onQr} paymentsByStore={paymentsByStore} />
+        : <StaffBody open={open} onEditing={setEditing} stores={stores} />}
     </BusinessScreen>
   )
 }
