@@ -1010,9 +1010,7 @@ export function ImportWalletPage() {
   )
 }
 
-// ─── Claim Username ───────────────────────────────────────────────────────────
 // Same list as the merchant application, so it can be prefilled from here.
-const STORE_TYPES = ['Retail store', 'Restaurant / Café', 'Online shop', 'Services', 'Freelancer', 'Other']
 
 export function ClaimUsernamePage() {
   const navigate = useNavigate()
@@ -1028,8 +1026,6 @@ export function ClaimUsernamePage() {
   // plus a store name customers see.
   const signupKind = getSignupKind() ?? 'personal'
   const isBusiness = signupKind === 'business'
-  const [storeName, setStoreName] = useState('')
-  const [storeType, setStoreType] = useState(STORE_TYPES[0])
   const [onchainStep, setOnchainStep] = useState<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
   const [statusMsg, setStatusMsg] = useState('')
@@ -1105,7 +1101,6 @@ export function ClaimUsernamePage() {
 
   const handleClaim = async () => {
     if (status !== 'available' || !walletAddress || !handle) return
-    if (isBusiness && storeName.trim().length < 2) { showToastMessage('Enter your store name', 'error'); return }
     setLoading(true)
 
     // Final availability check against Supabase
@@ -1150,7 +1145,6 @@ export function ClaimUsernamePage() {
       try {
         const { data: isBiz } = await supabase.rpc('start_business_account')
         if (!isBiz) throw new Error('Could not set up the business account')
-        try { localStorage.setItem('meshport_business_draft', JSON.stringify({ storeName: storeName.trim(), storeType })) } catch { /* storage unavailable */ }
       } catch (e) {
         console.warn('[Claim] business account:', e instanceof Error ? e.message : e)
       }
@@ -1160,7 +1154,7 @@ export function ClaimUsernamePage() {
     // Never blocks sign-up: a failure is retried by the server.
     setOnchainStep('Registering ' + handle + '.arc on Arc…')
     const onchain = await Promise.race([
-      registerNameOnchain({ walletAddress, name: handle, kind: signupKind, displayName: isBusiness ? storeName.trim() : '' })
+      registerNameOnchain({ walletAddress, name: handle, kind: signupKind, displayName: '' })
         .catch(() => ({ status: 'failed' as const })),
       new Promise<{ status: 'pending' }>(r => setTimeout(() => r({ status: 'pending' }), 35_000)),
     ])
@@ -1192,8 +1186,8 @@ export function ClaimUsernamePage() {
           <div className="w-16 h-16 bg-brand/20 rounded-3xl flex items-center justify-center mx-auto mb-4">
             <AtSign className="w-8 h-8 text-brand-text" />
           </div>
-          <h2 className="text-2xl font-bold text-text-primary">{isBusiness ? 'Claim your store username' : 'Claim Your Username'}</h2>
-          <p className="text-text-secondary mt-2">{isBusiness ? 'Customers find and pay your store with it' : 'Your permanent MeshPort identity'}</p>
+          <h2 className="text-2xl font-bold text-text-primary">{isBusiness ? 'Claim your business username' : 'Claim Your Username'}</h2>
+          <p className="text-text-secondary mt-2">{isBusiness ? 'Your business on MeshPort. Add your shops after approval.' : 'Your permanent MeshPort identity'}</p>
           {!walletAddress && (
             <div className="mt-3 p-3 bg-danger/10 border border-danger/30 rounded-2xl flex items-start gap-2 text-left">
               <AlertTriangle className="w-4 h-4 text-danger flex-shrink-0 mt-0.5" />
@@ -1206,23 +1200,7 @@ export function ClaimUsernamePage() {
         </div>
         <div className="space-y-4">
           {isBusiness && (
-            <div className="space-y-3">
-              <div>
-                <label htmlFor="store-name" className="block text-sm font-semibold text-text-primary mb-1.5">Store name</label>
-                <input id="store-name" value={storeName} onChange={e => setStoreName(e.target.value.slice(0, 64))}
-                  placeholder="e.g. Sharma Chai Corner" maxLength={64}
-                  className="w-full bg-surface border border-border rounded-2xl px-4 py-3.5 text-text-primary placeholder-gray-600 focus:outline-none focus:border-brand text-base" />
-              </div>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Business type">
-                {STORE_TYPES.map(t => (
-                  <button key={t} type="button" onClick={() => setStoreType(t)}
-                    className={`px-3 py-2 rounded-full text-sm font-semibold border ${storeType === t ? 'bg-brand/15 border-brand text-brand-text' : 'bg-surface border-border text-text-secondary'}`}>
-                    {t}
-                  </button>
-                ))}
-              </div>
-              <label htmlFor="store-handle" className="block text-sm font-semibold text-text-primary pt-1">Store username</label>
-            </div>
+            <label htmlFor="store-handle" className="block text-sm font-semibold text-text-primary">Business username</label>
           )}
           <div>
             <div className="flex items-center bg-surface border border-border rounded-2xl focus-within:border-brand transition-colors">
@@ -1252,8 +1230,8 @@ export function ClaimUsernamePage() {
               <Loader2 className="w-4 h-4 animate-spin" /> {onchainStep}
             </p>
           )}
-          <Button fullWidth loading={loading} disabled={status !== 'available' || !walletAddress || (isBusiness && storeName.trim().length < 2)} onClick={handleClaim}>
-            {loading ? 'Saving...' : status === 'available' ? `Claim ${handle}.arc` : isBusiness ? 'Claim store username' : 'Claim Username'}
+          <Button fullWidth loading={loading} disabled={status !== 'available' || !walletAddress} onClick={handleClaim}>
+            {loading ? 'Saving...' : status === 'available' ? `Claim ${handle}.arc` : isBusiness ? 'Claim business username' : 'Claim Username'}
           </Button>
         </div>
       </div>
