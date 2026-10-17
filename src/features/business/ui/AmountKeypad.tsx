@@ -63,7 +63,7 @@ export function AmountKeypad({ value, onKey, note, onNote }: AmountKeypadProps) 
       </div>
 
       {/* Keypad */}
-      <div className="grid grid-cols-3 gap-2 w-full max-w-[320px]">
+      <div className="grid grid-cols-3 gap-2.5 w-full max-w-[320px]">
         {KEYS.map((key, i) => {
           if (key === '') return <div key={i} />
           const isDel = key === 'del'
@@ -75,10 +75,9 @@ export function AmountKeypad({ value, onKey, note, onNote }: AmountKeypadProps) 
               onClick={() => onKey(key)}
               whileTap={{ scale: 0.93 }}
               transition={springs.snappy}
-              className={`flex items-center justify-center rounded-2xl min-h-[64px] text-xl font-semibold select-none transition-colors ${
-                isDel
-                  ? 'text-text-secondary hover:bg-border/30 active:bg-border/50'
-                  : 'bg-surface border border-border text-text-primary hover:bg-border/20 active:bg-border/40'
+              // Same keys as the app's amount keypad (Pay, Swap…).
+              className={`flex items-center justify-center rounded-[14px] h-14 font-semibold select-none bg-surface border border-border ${
+                isDel ? 'text-text-secondary' : key === '.' ? 'text-[28px] text-text-primary' : 'text-2xl text-text-primary'
               }`}
             >
               {isDel ? <Delete className="size-5" /> : key}

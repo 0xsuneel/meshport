@@ -101,7 +101,7 @@ export function StoresView({ stores, onAdd, onEdit, onQr, addLockedNote }: Store
           {stores.map(store => (
             <div
               key={store.id}
-              className="bg-card border border-border/50 rounded-2xl p-4 flex flex-col gap-3"
+              className="bg-card border border-border rounded-2xl p-4 flex flex-col gap-3"
             >
               <div className="flex items-start gap-3">
                 <span className="size-10 rounded-xl bg-brand/10 text-brand-text flex items-center justify-center shrink-0">

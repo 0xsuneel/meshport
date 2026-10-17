@@ -64,7 +64,7 @@ export function KpiGrid({ loading, items }: KpiGridProps) {
         return (
           <div
             key={item.id}
-            className="bg-card rounded-2xl p-4 flex flex-col gap-2 border border-border/50"
+            className="bg-card rounded-2xl p-4 flex flex-col gap-2 border border-border"
           >
             <span className={`inline-flex items-center justify-center size-9 rounded-xl ${tones.icon}`}>
               <Icon className="size-4.5" />

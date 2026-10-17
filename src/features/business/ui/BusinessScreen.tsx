@@ -28,19 +28,12 @@ export function BusinessScreen({ open, title, onBack, children, footer }: Busine
           transition={springs.sheet}
         >
           <div className="relative w-full max-w-md flex flex-col h-full">
-            {/* Header — safe-area top */}
-            <header className="shrink-0 flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top,0px)+10px)] pb-3 bg-bg border-b border-border sticky top-0 z-10">
-              <button
-                type="button"
-                aria-label="Go back"
-                onClick={onBack}
-                className="size-10 flex items-center justify-center rounded-2xl text-text-secondary hover:bg-border/40 active:scale-95 transition-all shrink-0"
-              >
-                <ArrowLeft className="size-5" />
+            {/* Header — the app's standard page header (Profile, Receive…) */}
+            <header className="shrink-0 header-row gap-3 px-5 pt-header pb-header bg-bg sticky top-0 z-10">
+              <button type="button" aria-label="Go back" onClick={onBack} className="back-btn">
+                <ArrowLeft className="w-5 h-5 text-text-primary" />
               </button>
-              <h2 className="display text-base font-semibold text-text-primary flex-1 truncate">
-                {title}
-              </h2>
+              <h2 className="header-title flex-1 truncate">{title}</h2>
             </header>
 
             {/* Scrollable body */}

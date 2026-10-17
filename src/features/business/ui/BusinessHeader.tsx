@@ -3,7 +3,7 @@
  * Shows store name, .arc handle, verification badge, voice toggle, and menu button.
  */
 import React from 'react'
-import { Mic, MicOff, ShieldCheck, AlertCircle, Clock, User, ChevronDown, Menu } from 'lucide-react'
+import { Mic, MicOff, ShieldCheck, Clock, User, ChevronDown, Menu } from 'lucide-react'
 
 export type VerificationStatus = 'verified' | 'review' | 'unverified'
 
@@ -25,12 +25,6 @@ export interface BusinessHeaderProps {
   avatarName?: string
 }
 
-const statusConfig: Record<VerificationStatus, { label: string; Icon: React.ElementType }> = {
-  verified:   { label: 'Verified',      Icon: ShieldCheck },
-  review:     { label: 'Under review',  Icon: Clock },
-  unverified: { label: 'Not verified',  Icon: AlertCircle },
-}
-
 export function BusinessHeader({
   storeName,
   handle,
@@ -43,12 +37,15 @@ export function BusinessHeader({
   outlet,
   avatarName,
 }: BusinessHeaderProps) {
-  const { label, Icon } = statusConfig[status]
   const menuAction = onMenu ?? onProfile
   const initials = (avatarName ?? storeName).split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'B'
 
+  // Same look as Home's header: round avatar with a brand ring, name + a
+  // small second line, round outlined icon buttons on the right.
+  const roundBtn = 'inline-flex items-center justify-center size-[38px] rounded-full shrink-0 active:scale-95 transition-transform'
+  const roundStyle = { background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 15%, transparent)' }
   return (
-    <header className="flex items-center gap-3 px-5 pt-5 pb-3">
+    <header className="flex items-center gap-3 px-5 pb-3" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))' }}>
       <button
         type="button"
         onClick={onSwitchStore}
@@ -56,41 +53,33 @@ export function BusinessHeader({
         aria-label={onSwitchStore ? `Switch store, now ${storeName}` : undefined}
         className="flex-1 min-w-0 flex items-center gap-2.5 text-left disabled:cursor-default"
       >
-        <span className="shrink-0 flex items-center justify-center size-10 rounded-xl bg-brand text-white text-[15px] font-bold">
-          {initials}
+        <span className="shrink-0 rounded-full p-[2px] bg-brand" style={{ width: 47, height: 47 }}>
+          <span className="flex items-center justify-center w-full h-full rounded-full bg-brand text-white text-[17px] font-bold" style={{ border: '2px solid var(--bg)' }}>
+            {initials.slice(0, 1)}
+          </span>
         </span>
         <span className="min-w-0">
           <span className="flex items-center gap-1">
-            <span className="text-base font-semibold text-text-primary leading-tight truncate">{storeName}</span>
+            <span className="text-[15px] font-bold text-text-primary truncate" style={{ letterSpacing: '-0.3px' }}>{storeName}</span>
             {status === 'verified' && <ShieldCheck className="size-4 text-brand-text shrink-0" aria-label="Verified" />}
+            {status === 'review' && <Clock className="size-3.5 text-warning shrink-0" aria-label="Under review" />}
             {onSwitchStore && <ChevronDown className="size-4 text-text-muted shrink-0" />}
           </span>
-          <span className="flex items-center gap-1 text-xs text-text-muted truncate">
+          <span className="flex items-center gap-1 mt-0.5 text-[11.5px] text-link truncate" style={{ fontFamily: 'monospace' }}>
             {outlet ? `${outlet} · ${handle}` : storeName === handle ? 'Business account' : handle}
-            {status !== 'verified' && (
-              <span className="inline-flex items-center gap-0.5 text-text-secondary shrink-0"> · <Icon className="size-3" />{label}</span>
-            )}
           </span>
         </span>
       </button>
 
       <div className="flex items-center gap-2 shrink-0">
-        <button
-          type="button"
-          aria-label={voiceOn ? 'Voice alerts on' : 'Voice alerts off'}
-          onClick={onVoice}
-          className={`inline-flex items-center justify-center size-11 rounded-[14px] border transition-colors ${voiceOn ? 'border-brand/30 bg-brand/10 text-brand-text' : 'border-border bg-card text-text-secondary'}`}
-        >
-          {voiceOn ? <Mic className="size-5" /> : <MicOff className="size-5" />}
+        <button type="button" aria-label={voiceOn ? 'Voice alerts on' : 'Voice alerts off'} onClick={onVoice}
+          className={roundBtn} style={roundStyle}>
+          {voiceOn ? <Mic className="size-4 text-brand-text" /> : <MicOff className="size-4 text-text-secondary" />}
         </button>
         {menuAction && (
-          <button
-            type="button"
-            aria-label={onMenu ? 'Business menu' : 'Open profile'}
-            onClick={menuAction}
-            className="inline-flex items-center justify-center size-11 rounded-[14px] border border-border bg-card text-text-primary active:scale-95 transition-all"
-          >
-            {onMenu ? <Menu className="size-5" /> : <User className="size-5" />}
+          <button type="button" aria-label={onMenu ? 'Business menu' : 'Open profile'} onClick={menuAction}
+            className={roundBtn} style={roundStyle}>
+            {onMenu ? <Menu className="size-4 text-brand-text" /> : <User className="size-4 text-brand-text" />}
           </button>
         )}
       </div>

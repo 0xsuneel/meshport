@@ -54,7 +54,7 @@ export function StaffView({ staff, onInvite, onEdit, onRemove }: StaffViewProps)
         <p className="text-xs text-text-muted font-medium uppercase tracking-wide">Roles</p>
         <div className="grid grid-cols-2 gap-2">
           {(Object.entries(ROLE_LEGEND) as [StaffRole, typeof ROLE_LEGEND[StaffRole]][]).map(([roleKey, info]) => (
-            <div key={roleKey} className="bg-card border border-border/50 rounded-2xl p-3 flex flex-col gap-1.5">
+            <div key={roleKey} className="bg-card border border-border rounded-2xl p-3 flex flex-col gap-1.5">
               <span className={`self-start px-2 py-0.5 rounded-full text-xs font-semibold ${info.color}`}>
                 {info.label}
               </span>
@@ -83,7 +83,7 @@ export function StaffView({ staff, onInvite, onEdit, onRemove }: StaffViewProps)
             return (
               <div
                 key={member.id}
-                className="bg-card border border-border/50 rounded-2xl px-4 py-3.5 flex items-center gap-3"
+                className="bg-card border border-border rounded-2xl px-4 py-3.5 flex items-center gap-3"
               >
                 <span className={`size-9 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${legend.color}`}>
                   {member.name[0].toUpperCase()}
@@ -213,7 +213,7 @@ export function StaffForm({
                   'flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition-all text-sm',
                   store === s.id
                     ? 'border-brand bg-brand/5 text-text-primary font-medium'
-                    : 'border-border/50 text-text-secondary hover:border-border',
+                    : 'border-border text-text-secondary hover:border-border',
                 ].join(' ')}
               >
                 <span className={`size-4 rounded-full border-2 flex items-center justify-center transition-colors ${store === s.id ? 'border-brand' : 'border-border'}`}>
@@ -261,7 +261,7 @@ export interface StaffBannerProps {
 export function StaffBanner({ ownerStore, role, onOpen }: StaffBannerProps) {
   const legend = ROLE_LEGEND[role]
   return (
-    <div className="mx-5 bg-card border border-border/50 rounded-2xl px-4 py-4 flex items-center gap-3">
+    <div className="mx-5 bg-card border border-border rounded-2xl px-4 py-4 flex items-center gap-3">
       <span className={`size-10 rounded-xl flex items-center justify-center shrink-0 ${legend.color}`}>
         <ShieldCheck className="size-5" />
       </span>

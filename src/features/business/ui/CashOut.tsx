@@ -18,7 +18,7 @@ export interface CashOutHeroProps {
 
 export function CashOutHero({ usdc, estimate, rateLabel }: CashOutHeroProps) {
   return (
-    <div className="bg-card border border-border/50 rounded-3xl px-6 py-7 flex flex-col items-center gap-1 text-center">
+    <div className="bg-card border border-border rounded-3xl px-6 py-7 flex flex-col items-center gap-1 text-center">
       <p className="text-xs text-text-muted font-medium uppercase tracking-wide mb-2">
         Available to cash out
       </p>
@@ -45,7 +45,7 @@ export interface CashOutAmountProps {
 
 export function CashOutAmount({ value, onChange, max, onMax, estimate, error }: CashOutAmountProps) {
   return (
-    <div className="bg-card border border-border/50 rounded-3xl p-5 flex flex-col gap-3">
+    <div className="bg-card border border-border rounded-3xl p-5 flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <div className="flex-1">
           <div className="flex items-baseline gap-1">
@@ -136,7 +136,7 @@ export function BuyerOfferList({ loading, offers, selected, onSelect }: BuyerOff
           onClick={() => onSelect(offer.id)}
           className={[
             'bg-card rounded-2xl p-4 flex items-start gap-3 text-left transition-all border',
-            selected === offer.id ? 'border-brand ring-1 ring-brand/30' : 'border-border/50',
+            selected === offer.id ? 'border-brand ring-1 ring-brand/30' : 'border-border',
           ].join(' ')}
         >
           {/* Avatar initial */}
@@ -197,7 +197,7 @@ export function PayoutAccountPicker({ accounts, selected, onSelect, onAdd }: Pay
           onClick={() => onSelect(acc.id)}
           className={[
             'flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-card border transition-all text-left',
-            selected === acc.id ? 'border-brand ring-1 ring-brand/30' : 'border-border/50',
+            selected === acc.id ? 'border-brand ring-1 ring-brand/30' : 'border-border',
           ].join(' ')}
         >
           <CreditCard className="size-5 text-text-muted shrink-0" />
@@ -371,7 +371,7 @@ export function CashOutTradeView({
   return (
     <div className="flex flex-col gap-5">
       {/* Amounts */}
-      <div className="bg-card border border-border/50 rounded-3xl px-5 py-5 flex flex-col gap-1 items-center text-center">
+      <div className="bg-card border border-border rounded-3xl px-5 py-5 flex flex-col gap-1 items-center text-center">
         <p className="text-3xl font-bold tabular-nums text-text-primary">{amountUsdc}</p>
         <p className="text-lg tabular-nums text-text-secondary">{amountFiat}</p>
         <p className="text-xs text-text-muted mt-1">Buyer: {buyer}</p>
@@ -574,7 +574,7 @@ export function CashOutHistory({ items, onOpen }: CashOutHistoryProps) {
           key={item.id}
           type="button"
           onClick={() => onOpen(item.id)}
-          className="flex items-center gap-3 px-5 py-4 bg-card rounded-2xl border border-border/50 text-left hover:border-border transition-colors"
+          className="flex items-center gap-3 px-5 py-4 bg-card rounded-2xl border border-border text-left hover:border-border transition-colors"
         >
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-text-primary tabular-nums">

@@ -46,7 +46,7 @@ export function BusinessTabs({ tab, onTab, settleCount }: BusinessTabsProps) {
             {active && (
               <motion.span
                 layoutId="tab-pill"
-                className="absolute inset-0 rounded-xl bg-card shadow-sm border border-border/60"
+                className="absolute inset-0 rounded-xl bg-card shadow-sm border border-border"
                 transition={springs.snappy}
               />
             )}
