@@ -27,7 +27,7 @@ import { useAutoSettle } from './autoSettle'
 import { CashOutScreen, TeamScreen } from './teamScreens'
 import { StaffModePage } from './staffMode'
 import { useUIStore } from '@/store'
-import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
+import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
   BusinessHeader, SetupBanner, OverviewView, PaymentsView, PaymentDetailSheet,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
@@ -35,7 +35,7 @@ import {
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
-type ScreenId = 'qr' | 'receive' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team'
+type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
@@ -352,7 +352,7 @@ function OwnerBusinessPage() {
               checking: scanning, arcLogo: chainLogoSrc('Arc_Testnet') }}
             refunded={{ total: money(refundedInPeriod.reduce((s, r) => s + r.amount, 0)), count: refundedInPeriod.length }}
             recent={payments.slice(0, 4)}
-            onShowQr={open('qr')} onReceive={open('receive')} onPayments={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onBalance={() => setTab('settlements')}
+            onShowQr={open('qr')} onReceive={open('receive')} onCustomers={open('customers')} onPayments={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onBalance={() => setTab('settlements')}
             onToSettle={() => setTab('settlements')} onRefunded={() => { setPayFilter('refunded'); setTab('payments') }}
             onSeeAllPayments={() => { setPayFilter('all'); setTab('payments') }} onPayment={setDetail} onPeriod={() => setPeriodSheet(true)} />
         )}
@@ -462,6 +462,8 @@ function OwnerBusinessPage() {
       <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: qrStore?.id ?? null, canBill: true }}>
       <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
       <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={storeName} />
+      <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => !refundOf.has(p.id))}
+        onPayment={p => setDetail(toRow(p))} onChat={u => { setScreen(null); void openChat(u) }} />
       <ReportsScreen open={screen === 'reports'} onBack={back}
         insights={{ payments: storeRaw.filter(p => !refundOf.has(p.id)), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null }}
         statement={{ storeName: stores.length > 1 && activeStore ? `${storeName} · ${activeStore.name}` : storeName, handle,

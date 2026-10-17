@@ -23,6 +23,8 @@ import {
   type MerchantIntent, type MerchantPayment, type PaymentView, type InvoiceItem,
 } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
+import { timeAgo } from '@/lib/utils'
+import { SearchField } from '@/components/ui/SearchField'
 import {
   BusinessScreen, QrCard, AmountKeypad, LiveStatus, ShareLink, Field, TextInput, ChipSelect, BillItemsEditor,
   RequestRow, InsightsChart, RankList, ProfileStatusCard, DetailList, PrimaryBtn, GhostBtn, Skeleton,
@@ -622,6 +624,132 @@ export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void
           unmatched={unmatched.map(u => ({ id: u.id, amount: money(u.amount), from: `${u.from.slice(0, 6)}…${u.from.slice(-4)}`, chainLabel: chainLabel(u.chain), when: u.createdAt }))}
           onAssign={id => { void assign(id) }} faq={FAQ} />
       </div>
+    </BusinessScreen>
+  )
+}
+
+// ── Customers ────────────────────────────────────────────────────────────
+// Everyone who paid the business (the selected store), from its payments:
+// MeshPort users by username, others by wallet; bridge payments (no paying
+// wallet on that chain) are grouped. Tap one for their payments.
+
+type Customer = {
+  key: string; name: string; username: string | null; wallet: string | null; bridge: boolean
+  payments: MerchantPayment[]; total: number; last: string
+}
+
+const ZERO_WALLET = /^0x0{40}$/i
+const shortWallet = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`
+
+export function CustomersScreen({ open, onBack, payments, onPayment, onChat }: {
+  open: boolean; onBack: () => void; payments: MerchantPayment[]
+  onPayment: (p: MerchantPayment) => void; onChat: (username: string) => void
+}) {
+  const toast = useUIStore(s => s.showToastMessage)
+  const { copy } = useShare()
+  const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState<string | null>(null)
+  useEffect(() => { if (!open) { setQuery(''); setSelected(null) } }, [open])
+
+  const customers = useMemo(() => {
+    const m = new Map<string, Customer>()
+    for (const p of payments) {
+      const bridge = !p.customerUsername && ZERO_WALLET.test(p.from)
+      const key = p.customerUsername ? `u:${p.customerUsername.toLowerCase()}` : bridge ? 'bridge' : `w:${p.from.toLowerCase()}`
+      const c = m.get(key) ?? {
+        key, bridge, username: p.customerUsername ?? null, wallet: p.customerUsername || bridge ? null : p.from,
+        name: p.customerUsername ? `${p.customerUsername}.arc` : bridge ? 'Bridge payments' : shortWallet(p.from),
+        payments: [], total: 0, last: p.createdAt,
+      }
+      c.payments.push(p); c.total += p.amount
+      if (Date.parse(p.createdAt) > Date.parse(c.last)) c.last = p.createdAt
+      m.set(key, c)
+    }
+    return [...m.values()].sort((a, b) => b.total - a.total)
+  }, [payments])
+  const q = query.trim().toLowerCase()
+  const shown = q ? customers.filter(c => c.name.toLowerCase().includes(q) || (c.wallet ?? '').toLowerCase().includes(q)) : customers
+  const current = customers.find(c => c.key === selected) ?? null
+  const avatar = (c: Customer, size: number) => (
+    <span className="shrink-0 rounded-full p-[2px] bg-brand" style={{ width: size, height: size }}>
+      <span className="flex items-center justify-center w-full h-full rounded-full bg-brand text-white font-bold text-sm" style={{ border: '2px solid var(--bg)' }}>
+        {c.bridge ? '⇄' : c.username ? c.username[0].toUpperCase() : '0x'}
+      </span>
+    </span>
+  )
+  const sub = (c: Customer) => `${c.username ? '' : c.bridge ? 'Through a bridge · ' : 'Not on MeshPort · '}${c.payments.length} payment${c.payments.length === 1 ? '' : 's'}`
+
+  return (
+    <BusinessScreen open={open} title={current ? current.name : 'Customers'} onBack={current ? () => setSelected(null) : onBack}>
+      {current ? (
+        <div className="flex flex-col gap-5 px-5 pt-2 pb-6">
+          <div className="flex items-center gap-3 rounded-2xl bg-surface border border-border p-4">
+            {avatar(current, 52)}
+            <span className="flex-1 min-w-0">
+              <span className="block text-[15px] font-bold text-text-primary truncate">{current.name}</span>
+              <span className="block text-xs text-text-muted truncate">{sub(current)} · last {timeAgo(current.last)}</span>
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="rounded-2xl bg-surface border border-border px-4 py-3">
+              <p className="text-xs text-text-muted">Total paid</p>
+              <p className="text-xl font-bold tabular-nums text-text-primary">{money(current.total)}</p>
+            </div>
+            <div className="rounded-2xl bg-surface border border-border px-4 py-3">
+              <p className="text-xs text-text-muted">Average</p>
+              <p className="text-xl font-bold tabular-nums text-text-primary">{money(current.total / current.payments.length)}</p>
+            </div>
+          </div>
+          {current.username ? (
+            <PrimaryBtn onClick={() => onChat(current.username!)}>Chat with {current.name}</PrimaryBtn>
+          ) : current.wallet ? (
+            <GhostBtn onClick={() => { void copy(current.wallet!); toast('Address copied', 'success') }}>Copy wallet address</GhostBtn>
+          ) : null}
+          <div>
+            <p className="text-base font-bold text-text-primary mb-3">Payments</p>
+            <div className="rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
+              {current.payments.map(p => (
+                <button key={p.id} type="button" onClick={() => onPayment(p)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-border/20">
+                  <img src={chainLogoSrc(p.chain)} alt="" className="size-8 rounded-full shrink-0" />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium text-text-primary truncate">{p.orderNumber ?? chainLabel(p.chain)}</span>
+                    <span className="block text-xs text-text-muted">{chainLabel(p.chain)} · {new Date(p.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
+                  </span>
+                  <span className="text-sm font-semibold tabular-nums text-brand-text">+{money(p.amount)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4 px-5 pt-2 pb-6">
+          <SearchField value={query} onChange={setQuery} ariaLabel="Search customers" placeholder={['Search name or wallet', 'Search']} />
+          {customers.length > 0 && (
+            <p className="text-xs text-text-muted -mt-1">{customers.length} customer{customers.length === 1 ? '' : 's'} · {money(customers.reduce((s, c) => s + c.total, 0))} paid</p>
+          )}
+          {shown.length === 0 ? (
+            <div className="flex flex-col items-center text-center py-16">
+              <p className="text-sm font-medium text-text-secondary">{q ? 'No customer matches' : 'No customers yet'}</p>
+              <p className="text-xs text-text-muted mt-1">People who pay you show up here.</p>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
+              {shown.map(c => (
+                <button key={c.key} type="button" onClick={() => setSelected(c.key)}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-border/20">
+                  {avatar(c, 42)}
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-semibold text-text-primary truncate">{c.name}</span>
+                    <span className="block text-xs text-text-muted truncate">{sub(c)} · {timeAgo(c.last)}</span>
+                  </span>
+                  <span className="text-sm font-semibold tabular-nums text-text-primary">{money(c.total)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </BusinessScreen>
   )
 }
