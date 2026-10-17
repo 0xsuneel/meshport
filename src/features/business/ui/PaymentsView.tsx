@@ -81,17 +81,17 @@ export function PaymentsView({ loading, payments, onPayment, onExport }: Payment
     <div className="flex flex-col gap-4 pb-8">
       {/* Search + optional export */}
       <div className="mx-5 mt-2 flex items-center gap-2">
-        <div className="flex flex-1 items-center gap-2 bg-surface border border-border rounded-2xl px-3.5 py-3">
+        <div className="flex flex-1 min-w-0 items-center gap-2 bg-surface border border-border rounded-2xl px-3.5 py-3">
           <Search className="size-4 text-text-muted shrink-0" />
           <input
             type="search"
             placeholder="Search payments..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none"
+            className="flex-1 min-w-0 w-full bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none"
           />
         </div>
-        {onExport && <ExportButton onClick={onExport} />}
+        {onExport && <ExportButton onClick={onExport} label="CSV" />}
       </div>
 
       {/* Filter pills */}
