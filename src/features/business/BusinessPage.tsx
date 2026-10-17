@@ -383,7 +383,7 @@ function OwnerBusinessPage() {
 
       <Sheet open={switcher} onClose={() => setSwitcher(false)}>
         <StoreSwitcher stores={[{ id: '', name: 'All stores', handle: `${stores.length} store${stores.length === 1 ? '' : 's'} together`, active: !activeStore, all: true },
-          ...stores.map(s => ({ id: s.id, name: s.name, handle: s.type ?? 'Store', active: activeStore?.id === s.id }))]}
+          ...stores.map(s => ({ id: s.id, name: s.name, handle: `${s.isDefault ? 'Main store · ' : ''}${s.type ?? 'Store'}`, active: activeStore?.id === s.id }))]}
           onSwitch={id => pickStore(id || null)} onManage={() => { setSwitcher(false); setScreen('team') }} />
       </Sheet>
 

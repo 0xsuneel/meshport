@@ -112,7 +112,7 @@ export function StoresView({ stores, onAdd, onEdit, onQr, addLockedNote }: Store
                     <p className="text-sm font-semibold text-text-primary truncate">{store.name}</p>
                     {store.isDefault && (
                       <span className="px-1.5 py-0.5 rounded bg-brand/10 text-brand-text text-[10px] font-bold">
-                        Default
+                        Main
                       </span>
                     )}
                   </div>
