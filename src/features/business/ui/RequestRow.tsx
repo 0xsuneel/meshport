@@ -110,7 +110,7 @@ export function RequestRow({
             transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
             className="overflow-hidden"
           >
-            <div className="flex flex-wrap gap-2 px-4 pb-4 pt-1 border-t border-border/60">
+            <div className="flex flex-wrap gap-2 px-4 pb-4 pt-1 border-t border-border">
               {actions.map((a) => (
                 <button
                   key={a.label}

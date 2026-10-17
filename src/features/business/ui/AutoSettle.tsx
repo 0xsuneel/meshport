@@ -26,7 +26,7 @@ export function AutoSettleCard({
   schedule, time, onSchedule, onTime, nextLabel,
 }: AutoSettleCardProps) {
   return (
-    <div className="bg-card border border-border/50 rounded-3xl p-5 flex flex-col gap-4">
+    <div className="bg-card border border-border rounded-3xl p-5 flex flex-col gap-4">
       <div className="flex items-center gap-3">
         <span className="inline-flex items-center justify-center size-9 rounded-xl bg-brand/10 text-brand-text">
           <Bell className="size-4.5" />

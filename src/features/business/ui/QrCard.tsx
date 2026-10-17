@@ -19,7 +19,7 @@ export function QrCard({ dataUrl, title, subtitle, paid = false }: QrCardProps) 
   return (
     <div className="flex flex-col items-center">
       {/* Card */}
-      <div className="relative bg-white rounded-3xl p-5 shadow-sm border border-border/40 flex flex-col items-center gap-3 w-[280px]">
+      <div className="relative bg-white rounded-3xl p-5 shadow-sm border border-border flex flex-col items-center gap-3 w-[280px]">
         {/* QR area */}
         <div className="relative w-[232px] h-[232px] rounded-2xl overflow-hidden">
           <AnimatePresence mode="wait">

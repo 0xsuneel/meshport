@@ -4,7 +4,8 @@
  * waits on other chains, and recent payments. Every number appears once.
  */
 import React from 'react'
-import { QrCode, ArrowDownLeft, ListOrdered, Wallet, ChevronDown, CreditCard } from 'lucide-react'
+import { ChevronDown, CreditCard } from 'lucide-react'
+import { ActionIcon } from '@/components/ui/ActionIcon'
 import { motion } from 'framer-motion'
 import type { Payment, ReactNode } from './types'
 import { formatTime } from './types'
@@ -25,10 +26,10 @@ function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payme
       type="button"
       aria-label={`Payment from ${payment.from}`}
       onClick={() => onClick(payment)}
-      className="w-full flex items-center gap-3 px-4 py-2.5 text-left active:bg-border/20 transition-colors"
+      className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-border/20 transition-colors"
     >
       <span className="relative shrink-0">
-        <span className="flex items-center justify-center size-9 rounded-full bg-surface border border-border/60 text-xs font-semibold text-text-secondary">
+        <span className="flex items-center justify-center size-9 rounded-full bg-surface border border-border text-xs font-semibold text-text-secondary">
           {initials(payment.from)}
         </span>
         <ChainLogo src={payment.chainLogo} label={payment.chainLabel} size={16} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-card rounded-full" />
@@ -113,10 +114,10 @@ export function OverviewView({
   const hasSettle = toSettle.chainCount > 0
   const chains = toSettle.chains ?? []
   const actions = [
-    { Icon: QrCode,      label: 'Show QR',   onClick: onShowQr },
-    { Icon: ArrowDownLeft, label: 'Receive',   onClick: onReceive },
-    ...(onPayments ? [{ Icon: ListOrdered, label: 'Payments', onClick: onPayments }] : []),
-    ...(onBalance ? [{ Icon: Wallet, label: 'Balance', onClick: onBalance }] : []),
+    { icon: 'qr' as const,      label: 'Show QR',  onClick: onShowQr },
+    { icon: 'receive' as const, label: 'Receive',  onClick: onReceive },
+    ...(onPayments ? [{ icon: 'list' as const, label: 'Payments', onClick: onPayments }] : []),
+    ...(onBalance ? [{ icon: 'wallet' as const, label: 'Balance', onClick: onBalance }] : []),
   ]
 
   return (
@@ -164,15 +165,16 @@ export function OverviewView({
       </FadeUp>
 
       {/* ── Quick actions ───────────────────────────────────────────────── */}
+      {/* Same round brand buttons as Home's Pay / Receive / Swap / More. */}
       <FadeUp delay={0.08} className="mx-5">
-        <div className={`grid gap-2 ${actions.length === 4 ? 'grid-cols-4' : actions.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-          {actions.map(({ Icon, label, onClick }) => (
+        <div className={`flex ${actions.length > 2 ? 'justify-between' : 'justify-center gap-12'} w-[95%] mx-auto`}>
+          {actions.map(({ icon, label, onClick }) => (
             <button key={label} type="button" onClick={onClick}
-              className="flex flex-col items-center gap-2 py-1 active:scale-[0.95] transition-transform">
-              <span className="flex items-center justify-center size-14 rounded-[18px] bg-card border border-border/70 text-brand-text">
-                <Icon className="size-[22px]" />
+              className="flex flex-col items-center gap-2 active:scale-[0.95] transition-transform">
+              <span className="flex items-center justify-center rounded-full bg-brand" style={{ width: 55, height: 55 }}>
+                <ActionIcon name={icon} size={27} />
               </span>
-              <span className="text-xs font-medium text-text-primary">{label}</span>
+              <span className="text-xs font-medium text-text-primary leading-none">{label}</span>
             </button>
           ))}
         </div>
@@ -180,7 +182,7 @@ export function OverviewView({
 
       {/* ── Settle bar (always) ──────────────────────────────── */}
       <FadeUp delay={0.12} className="mx-5 flex flex-col gap-2">
-        {!toSettle.hidden && <div className="flex items-center gap-3 rounded-[18px] bg-card border border-border/70 px-3.5 py-3">
+        {!toSettle.hidden && <div className="flex items-center gap-3 rounded-2xl bg-card border border-border px-3.5 py-3">
           <span className="flex shrink-0">
             {hasSettle ? chains.slice(0, 3).map((c, i) => (
               <ChainLogo key={c.label} src={c.logo} label={c.label} size={28}
@@ -217,16 +219,17 @@ export function OverviewView({
 
       {/* ── Recent payments ─────────────────────────────────────────────── */}
       <FadeUp delay={0.16} className="mx-5">
-        <div className="rounded-[20px] bg-card border border-border/70 overflow-hidden">
-          <div className="flex items-center justify-between px-4 pt-3.5 pb-1.5">
-            <p className="text-[15px] font-semibold text-text-primary">Recent payments</p>
-            {recent.length > 0 && (
-              <button type="button" onClick={onSeeAllPayments}
-                className="min-h-[32px] text-[13px] font-semibold text-brand-text active:opacity-70">
-                See all
-              </button>
-            )}
-          </div>
+        {/* Heading outside the card, like Home's "Assets". */}
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-base font-bold text-text-primary">Recent payments</p>
+          {recent.length > 0 && (
+            <button type="button" onClick={onSeeAllPayments}
+              className="text-[15px] font-medium text-brand-text active:opacity-70">
+              See all
+            </button>
+          )}
+        </div>
+        <div className="rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
           {loading ? (
             <div className="flex flex-col gap-3 px-4 pt-2 pb-4">
               {[0, 1, 2].map(i => (
@@ -246,9 +249,7 @@ export function OverviewView({
               <p className="text-xs text-text-muted mt-1">Show your QR at the counter to get paid</p>
             </div>
           ) : (
-            <div className="flex flex-col pb-1.5">
-              {recent.slice(0, 4).map(p => <PaymentRow key={p.id} payment={p} onClick={onPayment} />)}
-            </div>
+            <>{recent.slice(0, 4).map(p => <PaymentRow key={p.id} payment={p} onClick={onPayment} />)}</>
           )}
         </div>
       </FadeUp>

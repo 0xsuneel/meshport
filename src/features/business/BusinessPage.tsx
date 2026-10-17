@@ -290,7 +290,7 @@ function OwnerBusinessPage() {
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-bg">
-      <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
+      <div>
         {tab === 'overview' ? (
           // Title = the store being viewed ("All stores" for the totals);
           // the line under it is the business account itself.
@@ -302,12 +302,11 @@ function OwnerBusinessPage() {
         ) : (
           // Payments and Settlements open from Overview (See all, the settle
           // bar, the menu) and come back with the arrow - no tab bar.
-          <header className="flex items-center gap-2 px-3 pt-4 pb-1">
-            <button type="button" aria-label="Back to overview" onClick={() => { setPayFilter('all'); setTab('overview') }}
-              className="size-11 flex items-center justify-center rounded-2xl text-text-secondary active:bg-border/40 transition-colors">
-              <ArrowLeft className="size-5" />
+          <header className="header-row gap-3 px-5 pt-header pb-header">
+            <button type="button" aria-label="Back to overview" onClick={() => { setPayFilter('all'); setTab('overview') }} className="back-btn">
+              <ArrowLeft className="w-5 h-5 text-text-primary" />
             </button>
-            <h1 className="text-lg font-semibold text-text-primary">{tab === 'payments' ? 'Payments' : 'Balance'}</h1>
+            <h1 className="header-title">{tab === 'payments' ? 'Payments' : 'Balance'}</h1>
             {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? 'All stores'}</span>}
           </header>
         )}

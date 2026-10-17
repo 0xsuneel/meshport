@@ -160,7 +160,7 @@ export function PeriodSheet({ open, value, customLabel, onPick, onCustom, onClos
       <div className="flex flex-col">
         {rows.map(r => (
           <button key={r.id} type="button" onClick={r.onClick}
-            className="flex items-center justify-between min-h-[52px] px-1 border-b border-border/60 last:border-0 text-left">
+            className="flex items-center justify-between min-h-[52px] px-1 border-b border-border last:border-0 text-left">
             <span className={`text-[15px] ${value === r.id ? 'font-semibold text-text-primary' : 'text-text-secondary'}`}>{r.label}</span>
             {value === r.id && <span className="size-2.5 rounded-full bg-brand" aria-label="Selected" />}
           </button>
