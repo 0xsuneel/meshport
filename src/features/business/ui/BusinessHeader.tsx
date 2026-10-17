@@ -21,6 +21,8 @@ export interface BusinessHeaderProps {
   onSwitchStore?: () => void
   /** Active outlet, shown before the handle ("MG Road · chai.arc") */
   outlet?: string | null
+  /** Name the initials tile is made from (the business), when the title shows a store */
+  avatarName?: string
 }
 
 const statusConfig: Record<VerificationStatus, { label: string; Icon: React.ElementType }> = {
@@ -39,10 +41,11 @@ export function BusinessHeader({
   onProfile,
   onSwitchStore,
   outlet,
+  avatarName,
 }: BusinessHeaderProps) {
   const { label, Icon } = statusConfig[status]
   const menuAction = onMenu ?? onProfile
-  const initials = storeName.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'B'
+  const initials = (avatarName ?? storeName).split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'B'
 
   return (
     <header className="flex items-center gap-3 px-5 pt-5 pb-3">
