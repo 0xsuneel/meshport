@@ -281,7 +281,7 @@ function OwnerBusinessPage() {
       <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
         {tab === 'overview' ? (
           <BusinessHeader storeName={storeName} handle={handle} status={headerStatus} voiceOn={voice.enabled}
-            onVoice={() => setVoiceOpen(true)} onMenu={() => setMenu(true)} onSwitchStore={() => setSwitcher(true)}
+            onVoice={() => setVoiceOpen(true)} onMenu={() => setMenu(true)} onSwitchStore={stores.length ? () => setSwitcher(true) : undefined}
             outlet={stores.length > 1 ? (activeStore?.name ?? 'All stores') : null} />
         ) : (
           // Payments and Settlements open from Overview (See all, the settle
@@ -382,7 +382,7 @@ function OwnerBusinessPage() {
       ]} />
 
       <Sheet open={switcher} onClose={() => setSwitcher(false)}>
-        <StoreSwitcher stores={[{ id: '', name: `All stores · ${storeName}`, handle, active: !activeStore },
+        <StoreSwitcher stores={[{ id: '', name: 'All stores', handle: `${stores.length} store${stores.length === 1 ? '' : 's'} together`, active: !activeStore, all: true },
           ...stores.map(s => ({ id: s.id, name: s.name, handle: s.type ?? 'Store', active: activeStore?.id === s.id }))]}
           onSwitch={id => pickStore(id || null)} onManage={() => { setSwitcher(false); setScreen('team') }} />
       </Sheet>
@@ -424,7 +424,7 @@ function OwnerBusinessPage() {
       <ProfileScreen open={screen === 'profile'} onBack={back} handle={handle} />
       </RequestMaker.Provider>
       <CashOutScreen open={screen === 'cashout'} onBack={back} />
-      <TeamScreen open={screen === 'team'} onBack={back} stores={stores} onChanged={setStores} paymentsByStore={paymentsByStore}
+      <TeamScreen open={screen === 'team'} onBack={back} canAddStores={isMerchant} stores={stores} onChanged={setStores} paymentsByStore={paymentsByStore}
         onQr={id => { pickStore(id); setScreen('qr') }} />
     </div>
   )

@@ -4,7 +4,7 @@
  * StoreForm — create/edit form for a store.
  */
 import React from 'react'
-import { Store, QrCode, Pencil, Plus, Loader2, ChevronDown, Trash2, CheckCircle2 } from 'lucide-react'
+import { Store, QrCode, Pencil, Plus, Loader2, ChevronDown, Trash2, CheckCircle2, LayoutGrid, Lock } from 'lucide-react'
 
 // ─── StoreSwitcher ────────────────────────────────────────────────────────────
 
@@ -13,6 +13,8 @@ export interface SwitcherStore {
   name: string
   handle: string
   active: boolean
+  /** The "All stores" row - totals for every store, not a store itself */
+  all?: boolean
 }
 
 export interface StoreSwitcherProps {
@@ -38,13 +40,13 @@ export function StoreSwitcher({ stores, onSwitch, onManage }: StoreSwitcherProps
             'size-9 rounded-xl flex items-center justify-center shrink-0',
             store.active ? 'bg-brand text-white' : 'bg-card border border-border text-text-muted',
           ].join(' ')}>
-            <Store className="size-4.5" />
+            {store.all ? <LayoutGrid className="size-4.5" /> : <Store className="size-4.5" />}
           </span>
           <div className="flex-1 min-w-0">
             <p className={`text-sm font-semibold truncate ${store.active ? 'text-brand-text' : 'text-text-primary'}`}>
               {store.name}
             </p>
-            <p className="text-xs text-text-muted font-mono">{store.handle}</p>
+            <p className="text-xs text-text-muted truncate">{store.handle}</p>
           </div>
           {store.active && <CheckCircle2 className="size-5 text-brand-text shrink-0" />}
         </button>
@@ -79,16 +81,20 @@ export interface StoresViewProps {
   onAdd: () => void
   onEdit: (id: string) => void
   onQr: (id: string) => void
+  /** Set when stores can't be added yet (business not approved) */
+  addLockedNote?: string
 }
 
-export function StoresView({ stores, onAdd, onEdit, onQr }: StoresViewProps) {
+export function StoresView({ stores, onAdd, onEdit, onQr, addLockedNote }: StoresViewProps) {
   return (
     <div className="flex flex-col gap-4 px-5 py-4">
       {stores.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-16 text-center">
           <Store className="size-10 text-text-muted" />
           <p className="text-text-secondary font-medium">No stores yet</p>
-          <p className="text-sm text-text-muted">Add your first outlet to start accepting payments.</p>
+          <p className="text-sm text-text-muted">
+            {addLockedNote ? 'Your shops and outlets show here.' : 'Add a shop or outlet. Each one gets its own QR, and its payments are counted separately.'}
+          </p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -142,14 +148,18 @@ export function StoresView({ stores, onAdd, onEdit, onQr }: StoresViewProps) {
         </div>
       )}
 
-      <button
+      {addLockedNote ? (
+        <p className="flex items-center justify-center gap-2 rounded-2xl bg-surface border border-border px-4 py-3 text-sm text-text-secondary text-center">
+          <Lock className="size-4 shrink-0" /> {addLockedNote}
+        </p>
+      ) : <button
         type="button"
         onClick={onAdd}
         className="w-full h-12 rounded-2xl border border-dashed border-border text-text-secondary text-sm font-medium flex items-center justify-center gap-2 hover:border-brand/40 hover:text-brand-text transition-all"
       >
         <Plus className="size-4.5" />
         Add store
-      </button>
+      </button>}
     </div>
   )
 }
