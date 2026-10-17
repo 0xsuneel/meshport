@@ -11,6 +11,7 @@
 // The UI kit in ./ui was designed with Arc Studio.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
 import { useAuthStore, useWalletStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
@@ -28,7 +29,7 @@ import { StaffModePage } from './staffMode'
 import { useUIStore } from '@/store'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, BillScreen, RequestsScreen, InsightsScreen, ProfileScreen, StatementScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
-  BusinessHeader, BusinessTabs, SetupBanner, OverviewView, PaymentsView, PaymentDetailSheet,
+  BusinessHeader, SetupBanner, OverviewView, PaymentsView, PaymentDetailSheet,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
   DateRangeBar, DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet, BusinessMenuSheet,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
@@ -279,10 +280,22 @@ function OwnerBusinessPage() {
   return (
     <div className="flex flex-col h-full min-h-0 bg-bg">
       <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
-        <BusinessHeader storeName={storeName} handle={handle} status={headerStatus} voiceOn={voice.enabled}
-          onVoice={() => setVoiceOpen(true)} onMenu={() => setMenu(true)} onSwitchStore={() => setSwitcher(true)}
-          outlet={stores.length > 1 ? (activeStore?.name ?? 'All stores') : null} />
-        <BusinessTabs tab={tab} onTab={t => { setPayFilter('all'); setTab(t) }} settleCount={settle.due.length} />
+        {tab === 'overview' ? (
+          <BusinessHeader storeName={storeName} handle={handle} status={headerStatus} voiceOn={voice.enabled}
+            onVoice={() => setVoiceOpen(true)} onMenu={() => setMenu(true)} onSwitchStore={() => setSwitcher(true)}
+            outlet={stores.length > 1 ? (activeStore?.name ?? 'All stores') : null} />
+        ) : (
+          // Payments and Settlements open from Overview (See all, the settle
+          // bar, the menu) and come back with the arrow - no tab bar.
+          <header className="flex items-center gap-2 px-3 pt-4 pb-1">
+            <button type="button" aria-label="Back to overview" onClick={() => { setPayFilter('all'); setTab('overview') }}
+              className="size-11 flex items-center justify-center rounded-2xl text-text-secondary active:bg-border/40 transition-colors">
+              <ArrowLeft className="size-5" />
+            </button>
+            <h1 className="text-lg font-semibold text-text-primary">{tab === 'payments' ? 'Payments' : 'Settlements'}</h1>
+            {stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? 'All stores'}</span>}
+          </header>
+        )}
         {tab !== 'overview' && <div className="pt-2">
           <DateRangeBar value={periodSel.id} customLabel={period.id === 'custom' ? period.label : undefined}
             onChange={id => choosePeriod({ ...periodSel, id })} onCustom={() => setRangeSheet({ from: periodSel.from, to: periodSel.to })} />
@@ -358,6 +371,7 @@ function OwnerBusinessPage() {
 
       <BusinessMenuSheet open={menu} onClose={() => setMenu(false)} groups={[
         { title: 'Money', items: [
+          { id: 'settlements', label: 'Settlements', hint: settle.due.length ? `${money(settle.total)} waiting on ${settle.due.length} chain${settle.due.length === 1 ? '' : 's'}` : 'Arc balance, history and auto-settle', icon: 'settlements', onClick: () => { setMenu(false); setTab('settlements') } },
           { id: 'cashout', label: 'Cash out to bank', hint: 'Sell USDC for ₹ to your UPI or bank', icon: 'cashout', onClick: go('cashout') },
           { id: 'statement', label: 'Statement', hint: 'Day, week or month · CSV and PDF', icon: 'statement', onClick: go('statement') },
           { id: 'insights', label: 'Insights', hint: 'Sales by day, hour and customer', icon: 'insights', onClick: go('insights') },
