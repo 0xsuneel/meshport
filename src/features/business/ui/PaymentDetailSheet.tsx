@@ -146,9 +146,9 @@ export function PaymentDetailSheet({
           </div>
 
           {/* Refund */}
-          {isRefunded && refund && (
+          {refund && (
             <div className="rounded-2xl bg-danger/10 border border-danger/20 px-4 py-3.5 flex flex-col gap-1">
-              <p className="text-xs font-semibold text-danger uppercase tracking-wider">Refunded {refund.amount}</p>
+              <p className="text-xs font-semibold text-danger uppercase tracking-wider">{isRefunded ? `Refunded ${refund.amount}` : `Partly refunded · ${refund.amount} of ${payment.amount}`}</p>
               <p className="text-sm text-text-secondary">{refund.reason} · {new Date(refund.when).toLocaleDateString([], { day: 'numeric', month: 'short' })}</p>
               {refund.txUrl && (
                 <a href={refund.txUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1.5 text-xs text-danger font-medium">
