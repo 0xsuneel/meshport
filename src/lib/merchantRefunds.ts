@@ -153,3 +153,48 @@ export async function refundPayment(p: {
   })
   return record(target, hash, 'contract', reason)
 }
+
+// ── Who can be refunded ───────────────────────────────────────────────────
+// Only a payment sent straight from a person's own wallet can go back to
+// that address: an exchange, a bridge, a Safe or any other contract may not
+// belong to the customer on the refund chain (or can't receive at all).
+// Checked on the chain it was paid on: a wallet has no contract code (or only
+// an EIP-7702 delegation, 0xef0100…); bridge mints come from the zero address.
+export type SenderCheck = { refundable: boolean; reason?: string }
+const senderCache = new Map<string, SenderCheck>()
+
+async function codeAt(chain: string, address: string): Promise<string | null> {
+  const body = { jsonrpc: '2.0', id: 1, method: 'eth_getCode', params: [address, 'latest'] }
+  if (chain === 'Arc_Testnet') {
+    const { arcRpcJson } = await import('@/lib/arc')
+    const j = await arcRpcJson(body).catch(() => null)
+    return typeof j?.result === 'string' ? j.result : null
+  }
+  const { EXTERNAL_CHAINS } = await import('@/blockchain/chains')
+  for (const url of EXTERNAL_CHAINS[chain]?.rpcs ?? []) {
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(6000) })
+      const j = await r.json()
+      if (typeof j?.result === 'string') return j.result
+    } catch { /* next RPC */ }
+  }
+  return null
+}
+
+export async function checkRefundableSender(chain: string, from: string): Promise<SenderCheck> {
+  const key = `${chain}:${from.toLowerCase()}`
+  const hit = senderCache.get(key)
+  if (hit) return hit
+  let out: SenderCheck
+  if (!/^0x[0-9a-fA-F]{40}$/.test(from) || /^0x0{40}$/i.test(from)) {
+    out = { refundable: false, reason: 'Paid through a bridge, so there is no wallet to send a refund back to.' }
+  } else {
+    const { KNOWN_INTERNAL_CONTRACTS } = await import('@/lib/onchainReceivedActivity')
+    const code = KNOWN_INTERNAL_CONTRACTS.has(from.toLowerCase()) ? 'contract' : await codeAt(chain, from)
+    out = code === null ? { refundable: false, reason: "Couldn't check who sent this payment. Try again in a moment." }
+      : code === '0x' || code.toLowerCase().startsWith('0xef0100') ? { refundable: true }
+      : { refundable: false, reason: 'Paid from a contract (an exchange, bridge or smart account), so it can’t be refunded automatically. Contact the customer.' }
+  }
+  if (out.refundable || out.reason?.startsWith('Paid')) senderCache.set(key, out)
+  return out
+}
