@@ -5,7 +5,7 @@
 import React from 'react'
 import {
   QrCode, CreditCard, Link2, FileText, Clock, ArrowDownToLine,
-  ChevronRight, BarChart2, Mic, User,
+  ChevronRight, BarChart2, Mic, User, LifeBuoy,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { Payment, ReactNode } from './types'
@@ -134,6 +134,8 @@ export interface OverviewViewProps {
     chainCount: number
   }
   recent: Payment[]
+  /** Optional trend chip rendered directly under the big total */
+  trend?: ReactNode
   banner?: ReactNode
 
   onShowQr: () => void
@@ -147,6 +149,8 @@ export interface OverviewViewProps {
   onInsights: () => void
   onVoiceAlerts: () => void
   onProfile: () => void
+  onStatement?: () => void
+  onHelp?: () => void
 }
 
 export function OverviewView({
@@ -155,6 +159,7 @@ export function OverviewView({
   onArc,
   toSettle,
   recent,
+  trend,
   banner,
   onShowQr,
   onCharge,
@@ -167,6 +172,8 @@ export function OverviewView({
   onInsights,
   onVoiceAlerts,
   onProfile,
+  onStatement,
+  onHelp,
 }: OverviewViewProps) {
   return (
     <div className="flex flex-col gap-5 pb-8">
@@ -196,6 +203,8 @@ export function OverviewView({
               <span className="text-base text-text-muted font-medium">USDC</span>
             </motion.div>
           )}
+
+          {!loading && trend && <div className="mt-2">{trend}</div>}
 
           {/* Stat chips */}
           <div className="mt-4 flex items-center gap-3 flex-wrap">
@@ -326,7 +335,9 @@ export function OverviewView({
         <div className="flex flex-wrap gap-2">
           <ManageChip Icon={BarChart2} label="Insights"      onClick={onInsights} />
           <ManageChip Icon={Mic}       label="Voice alerts"  onClick={onVoiceAlerts} />
+          {onStatement && <ManageChip Icon={FileText} label="Statement" onClick={onStatement} />}
           <ManageChip Icon={User}      label="Business profile" onClick={onProfile} />
+          {onHelp && <ManageChip Icon={LifeBuoy} label="Help" onClick={onHelp} />}
         </div>
       </FadeUp>
     </div>

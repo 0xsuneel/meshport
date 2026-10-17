@@ -98,7 +98,7 @@ function runReducer(s: RunState, a: RunAction): RunState {
   }
 }
 
-async function unlockKey(passcode?: string): Promise<string> {
+export async function unlockKey(passcode?: string): Promise<string> {
   let key = useAuthStore.getState().privateKey
   if (!key) {
     const { restorePrivateKey } = await import('@/lib/restoreWallet')

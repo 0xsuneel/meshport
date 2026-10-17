@@ -674,3 +674,12 @@ html.mp-locking #root { visibility: hidden; }
 :root[data-theme="light"] img[src$="/logos/chains/sonic.svg"] { filter: brightness(0.18); }
 :root[data-theme="light"] img[src$="/logos/chains/codex.svg"],
 :root[data-theme="light"] img[src$="/logos/chains/xdc.svg"] { filter: brightness(0.62) saturate(1.8); }
+
+/* Business → print a sticker, statement or receipt: only the .print-root
+   that PrintArea mounts on <body> is printed. */
+.print-root { display: none; }
+@media print {
+  body { background: #fff !important; }
+  body > *:not(.print-root) { display: none !important; }
+  .print-root { display: block !important; background: #fff; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

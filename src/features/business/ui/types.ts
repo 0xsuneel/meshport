@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 
 // ─── Domain types ────────────────────────────────────────────────────────────
 
-export type PaymentStatus = 'received' | 'to_settle'
+export type PaymentStatus = 'received' | 'to_settle' | 'refunded'
 
 export interface Payment {
   id: string

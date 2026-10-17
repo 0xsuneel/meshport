@@ -53,13 +53,14 @@ export function ChainLogo({ src, label, size = 24, className = '' }: ChainLogoPr
 // ─── Status dot ─────────────────────────────────────────────────────────────
 
 const dotColors: Record<string, string> = {
-  received: 'bg-success',
-  to_settle: 'bg-warning',
-  completed: 'bg-success',
-  in_progress: 'bg-brand-text',
-  failed: 'bg-danger',
-  verified: 'bg-success',
-  review: 'bg-warning',
+  received:   'bg-success',
+  to_settle:  'bg-warning',
+  refunded:   'bg-danger',
+  completed:  'bg-success',
+  in_progress:'bg-brand-text',
+  failed:     'bg-danger',
+  verified:   'bg-success',
+  review:     'bg-warning',
   unverified: 'bg-danger',
 }
 
