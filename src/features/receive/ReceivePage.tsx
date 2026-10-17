@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Copy, Share2, CheckCircle, ArrowLeft, Lightbulb, DollarSign, Download, ListChecks } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useMerchant } from '@/lib/merchant'
+import { useMerchant, useBusinessTab } from '@/lib/merchant'
+import { listStores, type Store } from '@/lib/businessTeam'
 import { MerchantQrPanel } from '@/features/merchant/MerchantQrPanel'
 import { arcAddressUri } from '@/lib/merchantQr'
 import { RequestQrPanel } from './RequestQrPanel'
@@ -55,13 +56,27 @@ export function ReceivePage() {
   // "Request payment" (replaces the old Collect USDC): an order-numbered
   // request whose QR / link / share carry the order.
   const [requesting, setRequesting] = useState(() => params.get('request') === '1' || !!params.get('customer'))
+  // Business accounts with stores: My QR is the shop QR of the store picked in
+  // the chips (main store first), so each store's payments land in it.
+  const business = useBusinessTab()
+  const [stores, setStores] = useState<Store[]>([])
+  const [storeId, setStoreId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!business) return
+    listStores().then(list => {
+      const sorted = [...list].sort((a, b) => Number(b.isDefault) - Number(a.isDefault))
+      setStores(sorted)
+      setStoreId(id => id ?? sorted[0]?.id ?? null)
+    }).catch(() => {})
+  }, [business])
+  const store = stores.find(s => s.id === storeId) ?? null
   if (!user) return null
 
   const displayUsername = (username || (user?.username || '')).replace(/\.arc$/, '')
 
   // Payment link - the real shareable URL
   const paymentLink = displayUsername
-    ? `${APP_URL}/paylink/${displayUsername}`
+    ? `${APP_URL}/paylink/${displayUsername}${store ? `?store=${store.id}` : ''}`
     : walletAddress
     ? `${APP_URL}/paylink/${walletAddress}`
     : APP_URL
@@ -152,8 +167,18 @@ export function ReceivePage() {
       padding: 16, boxShadow: 'var(--shadow-1)', width: '100%', boxSizing: 'border-box',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>My QR</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{store ? store.name : 'My QR'}</span>
       </div>
+      {stores.length > 1 && (
+        <div role="tablist" aria-label="Store" className="flex gap-2 overflow-x-auto no-scrollbar w-full justify-center flex-wrap">
+          {stores.map(s => (
+            <button key={s.id} type="button" role="tab" aria-selected={s.id === storeId} onClick={() => setStoreId(s.id)}
+              className={`shrink-0 min-h-[34px] px-3.5 rounded-full text-[13px] font-semibold border transition-colors ${s.id === storeId ? 'bg-brand border-brand text-white' : 'bg-transparent border-border text-text-secondary'}`}>
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* The frame hugs the QR: drawMeshportQr sizes the canvas to whole pixels per module (≤236px). */}
       <div className="relative" style={{

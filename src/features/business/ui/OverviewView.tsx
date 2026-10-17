@@ -78,7 +78,8 @@ export interface OverviewViewProps {
   }
   recent: Payment[]
 
-  onShowQr: () => void
+  /** Optional: the shop QR now lives on Receive (the app's main QR) */
+  onShowQr?: () => void
   /** Amount → counter QR + shareable link for one order */
   onReceive: () => void
   /** Balance: Arc balance, chains to settle, cash out */
@@ -117,7 +118,7 @@ export function OverviewView({
   const hasSettle = toSettle.chainCount > 0
   const chains = toSettle.chains ?? []
   const actions = [
-    { icon: 'qr' as const,      label: 'Show QR',  onClick: onShowQr },
+    ...(onShowQr ? [{ icon: 'qr' as const, label: 'Show QR', onClick: onShowQr }] : []),
     { icon: 'receive' as const, label: 'Receive',  onClick: onReceive },
     ...(onPayments ? [{ icon: 'list' as const, label: 'Payments', onClick: onPayments }] : []),
     ...(onCustomers ? [{ icon: 'bulk' as const, label: 'Customers', onClick: onCustomers }] : []),
