@@ -14,6 +14,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
 import { copyToClipboard } from '@/lib/utils'
+import { fetchActivity } from '@/lib/ActivityService'
 import { useAuthStore, useWalletStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
@@ -39,7 +40,8 @@ import {
 type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const who = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
+const who = (p: MerchantPayment) => p.method === 'own_transfer' ? 'Your transfer'
+  : p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
 const inWords = (ms: number) => {
   const m = Math.max(1, Math.round(ms / 60_000))
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`
@@ -88,17 +90,29 @@ function OwnerBusinessPage() {
   // payment come from PaymentReceivedWatcher, on every screen) ──────────
   const [raw, setRaw] = useState<MerchantPayment[]>([])
   const [loaded, setLoaded] = useState(false)
-  // Order payments, plus USDC that reached the store's address on another
-  // chain without an order (merchant_chain_receipts; not its own transfers).
+  // Every USDC that reached the business: order payments; USDC on other
+  // chains (merchant_chain_receipts, own transfers marked 'own_transfer');
+  // and direct receives on Arc from anyone - people, contracts, exchanges
+  // (the wallet's Activity 'receive' rows) that aren't order payments.
   const load = useCallback(async () => {
-    const [orders, receipts] = await Promise.all([listMyPayments(500), listChainReceipts(300).catch(() => [])])
+    const [orders, receipts, activity] = await Promise.all([
+      listMyPayments(500), listChainReceipts(300).catch(() => []),
+      walletAddress ? fetchActivity(walletAddress, { limit: 300 }).catch(() => []) : Promise.resolve([]),
+    ])
     const known = new Set(orders.map(p => `${p.chain}:${p.txHash.toLowerCase()}`))
     const extra: MerchantPayment[] = receipts
-      .filter(r => !isOwnReceipt(r, walletAddress) && !known.has(`${r.chain}:${r.txHash.toLowerCase()}`))
+      .filter(r => !known.has(`${r.chain}:${r.txHash.toLowerCase()}`))
       .map(r => ({ id: `rcpt_${r.id}`, intentId: '', chain: r.chain, txHash: r.txHash, from: r.from ?? '0x0000000000000000000000000000000000000000',
-        amount: r.amount, method: 'chain_receipt', status: r.status === 'converted' ? 'collected' : 'in_ledger', customerUsername: null,
+        amount: r.amount, method: isOwnReceipt(r, walletAddress) ? 'own_transfer' : 'chain_receipt',
+        status: r.status === 'converted' ? 'collected' : 'in_ledger', customerUsername: null,
         createdAt: r.createdAt, orderNumber: r.orderNumber, matchedBy: null }))
-    setRaw([...orders, ...extra].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))); setLoaded(true)
+    const direct: MerchantPayment[] = activity
+      .filter(a => a.activityType === 'receive' && a.status === 'completed' && (a.tokenSymbol || 'USDC').toUpperCase() === 'USDC'
+        && a.txHash && !known.has(`Arc_Testnet:${a.txHash.toLowerCase()}`))
+      .map(a => ({ id: `act_${a.id}`, intentId: '', chain: 'Arc_Testnet', txHash: a.txHash!, from: a.counterpartyAddress ?? '0x0000000000000000000000000000000000000000',
+        amount: a.amount, method: 'direct', status: 'confirmed', createdAt: a.createdAt, orderNumber: null, matchedBy: null,
+        customerUsername: String((a.metadata as any)?.fromUsername ?? '').replace(/\.arc$/i, '') || null }))
+    setRaw([...orders, ...extra, ...direct].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))); setLoaded(true)
   }, [walletAddress])
   useEffect(() => { void load() }, [load])
   useEffect(() => (walletAddress ? subscribeMerchantPayments(walletAddress, () => { void load() }) : undefined), [walletAddress, load])
@@ -118,7 +132,7 @@ function OwnerBusinessPage() {
     const p = raw.find(x => x.id === r.paymentId); return !p || r.amount >= p.amount - 1e-6
   }).map(r => r.paymentId)), [refunds, raw])
   /** Payments with refunds taken off (fully refunded ones dropped). */
-  const netOf = useCallback((list: MerchantPayment[]) => list.filter(p => kept(p) > 1e-6).map(p => refundOf.has(p.id) ? { ...p, amount: kept(p) } : p), [kept, refundOf])
+  const netOf = useCallback((list: MerchantPayment[]) => list.filter(p => p.method !== 'own_transfer' && kept(p) > 1e-6).map(p => refundOf.has(p.id) ? { ...p, amount: kept(p) } : p), [kept, refundOf])
 
   // ── Stores (which store this device works as; null = all) ─────────────
   const [stores, setStores] = useState<Store[]>([])
@@ -269,6 +283,10 @@ function OwnerBusinessPage() {
     const p = detail ? raw.find(x => x.id === detail.id) : undefined
     if (!p) { setSender(null); return }
     let live = true
+    // Your own transfer, or a direct receive (no order to refund against):
+    // no Refund here - send it back with Pay.
+    if (p.method === 'own_transfer') { setSender({ id: p.id, check: { refundable: false, reason: 'Your own transfer from another chain - not a customer payment.' } }); return }
+    if (p.method === 'direct') { setSender({ id: p.id, check: { refundable: false, reason: 'A direct transfer to your wallet. To give it back, send it with Pay.' } }); return }
     setSender({ id: p.id, check: null })
     checkRefundableSender(p.chain, p.from).then(check => { if (live) setSender({ id: p.id, check }) })
     return () => { live = false }
@@ -397,7 +415,7 @@ function OwnerBusinessPage() {
         onReceipt={() => { if (rawDetail) { setReceiptFor(rawDetail); setDetail(null); setScreen('receipt') } }}
         onRefund={rawDetail && !detailRefund && sender?.id === rawDetail.id && sender.check?.refundable ? () => { openRefund(rawDetail); setDetail(null) } : undefined}
         refundNote={sender?.id === detail?.id ? (sender?.check ? sender.check.reason : 'Checking who sent this payment…') : undefined}
-        wallet={rawDetail && !rawDetail.customerUsername ? rawDetail.from : undefined}
+        wallet={rawDetail && !rawDetail.customerUsername && rawDetail.method !== 'own_transfer' ? rawDetail.from : undefined}
         onCopyWallet={rawDetail ? () => { void copyToClipboard(rawDetail.from).then(ok => toast(ok ? 'Address copied' : 'Could not copy', ok ? 'success' : 'error')) } : undefined}
         customer={detailCustomer} store={rawDetail && stores.length ? stores.find(st => st.id === storeOf(rawDetail))?.name : undefined}
         onChat={rawDetail?.customerUsername ? () => { const u = rawDetail.customerUsername!; setDetail(null); void openChat(u) } : undefined}
@@ -478,7 +496,7 @@ function OwnerBusinessPage() {
       <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: qrStore?.id ?? null, canBill: true }}>
       <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
       <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={storeName} />
-      <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw.map(p => refundOf.has(p.id) && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
+      <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundOf.has(p.id) && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
         onPayment={p => setDetail(toRow(p))} onChat={u => { setScreen(null); void openChat(u) }} />
       <ReportsScreen open={screen === 'reports'} onBack={back}
         insights={{ payments: netOf(storeRaw), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null }}
