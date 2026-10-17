@@ -22,6 +22,10 @@
 //            must be the signed-in user's wallet)
 //          · Gateway Minter gatewayMint(attestation, signature)
 //          · CCTP V2 MessageTransmitter receiveMessage(message, attestation)
+//          · USDC transferWithAuthorization (EIP-3009) for a Business refund
+//            on the chain the customer paid on: from = the signed-in
+//            merchant, to/amount = a real payment from that customer to
+//            them on that chain that isn't refunded yet (refundFor)
 //        The recipient is fixed by the user's signature or Circle's
 //        attestation, so the relayer can't redirect anything. → { txHash }
 //
@@ -259,6 +263,10 @@ const RELAYABLE_ABI = [
   { type: 'function', name: 'depositWithPermit', stateMutability: 'nonpayable', outputs: [], inputs: [
     { name: 'token', type: 'address' }, { name: 'owner', type: 'address' }, { name: 'value', type: 'uint256' },
     { name: 'deadline', type: 'uint256' }, { name: 'signature', type: 'bytes' }] },
+  { type: 'function', name: 'transferWithAuthorization', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
+    { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] },
   { type: 'function', name: 'gatewayMint', stateMutability: 'nonpayable', outputs: [], inputs: [
     { name: 'attestationPayload', type: 'bytes' }, { name: 'signature', type: 'bytes' }] },
   { type: 'function', name: 'receiveMessage', stateMutability: 'nonpayable', outputs: [{ type: 'bool' }], inputs: [
@@ -296,6 +304,11 @@ export async function checkRelayable(to: string, data: `0x${string}`, caller: st
     if (String(call.args[1]).toLowerCase() !== caller) return 'You can only deposit from your own wallet'
     // Dust deposits would let anyone burn relayer gas for free.
     if (BigInt(call.args[2] as bigint) < MIN_TOTAL_UNITS) return 'Amount is below the minimum'
+    return null
+  }
+  // Business refund on the payment's own chain (USDC and payment checked in relayCall).
+  if (call.functionName === 'transferWithAuthorization') {
+    if (String(call.args[0]).toLowerCase() !== caller) return 'You can only send from your own wallet'
     return null
   }
   if (call.functionName === 'gatewayMint') return target === GATEWAY_MINTER ? null : 'This call cannot be relayed'
@@ -391,6 +404,47 @@ function allowRelay(wallet: string): boolean {
   return true
 }
 
+// transferWithAuthorization(address,address,uint256,uint256,uint256,bytes32,uint8,bytes32,bytes32)
+const TRANSFER_WITH_AUTH_SELECTOR = '0xe3ee160e'
+
+/**
+ * A relayed USDC transfer must be a Business refund (null = ok): the chain's
+ * USDC, from the merchant to the wallet that paid them on this chain, no more
+ * than that payment, and the payment not refunded yet.
+ */
+async function checkRefundTransfer(chainKey: string, to: string, data: `0x${string}`, caller: string, refundFor: any): Promise<string | null> {
+  const usdc = CHAINS[chainKey]?.usdc
+  if (!usdc || to.toLowerCase() !== usdc.toLowerCase()) return 'Not this chain\'s USDC'
+  const { decodeFunctionData } = await import('viem')
+  const call = decodeFunctionData({ abi: RELAYABLE_ABI, data }) as any
+  const customer = String(call.args[1]).toLowerCase()
+  const value = BigInt(call.args[2])
+  const supabaseUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim()
+  const svcKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || '').trim()
+  if (!supabaseUrl || !svcKey) return 'Server misconfigured'
+  const get = async (path: string) => {
+    const r = await fetch(`${supabaseUrl}/rest/v1/${path}`, { headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` } })
+    return r.ok ? ((await r.json().catch(() => [])) as any[]) : null
+  }
+  const id = String(refundFor?.paymentId || refundFor?.receiptId || '')
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return 'Missing payment'
+  const isReceipt = !!refundFor?.receiptId
+  const rows = await get(isReceipt
+    ? `merchant_chain_receipts?id=eq.${id}&select=merchant_wallet,from_address,source_chain,amount&limit=1`
+    : `merchant_payments?id=eq.${id}&select=merchant_wallet,from_address,source_chain,amount&limit=1`)
+  if (!rows) return 'Could not verify this payment - please try again'
+  const p = rows[0]
+  if (!p) return 'Unknown payment'
+  if (String(p.merchant_wallet).toLowerCase() !== caller) return 'Not your payment'
+  if (String(p.from_address).toLowerCase() !== customer) return 'Refunds go back to the wallet that paid'
+  if ((CHAIN_ALIASES[p.source_chain] ?? p.source_chain) !== chainKey) return 'Refund on the chain it was paid on'
+  if (value <= 0n || value > BigInt(Math.round(Number(p.amount) * 1e6))) return 'More than this payment'
+  const done = await get(`merchant_refunds?${isReceipt ? 'receipt_id' : 'payment_id'}=eq.${id}&select=id&limit=1`)
+  if (!done) return 'Could not verify this payment - please try again'
+  if (done.length) return 'Already refunded'
+  return null
+}
+
 // cancelTrade(bytes32) - see the seller check in relayCall.
 const CANCEL_TRADE_SELECTOR = '0x7cfb41b8'
 // registerTrade(bytes32,bytes32,address,uint256) - see checkP2PRegistration.
@@ -438,6 +492,10 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
     // Only for a real order: the trade row must exist, be this buyer's, still
     // awaiting registration, on an instant-order ad, for this exact amount.
     const why = await checkP2PRegistration(String((req.body as any)?.p2pTradeId ?? ''), data, caller)
+    if (why) return res.status(400).json({ error: why })
+  }
+  if (data.slice(0, 10).toLowerCase() === TRANSFER_WITH_AUTH_SELECTOR) {
+    const why = await checkRefundTransfer(chainKey, to, data, caller, (req.body as any)?.refundFor)
     if (why) return res.status(400).json({ error: why })
   }
   if (data.slice(0, 10).toLowerCase() === CANCEL_TRADE_SELECTOR) {

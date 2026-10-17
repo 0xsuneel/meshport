@@ -1,7 +1,12 @@
 // Merchant refunds - Business → payment → Refund.
 //
-// The merchant's own wallet sends the refund from its Arc balance, one of
-// two ways (the key signs here and never leaves the device):
+// The merchant's own wallet sends the refund (the key signs here and never
+// leaves the device), one of three ways:
+//   'chain'  from the merchant's USDC on the chain the customer paid on (the
+//            money is still there): an EIP-3009 transferWithAuthorization to
+//            the payer, signed here and submitted by MeshPort's relayer
+//            (/api/bridge-relay), so no gas token is needed. The relayer only
+//            sends it for a real, unrefunded payment from that wallet.
 //   'arc'    on Arc through the MeshPortRefunds contract (written, tested and
 //            deployed with Arc Studio): refund(paymentRef, customer, reason)
 //            with the USDC as the transaction value; one refund per payment
@@ -43,8 +48,8 @@ const MESSENGER = [
   { type: 'function', name: 'depositForBurnWithHook', stateMutability: 'nonpayable', inputs: [...BURN_ARGS, { name: 'hookData', type: 'bytes' }], outputs: [] },
 ] as const
 
-export type RefundRoute = 'arc' | 'origin'
-export type MerchantRefund = { id: string; paymentId: string; amount: number; reason: string; txHash: string; createdAt: string; chain: string; route: 'contract' | 'cctp' }
+export type RefundRoute = 'chain' | 'arc' | 'origin'
+export type MerchantRefund = { id: string; paymentId: string; amount: number; reason: string; txHash: string; createdAt: string; chain: string; route: 'contract' | 'cctp' | 'chain' }
 const mapRefund = (r: any): MerchantRefund => ({ id: r.id, paymentId: r.payment_id ?? `rcpt_${r.receipt_id}`, amount: Number(r.amount), reason: r.reason ?? '',
   txHash: r.tx_hash, createdAt: r.created_at, chain: r.refund_chain ?? 'Arc_Testnet', route: r.route ?? 'contract' })
 
@@ -65,7 +70,7 @@ export function subscribeMyRefunds(onChange: () => void): () => void {
   return () => { supabase.removeChannel(ch) }
 }
 
-async function record(target: { paymentId?: string; receiptId?: string }, txHash: string, route: 'contract' | 'cctp', reason: string): Promise<MerchantRefund> {
+async function record(target: { paymentId?: string; receiptId?: string }, txHash: string, route: 'contract' | 'cctp' | 'chain', reason: string): Promise<MerchantRefund> {
   for (let i = 0; i < 6; i++) {
     const { data, error } = await supabase.functions.invoke('merchant-refund', { body: { action: 'record', ...target, txHash, route, reason } })
     if (error) throw new Error(await describeFunctionsError(error, 'Could not record the refund'))
@@ -127,6 +132,12 @@ export async function refundPayment(p: {
   const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 250 })
   const balance = await publicClient.getBalance({ address: account.address }) // 18 decimals
   const reason = p.reason.slice(0, 140)
+
+  if (p.route === 'chain' && p.chain && p.chain !== 'Arc_Testnet') {
+    const hash = await transferOnChain({ chain: p.chain, account, to: p.customer as Hex, amount: p.amount, target })
+    void import('@/blockchain/BlockchainManager').then(m => m.notifyExternalBalanceChanged(p.chain!, account.address, { spent: p.amount })).catch(() => {})
+    return record(target, hash, 'chain', reason)
+  }
 
   if (p.route === 'origin' && p.chain && canRefundOnChain(p.chain)) {
     const amount = BigInt(Math.round(p.amount * 1e6))
@@ -197,4 +208,69 @@ export async function checkRefundableSender(chain: string, from: string): Promis
   }
   if (out.refundable || out.reason?.startsWith('Paid')) senderCache.set(key, out)
   return out
+}
+
+// ── Refund from the payment's own chain ──────────────────────────────────
+const USDC_ABI = [
+  { type: 'function', name: 'name', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'version', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ type: 'address' }], outputs: [{ type: 'uint256' }] },
+  { type: 'function', name: 'transferWithAuthorization', stateMutability: 'nonpayable', outputs: [], inputs: [
+    { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
+    { name: 'v', type: 'uint8' }, { name: 'r', type: 'bytes32' }, { name: 's', type: 'bytes32' }] },
+] as const
+
+/** USDC the merchant still holds on that chain (6 dp), or null when unreadable. */
+export async function chainUsdcBalance(chain: string, wallet: string): Promise<number | null> {
+  try {
+    const { readExternalChainBalance } = await import('@/blockchain/BlockchainManager')
+    return await readExternalChainBalance(chain as never, wallet)
+  } catch { return null }
+}
+
+async function transferOnChain(p: { chain: string; account: ReturnType<typeof privateKeyToAccount>; to: Hex; amount: number; target: { paymentId?: string; receiptId?: string } }): Promise<Hash> {
+  const { EXTERNAL_CHAINS } = await import('@/blockchain/chains')
+  const cfg = EXTERNAL_CHAINS[p.chain]
+  if (!cfg || typeof cfg.chainId !== 'number') throw new Error('Refunds on this chain are not available')
+  const { http, parseSignature, toHex } = await import('viem')
+  const usdc = cfg.usdc as Hex
+  const value = BigInt(Math.round(p.amount * 1e6))
+  // Name/version for the EIP-712 domain and the balance, from the chain itself.
+  let read: any = null
+  for (const url of cfg.rpcs) {
+    try {
+      const c: any = createPublicClient({ transport: http(url, { timeout: 8000 }) })
+      const [name, version, bal] = await Promise.all([
+        c.readContract({ address: usdc, abi: USDC_ABI, functionName: 'name' }),
+        c.readContract({ address: usdc, abi: USDC_ABI, functionName: 'version' }),
+        c.readContract({ address: usdc, abi: USDC_ABI, functionName: 'balanceOf', args: [p.account.address] }),
+      ])
+      read = { name, version, bal }; break
+    } catch { /* next RPC */ }
+  }
+  if (!read) throw new Error('Could not reach this chain - try again')
+  if ((read.bal as bigint) < value) throw new Error('Not enough USDC left on this chain (it may already be settled to Arc) - refund on Arc instead')
+
+  const nonce = toHex(crypto.getRandomValues(new Uint8Array(32)))
+  const validBefore = BigInt(Math.floor(Date.now() / 1000) + 60 * 60)
+  const signature = await p.account.signTypedData({
+    domain: { name: read.name, version: read.version, chainId: cfg.chainId, verifyingContract: usdc },
+    types: { TransferWithAuthorization: [
+      { name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' },
+      { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' },
+    ] },
+    primaryType: 'TransferWithAuthorization',
+    message: { from: p.account.address, to: p.to, value, validAfter: 0n, validBefore, nonce },
+  })
+  const sig = parseSignature(signature)
+  const data = encodeFunctionData({ abi: USDC_ABI, functionName: 'transferWithAuthorization',
+    args: [p.account.address, p.to, value, 0n, validBefore, nonce, Number(sig.v ?? BigInt(27 + (sig.yParity ?? 0))), sig.r, sig.s] })
+
+  const { authApiHeaders } = await import('@/lib/supabase')
+  const r = await fetch('/api/bridge-relay', { method: 'POST', headers: await authApiHeaders(),
+    body: JSON.stringify({ action: 'call', chain: p.chain, to: usdc, data, refundFor: p.target }) })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok || !j.txHash) throw new Error(j.error || 'Could not send the refund')
+  return j.txHash as Hash
 }
