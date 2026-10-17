@@ -64,6 +64,12 @@ export interface OverviewViewProps {
     chainCount: number
     /** Chains holding the money, for the logo stack and "On Base, …" line */
     chains?: { label: string; logo?: string }[]
+    /** Still reading the other chains' balances */
+    checking?: boolean
+    /** Arc logo for the "all on Arc" state */
+    arcLogo?: string
+    /** Staff mode: settling is the owner's, so no bar */
+    hidden?: boolean
   }
   refunded: {
     total: string
@@ -172,41 +178,52 @@ export function OverviewView({
         </div>
       </FadeUp>
 
-      {/* ── Settle bar / refunds ────────────────────────────────────────── */}
-      {!loading && (hasSettle || refunded.count > 0) && (
-        <FadeUp delay={0.12} className="mx-5 flex flex-col gap-2">
-          {hasSettle && (
-            <div className="flex items-center gap-3 rounded-[18px] bg-card border border-border/70 px-3.5 py-3">
-              <span className="flex shrink-0">
-                {chains.slice(0, 3).map((c, i) => (
-                  <ChainLogo key={c.label} src={c.logo} label={c.label} size={24}
-                    className={`ring-2 ring-card rounded-full ${i > 0 ? '-ml-2' : ''}`} />
-                ))}
-              </span>
-              <span className="flex-1 min-w-0">
-                <span className="block text-sm font-semibold text-text-primary">{toSettle.total} to settle</span>
-                <span className="block text-xs text-text-muted truncate">
-                  {chains.length ? `On ${chains.map(c => c.label).join(', ')}` : `On ${toSettle.chainCount} chain${toSettle.chainCount > 1 ? 's' : ''}`}
+      {/* ── Settle bar (always) / refunds ──────────────────────────────── */}
+      <FadeUp delay={0.12} className="mx-5 flex flex-col gap-2">
+        {!toSettle.hidden && <div className="flex items-center gap-3 rounded-[18px] bg-card border border-border/70 px-3.5 py-3">
+          <span className="flex shrink-0">
+            {hasSettle ? chains.slice(0, 3).map((c, i) => (
+              <ChainLogo key={c.label} src={c.logo} label={c.label} size={28}
+                className={`ring-2 ring-card rounded-full ${i > 0 ? '-ml-2.5' : ''}`} />
+            )) : (
+              <ChainLogo src={toSettle.arcLogo} label="Arc" size={28} className="rounded-full" />
+            )}
+          </span>
+          <span className="flex-1 min-w-0">
+            {toSettle.checking && !hasSettle ? (
+              <>
+                <Skeleton className="h-4 w-28 mb-1.5" />
+                <Skeleton className="h-3 w-36" />
+              </>
+            ) : (
+              <>
+                <span className="block text-sm font-semibold text-text-primary">
+                  {hasSettle ? `${toSettle.total} to settle` : 'Nothing to settle'}
                 </span>
-              </span>
-              <button type="button" onClick={onToSettle}
-                className="shrink-0 min-h-[40px] px-4 rounded-xl bg-brand/10 text-brand-text text-[13px] font-semibold active:bg-brand/20 transition-colors">
-                Settle
-              </button>
-            </div>
-          )}
-          {refunded.count > 0 && (
-            <button type="button" onClick={onRefunded}
-              className="flex items-center gap-3 rounded-[18px] bg-card border border-border/70 px-3.5 py-3 text-left active:bg-border/20 transition-colors">
-              <span className="flex items-center justify-center size-6 rounded-full bg-surface text-text-muted"><RotateCcw className="size-3.5" /></span>
-              <span className="flex-1 text-sm text-text-secondary">
-                <b className="font-semibold text-text-primary">{refunded.total}</b> refunded · {refunded.count} payment{refunded.count > 1 ? 's' : ''}
-              </span>
-              <ChevronRight className="size-4 text-text-muted" />
-            </button>
-          )}
-        </FadeUp>
-      )}
+                <span className="block text-xs text-text-muted truncate">
+                  {hasSettle
+                    ? (chains.length ? `On ${chains.map(c => c.label).join(', ')}` : `On ${toSettle.chainCount} chain${toSettle.chainCount > 1 ? 's' : ''}`)
+                    : 'All your USDC is on Arc'}
+                </span>
+              </>
+            )}
+          </span>
+          <button type="button" onClick={onToSettle}
+            className={`shrink-0 min-h-[40px] px-4 rounded-xl text-[13px] font-semibold transition-colors ${hasSettle ? 'bg-brand/10 text-brand-text active:bg-brand/20' : 'bg-surface text-text-secondary active:bg-border/40'}`}>
+            {hasSettle ? 'Settle' : 'View'}
+          </button>
+        </div>}
+        {!loading && refunded.count > 0 && (
+          <button type="button" onClick={onRefunded}
+            className="flex items-center gap-3 rounded-[18px] bg-card border border-border/70 px-3.5 py-3 text-left active:bg-border/20 transition-colors">
+            <span className="flex items-center justify-center size-6 rounded-full bg-surface text-text-muted"><RotateCcw className="size-3.5" /></span>
+            <span className="flex-1 text-sm text-text-secondary">
+              <b className="font-semibold text-text-primary">{refunded.total}</b> refunded · {refunded.count} payment{refunded.count > 1 ? 's' : ''}
+            </span>
+            <ChevronRight className="size-4 text-text-muted" />
+          </button>
+        )}
+      </FadeUp>
 
       {/* ── Recent payments ─────────────────────────────────────────────── */}
       <FadeUp delay={0.16} className="mx-5">
