@@ -365,7 +365,7 @@ function OwnerBusinessPage() {
         )}
         {tab === 'payments' && <div className="px-5 pt-2">
           <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Payments or my requests">
-            {([['payments', 'Payments'], ['requests', 'My requests']] as const).map(([id, label]) => (
+            {([['payments', 'Payments'], ['requests', 'Orders']] as const).map(([id, label]) => (
               <button key={id} type="button" role="tab" aria-selected={payView === id} onClick={() => setPayView(id)}
                 className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${payView === id ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
                 {label}

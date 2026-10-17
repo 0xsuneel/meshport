@@ -38,7 +38,7 @@ import {
 import { usePrint } from './printArea'
 import { salesByHour, hourLabel, statementRows, rangeLabel, rangeStart, exportPaymentsCsv } from './reports'
 import type { MerchantRefund } from '@/lib/merchantRefunds'
-import { submitPayment, listUnmatchedDeposits, assignDeposit, type UnmatchedDeposit } from '@/lib/merchantPay'
+import { submitPayment, displayOrderNumber, listUnmatchedDeposits, assignDeposit, type UnmatchedDeposit } from '@/lib/merchantPay'
 import { chainLabel } from './settlement'
 
 /** How Charge / Payment link / Bill create requests: the owner's own
@@ -322,7 +322,16 @@ export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBa
 
 // ── Requests ─────────────────────────────────────────────────────────────
 
-const FILTERS = [{ id: 'open', label: 'Open' }, { id: 'paid', label: 'Paid' }, { id: 'all', label: 'All' }]
+// Orders by status: Open (waiting), Partly paid, Paid (incl. completed), Cancelled, Expired.
+const FILTERS = [
+  { id: 'open', label: 'Open' }, { id: 'part', label: 'Partly paid' }, { id: 'paid', label: 'Paid' },
+  { id: 'cancelled', label: 'Cancelled' }, { id: 'expired', label: 'Expired' }, { id: 'all', label: 'All' },
+] as const
+type OrderFilter = typeof FILTERS[number]['id']
+const EMPTY: Record<OrderFilter, string> = {
+  open: 'No open orders', part: 'No partly paid orders', paid: 'Nothing paid yet',
+  cancelled: 'No cancelled orders', expired: 'No expired orders', all: 'No orders yet',
+}
 
 function requestStatus(i: MerchantIntent): RequestStatus {
   if (i.status === 'paid') return i.completedByMerchant ? 'completed' : 'paid'
@@ -330,13 +339,16 @@ function requestStatus(i: MerchantIntent): RequestStatus {
   if (i.status === 'expired' || isExpired(i)) return 'expired'
   return i.status === 'partially_paid' ? 'part' : 'open'
 }
+const filterOf = (s: RequestStatus): OrderFilter => (s === 'completed' ? 'paid' : s) as OrderFilter
 
-/** Business → Payments → "My requests": what the business asked to be paid
- *  (Receive amounts and bills), with copy link / complete / cancel. */
+/** Business → Payments → Orders: everything the business asked to be paid
+ *  (Receive amounts, bills, Shop QR orders), by status, with copy link /
+ *  complete / cancel. */
 export function RequestsList({ active, storeId }: { active: boolean; storeId?: string | null }) {
   const toast = useUIStore(s => s.showToastMessage)
   const [list, setList] = useState<MerchantIntent[] | null>(null)
-  const [filter, setFilter] = useState('open')
+  const [filter, setFilter] = useState<OrderFilter>('open')
+  const [query, setQuery] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const { copy } = useShare()
@@ -344,15 +356,25 @@ export function RequestsList({ active, storeId }: { active: boolean; storeId?: s
   const load = () => listMyIntents(200).then(setList).catch(() => setList([]))
   useEffect(() => { if (active) { setList(null); void load() } }, [active])
 
-  const shown = (list ?? []).filter(i => !storeId || i.storeId === storeId).filter(i => {
-    const s = requestStatus(i)
-    return filter === 'all' || (filter === 'paid' ? s === 'paid' || s === 'completed' : s === 'open' || s === 'part')
-  })
+  const inStore = (list ?? []).filter(i => !storeId || i.storeId === storeId)
+  const counts = useMemo(() => {
+    const c: Record<OrderFilter, number> = { open: 0, part: 0, paid: 0, cancelled: 0, expired: 0, all: inStore.length }
+    for (const i of inStore) c[filterOf(requestStatus(i))]++
+    return c
+  }, [inStore])
+  const q = query.trim().toLowerCase().replace(/^#/, '')
+  const shown = inStore
+    .filter(i => filter === 'all' || filterOf(requestStatus(i)) === filter)
+    .filter(i => !q || [i.orderNumber, i.orderNumber && displayOrderNumber(i.orderNumber), i.customerUsername, i.note, i.code, i.amount.toFixed(2)]
+      .some(v => v && String(v).toLowerCase().includes(q)))
+  // What is still owed on the orders in view that can be paid.
+  const due = shown.reduce((sum, i) => { const s = requestStatus(i); return s === 'open' || s === 'part' ? sum + Math.max(0, i.amount - i.received) : sum }, 0)
+
   const act = async (i: MerchantIntent, what: 'cancel' | 'complete') => {
     setBusy(i.id)
     try {
       await (what === 'cancel' ? cancelPayment(i.code) : completeOrder(i.code))
-      toast(what === 'cancel' ? 'Request cancelled' : 'Marked as completed', 'success')
+      toast(what === 'cancel' ? 'Order cancelled' : 'Marked as completed', 'success')
       await load()
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not update', 'error') }
     setBusy(null)
@@ -360,15 +382,32 @@ export function RequestsList({ active, storeId }: { active: boolean; storeId?: s
 
   return (
     <>
-      <div className="px-5 pt-3 pb-4"><ChipSelect options={FILTERS} value={filter} onChange={setFilter} /></div>
+      <div className="px-5 pt-3">
+        <SearchField value={query} onChange={setQuery} ariaLabel="Search orders" placeholder={['Search order, customer or note', 'Order, customer, note', 'Search']} />
+      </div>
+      <div className="flex gap-2 overflow-x-auto px-5 pt-3 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Order status">
+        {FILTERS.map(f => {
+          const on = f.id === filter
+          return (
+            <button key={f.id} type="button" role="tab" aria-selected={on} onClick={() => setFilter(f.id)}
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3.5 min-h-[36px] text-xs font-semibold transition-colors ${on ? 'bg-brand text-white' : 'bg-surface border border-border text-text-secondary'}`}>
+              {f.label}
+              {counts[f.id] > 0 && <span className={`tabular-nums ${on ? 'text-white/80' : 'text-text-muted'}`}>{counts[f.id]}</span>}
+            </button>
+          )
+        })}
+      </div>
+      {list !== null && shown.length > 0 && (filter === 'open' || filter === 'part' || filter === 'all') && due > 0 && (
+        <p className="px-5 pb-2 text-xs text-text-muted">{money(due)} still to collect</p>
+      )}
       <div className="px-5 pb-6">
         {list === null ? (
           <div className="flex flex-col gap-3">{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
         ) : shown.length === 0 ? (
           <div className="flex flex-col items-center text-center py-16">
             <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-surface border border-border mb-3"><Clock className="size-5 text-text-muted" /></span>
-            <p className="text-sm font-medium text-text-secondary">{filter === 'open' ? 'No open requests' : filter === 'paid' ? 'Nothing paid yet' : 'No requests yet'}</p>
-            <p className="text-xs text-text-muted mt-1">Amounts and bills you create with Receive show up here.</p>
+            <p className="text-sm font-medium text-text-secondary">{q ? 'No orders match your search' : EMPTY[filter]}</p>
+            {!q && <p className="text-xs text-text-muted mt-1">Amounts and bills you create with Receive show up here.</p>}
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -377,8 +416,9 @@ export function RequestsList({ active, storeId }: { active: boolean; storeId?: s
               const live = status === 'open' || status === 'part'
               return (
                 <RequestRow key={i.id} kind={i.kind} status={status} amount={money(i.amount)}
-                  title={i.note || (i.kind === 'invoice' ? 'Bill' : 'Payment request')}
-                  sub={[i.orderNumber, i.customerUsername && `${i.customerUsername}.arc`, new Date(i.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })].filter(Boolean).join(' · ')}
+                  title={i.note || (i.kind === 'invoice' ? 'Bill' : i.via === 'shop_qr' ? 'Shop QR' : 'Payment request')}
+                  sub={[i.orderNumber && displayOrderNumber(i.orderNumber), status === 'part' && `${money(i.received)} received`, i.customerUsername && `${i.customerUsername}.arc`,
+                    new Date(i.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })].filter(Boolean).join(' · ')}
                   expanded={openId === i.id} onToggle={() => setOpenId(openId === i.id ? null : i.id)}
                   actions={[
                     { label: 'Copy link', tone: 'neutral', onClick: () => { void copy(paymentLink(i.code)); toast('Link copied', 'success') } },
