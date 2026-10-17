@@ -138,12 +138,21 @@ function OwnerBusinessPage() {
   const waitingOn = new Set((chains ?? []).map(c => c.id))
 
   // A payment on another chain is "to settle" while that chain still holds USDC.
-  const payments: Payment[] = useMemo(() => periodRaw.map(p => ({
+  const toRow = (p: MerchantPayment): Payment => ({
     id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain), chainLogo: chainLogoSrc(p.chain),
     time: p.createdAt, order: p.orderNumber ?? undefined,
     status: refundOf.has(p.id) ? 'refunded' as const
       : p.chain !== 'Arc_Testnet' && p.status !== 'collected' && waitingOn.has(p.chain) ? 'to_settle' as const : 'received' as const,
-  })), [periodRaw, chains, refundOf])
+  })
+  const payments: Payment[] = useMemo(() => periodRaw.map(toRow), [periodRaw, chains, refundOf])
+  // Payments screen: every payment, grouped by day (Today, Yesterday… are
+  // its headers), narrowed only by its own Filter (7 days, month, a range).
+  const [payRange, setPayRange] = useState<{ id: 'all' | 'week' | 'month' | 'custom'; from?: string; to?: string }>({ id: 'all' })
+  const payList: Payment[] = useMemo(() => {
+    const r = payRange.id === 'all' ? null : makePeriod(payRange.id, { from: payRange.from ?? '', to: payRange.to ?? '' })
+    return (r ? storeRaw.filter(p => inPeriod(p.createdAt, r)) : storeRaw).map(toRow)
+  }, [storeRaw, payRange, chains, refundOf])
+  const [rangeFor, setRangeFor] = useState<'overview' | 'payments'>('overview')
 
   const today = useMemo(() => {
     const t = periodRaw.filter(p => !refundOf.has(p.id))
@@ -335,8 +344,9 @@ function OwnerBusinessPage() {
         )}
         {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} />}
         {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter}
-          period={{ id: periodSel.id, label: period.label }} onPeriod={id => choosePeriod({ ...periodSel, id })}
-          onCustomPeriod={() => setRangeSheet({ from: periodSel.from, to: periodSel.to })} loading={!loaded} payments={payments} onPayment={setDetail} />}
+          period={{ id: payRange.id, label: payRange.id === 'custom' ? makePeriod('custom', { from: payRange.from ?? '', to: payRange.to ?? '' }).label : payRange.id === 'week' ? 'Last 7 days' : payRange.id === 'month' ? 'This month' : 'All' }}
+          onPeriod={id => setPayRange({ id: id as 'all' | 'week' | 'month' })}
+          onCustomPeriod={() => { setRangeFor('payments'); setRangeSheet({ from: payRange.from ?? '', to: payRange.to ?? '' }) }} loading={!loaded} payments={payList} onPayment={setDetail} />}
         {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out"
           action={<button type="button" onClick={open('cashout')} className="shrink-0 min-h-[40px] px-4 rounded-xl bg-brand text-white text-[13px] font-semibold active:opacity-90">Cash out</button>} /></div>}
         {tab === 'settlements' && (
@@ -420,7 +430,13 @@ function OwnerBusinessPage() {
             : { from: iso(new Date(d.getFullYear(), 0, 1)), to: iso(d) }
           setRangeSheet(r)
         }}
-        onApply={() => { if (rangeSheet?.from && rangeSheet.to) choosePeriod({ id: 'custom', ...rangeSheet }); setRangeSheet(null) }}
+        onApply={() => {
+          if (rangeSheet?.from && rangeSheet.to) {
+            if (rangeFor === 'payments') setPayRange({ id: 'custom', ...rangeSheet })
+            else choosePeriod({ id: 'custom', ...rangeSheet })
+          }
+          setRangeSheet(null); setRangeFor('overview')
+        }}
         onClose={() => setRangeSheet(null)} />
 
       <PeriodSheet open={periodSheet} value={periodSel.id} customLabel={period.id === 'custom' ? period.label : undefined}
