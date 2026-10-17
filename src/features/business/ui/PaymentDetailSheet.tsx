@@ -3,7 +3,7 @@
  * Supports received, to_settle, and refunded statuses.
  */
 import React from 'react'
-import { ExternalLink, ArrowDownToLine, RotateCcw, FileText, MessageCircle } from 'lucide-react'
+import { ExternalLink, ArrowDownToLine, RotateCcw, FileText, MessageCircle, Copy } from 'lucide-react'
 import type { Payment } from './types'
 import { formatTime } from './types'
 import { Sheet } from './primitives'
@@ -32,6 +32,9 @@ export interface PaymentDetailSheetProps {
   onChat?: () => void
   /** Store the payment belongs to */
   store?: string
+  /** Payer's full wallet when they have no MeshPort account (Copy address) */
+  wallet?: string
+  onCopyWallet?: () => void
 }
 
 // Customer card + round actions (designs 4 and 3): who paid and how often,
@@ -64,9 +67,12 @@ function RoundAction({ label, onClick, href, tone = 'brand', children }: {
 }
 
 export function PaymentDetailSheet({
-  payment, explorerUrl, onClose, onSettle, onRefund, onReceipt, refundNote, refund, customer, onChat, store,
+  payment, explorerUrl, onClose, onSettle, onRefund, onReceipt, refundNote, refund, customer, onChat, store, wallet, onCopyWallet,
 }: PaymentDetailSheetProps) {
   const isRefunded = payment?.status === 'refunded'
+  // Paid through a bridge: there's no paying wallet on that chain.
+  const bridge = !!payment && /^0x0{4}…0{4}$/i.test(payment.from)
+  const payerName = bridge ? 'Bridge payment' : payment?.from ?? ''
   const toSettle = payment?.status === 'to_settle'
   const steps = payment ? [
     { label: `Paid on ${payment.chainLabel}`, done: true },
@@ -83,19 +89,26 @@ export function PaymentDetailSheet({
           <div className="flex items-center gap-3 rounded-2xl bg-bg border border-border p-3.5">
             <span className="shrink-0 rounded-full p-[2px] bg-brand" style={{ width: 48, height: 48 }}>
               <span className="flex items-center justify-center w-full h-full rounded-full bg-brand text-white font-bold" style={{ border: '2px solid var(--bg)' }}>
-                {initial(payment.from)}
+                {bridge ? '⇄' : initial(payment.from)}
               </span>
             </span>
             <span className="flex-1 min-w-0">
-              <span className="block text-[15px] font-bold text-text-primary truncate">{payment.from}</span>
+              <span className="block text-[15px] font-bold text-text-primary truncate">{payerName}</span>
               <span className="block text-xs text-text-muted truncate">
-                {customer && customer.payments > 1 ? `Regular · ${customer.payments} payments · ${customer.total} total` : 'First payment'}
+                {bridge ? 'Sent through a bridge · no wallet to refund'
+                  : `${onChat ? '' : 'Not on MeshPort · '}${customer && customer.payments > 1 ? `${customer.payments} payments · ${customer.total} total` : 'First payment'}`}
               </span>
             </span>
             {onChat && (
               <button type="button" onClick={onChat}
                 className="shrink-0 inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-full border border-border text-[13px] font-semibold text-text-primary active:bg-border/30">
                 <MessageCircle className="size-4" /> Chat
+              </button>
+            )}
+            {!onChat && !bridge && wallet && onCopyWallet && (
+              <button type="button" onClick={onCopyWallet}
+                className="shrink-0 inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-full border border-border text-[13px] font-semibold text-text-primary active:bg-border/30">
+                <Copy className="size-4" /> Copy
               </button>
             )}
           </div>
