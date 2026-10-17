@@ -22,3 +22,18 @@ export async function getShopInfo(username: string, storeId: string | null): Pro
   return info
 }
 
+
+export type ShopLimits = { min: number | null; max: number | null }
+
+/** The smallest / largest amount a customer may type on this shop's page. */
+export async function getShopLimits(username: string): Promise<ShopLimits> {
+  const { data } = await supabase.rpc('shop_limits', { p_username: username })
+  const r = Array.isArray(data) ? data[0] : data
+  return { min: r?.min_amount != null ? Number(r.min_amount) : null, max: r?.max_amount != null ? Number(r.max_amount) : null }
+}
+
+/** Owner: set (or clear with null) the limits for the Shop QR and payment link. */
+export async function setShopLimits(min: number | null, max: number | null): Promise<void> {
+  const { error } = await supabase.rpc('set_shop_limits', { p_min: min, p_max: max })
+  if (error) throw new Error(error.message)
+}

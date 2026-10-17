@@ -7,7 +7,7 @@ import {
   Banknote, FileText, BarChart2,
   Store, Users, Mic,
   ShieldCheck, HelpCircle, QrCode,
-  ChevronRight, Clock, ArrowLeftRight,
+  ChevronRight, Clock, ArrowLeftRight, Send,
 } from 'lucide-react'
 import { Sheet } from './primitives'
 
@@ -25,6 +25,7 @@ export type MenuIconId =
   | 'sticker'
   | 'requests'
   | 'settlements'
+  | 'payouts'
 
 export interface MenuItem {
   id: string
@@ -53,6 +54,7 @@ const ICON_MAP: Record<MenuIconId, React.ElementType> = {
   statement: FileText,
   requests: Clock,
   settlements: ArrowLeftRight,
+  payouts:   Send,
   insights:  BarChart2,
   stores:    Store,
   staff:     Users,
@@ -65,6 +67,7 @@ const ICON_MAP: Record<MenuIconId, React.ElementType> = {
 // Icon background tones per icon (subtle, brand-adjacent)
 const ICON_TONE: Partial<Record<MenuIconId, string>> = {
   cashout:   'bg-success/10 text-success',
+  payouts:   'bg-brand/10 text-brand-text',
   statement: 'bg-brand/10 text-brand-text',
   insights:  'bg-brand/10 text-brand-text',
   stores:    'bg-warning/10 text-warning',

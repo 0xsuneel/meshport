@@ -52,7 +52,7 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
     setError(''); setStep('working')
     try {
       // Arc: native USDC send. Other chains: USDC token transfer there.
-      const h = isArc ? await payArcFromBrowserWallet(w, to, value) : await payWithBrowserWallet(w, chain, to, value)
+      const h = isArc ? await payArcFromBrowserWallet(w, to, value, code ? { code, orderNumber } : undefined) : await payWithBrowserWallet(w, chain, to, value)
       setHash(h)
       if (code) {
         setStep('confirming')

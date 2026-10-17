@@ -27,6 +27,7 @@ import {
 import { speakPayment } from '@/lib/voiceAlerts'
 import { timeAgo } from '@/lib/utils'
 import { listItems, rememberItems, deleteItem, type SavedItem } from '@/lib/businessItems'
+import { getShopLimits, setShopLimits } from '@/lib/shop'
 import { SearchField } from '@/components/ui/SearchField'
 import {
   BusinessScreen, QrCard, AmountKeypad, LiveStatus, ShareLink, Field, TextInput, ChipSelect, BillItemsEditor,
@@ -466,6 +467,50 @@ function InsightsBody({ payments, waiting, period, scope }: {
 
 // ── Business profile / approval ──────────────────────────────────────────
 
+/** Smallest / largest amount customers can type on the business QR and payment link. */
+function ShopLimitsCard({ open, handle }: { open: boolean; handle: string }) {
+  const toast = useUIStore(s => s.showToastMessage)
+  const [min, setMin] = useState('')
+  const [max, setMax] = useState('')
+  const [saved, setSaved] = useState({ min: '', max: '' })
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    getShopLimits(handle).then(l => {
+      const v = { min: l.min != null ? String(l.min) : '', max: l.max != null ? String(l.max) : '' }
+      setSaved(v); setMin(v.min); setMax(v.max)
+    }).catch(() => {})
+  }, [open, handle])
+  const num = (v: string) => (v.trim() ? Number(v) : null)
+  const lo = num(min), hi = num(max)
+  const err = (lo != null && !(lo >= 0.01)) || (hi != null && !(hi >= 0.01)) ? 'Enter amounts of at least $0.01'
+    : lo != null && hi != null && lo > hi ? 'Minimum is more than the maximum' : null
+  const save = async () => {
+    setBusy(true)
+    try { await setShopLimits(lo, hi); setSaved({ min, max }); toast(lo == null && hi == null ? 'Limits removed' : 'Limits saved', 'success') }
+    catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
+    setBusy(false)
+  }
+  const clean = (v: string) => v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').slice(0, 9)
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl bg-surface border border-border p-4">
+      <span>
+        <span className="block text-sm font-semibold text-text-primary">Payment limits</span>
+        <span className="block text-xs text-text-muted">For amounts customers type on your QR and payment link. Leave empty for no limit.</span>
+      </span>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Minimum ($)"><TextInput inputMode="decimal" value={min} onChange={e => setMin(clean(e.target.value))} placeholder="No minimum" /></Field>
+        <Field label="Maximum ($)"><TextInput inputMode="decimal" value={max} onChange={e => setMax(clean(e.target.value))} placeholder="No maximum" /></Field>
+      </div>
+      {err && <p className="text-xs font-semibold text-danger">{err}</p>}
+      <button type="button" onClick={save} disabled={busy || !!err || (min === saved.min && max === saved.max)}
+        className="min-h-[44px] rounded-2xl bg-brand text-white text-sm font-semibold disabled:opacity-40">
+        {busy ? 'Saving…' : 'Save limits'}
+      </button>
+    </div>
+  )
+}
+
 export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack: () => void; handle: string }) {
   const toast = useUIStore(s => s.showToastMessage)
   const { status, application, storeName } = useMerchant()
@@ -529,6 +574,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
             </div>
           </Field>
         </div>
+        <ShopLimitsCard open={open} handle={handle} />
         <ProfileStatusCard {...card} />
         {canApply ? (
           <>

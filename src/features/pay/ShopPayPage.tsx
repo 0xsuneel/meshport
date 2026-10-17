@@ -2,11 +2,11 @@
 // the amount, shop_open_order creates an order for that exact store, and
 // the normal order page (/paylink/r/<code>) takes the payment - so every
 // Shop QR payment is recorded in the owner's Business tab with its store.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, BadgeCheck, Store } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import type { ShopInfo } from '@/lib/shop'
+import { getShopLimits, type ShopInfo, type ShopLimits } from '@/lib/shop'
 import { useUIStore } from '@/store'
 import { Avatar } from '@/components/ui/Avatar'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -21,6 +21,8 @@ export function ShopPayPage({ shop, initialAmount }: { shop: ShopInfo; initialAm
   const [amount, setAmount] = useState(() => initialAmount && Number(initialAmount) > 0 ? String(Number(initialAmount)) : '')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
+  const [limits, setLimits] = useState<ShopLimits>({ min: null, max: null })
+  useEffect(() => { getShopLimits(shop.username).then(setLimits).catch(() => {}) }, [shop.username])
 
   const press = (k: KeypadKey) => setAmount(a => {
     if (k === 'del') return a.slice(0, -1)
@@ -29,6 +31,11 @@ export function ShopPayPage({ shop, initialAmount }: { shop: ShopInfo; initialAm
     return /\.\d{3,}$/.test(next) || Number(next) > 100000 ? a : next
   })
   const value = Number(amount) || 0
+  const limitError = !value ? null
+    : limits.min != null && value < limits.min ? `The smallest payment here is ${money(limits.min)}`
+    : limits.max != null && value > limits.max ? `The largest payment here is ${money(limits.max)}` : null
+  const limitHint = limits.min != null && limits.max != null ? `${money(limits.min)} – ${money(limits.max)}`
+    : limits.min != null ? `From ${money(limits.min)}` : limits.max != null ? `Up to ${money(limits.max)}` : null
 
   const go = async () => {
     setBusy(true)
@@ -73,7 +80,10 @@ export function ShopPayPage({ shop, initialAmount }: { shop: ShopInfo; initialAm
       </div>
 
       <div className="mx-auto w-full max-w-md px-5 pt-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>
-        <button type="button" disabled={!(value >= 0.01) || busy} onClick={go}
+        {(limitError || limitHint) && (
+          <p className={`mb-2 text-xs text-center ${limitError ? 'text-danger font-semibold' : 'text-text-muted'}`}>{limitError ?? `Payments here: ${limitHint}`}</p>
+        )}
+        <button type="button" disabled={!(value >= 0.01) || !!limitError || busy} onClick={go}
           className="w-full min-h-[52px] rounded-2xl bg-brand text-white font-bold text-base disabled:opacity-40 transition-opacity">
           {busy ? 'Starting…' : value >= 0.01 ? `Pay ${money(value)}` : 'Enter amount'}
         </button>
