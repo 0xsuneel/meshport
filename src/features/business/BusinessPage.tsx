@@ -30,7 +30,7 @@ import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, ReportsScreen,
 import {
   BusinessHeader, SetupBanner, OverviewView, PaymentsView, PaymentDetailSheet,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
-  DateRangeBar, DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet, BusinessMenuSheet,
+  DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet, BusinessMenuSheet,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
@@ -318,10 +318,7 @@ function OwnerBusinessPage() {
             ))}
           </div>
         </div>}
-        {tab === 'payments' && payView === 'payments' && <div className="pt-2">
-          <DateRangeBar value={periodSel.id} customLabel={period.id === 'custom' ? period.label : undefined}
-            onChange={id => choosePeriod({ ...periodSel, id })} onCustom={() => setRangeSheet({ from: periodSel.from, to: periodSel.to })} />
-        </div>}
+
       </div>
 
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
@@ -337,7 +334,9 @@ function OwnerBusinessPage() {
             onSeeAllPayments={() => { setPayFilter('all'); setTab('payments') }} onPayment={setDetail} onPeriod={() => setPeriodSheet(true)} />
         )}
         {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} />}
-        {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter} loading={!loaded} payments={payments} onPayment={setDetail} />}
+        {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter}
+          period={{ id: periodSel.id, label: period.label }} onPeriod={id => choosePeriod({ ...periodSel, id })}
+          onCustomPeriod={() => setRangeSheet({ from: periodSel.from, to: periodSel.to })} loading={!loaded} payments={payments} onPayment={setDetail} />}
         {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out"
           action={<button type="button" onClick={open('cashout')} className="shrink-0 min-h-[40px] px-4 rounded-xl bg-brand text-white text-[13px] font-semibold active:opacity-90">Cash out</button>} /></div>}
         {tab === 'settlements' && (
