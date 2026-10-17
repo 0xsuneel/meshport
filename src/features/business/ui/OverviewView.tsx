@@ -4,7 +4,7 @@
  * waits on other chains, and recent payments. Every number appears once.
  */
 import React from 'react'
-import { QrCode, ArrowDownLeft, ListOrdered, Wallet, ChevronDown, ChevronRight, RotateCcw, CreditCard } from 'lucide-react'
+import { QrCode, ArrowDownLeft, ListOrdered, Wallet, ChevronDown, CreditCard } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { Payment, ReactNode } from './types'
 import { formatTime } from './types'
@@ -100,14 +100,12 @@ export function OverviewView({
   periodLabel,
   collection,
   toSettle,
-  refunded,
   recent,
   onShowQr,
   onReceive,
   onBalance,
   onPayments,
   onToSettle,
-  onRefunded,
   onSeeAllPayments,
   onPayment,
   onPeriod,
@@ -180,7 +178,7 @@ export function OverviewView({
         </div>
       </FadeUp>
 
-      {/* ── Settle bar (always) / refunds ──────────────────────────────── */}
+      {/* ── Settle bar (always) ──────────────────────────────── */}
       <FadeUp delay={0.12} className="mx-5 flex flex-col gap-2">
         {!toSettle.hidden && <div className="flex items-center gap-3 rounded-[18px] bg-card border border-border/70 px-3.5 py-3">
           <span className="flex shrink-0">
@@ -215,16 +213,6 @@ export function OverviewView({
             {hasSettle ? 'Settle' : 'View'}
           </button>
         </div>}
-        {!loading && refunded.count > 0 && (
-          <button type="button" onClick={onRefunded}
-            className="flex items-center gap-3 rounded-[18px] bg-card border border-border/70 px-3.5 py-3 text-left active:bg-border/20 transition-colors">
-            <span className="flex items-center justify-center size-6 rounded-full bg-surface text-text-muted"><RotateCcw className="size-3.5" /></span>
-            <span className="flex-1 text-sm text-text-secondary">
-              <b className="font-semibold text-text-primary">{refunded.total}</b> refunded · {refunded.count} payment{refunded.count > 1 ? 's' : ''}
-            </span>
-            <ChevronRight className="size-4 text-text-muted" />
-          </button>
-        )}
       </FadeUp>
 
       {/* ── Recent payments ─────────────────────────────────────────────── */}
