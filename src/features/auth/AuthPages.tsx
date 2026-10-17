@@ -141,7 +141,7 @@ function AccountKindPicker({ onChoose }: { onChoose: (k: AccountKind | null) => 
         </div>
         <div className="space-y-3">
           {option('personal', <UserIcon className="w-6 h-6" />, 'Personal', 'Send, receive and swap USDC with friends')}
-          {option('business', <Store className="w-6 h-6" />, 'Business', 'Accept payments from customers with your shop QR')}
+          {option('business', <Store className="w-6 h-6" />, 'Business', 'Everything in Personal, plus accept payments from customers')}
         </div>
         <button type="button" onClick={() => onChoose(null)} className="mt-8 text-sm font-semibold text-brand-text text-center">
           I already have an account
