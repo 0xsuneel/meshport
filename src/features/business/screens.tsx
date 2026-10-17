@@ -4,7 +4,7 @@
 //   ShopQrScreen      the store's fixed QR (customer types the amount)
 //   ReceiveScreen     an amount (keypad) or an itemised bill -> one order shown
 //                     as a counter QR and a link to send, live until it's paid
-//   RequestsScreen    everything the store asked for, with cancel / complete
+//   RequestsList      what the store asked to be paid (Payments → My requests)
 //   ReportsScreen     Insights (the selected period by day, hour, customer and
 //                     chain) and Statement (CSV / PDF), one screen
 //   ProfileScreen     business details and approval (the application form)
@@ -294,7 +294,9 @@ function requestStatus(i: MerchantIntent): RequestStatus {
   return i.status === 'partially_paid' ? 'part' : 'open'
 }
 
-export function RequestsScreen({ open, onBack }: { open: boolean; onBack: () => void }) {
+/** Business → Payments → "My requests": what the business asked to be paid
+ *  (Receive amounts and bills), with copy link / complete / cancel. */
+export function RequestsList({ active, storeId }: { active: boolean; storeId?: string | null }) {
   const toast = useUIStore(s => s.showToastMessage)
   const [list, setList] = useState<MerchantIntent[] | null>(null)
   const [filter, setFilter] = useState('open')
@@ -303,9 +305,9 @@ export function RequestsScreen({ open, onBack }: { open: boolean; onBack: () => 
   const { copy } = useShare()
 
   const load = () => listMyIntents(200).then(setList).catch(() => setList([]))
-  useEffect(() => { if (open) { setList(null); void load() } }, [open])
+  useEffect(() => { if (active) { setList(null); void load() } }, [active])
 
-  const shown = (list ?? []).filter(i => {
+  const shown = (list ?? []).filter(i => !storeId || i.storeId === storeId).filter(i => {
     const s = requestStatus(i)
     return filter === 'all' || (filter === 'paid' ? s === 'paid' || s === 'completed' : s === 'open' || s === 'part')
   })
@@ -320,8 +322,8 @@ export function RequestsScreen({ open, onBack }: { open: boolean; onBack: () => 
   }
 
   return (
-    <BusinessScreen open={open} title="Requests" onBack={onBack}>
-      <div className="px-5 pt-4 pb-4"><ChipSelect options={FILTERS} value={filter} onChange={setFilter} /></div>
+    <>
+      <div className="px-5 pt-3 pb-4"><ChipSelect options={FILTERS} value={filter} onChange={setFilter} /></div>
       <div className="px-5 pb-6">
         {list === null ? (
           <div className="flex flex-col gap-3">{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
@@ -329,7 +331,7 @@ export function RequestsScreen({ open, onBack }: { open: boolean; onBack: () => 
           <div className="flex flex-col items-center text-center py-16">
             <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-surface border border-border mb-3"><Clock className="size-5 text-text-muted" /></span>
             <p className="text-sm font-medium text-text-secondary">{filter === 'open' ? 'No open requests' : filter === 'paid' ? 'Nothing paid yet' : 'No requests yet'}</p>
-            <p className="text-xs text-text-muted mt-1">Charges, links and bills you create show up here.</p>
+            <p className="text-xs text-text-muted mt-1">Amounts and bills you create with Receive show up here.</p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
@@ -353,7 +355,7 @@ export function RequestsScreen({ open, onBack }: { open: boolean; onBack: () => 
           </div>
         )}
       </div>
-    </BusinessScreen>
+    </>
   )
 }
 

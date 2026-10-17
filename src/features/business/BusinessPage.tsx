@@ -26,7 +26,7 @@ import { useAutoSettle } from './autoSettle'
 import { CashOutScreen, TeamScreen } from './teamScreens'
 import { StaffModePage } from './staffMode'
 import { useUIStore } from '@/store'
-import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
+import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
   BusinessHeader, SetupBanner, OverviewView, PaymentsView, PaymentDetailSheet,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
@@ -34,7 +34,7 @@ import {
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
-type ScreenId = 'qr' | 'receive' | 'requests' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team'
+type ScreenId = 'qr' | 'receive' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
@@ -103,6 +103,8 @@ function OwnerBusinessPage() {
   const [switcher, setSwitcher] = useState(false)
   const [menu, setMenu] = useState(false)
   const [periodSheet, setPeriodSheet] = useState(false)
+  const [payView, setPayView] = useState<'payments' | 'requests'>('payments')
+  useEffect(() => { if (tab !== 'payments') setPayView('payments') }, [tab])
   const [payFilter, setPayFilter] = useState<'all' | 'refunded'>('all')
   useEffect(() => { listStores().then(setStores).catch(() => {}) }, [])
   useEffect(() => { listMyIntents(500).then(l => setIntentStore(new Map(l.map(i => [i.id, i.storeId ?? null])))).catch(() => {}) }, [raw.length])
@@ -306,7 +308,17 @@ function OwnerBusinessPage() {
             {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? 'All stores'}</span>}
           </header>
         )}
-        {tab === 'payments' && <div className="pt-2">
+        {tab === 'payments' && <div className="px-5 pt-2">
+          <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Payments or my requests">
+            {([['payments', 'Payments'], ['requests', 'My requests']] as const).map(([id, label]) => (
+              <button key={id} type="button" role="tab" aria-selected={payView === id} onClick={() => setPayView(id)}
+                className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${payView === id ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>}
+        {tab === 'payments' && payView === 'payments' && <div className="pt-2">
           <DateRangeBar value={periodSel.id} customLabel={period.id === 'custom' ? period.label : undefined}
             onChange={id => choosePeriod({ ...periodSel, id })} onCustom={() => setRangeSheet({ from: periodSel.from, to: periodSel.to })} />
         </div>}
@@ -320,11 +332,12 @@ function OwnerBusinessPage() {
               checking: scanning, arcLogo: chainLogoSrc('Arc_Testnet') }}
             refunded={{ total: money(refundedInPeriod.reduce((s, r) => s + r.amount, 0)), count: refundedInPeriod.length }}
             recent={payments.slice(0, 4)}
-            onShowQr={open('qr')} onReceive={open('receive')} onRequests={open('requests')} onBalance={() => setTab('settlements')}
+            onShowQr={open('qr')} onReceive={open('receive')} onPayments={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onBalance={() => setTab('settlements')}
             onToSettle={() => setTab('settlements')} onRefunded={() => { setPayFilter('refunded'); setTab('payments') }}
             onSeeAllPayments={() => { setPayFilter('all'); setTab('payments') }} onPayment={setDetail} onPeriod={() => setPeriodSheet(true)} />
         )}
-        {tab === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter} loading={!loaded} payments={payments} onPayment={setDetail} />}
+        {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} />}
+        {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter} loading={!loaded} payments={payments} onPayment={setDetail} />}
         {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out"
           action={<button type="button" onClick={open('cashout')} className="shrink-0 min-h-[40px] px-4 rounded-xl bg-brand text-white text-[13px] font-semibold active:opacity-90">Cash out</button>} /></div>}
         {tab === 'settlements' && (
@@ -423,7 +436,6 @@ function OwnerBusinessPage() {
       <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: qrStore?.id ?? null, canBill: true }}>
       <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
       <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={storeName} />
-      <RequestsScreen open={screen === 'requests'} onBack={back} />
       <ReportsScreen open={screen === 'reports'} onBack={back}
         insights={{ payments: storeRaw.filter(p => !refundOf.has(p.id)), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null }}
         statement={{ storeName: stores.length > 1 && activeStore ? `${storeName} · ${activeStore.name}` : storeName, handle,
