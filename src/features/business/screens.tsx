@@ -635,14 +635,16 @@ export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void
 
 type Customer = {
   key: string; name: string; username: string | null; wallet: string | null; bridge: boolean
-  payments: MerchantPayment[]; total: number; last: string
+  payments: MerchantPayment[]; total: number; last: string; refunded: number
 }
 
 const ZERO_WALLET = /^0x0{40}$/i
 const shortWallet = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`
 
-export function CustomersScreen({ open, onBack, payments, onPayment, onChat }: {
+export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment, onChat }: {
   open: boolean; onBack: () => void; payments: MerchantPayment[]
+  /** Refunded payments still list the customer but don't count in totals */
+  refundedIds: Set<string>
   onPayment: (p: MerchantPayment) => void; onChat: (username: string) => void
 }) {
   const toast = useUIStore(s => s.showToastMessage)
@@ -659,14 +661,16 @@ export function CustomersScreen({ open, onBack, payments, onPayment, onChat }: {
       const c = m.get(key) ?? {
         key, bridge, username: p.customerUsername ?? null, wallet: p.customerUsername || bridge ? null : p.from,
         name: p.customerUsername ? `${p.customerUsername}.arc` : bridge ? 'Bridge payments' : shortWallet(p.from),
-        payments: [], total: 0, last: p.createdAt,
+        payments: [], total: 0, last: p.createdAt, refunded: 0,
       }
-      c.payments.push(p); c.total += p.amount
+      c.payments.push(p)
+      if (refundedIds.has(p.id)) c.refunded++
+      else c.total += p.amount
       if (Date.parse(p.createdAt) > Date.parse(c.last)) c.last = p.createdAt
       m.set(key, c)
     }
     return [...m.values()].sort((a, b) => b.total - a.total)
-  }, [payments])
+  }, [payments, refundedIds])
   const q = query.trim().toLowerCase()
   const shown = q ? customers.filter(c => c.name.toLowerCase().includes(q) || (c.wallet ?? '').toLowerCase().includes(q)) : customers
   const current = customers.find(c => c.key === selected) ?? null
@@ -677,7 +681,7 @@ export function CustomersScreen({ open, onBack, payments, onPayment, onChat }: {
       </span>
     </span>
   )
-  const sub = (c: Customer) => `${c.username ? '' : c.bridge ? 'Through a bridge · ' : 'Not on MeshPort · '}${c.payments.length} payment${c.payments.length === 1 ? '' : 's'}`
+  const sub = (c: Customer) => `${c.username ? '' : c.bridge ? 'Through a bridge · ' : 'Not on MeshPort · '}${c.payments.length} payment${c.payments.length === 1 ? '' : 's'}${c.refunded ? ` · ${c.refunded} refunded` : ''}`
 
   return (
     <BusinessScreen open={open} title={current ? current.name : 'Customers'} onBack={current ? () => setSelected(null) : onBack}>
@@ -697,7 +701,7 @@ export function CustomersScreen({ open, onBack, payments, onPayment, onChat }: {
             </div>
             <div className="rounded-2xl bg-surface border border-border px-4 py-3">
               <p className="text-xs text-text-muted">Average</p>
-              <p className="text-xl font-bold tabular-nums text-text-primary">{money(current.total / current.payments.length)}</p>
+              <p className="text-xl font-bold tabular-nums text-text-primary">{money(current.payments.length > current.refunded ? current.total / (current.payments.length - current.refunded) : 0)}</p>
             </div>
           </div>
           {current.username ? (
@@ -716,7 +720,7 @@ export function CustomersScreen({ open, onBack, payments, onPayment, onChat }: {
                     <span className="block text-sm font-medium text-text-primary truncate">{p.orderNumber ?? chainLabel(p.chain)}</span>
                     <span className="block text-xs text-text-muted">{chainLabel(p.chain)} · {new Date(p.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
                   </span>
-                  <span className="text-sm font-semibold tabular-nums text-brand-text">+{money(p.amount)}</span>
+                  <span className={`text-sm font-semibold tabular-nums ${refundedIds.has(p.id) ? 'text-text-muted line-through' : 'text-brand-text'}`}>+{money(p.amount)}</span>
                 </button>
               ))}
             </div>
