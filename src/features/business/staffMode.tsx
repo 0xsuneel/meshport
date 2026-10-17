@@ -4,7 +4,6 @@
 // today only). No balances, refunds, settlements or cash out - those stay
 // with the owner. Pending invites are accepted here.
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useUIStore } from '@/store'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { myMemberships, acceptInvite, staffCreateRequest, staffPayments, type Membership } from '@/lib/businessTeam'
@@ -17,7 +16,6 @@ const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigi
 const who = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
 
 export function StaffModePage() {
-  const navigate = useNavigate()
   const toast = useUIStore(s => s.showToastMessage)
   const [list, setList] = useState<Membership[] | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -67,15 +65,15 @@ export function StaffModePage() {
         <StaffModeHeader store={active.storeName ? `${active.ownerName} · ${active.storeName}` : active.ownerName} role={active.role} onExit={() => setActiveId(null)} />
       </div>
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
-        <OverviewView loading={false} title="Taken today" onArcLabel="Payments today"
-          today={{ total: money(total), count: today.length, average: money(today.length ? total / today.length : 0), customers: new Set(today.map(who)).size }}
-          onArc={String(today.length)} toSettle={{ total: '—', chainCount: 0 }} recent={payments.slice(0, 4)}
+        <OverviewView loading={false} periodLabel="Today"
+          collection={{ total: money(total), count: today.length, average: money(today.length ? total / today.length : 0), customers: new Set(today.map(who)).size }}
+          toSettle={{ total: '—', chainCount: 0 }} refunded={{ total: '—', count: 0 }} recent={payments.slice(0, 4)}
           onShowQr={() => setScreen('qr')} onCharge={() => setScreen('charge')}
           onPaymentLink={() => manager ? setScreen('link') : toast('Ask the owner to make you a manager for links', 'info')}
           onSendBill={() => manager ? setScreen('bill') : toast('Ask the owner to make you a manager for bills', 'info')}
-          onRequests={() => setScreen('payments')} onSettle={() => toast('Settlements are done by the owner', 'info')}
-          onSeeAllPayments={() => setScreen('payments')} onPayment={() => {}}
-          onInsights={() => setScreen('payments')} onVoiceAlerts={() => {}} onProfile={() => navigate('/profile')} />
+          onRequests={() => setScreen('payments')} onToSettle={() => toast('Settlements are done by the owner', 'info')}
+          onRefunded={() => toast('Refunds are done by the owner', 'info')}
+          onSeeAllPayments={() => setScreen('payments')} onPayment={() => {}} />
       </div>
       <RequestMaker.Provider value={{ create: p => staffCreateRequest(active.ownerAuthUid, { ...p, storeId: p.storeId ?? active.storeId }), storeId: active.storeId, canBill: manager }}>
         <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={active.ownerName} handle={`${active.ownerUsername}.arc`} payTo={active.ownerUsername} />
