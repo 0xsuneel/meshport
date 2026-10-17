@@ -76,7 +76,7 @@ export function StaffModePage() {
           onSeeAllPayments={() => setScreen('payments')} onPayment={() => {}} />
       </div>
       <RequestMaker.Provider value={{ create: p => staffCreateRequest(active.ownerAuthUid, { ...p, storeId: p.storeId ?? active.storeId }), storeId: active.storeId, canBill: manager }}>
-        <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={active.ownerName} handle={`${active.ownerUsername}.arc`} payTo={active.ownerUsername} />
+        <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={active.ownerName} outlet={active.storeName} handle={`${active.ownerUsername}.arc`} payTo={active.ownerUsername} />
         <ChargeScreen open={screen === 'charge'} onBack={back} />
         <LinkScreen open={screen === 'link'} onBack={back} storeName={active.ownerName} />
         <BillScreen open={screen === 'bill'} onBack={back} storeName={active.ownerName} />

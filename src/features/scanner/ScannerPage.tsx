@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { getShopInfo } from '@/lib/shop'
 import { SHEET_BACKDROP, DIALOG_CARD } from '@/lib/motion'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {Zap, Camera, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, Flashlight, X} from 'lucide-react'
@@ -322,9 +323,15 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
 
       // Try to extract wallet address from MeshPort QR URL format
       // e.g. meshport.xyz/paylink/sunil (older: /pay/sunil) OR /pay?to=username OR /pay?to=0x...
+      let shopLink: { username: string; store: string | null; amount: string | null } | null = null
       if (value.includes('meshportweb') || value.includes('meshport') || value.includes('?to=')) {
         try {
           const urlObj = new URL(value.startsWith('http') ? value : 'https://' + value)
+          // A business's Shop QR (/paylink/<username>[?store=]) - checked below.
+          const seg = urlObj.pathname.split('/').filter(Boolean)
+          if (seg.length === 2 && (seg[0] === 'paylink' || seg[0] === 'pay') && !isValidAddress(seg[1]) && !urlObj.searchParams.get('token')) {
+            shopLink = { username: seg[1], store: urlObj.searchParams.get('store'), amount: urlObj.searchParams.get('amount') }
+          }
           const toParam = urlObj.searchParams.get('to')
           const addrParam = urlObj.searchParams.get('address') || urlObj.searchParams.get('wallet')
           const pathParts = urlObj.pathname.split('/').filter(Boolean)
@@ -342,6 +349,20 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
           else if (toParam) value = toParam
           else if (pathUser && pathUser !== 'pay' && pathUser !== 'paylink' && pathUser !== 'send') value = pathUser
         } catch {}
+      }
+
+      // Business Shop QR → the shop's amount page, so the payment is
+      // recorded as an order for that store (see ShopPayPage).
+      if (shopLink && !walletMode) {
+        const shop = await getShopInfo(shopLink.username, shopLink.store).catch(() => null)
+        if (shop) {
+          const q = new URLSearchParams()
+          if (shopLink.store) q.set('store', shopLink.store)
+          if (shopLink.amount && Number(shopLink.amount) > 0) q.set('amount', shopLink.amount)
+          setResolving(false)
+          navigate(`/paylink/${shop.username}${q.toString() ? `?${q}` : ''}`)
+          return
+        }
       }
 
       // Re-extract address if embedded in value
