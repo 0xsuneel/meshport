@@ -3,8 +3,7 @@
  * Shows store name, .arc handle, verification badge, voice toggle, and menu button.
  */
 import React from 'react'
-import { Mic, MicOff, ShieldCheck, AlertCircle, Clock, User, ChevronDown, LayoutGrid } from 'lucide-react'
-import { IconBtn, StatusDot } from './primitives'
+import { Mic, MicOff, ShieldCheck, AlertCircle, Clock, User, ChevronDown, Menu } from 'lucide-react'
 
 export type VerificationStatus = 'verified' | 'review' | 'unverified'
 
@@ -20,6 +19,8 @@ export interface BusinessHeaderProps {
   onProfile?: () => void
   /** Optional — shows a chevron next to the store name for multi-store switching. */
   onSwitchStore?: () => void
+  /** Active outlet, shown before the handle ("MG Road · chai.arc") */
+  outlet?: string | null
 }
 
 const statusConfig: Record<VerificationStatus, { label: string; Icon: React.ElementType }> = {
@@ -37,58 +38,56 @@ export function BusinessHeader({
   onMenu,
   onProfile,
   onSwitchStore,
+  outlet,
 }: BusinessHeaderProps) {
   const { label, Icon } = statusConfig[status]
-  // onMenu takes priority; fall back to onProfile for backwards compat
   const menuAction = onMenu ?? onProfile
+  const initials = storeName.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'B'
 
   return (
     <header className="flex items-center gap-3 px-5 pt-5 pb-3">
-      {/* Left: store name + handle + status */}
-      <div className="flex-1 min-w-0">
+      <button
+        type="button"
+        onClick={onSwitchStore}
+        disabled={!onSwitchStore}
+        aria-label={onSwitchStore ? `Switch store, now ${outlet ?? storeName}` : undefined}
+        className="flex-1 min-w-0 flex items-center gap-2.5 text-left disabled:cursor-default"
+      >
+        <span className="shrink-0 flex items-center justify-center size-10 rounded-xl bg-brand text-white text-[15px] font-bold">
+          {initials}
+        </span>
+        <span className="min-w-0">
+          <span className="flex items-center gap-1">
+            <span className="text-base font-semibold text-text-primary leading-tight truncate">{storeName}</span>
+            {status === 'verified' && <ShieldCheck className="size-4 text-brand-text shrink-0" aria-label="Verified" />}
+            {onSwitchStore && <ChevronDown className="size-4 text-text-muted shrink-0" />}
+          </span>
+          <span className="flex items-center gap-1 text-xs text-text-muted truncate">
+            {outlet ? `${outlet} · ${handle}` : handle}
+            {status !== 'verified' && (
+              <span className="inline-flex items-center gap-0.5 text-text-secondary shrink-0"> · <Icon className="size-3" />{label}</span>
+            )}
+          </span>
+        </span>
+      </button>
+
+      <div className="flex items-center gap-2 shrink-0">
         <button
           type="button"
-          onClick={onSwitchStore}
-          disabled={!onSwitchStore}
-          className="flex items-center gap-1 disabled:cursor-default group"
-          aria-label={onSwitchStore ? 'Switch store' : undefined}
-        >
-          <h1 className="text-lg font-semibold text-text-primary leading-tight truncate">
-            {storeName}
-          </h1>
-          {onSwitchStore && (
-            <ChevronDown className="size-4 text-text-muted group-hover:text-text-secondary transition-colors shrink-0" />
-          )}
-        </button>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-xs text-text-muted font-mono truncate">{handle}</span>
-          <span className="text-text-muted opacity-40">·</span>
-          <StatusDot status={status} />
-          <span className="text-xs text-text-secondary flex items-center gap-1">
-            <Icon className="size-3" />
-            {label}
-          </span>
-        </div>
-      </div>
-
-      {/* Right: voice toggle + menu / profile */}
-      <div className="flex items-center gap-1 shrink-0">
-        <IconBtn
-          label={voiceOn ? 'Disable voice alerts' : 'Enable voice alerts'}
+          aria-label={voiceOn ? 'Voice alerts on' : 'Voice alerts off'}
           onClick={onVoice}
-          className={voiceOn ? 'text-brand-text bg-brand/10' : ''}
+          className={`inline-flex items-center justify-center size-11 rounded-[14px] border transition-colors ${voiceOn ? 'border-brand/30 bg-brand/10 text-brand-text' : 'border-border bg-card text-text-secondary'}`}
         >
           {voiceOn ? <Mic className="size-5" /> : <MicOff className="size-5" />}
-        </IconBtn>
-
+        </button>
         {menuAction && (
           <button
             type="button"
             aria-label={onMenu ? 'Business menu' : 'Open profile'}
             onClick={menuAction}
-            className="inline-flex items-center justify-center size-11 rounded-2xl text-text-secondary hover:bg-border/30 active:scale-95 transition-all"
+            className="inline-flex items-center justify-center size-11 rounded-[14px] border border-border bg-card text-text-primary active:scale-95 transition-all"
           >
-            {onMenu ? <LayoutGrid className="size-5" /> : <User className="size-5" />}
+            {onMenu ? <Menu className="size-5" /> : <User className="size-5" />}
           </button>
         )}
       </div>

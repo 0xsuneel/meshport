@@ -1,42 +1,47 @@
 /**
- * OverviewView — clean merchant dashboard. Every number and action appears exactly once.
+ * OverviewView — the Business home ("wallet card" layout): a brand card with
+ * the period's collection, four round quick actions, a settle bar when money
+ * waits on other chains, and recent payments. Every number appears once.
  */
 import React from 'react'
-import {
-  QrCode, CreditCard, Link2, FileText, Clock, ChevronRight,
-} from 'lucide-react'
+import { QrCode, DollarSign, Link2, ReceiptText, ChevronDown, ChevronRight, RotateCcw, CreditCard } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { Payment, ReactNode } from './types'
 import { formatTime } from './types'
-import { Skeleton, ChainLogo, StatusDot, Divider, FadeUp } from './primitives'
+import { Skeleton, ChainLogo, FadeUp } from './primitives'
 
 // ─── Local helpers ────────────────────────────────────────────────────────────
 
-function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payment) => void }) {
-  const statusLabel =
-    payment.status === 'to_settle' ? 'To settle'
-    : payment.status === 'refunded' ? 'Refunded'
-    : 'Received'
+const initials = (name: string) => {
+  if (/^0x/i.test(name)) return '0x'
+  const parts = name.replace(/\.arc$/, '').split(/[\s._-]+/).filter(Boolean)
+  return ((parts[0]?.[0] ?? '?') + (parts[1]?.[0] ?? parts[0]?.[1] ?? '')).toUpperCase()
+}
 
+function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payment) => void }) {
+  const tag = payment.status === 'to_settle' ? ' · to settle' : payment.status === 'refunded' ? ' · refunded' : ''
   return (
     <button
       type="button"
       aria-label={`Payment from ${payment.from}`}
       onClick={() => onClick(payment)}
-      className="w-full flex items-center gap-3 py-3 active:bg-border/20 rounded-xl -mx-1 px-1 transition-colors"
+      className="w-full flex items-center gap-3 px-4 py-2.5 text-left active:bg-border/20 transition-colors"
     >
-      <ChainLogo src={payment.chainLogo} label={payment.chainLabel} size={36} />
-      <div className="flex-1 min-w-0 text-left">
-        <p className="text-sm font-medium text-text-primary truncate">{payment.from}</p>
-        <p className="text-xs text-text-muted mt-0.5">{payment.chainLabel} · {formatTime(payment.time)}</p>
-      </div>
-      <div className="text-right shrink-0">
-        <p className="text-sm font-semibold tabular-nums text-text-primary">{payment.amount}</p>
-        <div className="flex items-center justify-end gap-1 mt-0.5">
-          <StatusDot status={payment.status} />
-          <span className="text-[10px] text-text-muted">{statusLabel}</span>
-        </div>
-      </div>
+      <span className="relative shrink-0">
+        <span className="flex items-center justify-center size-9 rounded-full bg-surface border border-border/60 text-xs font-semibold text-text-secondary">
+          {initials(payment.from)}
+        </span>
+        <ChainLogo src={payment.chainLogo} label={payment.chainLabel} size={16} className="absolute -bottom-0.5 -right-0.5 ring-2 ring-card rounded-full" />
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-sm font-medium text-text-primary truncate">{payment.from}</span>
+        <span className="block text-xs text-text-muted truncate">
+          {payment.chainLabel}{payment.order ? ` · ${payment.order}` : ''} · {formatTime(payment.time)}{tag}
+        </span>
+      </span>
+      <span className={`shrink-0 text-sm font-semibold tabular-nums ${payment.status === 'refunded' ? 'text-text-muted line-through' : 'text-brand-text'}`}>
+        +{payment.amount}
+      </span>
     </button>
   )
 }
@@ -57,6 +62,8 @@ export interface OverviewViewProps {
   toSettle: {
     total: string
     chainCount: number
+    /** Chains holding the money, for the logo stack and "On Base, …" line */
+    chains?: { label: string; logo?: string }[]
   }
   refunded: {
     total: string
@@ -68,11 +75,13 @@ export interface OverviewViewProps {
   onCharge: () => void
   onPaymentLink: () => void
   onSendBill: () => void
-  onRequests: () => void
+  onRequests?: () => void
   onToSettle: () => void
   onRefunded: () => void
   onSeeAllPayments: () => void
   onPayment: (p: Payment) => void
+  /** Opens the period picker from the card's chip (no chip when omitted) */
+  onPeriod?: () => void
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -89,225 +98,153 @@ export function OverviewView({
   onCharge,
   onPaymentLink,
   onSendBill,
-  onRequests,
   onToSettle,
   onRefunded,
   onSeeAllPayments,
   onPayment,
+  onPeriod,
 }: OverviewViewProps) {
   const hasSettle = toSettle.chainCount > 0
+  const chains = toSettle.chains ?? []
+  const actions = [
+    { Icon: QrCode,      label: 'Show QR',   onClick: onShowQr },
+    { Icon: DollarSign, label: 'Charge',    onClick: onCharge },
+    { Icon: Link2,       label: 'Pay link',  onClick: onPaymentLink },
+    { Icon: ReceiptText, label: 'Send bill', onClick: onSendBill },
+  ]
 
   return (
-    <div className="flex flex-col gap-5 pb-8">
-
-      {/* Optional setup / alert banner */}
+    <div className="flex flex-col gap-4 pb-8">
       {banner}
 
-      {/* ── Hero card ──────────────────────────────────────────────────── */}
+      {/* ── Collection card ─────────────────────────────────────────────── */}
       <FadeUp delay={0.04} className="mx-5">
-        <div className="rounded-3xl bg-card border border-border/60 p-5">
-          <p className="text-xs font-semibold text-text-muted tracking-widest uppercase">
-            {periodLabel === 'Today' ? "Today's collection" : `Collection · ${periodLabel}`}
-          </p>
-
+        <div className="rounded-3xl bg-brand text-white p-5 flex flex-col gap-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[13px] text-white/85">
+              {periodLabel === 'Today' ? "Today's collection" : 'Collection'}
+            </p>
+            {onPeriod && (
+              <button type="button" onClick={onPeriod} aria-label="Change period"
+                className="inline-flex items-center gap-1 min-h-[32px] px-3 rounded-full bg-white/15 text-xs font-semibold text-white active:bg-white/25 transition-colors">
+                {periodLabel} <ChevronDown className="size-3.5" />
+              </button>
+            )}
+          </div>
           {loading ? (
-            <Skeleton className="mt-3 h-11 w-44 rounded-xl" />
+            <Skeleton className="h-10 w-44 rounded-xl bg-white/20" />
           ) : (
-            <motion.div
+            <motion.p
               key={collection.total}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
-              className="mt-2 flex items-baseline gap-2"
+              transition={{ duration: 0.22 }}
+              className="text-[40px] font-bold tabular-nums leading-none tracking-tight"
             >
-              <span className="text-4xl font-bold tabular-nums text-text-primary leading-none">
-                {collection.total}
-              </span>
-              <span className="text-base text-text-muted font-medium">USDC</span>
-            </motion.div>
+              {collection.total}
+            </motion.p>
           )}
-
-          {/* Trend chip */}
-          {!loading && collection.trend && (
-            <div className="mt-2">{collection.trend}</div>
-          )}
-
-          {/* One-line stats */}
           {loading ? (
-            <Skeleton className="mt-3 h-4 w-48 rounded" />
+            <Skeleton className="h-4 w-52 rounded bg-white/20" />
           ) : (
-            <p className="mt-3 text-xs text-text-muted tabular-nums">
-              {collection.count} payments
-              {' · '}avg {collection.average}
-              {' · '}{collection.customers} customers
-            </p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-white/90">
+              <span><b className="font-semibold text-white">{collection.count}</b> payment{collection.count === 1 ? '' : 's'}</span>
+              <span><b className="font-semibold text-white">{collection.customers}</b> customer{collection.customers === 1 ? '' : 's'}</span>
+              {collection.count > 0 && <span>avg {collection.average}</span>}
+              {collection.trend}
+            </div>
           )}
         </div>
       </FadeUp>
 
-      {/* ── Status tiles: To settle + Refunded ─────────────────────────── */}
+      {/* ── Quick actions ───────────────────────────────────────────────── */}
       <FadeUp delay={0.08} className="mx-5">
-        <div className="grid grid-cols-2 gap-3">
-
-          {/* To settle */}
-          <button
-            type="button"
-            aria-label="View payments to settle"
-            onClick={onToSettle}
-            className={[
-              'rounded-2xl p-4 text-left active:scale-[0.97] transition-all border',
-              hasSettle
-                ? 'bg-warning/10 border-warning/20'
-                : 'bg-card border-border/50',
-            ].join(' ')}
-          >
-            <p className={`text-[10px] font-semibold uppercase tracking-wider ${hasSettle ? 'text-warning' : 'text-text-muted'}`}>
-              To settle
-            </p>
-            {loading ? (
-              <Skeleton className="mt-2 h-6 w-20 rounded" />
-            ) : (
-              <>
-                <p className={`mt-1.5 text-lg font-bold tabular-nums leading-none ${hasSettle ? 'text-warning' : 'text-text-secondary'}`}>
-                  {toSettle.total}
-                </p>
-                <p className="mt-1 text-[11px] text-text-muted">
-                  {hasSettle ? `on ${toSettle.chainCount} chain${toSettle.chainCount > 1 ? 's' : ''}` : 'All on Arc'}
-                </p>
-              </>
-            )}
-            <ChevronRight className={`size-3.5 mt-2 ${hasSettle ? 'text-warning' : 'text-text-muted'}`} />
-          </button>
-
-          {/* Refunded */}
-          <button
-            type="button"
-            aria-label="View refunded payments"
-            onClick={onRefunded}
-            className="rounded-2xl p-4 text-left bg-card border border-border/50 active:scale-[0.97] transition-all"
-          >
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-              Refunded
-            </p>
-            {loading ? (
-              <Skeleton className="mt-2 h-6 w-20 rounded" />
-            ) : (
-              <>
-                <p className="mt-1.5 text-lg font-bold tabular-nums leading-none text-text-secondary">
-                  {refunded.total}
-                </p>
-                <p className="mt-1 text-[11px] text-text-muted">
-                  {refunded.count > 0
-                    ? `${refunded.count} refund${refunded.count > 1 ? 's' : ''}`
-                    : periodLabel === 'Today' ? 'None today' : 'None'}
-                </p>
-              </>
-            )}
-            <ChevronRight className="size-3.5 mt-2 text-text-muted" />
-          </button>
-
-        </div>
-      </FadeUp>
-
-      {/* ── Primary actions ─────────────────────────────────────────────── */}
-      <FadeUp delay={0.12} className="mx-5">
-        <div className="grid grid-cols-2 gap-3">
-
-          <button
-            type="button"
-            aria-label="Show QR code"
-            onClick={onShowQr}
-            className="flex flex-col items-center justify-center gap-2.5 rounded-2xl bg-brand min-h-[88px] p-4 active:scale-[0.96] transition-all"
-          >
-            <QrCode className="size-6 text-white" />
-            <span className="text-sm font-semibold text-white">Show QR</span>
-          </button>
-
-          <button
-            type="button"
-            aria-label="Charge a customer"
-            onClick={onCharge}
-            className="flex flex-col items-center justify-center gap-2.5 rounded-2xl bg-card border border-border/60 min-h-[88px] p-4 active:scale-[0.96] transition-all hover:border-border"
-          >
-            <CreditCard className="size-6 text-text-secondary" />
-            <span className="text-sm font-semibold text-text-secondary">Charge</span>
-          </button>
-
-        </div>
-      </FadeUp>
-
-      {/* ── Get paid strip ──────────────────────────────────────────────── */}
-      <FadeUp delay={0.14} className="mx-5">
-        <div className="flex items-stretch gap-2">
-          {([
-            { Icon: Link2,     label: 'Payment link', onClick: onPaymentLink },
-            { Icon: FileText,  label: 'Send bill',    onClick: onSendBill    },
-            { Icon: Clock,     label: 'Requests',     onClick: onRequests    },
-          ] as const).map(({ Icon, label, onClick }) => (
-            <button
-              key={label}
-              type="button"
-              aria-label={label}
-              onClick={onClick}
-              className="flex-1 flex flex-col items-center gap-2 py-3.5 rounded-2xl bg-card border border-border/60 active:scale-[0.96] transition-all hover:border-border"
-            >
-              <span className="inline-flex items-center justify-center size-9 rounded-xl bg-brand/10 text-brand-text">
-                <Icon className="size-4" />
+        <div className="grid grid-cols-4 gap-2">
+          {actions.map(({ Icon, label, onClick }) => (
+            <button key={label} type="button" onClick={onClick}
+              className="flex flex-col items-center gap-2 py-1 active:scale-[0.95] transition-transform">
+              <span className="flex items-center justify-center size-14 rounded-[18px] bg-card border border-border/70 text-brand-text">
+                <Icon className="size-[22px]" />
               </span>
-              <span className="text-[11px] font-medium text-text-secondary text-center leading-tight">{label}</span>
+              <span className="text-xs font-medium text-text-primary">{label}</span>
             </button>
           ))}
         </div>
       </FadeUp>
 
-      <Divider className="mx-5" />
+      {/* ── Settle bar / refunds ────────────────────────────────────────── */}
+      {!loading && (hasSettle || refunded.count > 0) && (
+        <FadeUp delay={0.12} className="mx-5 flex flex-col gap-2">
+          {hasSettle && (
+            <div className="flex items-center gap-3 rounded-[18px] bg-card border border-border/70 px-3.5 py-3">
+              <span className="flex shrink-0">
+                {chains.slice(0, 3).map((c, i) => (
+                  <ChainLogo key={c.label} src={c.logo} label={c.label} size={24}
+                    className={`ring-2 ring-card rounded-full ${i > 0 ? '-ml-2' : ''}`} />
+                ))}
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold text-text-primary">{toSettle.total} to settle</span>
+                <span className="block text-xs text-text-muted truncate">
+                  {chains.length ? `On ${chains.map(c => c.label).join(', ')}` : `On ${toSettle.chainCount} chain${toSettle.chainCount > 1 ? 's' : ''}`}
+                </span>
+              </span>
+              <button type="button" onClick={onToSettle}
+                className="shrink-0 min-h-[40px] px-4 rounded-xl bg-brand/10 text-brand-text text-[13px] font-semibold active:bg-brand/20 transition-colors">
+                Settle
+              </button>
+            </div>
+          )}
+          {refunded.count > 0 && (
+            <button type="button" onClick={onRefunded}
+              className="flex items-center gap-3 rounded-[18px] bg-card border border-border/70 px-3.5 py-3 text-left active:bg-border/20 transition-colors">
+              <span className="flex items-center justify-center size-6 rounded-full bg-surface text-text-muted"><RotateCcw className="size-3.5" /></span>
+              <span className="flex-1 text-sm text-text-secondary">
+                <b className="font-semibold text-text-primary">{refunded.total}</b> refunded · {refunded.count} payment{refunded.count > 1 ? 's' : ''}
+              </span>
+              <ChevronRight className="size-4 text-text-muted" />
+            </button>
+          )}
+        </FadeUp>
+      )}
 
       {/* ── Recent payments ─────────────────────────────────────────────── */}
       <FadeUp delay={0.16} className="mx-5">
-        <div className="flex items-center justify-between mb-1">
-          <p className="text-sm font-semibold text-text-primary">Recent payments</p>
-          <button
-            type="button"
-            onClick={onSeeAllPayments}
-            className="text-xs text-brand-text font-medium flex items-center gap-0.5 active:opacity-70 py-1"
-          >
-            See all <ChevronRight className="size-3.5" />
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="flex flex-col gap-3 mt-2">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="size-9 rounded-full" />
-                <div className="flex-1">
-                  <Skeleton className="h-3.5 w-32 mb-1.5" />
-                  <Skeleton className="h-3 w-20" />
+        <div className="rounded-[20px] bg-card border border-border/70 overflow-hidden">
+          <div className="flex items-center justify-between px-4 pt-3.5 pb-1.5">
+            <p className="text-[15px] font-semibold text-text-primary">Recent payments</p>
+            {recent.length > 0 && (
+              <button type="button" onClick={onSeeAllPayments}
+                className="min-h-[32px] text-[13px] font-semibold text-brand-text active:opacity-70">
+                See all
+              </button>
+            )}
+          </div>
+          {loading ? (
+            <div className="flex flex-col gap-3 px-4 pt-2 pb-4">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="flex items-center gap-3">
+                  <Skeleton className="size-9 rounded-full" />
+                  <div className="flex-1"><Skeleton className="h-3.5 w-32 mb-1.5" /><Skeleton className="h-3 w-20" /></div>
+                  <Skeleton className="h-4 w-14" />
                 </div>
-                <Skeleton className="h-4 w-16" />
-              </div>
-            ))}
-          </div>
-        ) : recent.length === 0 ? (
-          <div className="mt-6 flex flex-col items-center text-center py-8">
-            <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-surface border border-border mb-3">
-              <CreditCard className="size-5 text-text-muted" />
-            </span>
-            <p className="text-sm font-medium text-text-secondary">No payments yet</p>
-            <p className="text-xs text-text-muted mt-1">Share your QR code to receive payments</p>
-          </div>
-        ) : (
-          <div className="flex flex-col">
-            {recent.slice(0, 4).map((p, i) => (
-              <React.Fragment key={p.id}>
-                {i > 0 && <Divider className="my-0.5" />}
-                <PaymentRow payment={p} onClick={onPayment} />
-              </React.Fragment>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          ) : recent.length === 0 ? (
+            <div className="flex flex-col items-center text-center px-6 pt-4 pb-7">
+              <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-surface border border-border mb-3">
+                <CreditCard className="size-5 text-text-muted" />
+              </span>
+              <p className="text-sm font-medium text-text-secondary">No payments yet</p>
+              <p className="text-xs text-text-muted mt-1">Show your QR at the counter to get paid</p>
+            </div>
+          ) : (
+            <div className="flex flex-col pb-1.5">
+              {recent.slice(0, 4).map(p => <PaymentRow key={p.id} payment={p} onClick={onPayment} />)}
+            </div>
+          )}
+        </div>
       </FadeUp>
-
     </div>
   )
 }
