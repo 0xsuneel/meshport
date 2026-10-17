@@ -53,7 +53,7 @@ export function BusinessHeader({
         type="button"
         onClick={onSwitchStore}
         disabled={!onSwitchStore}
-        aria-label={onSwitchStore ? `Switch store, now ${outlet ?? storeName}` : undefined}
+        aria-label={onSwitchStore ? `Switch store, now ${storeName}` : undefined}
         className="flex-1 min-w-0 flex items-center gap-2.5 text-left disabled:cursor-default"
       >
         <span className="shrink-0 flex items-center justify-center size-10 rounded-xl bg-brand text-white text-[15px] font-bold">
