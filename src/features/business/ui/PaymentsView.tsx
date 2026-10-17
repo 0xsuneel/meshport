@@ -2,8 +2,11 @@
  * PaymentsView — searchable, filterable list of all payments.
  * Grouped by day with a day-total header row.
  */
-import React, { useState, useMemo } from 'react'
-import { Search, CreditCard } from 'lucide-react'
+import React, { useState, useMemo, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
+import { CreditCard, X } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { SearchField } from '@/components/ui/SearchField'
 import type { Payment } from './types'
 import { groupByDay, formatTime } from './types'
 import { Skeleton, ChainLogo, StatusDot, Divider } from './primitives'
@@ -17,7 +20,17 @@ export interface PaymentsViewProps {
   onExport?: () => void
   /** Filter chip selected on open (e.g. 'refunded' from the Overview tile) */
   initialFilter?: 'all' | 'received' | 'to_settle' | 'refunded'
+  /** Date range, picked from the same Filter menu (like Activity's) */
+  period?: { id: PeriodChoice; label: string }
+  onPeriod?: (id: PeriodChoice) => void
+  onCustomPeriod?: () => void
 }
+
+export type PeriodChoice = 'today' | 'yesterday' | 'week' | 'month' | 'custom'
+const PERIODS: { id: PeriodChoice; label: string }[] = [
+  { id: 'today', label: 'Today' }, { id: 'yesterday', label: 'Yesterday' },
+  { id: 'week', label: 'Last 7 days' }, { id: 'month', label: 'This month' }, { id: 'custom', label: 'Custom range…' },
+]
 
 type Filter = 'all' | 'received' | 'to_settle' | 'refunded'
 
@@ -60,9 +73,51 @@ function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payme
   )
 }
 
-export function PaymentsView({ loading, payments, onPayment, onExport, initialFilter = 'all' }: PaymentsViewProps) {
+// Activity-style filter menu: floats under the search box's Filter chip,
+// with the date range and the status in two short groups.
+function FilterMenu({ anchor, period, status, onPeriod, onStatus, onClose }: {
+  anchor: HTMLElement | null; period: PeriodChoice; status: Filter
+  onPeriod: (id: PeriodChoice) => void; onStatus: (id: Filter) => void; onClose: () => void
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const r = anchor?.getBoundingClientRect()
+  if (!r) return null
+  const row = (on: boolean, label: string, onClick: () => void) => (
+    <button key={label} type="button" role="option" aria-selected={on} onClick={onClick}
+      className="flex items-center rounded-full active:opacity-70 transition-opacity text-left"
+      style={{ height: 38, padding: '0 14px', background: on ? 'var(--brand)' : 'transparent', border: 'none', cursor: 'pointer' }}>
+      <span className="text-[15px] font-bold" style={{ color: on ? '#fff' : 'var(--text-primary)', whiteSpace: 'nowrap' }}>{label}</span>
+    </button>
+  )
+  return createPortal(
+    <>
+      <div aria-hidden onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
+      <motion.div role="listbox" aria-label="Filter payments"
+        initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
+        style={{ position: 'fixed', top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right), width: 210, zIndex: 61, transformOrigin: 'top right',
+          display: 'flex', flexDirection: 'column', gap: 2, padding: 4, borderRadius: 22,
+          background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 12px 28px rgba(0,0,0,0.3)' }}>
+        <p className="px-3.5 pt-1.5 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Date</p>
+        {PERIODS.map(p => row(period === p.id, p.label, () => { onPeriod(p.id); onClose() }))}
+        <div className="mx-3 my-1 border-t border-border" />
+        <p className="px-3.5 pt-0.5 pb-0.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Status</p>
+        {FILTERS.map(f => row(status === f.id, f.label, () => { onStatus(f.id); onClose() }))}
+      </motion.div>
+    </>,
+    document.body,
+  )
+}
+
+export function PaymentsView({ loading, payments, onPayment, onExport, initialFilter = 'all', period, onPeriod, onCustomPeriod }: PaymentsViewProps) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>(initialFilter)
+  const [menu, setMenu] = useState(false)
+  const chipRef = useRef<HTMLDivElement>(null)
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase()
@@ -81,42 +136,46 @@ export function PaymentsView({ loading, payments, onPayment, onExport, initialFi
 
   return (
     <div className="flex flex-col gap-4 pb-8">
-      {/* Search + optional export */}
+      {/* Search with the Filter chip (date + status), like Activity */}
       <div className="mx-5 mt-2 flex items-center gap-2">
-        <div className="flex flex-1 min-w-0 items-center gap-2 bg-surface border border-border rounded-2xl px-3.5 py-3">
-          <Search className="size-4 text-text-muted shrink-0" />
-          <input
-            type="search"
-            placeholder="Search payments..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 min-w-0 w-full bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none"
-          />
+        <div className="flex-1 min-w-0">
+          {(() => {
+            const periodId = period?.id ?? 'today'
+            const on = periodId !== 'today' || filter !== 'all'
+            const label = [periodId !== 'today' ? period?.label : null, filter !== 'all' ? FILTERS.find(f => f.id === filter)?.label : null]
+              .filter(Boolean).join(' · ') || 'Today'
+            return (
+              <SearchField value={query} onChange={setQuery} ariaLabel="Search payments"
+                placeholder={['Search name, wallet or order', 'Name, wallet, order', 'Search']}
+                trailing={
+                  <div ref={chipRef} className="flex-shrink-0 flex items-center rounded-full max-w-[150px]"
+                    style={{ height: 34, background: on ? 'var(--brand)' : 'color-mix(in srgb, var(--text-primary) 7%, transparent)', color: on ? '#fff' : 'var(--text-primary)' }}>
+                    <button type="button" onClick={() => setMenu(m => !m)} aria-label={`Filter: ${label}`} aria-expanded={menu}
+                      className="h-full min-w-0 flex items-center gap-1.5 active:opacity-70"
+                      style={{ padding: on ? '0 4px 0 12px' : '0 13px 0 12px', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true" className="shrink-0">
+                        <path d="M4 6h16M4 12h11M4 18h6" />
+                      </svg>
+                      <span className="truncate">{label}</span>
+                    </button>
+                    {on && (
+                      <button type="button" aria-label="Clear filter" onClick={() => { setFilter('all'); onPeriod?.('today') }}
+                        className="h-full flex items-center active:opacity-70"
+                        style={{ padding: '0 11px 0 4px', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', opacity: 0.85 }}>
+                        <X className="w-3.5 h-3.5" strokeWidth={2.6} />
+                      </button>
+                    )}
+                  </div>
+                } />
+            )
+          })()}
         </div>
         {onExport && <ExportButton onClick={onExport} label="CSV" />}
       </div>
-
-      {/* Filter pills */}
-      <div className="flex gap-2 px-5 no-scrollbar overflow-x-auto">
-        {FILTERS.map(({ id, label }) => {
-          const active = filter === id
-          return (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={active}
-              onClick={() => setFilter(id)}
-              className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold transition-colors min-h-[36px] ${
-                active
-                  ? 'bg-brand text-white'
-                  : 'bg-surface border border-border text-text-secondary hover:border-text-muted'
-              }`}
-            >
-              {label}
-            </button>
-          )
-        })}
-      </div>
+      <AnimatePresence>
+        {menu && <FilterMenu key="f" anchor={chipRef.current} period={period?.id ?? 'today'} status={filter}
+          onPeriod={id => (id === 'custom' ? onCustomPeriod?.() : onPeriod?.(id))} onStatus={setFilter} onClose={() => setMenu(false)} />}
+      </AnimatePresence>
 
       {/* List */}
       {loading ? (
