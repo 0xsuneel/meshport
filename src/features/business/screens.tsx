@@ -1,0 +1,448 @@
+// Business tab - its own screens. Every action on the Business tab opens one
+// of these over the tab instead of sending the merchant to another page:
+//
+//   ShopQrScreen      the store's fixed QR (customer types the amount)
+//   ChargeScreen      counter keypad -> one-time QR for that amount, live
+//                     until it's paid
+//   LinkScreen        payment link to share (amount, note, how long it's open)
+//   BillScreen        itemised bill for a customer
+//   RequestsScreen    everything the store asked for, with cancel / complete
+//   InsightsScreen    last 7 days from the store's own payments
+//   ProfileScreen     business details and approval (the application form)
+//
+// Visuals come from the Arc Studio kit in ./ui; this file holds the logic.
+// Money in uses the merchant-pay service (payment requests, live status);
+// nothing here moves funds out.
+import { useEffect, useMemo, useState } from 'react'
+import QRCode from 'qrcode'
+import { Store, Link2, FileText, Clock } from 'lucide-react'
+import { useAuthStore, useUIStore } from '@/store'
+import { useMerchant, applyForMerchant } from '@/lib/merchant'
+import { chainLogoSrc } from '@/lib/chainLogos'
+import {
+  createPaymentRequest, listMyIntents, cancelPayment, completeOrder, paymentLink, watchPayment, invoiceTotal,
+  type MerchantIntent, type MerchantPayment, type PaymentView, type InvoiceItem,
+} from '@/lib/merchantPay'
+import { speakPayment } from '@/lib/voiceAlerts'
+import {
+  BusinessScreen, QrCard, AmountKeypad, LiveStatus, ShareLink, Field, TextInput, ChipSelect, BillItemsEditor,
+  RequestRow, InsightsChart, RankList, ProfileStatusCard, DetailList, PrimaryBtn, GhostBtn, Skeleton,
+  type KeypadKey, type LiveStatusKind, type BillItem, type RequestStatus, type StatusCardTone,
+} from './ui'
+import { chainLabel } from './settlement'
+
+const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const OPEN = new Set(['pending', 'payment_detected', 'processing', 'partially_paid'])
+const isExpired = (i: { expiresAt: string | null; status: string }) => !!i.expiresAt && Date.parse(i.expiresAt) < Date.now() && i.status !== 'paid'
+
+// ── Shared logic ─────────────────────────────────────────────────────────
+
+function useQr(value: string | null) {
+  const [src, setSrc] = useState<string>()
+  useEffect(() => {
+    setSrc(undefined)
+    if (!value) return
+    let live = true
+    QRCode.toDataURL(value, { width: 464, margin: 1, color: { dark: '#0B0E11', light: '#FFFFFF' }, errorCorrectionLevel: 'M' })
+      .then(u => { if (live) setSrc(u) }).catch(() => {})
+    return () => { live = false }
+  }, [value])
+  return src
+}
+
+function useShare() {
+  const toast = useUIStore(s => s.showToastMessage)
+  const [copied, setCopied] = useState(false)
+  const copy = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1600) }
+    catch { toast('Could not copy', 'error') }
+  }
+  const share = async (text: string, url: string) => {
+    if (navigator.share) { try { await navigator.share({ text, url }) } catch { /* closed */ } return }
+    void copy(`${text} ${url}`)
+  }
+  return { copied, copy, share }
+}
+
+function LinkShare({ url, text }: { url: string; text: string }) {
+  const { copied, copy, share } = useShare()
+  return <ShareLink url={url} copied={copied} onCopy={() => copy(url)} onShare={() => share(text, url)} />
+}
+
+/** Live status of one request (polls until it's final). */
+function useLiveRequest(code: string | null) {
+  const [view, setView] = useState<PaymentView | null>(null)
+  useEffect(() => {
+    setView(null)
+    if (!code) return
+    return watchPayment(code, setView, 3000)
+  }, [code])
+  return view
+}
+
+function liveStatus(v: PaymentView | null): { status: LiveStatusKind; text: string } {
+  const s = v?.status ?? 'pending'
+  if (s === 'paid') return { status: 'paid', text: `Paid ${money(v!.received)}` }
+  if (s === 'partially_paid') return { status: 'partial', text: `Received ${money(v!.received)} of ${money(v!.amount)}` }
+  if (s === 'payment_detected' || s === 'processing') return { status: 'detected', text: 'Payment found - confirming' }
+  if (s === 'expired') return { status: 'expired', text: 'This request expired' }
+  if (s === 'cancelled') return { status: 'cancelled', text: 'Cancelled' }
+  if (s === 'failed') return { status: 'failed', text: 'Payment failed' }
+  return { status: 'waiting', text: 'Waiting for payment' }
+}
+const Live = ({ view }: { view: PaymentView | null }) => <LiveStatus {...liveStatus(view)} />
+
+function Done({ icon, top, amount, note, children }: { icon: React.ReactNode; top?: string; amount: number; note?: string | null; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center text-center px-5 pt-6 gap-4">
+      <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-brand/10 text-brand-text">{icon}</span>
+      <div>
+        {top && <p className="text-sm text-text-muted">{top}</p>}
+        <p className="display text-3xl font-bold tabular-nums text-text-primary">{money(amount)}</p>
+        {note && <p className="text-sm text-text-secondary mt-1">{note}</p>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// ── Shop QR ──────────────────────────────────────────────────────────────
+
+export function ShopQrScreen({ open, onBack, storeName, handle }: { open: boolean; onBack: () => void; storeName: string; handle: string }) {
+  const username = useAuthStore(s => s.username)
+  const url = `${window.location.origin}/paylink/${username ?? ''}`
+  const qr = useQr(open && username ? url : null)
+  return (
+    <BusinessScreen open={open} title="Shop QR" onBack={onBack}>
+      <div className="flex flex-col items-center text-center px-5 pt-6 gap-5">
+        <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-brand/10 text-brand-text"><Store className="size-5" /></span>
+        <QrCard dataUrl={qr} title={storeName} subtitle={handle} />
+        <p className="text-xs text-text-muted max-w-[260px]">Customers scan with any wallet and type the amount. USDC from any CCTP chain is accepted.</p>
+        <div className="w-full"><LinkShare url={url} text={`Pay ${storeName} on MeshPort`} /></div>
+      </div>
+    </BusinessScreen>
+  )
+}
+
+// ── Charge (counter keypad) ──────────────────────────────────────────────
+
+export function ChargeScreen({ open, onBack }: { open: boolean; onBack: () => void }) {
+  const toast = useUIStore(s => s.showToastMessage)
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [intent, setIntent] = useState<MerchantIntent | null>(null)
+  const view = useLiveRequest(intent?.code ?? null)
+  const qr = useQr(intent ? paymentLink(intent.code) : null)
+  const paid = view?.status === 'paid'
+
+  useEffect(() => { if (paid) speakPayment(view!.received) }, [paid])
+  const reset = () => { setAmount(''); setNote(''); setIntent(null) }
+  useEffect(() => { if (!open) reset() }, [open])
+
+  const press = (k: KeypadKey) => setAmount(a => {
+    if (k === 'del') return a.slice(0, -1)
+    if (k === '.') return a.includes('.') ? a : (a || '0') + '.'
+    const next = a === '0' ? k : a + k
+    return /\.\d{3,}$/.test(next) || Number(next) > 100000 ? a : next
+  })
+  const value = Number(amount) || 0
+
+  const charge = async () => {
+    setBusy(true)
+    try { setIntent(await createPaymentRequest({ amount: value, note: note || undefined, expiresInMinutes: 15 })) }
+    catch (e) { toast(e instanceof Error ? e.message : 'Could not create the charge', 'error') }
+    setBusy(false)
+  }
+  const cancel = async () => {
+    if (intent && view && OPEN.has(view.status)) await cancelPayment(intent.code).catch(() => {})
+    setIntent(null)
+  }
+
+  if (intent) return (
+    <BusinessScreen open={open} title="Charge" onBack={onBack}
+      footer={paid ? <PrimaryBtn onClick={reset}>New charge</PrimaryBtn> : <GhostBtn onClick={cancel}>Cancel charge</GhostBtn>}>
+      <div className="flex flex-col items-center text-center px-5 pt-6 gap-5">
+        <div>
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-widest">Amount due</p>
+          <p className="display text-4xl font-bold tabular-nums text-text-primary mt-1">{money(intent.amount)}</p>
+          {intent.note && <p className="text-sm text-text-secondary mt-1">{intent.note}</p>}
+        </div>
+        <QrCard dataUrl={qr} paid={paid} subtitle={paid ? undefined : 'Scan to pay · valid 15 minutes'} />
+        <Live view={view} />
+      </div>
+    </BusinessScreen>
+  )
+
+  return (
+    <BusinessScreen open={open} title="Charge" onBack={onBack}
+      footer={<PrimaryBtn disabled={!(value > 0) || busy} onClick={charge}>{busy ? 'Creating…' : value > 0 ? `Charge ${money(value)}` : 'Enter amount'}</PrimaryBtn>}>
+      <AmountKeypad value={amount} onKey={press} note={note} onNote={setNote} />
+    </BusinessScreen>
+  )
+}
+
+// ── Payment link ─────────────────────────────────────────────────────────
+
+const EXPIRY = [{ id: '60', label: '1 hour' }, { id: '1440', label: '1 day' }, { id: '10080', label: '7 days' }, { id: '0', label: 'No limit' }]
+
+export function LinkScreen({ open, onBack, storeName }: { open: boolean; onBack: () => void; storeName: string }) {
+  const toast = useUIStore(s => s.showToastMessage)
+  const [amount, setAmount] = useState('')
+  const [note, setNote] = useState('')
+  const [customer, setCustomer] = useState('')
+  const [expiry, setExpiry] = useState('1440')
+  const [busy, setBusy] = useState(false)
+  const [intent, setIntent] = useState<MerchantIntent | null>(null)
+  const view = useLiveRequest(intent?.code ?? null)
+  const reset = () => { setAmount(''); setNote(''); setCustomer(''); setIntent(null) }
+  useEffect(() => { if (!open) reset() }, [open])
+
+  const create = async () => {
+    setBusy(true)
+    try { setIntent(await createPaymentRequest({ amount: Number(amount), note: note || undefined, customer: customer || undefined, expiresInMinutes: Number(expiry) || null })) }
+    catch (e) { toast(e instanceof Error ? e.message : 'Could not create the link', 'error') }
+    setBusy(false)
+  }
+
+  return (
+    <BusinessScreen open={open} title="Payment link" onBack={onBack}
+      footer={intent ? <GhostBtn onClick={reset}>Create another</GhostBtn>
+        : <PrimaryBtn disabled={!(Number(amount) > 0) || busy} onClick={create}>{busy ? 'Creating…' : 'Create link'}</PrimaryBtn>}>
+      {intent ? (
+        <Done icon={<Link2 className="size-5" />} amount={intent.amount} note={intent.note}>
+          <Live view={view} />
+          <div className="w-full"><LinkShare url={paymentLink(intent.code)} text={`${storeName}: pay ${money(intent.amount)}${intent.note ? ` for ${intent.note}` : ''}`} /></div>
+        </Done>
+      ) : (
+        <div className="flex flex-col gap-5 px-5 pt-5">
+          <Field label="Amount (USDC)">
+            <TextInput inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" className="text-2xl font-semibold tabular-nums" />
+          </Field>
+          <Field label="What is it for?"><TextInput value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="e.g. Cake order" /></Field>
+          <Field label="Customer (optional)" hint="Their MeshPort username - they also get it in their notifications.">
+            <TextInput value={customer} onChange={e => setCustomer(e.target.value)} placeholder="username.arc" />
+          </Field>
+          <Field label="Link open for"><ChipSelect options={EXPIRY} value={expiry} onChange={setExpiry} /></Field>
+        </div>
+      )}
+    </BusinessScreen>
+  )
+}
+
+// ── Bill ─────────────────────────────────────────────────────────────────
+
+const blank = (): BillItem => ({ name: '', qty: 1, price: '' })
+
+export function BillScreen({ open, onBack, storeName }: { open: boolean; onBack: () => void; storeName: string }) {
+  const toast = useUIStore(s => s.showToastMessage)
+  const [customer, setCustomer] = useState('')
+  const [note, setNote] = useState('')
+  const [rows, setRows] = useState<BillItem[]>([blank()])
+  const [busy, setBusy] = useState(false)
+  const [intent, setIntent] = useState<MerchantIntent | null>(null)
+  const view = useLiveRequest(intent?.code ?? null)
+  const reset = () => { setCustomer(''); setNote(''); setRows([blank()]); setIntent(null) }
+  useEffect(() => { if (!open) reset() }, [open])
+
+  const items: InvoiceItem[] = rows.map(r => ({ name: r.name, qty: r.qty, price: Number(r.price) || 0 })).filter(i => i.name.trim() && i.qty > 0)
+  const total = invoiceTotal(items)
+
+  const send = async () => {
+    setBusy(true)
+    try { setIntent(await createPaymentRequest({ amount: total, items, customer: customer || undefined, note: note || undefined, expiresInMinutes: 10080 })) }
+    catch (e) { toast(e instanceof Error ? e.message : 'Could not create the bill', 'error') }
+    setBusy(false)
+  }
+
+  return (
+    <BusinessScreen open={open} title="Send bill" onBack={onBack}
+      footer={intent ? <GhostBtn onClick={reset}>New bill</GhostBtn>
+        : <PrimaryBtn disabled={!(total > 0) || busy} onClick={send}>{busy ? 'Creating…' : total > 0 ? `Create bill · ${money(total)}` : 'Add items'}</PrimaryBtn>}>
+      {intent ? (
+        <Done icon={<FileText className="size-5" />} amount={intent.amount} note={intent.note}
+          top={`${intent.orderNumber ?? 'Bill'}${intent.customerUsername ? ` · ${intent.customerUsername}.arc` : ''}`}>
+          <div className="w-full"><DetailList rows={(intent.items ?? items).map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
+          <Live view={view} />
+          <div className="w-full"><LinkShare url={paymentLink(intent.code)} text={`${storeName}: bill ${intent.orderNumber ?? ''} for ${money(intent.amount)}`} /></div>
+        </Done>
+      ) : (
+        <div className="flex flex-col gap-5 px-5 pt-5">
+          <Field label="Customer (optional)"><TextInput value={customer} onChange={e => setCustomer(e.target.value)} placeholder="username.arc" /></Field>
+          <Field label="Items"><BillItemsEditor rows={rows} onChange={r => setRows(r.slice(0, 50))} total={money(total)} /></Field>
+          <Field label="Note (optional)"><TextInput value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="Thanks for shopping with us" /></Field>
+        </div>
+      )}
+    </BusinessScreen>
+  )
+}
+
+// ── Requests ─────────────────────────────────────────────────────────────
+
+const FILTERS = [{ id: 'open', label: 'Open' }, { id: 'paid', label: 'Paid' }, { id: 'all', label: 'All' }]
+
+function requestStatus(i: MerchantIntent): RequestStatus {
+  if (i.status === 'paid') return i.completedByMerchant ? 'completed' : 'paid'
+  if (i.status === 'cancelled' || i.status === 'failed') return 'cancelled'
+  if (i.status === 'expired' || isExpired(i)) return 'expired'
+  return i.status === 'partially_paid' ? 'part' : 'open'
+}
+
+export function RequestsScreen({ open, onBack }: { open: boolean; onBack: () => void }) {
+  const toast = useUIStore(s => s.showToastMessage)
+  const [list, setList] = useState<MerchantIntent[] | null>(null)
+  const [filter, setFilter] = useState('open')
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const { copy } = useShare()
+
+  const load = () => listMyIntents(200).then(setList).catch(() => setList([]))
+  useEffect(() => { if (open) { setList(null); void load() } }, [open])
+
+  const shown = (list ?? []).filter(i => {
+    const s = requestStatus(i)
+    return filter === 'all' || (filter === 'paid' ? s === 'paid' || s === 'completed' : s === 'open' || s === 'part')
+  })
+  const act = async (i: MerchantIntent, what: 'cancel' | 'complete') => {
+    setBusy(i.id)
+    try {
+      await (what === 'cancel' ? cancelPayment(i.code) : completeOrder(i.code))
+      toast(what === 'cancel' ? 'Request cancelled' : 'Marked as completed', 'success')
+      await load()
+    } catch (e) { toast(e instanceof Error ? e.message : 'Could not update', 'error') }
+    setBusy(null)
+  }
+
+  return (
+    <BusinessScreen open={open} title="Requests" onBack={onBack}>
+      <div className="px-5 pt-4 pb-4"><ChipSelect options={FILTERS} value={filter} onChange={setFilter} /></div>
+      <div className="px-5 pb-6">
+        {list === null ? (
+          <div className="flex flex-col gap-3">{[0, 1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
+        ) : shown.length === 0 ? (
+          <div className="flex flex-col items-center text-center py-16">
+            <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-surface border border-border mb-3"><Clock className="size-5 text-text-muted" /></span>
+            <p className="text-sm font-medium text-text-secondary">{filter === 'open' ? 'No open requests' : filter === 'paid' ? 'Nothing paid yet' : 'No requests yet'}</p>
+            <p className="text-xs text-text-muted mt-1">Charges, links and bills you create show up here.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {shown.map(i => {
+              const status = requestStatus(i)
+              const live = status === 'open' || status === 'part'
+              return (
+                <RequestRow key={i.id} kind={i.kind} status={status} amount={money(i.amount)}
+                  title={i.note || (i.kind === 'invoice' ? 'Bill' : 'Payment request')}
+                  sub={[i.orderNumber, i.customerUsername && `${i.customerUsername}.arc`, new Date(i.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })].filter(Boolean).join(' · ')}
+                  expanded={openId === i.id} onToggle={() => setOpenId(openId === i.id ? null : i.id)}
+                  actions={[
+                    { label: 'Copy link', tone: 'neutral', onClick: () => { void copy(paymentLink(i.code)); toast('Link copied', 'success') } },
+                    ...(live ? [
+                      { label: 'Mark completed', tone: 'brand' as const, onClick: () => act(i, 'complete'), disabled: busy === i.id },
+                      { label: 'Cancel', tone: 'danger' as const, onClick: () => act(i, 'cancel'), disabled: busy === i.id },
+                    ] : []),
+                  ]} />
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </BusinessScreen>
+  )
+}
+
+// ── Insights ─────────────────────────────────────────────────────────────
+
+export function InsightsScreen({ open, onBack, payments }: { open: boolean; onBack: () => void; payments: MerchantPayment[] }) {
+  const data = useMemo(() => {
+    const days = [...Array(7)].map((_, k) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (6 - k)); return d })
+    const week = payments.filter(p => new Date(p.createdAt) >= days[0])
+    const total = week.reduce((s, p) => s + p.amount, 0)
+    const rank = (key: (p: MerchantPayment) => string) => {
+      const m = new Map<string, { total: number; count: number }>()
+      for (const p of week) { const k = key(p); const v = m.get(k) ?? { total: 0, count: 0 }; v.total += p.amount; v.count++; m.set(k, v) }
+      return [...m.entries()].sort((a, b) => b[1].total - a[1].total)
+    }
+    return {
+      total, count: week.length,
+      bars: days.map(d => {
+        const v = week.filter(p => new Date(p.createdAt).toDateString() === d.toDateString()).reduce((s, p) => s + p.amount, 0)
+        return { label: d.toLocaleDateString([], { weekday: 'short' }), value: v, display: money(v) }
+      }),
+      customers: rank(p => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`).slice(0, 5)
+        .map(([name, v]) => ({ id: name, left: name, sub: `${v.count} payment${v.count === 1 ? '' : 's'}`, right: money(v.total) })),
+      chains: rank(p => p.chain).map(([id, v]) => ({ id, left: chainLabel(id), logo: chainLogoSrc(id), sub: `${Math.round((v.total / (total || 1)) * 100)}% of sales`, right: money(v.total) })),
+    }
+  }, [payments])
+
+  return (
+    <BusinessScreen open={open} title="Insights" onBack={onBack}>
+      <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
+        <InsightsChart total={money(data.total)} sub={`Last 7 days · ${data.count} payments · avg ${money(data.count ? data.total / data.count : 0)}`} bars={data.bars} />
+        <RankList title="Top customers" empty="No customers this week" rows={data.customers} />
+        <RankList title="By chain" empty="No payments this week" rows={data.chains} />
+      </div>
+    </BusinessScreen>
+  )
+}
+
+// ── Business profile / approval ──────────────────────────────────────────
+
+const TYPES = ['Retail store', 'Restaurant / Café', 'Online shop', 'Services', 'Freelancer', 'Other'].map(t => ({ id: t, label: t }))
+
+export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack: () => void; handle: string }) {
+  const toast = useUIStore(s => s.showToastMessage)
+  const { status, application, storeName } = useMerchant()
+  const draft = (() => { try { return JSON.parse(localStorage.getItem('meshport_business_draft') || 'null') as { storeName?: string; storeType?: string } | null } catch { return null } })()
+  const [name, setName] = useState(() => application?.businessName || storeName || draft?.storeName || '')
+  const [type, setType] = useState(() => application?.businessType || TYPES.find(t => t.id === draft?.storeType)?.id || TYPES[0].id)
+  const [contact, setContact] = useState(() => application?.contact || '')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [again, setAgain] = useState(false)
+
+  const closed = status === 'rejected' || status === 'revoked'
+  const canApply = status === 'none' || (closed && again)
+  const submit = async () => {
+    setBusy(true)
+    try { await applyForMerchant({ businessName: name, businessType: type, contact, description: reason }); toast('Sent for review', 'success'); setAgain(false) }
+    catch (e) { toast(e instanceof Error ? e.message : 'Could not send', 'error') }
+    setBusy(false)
+  }
+
+  const card: { tone: StatusCardTone; title: string; text: string } =
+    status === 'approved' ? { tone: 'success', title: 'Verified business', text: 'All merchant tools are on.' }
+    : status === 'pending' ? { tone: 'warning', title: 'Under review', text: "MeshPort is reviewing your business. You'll get a notification when it's approved." }
+    : closed ? { tone: 'danger', title: status === 'revoked' ? 'Merchant access removed' : 'Not approved', text: application?.reviewNote || 'Check the details and send it again.' }
+    : { tone: 'brand', title: 'Complete your business account', text: 'Tell MeshPort why you need a business account. Once approved, your store shows as verified.' }
+
+  return (
+    <BusinessScreen open={open} title="Business profile" onBack={onBack}
+      footer={canApply ? <PrimaryBtn disabled={busy || name.trim().length < 2 || reason.trim().length < 10} onClick={submit}>{busy ? 'Sending…' : 'Send for review'}</PrimaryBtn>
+        : closed ? <PrimaryBtn onClick={() => setAgain(true)}>Apply again</PrimaryBtn> : undefined}>
+      <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
+        <ProfileStatusCard {...card} />
+        {canApply ? (
+          <>
+            <Field label="Business name"><TextInput value={name} onChange={e => setName(e.target.value)} maxLength={80} placeholder="Royal Bakes" /></Field>
+            <Field label="Type"><ChipSelect options={TYPES} value={type} onChange={setType} /></Field>
+            <Field label="Contact (optional)"><TextInput value={contact} onChange={e => setContact(e.target.value)} maxLength={120} placeholder="Phone or email" /></Field>
+            <Field label="Why do you need a business account?" hint={`${reason.trim().length}/10 characters minimum`}>
+              <textarea value={reason} onChange={e => setReason(e.target.value)} maxLength={500} rows={4}
+                placeholder="e.g. I run a bakery and want customers to pay in USDC at the counter."
+                className="w-full rounded-2xl bg-surface border border-border px-4 py-3 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-brand resize-none" />
+            </Field>
+          </>
+        ) : (
+          <DetailList rows={[
+            { label: 'Store', value: application?.businessName || storeName || '-' },
+            { label: 'On-chain name', value: handle },
+            ...(application?.businessType ? [{ label: 'Type', value: application.businessType }] : []),
+            ...(application?.contact ? [{ label: 'Contact', value: application.contact }] : []),
+            ...(application ? [{ label: 'Applied', value: new Date(application.createdAt).toLocaleDateString() }] : []),
+          ]} />
+        )}
+      </div>
+    </BusinessScreen>
+  )
+}

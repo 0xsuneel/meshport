@@ -5,7 +5,7 @@
 import React from 'react'
 import {
   QrCode, CreditCard, Link2, FileText, Clock, ArrowDownToLine,
-  ChevronRight, BarChart2, Mic, Globe, User,
+  ChevronRight, BarChart2, Mic, User,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { Payment, ReactNode } from './types'
@@ -146,7 +146,6 @@ export interface OverviewViewProps {
   onPayment: (p: Payment) => void
   onInsights: () => void
   onVoiceAlerts: () => void
-  onCrossChain: () => void
   onProfile: () => void
 }
 
@@ -167,7 +166,6 @@ export function OverviewView({
   onPayment,
   onInsights,
   onVoiceAlerts,
-  onCrossChain,
   onProfile,
 }: OverviewViewProps) {
   return (
@@ -328,8 +326,7 @@ export function OverviewView({
         <div className="flex flex-wrap gap-2">
           <ManageChip Icon={BarChart2} label="Insights"      onClick={onInsights} />
           <ManageChip Icon={Mic}       label="Voice alerts"  onClick={onVoiceAlerts} />
-          <ManageChip Icon={Globe}     label="Cross-chain"   onClick={onCrossChain} />
-          <ManageChip Icon={User}      label="Profile"       onClick={onProfile} />
+          <ManageChip Icon={User}      label="Business profile" onClick={onProfile} />
         </div>
       </FadeUp>
     </div>
