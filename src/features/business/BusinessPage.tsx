@@ -306,7 +306,8 @@ function OwnerBusinessPage() {
         {tab === 'overview' && (
           <OverviewView loading={!loaded} banner={banner} periodLabel={period.label}
             collection={{ total: money(today.total), trend: <TrendChip pct={trend} compare={period.compareLabel} tone="onBrand" />, count: today.count, average: money(today.average), customers: today.customers }}
-            toSettle={{ total: money(settle.total), chainCount: settle.due.length, chains: settle.due.map(c => ({ label: c.label, logo: c.logo })) }}
+            toSettle={{ total: money(settle.total), chainCount: settle.due.length, chains: settle.due.map(c => ({ label: c.label, logo: c.logo })),
+              checking: scanning, arcLogo: chainLogoSrc('Arc_Testnet') }}
             refunded={{ total: money(refundedInPeriod.reduce((s, r) => s + r.amount, 0)), count: refundedInPeriod.length }}
             recent={payments.slice(0, 4)}
             onShowQr={open('qr')} onReceive={open('receive')} onSendBill={open('bill')} onRequests={open('requests')}

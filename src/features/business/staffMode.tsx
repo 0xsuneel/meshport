@@ -67,7 +67,7 @@ export function StaffModePage() {
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
         <OverviewView loading={false} periodLabel="Today"
           collection={{ total: money(total), count: today.length, average: money(today.length ? total / today.length : 0), customers: new Set(today.map(who)).size }}
-          toSettle={{ total: '—', chainCount: 0 }} refunded={{ total: '—', count: 0 }} recent={payments.slice(0, 4)}
+          toSettle={{ total: '—', chainCount: 0, hidden: true }} refunded={{ total: '—', count: 0 }} recent={payments.slice(0, 4)}
           onShowQr={() => setScreen('qr')} onReceive={() => setScreen('receive')}
           onSendBill={() => manager ? setScreen('bill') : toast('Ask the owner to make you a manager for bills', 'info')}
           onToSettle={() => toast('Settlements are done by the owner', 'info')}
