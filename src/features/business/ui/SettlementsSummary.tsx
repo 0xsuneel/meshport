@@ -10,16 +10,18 @@ export interface ArcBalanceCardProps {
   hidden?: boolean
   onToggleHidden?: () => void
   note?: string
+  /** A button beside the amount (e.g. Cash out) */
+  action?: React.ReactNode
 }
 
-export function ArcBalanceCard({ amount, hidden, onToggleHidden, note }: ArcBalanceCardProps) {
+export function ArcBalanceCard({ amount, hidden, onToggleHidden, note, action }: ArcBalanceCardProps) {
   return (
     <div className="flex-1 bg-card border border-border/50 rounded-2xl p-4 flex flex-col gap-1.5 min-w-0">
       <span className="text-xs text-text-muted font-medium uppercase tracking-wide">
         Available on Arc
       </span>
       <div className="flex items-center gap-2">
-        <span className="text-xl font-bold tabular-nums text-text-primary">
+        <span className="text-xl font-bold tabular-nums text-text-primary flex-1 min-w-0 truncate">
           {hidden ? '••••••' : amount}
         </span>
         {onToggleHidden && (
@@ -32,6 +34,7 @@ export function ArcBalanceCard({ amount, hidden, onToggleHidden, note }: ArcBala
             {hidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
         )}
+        {action}
       </div>
       {note && <p className="text-xs text-text-muted leading-snug">{note}</p>}
     </div>

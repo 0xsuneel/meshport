@@ -2,11 +2,11 @@
 // of these over the tab instead of sending the merchant to another page:
 //
 //   ShopQrScreen      the store's fixed QR (customer types the amount)
-//   ReceiveScreen     amount keypad -> one order shown as a counter QR and a
-//                     link to send, live until it's paid
-//   BillScreen        itemised bill for a customer
+//   ReceiveScreen     an amount (keypad) or an itemised bill -> one order shown
+//                     as a counter QR and a link to send, live until it's paid
 //   RequestsScreen    everything the store asked for, with cancel / complete
-//   InsightsScreen    the selected period's payments, by day, hour and chain
+//   ReportsScreen     Insights (the selected period by day, hour, customer and
+//                     chain) and Statement (CSV / PDF), one screen
 //   ProfileScreen     business details and approval (the application form)
 //
 // Visuals come from the Arc Studio kit in ./ui; this file holds the logic.
@@ -14,7 +14,7 @@
 // nothing here moves funds out.
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
-import { Store, ChevronDown, FileText, Clock, Printer } from 'lucide-react'
+import { Store, ChevronDown, Clock, Printer } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, applyForMerchant } from '@/lib/merchant'
 import { chainLogoSrc } from '@/lib/chainLogos'
@@ -158,14 +158,18 @@ const VALID_FOR = [
   { id: '10080', label: '7 days' }, { id: '0', label: 'No limit' },
 ]
 
+const blank = (): BillItem => ({ name: '', qty: 1, price: '' })
+
 export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBack: () => void; storeName: string }) {
   const make = useMakeRequest()
-  // Cashiers take counter payments only: up to an hour, no named customer.
+  // Cashiers take counter payments only: up to an hour, no named customer, no bills.
   const { canBill } = useContext(RequestMaker)
   const validFor = canBill ? VALID_FOR : VALID_FOR.slice(0, 2)
   const toast = useUIStore(s => s.showToastMessage)
+  const [itemised, setItemised] = useState(false)
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
+  const [rows, setRows] = useState<BillItem[]>([blank()])
   const [customer, setCustomer] = useState('')
   const [expiry, setExpiry] = useState('15')
   const [more, setMore] = useState(false)
@@ -177,8 +181,12 @@ export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBa
   const paid = view?.status === 'paid'
 
   useEffect(() => { if (paid) speakPayment(view!.received) }, [paid])
-  const reset = () => { setAmount(''); setNote(''); setCustomer(''); setExpiry('15'); setMore(false); setIntent(null) }
+  const reset = () => {
+    setItemised(false); setAmount(''); setNote(''); setRows([blank()]); setCustomer(''); setExpiry('15'); setMore(false); setIntent(null)
+  }
   useEffect(() => { if (!open) reset() }, [open])
+  // A bill usually goes to someone later: open for 7 days by default.
+  const toggleItems = (on: boolean) => { setItemised(on); setExpiry(on ? '10080' : '15') }
 
   const press = (k: KeypadKey) => setAmount(a => {
     if (k === 'del') return a.slice(0, -1)
@@ -186,14 +194,15 @@ export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBa
     const next = a === '0' ? k : a + k
     return /\.\d{3,}$/.test(next) || Number(next) > 100000 ? a : next
   })
-  const value = Number(amount) || 0
+  const items: InvoiceItem[] = rows.map(r => ({ name: r.name, qty: r.qty, price: Number(r.price) || 0 })).filter(i => i.name.trim() && i.qty > 0)
+  const value = itemised ? invoiceTotal(items) : Number(amount) || 0
   const validLabel = validFor.find(v => v.id === expiry)?.label ?? '15 min'
 
   const create = async () => {
     setBusy(true)
     try {
-      setIntent(await make({ amount: value, note: note || undefined, customer: canBill && customer ? customer : undefined,
-        expiresInMinutes: Number(expiry) || null }))
+      setIntent(await make({ amount: value, ...(itemised ? { items } : {}), note: note || undefined,
+        customer: canBill && customer ? customer : undefined, expiresInMinutes: Number(expiry) || null }))
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not create the payment', 'error') }
     setBusy(false)
   }
@@ -203,21 +212,26 @@ export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBa
   }
 
   if (intent) return (
-    <BusinessScreen open={open} title="Receive" onBack={onBack}
+    <BusinessScreen open={open} title={intent.kind === 'invoice' ? 'Bill' : 'Receive'} onBack={onBack}
       footer={paid ? <PrimaryBtn onClick={reset}>New payment</PrimaryBtn> : <GhostBtn onClick={cancel}>Cancel payment</GhostBtn>}>
       <div className="flex flex-col items-center text-center px-5 pt-5 gap-4">
         <div>
-          <p className="text-xs font-semibold text-text-muted uppercase tracking-widest">Amount due</p>
+          <p className="text-xs font-semibold text-text-muted uppercase tracking-widest">
+            {intent.kind === 'invoice' ? `Bill ${intent.orderNumber ?? ''}` : 'Amount due'}
+          </p>
           <p className="display text-4xl font-bold tabular-nums text-text-primary mt-1">{money(intent.amount)}</p>
           {intent.note && <p className="text-sm text-text-secondary mt-1">{intent.note}</p>}
           {intent.customerUsername && <p className="text-xs text-text-muted mt-1">For {intent.customerUsername}.arc</p>}
         </div>
+        {intent.kind === 'invoice' && (
+          <div className="w-full text-left"><DetailList rows={(intent.items ?? items).map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
+        )}
         <QrCard dataUrl={qr} paid={paid} subtitle={paid ? undefined : `Scan to pay · valid ${intent.expiresAt ? validLabel : 'until paid'}`} />
         <Live view={view} />
         {!paid && link && (
           <div className="w-full">
             <p className="text-xs text-text-muted mb-2">Customer not here? Send the link</p>
-            <LinkShare url={link} text={`${storeName}: pay ${money(intent.amount)}${intent.note ? ` for ${intent.note}` : ''}`} />
+            <LinkShare url={link} text={`${storeName}: ${intent.kind === 'invoice' ? `bill ${intent.orderNumber ?? ''} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}`} />
           </div>
         )}
       </div>
@@ -226,8 +240,28 @@ export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBa
 
   return (
     <BusinessScreen open={open} title="Receive" onBack={onBack}
-      footer={<PrimaryBtn disabled={!(value > 0) || busy} onClick={create}>{busy ? 'Creating…' : value > 0 ? `Receive ${money(value)}` : 'Enter amount'}</PrimaryBtn>}>
-      <AmountKeypad value={amount} onKey={press} note={note} onNote={setNote} />
+      footer={<PrimaryBtn disabled={!(value > 0) || busy} onClick={create}>
+        {busy ? 'Creating…' : value > 0 ? `${itemised ? 'Create bill' : 'Receive'} ${money(value)}` : itemised ? 'Add items' : 'Enter amount'}</PrimaryBtn>}>
+      {canBill && (
+        <div className="px-5 pt-4">
+          <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Receive type">
+            {[{ on: false, label: 'Amount' }, { on: true, label: 'Itemised bill' }].map(t => (
+              <button key={t.label} type="button" role="tab" aria-selected={itemised === t.on} onClick={() => toggleItems(t.on)}
+                className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${itemised === t.on ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {itemised ? (
+        <div className="flex flex-col gap-5 px-5 pt-5">
+          <Field label="Items"><BillItemsEditor rows={rows} onChange={r => setRows(r.slice(0, 50))} total={money(value)} /></Field>
+          <Field label="Note (optional)"><TextInput value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="Thanks for shopping with us" /></Field>
+        </div>
+      ) : (
+        <AmountKeypad value={amount} onKey={press} note={note} onNote={setNote} />
+      )}
       <div className="px-5 pt-5 pb-2">
         <button type="button" onClick={() => setMore(m => !m)} aria-expanded={more}
           className="w-full flex items-center justify-between min-h-[48px] px-4 rounded-2xl bg-card border border-border text-sm">
@@ -245,54 +279,6 @@ export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBa
           </div>
         )}
       </div>
-    </BusinessScreen>
-  )
-}
-
-// ── Bill ─────────────────────────────────────────────────────────────────
-
-const blank = (): BillItem => ({ name: '', qty: 1, price: '' })
-
-export function BillScreen({ open, onBack, storeName }: { open: boolean; onBack: () => void; storeName: string }) {
-  const make = useMakeRequest()
-  const toast = useUIStore(s => s.showToastMessage)
-  const [customer, setCustomer] = useState('')
-  const [note, setNote] = useState('')
-  const [rows, setRows] = useState<BillItem[]>([blank()])
-  const [busy, setBusy] = useState(false)
-  const [intent, setIntent] = useState<MerchantIntent | null>(null)
-  const view = useLiveRequest(intent?.code ?? null)
-  const reset = () => { setCustomer(''); setNote(''); setRows([blank()]); setIntent(null) }
-  useEffect(() => { if (!open) reset() }, [open])
-
-  const items: InvoiceItem[] = rows.map(r => ({ name: r.name, qty: r.qty, price: Number(r.price) || 0 })).filter(i => i.name.trim() && i.qty > 0)
-  const total = invoiceTotal(items)
-
-  const send = async () => {
-    setBusy(true)
-    try { setIntent(await make({ amount: total, items, customer: customer || undefined, note: note || undefined, expiresInMinutes: 10080 })) }
-    catch (e) { toast(e instanceof Error ? e.message : 'Could not create the bill', 'error') }
-    setBusy(false)
-  }
-
-  return (
-    <BusinessScreen open={open} title="Send bill" onBack={onBack}
-      footer={intent ? <GhostBtn onClick={reset}>New bill</GhostBtn>
-        : <PrimaryBtn disabled={!(total > 0) || busy} onClick={send}>{busy ? 'Creating…' : total > 0 ? `Create bill · ${money(total)}` : 'Add items'}</PrimaryBtn>}>
-      {intent ? (
-        <Done icon={<FileText className="size-5" />} amount={intent.amount} note={intent.note}
-          top={`${intent.orderNumber ?? 'Bill'}${intent.customerUsername ? ` · ${intent.customerUsername}.arc` : ''}`}>
-          <div className="w-full"><DetailList rows={(intent.items ?? items).map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
-          <Live view={view} />
-          <div className="w-full"><LinkShare url={paymentLink(intent.code)} text={`${storeName}: bill ${intent.orderNumber ?? ''} for ${money(intent.amount)}`} /></div>
-        </Done>
-      ) : (
-        <div className="flex flex-col gap-5 px-5 pt-5">
-          <Field label="Customer (optional)"><TextInput value={customer} onChange={e => setCustomer(e.target.value)} placeholder="username.arc" /></Field>
-          <Field label="Items"><BillItemsEditor rows={rows} onChange={r => setRows(r.slice(0, 50))} total={money(total)} /></Field>
-          <Field label="Note (optional)"><TextInput value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="Thanks for shopping with us" /></Field>
-        </div>
-      )}
     </BusinessScreen>
   )
 }
@@ -373,8 +359,8 @@ export function RequestsScreen({ open, onBack }: { open: boolean; onBack: () => 
 
 // ── Insights ─────────────────────────────────────────────────────────────
 
-export function InsightsScreen({ open, onBack, payments, waiting, period, scope }: {
-  open: boolean; onBack: () => void; payments: MerchantPayment[]; waiting: string
+function InsightsBody({ payments, waiting, period, scope }: {
+  payments: MerchantPayment[]; waiting: string
   /** The Business date filter - Insights reads the same range. */
   period: { from: Date; to: Date; label: string }
   /** Active store name when the owner has picked one. */
@@ -426,8 +412,7 @@ export function InsightsScreen({ open, onBack, payments, waiting, period, scope 
 
   const label = scope ? `${period.label} · ${scope}` : period.label
   return (
-    <BusinessScreen open={open} title="Insights" onBack={onBack}>
-      <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
+      <div className="flex flex-col gap-6 px-5 pt-4 pb-6">
         <InsightsChart total={money(data.total)} sub={`${label} · ${data.count} payment${data.count === 1 ? '' : 's'}`} bars={data.bars} />
         <StatTriple items={[
           { label: 'Average ticket', value: money(data.count ? data.total / data.count : 0) },
@@ -438,7 +423,6 @@ export function InsightsScreen({ open, onBack, payments, waiting, period, scope 
         <RankList title="Top customers" empty="No customers in this period" rows={data.customers} />
         <RankList title="By chain" empty="No payments in this period" rows={data.chains} />
       </div>
-    </BusinessScreen>
   )
 }
 
@@ -505,8 +489,8 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
 
 // ── Statement ────────────────────────────────────────────────────────────
 
-export function StatementScreen({ open, onBack, storeName, handle, payments, refunds, settled, waiting, loading }: {
-  open: boolean; onBack: () => void; storeName: string; handle: string; payments: MerchantPayment[]; refunds: MerchantRefund[]
+function StatementBody({ storeName, handle, payments, refunds, settled, waiting, loading }: {
+  storeName: string; handle: string; payments: MerchantPayment[]; refunds: MerchantRefund[]
   settled: { amount: number; createdAt: string }[]; waiting: number; loading: boolean
 }) {
   const [range, setRange] = useState<StatementRange>('today')
@@ -520,12 +504,38 @@ export function StatementScreen({ open, onBack, storeName, handle, payments, ref
     <PrintableStatement storeName={storeName} handle={handle} periodLabel={rangeLabel(range)} rows={rows}
       payments={inRange.map(p => ({ time: p.createdAt, from: name(p), order: p.orderNumber ?? undefined, chain: chainLabel(p.chain), amount: money(p.amount), status: refunded.has(p.id) ? 'Refunded' : 'Paid' }))} />)
   return (
-    <BusinessScreen open={open} title="Statement" onBack={onBack}>
-      <div className="px-5 pt-5 pb-6">
+    <>
+      <div className="px-5 pt-4 pb-6">
         <StatementView range={range} onRange={setRange} loading={loading} rows={rows} periodLabel={rangeLabel(range)}
           onCsv={() => exportPaymentsCsv(inRange, storeName, refunds)} onPdf={pdf} />
       </div>
       {printer.portal}
+    </>
+  )
+}
+
+// ── Reports: Insights + Statement ────────────────────────────────────────
+
+export function ReportsScreen({ open, onBack, insights, statement }: {
+  open: boolean; onBack: () => void
+  insights: Parameters<typeof InsightsBody>[0]
+  statement: Parameters<typeof StatementBody>[0]
+}) {
+  const [view, setView] = useState<'insights' | 'statement'>('insights')
+  useEffect(() => { if (!open) setView('insights') }, [open])
+  return (
+    <BusinessScreen open={open} title="Reports" onBack={onBack}>
+      <div className="px-5 pt-4">
+        <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Report">
+          {([['insights', 'Insights'], ['statement', 'Statement']] as const).map(([id, label]) => (
+            <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
+              className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${view === id ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {view === 'insights' ? <InsightsBody {...insights} /> : <StatementBody {...statement} />}
     </BusinessScreen>
   )
 }
