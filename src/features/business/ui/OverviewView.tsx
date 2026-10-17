@@ -4,7 +4,7 @@
  * waits on other chains, and recent payments. Every number appears once.
  */
 import React from 'react'
-import { QrCode, DollarSign, Link2, ReceiptText, ChevronDown, ChevronRight, RotateCcw, CreditCard } from 'lucide-react'
+import { QrCode, ArrowDownLeft, Clock, ReceiptText, ChevronDown, ChevronRight, RotateCcw, CreditCard } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { Payment, ReactNode } from './types'
 import { formatTime } from './types'
@@ -72,8 +72,8 @@ export interface OverviewViewProps {
   recent: Payment[]
 
   onShowQr: () => void
-  onCharge: () => void
-  onPaymentLink: () => void
+  /** Amount → counter QR + shareable link for one order */
+  onReceive: () => void
   onSendBill: () => void
   onRequests?: () => void
   onToSettle: () => void
@@ -95,9 +95,9 @@ export function OverviewView({
   refunded,
   recent,
   onShowQr,
-  onCharge,
-  onPaymentLink,
+  onReceive,
   onSendBill,
+  onRequests,
   onToSettle,
   onRefunded,
   onSeeAllPayments,
@@ -108,9 +108,9 @@ export function OverviewView({
   const chains = toSettle.chains ?? []
   const actions = [
     { Icon: QrCode,      label: 'Show QR',   onClick: onShowQr },
-    { Icon: DollarSign, label: 'Charge',    onClick: onCharge },
-    { Icon: Link2,       label: 'Pay link',  onClick: onPaymentLink },
-    { Icon: ReceiptText, label: 'Send bill', onClick: onSendBill },
+    { Icon: ArrowDownLeft, label: 'Receive',   onClick: onReceive },
+    { Icon: ReceiptText,   label: 'Send bill', onClick: onSendBill },
+    ...(onRequests ? [{ Icon: Clock, label: 'Requests', onClick: onRequests }] : []),
   ]
 
   return (
@@ -159,7 +159,7 @@ export function OverviewView({
 
       {/* ── Quick actions ───────────────────────────────────────────────── */}
       <FadeUp delay={0.08} className="mx-5">
-        <div className="grid grid-cols-4 gap-2">
+        <div className={`grid gap-2 ${actions.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
           {actions.map(({ Icon, label, onClick }) => (
             <button key={label} type="button" onClick={onClick}
               className="flex flex-col items-center gap-2 py-1 active:scale-[0.95] transition-transform">
