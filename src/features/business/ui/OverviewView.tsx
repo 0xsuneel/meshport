@@ -19,7 +19,7 @@ const initials = (name: string) => {
   return ((parts[0]?.[0] ?? '?') + (parts[1]?.[0] ?? parts[0]?.[1] ?? '')).toUpperCase()
 }
 
-function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payment) => void }) {
+export function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payment) => void }) {
   const tag = payment.status === 'to_settle' ? ' · to settle' : payment.status === 'refunded' ? ' · refunded' : ''
   return (
     <button
