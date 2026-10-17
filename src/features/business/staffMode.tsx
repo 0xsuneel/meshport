@@ -8,7 +8,7 @@ import { useUIStore } from '@/store'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { myMemberships, acceptInvite, staffCreateRequest, staffPayments, type Membership } from '@/lib/businessTeam'
 import type { MerchantPayment } from '@/lib/merchantPay'
-import { RequestMaker, ShopQrScreen, ChargeScreen, LinkScreen, BillScreen } from './screens'
+import { RequestMaker, ShopQrScreen, ReceiveScreen, BillScreen } from './screens'
 import { StaffBanner, StaffModeHeader, PaymentsView, OverviewView, Skeleton, type Payment } from './ui'
 import { chainLabel } from './settlement'
 
@@ -20,7 +20,7 @@ export function StaffModePage() {
   const [list, setList] = useState<Membership[] | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [raw, setRaw] = useState<MerchantPayment[]>([])
-  const [screen, setScreen] = useState<'qr' | 'charge' | 'link' | 'bill' | 'payments' | null>(null)
+  const [screen, setScreen] = useState<'qr' | 'receive' | 'bill' | 'payments' | null>(null)
 
   const load = () => myMemberships().then(setList).catch(() => setList([]))
   useEffect(() => { void load() }, [])
@@ -68,17 +68,15 @@ export function StaffModePage() {
         <OverviewView loading={false} periodLabel="Today"
           collection={{ total: money(total), count: today.length, average: money(today.length ? total / today.length : 0), customers: new Set(today.map(who)).size }}
           toSettle={{ total: '—', chainCount: 0 }} refunded={{ total: '—', count: 0 }} recent={payments.slice(0, 4)}
-          onShowQr={() => setScreen('qr')} onCharge={() => setScreen('charge')}
-          onPaymentLink={() => manager ? setScreen('link') : toast('Ask the owner to make you a manager for links', 'info')}
+          onShowQr={() => setScreen('qr')} onReceive={() => setScreen('receive')}
           onSendBill={() => manager ? setScreen('bill') : toast('Ask the owner to make you a manager for bills', 'info')}
-          onRequests={() => setScreen('payments')} onToSettle={() => toast('Settlements are done by the owner', 'info')}
+          onToSettle={() => toast('Settlements are done by the owner', 'info')}
           onRefunded={() => toast('Refunds are done by the owner', 'info')}
           onSeeAllPayments={() => setScreen('payments')} onPayment={() => {}} />
       </div>
       <RequestMaker.Provider value={{ create: p => staffCreateRequest(active.ownerAuthUid, { ...p, storeId: p.storeId ?? active.storeId }), storeId: active.storeId, canBill: manager }}>
         <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={active.ownerName} outlet={active.storeName} handle={`${active.ownerUsername}.arc`} payTo={active.ownerUsername} />
-        <ChargeScreen open={screen === 'charge'} onBack={back} />
-        <LinkScreen open={screen === 'link'} onBack={back} storeName={active.ownerName} />
+        <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={active.ownerName} />
         <BillScreen open={screen === 'bill'} onBack={back} storeName={active.ownerName} />
       </RequestMaker.Provider>
       {screen === 'payments' && (

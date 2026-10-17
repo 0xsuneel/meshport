@@ -2,12 +2,11 @@
 // of these over the tab instead of sending the merchant to another page:
 //
 //   ShopQrScreen      the store's fixed QR (customer types the amount)
-//   ChargeScreen      counter keypad -> one-time QR for that amount, live
-//                     until it's paid
-//   LinkScreen        payment link to share (amount, note, how long it's open)
+//   ReceiveScreen     amount keypad -> one order shown as a counter QR and a
+//                     link to send, live until it's paid
 //   BillScreen        itemised bill for a customer
 //   RequestsScreen    everything the store asked for, with cancel / complete
-//   InsightsScreen    last 7 days from the store's own payments
+//   InsightsScreen    the selected period's payments, by day, hour and chain
 //   ProfileScreen     business details and approval (the application form)
 //
 // Visuals come from the Arc Studio kit in ./ui; this file holds the logic.
@@ -15,7 +14,7 @@
 // nothing here moves funds out.
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
-import { Store, Link2, FileText, Clock, Printer } from 'lucide-react'
+import { Store, ChevronDown, FileText, Clock, Printer } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, applyForMerchant } from '@/lib/merchant'
 import { chainLogoSrc } from '@/lib/chainLogos'
@@ -152,21 +151,33 @@ export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo }:
   )
 }
 
-// ── Charge (counter keypad) ──────────────────────────────────────────────
+// ── Receive (counter QR + shareable link, one order) ─────────────────────
 
-export function ChargeScreen({ open, onBack }: { open: boolean; onBack: () => void }) {
+const VALID_FOR = [
+  { id: '15', label: '15 min' }, { id: '60', label: '1 hour' }, { id: '1440', label: '1 day' },
+  { id: '10080', label: '7 days' }, { id: '0', label: 'No limit' },
+]
+
+export function ReceiveScreen({ open, onBack, storeName }: { open: boolean; onBack: () => void; storeName: string }) {
   const make = useMakeRequest()
+  // Cashiers take counter payments only: up to an hour, no named customer.
+  const { canBill } = useContext(RequestMaker)
+  const validFor = canBill ? VALID_FOR : VALID_FOR.slice(0, 2)
   const toast = useUIStore(s => s.showToastMessage)
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
+  const [customer, setCustomer] = useState('')
+  const [expiry, setExpiry] = useState('15')
+  const [more, setMore] = useState(false)
   const [busy, setBusy] = useState(false)
   const [intent, setIntent] = useState<MerchantIntent | null>(null)
   const view = useLiveRequest(intent?.code ?? null)
-  const qr = useQr(intent ? paymentLink(intent.code) : null)
+  const link = intent ? paymentLink(intent.code) : null
+  const qr = useQr(link)
   const paid = view?.status === 'paid'
 
   useEffect(() => { if (paid) speakPayment(view!.received) }, [paid])
-  const reset = () => { setAmount(''); setNote(''); setIntent(null) }
+  const reset = () => { setAmount(''); setNote(''); setCustomer(''); setExpiry('15'); setMore(false); setIntent(null) }
   useEffect(() => { if (!open) reset() }, [open])
 
   const press = (k: KeypadKey) => setAmount(a => {
@@ -176,11 +187,14 @@ export function ChargeScreen({ open, onBack }: { open: boolean; onBack: () => vo
     return /\.\d{3,}$/.test(next) || Number(next) > 100000 ? a : next
   })
   const value = Number(amount) || 0
+  const validLabel = validFor.find(v => v.id === expiry)?.label ?? '15 min'
 
-  const charge = async () => {
+  const create = async () => {
     setBusy(true)
-    try { setIntent(await make({ amount: value, note: note || undefined, expiresInMinutes: 15 })) }
-    catch (e) { toast(e instanceof Error ? e.message : 'Could not create the charge', 'error') }
+    try {
+      setIntent(await make({ amount: value, note: note || undefined, customer: canBill && customer ? customer : undefined,
+        expiresInMinutes: Number(expiry) || null }))
+    } catch (e) { toast(e instanceof Error ? e.message : 'Could not create the payment', 'error') }
     setBusy(false)
   }
   const cancel = async () => {
@@ -189,73 +203,48 @@ export function ChargeScreen({ open, onBack }: { open: boolean; onBack: () => vo
   }
 
   if (intent) return (
-    <BusinessScreen open={open} title="Charge" onBack={onBack}
-      footer={paid ? <PrimaryBtn onClick={reset}>New charge</PrimaryBtn> : <GhostBtn onClick={cancel}>Cancel charge</GhostBtn>}>
-      <div className="flex flex-col items-center text-center px-5 pt-6 gap-5">
+    <BusinessScreen open={open} title="Receive" onBack={onBack}
+      footer={paid ? <PrimaryBtn onClick={reset}>New payment</PrimaryBtn> : <GhostBtn onClick={cancel}>Cancel payment</GhostBtn>}>
+      <div className="flex flex-col items-center text-center px-5 pt-5 gap-4">
         <div>
           <p className="text-xs font-semibold text-text-muted uppercase tracking-widest">Amount due</p>
           <p className="display text-4xl font-bold tabular-nums text-text-primary mt-1">{money(intent.amount)}</p>
           {intent.note && <p className="text-sm text-text-secondary mt-1">{intent.note}</p>}
+          {intent.customerUsername && <p className="text-xs text-text-muted mt-1">For {intent.customerUsername}.arc</p>}
         </div>
-        <QrCard dataUrl={qr} paid={paid} subtitle={paid ? undefined : 'Scan to pay · valid 15 minutes'} />
+        <QrCard dataUrl={qr} paid={paid} subtitle={paid ? undefined : `Scan to pay · valid ${intent.expiresAt ? validLabel : 'until paid'}`} />
         <Live view={view} />
+        {!paid && link && (
+          <div className="w-full">
+            <p className="text-xs text-text-muted mb-2">Customer not here? Send the link</p>
+            <LinkShare url={link} text={`${storeName}: pay ${money(intent.amount)}${intent.note ? ` for ${intent.note}` : ''}`} />
+          </div>
+        )}
       </div>
     </BusinessScreen>
   )
 
   return (
-    <BusinessScreen open={open} title="Charge" onBack={onBack}
-      footer={<PrimaryBtn disabled={!(value > 0) || busy} onClick={charge}>{busy ? 'Creating…' : value > 0 ? `Charge ${money(value)}` : 'Enter amount'}</PrimaryBtn>}>
+    <BusinessScreen open={open} title="Receive" onBack={onBack}
+      footer={<PrimaryBtn disabled={!(value > 0) || busy} onClick={create}>{busy ? 'Creating…' : value > 0 ? `Receive ${money(value)}` : 'Enter amount'}</PrimaryBtn>}>
       <AmountKeypad value={amount} onKey={press} note={note} onNote={setNote} />
-    </BusinessScreen>
-  )
-}
-
-// ── Payment link ─────────────────────────────────────────────────────────
-
-const EXPIRY = [{ id: '60', label: '1 hour' }, { id: '1440', label: '1 day' }, { id: '10080', label: '7 days' }, { id: '0', label: 'No limit' }]
-
-export function LinkScreen({ open, onBack, storeName }: { open: boolean; onBack: () => void; storeName: string }) {
-  const make = useMakeRequest()
-  const toast = useUIStore(s => s.showToastMessage)
-  const [amount, setAmount] = useState('')
-  const [note, setNote] = useState('')
-  const [customer, setCustomer] = useState('')
-  const [expiry, setExpiry] = useState('1440')
-  const [busy, setBusy] = useState(false)
-  const [intent, setIntent] = useState<MerchantIntent | null>(null)
-  const view = useLiveRequest(intent?.code ?? null)
-  const reset = () => { setAmount(''); setNote(''); setCustomer(''); setIntent(null) }
-  useEffect(() => { if (!open) reset() }, [open])
-
-  const create = async () => {
-    setBusy(true)
-    try { setIntent(await make({ amount: Number(amount), note: note || undefined, customer: customer || undefined, expiresInMinutes: Number(expiry) || null })) }
-    catch (e) { toast(e instanceof Error ? e.message : 'Could not create the link', 'error') }
-    setBusy(false)
-  }
-
-  return (
-    <BusinessScreen open={open} title="Payment link" onBack={onBack}
-      footer={intent ? <GhostBtn onClick={reset}>Create another</GhostBtn>
-        : <PrimaryBtn disabled={!(Number(amount) > 0) || busy} onClick={create}>{busy ? 'Creating…' : 'Create link'}</PrimaryBtn>}>
-      {intent ? (
-        <Done icon={<Link2 className="size-5" />} amount={intent.amount} note={intent.note}>
-          <Live view={view} />
-          <div className="w-full"><LinkShare url={paymentLink(intent.code)} text={`${storeName}: pay ${money(intent.amount)}${intent.note ? ` for ${intent.note}` : ''}`} /></div>
-        </Done>
-      ) : (
-        <div className="flex flex-col gap-5 px-5 pt-5">
-          <Field label="Amount (USDC)">
-            <TextInput inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" className="text-2xl font-semibold tabular-nums" />
-          </Field>
-          <Field label="What is it for?"><TextInput value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="e.g. Cake order" /></Field>
-          <Field label="Customer (optional)" hint="Their MeshPort username - they also get it in their notifications.">
-            <TextInput value={customer} onChange={e => setCustomer(e.target.value)} placeholder="username.arc" />
-          </Field>
-          <Field label="Link open for"><ChipSelect options={EXPIRY} value={expiry} onChange={setExpiry} /></Field>
-        </div>
-      )}
+      <div className="px-5 pt-5 pb-2">
+        <button type="button" onClick={() => setMore(m => !m)} aria-expanded={more}
+          className="w-full flex items-center justify-between min-h-[48px] px-4 rounded-2xl bg-card border border-border text-sm">
+          <span className="text-text-secondary">Valid for <b className="font-semibold text-text-primary">{validLabel}</b>{canBill && customer ? <> · for <b className="font-semibold text-text-primary">{customer.replace(/\.arc$/, '')}.arc</b></> : null}</span>
+          <ChevronDown className={`size-4 text-text-muted transition-transform ${more ? 'rotate-180' : ''}`} />
+        </button>
+        {more && (
+          <div className="flex flex-col gap-4 pt-4">
+            <Field label="Valid for"><ChipSelect options={validFor} value={expiry} onChange={setExpiry} /></Field>
+            {canBill && (
+              <Field label="Customer (optional)" hint="Their MeshPort username - they get it in their notifications.">
+                <TextInput value={customer} onChange={e => setCustomer(e.target.value)} placeholder="username.arc" />
+              </Field>
+            )}
+          </div>
+        )}
+      </div>
     </BusinessScreen>
   )
 }
