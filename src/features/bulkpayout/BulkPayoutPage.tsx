@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { useStepDirection, stepMotion } from '@/hooks/useStepDirection'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
+import type { BulkPayPrefill } from '@/lib/businessPayouts'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import {
   ArrowLeft, Plus, Trash2, Upload, CheckCircle, XCircle,
@@ -174,6 +175,22 @@ export function BulkPayoutPage() {
   const [processing, setProcessing] = useState(false)
   const [processingStatus, setProcessingStatus] = useState('')
   const [purpose, setPurpose] = useState('')
+  // Opened from Business → Payouts: start with that list (then marked paid).
+  const location = useLocation()
+  const payoutIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    const prefill = (location.state as { bulkPay?: BulkPayPrefill } | null)?.bulkPay
+    if (!prefill?.recipients?.length) return
+    payoutIdRef.current = prefill.payoutId
+    setPurpose(prefill.purpose.slice(0, 120))
+    setRecipients(prefill.recipients.map((p, i) => ({
+      id: `payout_${i}_${Date.now()}`, input: p.input,
+      walletAddress: isValidAddress(p.input) ? p.input : '',
+      displayName: p.input, username: p.input, amount: p.amount, status: 'pending' as RecipientStatus,
+    })))
+    navigate(location.pathname, { replace: true, state: null })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const [entryMode, setEntryMode] = useState<'manual' | 'csv'>('manual')
 
   // ─── Resume an in-flight bulk payout after a refresh ────────────────────
@@ -377,6 +394,10 @@ export function BulkPayoutPage() {
       const name = `${String(r.username || '').replace(/\.arc$/, '')}.arc`
       refused.set(r.id, reach.blocked ? BLOCKED_YOU(name) : STRANGER_PAY_BLOCKED(name))
     }))
+    // USDC refuses blocklisted addresses: the whole batch would fail on-chain.
+    const { blockedAmong, BLOCKED_TEXT } = await import('@/lib/usdcBlocklist')
+    const blocked = await blockedAmong(resolved.map(r => r.walletAddress).filter(Boolean)).catch(() => new Set<string>())
+    for (const r of resolved) if (blocked.has(r.walletAddress.toLowerCase())) refused.set(r.id, BLOCKED_TEXT)
     if (refused.size) {
       setProcessing(false)
       setRecipients(prev => prev.map(r => refused.has(r.id) ? { ...r, status: 'unresolved' as RecipientStatus, error: refused.get(r.id) } : r))
@@ -752,6 +773,11 @@ export function BulkPayoutPage() {
   // retry with Review Payout.
   useEffect(() => {
     if (step !== 'results') return
+    if (payoutIdRef.current && results.some(r => r.status === 'success')) {
+      const id = payoutIdRef.current
+      payoutIdRef.current = null
+      void import('@/lib/businessPayouts').then(m => m.markPayoutPaid(id)).catch(() => {})
+    }
     const failed = results.filter(r => r.status === 'failed').map(r => ({ ...r.recipient, error: undefined }))
     const keepPurpose = purpose
     clearEntry()

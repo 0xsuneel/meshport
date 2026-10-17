@@ -12,7 +12,7 @@
 // Payments are only ever confirmed by the merchant-pay Edge Function, which
 // reads the transaction from the chain. Nothing here marks anything paid.
 
-import { encodeFunctionData, parseUnits, createPublicClient, http, erc20Abi, type Hex } from 'viem'
+import { encodeFunctionData, parseUnits, stringToHex, createPublicClient, http, erc20Abi, type Hex } from 'viem'
 import { supabase } from './supabase'
 import { describeFunctionsError } from './describeFunctionsError'
 import { ARC_EXPLORER, ARC_CHAIN_KEY } from './chainExplorers'
@@ -536,11 +536,42 @@ export const ARC_PAY_CHAIN: PayChain = { id: 'Arc_Testnet', label: 'Arc', chainI
  * wallet if needed, then a plain native USDC send - the wallet shows
  * "Send <amount> USDC to <address>".
  */
-export async function payArcFromBrowserWallet(w: BrowserWallet, to: string, amount: number): Promise<string> {
+export async function payArcFromBrowserWallet(w: BrowserWallet, to: string, amount: number, memo?: { code: string; orderNumber?: string | null }): Promise<string> {
   const from = await connectWallet(w)
   await ensureChain(w, ARC_PAY_CHAIN)
+  if (memo) {
+    // The order rides along on-chain (Arc Memo contract), so the payment is
+    // matched to it even if this page closes before it reports back.
+    try {
+      return await w.provider.request({ method: 'eth_sendTransaction', params: [{ from, to: ARC_MEMO_CONTRACT, data: memoTransferData(to, amount, memo) }] })
+    } catch (e: any) {
+      if (e?.code === 4001 || /reject|denied|cancel/i.test(String(e?.message ?? ''))) throw e
+      // A wallet that can't run the memo call still pays with a plain send.
+    }
+  }
   const value = parseUnits(amount.toFixed(6), 18)
   return await w.provider.request({ method: 'eth_sendTransaction', params: [{ from, to, value: `0x${value.toString(16)}` }] })
+}
+
+/** Arc's Memo contract - https://docs.arc.io/arc/concepts/transaction-memos */
+export const ARC_MEMO_CONTRACT = '0x5294E9927c3306DcBaDb03fe70b92e01cCede505'
+const MEMO_ABI = [{
+  type: 'function', name: 'memo', stateMutability: 'nonpayable', outputs: [],
+  inputs: [{ name: 'target', type: 'address' }, { name: 'data', type: 'bytes' }, { name: 'memoId', type: 'bytes32' }, { name: 'memoData', type: 'bytes' }],
+}] as const
+
+/** memoId for an order: its code as bytes32 (the watcher reads it back the same way). */
+export function orderMemoId(code: string): Hex {
+  return stringToHex(code.toLowerCase(), { size: 32 })
+}
+
+/** A USDC transfer to `to`, wrapped in Memo.memo(...) with the order attached. */
+export function memoTransferData(to: string, amount: number, memo: { code: string; orderNumber?: string | null }): Hex {
+  const transfer = encodeFunctionData({ abi: erc20Abi, functionName: 'transfer', args: [to as Hex, parseUnits(amount.toFixed(6), 6)] })
+  return encodeFunctionData({
+    abi: MEMO_ABI, functionName: 'memo',
+    args: [ARC_PAY_CHAIN.usdc as Hex, transfer, orderMemoId(memo.code), stringToHex(`MeshPort ${orderDisplay(memo)}`)],
+  })
 }
 
 /** Deep links that open a page inside a wallet app's browser. */

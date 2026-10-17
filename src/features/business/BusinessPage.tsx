@@ -27,6 +27,7 @@ import { listMyRefunds, subscribeMyRefunds, refundPayment, chainUsdcBalance, che
 import { makePeriod, inPeriod, inPrevious, periodTrend, savedPeriod, savePeriod, type PeriodId } from './period'
 import { useAutoSettle } from './autoSettle'
 import { CashOutScreen, TeamScreen } from './teamScreens'
+import { PayoutsScreen } from './payoutsScreen'
 import { StaffModePage } from './staffMode'
 import { useUIStore } from '@/store'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
@@ -37,7 +38,7 @@ import {
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
-type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team'
+type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.method === 'own_transfer' ? 'Your transfer'
@@ -454,6 +455,7 @@ function OwnerBusinessPage() {
       <BusinessMenuSheet open={menu} onClose={() => setMenu(false)} groups={[
         { title: 'Business', items: [
           { id: 'reports', label: 'Reports', hint: 'Insights and statement · CSV and PDF', icon: 'insights', onClick: go('reports') },
+          { id: 'payouts', label: 'Payouts', hint: 'Pay staff and suppliers · once or on a repeat', icon: 'payouts', onClick: go('payouts') },
           { id: 'team', label: 'Stores & staff', hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers', icon: 'stores', onClick: go('team') },
         ] },
         { title: 'Account', items: [
@@ -509,6 +511,7 @@ function OwnerBusinessPage() {
       <ProfileScreen open={screen === 'profile'} onBack={back} handle={handle} />
       </RequestMaker.Provider>
       <CashOutScreen open={screen === 'cashout'} onBack={back} />
+      <PayoutsScreen open={screen === 'payouts'} onBack={back} />
       <TeamScreen open={screen === 'team'} onBack={back} canAddStores={isMerchant} stores={stores} onChanged={setStores} paymentsByStore={paymentsByStore}
         onQr={id => { pickStore(id); setScreen('qr') }} />
     </div>

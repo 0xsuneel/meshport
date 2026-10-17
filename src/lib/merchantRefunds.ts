@@ -132,6 +132,10 @@ export async function refundPayment(p: {
   const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 250 })
   const balance = await publicClient.getBalance({ address: account.address }) // 18 decimals
   const reason = p.reason.slice(0, 140)
+  // A transfer to a blocklisted address reverts and still costs gas.
+  const { isUsdcBlocked, BLOCKED_TEXT } = await import('@/lib/usdcBlocklist')
+  const toChain = (p.route === 'chain' || p.route === 'origin') && p.chain ? p.chain : 'Arc_Testnet'
+  if (await isUsdcBlocked(p.customer, toChain)) throw new Error(BLOCKED_TEXT)
 
   if (p.route === 'chain' && p.chain && p.chain !== 'Arc_Testnet') {
     const hash = await transferOnChain({ chain: p.chain, account, to: p.customer as Hex, amount: p.amount, target })
@@ -202,9 +206,12 @@ export async function checkRefundableSender(chain: string, from: string): Promis
   } else {
     const { KNOWN_INTERNAL_CONTRACTS } = await import('@/lib/onchainReceivedActivity')
     const code = KNOWN_INTERNAL_CONTRACTS.has(from.toLowerCase()) ? 'contract' : await codeAt(chain, from)
+    const { isUsdcBlocked, BLOCKED_TEXT } = await import('@/lib/usdcBlocklist')
     out = code === null ? { refundable: false, reason: "Couldn't check who sent this payment. Try again in a moment." }
-      : code === '0x' || code.toLowerCase().startsWith('0xef0100') ? { refundable: true }
-      : { refundable: false, reason: 'Paid from a contract (an exchange, bridge or smart account), so it can’t be refunded automatically. Contact the customer.' }
+      : !(code === '0x' || code.toLowerCase().startsWith('0xef0100'))
+        ? { refundable: false, reason: 'Paid from a contract (an exchange, bridge or smart account), so it can’t be refunded automatically. Contact the customer.' }
+      : await isUsdcBlocked(from, chain) ? { refundable: false, reason: `Paid from a blocked address. ${BLOCKED_TEXT}` }
+      : { refundable: true }
   }
   if (out.refundable || out.reason?.startsWith('Paid')) senderCache.set(key, out)
   return out

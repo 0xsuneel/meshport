@@ -376,6 +376,20 @@ function isServiceCaller(req: Request): boolean {
   return isCronOrLegacyServiceCaller(req)
 }
 
+// Arc Memo contract: a payment sent with the order code as memoId is matched
+// to that order directly - https://docs.arc.io/arc/concepts/transaction-memos
+const ARC_MEMO_CONTRACT = '0x5294e9927c3306dcbadb03fe70b92e01ccede505'
+const MEMO_TOPIC = '0xeb15ee720798341c37739df41be53acfbbf70ae6802dade35457beec6e47a5e4'
+const memoIdOf = (code: string) => '0x' + [...new TextEncoder().encode(code.toLowerCase())].map(b => b.toString(16).padStart(2, '0')).join('').padEnd(64, '0')
+
+/** memoIds the sender attached to this transaction (Memo events). */
+async function txMemoIds(rpcs: string[], tx: string): Promise<string[]> {
+  const receipt = await rpc(rpcs, 'eth_getTransactionReceipt', [tx]).catch(() => null)
+  return (receipt?.logs ?? [])
+    .filter((l: any) => String(l.address).toLowerCase() === ARC_MEMO_CONTRACT && String(l.topics?.[0]).toLowerCase() === MEMO_TOPIC)
+    .map((l: any) => String(l.topics?.[3] ?? '').toLowerCase())
+}
+
 const pad = (a: string) => '0x' + a.replace(/^0x/, '').toLowerCase().padStart(64, '0')
 const hex = (n: number) => '0x' + n.toString(16)
 
@@ -504,6 +518,13 @@ async function watchDeposits() {
             candidate_codes: list.map((c: any) => c.code),
           })
           review += 1
+        }
+
+        // 0) Sent with the order attached (Arc memo): that order, whatever the amount.
+        if (isArc && live.length) {
+          const ids = new Set(await txMemoIds(chain.rpcs, tx))
+          const named = ids.size ? live.find((i: any) => ids.has(memoIdOf(String(i.code)))) : undefined
+          if (named) { await record(named); return }
         }
 
         // 1) Exact amount.

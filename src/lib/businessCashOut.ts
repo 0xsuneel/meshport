@@ -21,13 +21,15 @@ export type BuyerOffer = { offer: P2POffer; remaining: number; rating: { avg: nu
 export async function listBuyers(myUserId: string): Promise<BuyerOffer[]> {
   const offers = await fetchOffers({ offerType: 'buy', currency: CASH_OUT_CURRENCY, excludeUserId: myUserId, limit: 50 })
   if (!offers.length) return []
-  const [consumed, ratings] = await Promise.all([
+  const [consumed, ratings, blocked] = await Promise.all([
     fetchOfferConsumedAmounts(offers.map(o => o.id)),
     Promise.all(offers.map(o => fetchUserRating(o.userId).catch(() => ({ avg: 0, count: 0 })))),
+    // The escrow releases to the buyer: one USDC refuses would fail the trade.
+    import('./usdcBlocklist').then(m => m.blockedAmong(offers.map(o => o.walletAddress).filter(Boolean))).catch(() => new Set<string>()),
   ])
   return offers
     .map((offer, i) => ({ offer, remaining: offerRemainingAmount(offer, consumed.get(offer.id) ?? 0), rating: ratings[i] }))
-    .filter(b => b.remaining >= b.offer.minAmount)
+    .filter(b => b.remaining >= b.offer.minAmount && !blocked.has(String(b.offer.walletAddress ?? '').toLowerCase()))
     .sort((a, b) => b.offer.pricePerUsdc - a.offer.pricePerUsdc)
 }
 
