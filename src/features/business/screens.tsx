@@ -428,14 +428,9 @@ function InsightsBody({ payments, waiting, period, scope }: {
 
 // ── Business profile / approval ──────────────────────────────────────────
 
-const TYPES = ['Retail store', 'Restaurant / Café', 'Online shop', 'Services', 'Freelancer', 'Other'].map(t => ({ id: t, label: t }))
-
 export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack: () => void; handle: string }) {
   const toast = useUIStore(s => s.showToastMessage)
-  const { status, application, storeName } = useMerchant()
-  const draft = (() => { try { return JSON.parse(localStorage.getItem('meshport_business_draft') || 'null') as { storeName?: string; storeType?: string } | null } catch { return null } })()
-  const [name, setName] = useState(() => application?.businessName || storeName || draft?.storeName || '')
-  const [type, setType] = useState(() => application?.businessType || TYPES.find(t => t.id === draft?.storeType)?.id || TYPES[0].id)
+  const { status, application } = useMerchant()
   const [contact, setContact] = useState(() => application?.contact || '')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
@@ -445,39 +440,36 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
   const canApply = status === 'none' || (closed && again)
   const submit = async () => {
     setBusy(true)
-    try { await applyForMerchant({ businessName: name, businessType: type, contact, description: reason }); toast('Sent for review', 'success'); setAgain(false) }
+    // The business is its username; shops are added as stores after approval.
+    try { await applyForMerchant({ businessName: handle, contact, description: reason }); toast('Sent for review', 'success'); setAgain(false) }
     catch (e) { toast(e instanceof Error ? e.message : 'Could not send', 'error') }
     setBusy(false)
   }
 
   const card: { tone: StatusCardTone; title: string; text: string } =
-    status === 'approved' ? { tone: 'success', title: 'Verified business', text: 'All merchant tools are on.' }
+    status === 'approved' ? { tone: 'success', title: 'Verified business', text: 'All merchant tools are on. Add your shops in Stores & staff.' }
     : status === 'pending' ? { tone: 'warning', title: 'Under review', text: "MeshPort is reviewing your business. You'll get a notification when it's approved." }
     : closed ? { tone: 'danger', title: status === 'revoked' ? 'Merchant access removed' : 'Not approved', text: application?.reviewNote || 'Check the details and send it again.' }
-    : { tone: 'brand', title: 'Complete your business account', text: 'Tell MeshPort why you need a business account. Once approved, your store shows as verified.' }
+    : { tone: 'brand', title: 'Complete your business account', text: 'Tell MeshPort why you need a business account. Once approved, you can add your stores.' }
 
   return (
     <BusinessScreen open={open} title="Business profile" onBack={onBack}
-      footer={canApply ? <PrimaryBtn disabled={busy || name.trim().length < 2 || reason.trim().length < 10} onClick={submit}>{busy ? 'Sending…' : 'Send for review'}</PrimaryBtn>
+      footer={canApply ? <PrimaryBtn disabled={busy || reason.trim().length < 10} onClick={submit}>{busy ? 'Sending…' : 'Send for review'}</PrimaryBtn>
         : closed ? <PrimaryBtn onClick={() => setAgain(true)}>Apply again</PrimaryBtn> : undefined}>
       <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
         <ProfileStatusCard {...card} />
         {canApply ? (
           <>
-            <Field label="Business name"><TextInput value={name} onChange={e => setName(e.target.value)} maxLength={80} placeholder="Royal Bakes" /></Field>
-            <Field label="Type"><ChipSelect options={TYPES} value={type} onChange={setType} /></Field>
-            <Field label="Contact (optional)"><TextInput value={contact} onChange={e => setContact(e.target.value)} maxLength={120} placeholder="Phone or email" /></Field>
             <Field label="Why do you need a business account?" hint={`${reason.trim().length}/10 characters minimum`}>
               <textarea value={reason} onChange={e => setReason(e.target.value)} maxLength={500} rows={4}
                 placeholder="e.g. I run a bakery and want customers to pay in USDC at the counter."
                 className="w-full rounded-2xl bg-surface border border-border px-4 py-3 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-brand resize-none" />
             </Field>
+            <Field label="Contact (optional)"><TextInput value={contact} onChange={e => setContact(e.target.value)} maxLength={120} placeholder="Phone or email" /></Field>
           </>
         ) : (
           <DetailList rows={[
-            { label: 'Store', value: application?.businessName || storeName || '-' },
-            { label: 'On-chain name', value: handle },
-            ...(application?.businessType ? [{ label: 'Type', value: application.businessType }] : []),
+            { label: 'Business', value: handle },
             ...(application?.contact ? [{ label: 'Contact', value: application.contact }] : []),
             ...(application ? [{ label: 'Applied', value: new Date(application.createdAt).toLocaleDateString() }] : []),
           ]} />

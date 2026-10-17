@@ -251,10 +251,13 @@ function OwnerBusinessPage() {
     : `Settle all · ${money(settle.total)} to Arc`
   const settleNote = `Uses CCTP. MeshPort pays the gas.${settle.waitHours ? ` Settle all once every ${settle.waitHours} hour${settle.waitHours === 1 ? '' : 's'}; settle one chain any time below.` : ' You can also settle one chain at a time below.'}`
 
-  const namedStore = application?.businessName || accountStoreName || null
-  const storeName = namedStore || 'Your business'
-  const storeInText = namedStore || 'your business'
   const handle = `${application?.username || username || 'store'}.arc`
+  // The business is its username; a name it applied with (older
+  // applications) or set on the account is shown when there is one.
+  const appliedName = application?.businessName && !/\.arc$/i.test(application.businessName) ? application.businessName : null
+  const namedStore = appliedName || accountStoreName || null
+  const storeName = namedStore || handle
+  const storeInText = namedStore || 'your business'
   const headerStatus: VerificationStatus = isMerchant ? 'verified' : status === 'pending' ? 'review' : 'unverified'
 
   const banner = isMerchant ? undefined
