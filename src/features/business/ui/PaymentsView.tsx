@@ -26,10 +26,12 @@ export interface PaymentsViewProps {
   onCustomPeriod?: () => void
 }
 
-export type PeriodChoice = 'today' | 'yesterday' | 'week' | 'month' | 'custom'
+// The list is grouped by day (Today, Yesterday… headers), so the filter only
+// narrows to longer ranges.
+export type PeriodChoice = 'all' | 'week' | 'month' | 'custom'
 const PERIODS: { id: PeriodChoice; label: string }[] = [
-  { id: 'today', label: 'Today' }, { id: 'yesterday', label: 'Yesterday' },
-  { id: 'week', label: 'Last 7 days' }, { id: 'month', label: 'This month' }, { id: 'custom', label: 'Custom range…' },
+  { id: 'all', label: 'All time' }, { id: 'week', label: 'Last 7 days' },
+  { id: 'month', label: 'This month' }, { id: 'custom', label: 'Custom range…' },
 ]
 
 type Filter = 'all' | 'received' | 'to_settle' | 'refunded'
@@ -140,10 +142,10 @@ export function PaymentsView({ loading, payments, onPayment, onExport, initialFi
       <div className="mx-5 mt-2 flex items-center gap-2">
         <div className="flex-1 min-w-0">
           {(() => {
-            const periodId = period?.id ?? 'today'
-            const on = periodId !== 'today' || filter !== 'all'
-            const label = [periodId !== 'today' ? period?.label : null, filter !== 'all' ? FILTERS.find(f => f.id === filter)?.label : null]
-              .filter(Boolean).join(' · ') || 'Today'
+            const periodId = period?.id ?? 'all'
+            const on = periodId !== 'all' || filter !== 'all'
+            const label = [periodId !== 'all' ? period?.label : null, filter !== 'all' ? FILTERS.find(f => f.id === filter)?.label : null]
+              .filter(Boolean).join(' · ') || 'Filter'
             return (
               <SearchField value={query} onChange={setQuery} ariaLabel="Search payments"
                 placeholder={['Search name, wallet or order', 'Name, wallet, order', 'Search']}
@@ -159,7 +161,7 @@ export function PaymentsView({ loading, payments, onPayment, onExport, initialFi
                       <span className="truncate">{label}</span>
                     </button>
                     {on && (
-                      <button type="button" aria-label="Clear filter" onClick={() => { setFilter('all'); onPeriod?.('today') }}
+                      <button type="button" aria-label="Clear filter" onClick={() => { setFilter('all'); onPeriod?.('all') }}
                         className="h-full flex items-center active:opacity-70"
                         style={{ padding: '0 11px 0 4px', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', opacity: 0.85 }}>
                         <X className="w-3.5 h-3.5" strokeWidth={2.6} />
@@ -173,7 +175,7 @@ export function PaymentsView({ loading, payments, onPayment, onExport, initialFi
         {onExport && <ExportButton onClick={onExport} label="CSV" />}
       </div>
       <AnimatePresence>
-        {menu && <FilterMenu key="f" anchor={chipRef.current} period={period?.id ?? 'today'} status={filter}
+        {menu && <FilterMenu key="f" anchor={chipRef.current} period={period?.id ?? 'all'} status={filter}
           onPeriod={id => (id === 'custom' ? onCustomPeriod?.() : onPeriod?.(id))} onStatus={setFilter} onClose={() => setMenu(false)} />}
       </AnimatePresence>
 
