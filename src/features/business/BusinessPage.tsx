@@ -365,7 +365,7 @@ function OwnerBusinessPage() {
               checking: scanning, arcLogo: chainLogoSrc('Arc_Testnet') }}
             refunded={{ total: money(refundedInPeriod.reduce((s, r) => s + r.amount, 0)), count: refundedInPeriod.length }}
             recent={payments.slice(0, 4)}
-            onShowQr={open('qr')} onReceive={open('receive')} onCustomers={open('customers')} onPayments={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onBalance={() => setTab('settlements')}
+            onReceive={open('receive')} onCustomers={open('customers')} onPayments={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onBalance={() => setTab('settlements')}
             onToSettle={() => setTab('settlements')} onRefunded={() => { setPayFilter('refunded'); setTab('payments') }}
             onSeeAllPayments={() => { setPayFilter('all'); setTab('payments') }} onPayment={setDetail} onPeriod={() => setPeriodSheet(true)} />
         )}
