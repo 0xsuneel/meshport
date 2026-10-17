@@ -15,11 +15,11 @@ import { useAuthStore, useWalletStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLogoSrc } from '@/lib/chainLogos'
-import { listMyPayments, listMyIntents, subscribeMerchantPayments, createPaymentRequest, type MerchantPayment } from '@/lib/merchantPay'
+import { listMyPayments, listMyIntents, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, createPaymentRequest, type MerchantPayment } from '@/lib/merchantPay'
 import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, VOICE_LANGS, type VoiceLang } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockKey } from './settlement'
-import { listMyRefunds, subscribeMyRefunds, refundPayment, REFUND_REASONS, type MerchantRefund } from '@/lib/merchantRefunds'
+import { listMyRefunds, subscribeMyRefunds, refundPayment, canRefundOnChain, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
 import { exportPaymentsCsv } from './reports'
 import { makePeriod, inPeriod, inPrevious, periodTrend, savedPeriod, savePeriod, type PeriodId } from './period'
 import { useAutoSettle } from './autoSettle'
@@ -72,7 +72,18 @@ function OwnerBusinessPage() {
   // payment come from PaymentReceivedWatcher, on every screen) ──────────
   const [raw, setRaw] = useState<MerchantPayment[]>([])
   const [loaded, setLoaded] = useState(false)
-  const load = useCallback(async () => { setRaw(await listMyPayments(500)); setLoaded(true) }, [])
+  // Order payments, plus USDC that reached the store's address on another
+  // chain without an order (merchant_chain_receipts; not its own transfers).
+  const load = useCallback(async () => {
+    const [orders, receipts] = await Promise.all([listMyPayments(500), listChainReceipts(300).catch(() => [])])
+    const known = new Set(orders.map(p => `${p.chain}:${p.txHash.toLowerCase()}`))
+    const extra: MerchantPayment[] = receipts
+      .filter(r => !isOwnReceipt(r, walletAddress) && !known.has(`${r.chain}:${r.txHash.toLowerCase()}`))
+      .map(r => ({ id: `rcpt_${r.id}`, intentId: '', chain: r.chain, txHash: r.txHash, from: r.from ?? '0x0000000000000000000000000000000000000000',
+        amount: r.amount, method: 'chain_receipt', status: r.status === 'converted' ? 'collected' : 'in_ledger', customerUsername: null,
+        createdAt: r.createdAt, orderNumber: r.orderNumber, matchedBy: null }))
+    setRaw([...orders, ...extra].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))); setLoaded(true)
+  }, [walletAddress])
   useEffect(() => { void load() }, [load])
   useEffect(() => (walletAddress ? subscribeMerchantPayments(walletAddress, () => { void load() }) : undefined), [walletAddress, load])
   const [refunds, setRefunds] = useState<MerchantRefund[]>([])
@@ -171,9 +182,14 @@ function OwnerBusinessPage() {
   const [refundFor, setRefundFor] = useState<MerchantPayment | null>(null)
   const [refundReason, setRefundReason] = useState(REFUND_REASONS[0])
   const [refundNote, setRefundNote] = useState('')
+  const [refundDest, setRefundDest] = useState<RefundRoute>('arc')
   const [refundBusy, setRefundBusy] = useState(false)
   const [refundError, setRefundError] = useState<string>()
-  const openRefund = (p: MerchantPayment) => { setRefundFor(p); setRefundReason(REFUND_REASONS[0]); setRefundNote(''); setRefundError(undefined) }
+  const openRefund = (p: MerchantPayment) => {
+    setRefundFor(p); setRefundReason(REFUND_REASONS[0]); setRefundNote(''); setRefundError(undefined)
+    // Paid on another chain: send it back there by default.
+    setRefundDest(canRefundOnChain(p.chain) ? 'origin' : 'arc')
+  }
   const confirmRefund = () => {
     if (settle.needsPasscode) { setPinError(undefined); setPin({ kind: 'refund' }); return }
     void runRefund()
@@ -184,9 +200,9 @@ function OwnerBusinessPage() {
     try {
       const key = await unlockKey(passcode)
       const reason = (refundNote.trim() ? `${refundReason}: ${refundNote.trim()}` : refundReason).slice(0, 140)
-      await refundPayment({ paymentId: refundFor.id, customer: refundFor.from, amount: refundFor.amount, reason, privateKey: key })
+      await refundPayment({ paymentId: refundFor.id, customer: refundFor.from, amount: refundFor.amount, reason, privateKey: key, route: refundDest, chain: refundFor.chain })
       await loadRefunds()
-      toast(`Refunded ${money(refundFor.amount)} to ${who(refundFor)}`, 'success')
+      toast(`Refunded ${money(refundFor.amount)} to ${who(refundFor)}${refundDest === 'origin' ? ` on ${chainLabel(refundFor.chain)} · arrives in a few minutes` : ''}`, 'success')
       setRefundFor(null)
     } catch (e) { setRefundError(e instanceof Error ? e.message : 'Refund failed') }
     setRefundBusy(false)
@@ -277,12 +293,18 @@ function OwnerBusinessPage() {
       <PaymentDetailSheet payment={detail} explorerUrl={rawDetail ? explorerTxUrl(rawDetail.chain, rawDetail.txHash) ?? undefined : undefined}
         onClose={() => setDetail(null)} onSettle={() => { setDetail(null); setTab('settlements') }}
         onReceipt={() => { if (rawDetail) { setReceiptFor(rawDetail); setDetail(null); setScreen('receipt') } }}
-        onRefund={() => { if (rawDetail) { openRefund(rawDetail); setDetail(null) } }}
+        onRefund={rawDetail && /^0x0+$/.test(rawDetail.from) ? undefined : () => { if (rawDetail) { openRefund(rawDetail); setDetail(null) } }}
         refund={detailRefund ? { amount: money(detailRefund.amount), reason: detailRefund.reason, when: detailRefund.createdAt, txUrl: explorerTxUrl('Arc_Testnet', detailRefund.txHash) ?? undefined } : undefined} />
 
       <RefundSheet open={!!refundFor} amount={refundFor ? money(refundFor.amount) : ''} customer={refundFor ? who(refundFor) : ''}
         reasons={REFUND_REASONS} reason={refundReason} onReason={setRefundReason} note={refundNote} onNote={setRefundNote}
-        busy={refundBusy} error={refundError} onConfirm={confirmRefund} onClose={() => { if (!refundBusy) setRefundFor(null) }} />
+        busy={refundBusy} error={refundError} onConfirm={confirmRefund} onClose={() => { if (!refundBusy) setRefundFor(null) }}
+        destinations={refundFor && canRefundOnChain(refundFor.chain) ? [
+          { id: 'origin', label: `On ${chainLabel(refundFor.chain)}`, hint: 'Where they paid · arrives in minutes' },
+          { id: 'arc', label: 'On Arc', hint: 'Same wallet address · instant' },
+        ] : undefined}
+        destination={refundDest} onDestination={id => setRefundDest(id as RefundRoute)}
+        note2={refundFor && refundDest === 'origin' ? `Sent over CCTP. Circle's small fee is added on top, so the customer gets the full ${money(refundFor.amount)}.` : undefined} />
 
       <SettleProgressSheet open={progressOpen || !!historyClaim} running={progressOpen && settle.running} rows={progressRows}
         onClose={() => { setProgressOpen(false); setHistoryId(null) }}

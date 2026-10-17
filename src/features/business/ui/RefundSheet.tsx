@@ -19,6 +19,12 @@ export interface RefundSheetProps {
   error?: string
   onConfirm: () => void
   onClose: () => void
+  /** Where the money goes back (e.g. On Arc / On Base, where they paid). */
+  destinations?: { id: string; label: string; hint: string }[]
+  destination?: string
+  onDestination?: (id: string) => void
+  /** Line under the warning, e.g. the fee for a refund on another chain. */
+  note2?: string
 }
 
 export function RefundSheet({
@@ -34,6 +40,10 @@ export function RefundSheet({
   error,
   onConfirm,
   onClose,
+  destinations,
+  destination,
+  onDestination,
+  note2,
 }: RefundSheetProps) {
   return (
     <Sheet open={open} onClose={onClose}>
@@ -59,6 +69,22 @@ export function RefundSheet({
             Refund to <span className="font-medium text-text-secondary">{customer}</span>
           </p>
         </div>
+
+        {/* Where it goes back */}
+        {destinations && destinations.length > 1 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Send back on</p>
+            <div className="grid grid-cols-2 gap-2">
+              {destinations.map(d => (
+                <button key={d.id} type="button" onClick={() => onDestination?.(d.id)} aria-pressed={destination === d.id}
+                  className={`text-left rounded-2xl border px-3.5 py-3 min-h-[60px] transition-colors ${destination === d.id ? 'border-brand bg-brand/10' : 'border-border bg-surface'}`}>
+                  <span className={`block text-sm font-semibold ${destination === d.id ? 'text-brand-text' : 'text-text-primary'}`}>{d.label}</span>
+                  <span className="block text-[11px] text-text-muted mt-0.5 leading-snug">{d.hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Reason chips */}
         <div className="flex flex-col gap-2">
@@ -102,6 +128,7 @@ export function RefundSheet({
           <p className="text-xs text-text-secondary leading-relaxed">
             The USDC goes back to the customer from your Arc balance.
             This can&apos;t be undone.
+            {note2 && <span className="block mt-1 text-text-muted">{note2}</span>}
           </p>
         </div>
 
