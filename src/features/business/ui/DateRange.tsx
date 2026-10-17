@@ -138,3 +138,34 @@ export function DateRangeSheet({
     </Sheet>
   )
 }
+
+// ─── PeriodSheet ──────────────────────────────────────────────────────────────
+// The period picker behind the Overview card's period chip.
+
+export interface PeriodSheetProps {
+  open: boolean
+  value: DateRangeValue
+  customLabel?: string
+  onPick: (id: DateRangeValue) => void
+  onCustom: () => void
+  onClose: () => void
+}
+
+export function PeriodSheet({ open, value, customLabel, onPick, onCustom, onClose }: PeriodSheetProps) {
+  const rows = [...CHIPS.map(c => ({ ...c, onClick: () => onPick(c.id) })),
+    { id: 'custom' as DateRangeValue, label: value === 'custom' && customLabel ? customLabel : 'Custom range…', onClick: onCustom }]
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <p className="text-base font-semibold text-text-primary mb-3">Show collection for</p>
+      <div className="flex flex-col">
+        {rows.map(r => (
+          <button key={r.id} type="button" onClick={r.onClick}
+            className="flex items-center justify-between min-h-[52px] px-1 border-b border-border/60 last:border-0 text-left">
+            <span className={`text-[15px] ${value === r.id ? 'font-semibold text-text-primary' : 'text-text-secondary'}`}>{r.label}</span>
+            {value === r.id && <span className="size-2.5 rounded-full bg-brand" aria-label="Selected" />}
+          </button>
+        ))}
+      </div>
+    </Sheet>
+  )
+}

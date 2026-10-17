@@ -30,7 +30,7 @@ import { RequestMaker, ShopQrScreen, ChargeScreen, LinkScreen, BillScreen, Reque
 import {
   BusinessHeader, BusinessTabs, SetupBanner, OverviewView, PaymentsView, PaymentDetailSheet,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
-  DateRangeBar, DateRangeSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet, BusinessMenuSheet,
+  DateRangeBar, DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet, BusinessMenuSheet,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
@@ -102,6 +102,7 @@ function OwnerBusinessPage() {
   const [intentStore, setIntentStore] = useState<Map<string, string | null>>(new Map())
   const [switcher, setSwitcher] = useState(false)
   const [menu, setMenu] = useState(false)
+  const [periodSheet, setPeriodSheet] = useState(false)
   const [payFilter, setPayFilter] = useState<'all' | 'refunded'>('all')
   useEffect(() => { listStores().then(setStores).catch(() => {}) }, [])
   useEffect(() => { listMyIntents(500).then(l => setIntentStore(new Map(l.map(i => [i.id, i.storeId ?? null])))).catch(() => {}) }, [raw.length])
@@ -279,24 +280,25 @@ function OwnerBusinessPage() {
     <div className="flex flex-col h-full min-h-0 bg-bg">
       <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
         <BusinessHeader storeName={storeName} handle={handle} status={headerStatus} voiceOn={voice.enabled}
-          onVoice={() => setVoiceOpen(true)} onMenu={() => setMenu(true)} onSwitchStore={() => setSwitcher(true)} />
+          onVoice={() => setVoiceOpen(true)} onMenu={() => setMenu(true)} onSwitchStore={() => setSwitcher(true)}
+          outlet={stores.length > 1 ? (activeStore?.name ?? 'All stores') : null} />
         <BusinessTabs tab={tab} onTab={t => { setPayFilter('all'); setTab(t) }} settleCount={settle.due.length} />
-        <div className="pt-2">
+        {tab !== 'overview' && <div className="pt-2">
           <DateRangeBar value={periodSel.id} customLabel={period.id === 'custom' ? period.label : undefined}
             onChange={id => choosePeriod({ ...periodSel, id })} onCustom={() => setRangeSheet({ from: periodSel.from, to: periodSel.to })} />
-        </div>
+        </div>}
       </div>
 
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
         {tab === 'overview' && (
           <OverviewView loading={!loaded} banner={banner} periodLabel={period.label}
-            collection={{ total: money(today.total), trend: <TrendChip pct={trend} />, count: today.count, average: money(today.average), customers: today.customers }}
-            toSettle={{ total: money(settle.total), chainCount: settle.due.length }}
+            collection={{ total: money(today.total), trend: <TrendChip pct={trend} compare={period.compareLabel} tone="onBrand" />, count: today.count, average: money(today.average), customers: today.customers }}
+            toSettle={{ total: money(settle.total), chainCount: settle.due.length, chains: settle.due.map(c => ({ label: c.label, logo: c.logo })) }}
             refunded={{ total: money(refundedInPeriod.reduce((s, r) => s + r.amount, 0)), count: refundedInPeriod.length }}
             recent={payments.slice(0, 4)}
             onShowQr={open('qr')} onCharge={open('charge')} onPaymentLink={open('link')} onSendBill={open('bill')} onRequests={open('requests')}
             onToSettle={() => setTab('settlements')} onRefunded={() => { setPayFilter('refunded'); setTab('payments') }}
-            onSeeAllPayments={() => { setPayFilter('all'); setTab('payments') }} onPayment={setDetail} />
+            onSeeAllPayments={() => { setPayFilter('all'); setTab('payments') }} onPayment={setDetail} onPeriod={() => setPeriodSheet(true)} />
         )}
         {tab === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter} loading={!loaded} payments={payments} onPayment={setDetail} onExport={() => exportPaymentsCsv(periodRaw, storeName, refunds)} />}
         {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out" /></div>}
@@ -358,6 +360,7 @@ function OwnerBusinessPage() {
         { title: 'Money', items: [
           { id: 'cashout', label: 'Cash out to bank', hint: 'Sell USDC for ₹ to your UPI or bank', icon: 'cashout', onClick: go('cashout') },
           { id: 'statement', label: 'Statement', hint: 'Day, week or month · CSV and PDF', icon: 'statement', onClick: go('statement') },
+          { id: 'requests', label: 'Requests & bills', hint: 'Open, paid and expired requests', icon: 'requests', onClick: go('requests') },
           { id: 'insights', label: 'Insights', hint: 'Sales by day, hour and customer', icon: 'insights', onClick: go('insights') },
         ] },
         { title: 'Store', items: [
@@ -390,6 +393,11 @@ function OwnerBusinessPage() {
         }}
         onApply={() => { if (rangeSheet?.from && rangeSheet.to) choosePeriod({ id: 'custom', ...rangeSheet }); setRangeSheet(null) }}
         onClose={() => setRangeSheet(null)} />
+
+      <PeriodSheet open={periodSheet} value={periodSel.id} customLabel={period.id === 'custom' ? period.label : undefined}
+        onPick={id => { choosePeriod({ ...periodSel, id }); setPeriodSheet(false) }}
+        onCustom={() => { setPeriodSheet(false); setRangeSheet({ from: periodSel.from, to: periodSel.to }) }}
+        onClose={() => setPeriodSheet(false)} />
 
       <SettleDueSheet open={autoSettle.due && settle.due.length > 0 && !settle.running} amount={money(settle.total)}
         chains={settle.due.map(c => ({ label: c.label, logo: c.logo }))}

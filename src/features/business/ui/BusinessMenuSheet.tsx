@@ -7,7 +7,7 @@ import {
   Banknote, FileText, BarChart2,
   Store, Users, Mic,
   ShieldCheck, HelpCircle, QrCode,
-  ChevronRight,
+  ChevronRight, Clock,
 } from 'lucide-react'
 import { Sheet } from './primitives'
 
@@ -23,6 +23,7 @@ export type MenuIconId =
   | 'profile'
   | 'help'
   | 'sticker'
+  | 'requests'
 
 export interface MenuItem {
   id: string
@@ -49,6 +50,7 @@ export interface BusinessMenuSheetProps {
 const ICON_MAP: Record<MenuIconId, React.ElementType> = {
   cashout:   Banknote,
   statement: FileText,
+  requests: Clock,
   insights:  BarChart2,
   stores:    Store,
   staff:     Users,
