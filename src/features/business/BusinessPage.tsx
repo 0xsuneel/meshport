@@ -10,7 +10,8 @@
 //
 // The UI kit in ./ui was designed with Arc Studio.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
 import { useAuthStore, useWalletStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
@@ -67,6 +68,19 @@ function OwnerBusinessPage() {
   })
 
   const toast = useUIStore(s => s.showToastMessage)
+  const navigate = useNavigate()
+  const myUserId = useAuthStore(s => s.user?.id)
+  const openChat = async (customer: string) => {
+    try {
+      const other = await getUserByUsername(customer)
+      if (!other || !myUserId) throw new Error('Could not find this customer')
+      const { id, error } = await getOrCreateConversation(myUserId, other.id)
+      if (error || !id) throw new Error('Could not open the chat')
+      const { cacheOtherUser } = await import('@/features/chat/ChatPage')
+      cacheOtherUser(id, other)
+      navigate(`/chat/${id}`)
+    } catch (e) { toast(e instanceof Error ? e.message : 'Could not open the chat', 'error') }
+  }
 
   // ── Payments and refunds (live; the pop-up and voice alert for a new
   // payment come from PaymentReceivedWatcher, on every screen) ──────────
@@ -287,6 +301,13 @@ function OwnerBusinessPage() {
 
   const rawDetail = detail ? raw.find(p => p.id === detail.id) : undefined
   const detailRefund = detail ? refundOf.get(detail.id) : undefined
+  // The payer's history with this business, for the detail's customer card.
+  const detailCustomer = useMemo(() => {
+    if (!rawDetail) return undefined
+    const key = (p: MerchantPayment) => p.customerUsername ? p.customerUsername.toLowerCase() : p.from.toLowerCase()
+    const mine = raw.filter(p => key(p) === key(rawDetail) && !refundOf.has(p.id))
+    return { payments: mine.length, total: money(mine.reduce((s, p) => s + p.amount, 0)) }
+  }, [rawDetail, raw, refundOf])
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-bg">
@@ -363,6 +384,8 @@ function OwnerBusinessPage() {
         onReceipt={() => { if (rawDetail) { setReceiptFor(rawDetail); setDetail(null); setScreen('receipt') } }}
         onRefund={rawDetail && sender?.id === rawDetail.id && sender.check?.refundable ? () => { openRefund(rawDetail); setDetail(null) } : undefined}
         refundNote={sender?.id === detail?.id ? (sender?.check ? sender.check.reason : 'Checking who sent this payment…') : undefined}
+        customer={detailCustomer} store={rawDetail && stores.length ? stores.find(st => st.id === storeOf(rawDetail))?.name : undefined}
+        onChat={rawDetail?.customerUsername ? () => { const u = rawDetail.customerUsername!; setDetail(null); void openChat(u) } : undefined}
         refund={detailRefund ? { amount: money(detailRefund.amount), reason: detailRefund.reason, when: detailRefund.createdAt, txUrl: explorerTxUrl('Arc_Testnet', detailRefund.txHash) ?? undefined } : undefined} />
 
       <RefundSheet open={!!refundFor} amount={refundFor ? money(refundFor.amount) : ''} customer={refundFor ? who(refundFor) : ''}
