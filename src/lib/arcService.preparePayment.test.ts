@@ -9,7 +9,7 @@ const SENDER = '0x1111111111111111111111111111111111111111'
 const RECIPIENT = '0x2222222222222222222222222222222222222222'
 const OTHER = '0x3333333333333333333333333333333333333333'
 
-const createPayIntent = vi.fn(async (_req: { recipientAddress: string; amountAtomic: string }) =>
+const createPayIntent = vi.fn(async (_req: { recipientAddress: string; amountAtomic: string; callTarget?: string | null }) =>
   ({ success: true, attemptId: 'attempt-1', nonce: 7 }))
 let receipt: () => Promise<{ status: string; blockNumber: bigint }> = async () => ({ status: 'success', blockNumber: 1n })
 const sendTransaction = vi.fn(async (_args: unknown) =>
@@ -26,7 +26,7 @@ vi.mock('./arc', async () => {
 })
 
 vi.mock('./payIntentService', () => ({
-  createPayIntent: (req: { recipientAddress: string; amountAtomic: string }) => createPayIntent(req),
+  createPayIntent: (req: { recipientAddress: string; amountAtomic: string; callTarget?: string | null }) => createPayIntent(req),
   markPayAttemptSubmitted: () => Promise.resolve(),
 }))
 
@@ -95,5 +95,30 @@ describe('send confirmation state', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('order payment memo', () => {
+  beforeEach(() => { createPayIntent.mockClear(); sendTransaction.mockClear(); receipt = async () => ({ status: 'success', blockNumber: 1n }) })
+
+  it('order payment: the early preflight and the send both go through the Memo contract', async () => {
+    const memo = { code: 'd73a434b15', label: 'ORD-00094' }
+    preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 10, idempotencyKey: 'key-m', memo })
+    await sendUSDC({ privateKey: '0x' + '1'.repeat(64), to: RECIPIENT, amount: 10, idempotencyKey: 'key-m', memo })
+
+    expect(createPayIntent).toHaveBeenCalledTimes(1)
+    expect(createPayIntent.mock.calls[0][0].callTarget).toBe('0x5294E9927c3306DcBaDb03fe70b92e01cCede505')
+    expect(createPayIntent.mock.calls[0][0].amountAtomic).toBe('10000000000000000000')
+    const signed = sendTransaction.mock.calls[0][0] as { to: string; value: bigint; data: string }
+    expect(signed.to).toBe('0x5294E9927c3306DcBaDb03fe70b92e01cCede505')
+    expect(signed.value).toBe(0n)
+    expect(signed.data).toContain('6437336134333462313500000000000000000000000000000000000000000000') // memoId = order code
+  })
+
+  it('an early preflight without the memo is not reused for an order payment', async () => {
+    preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 10, idempotencyKey: 'key-n' })
+    await sendUSDC({ privateKey: '0x' + '1'.repeat(64), to: RECIPIENT, amount: 10, idempotencyKey: 'key-n', memo: { code: 'abc', label: 'ORD-1' } })
+    expect(createPayIntent).toHaveBeenCalledTimes(2)
+    expect(createPayIntent.mock.calls[1][0].callTarget).toBe('0x5294E9927c3306DcBaDb03fe70b92e01cCede505')
   })
 })

@@ -27,7 +27,12 @@ export interface CreatePayIntentRequest {
   tokenSymbol: string | null
   recipientAddress: string
   recipientUsername?: string | null
+  /** Native USDC paid through Arc's Memo contract (an order payment) - the only allowed wrapper. */
+  callTarget?: string | null
 }
+
+// Arc Memo contract - https://docs.arc.io/arc/concepts/transaction-memos
+export const ARC_MEMO_CONTRACT = '0x5294e9927c3306dcbadb03fe70b92e01ccede505'
 
 export interface IntentRepository {
   findIntentByIdempotencyKey(walletAddress: string, idempotencyKey: string): Promise<{ id: string; attemptId: string | null; nonce: number | null; txHash: string | null; createdAt?: string | null } | null>
@@ -180,6 +185,10 @@ export async function createPayIntent(
   try { amountBig = BigInt(req.amountAtomic) } catch { return { outcome: 'invalid_request', reason: 'amountAtomic must be a valid integer string' } }
   if (amountBig <= 0n) return { outcome: 'invalid_request', reason: 'amountAtomic must be positive' }
   if (!req.isNative && !req.tokenAddress) return { outcome: 'invalid_request', reason: 'tokenAddress required for a non-native Pay' }
+  const callTarget = req.callTarget ? req.callTarget.trim().toLowerCase() : null
+  if (callTarget && (callTarget !== ARC_MEMO_CONTRACT || !req.isNative || req.tokenSymbol !== 'USDC')) {
+    return { outcome: 'invalid_request', reason: 'callTarget is only allowed for USDC through the Arc Memo contract' }
+  }
 
   const existing = await repo.findIntentByIdempotencyKey(wallet, req.idempotencyKey)
   const createdMs = existing?.createdAt ? Date.parse(existing.createdAt) : NaN
@@ -220,7 +229,7 @@ export async function createPayIntent(
     token_symbol: req.tokenSymbol,
     recipient_address: recipient,
     recipient_username: req.recipientUsername ?? null,
-    metadata: {},
+    metadata: callTarget ? { callTarget } : {},
   })
 
   if (insertResult.outcome === 'conflict') {

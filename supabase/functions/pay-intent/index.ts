@@ -160,6 +160,11 @@ Deno.serve(async (req: Request) => {
   try { body = await req.json() } catch { /* ignore, validated below */ }
   const b = body as Record<string, unknown>
 
+  // Warm-up ping: wakes the isolate without touching auth or the DB.
+  // Called by warmPayIntent() on page/conversation mount so the real
+  // payment call doesn't pay the cold-start penalty (~500-1500ms).
+  if (b.action === 'ping') return json({ success: true, pong: true })
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
   // Only for the caller's own wallet (see _shared/callerWallet.ts).
   const myWallet = await callerWallet(req, supabase)
@@ -194,6 +199,7 @@ Deno.serve(async (req: Request) => {
     tokenSymbol: typeof b.tokenSymbol === 'string' ? b.tokenSymbol : null,
     recipientAddress: typeof b.recipientAddress === 'string' ? b.recipientAddress : '',
     recipientUsername: typeof b.recipientUsername === 'string' ? b.recipientUsername : null,
+    callTarget: typeof b.callTarget === 'string' ? b.callTarget : null,
   }
   const nonceFetcher = makeLiveNonceFetcher()
 

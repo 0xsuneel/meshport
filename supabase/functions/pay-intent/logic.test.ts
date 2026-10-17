@@ -250,3 +250,26 @@ Deno.test('invalid: malformed txHash rejected before any write', async () => {
   const result = await markPayAttemptSubmitted(repo, 'attempt-1', 'not-a-hash')
   assertEquals(result.outcome, 'invalid_request')
 })
+
+Deno.test('callTarget: only the Arc Memo contract, only for native USDC; stored on the intent metadata', async () => {
+  const rows: any[] = []
+  const repo: IntentRepository = {
+    async findIntentByIdempotencyKey() { return null },
+    async insertIntent(row) { rows.push(row); return { outcome: 'inserted', id: 'i1' } },
+    async insertAttempt() { return { outcome: 'inserted', id: 'a1' } },
+    async markAttemptSubmitted() {},
+    async transitionIntentToSubmitted() {},
+  } as unknown as IntentRepository
+  const nonces: NonceFetcher = { async getPendingNonce() { return 7 } } as NonceFetcher
+  const base: CreatePayIntentRequest = {
+    walletAddress: '0x05d00ab75bcbe15450143f810cd5e5164ee126e0', idempotencyKey: 'k', chainId: 'arc', amountAtomic: '1000000000000000000',
+    decimals: 18, isNative: true, tokenAddress: null, tokenSymbol: 'USDC', recipientAddress: '0x6fa6547a4188d50a9585a2f8fc66c370e97a869c',
+  }
+  const bad = await createPayIntent(repo, nonces, { ...base, callTarget: '0x000000000000000000000000000000000000dead' })
+  if (bad.outcome !== 'invalid_request') throw new Error('other contracts must be refused')
+  const eurc = await createPayIntent(repo, nonces, { ...base, isNative: false, tokenAddress: '0x89b50855aa3be2f677cd6303cec089b5f319d72a', tokenSymbol: 'EURC', callTarget: '0x5294E9927c3306DcBaDb03fe70b92e01cCede505' })
+  if (eurc.outcome !== 'invalid_request') throw new Error('memo only for native USDC')
+  const ok = await createPayIntent(repo, nonces, { ...base, callTarget: '0x5294E9927c3306DcBaDb03fe70b92e01cCede505' })
+  if (ok.outcome !== 'created') throw new Error('memo payment should be created: ' + JSON.stringify(ok))
+  if (rows.at(-1)?.metadata?.callTarget !== '0x5294e9927c3306dcbadb03fe70b92e01ccede505') throw new Error('callTarget not stored')
+})
