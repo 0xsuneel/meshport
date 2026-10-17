@@ -11,3 +11,8 @@ alter table public.merchant_refunds add column if not exists receipt_id uuid uni
 alter table public.merchant_refunds add column if not exists refund_chain text not null default 'Arc_Testnet';
 alter table public.merchant_refunds add column if not exists route text not null default 'contract' check (route in ('contract', 'cctp'));
 alter table public.merchant_refunds add constraint merchant_refunds_target check (payment_id is not null or receipt_id is not null);
+
+-- route 'chain': sent from the merchant's USDC on the chain the customer paid
+-- on (a relayed EIP-3009 transfer), no Arc balance involved.
+alter table public.merchant_refunds drop constraint if exists merchant_refunds_route_check;
+alter table public.merchant_refunds add constraint merchant_refunds_route_check check (route in ('contract', 'cctp', 'chain'));

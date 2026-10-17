@@ -1,14 +1,17 @@
 // supabase/functions/merchant-refund/index.ts
 //
-// Records a merchant refund that already happened on Arc.
+// Records a merchant refund that already happened (on Arc, or on the chain the customer paid on).
 //
 //   POST { action: 'record', paymentId | receiptId, txHash, route? }   merchant only
 //
-// The merchant's wallet sends the refund itself, one of two ways:
+// The merchant's wallet sends the refund itself, one of three ways:
 //   route 'contract' (default): on Arc through the MeshPortRefunds contract
 //     (deployed with Arc Studio; one refund per payment per merchant,
 //     enforced on-chain). Its Refunded event must name this merchant,
 //     keccak256(id) as the reference and the payer as the customer.
+//   route 'chain': from the merchant's USDC on the chain the customer paid
+//     on (the money is still there) - a USDC Transfer on that chain from the
+//     merchant to the payer, sent by MeshPort's relayer (EIP-3009).
 //   route 'cctp': back on the chain the customer paid from - a CCTP burn on
 //     Arc (TokenMessengerV2 DepositForBurn) by the merchant, minted by Circle
 //     to the payer's address on that chain's domain.
@@ -67,6 +70,20 @@ const CHAIN_RPCS: Record<string, string[]> = {
   Codex_Testnet: ['https://rpc.codex-stg.xyz'],
   XDC_Apothem: ['https://rpc.apothem.network'],
 }
+
+// USDC per chain (same values as merchant-pay / src/blockchain/chains.ts).
+const CHAIN_USDC: Record<string, string> = {
+  Ethereum_Sepolia: '0x1c7d4b196cb0c7b01d743fbc6116a902379c7238', Base_Sepolia: '0x036cbd53842c5426634e7929541ec2318f3dcf7e',
+  Arbitrum_Sepolia: '0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d', Optimism_Sepolia: '0x5fd84259d66cd46123540766be93dfe6d43130d7',
+  Polygon_Sepolia: '0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582', Avalanche_Fuji: '0x5425890298aed601595a70ab815c96711a31bc65',
+  HyperEVM_Testnet: '0x2b3370ee501b4a559b57d449569354196457d8ab', Sei_Testnet: '0x4fcf1784b31630811181f670aea7a7bef803eaed',
+  Unichain_Sepolia: '0x31d0220469e10c4e71834a79b1f276d740d3768f', Sonic_Testnet: '0x0ba304580ee7c9a980cf72e55f5ed2e9fd30bc51',
+  World_Chain_Sepolia: '0x66145f38cbac35ca6f1dfb4914df98f1614aea88', Linea_Sepolia: '0xfece4462d57bd51a6a552365a011b95f0e16d9b7',
+  Ink_Testnet: '0xfabab97dce620294d2b0b0e46c68964e326300ac', Monad_Testnet: '0x534b2f3a21130d7a60830c2df862319e593943a3',
+  Plume_Testnet: '0xcb5f30e335672893c7eb944b374c196392c19d18', Codex_Testnet: '0x6d7f141b6819c2c9cc2f818e6ad549e7ca090f8f',
+  XDC_Apothem: '0xb5ab69f7bbada22b28e79c8ffaece55ef1c771d4',
+}
+const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
 
 // CCTP V2 (testnet) on Arc.
 const TOKEN_MESSENGER = '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa'
@@ -156,7 +173,7 @@ Deno.serve(async (req: Request) => {
 
   const paymentId = b.paymentId ? String(b.paymentId) : null
   const receiptId = b.receiptId ? String(b.receiptId) : null
-  const route = b.route === 'cctp' ? 'cctp' : 'contract'
+  const route = b.route === 'cctp' ? 'cctp' : b.route === 'chain' ? 'chain' : 'contract'
   const txHash = String(b.txHash ?? '').toLowerCase()
   const uuid = /^[0-9a-f-]{36}$/i
   if (!!paymentId === !!receiptId || !uuid.test(paymentId ?? receiptId ?? '') || !/^0x[0-9a-f]{64}$/.test(txHash)) return jsonFor(req, { error: 'Bad request' }, 400)
@@ -196,10 +213,11 @@ Deno.serve(async (req: Request) => {
   const { data: existing } = await db.from('merchant_refunds').select('*').eq(key, target.id).maybeSingle()
   if (existing) return jsonFor(req, { refund: existing })
 
-  // Read the refund from Arc.
+  // Read the refund (on Arc, or on the payment's chain for route 'chain').
+  const txRpcs = route === 'chain' ? (CHAIN_RPCS[target.chain] ?? []) : ARC_RPCS
   let receipt: any = null
   for (let i = 0; i < 6 && !receipt; i++) {
-    receipt = await rpc('eth_getTransactionReceipt', [txHash]).catch(() => null)
+    receipt = await rpc('eth_getTransactionReceipt', [txHash], txRpcs).catch(() => null)
     if (!receipt) await new Promise(r => setTimeout(r, 1500))
   }
   if (!receipt) return jsonFor(req, { error: 'Refund transaction not found yet - try again in a moment', pending: true }, 202)
@@ -218,6 +236,11 @@ Deno.serve(async (req: Request) => {
           found = { amount: Number(a.amount) / 1e18, reason: a.reason }
         }
       }
+      if (route === 'chain' && addr === CHAIN_USDC[target.chain] && log.topics?.[0] === TRANSFER_TOPIC) {
+        const from = ('0x' + String(log.topics[1]).slice(-40)).toLowerCase()
+        const to = ('0x' + String(log.topics[2]).slice(-40)).toLowerCase()
+        if (from === merchantWallet && to === customerWallet) found = { amount: Number(BigInt(log.data)) / 1e6, reason: String(b.reason ?? '').slice(0, 140) }
+      }
       if (route === 'cctp' && addr === TOKEN_MESSENGER) {
         const a = decodeEventLog({ abi: DEPOSIT_FOR_BURN, data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]] }).args
         const recipient = ('0x' + a.mintRecipient.slice(-40)).toLowerCase()
@@ -235,7 +258,7 @@ Deno.serve(async (req: Request) => {
   const { data: row, error } = await db.from('merchant_refunds').insert({
     payment_id: paymentId, receipt_id: receiptId, intent_id: target.intentId, merchant_auth_uid: uid, merchant_wallet: merchantWallet,
     customer_wallet: customerWallet, customer_user_id: target.customerUserId, route,
-    refund_chain: route === 'cctp' ? target.chain : 'Arc_Testnet',
+    refund_chain: route === 'contract' ? 'Arc_Testnet' : target.chain,
     amount: Number(Math.max(found.amount, 0.000001).toFixed(6)), reason: found.reason.slice(0, 140), tx_hash: txHash,
   }).select('*').single()
   if (error) {
@@ -248,7 +271,7 @@ Deno.serve(async (req: Request) => {
     await db.from('notifications').insert({
       user_id: target.customerUserId, type: 'merchant_refund', read: false,
       title: `Refund from ${target.merchantName || 'a merchant'}`,
-      message: `${usd(found.amount)} USDC was refunded${target.orderNumber ? ` for ${target.orderNumber}` : ''}${route === 'cctp' ? ` on ${target.chain.replace(/_(Sepolia|Testnet|Fuji)$/, '').replace(/_/g, ' ')}` : ''}${found.reason ? ` · ${found.reason}` : ''}`,
+      message: `${usd(found.amount)} USDC was refunded${target.orderNumber ? ` for ${target.orderNumber}` : ''}${route !== 'contract' ? ` on ${target.chain.replace(/_(Sepolia|Testnet|Fuji)$/, '').replace(/_/g, ' ')}` : ''}${found.reason ? ` · ${found.reason}` : ''}`,
     }).then(() => {}, () => {})
   }
   return jsonFor(req, { refund: row })

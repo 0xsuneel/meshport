@@ -126,7 +126,7 @@ export function RefundSheet({
         <div className="flex items-start gap-3 rounded-2xl bg-warning/10 border border-warning/20 px-4 py-3.5">
           <AlertTriangle className="size-4 text-warning shrink-0 mt-0.5" />
           <p className="text-xs text-text-secondary leading-relaxed">
-            The USDC goes back to the customer from your Arc balance.
+            The USDC goes back to the wallet that paid you.
             This can&apos;t be undone.
             {note2 && <span className="block mt-1 text-text-muted">{note2}</span>}
           </p>
