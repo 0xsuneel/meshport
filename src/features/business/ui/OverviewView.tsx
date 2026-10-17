@@ -4,7 +4,7 @@
  * waits on other chains, and recent payments. Every number appears once.
  */
 import React from 'react'
-import { QrCode, ArrowDownLeft, Clock, Wallet, ChevronDown, ChevronRight, RotateCcw, CreditCard } from 'lucide-react'
+import { QrCode, ArrowDownLeft, ListOrdered, Wallet, ChevronDown, ChevronRight, RotateCcw, CreditCard } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { Payment, ReactNode } from './types'
 import { formatTime } from './types'
@@ -82,7 +82,8 @@ export interface OverviewViewProps {
   onReceive: () => void
   /** Balance: Arc balance, chains to settle, cash out */
   onBalance?: () => void
-  onRequests?: () => void
+  /** All payments (and the business's own requests) */
+  onPayments?: () => void
   onToSettle: () => void
   onRefunded: () => void
   onSeeAllPayments: () => void
@@ -104,7 +105,7 @@ export function OverviewView({
   onShowQr,
   onReceive,
   onBalance,
-  onRequests,
+  onPayments,
   onToSettle,
   onRefunded,
   onSeeAllPayments,
@@ -116,7 +117,7 @@ export function OverviewView({
   const actions = [
     { Icon: QrCode,      label: 'Show QR',   onClick: onShowQr },
     { Icon: ArrowDownLeft, label: 'Receive',   onClick: onReceive },
-    ...(onRequests ? [{ Icon: Clock, label: 'Requests', onClick: onRequests }] : []),
+    ...(onPayments ? [{ Icon: ListOrdered, label: 'Payments', onClick: onPayments }] : []),
     ...(onBalance ? [{ Icon: Wallet, label: 'Balance', onClick: onBalance }] : []),
   ]
 
