@@ -22,6 +22,8 @@ export interface PaymentDetailSheetProps {
   onSettle: (p: Payment) => void
   onRefund?: () => void
   onReceipt?: () => void
+  /** Why there's no Refund (e.g. paid from a contract or exchange); shown instead. */
+  refundNote?: string
   /** Present when payment has already been refunded */
   refund?: RefundInfo
 }
@@ -79,6 +81,7 @@ export function PaymentDetailSheet({
   onSettle,
   onRefund,
   onReceipt,
+  refundNote,
   refund,
 }: PaymentDetailSheetProps) {
   const isArc      = payment?.chainLabel === 'Arc'
@@ -218,7 +221,7 @@ export function PaymentDetailSheet({
           )}
 
           {/* Receipt + Refund pair (received or refunded) */}
-          {(payment.status === 'received' || isRefunded) && (onReceipt || onRefund) && (
+          {(onReceipt || onRefund) && (
             <div className="mt-4 flex gap-3">
               {onReceipt && (
                 <GhostBtn onClick={onReceipt} className="flex items-center justify-center gap-2">
@@ -237,6 +240,9 @@ export function PaymentDetailSheet({
                 </button>
               )}
             </div>
+          )}
+          {!isRefunded && !onRefund && refundNote && (
+            <p className="mt-3 text-center text-xs text-text-muted leading-relaxed">{refundNote}</p>
           )}
         </div>
       )}

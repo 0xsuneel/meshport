@@ -19,7 +19,7 @@ import { listMyPayments, listMyIntents, listChainReceipts, isOwnReceipt, subscri
 import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, VOICE_LANGS, type VoiceLang } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockKey } from './settlement'
-import { listMyRefunds, subscribeMyRefunds, refundPayment, canRefundOnChain, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
+import { listMyRefunds, subscribeMyRefunds, refundPayment, canRefundOnChain, checkRefundableSender, type SenderCheck, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
 import { exportPaymentsCsv } from './reports'
 import { makePeriod, inPeriod, inPrevious, periodTrend, savedPeriod, savePeriod, type PeriodId } from './period'
 import { useAutoSettle } from './autoSettle'
@@ -209,6 +209,17 @@ function OwnerBusinessPage() {
   }
   const [receiptFor, setReceiptFor] = useState<MerchantPayment | null>(null)
 
+  // Refund only to a person's own wallet: checked on the chain it was paid on.
+  const [sender, setSender] = useState<{ id: string; check: SenderCheck | null } | null>(null)
+  useEffect(() => {
+    const p = detail ? raw.find(x => x.id === detail.id) : undefined
+    if (!p) { setSender(null); return }
+    let live = true
+    setSender({ id: p.id, check: null })
+    checkRefundableSender(p.chain, p.from).then(check => { if (live) setSender({ id: p.id, check }) })
+    return () => { live = false }
+  }, [detail?.id])
+
   // ── Labels ────────────────────────────────────────────────────────────
   const scanning = chains === undefined || !settle.checked
   const settleLabel = scanning ? 'Checking chains…'
@@ -293,7 +304,8 @@ function OwnerBusinessPage() {
       <PaymentDetailSheet payment={detail} explorerUrl={rawDetail ? explorerTxUrl(rawDetail.chain, rawDetail.txHash) ?? undefined : undefined}
         onClose={() => setDetail(null)} onSettle={() => { setDetail(null); setTab('settlements') }}
         onReceipt={() => { if (rawDetail) { setReceiptFor(rawDetail); setDetail(null); setScreen('receipt') } }}
-        onRefund={rawDetail && /^0x0+$/.test(rawDetail.from) ? undefined : () => { if (rawDetail) { openRefund(rawDetail); setDetail(null) } }}
+        onRefund={rawDetail && sender?.id === rawDetail.id && sender.check?.refundable ? () => { openRefund(rawDetail); setDetail(null) } : undefined}
+        refundNote={sender?.id === detail?.id ? (sender?.check ? sender.check.reason : 'Checking who sent this payment…') : undefined}
         refund={detailRefund ? { amount: money(detailRefund.amount), reason: detailRefund.reason, when: detailRefund.createdAt, txUrl: explorerTxUrl('Arc_Testnet', detailRefund.txHash) ?? undefined } : undefined} />
 
       <RefundSheet open={!!refundFor} amount={refundFor ? money(refundFor.amount) : ''} customer={refundFor ? who(refundFor) : ''}

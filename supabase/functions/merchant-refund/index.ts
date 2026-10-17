@@ -47,6 +47,27 @@ const ARC_RPCS = [
   'https://rpc.drpc.testnet.arc.io',
 ]
 
+// Public RPCs to look at the payer on the chain they paid from (same set as merchant-pay).
+const CHAIN_RPCS: Record<string, string[]> = {
+  Ethereum_Sepolia: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://rpc.sepolia.org'],
+  Base_Sepolia: ['https://base-sepolia-rpc.publicnode.com', 'https://sepolia.base.org'],
+  Arbitrum_Sepolia: ['https://arbitrum-sepolia-rpc.publicnode.com', 'https://sepolia-rollup.arbitrum.io/rpc'],
+  Optimism_Sepolia: ['https://optimism-sepolia-rpc.publicnode.com', 'https://sepolia.optimism.io'],
+  Polygon_Sepolia: ['https://polygon-amoy-bor-rpc.publicnode.com'],
+  Avalanche_Fuji: ['https://api.avax-test.network/ext/bc/C/rpc', 'https://avalanche-fuji-c-chain-rpc.publicnode.com'],
+  HyperEVM_Testnet: ['https://rpcs.chain.link/hyperevm/testnet', 'https://rpc.hyperliquid-testnet.xyz/evm'],
+  Sei_Testnet: ['https://evm-rpc-testnet.sei-apis.com'],
+  Unichain_Sepolia: ['https://sepolia.unichain.org'],
+  Sonic_Testnet: ['https://rpc.testnet.soniclabs.com'],
+  World_Chain_Sepolia: ['https://worldchain-sepolia.g.alchemy.com/public'],
+  Linea_Sepolia: ['https://rpc.sepolia.linea.build'],
+  Ink_Testnet: ['https://rpc-gel-sepolia.inkonchain.com'],
+  Monad_Testnet: ['https://testnet-rpc.monad.xyz'],
+  Plume_Testnet: ['https://testnet-rpc.plume.org'],
+  Codex_Testnet: ['https://rpc.codex-stg.xyz'],
+  XDC_Apothem: ['https://rpc.apothem.network'],
+}
+
 // CCTP V2 (testnet) on Arc.
 const TOKEN_MESSENGER = '0x8fe6b999dc680ccfdd5bf7eb0974218be2542daa'
 const CCTP_DOMAINS: Record<string, number> = {
@@ -97,9 +118,9 @@ function serviceKey(): string {
 }
 const db = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey())
 
-async function rpc(method: string, params: unknown[]): Promise<any> {
+async function rpc(method: string, params: unknown[], urls: string[] = ARC_RPCS): Promise<any> {
   const errors: string[] = []
-  for (const url of ARC_RPCS) {
+  for (const url of urls) {
     try {
       const r = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -164,6 +185,12 @@ Deno.serve(async (req: Request) => {
       merchantName: (apps ?? [])[0]?.business_name || u?.store_name || u?.username || null, orderNumber: rc.order_number ?? null }
   }
   if (!/^0x[0-9a-f]{40}$/.test(target.customer) || /^0x0+$/.test(target.customer)) return jsonFor(req, { error: 'This payment has no wallet to refund to' }, 422)
+
+  // Only a person's own wallet: a contract (exchange, bridge, smart account)
+  // may not be the customer's on the refund chain. EIP-7702 wallets are fine.
+  const code = await rpc('eth_getCode', [target.customer, 'latest'], target.chain === 'Arc_Testnet' ? ARC_RPCS : (CHAIN_RPCS[target.chain] ?? [])).catch(() => null)
+  if (typeof code !== 'string') return jsonFor(req, { error: "Couldn't check who sent this payment - try again" }, 503)
+  if (code !== '0x' && !code.toLowerCase().startsWith('0xef0100')) return jsonFor(req, { error: 'Paid from a contract (exchange, bridge or smart account) - it can’t be refunded automatically' }, 422)
 
   const key = paymentId ? 'payment_id' : 'receipt_id'
   const { data: existing } = await db.from('merchant_refunds').select('*').eq(key, target.id).maybeSingle()
