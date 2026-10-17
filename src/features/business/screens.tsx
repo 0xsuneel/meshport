@@ -16,7 +16,9 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { Store, ChevronDown, Clock, Printer } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
-import { useMerchant, applyForMerchant } from '@/lib/merchant'
+import { useMerchant, applyForMerchant, setBusinessName } from '@/lib/merchant'
+import { useNavigate } from 'react-router-dom'
+import { Avatar } from '@/components/ui/Avatar'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import {
   createPaymentRequest, listMyIntents, cancelPayment, completeOrder, paymentLink, watchPayment, invoiceTotal,
@@ -434,7 +436,18 @@ function InsightsBody({ payments, waiting, period, scope }: {
 
 export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack: () => void; handle: string }) {
   const toast = useUIStore(s => s.showToastMessage)
-  const { status, application } = useMerchant()
+  const { status, application, storeName } = useMerchant()
+  const navigate = useNavigate()
+  const avatar = useAuthStore(s => s.user?.avatar ?? null)
+  const [bizName, setBizName] = useState(storeName ?? '')
+  const [savingName, setSavingName] = useState(false)
+  useEffect(() => { if (open) setBizName(storeName ?? '') }, [open, storeName])
+  const saveName = async () => {
+    setSavingName(true)
+    try { await setBusinessName(bizName); toast(bizName.trim() ? 'Business name saved' : 'Business name removed', 'success') }
+    catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
+    setSavingName(false)
+  }
   const [contact, setContact] = useState(() => application?.contact || '')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
@@ -461,6 +474,29 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
       footer={canApply ? <PrimaryBtn disabled={busy || reason.trim().length < 10} onClick={submit}>{busy ? 'Sending…' : 'Send for review'}</PrimaryBtn>
         : closed ? <PrimaryBtn onClick={() => setAgain(true)}>Apply again</PrimaryBtn> : undefined}>
       <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
+        {/* Name and logo customers see on the pay page, receipts and notifications */}
+        <div className="flex flex-col gap-4 rounded-2xl bg-surface border border-border p-4">
+          <div className="flex items-center gap-3">
+            <Avatar name={bizName || handle} src={avatar ?? undefined} size="lg" />
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-semibold text-text-primary">Logo</span>
+              <span className="block text-xs text-text-muted">Your profile photo is your business logo</span>
+            </span>
+            <button type="button" onClick={() => navigate('/edit-profile')}
+              className="shrink-0 min-h-[36px] px-3 rounded-full border border-border text-[13px] font-semibold text-text-primary active:bg-border/30">
+              {avatar ? 'Change' : 'Add'}
+            </button>
+          </div>
+          <Field label="Business name" hint={`Customers see this. Leave empty to show ${handle}.`}>
+            <div className="flex gap-2">
+              <TextInput value={bizName} onChange={e => setBizName(e.target.value)} maxLength={60} placeholder="e.g. Sharma Chai Corner" />
+              <button type="button" onClick={saveName} disabled={savingName || bizName.trim() === (storeName ?? '')}
+                className="shrink-0 min-h-[48px] px-4 rounded-2xl bg-brand text-white text-sm font-semibold disabled:opacity-40">
+                {savingName ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </Field>
+        </div>
         <ProfileStatusCard {...card} />
         {canApply ? (
           <>

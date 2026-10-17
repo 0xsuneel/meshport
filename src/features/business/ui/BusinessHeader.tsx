@@ -23,6 +23,8 @@ export interface BusinessHeaderProps {
   outlet?: string | null
   /** Name the initials tile is made from (the business), when the title shows a store */
   avatarName?: string
+  /** The business logo (profile photo) */
+  avatarUrl?: string
 }
 
 export function BusinessHeader({
@@ -36,6 +38,7 @@ export function BusinessHeader({
   onSwitchStore,
   outlet,
   avatarName,
+  avatarUrl,
 }: BusinessHeaderProps) {
   const menuAction = onMenu ?? onProfile
   const initials = (avatarName ?? storeName).split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'B'
@@ -54,9 +57,11 @@ export function BusinessHeader({
         className="flex-1 min-w-0 flex items-center gap-2.5 text-left disabled:cursor-default"
       >
         <span className="shrink-0 rounded-full p-[2px] bg-brand" style={{ width: 47, height: 47 }}>
-          <span className="flex items-center justify-center w-full h-full rounded-full bg-brand text-white text-[17px] font-bold" style={{ border: '2px solid var(--bg)' }}>
-            {initials.slice(0, 1)}
-          </span>
+          {avatarUrl
+            ? <img src={avatarUrl.split('?')[0]} alt="" className="w-full h-full rounded-full object-cover" style={{ border: '2px solid var(--bg)' }} />
+            : <span className="flex items-center justify-center w-full h-full rounded-full bg-brand text-white text-[17px] font-bold" style={{ border: '2px solid var(--bg)' }}>
+                {initials.slice(0, 1)}
+              </span>}
         </span>
         <span className="min-w-0">
           <span className="flex items-center gap-1">

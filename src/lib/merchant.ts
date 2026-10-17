@@ -176,6 +176,13 @@ export function useMerchant(): State & { isMerchant: boolean; refresh: () => Pro
   return { ...s, isMerchant: s.loaded ? s.status === 'approved' : readHint(), refresh: refreshMerchant }
 }
 
+/** Business → the business's display name (empty clears it; the username shows then). */
+export async function setBusinessName(name: string): Promise<void> {
+  const { error } = await supabase.rpc('set_business_name', { p_name: name })
+  if (error) throw new Error(error.message)
+  await refreshMerchant()
+}
+
 export async function applyForMerchant(p: {
   businessName: string; businessType?: string; contact?: string; description?: string
 }): Promise<void> {
