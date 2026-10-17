@@ -66,7 +66,7 @@ export function BusinessHeader({
             {onSwitchStore && <ChevronDown className="size-4 text-text-muted shrink-0" />}
           </span>
           <span className="flex items-center gap-1 text-xs text-text-muted truncate">
-            {outlet ? `${outlet} · ${handle}` : handle}
+            {outlet ? `${outlet} · ${handle}` : storeName === handle ? 'Business account' : handle}
             {status !== 'verified' && (
               <span className="inline-flex items-center gap-0.5 text-text-secondary shrink-0"> · <Icon className="size-3" />{label}</span>
             )}
