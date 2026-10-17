@@ -214,7 +214,8 @@ const STORE_TYPES = ['Retail store', 'Restaurant / Café', 'Online shop', 'Servi
 
 type Editing = { title: string; back: () => void } | null
 
-function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore }: {
+function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLockedNote }: {
+  addLockedNote?: string
   open: boolean; onEditing: (e: Editing) => void; onChanged: (stores: Store[]) => void; onQr: (id: string) => void
   paymentsByStore: Map<string, { total: number; count: number }>
 }) {
@@ -254,7 +255,7 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore }: {
           })}
             onAdd={() => setEdit({ name: '', type: STORE_TYPES[0], address: '' })}
             onEdit={id => { const s = stores.find(x => x.id === id); if (s) setEdit({ id, name: s.name, type: s.type ?? STORE_TYPES[0], address: s.address ?? '' }) }}
-            onQr={onQr} />
+            onQr={onQr} addLockedNote={addLockedNote} />
         )}
       </div>
   )
@@ -302,7 +303,9 @@ function StaffBody({ open, onEditing, stores }: { open: boolean; onEditing: (e: 
 
 // ── Stores & staff (one screen) ──────────────────────────────────────────
 
-export function TeamScreen({ open, onBack, stores, onChanged, onQr, paymentsByStore }: {
+export function TeamScreen({ open, onBack, stores, onChanged, onQr, paymentsByStore, canAddStores = true }: {
+  /** Stores are opened once the business is approved */
+  canAddStores?: boolean
   open: boolean; onBack: () => void; stores: Store[]; onChanged: (stores: Store[]) => void; onQr: (id: string) => void
   paymentsByStore: Map<string, { total: number; count: number }>
 }) {
@@ -324,7 +327,8 @@ export function TeamScreen({ open, onBack, stores, onChanged, onQr, paymentsBySt
         </div>
       )}
       {view === 'stores'
-        ? <StoresBody open={open} onEditing={setEditing} onChanged={onChanged} onQr={onQr} paymentsByStore={paymentsByStore} />
+        ? <StoresBody open={open} onEditing={setEditing} onChanged={onChanged} onQr={onQr} paymentsByStore={paymentsByStore}
+            addLockedNote={canAddStores ? undefined : 'You can add stores once your business is approved'} />
         : <StaffBody open={open} onEditing={setEditing} stores={stores} />}
     </BusinessScreen>
   )
