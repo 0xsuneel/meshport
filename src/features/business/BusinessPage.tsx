@@ -11,34 +11,49 @@
 // The UI kit in ./ui was designed with Arc Studio.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useAuthStore } from '@/store'
-import { useMerchant } from '@/lib/merchant'
+import { useAuthStore, useWalletStore } from '@/store'
+import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLogoSrc } from '@/lib/chainLogos'
-import { listMyPayments, subscribeMerchantPayments, type MerchantPayment } from '@/lib/merchantPay'
+import { listMyPayments, listMyIntents, subscribeMerchantPayments, createPaymentRequest, type MerchantPayment } from '@/lib/merchantPay'
+import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
+import { Banknote, Store as StoreIcon, Users } from 'lucide-react'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, VOICE_LANGS, type VoiceLang } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockKey } from './settlement'
 import { listMyRefunds, subscribeMyRefunds, refundPayment, REFUND_REASONS, type MerchantRefund } from '@/lib/merchantRefunds'
-import { dayTrend, exportPaymentsCsv } from './reports'
+import { exportPaymentsCsv } from './reports'
+import { makePeriod, inPeriod, inPrevious, periodTrend, savedPeriod, savePeriod, type PeriodId } from './period'
+import { useAutoSettle } from './autoSettle'
+import { CashOutScreen, StoresScreen, StaffScreen } from './teamScreens'
+import { StaffModePage } from './staffMode'
 import { useUIStore } from '@/store'
-import { ShopQrScreen, ChargeScreen, LinkScreen, BillScreen, RequestsScreen, InsightsScreen, ProfileScreen, StatementScreen, ReceiptScreen, HelpScreen } from './screens'
+import { RequestMaker, ShopQrScreen, ChargeScreen, LinkScreen, BillScreen, RequestsScreen, InsightsScreen, ProfileScreen, StatementScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
   BusinessHeader, BusinessTabs, SetupBanner, OverviewView, PaymentsView, PaymentDetailSheet,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
+  DateRangeBar, DateRangeSheet, KpiGrid, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet, ManageChip,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
-type ScreenId = 'qr' | 'charge' | 'link' | 'bill' | 'requests' | 'insights' | 'profile' | 'statement' | 'receipt' | 'help'
+type ScreenId = 'qr' | 'charge' | 'link' | 'bill' | 'requests' | 'insights' | 'profile' | 'statement' | 'receipt' | 'help' | 'cashout' | 'stores' | 'staff'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
-const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toDateString()
 const inWords = (ms: number) => {
   const m = Math.max(1, Math.round(ms / 60_000))
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`
 }
 
+/** Business accounts get their Business tab; staff of a business get staff mode. */
 export function BusinessPage() {
+  const business = useBusinessTab()
+  const { loaded } = useMerchant()
+  // Wait for the account type before choosing (no flash of staff mode).
+  if (!business && !loaded) return <div className="h-full bg-bg" />
+  return business ? <OwnerBusinessPage /> : <StaffModePage />
+}
+
+function OwnerBusinessPage() {
   const location = useLocation()
   const query = new URLSearchParams(location.search)
   const { isMerchant, status, application, storeName: accountStoreName } = useMerchant()
@@ -66,6 +81,29 @@ export function BusinessPage() {
   useEffect(() => { void loadRefunds(); return subscribeMyRefunds(() => { void loadRefunds() }) }, [loadRefunds])
   const refundOf = useMemo(() => new Map(refunds.map(r => [r.paymentId, r])), [refunds])
 
+  // ── Stores (which store this device works as; null = all) ─────────────
+  const [stores, setStores] = useState<Store[]>([])
+  const [storeId, setStoreId] = useState<string | null>(activeStoreId)
+  const [intentStore, setIntentStore] = useState<Map<string, string | null>>(new Map())
+  const [switcher, setSwitcher] = useState(false)
+  useEffect(() => { listStores().then(setStores).catch(() => {}) }, [])
+  useEffect(() => { listMyIntents(500).then(l => setIntentStore(new Map(l.map(i => [i.id, i.storeId ?? null])))).catch(() => {}) }, [raw.length])
+  const activeStore = stores.find(s => s.id === storeId) ?? null
+  const pickStore = (id: string | null) => { setStoreId(id); setActiveStoreId(id); setSwitcher(false) }
+  const storeRaw = useMemo(() => activeStore ? raw.filter(p => intentStore.get(p.intentId) === activeStore.id) : raw, [raw, activeStore, intentStore])
+  const paymentsByStore = useMemo(() => {
+    const m = new Map<string, { total: number; count: number }>()
+    for (const p of raw) { const sid = intentStore.get(p.intentId); if (!sid) continue; const v = m.get(sid) ?? { total: 0, count: 0 }; v.total += p.amount; v.count++; m.set(sid, v) }
+    return m
+  }, [raw, intentStore])
+
+  // ── Date filter (Overview, Payments, Settlements) ─────────────────────
+  const [periodSel, setPeriodSel] = useState(savedPeriod)
+  const [rangeSheet, setRangeSheet] = useState<{ from: string; to: string } | null>(null)
+  const choosePeriod = (v: { id: PeriodId; from: string; to: string }) => { setPeriodSel(v); savePeriod(v) }
+  const period = useMemo(() => makePeriod(periodSel.id, periodSel), [periodSel])
+  const periodRaw = useMemo(() => storeRaw.filter(p => inPeriod(p.createdAt, period)), [storeRaw, period])
+
   // ── Settlements ───────────────────────────────────────────────────────
   const settle = useSettlement()
   const { chains } = settle
@@ -73,20 +111,24 @@ export function BusinessPage() {
   const waitingOn = new Set((chains ?? []).map(c => c.id))
 
   // A payment on another chain is "to settle" while that chain still holds USDC.
-  const payments: Payment[] = useMemo(() => raw.map(p => ({
+  const payments: Payment[] = useMemo(() => periodRaw.map(p => ({
     id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain), chainLogo: chainLogoSrc(p.chain),
     time: p.createdAt, order: p.orderNumber ?? undefined,
     status: refundOf.has(p.id) ? 'refunded' as const
       : p.chain !== 'Arc_Testnet' && p.status !== 'collected' && waitingOn.has(p.chain) ? 'to_settle' as const : 'received' as const,
-  })), [raw, chains, refundOf])
+  })), [periodRaw, chains, refundOf])
 
   const today = useMemo(() => {
-    const t = raw.filter(p => isToday(p.createdAt) && !refundOf.has(p.id))
+    const t = periodRaw.filter(p => !refundOf.has(p.id))
     const total = t.reduce((s, p) => s + p.amount, 0)
     const onArc = t.filter(p => p.chain === 'Arc_Testnet').reduce((s, p) => s + p.amount, 0)
     return { total, count: t.length, average: t.length ? total / t.length : 0, customers: new Set(t.map(who)).size, onArc }
-  }, [raw, refundOf])
-  const trend = useMemo(() => dayTrend(raw.filter(p => !refundOf.has(p.id))), [raw, refundOf])
+  }, [periodRaw, refundOf])
+  const trend = useMemo(() => periodTrend(today.total,
+    storeRaw.filter(p => inPrevious(p.createdAt, period) && !refundOf.has(p.id)).reduce((s, p) => s + p.amount, 0)), [today.total, storeRaw, period, refundOf])
+  const refundedInPeriod = refunds.filter(r => inPeriod(r.createdAt, period) && (!activeStore || storeRaw.some(p => p.id === r.paymentId)))
+  const arcBalance = useWalletStore(s => s.balance)
+  const autoSettle = useAutoSettle(settle.total)
 
   // ── Sheets ────────────────────────────────────────────────────────────
   const [detail, setDetail] = useState<Payment | null>(null)
@@ -173,7 +215,7 @@ export function BusinessPage() {
         : <SetupBanner tone="brand" title="Complete your business account" text={`Tell us why ${storeInText} needs a business account. Once approved, merchant tools turn on.`} action="Complete" onAction={open('profile')} />
 
   // History rows from claims; a tapped one opens in the progress sheet.
-  const historyItems = (history ?? []).slice(0, 20).map(c => ({
+  const historyItems = (history ?? []).filter(c => inPeriod(c.createdAt, period)).slice(0, 30).map(c => ({
     id: c.id, amount: money(c.arrivedAmount ?? c.amount), chainLabels: [chainLabel(c.sourceChain)], when: c.createdAt,
     status: c.status === 'completed' ? 'completed' as const : c.status === 'failed' ? 'failed' as const : 'in_progress' as const,
   }))
@@ -192,13 +234,30 @@ export function BusinessPage() {
     <div className="flex flex-col h-full min-h-0 bg-bg">
       <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
         <BusinessHeader storeName={storeName} handle={handle} status={headerStatus} voiceOn={voice.enabled}
-          onVoice={() => setVoiceOpen(true)} onProfile={open('profile')} />
+          onVoice={() => setVoiceOpen(true)} onProfile={open('profile')} onSwitchStore={() => setSwitcher(true)} />
         <BusinessTabs tab={tab} onTab={setTab} settleCount={settle.due.length} />
+        <div className="pt-2">
+          <DateRangeBar value={periodSel.id} customLabel={period.id === 'custom' ? period.label : undefined}
+            onChange={id => choosePeriod({ ...periodSel, id })} onCustom={() => setRangeSheet({ from: periodSel.from, to: periodSel.to })} />
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
         {tab === 'overview' && (
           <OverviewView loading={!loaded}
+            title={period.id === 'today' ? "Today's collection" : `Collection · ${period.label}`}
+            onArcLabel={period.id === 'today' ? 'On Arc today' : 'On Arc'}
+            kpis={<KpiGrid loading={!loaded} items={[
+              { id: 'collected', label: 'Collected', value: money(today.total), icon: 'collection', tone: 'success' },
+              { id: 'payments', label: 'Payments', value: String(today.count), hint: `avg ${money(today.average)}`, icon: 'payments' },
+              { id: 'arriving', label: 'Arriving from other chains', value: money(settle.total), icon: 'arriving', tone: settle.total > 0 ? 'warning' : 'default' },
+              { id: 'refunded', label: 'Refunded', value: money(refundedInPeriod.reduce((s, r) => s + r.amount, 0)), hint: `${refundedInPeriod.length} refund${refundedInPeriod.length === 1 ? '' : 's'}`, icon: 'refunded', tone: refundedInPeriod.length ? 'danger' : 'default' },
+            ]} />}
+            moreTools={<>
+              <ManageChip Icon={Banknote} label="Cash out to bank" onClick={open('cashout')} />
+              <ManageChip Icon={StoreIcon} label="Stores" onClick={open('stores')} />
+              <ManageChip Icon={Users} label="Staff" onClick={open('staff')} />
+            </>}
             today={{ total: money(today.total), count: today.count, average: money(today.average), customers: today.customers }}
             onArc={money(today.onArc)} toSettle={{ total: money(settle.total), chainCount: settle.due.length }}
             recent={payments.slice(0, 4)} banner={banner} trend={<TrendChip pct={trend} />}
@@ -209,7 +268,8 @@ export function BusinessPage() {
             onInsights={open('insights')} onVoiceAlerts={() => setVoiceOpen(true)} onProfile={open('profile')}
             onStatement={open('statement')} onHelp={open('help')} />
         )}
-        {tab === 'payments' && <PaymentsView loading={!loaded} payments={payments} onPayment={setDetail} onExport={() => exportPaymentsCsv(raw, storeName, refunds)} />}
+        {tab === 'payments' && <PaymentsView loading={!loaded} payments={payments} onPayment={setDetail} onExport={() => exportPaymentsCsv(periodRaw, storeName, refunds)} />}
+        {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out" /></div>}
         {tab === 'settlements' && (
           <SettlementsView scanning={scanning}
             chains={(settle.allChains ?? []).map(c => ({ id: c.id, label: c.label, logo: c.logo, balance: money(c.balance),
@@ -219,6 +279,12 @@ export function BusinessPage() {
             onSettle={() => beginSettle()} onRefresh={settle.rescan}
             history={historyItems} onHistory={id => { setProgressOpen(false); setHistoryId(id) }}
             lastRun={settle.run.length ? { running: settle.running, onOpen: () => { setHistoryId(null); setProgressOpen(true) } } : undefined} />
+        )}
+        {tab === 'settlements' && (
+          <div className="mx-5 mt-5">
+            <AutoSettleCard schedule={autoSettle.settings.schedule} time={autoSettle.settings.time}
+              onSchedule={s => autoSettle.update({ schedule: s })} onTime={t => autoSettle.update({ time: t, lastPrompt: Date.now() })} nextLabel={autoSettle.nextLabel} />
+          </div>
         )}
       </div>
 
@@ -248,7 +314,31 @@ export function BusinessPage() {
         onToggle={() => setVoiceAlerts({ enabled: !voice.enabled })} onLang={id => setVoiceAlerts({ lang: id as VoiceLang })}
         onTest={() => speakPayment(24, { test: true })} onClose={() => setVoiceOpen(false)} />
 
-      <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} handle={handle} />
+      <Sheet open={switcher} onClose={() => setSwitcher(false)}>
+        <StoreSwitcher stores={[{ id: '', name: `All stores · ${storeName}`, handle, active: !activeStore },
+          ...stores.map(s => ({ id: s.id, name: s.name, handle: s.type ?? 'Store', active: activeStore?.id === s.id }))]}
+          onSwitch={id => pickStore(id || null)} onManage={() => { setSwitcher(false); setScreen('stores') }} />
+      </Sheet>
+
+      <DateRangeSheet open={!!rangeSheet} from={rangeSheet?.from ?? ''} to={rangeSheet?.to ?? ''}
+        onFrom={v => setRangeSheet(r => r && { ...r, from: v })} onTo={v => setRangeSheet(r => r && { ...r, to: v })}
+        presets={[{ id: '30', label: 'Last 30 days' }, { id: 'lastmonth', label: 'Last month' }, { id: 'year', label: 'This year' }]}
+        onPreset={id => {
+          const d = new Date(), iso = (x: Date) => x.toLocaleDateString('en-CA')
+          const r = id === '30' ? { from: iso(new Date(Date.now() - 29 * 86_400_000)), to: iso(d) }
+            : id === 'lastmonth' ? { from: iso(new Date(d.getFullYear(), d.getMonth() - 1, 1)), to: iso(new Date(d.getFullYear(), d.getMonth(), 0)) }
+            : { from: iso(new Date(d.getFullYear(), 0, 1)), to: iso(d) }
+          setRangeSheet(r)
+        }}
+        onApply={() => { if (rangeSheet?.from && rangeSheet.to) choosePeriod({ id: 'custom', ...rangeSheet }); setRangeSheet(null) }}
+        onClose={() => setRangeSheet(null)} />
+
+      <SettleDueSheet open={autoSettle.due && settle.due.length > 0 && !settle.running} amount={money(settle.total)}
+        chains={settle.due.map(c => ({ label: c.label, logo: c.logo }))}
+        onSettle={() => { autoSettle.dismiss(); setTab('settlements'); beginSettle() }} onLater={autoSettle.dismiss} />
+
+      <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: activeStore?.id ?? null, canBill: true }}>
+      <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={activeStore?.name ?? storeName} handle={handle} />
       <ChargeScreen open={screen === 'charge'} onBack={back} />
       <LinkScreen open={screen === 'link'} onBack={back} storeName={storeName} />
       <BillScreen open={screen === 'bill'} onBack={back} storeName={storeName} />
@@ -260,6 +350,11 @@ export function BusinessPage() {
       <ReceiptScreen open={screen === 'receipt'} onBack={back} storeName={storeName} handle={handle} payment={receiptFor} refunded={!!(receiptFor && refundOf.has(receiptFor.id))} />
       <HelpScreen open={screen === 'help'} onBack={back} />
       <ProfileScreen open={screen === 'profile'} onBack={back} handle={handle} />
+      </RequestMaker.Provider>
+      <CashOutScreen open={screen === 'cashout'} onBack={back} />
+      <StoresScreen open={screen === 'stores'} onBack={back} onChanged={setStores} paymentsByStore={paymentsByStore}
+        onQr={id => { pickStore(id); setScreen('qr') }} />
+      <StaffScreen open={screen === 'staff'} onBack={back} stores={stores} />
     </div>
   )
 }

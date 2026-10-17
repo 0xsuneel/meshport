@@ -13,7 +13,7 @@
 // Visuals come from the Arc Studio kit in ./ui; this file holds the logic.
 // Money in uses the merchant-pay service (payment requests, live status);
 // nothing here moves funds out.
-import { useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { Store, Link2, FileText, Clock, Printer } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
@@ -35,6 +35,18 @@ import { salesByHour, hourLabel, statementRows, rangeLabel, rangeStart, exportPa
 import type { MerchantRefund } from '@/lib/merchantRefunds'
 import { submitPayment, listUnmatchedDeposits, assignDeposit, type UnmatchedDeposit } from '@/lib/merchantPay'
 import { chainLabel } from './settlement'
+
+/** How Charge / Payment link / Bill create requests: the owner's own
+ *  (createPaymentRequest, for the active store) or, in staff mode, one that
+ *  pays the business they work for (staff_create_request). */
+type RequestInput = Parameters<typeof createPaymentRequest>[0]
+export const RequestMaker = createContext<{ create: (p: RequestInput) => Promise<MerchantIntent>; storeId: string | null; canBill: boolean }>({
+  create: createPaymentRequest, storeId: null, canBill: true,
+})
+function useMakeRequest() {
+  const m = useContext(RequestMaker)
+  return (p: RequestInput) => m.create({ ...p, storeId: p.storeId ?? m.storeId })
+}
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const OPEN = new Set(['pending', 'payment_detected', 'processing', 'partially_paid'])
@@ -113,8 +125,10 @@ function Done({ icon, top, amount, note, children }: { icon: React.ReactNode; to
 
 // ── Shop QR ──────────────────────────────────────────────────────────────
 
-export function ShopQrScreen({ open, onBack, storeName, handle }: { open: boolean; onBack: () => void; storeName: string; handle: string }) {
-  const username = useAuthStore(s => s.username)
+export function ShopQrScreen({ open, onBack, storeName, handle, payTo }: { open: boolean; onBack: () => void; storeName: string; handle: string; payTo?: string }) {
+  // payTo: whose pay link (staff mode: the business owner's, never the staff's own).
+  const own = useAuthStore(s => s.username)
+  const username = payTo ?? own
   const url = `${window.location.origin}/paylink/${username ?? ''}`
   const qr = useQr(open && username ? url : null)
   const sticker = usePrint()
@@ -137,6 +151,7 @@ export function ShopQrScreen({ open, onBack, storeName, handle }: { open: boolea
 // ── Charge (counter keypad) ──────────────────────────────────────────────
 
 export function ChargeScreen({ open, onBack }: { open: boolean; onBack: () => void }) {
+  const make = useMakeRequest()
   const toast = useUIStore(s => s.showToastMessage)
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
@@ -160,7 +175,7 @@ export function ChargeScreen({ open, onBack }: { open: boolean; onBack: () => vo
 
   const charge = async () => {
     setBusy(true)
-    try { setIntent(await createPaymentRequest({ amount: value, note: note || undefined, expiresInMinutes: 15 })) }
+    try { setIntent(await make({ amount: value, note: note || undefined, expiresInMinutes: 15 })) }
     catch (e) { toast(e instanceof Error ? e.message : 'Could not create the charge', 'error') }
     setBusy(false)
   }
@@ -197,6 +212,7 @@ export function ChargeScreen({ open, onBack }: { open: boolean; onBack: () => vo
 const EXPIRY = [{ id: '60', label: '1 hour' }, { id: '1440', label: '1 day' }, { id: '10080', label: '7 days' }, { id: '0', label: 'No limit' }]
 
 export function LinkScreen({ open, onBack, storeName }: { open: boolean; onBack: () => void; storeName: string }) {
+  const make = useMakeRequest()
   const toast = useUIStore(s => s.showToastMessage)
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
@@ -210,7 +226,7 @@ export function LinkScreen({ open, onBack, storeName }: { open: boolean; onBack:
 
   const create = async () => {
     setBusy(true)
-    try { setIntent(await createPaymentRequest({ amount: Number(amount), note: note || undefined, customer: customer || undefined, expiresInMinutes: Number(expiry) || null })) }
+    try { setIntent(await make({ amount: Number(amount), note: note || undefined, customer: customer || undefined, expiresInMinutes: Number(expiry) || null })) }
     catch (e) { toast(e instanceof Error ? e.message : 'Could not create the link', 'error') }
     setBusy(false)
   }
@@ -245,6 +261,7 @@ export function LinkScreen({ open, onBack, storeName }: { open: boolean; onBack:
 const blank = (): BillItem => ({ name: '', qty: 1, price: '' })
 
 export function BillScreen({ open, onBack, storeName }: { open: boolean; onBack: () => void; storeName: string }) {
+  const make = useMakeRequest()
   const toast = useUIStore(s => s.showToastMessage)
   const [customer, setCustomer] = useState('')
   const [note, setNote] = useState('')
@@ -260,7 +277,7 @@ export function BillScreen({ open, onBack, storeName }: { open: boolean; onBack:
 
   const send = async () => {
     setBusy(true)
-    try { setIntent(await createPaymentRequest({ amount: total, items, customer: customer || undefined, note: note || undefined, expiresInMinutes: 10080 })) }
+    try { setIntent(await make({ amount: total, items, customer: customer || undefined, note: note || undefined, expiresInMinutes: 10080 })) }
     catch (e) { toast(e instanceof Error ? e.message : 'Could not create the bill', 'error') }
     setBusy(false)
   }

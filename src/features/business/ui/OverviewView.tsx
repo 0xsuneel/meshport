@@ -66,7 +66,7 @@ function CompactActionBtn({
   )
 }
 
-function ManageChip({
+export function ManageChip({
   Icon,
   label,
   onClick,
@@ -137,6 +137,13 @@ export interface OverviewViewProps {
   /** Optional trend chip rendered directly under the big total */
   trend?: ReactNode
   banner?: ReactNode
+  /** Period shown in the hero (default "Today's collection" / "On Arc today"). */
+  title?: string
+  onArcLabel?: string
+  /** Rendered under the On Arc / To settle strip (e.g. a KPI grid). */
+  kpis?: ReactNode
+  /** Extra chips appended to the Manage row. */
+  moreTools?: ReactNode
 
   onShowQr: () => void
   onCharge: () => void
@@ -161,6 +168,10 @@ export function OverviewView({
   recent,
   trend,
   banner,
+  title = "Today's collection",
+  onArcLabel = 'On Arc today',
+  kpis,
+  moreTools,
   onShowQr,
   onCharge,
   onPaymentLink,
@@ -184,7 +195,7 @@ export function OverviewView({
       <FadeUp delay={0.04} className="mx-5">
         <div className="rounded-3xl bg-card border border-border p-5">
           <p className="text-xs font-semibold text-text-muted tracking-widest uppercase">
-            Today&apos;s collection
+            {title}
           </p>
 
           {loading ? (
@@ -230,7 +241,7 @@ export function OverviewView({
         <div className="grid grid-cols-2 gap-3">
           {/* On Arc */}
           <div className="rounded-2xl bg-surface border border-border p-4">
-            <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">On Arc today</p>
+            <p className="text-[10px] font-semibold text-text-muted uppercase tracking-wider">{onArcLabel}</p>
             {loading ? (
               <Skeleton className="mt-2 h-6 w-20" />
             ) : (
@@ -260,6 +271,8 @@ export function OverviewView({
           </div>
         </div>
       </FadeUp>
+
+      {kpis && <FadeUp delay={0.1}>{kpis}</FadeUp>}
 
       {/* ── Primary actions ─────────────────────────────────────────────── */}
       <FadeUp delay={0.12} className="mx-5">
@@ -338,6 +351,7 @@ export function OverviewView({
           {onStatement && <ManageChip Icon={FileText} label="Statement" onClick={onStatement} />}
           <ManageChip Icon={User}      label="Business profile" onClick={onProfile} />
           {onHelp && <ManageChip Icon={LifeBuoy} label="Help" onClick={onHelp} />}
+          {moreTools}
         </div>
       </FadeUp>
     </div>

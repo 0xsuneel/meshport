@@ -515,6 +515,13 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
   const hub = useHubLabel()
   // Merchants: Rewards is replaced by the Business tab.
   const { isMerchant } = useMerchant()
+  // Staff of a business (invited by its owner) get "Staff mode" here.
+  const business = useBusinessTab()
+  const [staffOf, setStaffOf] = useState(false)
+  useEffect(() => {
+    if (business) return
+    import('@/lib/businessTeam').then(m => m.myMemberships()).then(l => setStaffOf(l.length > 0)).catch(() => {})
+  }, [business])
   // Two groups, four across (Money, then Explore).
   const groups: { title: string; actions: { label: string; path: string; icon: React.ReactNode }[] }[] = [
     { title: 'Money', actions: [
@@ -528,6 +535,7 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
       { label: 'P2P',            path: '/p2p',        icon: <ActionIcon name="p2p" size={27} /> },
       ...(isMerchant ? [] : [{ label: 'Rewards', path: '/rewards', icon: <ActionIcon name="rewards" size={27} /> }]),
       { label: 'Insights',       path: '/insights',   icon: <ActionIcon name="insights" size={27} /> },
+      ...(staffOf ? [{ label: 'Staff mode', path: '/business', icon: <ActionIcon name="clock" size={27} /> }] : []),
     ] },
   ]
   const content = (

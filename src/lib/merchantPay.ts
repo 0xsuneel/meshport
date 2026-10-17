@@ -214,6 +214,8 @@ export type MerchantIntent = {
   kind: 'request' | 'invoice'; items: InvoiceItem[] | null
   completedByMerchant: boolean; completedNote: string | null
   personal?: boolean | null
+  /** Business → Stores: the store it was made for. */
+  storeId?: string | null
 }
 export type MerchantPayment = {
   id: string; intentId: string; chain: string; txHash: string; from: string; amount: number
@@ -271,7 +273,7 @@ function mapIntent(r: any): MerchantIntent {
     customerUsername: r.customer_username, customerWallet: r.customer_wallet, status: expired ? 'expired' : r.status,
     sourceChain: r.source_chain, paymentMethod: r.payment_method, createdAt: r.created_at, expiresAt: r.expires_at, paidAt: r.paid_at,
     kind: r.kind === 'invoice' ? 'invoice' : 'request', personal: typeof r.personal === 'boolean' ? r.personal : null,
-    completedByMerchant: !!r.completed_by_merchant, completedNote: r.completed_note ?? null,
+    completedByMerchant: !!r.completed_by_merchant, completedNote: r.completed_note ?? null, storeId: r.store_id ?? null,
     items: Array.isArray(r.items) ? r.items.map((i: any) => ({ name: i.name, qty: Number(i.qty), price: Number(i.price), total: Number(i.total) })) : null,
   }
 }
@@ -281,7 +283,7 @@ export function invoiceTotal(items: InvoiceItem[]): number {
   return Number(items.reduce((s, i) => s + Math.round((i.qty || 0) * (i.price || 0) * 1e6) / 1e6, 0).toFixed(6))
 }
 
-export async function createPaymentRequest(p: { amount: number; customer?: string; note?: string; expiresInMinutes?: number | null; items?: InvoiceItem[] }): Promise<MerchantIntent> {
+export async function createPaymentRequest(p: { amount: number; customer?: string; note?: string; expiresInMinutes?: number | null; items?: InvoiceItem[]; storeId?: string | null }): Promise<MerchantIntent> {
   const items = p.items?.filter(i => i.name.trim() && i.qty > 0 && i.price >= 0).map(i => ({ name: i.name.trim().slice(0, 80), qty: i.qty, price: i.price }))
   const amount = items?.length ? invoiceTotal(items) : p.amount
   if (!(amount > 0)) throw new Error(items ? 'Add at least one item with a price' : 'Enter an amount')
@@ -291,6 +293,7 @@ export async function createPaymentRequest(p: { amount: number; customer?: strin
     customer_username: p.customer?.trim().replace(/^@/, '') || null,
     note: p.note?.trim().slice(0, 140) || null,
     expires_at: p.expiresInMinutes ? new Date(Date.now() + p.expiresInMinutes * 60_000).toISOString() : null,
+    ...(p.storeId ? { store_id: p.storeId } : {}),
   }).select('*').single()
   if (error) throw new Error(/business accounts/i.test(error.message) ? 'Only business accounts can send bills.' : error.message)
   markPaymentRequestCreated()
