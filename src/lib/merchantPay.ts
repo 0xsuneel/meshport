@@ -61,6 +61,8 @@ export type PaymentView = {
   createdAt: string
   expiresAt: string | null
   paidAt: string | null
+  /** Pay-by date (YYYY-MM-DD) the business set; null = none or an older server. */
+  dueDate?: string | null
   /** The merchant marked the order completed themselves (settled another way). */
   completedByMerchant?: boolean
   completedNote?: string | null
@@ -82,6 +84,8 @@ export const findOpenOrder = (wallet: string, amount: number) =>
 
 export const getPayment = (code: string) => call<PaymentView>({ action: 'get', code })
 export const cancelPayment = (code: string) => call<PaymentView>({ action: 'cancel', code })
+/** Merchant: a cancelled / expired order is open again; what was paid on it counts. */
+export const reopenOrder = (code: string) => call<PaymentView>({ action: 'reopen', code })
 
 /**
  * Hands a payment transaction to the server for on-chain verification.

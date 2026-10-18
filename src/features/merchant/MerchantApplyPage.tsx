@@ -9,7 +9,8 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Store, Clock, CheckCircle2, XCircle } from 'lucide-react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useUIStore } from '@/store'
-import { useMerchant, applyForMerchant } from '@/lib/merchant'
+import { useMerchant, applyForMerchant, type BusinessDoc } from '@/lib/merchant'
+import { BusinessDocsField } from './BusinessDocsField'
 import { BUSINESS_CATEGORIES, toCategory } from '@/lib/businessCategories'
 
 const TYPES = BUSINESS_CATEGORIES
@@ -26,6 +27,8 @@ export function MerchantApplyPage() {
   const [businessType, setBusinessType] = useState<string>(() => toCategory(draft?.storeType))
   const [contact, setContact] = useState('')
   const [description, setDescription] = useState('')
+  const [registration, setRegistration] = useState('')
+  const [docs, setDocs] = useState<BusinessDoc[]>([])
   const [submitting, setSubmitting] = useState(false)
 
   const showForm = (status === 'none' && accountType === 'business') || ((status === 'rejected' || status === 'revoked') && reapply)
@@ -34,10 +37,11 @@ export function MerchantApplyPage() {
   const submit = async () => {
     if (businessName.trim().length < 2) { showToastMessage('Enter your business name', 'error'); return }
     if (description.trim().length < 10) { showToastMessage('Tell us why you need a business account', 'error'); return }
+    if (!docs.length) { showToastMessage('Add at least one document - an ID or a photo of your shop', 'error'); return }
     setSubmitting(true)
     try {
-      await applyForMerchant({ businessName, businessType, contact, description })
-      setReapply(false)
+      await applyForMerchant({ businessName, businessType, contact, description, registrationNumber: registration, documents: docs })
+      setReapply(false); setDocs([]); setRegistration('')
       try { localStorage.removeItem('meshport_business_draft') } catch { /* storage unavailable */ }
       showToastMessage('Sent for review - we’ll let you know once it’s approved', 'success')
     } catch (e) {
@@ -109,6 +113,14 @@ export function MerchantApplyPage() {
                 <p className="text-xs font-semibold text-text-secondary mb-2">Why do you need a business account?</p>
                 <textarea value={description} onChange={e => setDescription(e.target.value)} maxLength={500} rows={3}
                   placeholder="What you sell and how customers will pay you" className={`${input} resize-none`} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-text-secondary mb-2">Registration number - optional</p>
+                <input value={registration} onChange={e => setRegistration(e.target.value)} maxLength={40} placeholder="GSTIN, Udyam or shop licence number" className={input} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-text-secondary mb-2">Documents</p>
+                <BusinessDocsField docs={docs} onChange={setDocs} onError={m => showToastMessage(m, 'error')} />
               </div>
               <button onClick={submit} disabled={submitting}
                 className="w-full py-3 rounded-2xl text-white text-sm font-semibold active:scale-95 transition-transform disabled:opacity-60"

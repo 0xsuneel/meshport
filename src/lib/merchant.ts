@@ -31,7 +31,22 @@ export type MerchantApplication = {
   createdAt: string
   walletAddress: string | null
   username: string | null
+  /** GSTIN, Udyam, shop licence… as typed (upper-cased). */
+  registrationNumber: string | null
+  documents: BusinessDoc[]
 }
+
+/** A file the applicant attached for the admin (private bucket). */
+export type BusinessDocKind = 'id' | 'shop_photo' | 'registration' | 'other'
+export type BusinessDoc = { path: string; kind: BusinessDocKind; name: string }
+export const BUSINESS_DOC_KINDS: Array<{ id: BusinessDocKind; label: string }> = [
+  { id: 'id', label: 'Owner ID' }, { id: 'shop_photo', label: 'Shop photo' },
+  { id: 'registration', label: 'Registration' }, { id: 'other', label: 'Other' },
+]
+const DOCS_BUCKET = 'business-docs'
+const DOC_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'application/pdf': 'pdf' }
+export const MAX_BUSINESS_DOCS = 5
+export const MAX_BUSINESS_DOC_BYTES = 5 * 1024 * 1024
 
 type State = {
   loaded: boolean; status: MerchantStatus; application: MerchantApplication | null
@@ -80,6 +95,8 @@ function mapRow(r: any): MerchantApplication {
     contact: r.contact ?? null, description: r.description ?? null, status: r.status,
     reviewNote: r.review_note ?? null, reviewedAt: r.reviewed_at ?? null, createdAt: r.created_at,
     walletAddress: r.wallet_address ?? null, username: r.username ?? null,
+    registrationNumber: r.registration_number ?? null,
+    documents: Array.isArray(r.documents) ? r.documents.filter((d: any) => d?.path).map((d: any) => ({ path: d.path, kind: d.kind, name: d.name || 'Document' })) : [],
   }
 }
 
@@ -202,17 +219,47 @@ export async function setBusinessName(name: string): Promise<void> {
   await refreshMerchant()
 }
 
+/** Uploads one application document into the signed-in login's own folder.
+ *  The database checks the file is there when the application is sent. */
+export async function uploadBusinessDoc(file: File, kind: BusinessDocKind): Promise<BusinessDoc> {
+  const ext = DOC_TYPES[file.type]
+  if (!ext) throw new Error('Use a photo (JPG, PNG, WebP) or a PDF')
+  if (file.size > MAX_BUSINESS_DOC_BYTES) throw new Error('Each file can be up to 5 MB')
+  const uid = await authUid()
+  if (!uid) throw new Error('Sign in again to upload')
+  const path = `${uid}/${crypto.randomUUID()}.${ext}`
+  const { error } = await supabase.storage.from(DOCS_BUCKET).upload(path, file, { upsert: false, contentType: file.type })
+  if (error) throw new Error(error.message)
+  return { path, kind, name: file.name.slice(0, 120) || 'Document' }
+}
+
+/** Removes a document picked by mistake (only allowed before it's sent). */
+export async function removeBusinessDoc(path: string): Promise<void> {
+  await supabase.storage.from(DOCS_BUCKET).remove([path])
+}
+
+/** Short-lived link to open an application document (owner or admin). */
+export async function businessDocUrl(path: string): Promise<string> {
+  const { data, error } = await supabase.storage.from(DOCS_BUCKET).createSignedUrl(path, 300)
+  if (error || !data?.signedUrl) throw new Error(error?.message || 'Could not open the document')
+  return data.signedUrl
+}
+
 export async function applyForMerchant(p: {
   businessName: string; businessType?: string; contact?: string; description?: string
+  registrationNumber?: string; documents?: BusinessDoc[]
 }): Promise<void> {
   const name = p.businessName.trim()
   if (name.length < 2) throw new Error('Enter your business name')
   if ((p.description ?? '').trim().length < 10) throw new Error('Tell us why you need a business account')
+  if (!p.documents?.length) throw new Error('Add at least one document - an ID or a photo of your shop')
   const { error } = await supabase.from('merchant_applications').insert({
     business_name: name.slice(0, 80),
     business_type: p.businessType?.trim().slice(0, 60) || null,
     contact:       p.contact?.trim().slice(0, 120) || null,
     description:   p.description?.trim().slice(0, 500) || null,
+    registration_number: p.registrationNumber?.trim().slice(0, 40) || null,
+    documents:     p.documents.slice(0, MAX_BUSINESS_DOCS).map(d => ({ path: d.path, kind: d.kind, name: d.name })),
   })
   if (error) {
     if (/merchant_applications_one_open|duplicate/i.test(error.message)) throw new Error('You already have an application under review.')

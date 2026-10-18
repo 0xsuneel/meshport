@@ -2,10 +2,10 @@
 // reason the user sees), or revoke an approved merchant. Applicant identity
 // (user, wallet, username) is filled by the database and can't be edited.
 import { useEffect, useState } from 'react'
-import { Store, X } from 'lucide-react'
+import { FileText, Store, X } from 'lucide-react'
 import { AdminCard } from '@/components/admin/AdminCard'
 import { useAdminStore } from '@/store/adminStore'
-import { adminListMerchantApplications, adminReviewMerchant, type MerchantApplication } from '@/lib/merchant'
+import { adminListMerchantApplications, adminReviewMerchant, businessDocUrl, BUSINESS_DOC_KINDS, type MerchantApplication } from '@/lib/merchant'
 
 const TABS: Array<{ key: 'pending' | 'approved' | 'rejected' | 'all'; label: string }> = [
   { key: 'pending',  label: 'Pending' },
@@ -42,6 +42,19 @@ export function MerchantApplicationsPage() {
   const filtered = apps.filter(inTab)
   const count = (k: typeof TABS[number]['key']) => apps.filter(a =>
     k === 'all' ? true : k === 'rejected' ? (a.status === 'rejected' || a.status === 'revoked') : a.status === k).length
+
+  // Documents are private: each open makes a 5-minute signed link. The tab
+  // opens first (synchronously) so a popup blocker doesn't swallow it.
+  const openDoc = async (path: string) => {
+    const tabRef = window.open('', '_blank')
+    try {
+      const url = await businessDocUrl(path)
+      if (tabRef) tabRef.location.href = url; else window.location.assign(url)
+    } catch (e) {
+      tabRef?.close()
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
 
   const decide = async (status: 'approved' | 'rejected' | 'revoked') => {
     if (!active) return
@@ -124,6 +137,7 @@ export function MerchantApplicationsPage() {
               {row('Wallet', active.walletAddress)}
               {row('Business type', active.businessType)}
               {row('Contact', active.contact)}
+              {row('Registration no.', active.registrationNumber)}
               {row('Applied', new Date(active.createdAt).toLocaleString())}
               {row('Reviewed', active.reviewedAt ? new Date(active.reviewedAt).toLocaleString() : null)}
             </div>
@@ -132,6 +146,27 @@ export function MerchantApplicationsPage() {
                 <p style={{ fontSize: 13, color: 'var(--text-primary)', margin: 0, lineHeight: 1.6 }}>{active.description}</p>
               </div>
             )}
+
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', margin: '0 0 8px' }}>Documents</p>
+              {active.documents.length === 0 ? (
+                <p style={{ fontSize: 12, color: 'var(--warning)', margin: 0 }}>None attached (applied before documents were asked for)</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {active.documents.map(d => (
+                    <button key={d.path} onClick={() => { void openDoc(d.path) }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)', cursor: 'pointer', textAlign: 'left' }}>
+                      <FileText size={16} color="var(--text-secondary)" />
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{BUSINESS_DOC_KINDS.find(k => k.id === d.kind)?.label ?? 'Document'}</span>
+                        <span style={{ display: 'block', fontSize: 11, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                      </span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--brand)' }}>Open</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {active.status !== 'rejected' && active.status !== 'revoked' && (
               <>

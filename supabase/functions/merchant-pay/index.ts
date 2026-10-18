@@ -12,6 +12,8 @@
 //   POST { action: 'assign', depositId, code }      merchant picks the order for a deposit
 //   POST { action: 'dismiss', depositId }           merchant: not an order payment
 //   POST { action: 'complete', code, note? }        merchant marks an order completed (settled another way)
+//   POST { action: 'reopen', code }                 merchant: a cancelled / expired order is open again
+//                                                   (money paid after the cancel counts towards it)
 //
 // Nothing is trusted from the client except "look at this transaction":
 // the receipt is fetched from the chain, the USDC Transfer to the merchant's
@@ -162,7 +164,7 @@ function publicView(i: any, payments: any[]) {
     amount: Number(i.requested_amount), received: Number(i.received_amount), overpaid: Number(i.overpaid_amount ?? 0), currency: i.currency,
     note: i.note, customerUsername: i.customer_username, status: effectiveStatus(i),
     kind: i.kind ?? 'request', personal: typeof i.personal === 'boolean' ? i.personal : null, items: Array.isArray(i.items) ? i.items : null,
-    createdAt: i.created_at, expiresAt: i.expires_at, paidAt: i.paid_at,
+    createdAt: i.created_at, expiresAt: i.expires_at, paidAt: i.paid_at, dueDate: i.due_date ?? null,
     completedByMerchant: !!i.completed_by_merchant, completedNote: i.completed_note ?? null,
     chains: Object.entries(PAY_CHAINS).map(([id, c]) => ({ id, label: c.label, chainId: c.chainId, usdc: c.usdc, route: c.route })),
     payments: payments.map(p => ({ chain: p.source_chain, amount: Number(p.amount), status: p.status, txHash: p.tx_hash, method: p.method, late: !!p.late, createdAt: p.created_at })),
@@ -385,7 +387,7 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   }
   if (late && statusNow === 'cancelled') {
     await notifyMerchant(merchantWallet, 'merchant_payment_late', `Payment for cancelled ${orderName(i)}`,
-      `${label} from ${customerUsername ?? short(from)} arrived after the order was cancelled - refund it or reopen the sale.`)
+      `${label} from ${customerUsername ?? short(from)} arrived after the order was cancelled - reopen it in Orders to count the payment, or refund it.`)
   }
   return { ok: true }
 }
@@ -835,6 +837,31 @@ Deno.serve(async (req: Request) => {
       if (!['pending', 'expired'].includes(effectiveStatus(i)) || Number(i.received_amount) > 0) return jsonFor(req, { error: 'A payment was already made on this request.' }, 409)
       await db.from('merchant_payment_intents').update({ status: 'cancelled' }).eq('id', i.id)
       return jsonFor(req, publicView({ ...i, status: 'cancelled' }, []))
+    }
+
+    if (action === 'reopen') {
+      // Owner only. The order is open again with no expiry; what was paid on
+      // it (late payments included) is counted, so a sale paid after a
+      // cancel becomes paid / part paid instead of only refundable.
+      // Refused once anything on it was refunded: those payments are no
+      // longer the merchant's to count.
+      const who = await caller(req)
+      if (who?.authUid !== i.merchant_auth_uid) return jsonFor(req, { error: 'Not found' }, 404)
+      const st = effectiveStatus(i)
+      const pastExpiry = !!i.expires_at && new Date(i.expires_at).getTime() < Date.now()
+      if (!(st === 'cancelled' || st === 'expired' || (pastExpiry && (st === 'pending' || st === 'partially_paid')))) {
+        return jsonFor(req, { error: `${orderName(i)} is still open.` }, 409)
+      }
+      const { data: refunded } = await db.from('merchant_refunds').select('id').eq('intent_id', i.id).limit(1)
+      if (refunded?.length) return jsonFor(req, { error: `Money on ${orderName(i)} was refunded - create a new order instead.` }, 409)
+      // Only from the state just read, so a concurrent cancel / reopen can't be undone.
+      const { data: moved } = await db.from('merchant_payment_intents').update({ status: 'pending', expires_at: null })
+        .eq('id', i.id).eq('status', i.status).select('id')
+      if (!moved?.length) return jsonFor(req, { error: 'This order just changed - refresh and try again.' }, 409)
+      const { error: rcErr } = await db.rpc('merchant_intent_recompute', { p_intent: i.id })
+      if (rcErr) throw rcErr
+      const fresh = await loadIntent(code)
+      return jsonFor(req, publicView(fresh, await loadPayments(i.id)))
     }
 
     return jsonFor(req, { error: 'Unknown action' }, 400)

@@ -17,13 +17,14 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { Store, Clock, Printer, CalendarClock } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
-import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName } from '@/lib/merchant'
+import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName, type BusinessDoc } from '@/lib/merchant'
+import { BusinessDocsField } from '@/features/merchant/BusinessDocsField'
 import { BUSINESS_CATEGORIES, toCategory, useBizTerms, cap } from '@/lib/businessCategories'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/ui/Avatar'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import {
-  createPaymentRequest, listMyIntents, cancelPayment, completeOrder, paymentLink, watchPayment, billCardMessage, paymentRequestMessage,
+  createPaymentRequest, listMyIntents, cancelPayment, reopenOrder, completeOrder, paymentLink, watchPayment, billCardMessage, paymentRequestMessage,
   type MerchantIntent, type MerchantPayment, type PaymentView,
 } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
@@ -485,12 +486,14 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
   // What is still owed on the orders in view that can be paid.
   const due = shown.reduce((sum, i) => { const s = requestStatus(i); return s === 'open' || s === 'part' ? sum + Math.max(0, i.amount - i.received) : sum }, 0)
 
-  const act = async (i: MerchantIntent, what: 'cancel' | 'complete') => {
+  const act = async (i: MerchantIntent, what: 'cancel' | 'complete' | 'reopen') => {
     setBusy(i.id)
     try {
-      await (what === 'cancel' ? cancelPayment(i.code) : completeOrder(i.code))
-      void logBusiness(what === 'cancel' ? 'order_cancelled' : 'order_completed', { target: i.orderNumber ?? i.code, amount: i.amount })
-      toast(what === 'cancel' ? `${cap(t.order)} cancelled` : 'Marked as completed', 'success')
+      const v = await (what === 'cancel' ? cancelPayment(i.code) : what === 'reopen' ? reopenOrder(i.code) : completeOrder(i.code))
+      void logBusiness(what === 'cancel' ? 'order_cancelled' : what === 'reopen' ? 'order_reopened' : 'order_completed', { target: i.orderNumber ?? i.code, amount: i.amount })
+      toast(what === 'cancel' ? `${cap(t.order)} cancelled`
+        : what === 'reopen' ? (v.status === 'paid' ? `${cap(t.order)} reopened - paid in full` : v.received > 0 ? `${cap(t.order)} reopened - ${money(v.received)} counted` : `${cap(t.order)} reopened`)
+        : 'Marked as completed', 'success')
       await load()
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not update', 'error') }
     setBusy(null)
@@ -561,6 +564,8 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
               const extraAmt = i.overpaid && i.overpaid > 0 ? extraLeft(i.overpaid, pays.reduce((s, p) => s + (refundedOf?.(p) ?? 0), 0)) : 0
               const extra = extraAmt + 1e-9 >= MIN_REFUND ? refundable(i, extraAmt) : undefined
               const back = afterCancel ? refundable(i, 0) : undefined
+              // Reopen: cancelled / expired, nothing refunded on it (the server checks too).
+              const canReopen = (status === 'cancelled' || status === 'expired') && i.status !== 'failed' && !pays.some(p => (refundedOf?.(p) ?? 0) > 0)
               const remindIn = canRemindAt(i.lastRemindedAt)
               const badges = [
                 ...(due ? [{ label: due.text, tone: due.tone }] : []),
@@ -570,7 +575,7 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
                 ...(!afterCancel && pays.some(p => p.late) ? [{ label: 'Paid late', tone: 'warning' as const }] : []),
               ]
               const note = blocked ? "A payment came from an address on USDC's blocklist. Don't ship goods; contact support."
-                : afterCancel ? `${money(i.received)} arrived after this ${t.order} was ${status === 'cancelled' ? 'cancelled' : 'closed'} - refund it or reopen with a new ${t.order}.`
+                : afterCancel ? `${money(i.received)} arrived after this ${t.order} was ${status === 'cancelled' ? 'cancelled' : 'closed'} - reopen it to count the payment, or refund it.`
                 : undefined
               return (
                 <RequestRow key={i.id} kind={i.kind} status={status} amount={money(i.amount)} badges={badges} note={note}
@@ -584,6 +589,7 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
                     ...(live && i.customerUsername ? [{ label: remindIn.ok ? 'Remind' : `Remind in ${remindIn.inHours}h`, tone: 'neutral' as const, onClick: () => remind(i), disabled: busy === i.id || !remindIn.ok }] : []),
                     ...(onRefund && extra && !blocked ? [{ label: `Refund extra ${money(extraAmt)}`, tone: 'danger' as const, onClick: () => onRefund(extra, extraAmt) }] : []),
                     ...(onRefund && back && !blocked ? [{ label: 'Refund', tone: 'danger' as const, onClick: () => onRefund(back, leftOn(back)) }] : []),
+                    ...(canReopen ? [{ label: 'Reopen', tone: 'brand' as const, onClick: () => act(i, 'reopen'), disabled: busy === i.id }] : []),
                     ...(live ? [{ label: 'Mark completed', tone: 'brand' as const, onClick: () => act(i, 'complete'), disabled: busy === i.id }] : []),
                     // Only an order nothing was paid on can be cancelled (the server refuses the rest).
                     ...(status === 'open' && i.received <= 0 ? [{ label: 'Cancel', tone: 'danger' as const, onClick: () => act(i, 'cancel'), disabled: busy === i.id }] : []),
@@ -729,6 +735,8 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
   }
   const [contact, setContact] = useState(() => application?.contact || '')
   const [reason, setReason] = useState('')
+  const [registration, setRegistration] = useState('')
+  const [docs, setDocs] = useState<BusinessDoc[]>([])
   const [bizType, setBizType] = useState<string>(() => toCategory(application?.businessType))
   // The application can load after this screen mounts: prefill from it.
   useEffect(() => {
@@ -746,9 +754,9 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
     // The application carries the business name customers will see; the
     // account stays its username and shops are added as stores after approval.
     try {
-      await applyForMerchant({ businessName: bizName, businessType: bizType, contact, description: reason })
+      await applyForMerchant({ businessName: bizName, businessType: bizType, contact, description: reason, registrationNumber: registration, documents: docs })
       if (bizName.trim() !== (storeName ?? '')) await setBusinessName(bizName).catch(() => {})
-      toast('Sent for review', 'success'); setAgain(false)
+      toast('Sent for review', 'success'); setAgain(false); setDocs([]); setRegistration('')
     }
     catch (e) { toast(e instanceof Error ? e.message : 'Could not send', 'error') }
     setBusy(false)
@@ -762,7 +770,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
 
   return (
     <BusinessScreen open={open} title="Business profile" onBack={onBack}
-      footer={canApply ? <PrimaryBtn disabled={busy || bizName.trim().length < 2 || reason.trim().length < 10} onClick={submit}>{busy ? 'Sending…' : 'Send for review'}</PrimaryBtn>
+      footer={canApply ? <PrimaryBtn disabled={busy || bizName.trim().length < 2 || reason.trim().length < 10 || !docs.length} onClick={submit}>{busy ? 'Sending…' : 'Send for review'}</PrimaryBtn>
         : closed ? <PrimaryBtn onClick={() => { setBizName(n => n || appliedName); setAgain(true) }}>Apply again</PrimaryBtn> : undefined}>
       <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
         {/* Name and logo customers see on the pay page, receipts and notifications */}
@@ -806,12 +814,18 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
                 className="w-full rounded-2xl bg-surface border border-border px-4 py-3 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-brand resize-none" />
             </Field>
             <Field label="Contact (optional)"><TextInput value={contact} onChange={e => setContact(e.target.value)} maxLength={120} placeholder="Phone or email" /></Field>
+            <Field label="Registration number (optional)"><TextInput value={registration} onChange={e => setRegistration(e.target.value)} maxLength={40} placeholder="GSTIN, Udyam or shop licence number" /></Field>
+            <Field label="Documents" hint="Add at least one: your ID or a photo of your shop. A registration certificate helps.">
+              <BusinessDocsField docs={docs} onChange={setDocs} onError={m => toast(m, 'error')} />
+            </Field>
           </>
         ) : (
           <DetailList rows={[
             { label: 'Business', value: application?.businessName && application.businessName !== handle ? `${application.businessName} · ${handle}` : handle },
             ...(application?.businessType ? [{ label: 'Type', value: application.businessType }] : []),
             ...(application?.contact ? [{ label: 'Contact', value: application.contact }] : []),
+            ...(application?.registrationNumber ? [{ label: 'Registration', value: application.registrationNumber }] : []),
+            ...(application?.documents.length ? [{ label: 'Documents', value: `${application.documents.length} attached` }] : []),
             ...(application ? [{ label: 'Applied', value: new Date(application.createdAt).toLocaleDateString() }] : []),
           ]} />
         )}
@@ -846,7 +860,7 @@ function StatementBody({ storeName, handle, payments, refunds, settled, waiting,
     <>
       <div className="px-5 pt-4 pb-6">
         <StatementView range={range} onRange={setRange} loading={loading} rows={rows} periodLabel={rangeLabel(range)}
-          onCsv={() => exportPaymentsCsv(inRange, storeName, refunds)} onPdf={pdf} />
+          onCsv={() => { void exportPaymentsCsv(inRange, storeName, refunds) }} onPdf={pdf} />
       </div>
       {printer.portal}
     </>

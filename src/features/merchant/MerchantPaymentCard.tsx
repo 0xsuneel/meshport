@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { CheckCircle2, Clock, Receipt } from 'lucide-react'
 import { cardInnerWidth } from '@/features/chat/chatCard'
 import { formatAmount } from '@/lib/utils'
+import { dueText } from '@/lib/businessBills'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
@@ -127,6 +128,9 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
     : expiryText(v.expiresAt) && v.status !== 'processing' ? `${STATUS_LABEL[v.status]} · ${expiryText(v.expiresAt)!.replace(/^Expires/, 'expires')}`
     : STATUS_LABEL[v.status]
   const muted = 'var(--text-secondary)'
+  // Pay-by date the business set: "Due 25 Oct" / "Due today" / "Overdue 3 days".
+  const dueLine = loading ? null : dueText(v.dueDate, !paid && !closed)
+  const dueColor = dueLine?.tone === 'danger' ? 'var(--danger)' : dueLine?.tone === 'warning' ? 'var(--warning)' : muted
 
   return (
     <div id={`order-${number.toLowerCase()}`} role="button" onClick={e => { e.stopPropagation(); setOpen(true) }}
@@ -173,7 +177,12 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
           </div>
         )}
         {v.note && <div style={{ fontSize: 12, color: muted, marginTop: isBill ? 5 : 0 }}>{v.note}</div>}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 11.5, color: muted, marginTop: (isBill || v.note) ? 6 : 0 }}>
+        {dueLine && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: dueColor, marginTop: (isBill || v.note) ? 6 : 0 }}>
+            <Clock size={12} /> {dueLine.text}
+          </div>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 11.5, color: muted, marginTop: (isBill || v.note || dueLine) ? 6 : 0 }}>
           <span style={{ fontWeight: 600, color: paid ? 'var(--success)' : muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{statusLine}</span>
           {routeLabel && <span style={{ whiteSpace: 'nowrap' }}>{routeLabel}</span>}
         </div>
@@ -213,6 +222,10 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
     ? new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
     : null
   const status = paid ? 'success' : closed ? 'failed' : 'pending'
+  const dueLine = loading ? null : dueText(v.dueDate, !paid && !closed)
+  const dueOn = v.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(v.dueDate)
+    ? new Date(`${v.dueDate}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : null
   const title = paid ? (isMine ? 'Payment Received' : 'Paid Successfully')
     : closed ? `${kind} ${STATUS_LABEL[v.status]}`
     : kind
@@ -242,6 +255,7 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
         ...(!paid && !closed || statusText !== STATUS_LABEL[v.status] ? [{ label: 'Status', value: statusText, positive: paid }] : []),
         ...(v.received > 0 && Math.abs(v.received - v.amount) > 0.000001 ? [{ label: isMine ? 'Received' : 'Paid', value: `$${formatAmount(v.received)} USDC`, positive: true }] : []),
         ...(!paid && !closed && due > 0 ? [{ label: 'Still due', value: `$${formatAmount(due)} USDC` }] : []),
+        ...(dueLine && dueOn ? [{ label: 'Pay by', value: dueLine.tone === 'danger' ? `${dueOn} · ${dueLine.text.toLowerCase()}` : dueOn }] : []),
         ...(hash ? [{ label: 'Transaction Hash', value: `${hash.slice(0, 6)}…${hash.slice(-4)}` }] : []),
         ...(when(v.paidAt ?? payment?.createdAt) ? [{ label: paid ? 'Paid on' : 'Time', value: when(v.paidAt ?? payment?.createdAt)! }] : []),
       ]}

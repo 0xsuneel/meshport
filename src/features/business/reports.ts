@@ -2,6 +2,7 @@
 // trend, sales by hour, and the CSV export. Runs on this device only.
 import { displayOrderNumber, type MerchantPayment } from '@/lib/merchantPay'
 import { chainLabel } from './settlement'
+import { fetchFxHistory, rateAt, type FxPoint } from '@/lib/fxHistory'
 
 const sameDay = (iso: string, d: Date) => new Date(iso).toDateString() === d.toDateString()
 
@@ -22,23 +23,44 @@ export function salesByHour(payments: MerchantPayment[]): number[] {
 
 export const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`
 
-/** Saves the payments as a CSV file. */
-export function exportPaymentsCsv(payments: MerchantPayment[], storeName: string, refunds: { paymentId: string; amount: number }[] = []) {
+/**
+ * CSV rows: one per payment, with its rupee value at the USD→INR rate in
+ * effect when it arrived (USDC counted as 1 USD), so an accountant can book
+ * it in Tally / Zoho without converting by hand. "Rate date" is when that
+ * rate was published; a payment older than the rate history gets the
+ * earliest rate held, marked so. INR cells stay empty without any rates.
+ */
+export function paymentsCsvRows(payments: MerchantPayment[], refunds: { paymentId: string; amount: number }[] = [], inr: FxPoint[] = []): string[][] {
   // A payment can be refunded several times: the column is the total.
   const refunded = new Map<string, number>()
   for (const r of refunds) refunded.set(r.paymentId, (refunded.get(r.paymentId) ?? 0) + r.amount)
-  const cell = (v: unknown) => {
-    const s = v == null ? '' : String(v)
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
-  const rows = [
-    ['Date', 'Time', 'Order', 'Customer', 'From address', 'Chain', 'Amount (USDC)', 'Status', 'Refunded (USDC)', 'Transaction'],
+  const rows: (string | null)[][] = [
+    ['Date', 'Time', 'Order', 'Customer', 'From address', 'Chain', 'Amount (USDC)', 'INR per USDC', 'Amount (INR)', 'Status',
+      'Refunded (USDC)', 'Refunded (INR)', 'Rate date', 'Transaction'],
     ...payments.map(p => {
       const d = new Date(p.createdAt)
+      const back = refunded.get(p.id)
+      const rate = rateAt(inr, p.createdAt)
       return [d.toLocaleDateString('en-CA'), d.toLocaleTimeString('en-GB'), p.orderNumber ? displayOrderNumber(p.orderNumber) : null, p.customerUsername ? `${p.customerUsername}.arc` : '',
-        p.from, chainLabel(p.chain), p.amount.toFixed(2), refunded.has(p.id) ? (refunded.get(p.id)! >= p.amount - 1e-6 ? 'Refunded' : 'Partly refunded') : p.status === 'collected' || p.chain === 'Arc_Testnet' ? 'On Arc' : 'On ' + chainLabel(p.chain), refunded.get(p.id)?.toFixed(2) ?? '', p.txHash]
+        p.from, chainLabel(p.chain), p.amount.toFixed(2),
+        rate ? rate.usdRate.toFixed(4) : '', rate ? (p.amount * rate.usdRate).toFixed(2) : '',
+        back != null ? (back >= p.amount - 1e-6 ? 'Refunded' : 'Partly refunded') : p.status === 'collected' || p.chain === 'Arc_Testnet' ? 'On Arc' : 'On ' + chainLabel(p.chain),
+        back?.toFixed(2) ?? '', back != null && rate ? (back * rate.usdRate).toFixed(2) : '',
+        rate ? `${new Date(rate.at).toLocaleDateString('en-CA')}${rate.before ? ' (earliest held)' : ''}` : '',
+        p.txHash]
     }),
   ]
+  return rows.map(r => r.map(v => v ?? ''))
+}
+
+/** Saves the payments as a CSV file (rates are read first; without them the INR columns are empty). */
+export async function exportPaymentsCsv(payments: MerchantPayment[], storeName: string, refunds: { paymentId: string; amount: number }[] = []) {
+  const times = payments.map(p => Date.parse(p.createdAt)).filter(Number.isFinite)
+  const inr = times.length
+    ? await fetchFxHistory('INR', new Date(Math.min(...times)).toISOString(), new Date(Math.max(...times)).toISOString()).catch(() => [])
+    : []
+  const cell = (s: string) => /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  const rows = paymentsCsvRows(payments, refunds, inr)
   const blob = new Blob([rows.map(r => r.map(cell).join(',')).join('\n')], { type: 'text/csv' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
