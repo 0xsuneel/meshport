@@ -9,6 +9,7 @@ import { ChevronDown, CreditCard, QrCode, ShoppingBag, Wallet, Settings2, Lock }
 import type { Payment, ReactNode } from './types'
 import { Skeleton, FadeUp } from './primitives'
 import { PaymentRow } from './OverviewView'
+import { bizTerms, type BizTerms } from '@/lib/businessCategories'
 
 export type HubTone = 'neutral' | 'brand' | 'warning'
 export interface HubTile { badge: string; tone?: HubTone; onClick: () => void }
@@ -31,6 +32,8 @@ export interface HubViewProps {
   recent: Payment[]
   onSeeAll: () => void
   onPayment: (p: Payment) => void
+  /** Words for the business's category (Orders / Invoices, Customers / Clients) */
+  terms?: BizTerms
 }
 
 const TONE: Record<HubTone, string> = {
@@ -55,7 +58,7 @@ function Tile({ icon: Icon, title, sub, tile }: { icon: React.ElementType; title
 
 export function HubView({
   loading, banner, periodLabel, onPeriod, sales, pending, available, onPending, onAvailable,
-  collect, orders, money, tools, recent, onSeeAll, onPayment,
+  collect, orders, money, tools, recent, onSeeAll, onPayment, terms = bizTerms(null),
 }: HubViewProps) {
   return (
     <div className="flex flex-col gap-3 pb-8">
@@ -96,9 +99,9 @@ export function HubView({
       <FadeUp delay={0.08} className="mx-5">
         <div className="grid grid-cols-2 gap-2.5">
           <Tile icon={QrCode} title="Collect payment" sub="Shop QR · Charge · Bill" tile={collect} />
-          <Tile icon={ShoppingBag} title="Manage orders" sub="Status · Customer · Receipt" tile={orders} />
+          <Tile icon={ShoppingBag} title={`Manage ${terms.orders.toLowerCase()}`} sub={`Status · ${terms.customer} · Receipt`} tile={orders} />
           <Tile icon={Wallet} title="Manage money" sub="Arc balance · Other chains · Settle" tile={money} />
-          <Tile icon={Settings2} title="Business tools" sub="Stores · Staff · Reports · Settings" tile={tools} />
+          <Tile icon={Settings2} title="Business tools" sub={`${terms.stores} · Staff · Reports · Settings`} tile={tools} />
         </div>
       </FadeUp>
 
@@ -138,12 +141,12 @@ export function HubView({
 
 /** Business home before approval: only the apply banner and what approval
  *  turns on - the business tools stay hidden until MeshPort approves it. */
-export function LockedHubView({ banner }: { banner: ReactNode }) {
+export function LockedHubView({ banner, terms = bizTerms(null) }: { banner: ReactNode; terms?: BizTerms }) {
   const rows: Array<[React.ElementType, string, string]> = [
     [QrCode, 'Collect payment', 'Shop QR, charges and bills'],
-    [ShoppingBag, 'Manage orders', 'Open, paid and cancelled orders'],
+    [ShoppingBag, `Manage ${terms.orders.toLowerCase()}`, `Open, paid and cancelled ${terms.orders.toLowerCase()}`],
     [Wallet, 'Manage money', 'Arc balance, other chains and settle'],
-    [Settings2, 'Business tools', 'Stores, staff, reports and payouts'],
+    [Settings2, 'Business tools', `${terms.stores}, staff, reports and payouts`],
   ]
   return (
     <div className="flex flex-col gap-3 pb-8">

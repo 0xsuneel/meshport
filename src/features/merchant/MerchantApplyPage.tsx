@@ -10,8 +10,9 @@ import { ArrowLeft, Store, Clock, CheckCircle2, XCircle } from 'lucide-react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useUIStore } from '@/store'
 import { useMerchant, applyForMerchant } from '@/lib/merchant'
+import { BUSINESS_CATEGORIES, toCategory } from '@/lib/businessCategories'
 
-const TYPES = ['Retail store', 'Restaurant / Café', 'Online shop', 'Services', 'Freelancer', 'Other']
+const TYPES = BUSINESS_CATEGORIES
 
 export function MerchantApplyPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -22,7 +23,7 @@ export function MerchantApplyPage() {
   const draft = (() => { try { return JSON.parse(localStorage.getItem('meshport_business_draft') || 'null') as { storeName?: string; storeType?: string } | null } catch { return null } })()
   const [reapply, setReapply] = useState(false)
   const [businessName, setBusinessName] = useState(() => storeName || draft?.storeName || '')
-  const [businessType, setBusinessType] = useState(() => TYPES.find(t => t === draft?.storeType) ?? TYPES[0])
+  const [businessType, setBusinessType] = useState<string>(() => toCategory(draft?.storeType))
   const [contact, setContact] = useState('')
   const [description, setDescription] = useState('')
   const [submitting, setSubmitting] = useState(false)
