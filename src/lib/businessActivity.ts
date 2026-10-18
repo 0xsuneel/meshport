@@ -19,7 +19,7 @@ export type ActivityRow = {
 
 /** How each action reads in the log ("Ravi created bill ORD-00012"). */
 export const ACTION_LABEL: Record<ActivityAction, string> = {
-  charge_created: 'Created a charge',
+  charge_created: 'Created a request',
   bill_created: 'Created a bill',
   order_cancelled: 'Cancelled',
   order_completed: 'Marked completed',

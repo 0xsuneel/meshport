@@ -28,7 +28,7 @@ const ROLE_LEGEND: Record<StaffRole, { label: string; perms: string[]; color: st
   cashier: {
     label: 'Cashier',
     color: 'bg-brand/10 text-brand-text',
-    perms: ['Show QR', 'Charge', "Today's payments"],
+    perms: ['Show QR', 'Request', "Today's payments"],
   },
   manager: {
     label: 'Manager',

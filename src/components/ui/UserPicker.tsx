@@ -1,6 +1,7 @@
 // A "who" field that finds MeshPort people like Pay's recipient search
-// (hooks/useUserSearch + useKnownPeople): recent people and contacts first,
-// filtered as you type; a full username ("sunil.arc") is looked up exactly.
+// (hooks/useUserSearch + useKnownPeople): recent people and contacts when
+// empty; a person shows only for their full username ("sunil.arc") - never
+// for part of one.
 // Tapping a person fills the field as a chip (avatar, name, ×). Built for
 // bottom sheets: the list scrolls on its own and taps don't drop the keyboard
 // before they land.
@@ -35,7 +36,7 @@ export function UserPicker({ label, hint, query, onQuery, picked, onPick, active
 }) {
   const me = useAuthStore(s => s.user?.id ?? null)
   const people = useKnownPeople(active)
-  const { results, searching } = useUserSearch(picked ? '' : query, people)
+  const { results, searching } = useUserSearch(picked ? '' : query, people, true)
   const [focused, setFocused] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
