@@ -23,18 +23,22 @@ import { useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/ui/Avatar'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import {
-  createPaymentRequest, listMyIntents, cancelPayment, completeOrder, paymentLink, watchPayment,
+  createPaymentRequest, listMyIntents, cancelPayment, completeOrder, paymentLink, watchPayment, billCardMessage, paymentRequestMessage,
   type MerchantIntent, type MerchantPayment, type PaymentView,
 } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
-import { timeAgo } from '@/lib/utils'
+import { timeAgo, formatAmount } from '@/lib/utils'
 import { listItems, rememberItems, deleteItem, type SavedItem } from '@/lib/businessItems'
 import { getShopLimits, setShopLimits } from '@/lib/shop'
 import { SearchField } from '@/components/ui/SearchField'
-import { ActionSheet, SheetPerson, SheetLabel, SheetChips, sheetInputClass, sheetInputStyle } from '@/components/ui/ActionSheet'
+import { ActionSheet, SheetPerson, SheetLabel, SheetChips } from '@/components/ui/ActionSheet'
 import { RequestAmountForm } from '@/features/merchant/RequestComposer'
 import { BillComposer } from '@/features/merchant/InvoiceComposer'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { UserPicker, exactPick, pickerProblem, type PickedUser } from '@/components/ui/UserPicker'
+import { ChatSentLine } from '@/components/ui/ChatSentLine'
+import { useChatCardSender } from '@/hooks/useChatCardSender'
+import type { DbUser } from '@/lib/supabase'
 import {
   BusinessScreen, QrCard, LiveStatus, ShareLink, Field, TextInput, ChipSelect,
   RequestRow, InsightsChart, RankList, ProfileStatusCard, DetailList, PrimaryBtn, GhostBtn, Skeleton,
@@ -57,6 +61,9 @@ import { Sheet, ShareChannels } from './ui'
  *  pays the business they work for (staff_create_request). */
 type RequestInput = Parameters<typeof createPaymentRequest>[0]
 export const RequestMaker = createContext<{ create: (p: RequestInput) => Promise<MerchantIntent>; storeId: string | null; canBill: boolean; savedItems?: boolean
+  /** Post the order's card into the chat with a named customer (the owner
+   *  only - staff are other people, so their orders aren't sent as them). */
+  chat?: boolean
   /** Activity log (staff mode writes to the owner's log). */
   log?: (action: ActivityAction, p?: { target?: string | null; amount?: number | null }) => void }>({
   create: createPaymentRequest, storeId: null, canBill: true, savedItems: true,
@@ -223,10 +230,17 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   const make = useMakeRequest()
   const toast = useUIStore(s => s.showToastMessage)
   // Cashiers take counter payments only: up to an hour, no named customer, no bills.
-  const { canBill, savedItems = true, log = defaultLog } = useContext(RequestMaker)
+  const { canBill, savedItems = true, log = defaultLog, chat = false } = useContext(RequestMaker)
+  const navigate = useNavigate()
   const validFor: readonly { id: ValidFor; label: string }[] = canBill ? VALID_FOR : VALID_FOR.slice(0, 2)
   const [tab, setTab] = useState<CollectTab>(shopQr ? 'qr' : 'charge')
-  const [customer, setCustomer] = useState('')
+  // The customer: searched like Pay's recipients, picked as a chip. Only a
+  // real MeshPort user can be named on an order.
+  const [customerQuery, setCustomerQuery] = useState('')
+  const [picked, setPicked] = useState<PickedUser | null>(null)
+  const [found, setFound] = useState<{ results: DbUser[]; searching: boolean }>({ results: [], searching: false })
+  // With a named customer the order's card is posted into your chat with them.
+  const sender = useChatCardSender()
   const [expiry, setExpiry] = useState<ValidFor>('15')
   // The owner's saved items (products and prices), tapped into a bill.
   const [catalog, setCatalog] = useState<SavedItem[]>([])
@@ -242,16 +256,35 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   const paid = view?.status === 'paid'
 
   useEffect(() => { if (paid && !owner) speakPayment(view!.received) }, [paid])
-  const reset = () => { setTab(shopQr ? 'qr' : 'charge'); setCustomer(''); setExpiry('15'); setIntent(null) }
+  const reset = () => { setTab(shopQr ? 'qr' : 'charge'); setCustomerQuery(''); setPicked(null); setExpiry('15'); setIntent(null); sender.reset() }
   useEffect(() => { if (!open) reset() }, [open])
+  const newPayment = () => { setIntent(null); sender.reset() }
 
-  const who = canBill ? cleanUsername(customer) : ''
+  const who = canBill && picked ? cleanUsername(picked.username) : ''
   const validLabel = validFor.find(v => v.id === expiry)?.label ?? '15 min'
-  /** Makes the order (a failure shows in the form) and shows its QR. */
-  const create = async (p: RequestInput) => {
-    const it = await make({ ...p, customer: who || undefined })
+  /** The customer for a new order: the picked person, or the exact username
+   *  typed (not tapped); anything else typed is an error shown in the form. */
+  const resolveCustomer = (): PickedUser | null => {
+    if (!canBill) return null
+    if (picked) return picked
+    if (!customerQuery.trim()) return null
+    const exact = exactPick(customerQuery, found.results)
+    if (exact) { const u = { id: exact.id, username: cleanUsername(exact.username), display_name: exact.display_name, avatar_url: exact.avatar_url }; setPicked(u); setCustomerQuery(''); return u }
+    if (found.searching) throw new Error('Still looking up that username - try again')
+    throw new Error(pickerProblem(customerQuery, { searching: false, found: 0, self: false })?.text ?? 'Pick a MeshPort user')
+  }
+  /** Makes the order (a failure shows in the form), shows its QR and, with a
+   *  customer, posts its card into your chat with them in the background. */
+  const create = async (p: RequestInput, kind: 'charge' | 'bill') => {
+    const person = resolveCustomer()
+    const it = await make({ ...p, customer: person ? cleanUsername(person.username) : undefined })
     setIntent(it)
     onChanged?.()
+    if (chat && person) {
+      const amountText = formatAmount(it.amount)
+      void sender.send({ id: person.id, name: person.display_name || `${cleanUsername(person.username)}.arc` },
+        kind === 'bill' ? billCardMessage(it, amountText) : paymentRequestMessage(it, amountText))
+    } else sender.reset()
     return it
   }
   const cancel = async () => {
@@ -289,14 +322,8 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
     </div>
   )
   const customerInput = (label: string, hint?: string) => (
-    <div>
-      <SheetLabel>{label}</SheetLabel>
-      <input value={customer} onChange={e => setCustomer(e.target.value)} maxLength={40} placeholder="username.arc" aria-label={label}
-        autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false} enterKeyHint="done"
-        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-        className={sheetInputClass} style={sheetInputStyle} />
-      {hint && <p className="text-[12px] text-text-muted mt-1.5 px-0.5">{hint}</p>}
-    </div>
+    <UserPicker label={label} hint={hint} query={customerQuery} onQuery={setCustomerQuery} picked={picked} onPick={setPicked}
+      active={open && canBill} onResults={(results, searching) => setFound({ results, searching })} />
   )
 
   let body: React.ReactNode
@@ -319,6 +346,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
               <p className="display text-4xl font-bold tabular-nums text-text-primary">{money(intent.amount)}</p>
               {intent.note && <p className="text-sm text-text-secondary mt-1">{intent.note}</p>}
               {intent.customerUsername && <p className="text-xs text-text-muted mt-1">For {intent.customerUsername}.arc</p>}
+              <ChatSentLine status={sender.status} onRetry={sender.retry} onOpen={id => navigate(`/chat/${id}`)} className="mt-1.5" />
               {d && <p className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${dueTone[d.tone]}`}><CalendarClock className="size-3.5" /> {d.text}</p>}
             </div>
             {bill && (intent.items?.length ?? 0) > 0 && (
@@ -337,7 +365,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
         </div>
         <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: 10, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 18px)' }}>
           {paid || ended ? (
-            <button type="button" onClick={() => setIntent(null)}
+            <button type="button" onClick={newPayment}
               className="w-full rounded-2xl text-[16px] font-bold text-white active:scale-[0.98] transition-transform" style={{ height: 52, background: 'var(--brand)' }}>
               New payment
             </button>
@@ -363,12 +391,12 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   } else if (tab === 'bill' && canBill) {
     body = (
       <BillComposer open={open} isDesktop={isDesktop} header={head} submitLabel="Create bill" busyLabel="Creating…"
-        footerNote={due => `${who ? `${who}.arc gets it in their notifications` : 'Show the QR or send the link'}${due ? ` · ${due}` : ''}`}
+        footerNote={due => `${who ? `${who}.arc gets it ${chat ? 'in your chat' : 'in their notifications'}` : 'Show the QR or send the link'}${due ? ` · ${due}` : ''}`}
         saved={savedItems ? { items: catalog, onRemove: removeSaved, hint: 'Items you bill are saved here for next time' } : undefined}
         extra={<div className="mt-3 mb-1">{customerInput('Bill to (optional)')}</div>}
         onCreate={async ({ items, total, note, dueDate }) => {
           // Same as a chat bill: open 7 days, or until paid with a due date.
-          await create({ amount: total, items, note, expiresInMinutes: dueDate ? null : 7 * 24 * 60, dueDate })
+          await create({ amount: total, items, note, expiresInMinutes: dueDate ? null : 7 * 24 * 60, dueDate }, 'bill')
           if (savedItems) void rememberItems(items)
         }} />
     )
@@ -382,10 +410,10 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
             : <> · any {t.customer.toLowerCase()}</>)}</>,
           panel: <>
             <div><SheetLabel>Valid for</SheetLabel><SheetChips<ValidFor> label="Valid for" options={validFor} value={expiry} onChange={setExpiry} /></div>
-            {canBill && customerInput(`${t.customer} (optional)`, 'Their MeshPort username - they get it in their notifications.')}
+            {canBill && customerInput(`${t.customer} (optional)`, chat ? 'A MeshPort user - the request goes into your chat with them.' : 'A MeshPort user - they get it in their notifications.')}
           </>,
         }}
-        onSubmit={async (amount, note) => { await create({ amount, note: note || undefined, expiresInMinutes: Number(expiry) || null }) }} />
+        onSubmit={async (amount, note) => { await create({ amount, note: note || undefined, expiresInMinutes: Number(expiry) || null }, 'charge') }} />
     )
   }
 

@@ -186,6 +186,18 @@ export function paymentRequestMessage(i: { code: string; orderNumber?: string | 
   return `💸 Payment request · Order #${orderLabel(i)} · $${amountText} USDC${i.note ? `\n${i.note}` : ''}\n${paymentLink(i.code)}`
 }
 
+/** Chat message text for a bill: "🧾 Bill · Order #… · $8.2 USDC", its items,
+ *  the note, then the link - the chat renders it as the live bill card. */
+export function billCardMessage(i: { code: string; orderNumber?: string | null; amount: number; note?: string | null; items?: { name: string; qty: number }[] | null }, amountText: string): string {
+  const lines = (i.items ?? []).map(x => `${x.name} × ${x.qty}`).join(', ')
+  return `🧾 Bill · Order #${orderLabel(i)} · $${amountText} USDC${lines ? `\n${lines}` : ''}${i.note ? `\n${i.note}` : ''}\n${paymentLink(i.code)}`
+}
+
+/** The chat card for an order: a bill card for a bill, else a payment request card. */
+export function chatCardMessage(i: { kind?: 'request' | 'invoice'; code: string; orderNumber?: string | null; amount: number; note?: string | null; items?: { name: string; qty: number }[] | null }, amountText: string): string {
+  return i.kind === 'invoice' ? billCardMessage(i, amountText) : paymentRequestMessage(i, amountText)
+}
+
 /** Chat → pay a bill in-chat (ChatPage listens and opens its pay sheet). */
 export const BILL_PAY_EVENT = 'meshport:bill-pay'
 /** Fired after a bill payment is submitted so chat cards refresh at once. */

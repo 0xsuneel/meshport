@@ -54,7 +54,7 @@ import {
   subscribeWithRetry,
   type ChatMessage,
 } from '@/lib/chatService'
-import { codeFromLink, paymentLink, orderLabel, orderKindOf, orderTitle, displayOrderNumber, paymentOrderTag, parsePaymentOrderTag, paidTitleFromTag, orderCardPreview, BILL_PAY_EVENT, type PaymentView, type OrderKind } from '@/lib/merchantPay'
+import { codeFromLink, paymentLink, billCardMessage, orderLabel, orderKindOf, orderTitle, displayOrderNumber, paymentOrderTag, parsePaymentOrderTag, paidTitleFromTag, orderCardPreview, BILL_PAY_EVENT, type PaymentView, type OrderKind } from '@/lib/merchantPay'
 import { useMerchant } from '@/lib/merchant'
 import { ChatBillSheet } from '@/features/merchant/InvoiceComposer'
 import { ChatRequestSheet } from './ChatRequestSheet'
@@ -3567,17 +3567,19 @@ export function ChatConversationPage() {
     }
     const replyId = replyToId ?? (retryId ? (latestMessagesRef.current.find(m => m.id === retryId)?.reply_to_id ?? null) : null)
     let saved: ChatMessage | null = null
-    let encryptedContent = text
     try {
-      // Bill / payment-request cards are payment records, stored as plain
-      // text (like payment cards). Everything else is end-to-end encrypted.
-      const isPaymentRecordCard = /^(🧾 Bill|💸 Payment request)\b/u.test(text) && !!codeFromLink(text)
-      const { encryptText } = await import('@/lib/chatCrypto')
-      encryptedContent = isPaymentRecordCard ? text : await encryptText(text, await keyForSend())
-      // Known plaintext for this ciphertext - the saved copy (and the live
-      // echo) show the text at once instead of flashing empty.
-      _plainByContent.set(encryptedContent, text)
-      saved = await persistMessage({ conversationId: convId, senderId: user.id, content: encryptedContent, type: 'text', replyToId: replyId })
+      // The shared chat send (lib/chatSend.ts): bill / payment-request cards
+      // are payment records, stored as plain text (like payment cards);
+      // everything else is end-to-end encrypted with this chat's keys. It
+      // also updates the conversation's last message once saved.
+      const { sendChatText } = await import('@/lib/chatSend')
+      const sent = await sendChatText({
+        toUserId: otherUser?.id ?? null, conversationId: convId, text, replyToId: replyId, keys: keyForSend,
+        // Known plaintext for this ciphertext - the saved copy (and the live
+        // echo) show the text at once instead of flashing empty.
+        onSealed: content => { _plainByContent.set(content, text) },
+      })
+      saved = sent.message
     } catch (e) {
       console.error('[Chat] send failed:', e)
     }
@@ -3592,7 +3594,6 @@ export function ChatConversationPage() {
         _cachedMessages[convId] = n
         return n
       })
-      touchConversation(convId, encryptedContent, user.id, 'text')
     } else {
       setMessages(prev => { const n = prev.map(m => m.id === optId ? { ...m, _failed: true } : m); _cachedMessages[convId] = n; return n })
     }
@@ -5158,8 +5159,7 @@ export function ChatConversationPage() {
           merchantName={merchant.application?.businessName}
           customer={{ name: otherUser?.display_name || recipientClean, username: otherUser?.username || recipientClean, avatar: otherUser?.avatar_url ?? null }}
           onSend={async inv => {
-            const lines = (inv.items ?? []).map(i => `${i.name} × ${i.qty}`).join(', ')
-            void handleSend(`🧾 Bill · Order #${orderLabel(inv)} · $${formatAmount(inv.amount)} USDC${lines ? `\n${lines}` : ''}${inv.note ? `\n${inv.note}` : ''}\n${paymentLink(inv.code)}`)
+            void handleSend(billCardMessage(inv, formatAmount(inv.amount)))
           }} />
       )}
 

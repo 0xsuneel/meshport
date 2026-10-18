@@ -27,7 +27,7 @@ import { sendUSDC, sendEURC, estimateTransferFee, isValidAddress, confirmTransac
 import { classifyFailure, recordFailure, FAILURE_MESSAGES } from '@/lib/failure'
 import { arcRpcJson } from '@/lib/arc'
 import { notifyRewardSend } from '@/lib/notifications'
-import { searchUsersDb, getUserByWalletAddress, getUserByUsername, fetchContactsDbStrict, fetchConversations, type DbUser } from '@/lib/supabase'
+import { getUserByWalletAddress, getUserByUsername, type DbUser } from '@/lib/supabase'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isCoinEnabled } from '@/lib/featureFilters'
 import { fetchRecentContacts } from '@/lib/recentContacts'
@@ -47,7 +47,9 @@ import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { ScreenPush } from '@/components/ui/ScreenPush'
 import { readPeople, writePeople } from '@/lib/peopleCache'
+import { loadPayContacts } from '@/lib/payPeople'
 import { SearchField } from '@/components/ui/SearchField'
+import { useUserSearch } from '@/hooks/useUserSearch'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { reachCheck, STRANGER_PAY_BLOCKED, BLOCKED_YOU } from '@/lib/privacy'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -153,8 +155,6 @@ export function PaySendPage() {
 
   // Search screen
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<DbUser[]>([])
-  const [searching, setSearching] = useState(false)
   const [addressPreview, setAddressPreview] = useState<Recipient | null>(null)
   const [addressResolving, setAddressResolving] = useState(false)
   const [pasteMode, setPasteMode] = useState(false)
@@ -643,126 +643,38 @@ export function PaySendPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Load contacts eagerly on mount - saved + conversation partners, merged A-Z, excluding removed
+  // Load contacts eagerly on mount - saved + conversation partners, merged A-Z,
+  // excluding removed, you pinned first (lib/payPeople.ts).
   useEffect(() => {
-    const { user: u, walletAddress: wa } = useAuthStore.getState()
-    import('@/lib/removedContacts').then(({ getRemovedContacts }) => {
-      const removed = getRemovedContacts(wa)
-      const contactsP = u?.id && !u.id.startsWith('usr_')
-        ? fetchContactsDbStrict(u.id).then(rows => ({ ok: true as const, rows }), () => ({ ok: false as const, rows: [] as DbUser[] }))
-        : Promise.resolve({ ok: true as const, rows: [] as DbUser[] })
-      const convsP = u?.id
-        ? fetchConversations(u.id).catch(() => [] as any[])
-        : Promise.resolve([] as any[])
-      Promise.all([contactsP, convsP]).then(([savedRes, convs]) => {
-        // Couldn't reach the server: keep the cached list that's showing.
-        if (!savedRes.ok && readPeople('pay-contacts', u?.id)) { setContactsLoaded(true); return }
-        const savedRows = savedRes.rows
-        const merged = new Map<string, DbUser>()
-        // Exclude your own id here - self is handled separately below as a
-        // single pinned synthetic entry. Without this, a self-conversation
-        // (created when you pay yourself by username - see PaySendPage's
-        // chat block, which creates a conversation between user.id and
-        // otherUser.id even when they're the same id) makes fetchConversations
-        // return YOU as your own "other_user", merging you into this list a
-        // second time - then the explicit `self` entry gets prepended on top
-        // of that, producing two "(You)" rows.
-        for (const c of savedRows) if (!removed.has(c.id) && c.id !== u?.id) merged.set(c.id, c)
-        for (const conv of convs) {
-          const other = conv.other_user
-          if (other && other.id !== u?.id && !removed.has(other.id) && !merged.has(other.id)) merged.set(other.id, other)
-        }
-        const sorted = Array.from(merged.values()).sort((a, b) =>
-          (a.display_name || a.username).localeCompare(b.display_name || b.username)
-        )
-        // Self-transfer: pin your own profile at the top of Contacts, as a
-        // synthetic entry - never written to `user_contacts`, purely a UI
-        // convenience so "pay yourself" is always one tap away without
-        // requiring you to add yourself as a contact first. isSelf-tagged
-        // rendering (the "(You)" label) happens where this list is mapped
-        // below; this only builds the row's data.
-        const self: DbUser | null = u?.id
-          ? {
-              id: u.id,
-              username: u.username,
-              display_name: u.displayName || u.username,
-              email: u.email,
-              wallet_address: wa || u.walletAddress,
-              avatar_url: u.avatar || null,
-              created_at: u.createdAt,
-            }
-          : null
-        const list = self ? [self, ...sorted] : sorted
-        setSavedContacts(list)
-        setContactsLoaded(true)
-        writePeople('pay-contacts', u?.id, list)
-      })
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadPayContacts().then(list => {
+      if (list) setSavedContacts(list)
+      setContactsLoaded(true)
+    }).catch(() => setContactsLoaded(true))
   }, [user?.id])
 
-  // Live search / address detection
+  // Live address detection (a pasted 0x address resolves inline, no search).
   useEffect(() => {
     const raw = query.trim()
     latestQuery.current = raw
     setAddressPreview(null)
-    setResults([])
-
-    if (!raw) { setSearching(false); return }
-
-    // Wallet address - resolve inline, no search
-    if (isValidAddress(raw)) {
-      setSearching(false)
-      setAddressResolving(true)
-      getUserByWalletAddress(raw).then(profile => {
-        if (latestQuery.current !== raw) return
-        setAddressPreview(profile
-          ? { id: profile.id, display: profile.username?.endsWith('.arc') ? profile.username : profile.username + '.arc', displayName: profile.display_name || profile.username, walletAddress: profile.wallet_address, isUsername: true, avatarUrl: profile.avatar_url, enteredViaAddress: true }
-          : { display: midShortenAddress(raw), displayName: 'External Wallet', walletAddress: raw, isUsername: false, enteredViaAddress: true }
-        )
-      }).catch(() => {
-        setAddressPreview({ display: midShortenAddress(raw), displayName: 'External Wallet', walletAddress: raw, isUsername: false, enteredViaAddress: true })
-      }).finally(() => setAddressResolving(false))
-      return
-    }
-
-    // 1. Filter saved contacts by display name or username (partial, case-insensitive)
-    const term = raw.toLowerCase().replace(/\.arc$/i, '').trim()
-    const savedMatches = savedContacts.filter(c =>
-      (c.display_name || '').toLowerCase().includes(term) ||
-      (c.username || '').toLowerCase().replace(/\.arc$/i, '').includes(term)
-    )
-
-    // 2. Only hit the DB if user typed a FULL username.arc (new contact search)
-    const isFullUsername = /\.arc$/i.test(raw.trim())
-    if (!isFullUsername) {
-      // Partial: show saved contacts only - no open DB search
-      setResults(savedMatches)
-      setSearching(false)
-      return
-    }
-
-    // Full username.arc - exact match only (this is a specific person's handle,
-    // not a fuzzy prefix search, so don't surface similarly-named results).
-    setSearching(true)
-    const timer = setTimeout(async () => {
-      try {
-        // No excludeUserId here - self-transfer is permitted (see
-        // arcService.ts's sendUSDC/sendEURC), and typing your own exact
-        // username.arc should find yourself, tagged "You" at render time
-        // below (isSelfResult), same as the pinned Contacts entry above.
-        const dbResults = await searchUsersDb(raw) // exact "username = term" match, 0 or 1 result
-        if (latestQuery.current !== raw) return
-        // Only show a saved contact here if it's the SAME exact username, not a partial name match
-        const exactSavedMatches = savedContacts.filter(c => (c.username || '').toLowerCase().replace(/\.arc$/i, '') === term)
-        const savedIds = new Set(exactSavedMatches.map(c => c.id))
-        const newOnly = dbResults.filter(u => !savedIds.has(u.id))
-        setResults([...exactSavedMatches, ...newOnly])
-        setSearching(false)
-      } catch { setSearching(false) }
-    }, 220)
-    return () => clearTimeout(timer)
-  }, [query, savedContacts])
+    if (!raw || !isValidAddress(raw)) return
+    setAddressResolving(true)
+    getUserByWalletAddress(raw).then(profile => {
+      if (latestQuery.current !== raw) return
+      setAddressPreview(profile
+        ? { id: profile.id, display: profile.username?.endsWith('.arc') ? profile.username : profile.username + '.arc', displayName: profile.display_name || profile.username, walletAddress: profile.wallet_address, isUsername: true, avatarUrl: profile.avatar_url, enteredViaAddress: true }
+        : { display: midShortenAddress(raw), displayName: 'External Wallet', walletAddress: raw, isUsername: false, enteredViaAddress: true }
+      )
+    }).catch(() => {
+      setAddressPreview({ display: midShortenAddress(raw), displayName: 'External Wallet', walletAddress: raw, isUsername: false, enteredViaAddress: true })
+    }).finally(() => setAddressResolving(false))
+  }, [query])
+  // Live username search (shared with the Business customer field -
+  // hooks/useUserSearch): partial text filters saved contacts; a full
+  // username.arc is looked up exactly. No excludeUserId - self-transfer is
+  // permitted (see arcService.ts's sendUSDC/sendEURC), and typing your own
+  // exact username.arc finds yourself, tagged "You" at render time.
+  const { results, searching } = useUserSearch(isValidAddress(query.trim()) ? '' : query, savedContacts)
 
   // Warm the RPC proxy as soon as the passcode sheet opens.
   useEffect(() => {
@@ -783,7 +695,7 @@ export function PaySendPage() {
     // Clearing here means every fresh recipient selection starts blank,
     // matching what you'd expect from Venmo/Cash App/etc.
     setAmount(''); setAmountError(''); setNote('')
-    setQuery(''); setResults([]); goForward('amount')
+    setQuery(''); goForward('amount')
   }
 
   const pickRecipient = (r: Recipient) => {
@@ -1237,7 +1149,7 @@ export function PaySendPage() {
       // Desktop: a fresh payment on the same page, beside the updated
       // Recent History (like Swap / Transfer); phone: Home.
       setProcessStage('idle'); setTxHash(''); setPayPending(false)
-      setRecipient(null); setAmount(''); setAmountError(''); setNote(''); setQuery(''); setResults([])
+      setRecipient(null); setAmount(''); setAmountError(''); setNote(''); setQuery('')
       idempotencyKeyRef.current = null
       goBack2('search')
     }
