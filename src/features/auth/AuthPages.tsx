@@ -901,6 +901,9 @@ export function ImportWalletPage() {
   const username = useAuthStore(s => s.username)
   const passcode = useAuthStore(s => s.passcode)
   const existingWalletAddress = useAuthStore(s => s.walletAddress)
+  // Google / email sign-ins hold one MeshPort account per login, so switching
+  // that account to a different wallet (= a different account) can't work.
+  const isSocialLogin = useAuthStore(s => s.loginType) === 'social'
   const { setBalance } = useWalletStore()
   const { showToastMessage } = useUIStore()
   const [method, setMethod] = useState<'mnemonic' | 'privatekey'>('mnemonic')
@@ -1074,10 +1077,17 @@ export function ImportWalletPage() {
             <p className="text-xs text-text-secondary font-mono break-all">Current: {existingWalletAddress}</p>
             <p className="text-xs text-text-secondary font-mono break-all">Importing: {mismatch.result.address}</p>
           </div>
-          <p className="text-sm text-text-secondary">
-            Switching will move you to this different wallet inside MeshPort. Your existing wallet isn't deleted -
-            it's just no longer the one this account uses.
-          </p>
+          {isSocialLogin ? (
+            <p className="text-sm text-text-secondary" role="note">
+              This login already has a MeshPort account, so it can't be switched to a different wallet.
+              Log in with this login to use your existing account, or use a different login for this wallet.
+            </p>
+          ) : (
+            <p className="text-sm text-text-secondary">
+              Switching will move you to this different wallet inside MeshPort. Your existing wallet isn't deleted -
+              it's just no longer the one this account uses.
+            </p>
+          )}
           <div className="flex flex-col gap-2">
             <button
               onClick={() => setMismatch(null)}
@@ -1085,12 +1095,14 @@ export function ImportWalletPage() {
             >
               Cancel - check my input again
             </button>
-            <button
-              onClick={() => finishImport(mismatch.result, mismatch.walletSource)}
-              className="w-full py-3 bg-surface border border-border rounded-2xl text-sm font-medium text-text-secondary"
-            >
-              Yes, switch to this wallet anyway
-            </button>
+            {!isSocialLogin && (
+              <button
+                onClick={() => finishImport(mismatch.result, mismatch.walletSource)}
+                className="w-full py-3 bg-surface border border-border rounded-2xl text-sm font-medium text-text-secondary"
+              >
+                Yes, switch to this wallet anyway
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1266,7 +1278,9 @@ export function ClaimUsernamePage() {
 
     if (error) {
       console.error('[Claim] Supabase save error:', error)
-      showToastMessage('Error saving username: ' + error, 'error')
+      showToastMessage(/already has a MeshPort account/i.test(String(error))
+        ? 'This login already has a MeshPort account. Log in with it instead, or use a different login.'
+        : 'Error saving username: ' + error, 'error')
       setLoading(false)
       return
     }

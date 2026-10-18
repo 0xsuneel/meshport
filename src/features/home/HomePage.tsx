@@ -2069,6 +2069,12 @@ export function HomePage() {
   const { balance, setBalance } = useWalletStore()
   const { notifications, unreadCount, badgeLabel, addNotification } = useNotificationStore()
   const { showToastMessage } = useUIStore()
+  // A name that never reached the on-chain registry is registered now (once per session).
+  const merchantState = useMerchant()
+  useEffect(() => {
+    if (!walletAddress || !username || !merchantState.loaded) return
+    void import('@/lib/onchainNames').then(m => m.ensureNameOnchain(walletAddress, username, merchantState.accountType))
+  }, [walletAddress, username, merchantState.loaded, merchantState.accountType])
   const [handleCopied, setHandleCopied] = useState(false)
 
   // Newest-first, capped at 3, and DEDUPED PER TRADE - "new order placed"
