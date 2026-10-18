@@ -24,7 +24,7 @@ import { listMyPayments, listMyIntents, listChainReceipts, isOwnReceipt, subscri
 import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, VOICE_LANGS, type VoiceLang } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockKey } from './settlement'
-import { listMyRefunds, subscribeMyRefunds, refundPayment, chainUsdcBalance, checkRefundableSender, type SenderCheck, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
+import { listMyRefunds, subscribeMyRefunds, refundPayment, chainUsdcBalance, canRefundOnChain, checkRefundableSender, type SenderCheck, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
 import { makePeriod, inPeriod, inPrevious, periodTrend, savedPeriod, savePeriod, type PeriodId } from './period'
 import { useAutoSettle } from './autoSettle'
 import { CashOutScreen, TeamScreen } from './teamScreens'
@@ -142,13 +142,16 @@ function OwnerBusinessPage() {
   const [storeId, setStoreId] = useState<string | null>(activeStoreId)
   const [intents, setIntents] = useState<MerchantIntent[] | null>(null)
   const intentStore = useMemo(() => new Map((intents ?? []).map(i => [i.id, i.storeId ?? null] as const)), [intents])
+  // Other-chain receipts carry the order number, not the order id.
+  const orderStore = useMemo(() => new Map((intents ?? []).filter(i => i.orderNumber).map(i => [i.orderNumber!, i.storeId ?? null] as const)), [intents])
   const [switcher, setSwitcher] = useState(false)
   const [periodSheet, setPeriodSheet] = useState(false)
   const [payView, setPayView] = useState<'payments' | 'requests'>('payments')
   useEffect(() => { if (tab !== 'payments') setPayView('payments') }, [tab])
   const [payFilter, setPayFilter] = useState<'all' | 'refunded'>('all')
   useEffect(() => { listStores().then(setStores).catch(() => {}) }, [])
-  useEffect(() => { listMyIntents(500).then(setIntents).catch(() => setIntents([])) }, [raw.length, tab])
+  const reloadIntents = useCallback(() => { listMyIntents(500).then(setIntents).catch(() => setIntents(l => l ?? [])) }, [])
+  useEffect(reloadIntents, [raw.length, tab, reloadIntents])
   const activeStore = stores.find(s => s.id === storeId) ?? null
   // Requests and the Shop QR belong to the picked store; with "All stores"
   // they go to the main (default) store.
@@ -157,13 +160,14 @@ function OwnerBusinessPage() {
   // A payment's store is its order's store; anything without one (taken
   // before stores, other-chain receipts, plain transfers) is the main store's.
   const mainStoreId = stores.find(s => s.isDefault)?.id ?? null
-  const storeOf = useCallback((p: MerchantPayment) => intentStore.get(p.intentId) ?? mainStoreId, [intentStore, mainStoreId])
+  const storeOf = useCallback((p: MerchantPayment) => (p.intentId ? intentStore.get(p.intentId) : p.orderNumber ? orderStore.get(p.orderNumber) : null) ?? mainStoreId, [intentStore, orderStore, mainStoreId])
+  const inStore = (i: MerchantIntent, id: string) => (i.storeId ?? mainStoreId) === id
   const storeRaw = useMemo(() => activeStore ? raw.filter(p => storeOf(p) === activeStore.id) : raw, [raw, activeStore, storeOf])
   const paymentsByStore = useMemo(() => {
     const m = new Map<string, { total: number; count: number }>()
-    for (const p of raw) { const sid = storeOf(p); if (!sid) continue; const v = m.get(sid) ?? { total: 0, count: 0 }; v.total += p.amount; v.count++; m.set(sid, v) }
+    for (const p of netOf(raw)) { const sid = storeOf(p); if (!sid) continue; const v = m.get(sid) ?? { total: 0, count: 0 }; v.total += p.amount; v.count++; m.set(sid, v) }
     return m
-  }, [raw, storeOf])
+  }, [raw, storeOf, netOf])
 
   // ── Date filter (Overview, Payments, Settlements) ─────────────────────
   const [periodSel, setPeriodSel] = useState(savedPeriod)
@@ -215,23 +219,29 @@ function OwnerBusinessPage() {
   const locked = !isMerchant
   // Labels follow the business's category (a café has guests, a freelancer invoices).
   const terms = useBizTerms()
+  const allStores = `All ${terms.stores.toLowerCase()}`
   useEffect(() => {
     if (!locked) return
     if (tab !== 'overview') setTab('overview')
-    if (screen && screen !== 'profile' && screen !== 'help') setScreen(null)
+    if (screen && screen !== 'profile' && screen !== 'help') { fromTools.current = false; parent.current = null; setScreen(null) }
   }, [locked, tab, screen])
-  const open = (id: ScreenId) => () => setScreen(id)
-  // A screen opened from Business tools goes back to Business tools.
+  // A screen opened from Business tools goes back to Business tools; a
+  // screen opened from another one (receipt, store QR) back to that one.
   const fromTools = useRef(false)
+  const parent = useRef<ScreenId | null>(null)
+  const open = (id: ScreenId) => () => { fromTools.current = false; parent.current = null; setScreen(id) }
+  const close = () => { fromTools.current = false; parent.current = null; setScreen(null) }
   const back = () => {
+    if (parent.current && screen !== parent.current) { const to = parent.current; parent.current = null; setScreen(to); return }
     if (fromTools.current && screen !== 'tools') { setScreen('tools'); return }
-    fromTools.current = false
-    setScreen(null)
+    close()
   }
-  const go = (id: ScreenId) => () => setScreen(id)
+  const child = (id: ScreenId) => { parent.current = screen; setScreen(id) }
 
   const beginSettle = (retry?: string[]) => {
     if (settle.running) { setProgressOpen(true); return }
+    // Settle all once per cooldown (retrying failed chains is part of the same run).
+    if (!retry && !settle.ready) { setTab('settlements'); return }
     if (settle.needsPasscode) { setPinError(undefined); setPin({ kind: 'settle', retry }); return }
     setProgressOpen(true)
     void settle.settle(undefined, retry)
@@ -254,8 +264,12 @@ function OwnerBusinessPage() {
     void settle.settleOne(chainId)
   }
 
-  // ── Refund (MeshPortRefunds on Arc, signed on this device) ────────────
+  // ── Refund (signed on this device) ────────────────────────────────────
+  // Always back to the wallet on the chain the payment came in on: an Arc
+  // payment through MeshPortRefunds on Arc; another chain's from the USDC
+  // still there, or from Arc by CCTP to that chain - never to Arc.
   const [refundFor, setRefundFor] = useState<MerchantPayment | null>(null)
+  const refundId = useRef<string | null>(null)
   const [refundReason, setRefundReason] = useState(REFUND_REASONS[0])
   const [refundNote, setRefundNote] = useState('')
   const [refundDest, setRefundDest] = useState<RefundRoute>('arc')
@@ -264,14 +278,16 @@ function OwnerBusinessPage() {
   const [refundBusy, setRefundBusy] = useState(false)
   const [refundError, setRefundError] = useState<string>()
   const openRefund = (p: MerchantPayment) => {
-    setRefundFor(p); setRefundAmount(p.amount.toFixed(2)); setRefundReason(REFUND_REASONS[0]); setRefundNote(''); setRefundError(undefined)
+    setRefundFor(p); refundId.current = p.id; setRefundAmount(p.amount.toFixed(2)); setRefundReason(REFUND_REASONS[0]); setRefundNote(''); setRefundError(undefined)
     // Paid on another chain: refund from the USDC still on that chain.
     setChainLeft(null)
-    if (p.chain === 'Arc_Testnet' || !walletAddress) { setRefundDest('arc'); return }
+    if (p.chain === 'Arc_Testnet') { setRefundDest('arc'); return }
     setRefundDest('chain')
+    if (!walletAddress) return
     chainUsdcBalance(p.chain, walletAddress).then(b => {
+      if (refundId.current !== p.id) return
       setChainLeft(b)
-      if (b !== null && b < p.amount) setRefundDest('arc')
+      if (b !== null && b < p.amount && canRefundOnChain(p.chain)) setRefundDest('origin')
     })
   }
   const [refundAmount, setRefundAmount] = useState('')
@@ -287,13 +303,20 @@ function OwnerBusinessPage() {
       const reason = (refundNote.trim() ? `${refundReason}: ${refundNote.trim()}` : refundReason).slice(0, 140)
       const amount = Number(refundAmount)
       if (!(amount > 0) || amount > refundFor.amount + 1e-9) throw new Error(`Enter up to ${money(refundFor.amount)}`)
-      await refundPayment({ paymentId: refundFor.id, customer: refundFor.from, amount, reason, privateKey: key, route: refundDest, chain: refundFor.chain })
+      const route: RefundRoute = refundFor.chain === 'Arc_Testnet' ? 'arc' : refundDest === 'origin' ? 'origin' : 'chain'
+      await refundPayment({ paymentId: refundFor.id, customer: refundFor.from, amount, reason, privateKey: key, route, chain: refundFor.chain })
       await loadRefunds()
-      toast(`Refunded ${money(amount)} to ${who(refundFor)} on ${refundDest === 'chain' ? chainLabel(refundFor.chain) : 'Arc'}`, 'success')
+      toast(`Refunded ${money(amount)} to ${who(refundFor)} on ${chainLabel(refundFor.chain)}`, 'success')
       setRefundFor(null)
     } catch (e) { setRefundError(e instanceof Error ? e.message : 'Refund failed') }
     setRefundBusy(false)
   }
+  // Not enough USDC on the payment's chain for the route picked.
+  const refundShort = !!refundFor && refundFor.chain !== 'Arc_Testnet' && refundDest === 'chain' && chainLeft !== null
+    && chainLeft < (Number(refundAmount) || refundFor.amount) - 1e-9
+  const refundBlocked = refundShort && refundFor ? (canRefundOnChain(refundFor.chain)
+    ? `Not enough USDC on ${chainLabel(refundFor.chain)} - pick From Arc to send it there`
+    : `Not enough USDC on ${chainLabel(refundFor.chain)} - add some to refund`) : undefined
   const [receiptFor, setReceiptFor] = useState<MerchantPayment | null>(null)
 
   // Refund only to a person's own wallet: checked on the chain it was paid on.
@@ -354,9 +377,9 @@ function OwnerBusinessPage() {
     if (!intents) return null
     const now = Date.now()
     const live = intents.filter(i => (i.status === 'pending' || i.status === 'partially_paid')
-      && (!i.expiresAt || Date.parse(i.expiresAt) > now) && (!activeStore || i.storeId === activeStore.id))
+      && (!i.expiresAt || Date.parse(i.expiresAt) > now) && (!activeStore || inStore(i, activeStore.id)))
     return { count: live.length, due: live.reduce((t, i) => t + Math.max(0, i.amount - i.received), 0) }
-  }, [intents, activeStore])
+  }, [intents, activeStore, mainStoreId])
   const openOrders = () => { setPayView('requests'); setTab('payments') }
 
   const rawDetail = detail ? raw.find(p => p.id === detail.id) : undefined
@@ -375,9 +398,9 @@ function OwnerBusinessPage() {
         {tab === 'overview' ? (
           // Title = the store being viewed ("All stores" for the totals);
           // the line under it is the business account itself.
-          <BusinessHeader storeName={activeStore?.name ?? (stores.length > 1 ? 'All stores' : storeName)} handle={handle}
+          <BusinessHeader storeName={activeStore?.name ?? (stores.length > 1 ? allStores : storeName)} handle={handle}
             status={headerStatus} voiceOn={voice.enabled}
-            onVoice={() => setVoiceOpen(true)} onMenu={() => setScreen(locked ? 'profile' : 'tools')} onSwitchStore={stores.length ? () => setSwitcher(true) : undefined}
+            onVoice={() => setVoiceOpen(true)} onMenu={open(locked ? 'profile' : 'tools')} onSwitchStore={stores.length ? () => setSwitcher(true) : undefined}
             avatarName={storeName} avatarUrl={userAvatar ?? undefined}
             outlet={(activeStore || stores.length > 1) && activeStore?.name !== storeName ? storeName : null} />
         ) : (
@@ -388,7 +411,7 @@ function OwnerBusinessPage() {
               <ArrowLeft className="w-5 h-5 text-text-primary" />
             </button>
             <h1 className="header-title">{tab === 'payments' ? `Manage ${terms.orders.toLowerCase()}` : 'Manage money'}</h1>
-            {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? 'All stores'}</span>}
+            {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? allStores}</span>}
           </header>
         )}
         {tab === 'payments' && <div className="px-5 pt-2">
@@ -417,7 +440,7 @@ function OwnerBusinessPage() {
             tools={{ badge: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'}` : isMerchant ? 'Add a store' : 'Profile & help', onClick: open('tools') }}
             recent={payments.slice(0, 4)} onSeeAll={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onPayment={setDetail} />
         )}
-        {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} />}
+        {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} mainStoreId={mainStoreId} />}
         {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter}
           loading={!loaded} payments={payList} onPayment={setDetail} />}
         {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out"
@@ -445,14 +468,14 @@ function OwnerBusinessPage() {
 
       <PaymentDetailSheet payment={detail} explorerUrl={rawDetail ? explorerTxUrl(rawDetail.chain, rawDetail.txHash) ?? undefined : undefined}
         onClose={() => setDetail(null)} onSettle={() => { setDetail(null); setTab('settlements') }}
-        onReceipt={() => { if (rawDetail) { setReceiptFor(rawDetail); setDetail(null); setScreen('receipt') } }}
+        onReceipt={() => { if (rawDetail) { setReceiptFor(rawDetail); setDetail(null); child('receipt') } }}
         onRefund={rawDetail && !detailRefund && sender?.id === rawDetail.id && sender.check?.refundable ? () => { openRefund(rawDetail); setDetail(null) } : undefined}
         refundNote={sender?.id === detail?.id ? (sender?.check ? sender.check.reason : 'Checking who sent this payment…') : undefined}
         wallet={rawDetail && !rawDetail.customerUsername && rawDetail.method !== 'own_transfer' ? rawDetail.from : undefined}
         onCopyWallet={rawDetail ? () => { void copyToClipboard(rawDetail.from).then(ok => toast(ok ? 'Address copied' : 'Could not copy', ok ? 'success' : 'error')) } : undefined}
         customer={detailCustomer} store={rawDetail && stores.length ? stores.find(st => st.id === storeOf(rawDetail))?.name : undefined}
         onChat={rawDetail?.customerUsername ? () => { const u = rawDetail.customerUsername!; setDetail(null); void openChat(u) } : undefined}
-        refund={detailRefund ? { amount: money(detailRefund.amount), reason: detailRefund.reason, when: detailRefund.createdAt, txUrl: explorerTxUrl('Arc_Testnet', detailRefund.txHash) ?? undefined } : undefined} />
+        refund={detailRefund ? { amount: money(detailRefund.amount), reason: detailRefund.reason, when: detailRefund.createdAt, txUrl: explorerTxUrl(detailRefund.route === 'chain' ? detailRefund.chain : 'Arc_Testnet', detailRefund.txHash) ?? undefined } : undefined} />
 
       <RefundSheet open={!!refundFor} amount={refundFor ? money(refundFor.amount) : ''} customer={refundFor ? who(refundFor) : ''}
         reasons={REFUND_REASONS} reason={refundReason} onReason={setRefundReason} note={refundNote} onNote={setRefundNote}
@@ -462,11 +485,14 @@ function OwnerBusinessPage() {
           { id: 'chain', label: `From ${chainLabel(refundFor.chain)}`,
             hint: chainLeft === null ? `Checking your ${chainLabel(refundFor.chain)} balance…` : chainLeft >= (Number(refundAmount) || refundFor.amount)
               ? `Your ${money(chainLeft)} there · back to their wallet` : `Only ${money(chainLeft)} left there (settled)` },
-          { id: 'arc', label: 'From Arc', hint: 'Your Arc balance · same wallet on Arc' },
+          ...(canRefundOnChain(refundFor.chain) ? [{ id: 'origin', label: 'From Arc',
+            hint: `Your Arc balance · arrives on ${chainLabel(refundFor.chain)}` }] : []),
         ] : undefined}
         destination={refundDest}
         onDestination={id => { if (id === 'chain' && refundFor && chainLeft !== null && chainLeft < (Number(refundAmount) || refundFor.amount)) return; setRefundDest(id as RefundRoute) }}
-        note2={refundFor && refundDest === 'chain' ? `Sent from your USDC on ${chainLabel(refundFor.chain)} - MeshPort pays the gas.` : undefined} />
+        blocked={refundBlocked}
+        note2={refundFor && refundDest === 'chain' ? `Sent from your USDC on ${chainLabel(refundFor.chain)} - MeshPort pays the gas.`
+          : refundFor && refundDest === 'origin' ? `Sent from Arc to their wallet on ${chainLabel(refundFor.chain)} by CCTP - Circle's small fee is added on top.` : undefined} />
 
       <SettleProgressSheet open={progressOpen || !!historyClaim} running={progressOpen && settle.running} rows={progressRows}
         onClose={() => { setProgressOpen(false); setHistoryId(null) }}
@@ -474,7 +500,7 @@ function OwnerBusinessPage() {
         onTrack={id => { const c = settle.run.find(r => r.id === id)?.claimId; if (c) { setProgressOpen(false); setHistoryId(c) } }} />
 
       <PasscodeSheet open={!!pin} title={pin?.kind === 'refund' ? 'Confirm refund' : 'Confirm settle'}
-        subtitle={pin?.kind === 'refund' ? `Send ${refundFor ? money(refundFor.amount) : ''} back to ${refundFor ? who(refundFor) : 'the customer'}`
+        subtitle={pin?.kind === 'refund' ? `Send ${money(Number(refundAmount) || 0)} back to ${refundFor ? who(refundFor) : 'the customer'}`
           : pin?.kind === 'one' ? `Move ${money((chains ?? []).find(c => c.id === pin.chainId)?.balance ?? 0)} from ${chainLabel(pin.chainId)} to Arc`
           : `Move ${money(pin?.kind === 'settle' && pin.retry ? settle.run.filter(r => pin.retry!.includes(r.id)).reduce((s, r) => s + r.balance, 0) : settle.total)} to your Arc balance`}
         error={pinError} onComplete={code => { void onPin(code) }} onClose={() => setPin(null)} />
@@ -485,7 +511,7 @@ function OwnerBusinessPage() {
         onTest={() => speakPayment(24, { test: true })} onClose={() => setVoiceOpen(false)} />
 
       <ToolsScreen open={screen === 'tools'} onBack={back}
-        onOpen={(id: ToolId) => { if (id === 'voice') { setVoiceOpen(true); return } fromTools.current = true; setScreen(id) }}
+        onOpen={(id: ToolId) => { if (id === 'voice') { setVoiceOpen(true); return } fromTools.current = true; parent.current = null; setScreen(id) }}
         groups={[
           { title: 'Business', rows: [
             { id: 'team', label: `${terms.stores} & staff`, hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers' },
@@ -504,9 +530,9 @@ function OwnerBusinessPage() {
         ]} />
 
       <Sheet open={switcher} onClose={() => setSwitcher(false)}>
-        <StoreSwitcher stores={[{ id: '', name: 'All stores', handle: `${stores.length} store${stores.length === 1 ? '' : 's'} together`, active: !activeStore, all: true },
+        <StoreSwitcher stores={[{ id: '', name: allStores, handle: `${stores.length} store${stores.length === 1 ? '' : 's'} together`, active: !activeStore, all: true },
           ...stores.map(s => ({ id: s.id, name: s.name, handle: `${s.isDefault ? 'Main store · ' : ''}${s.type ?? 'Store'}`, active: activeStore?.id === s.id }))]}
-          onSwitch={id => pickStore(id || null)} onManage={() => { setSwitcher(false); setScreen('team') }} />
+          onSwitch={id => pickStore(id || null)} onManage={() => { setSwitcher(false); open('team')() }} />
       </Sheet>
 
       <DateRangeSheet open={!!rangeSheet} from={rangeSheet?.from ?? ''} to={rangeSheet?.to ?? ''}
@@ -530,20 +556,20 @@ function OwnerBusinessPage() {
         onCustom={() => { setPeriodSheet(false); setRangeSheet({ from: periodSel.from, to: periodSel.to }) }}
         onClose={() => setPeriodSheet(false)} />
 
-      <SettleDueSheet open={autoSettle.due && settle.due.length > 0 && !settle.running} amount={money(settle.total)}
+      <SettleDueSheet open={!locked && autoSettle.due && settle.ready && settle.due.length > 0 && !settle.running} amount={money(settle.total)}
         chains={settle.due.map(c => ({ label: c.label, logo: c.logo }))}
         onSettle={() => { autoSettle.dismiss(); setTab('settlements'); beginSettle() }} onLater={autoSettle.dismiss} />
 
       <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: qrStore?.id ?? null, canBill: true }}>
       <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
-      <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={storeName}
+      <ReceiveScreen open={screen === 'receive'} onBack={() => { back(); reloadIntents() }} onChanged={reloadIntents} storeName={storeName}
         shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} />
       <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundOf.has(p.id) && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
-        onPayment={p => setDetail(toRow(p))} onChat={u => { setScreen(null); void openChat(u) }} />
+        onPayment={p => setDetail(toRow(p))} onChat={u => { close(); void openChat(u) }} />
       <ReportsScreen open={screen === 'reports'} onBack={back}
         insights={{ payments: netOf(storeRaw), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null }}
         statement={{ storeName: stores.length > 1 && activeStore ? `${storeName} · ${activeStore.name}` : storeName, handle,
-          payments: storeRaw, refunds: activeStore ? refunds.filter(r => storeRaw.some(p => p.id === r.paymentId)) : refunds,
+          payments: storeRaw.filter(p => p.method !== 'own_transfer'), refunds: activeStore ? refunds.filter(r => storeRaw.some(p => p.id === r.paymentId)) : refunds,
           settled: (history ?? []).filter(c => c.status === 'completed').map(c => ({ amount: c.arrivedAmount ?? c.amount, createdAt: c.createdAt })),
           waiting: (chains ?? []).reduce((s, c) => s + c.balance, 0), loading: !loaded }} />
       <ReceiptScreen open={screen === 'receipt'} onBack={back} storeName={storeName} handle={handle} payment={receiptFor} refunded={!!(receiptFor && refundedIds.has(receiptFor.id))} />
@@ -553,7 +579,7 @@ function OwnerBusinessPage() {
       <CashOutScreen open={screen === 'cashout'} onBack={back} />
       <PayoutsScreen open={screen === 'payouts'} onBack={back} />
       <TeamScreen open={screen === 'team'} onBack={back} canAddStores={isMerchant} stores={stores} onChanged={setStores} paymentsByStore={paymentsByStore}
-        onQr={id => { pickStore(id); setScreen('qr') }} />
+        onQr={id => { pickStore(id); child('qr') }} />
     </div>
   )
 }

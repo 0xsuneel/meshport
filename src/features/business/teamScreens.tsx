@@ -9,7 +9,7 @@ import {
   paymentMethodSummary, inr, type BuyerOffer, type P2PTrade, type P2PPaymentMethod, type P2PMessage,
 } from '@/lib/businessCashOut'
 import { listStores, saveStore, deleteStore, listStaff, inviteStaff, updateStaff, removeStaff, type Store, type StaffMember, type StaffRole } from '@/lib/businessTeam'
-import { BUSINESS_CATEGORIES } from '@/lib/businessCategories'
+import { BUSINESS_CATEGORIES, useBizTerms } from '@/lib/businessCategories'
 import {
   BusinessScreen, CashOutHero, CashOutAmount, BuyerOfferList, PayoutAccountPicker, PayoutAccountForm, CashOutTradeView, CashOutHistory,
   StoresView, StoreForm, StaffView, StaffForm, PasscodeSheet, PrimaryBtn, Skeleton,
@@ -161,22 +161,26 @@ function CashOutTradeScreen({ tradeId, accounts, onBack, gate }: {
   const [now, setNow] = useState(Date.now())
   const seen = useRef(new Set<string>())
 
+  const [loadError, setLoadError] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+
   useEffect(() => {
-    setTrade(null); setMessages([]); seen.current = new Set()
+    setTrade(null); setMessages([]); setLoadError(false); seen.current = new Set()
     if (!tradeId) return
-    fetchTrade(tradeId).then(setTrade)
-    fetchTradeMessages(tradeId).then(m => { m.forEach(x => seen.current.add(x.id)); setMessages(m) })
-    const a = subscribeToTradeUpdates(tradeId, setTrade)
-    const b = subscribeToTradeMessages(tradeId, m => { if (seen.current.has(m.id)) return; seen.current.add(m.id); setMessages(x => [...x, m]) })
+    let live = true
+    fetchTrade(tradeId).then(t => { if (!live) return; if (t) setTrade(t); else setLoadError(true) }).catch(() => { if (live) setLoadError(true) })
+    fetchTradeMessages(tradeId).then(m => { if (!live) return; m.forEach(x => seen.current.add(x.id)); setMessages(m) }).catch(() => {})
+    const a = subscribeToTradeUpdates(tradeId, t => { if (live) setTrade(t) })
+    const b = subscribeToTradeMessages(tradeId, m => { if (!live || seen.current.has(m.id)) return; seen.current.add(m.id); setMessages(x => [...x, m]) })
     const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => { a(); b(); clearInterval(t) }
-  }, [tradeId])
+    return () => { live = false; a(); b(); clearInterval(t) }
+  }, [tradeId, attempt])
 
   const act = async (name: string, fn: () => Promise<{ success: boolean; message: string }>) => {
     setBusy(name)
     const r = await fn().catch(e => ({ success: false, message: e instanceof Error ? e.message : 'Failed' }))
     toast(r.message, r.success ? 'success' : 'error')
-    if (tradeId) fetchTrade(tradeId).then(setTrade)
+    if (tradeId) fetchTrade(tradeId).then(t => { if (t) setTrade(t) }).catch(() => {})
     setBusy(undefined)
   }
 
@@ -187,7 +191,12 @@ function CashOutTradeScreen({ tradeId, accounts, onBack, gate }: {
   return (
     <BusinessScreen open={!!tradeId} title="Cash out" onBack={onBack}>
       <div className="px-5 pt-5 pb-6">
-        {!trade ? <Skeleton className="h-64 w-full" /> : (
+        {!trade && loadError ? (
+          <div className="flex flex-col items-center gap-3 py-10 text-center">
+            <p className="text-sm text-text-secondary">Could not load this cash out.</p>
+            <PrimaryBtn onClick={() => setAttempt(n => n + 1)}>Try again</PrimaryBtn>
+          </div>
+        ) : !trade ? <Skeleton className="h-64 w-full" /> : (
           <CashOutTradeView amountUsdc={money(trade.amountUsdc)} amountFiat={inr(trade.amountFiat)} buyer="Buyer" stage={stage}
             deadline={stage === 'waiting_payment' && left > 0 ? `Buyer pays within ${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')}` : undefined}
             account={acct ? `${acct.method} · ${paymentMethodSummary(acct)}` : trade.paymentMethod}
@@ -265,6 +274,7 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
 // ── Staff & roles ────────────────────────────────────────────────────────
 
 function StaffBody({ open, onEditing, stores }: { open: boolean; onEditing: (e: Editing) => void; stores: Store[] }) {
+  const terms = useBizTerms()
   const toast = useUIStore(s => s.showToastMessage)
   const [staff, setStaff] = useState<StaffMember[] | null>(null)
   const [edit, setEdit] = useState<{ id?: string; username: string; role: StaffRole; store: string } | null>(null)
@@ -290,7 +300,7 @@ function StaffBody({ open, onEditing, stores }: { open: boolean; onEditing: (e: 
       <div className="px-5 pt-4 pb-6">
         {edit ? (
           <StaffForm username={edit.username} onUsername={v => setEdit({ ...edit, username: v })} role={edit.role} onRole={r => setEdit({ ...edit, role: r })}
-            stores={[{ id: '', name: 'All stores' }, ...stores.map(s => ({ id: s.id, name: s.name }))]} store={edit.store} onStore={v => setEdit({ ...edit, store: v })}
+            stores={[{ id: '', name: `All ${terms.stores.toLowerCase()}` }, ...stores.map(s => ({ id: s.id, name: s.name }))]} store={edit.store} onStore={v => setEdit({ ...edit, store: v })}
             busy={busy} error={error} onSave={save} onCancel={() => setEdit(null)} />
         ) : staff === null ? <Skeleton className="h-40 w-full" /> : (
           <StaffView staff={staff.map(m => ({ id: m.id, name: `${m.username}.arc`, role: m.role, status: m.status, store: m.storeId ? storeName.get(m.storeId) : undefined }))}
@@ -310,15 +320,16 @@ export function TeamScreen({ open, onBack, stores, onChanged, onQr, paymentsBySt
   open: boolean; onBack: () => void; stores: Store[]; onChanged: (stores: Store[]) => void; onQr: (id: string) => void
   paymentsByStore: Map<string, { total: number; count: number }>
 }) {
+  const terms = useBizTerms()
   const [view, setView] = useState<'stores' | 'staff'>('stores')
   const [editing, setEditing] = useState<Editing>(null)
   useEffect(() => { if (!open) { setView('stores'); setEditing(null) } }, [open])
   return (
-    <BusinessScreen open={open} title={editing?.title ?? 'Stores & staff'} onBack={editing?.back ?? onBack}>
+    <BusinessScreen open={open} title={editing?.title ?? `${terms.stores} & staff`} onBack={editing?.back ?? onBack}>
       {!editing && (
         <div className="px-5 pt-4">
           <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Stores or staff">
-            {([['stores', 'Stores'], ['staff', 'Staff']] as const).map(([id, label]) => (
+            {([['stores', terms.stores], ['staff', 'Staff']] as const).map(([id, label]) => (
               <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
                 className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${view === id ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
                 {label}

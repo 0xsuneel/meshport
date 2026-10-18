@@ -12,13 +12,15 @@ import {
 import { BusinessScreen, PrimaryBtn, GhostBtn, Skeleton, Field, TextInput, ChipSelect } from './ui'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const today = () => new Date().toISOString().slice(0, 10)
+// Local date (YYYY-MM-DD), not UTC.
+const today = () => new Date().toLocaleDateString('en-CA')
 const REPEATS: Array<{ id: PayoutRepeat; label: string }> = [
   { id: 'none', label: 'Once' }, { id: 'weekly', label: 'Weekly' }, { id: 'monthly', label: 'Monthly' },
 ]
 
 function dueText(p: BusinessPayout): { text: string; due: boolean } {
-  if (!p.nextDue) return { text: p.lastPaidAt ? `Paid ${new Date(p.lastPaidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : 'No date', due: false }
+  // A one-time payout has no schedule (older ones were saved with a date).
+  if (!p.nextDue || p.repeat === 'none') return { text: p.lastPaidAt ? `Paid ${new Date(p.lastPaidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : 'No date', due: false }
   const days = Math.round((new Date(p.nextDue + 'T00:00:00').getTime() - new Date(today() + 'T00:00:00').getTime()) / 86400_000)
   if (days < 0) return { text: `Overdue ${-days} day${days === -1 ? '' : 's'}`, due: true }
   if (days === 0) return { text: 'Due today', due: true }
@@ -55,7 +57,7 @@ export function PayoutsScreen({ open, onBack }: { open: boolean; onBack: () => v
     setBusy(true)
     try {
       const recipients: PayoutRecipient[] = clean.map(r => ({ to: r.to.trim().replace(/^@/, ''), amount: Number(r.amount), ...(r.label.trim() ? { label: r.label.trim() } : {}) }))
-      const saved = await savePayout({ id: draft.id, name: draft.name, recipients, repeat: draft.repeat, nextDue: draft.nextDue || null })
+      const saved = await savePayout({ id: draft.id, name: draft.name, recipients, repeat: draft.repeat, nextDue: draft.repeat === 'none' ? null : draft.nextDue || null })
       if (andPay) { pay(saved); return }
       toast('Payout saved', 'success'); setDraft(null); load()
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }

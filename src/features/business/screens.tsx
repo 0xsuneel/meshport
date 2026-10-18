@@ -16,7 +16,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { Store, ChevronDown, Clock, Printer } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
-import { useMerchant, applyForMerchant, setBusinessName } from '@/lib/merchant'
+import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName } from '@/lib/merchant'
 import { BUSINESS_CATEGORIES, toCategory, useBizTerms, cap } from '@/lib/businessCategories'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/ui/Avatar'
@@ -175,11 +175,15 @@ const blank = (): BillItem => ({ name: '', qty: 1, price: '' })
 
 /** Receive: an amount (Charge) or an itemised Bill -> one order with its QR.
  *  With `shopQr` it is Business → Collect payment: Shop QR · Charge · Bill. */
-export function ReceiveScreen({ open, onBack, storeName, shopQr }: {
+export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   open: boolean; onBack: () => void; storeName: string
   shopQr?: { outlet?: string | null; handle: string }
+  /** An order was created or cancelled here (refreshes open-order counts). */
+  onChanged?: () => void
 }) {
   const t = useBizTerms()
+  // Business owners hear payments from PaymentReceivedWatcher (every screen).
+  const owner = useBusinessTab()
   const [showQr, setShowQr] = useState(!!shopQr)
   const make = useMakeRequest()
   // Cashiers take counter payments only: up to an hour, no named customer, no bills.
@@ -214,7 +218,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr }: {
   const qr = useQr(link)
   const paid = view?.status === 'paid'
 
-  useEffect(() => { if (paid) speakPayment(view!.received) }, [paid])
+  useEffect(() => { if (paid && !owner) speakPayment(view!.received) }, [paid])
   const reset = () => {
     setItemised(false); setShowQr(!!shopQr); setAmount(''); setNote(''); setRows([blank()]); setCustomer(''); setExpiry('15'); setMore(false); setIntent(null)
   }
@@ -237,12 +241,14 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr }: {
     try {
       setIntent(await make({ amount: value, ...(itemised ? { items } : {}), note: note || undefined,
         customer: canBill && customer ? customer : undefined, expiresInMinutes: Number(expiry) || null }))
+      onChanged?.()
       if (itemised && savedItems) void rememberItems(items)
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not create the payment', 'error') }
     setBusy(false)
   }
   const cancel = async () => {
-    if (intent && view && OPEN.has(view.status)) await cancelPayment(intent.code).catch(() => {})
+    // Before the first status read the order is still open: cancel it too.
+    if (intent && (!view || OPEN.has(view.status))) { await cancelPayment(intent.code).catch(() => {}); onChanged?.() }
     setIntent(null)
   }
 
@@ -367,7 +373,11 @@ const filterOf = (s: RequestStatus): OrderFilter => (s === 'completed' ? 'paid' 
 /** Business → Payments → Orders: everything the business asked to be paid
  *  (Receive amounts, bills, Shop QR orders), by status, with copy link /
  *  complete / cancel. */
-export function RequestsList({ active, storeId }: { active: boolean; storeId?: string | null }) {
+export function RequestsList({ active, storeId, mainStoreId = null }: {
+  active: boolean; storeId?: string | null
+  /** Orders without a store belong to the main store (same as sales). */
+  mainStoreId?: string | null
+}) {
   const t = useBizTerms()
   const orders = t.orders.toLowerCase()
   const toast = useUIStore(s => s.showToastMessage)
@@ -378,10 +388,10 @@ export function RequestsList({ active, storeId }: { active: boolean; storeId?: s
   const [busy, setBusy] = useState<string | null>(null)
   const { copy } = useShare()
 
-  const load = () => listMyIntents(200).then(setList).catch(() => setList([]))
+  const load = () => listMyIntents(500).then(setList).catch(() => setList([]))
   useEffect(() => { if (active) { setList(null); void load() } }, [active])
 
-  const inStore = (list ?? []).filter(i => !storeId || i.storeId === storeId)
+  const inStore = (list ?? []).filter(i => !storeId || (i.storeId ?? mainStoreId) === storeId)
   const counts = useMemo(() => {
     const c: Record<OrderFilter, number> = { open: 0, part: 0, paid: 0, cancelled: 0, expired: 0, all: inStore.length }
     for (const i of inStore) c[filterOf(requestStatus(i))]++
@@ -594,6 +604,12 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
   const [contact, setContact] = useState(() => application?.contact || '')
   const [reason, setReason] = useState('')
   const [bizType, setBizType] = useState<string>(() => toCategory(application?.businessType))
+  // The application can load after this screen mounts: prefill from it.
+  useEffect(() => {
+    if (!open) return
+    setContact(application?.contact || ''); setBizType(toCategory(application?.businessType))
+  }, [open, application?.id])
+  const appliedName = application?.businessName && !/\.arc$/i.test(application.businessName) ? application.businessName : ''
   const [busy, setBusy] = useState(false)
   const [again, setAgain] = useState(false)
 
@@ -621,7 +637,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
   return (
     <BusinessScreen open={open} title="Business profile" onBack={onBack}
       footer={canApply ? <PrimaryBtn disabled={busy || bizName.trim().length < 2 || reason.trim().length < 10} onClick={submit}>{busy ? 'Sending…' : 'Send for review'}</PrimaryBtn>
-        : closed ? <PrimaryBtn onClick={() => setAgain(true)}>Apply again</PrimaryBtn> : undefined}>
+        : closed ? <PrimaryBtn onClick={() => { setBizName(n => n || appliedName); setAgain(true) }}>Apply again</PrimaryBtn> : undefined}>
       <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
         {/* Name and logo customers see on the pay page, receipts and notifications */}
         <div className="flex flex-col gap-4 rounded-2xl bg-surface border border-border p-4">
@@ -684,9 +700,10 @@ function StatementBody({ storeName, handle, payments, refunds, settled, waiting,
   storeName: string; handle: string; payments: MerchantPayment[]; refunds: MerchantRefund[]
   settled: { amount: number; createdAt: string }[]; waiting: number; loading: boolean
 }) {
+  const t = useBizTerms()
   const [range, setRange] = useState<StatementRange>('today')
   const printer = usePrint()
-  const rows = statementRows({ range, payments, refunds, settled, waiting })
+  const rows = statementRows({ range, payments, refunds, settled, waiting, customersLabel: t.customers })
   const since = rangeStart(range).getTime()
   const inRange = payments.filter(p => Date.parse(p.createdAt) >= since)
   const refunded = new Set(refunds.map(r => r.paymentId))
@@ -765,11 +782,12 @@ const HELP_CHAINS = ['Arc_Testnet', 'Base_Sepolia', 'Ethereum_Sepolia', 'Arbitru
 const FAQ = [
   { q: 'A customer says they paid but nothing shows', a: 'Ask for the transaction hash (it is in their wallet history), pick the chain and the order, then Check & attach. MeshPort reads it from the chain and adds it to the order if it paid your wallet.' },
   { q: 'A payment came in without an order', a: 'It shows under "Payments without an order". Pick the open order it belongs to and tap Assign.' },
-  { q: 'How do I refund?', a: 'Open the payment in Payments and tap Refund. The USDC goes back to the customer from your Arc balance through the MeshPort refunds contract, once per payment.' },
+  { q: 'How do I refund?', a: 'Open the payment in Payments and tap Refund. The USDC goes back to the wallet that paid, on the chain it was paid on: from your Arc balance for Arc payments; for another chain, from your USDC still there, or from Arc by CCTP to that chain. One refund per payment - a partial refund is final.' },
   { q: 'When does money from other chains reach Arc?', a: 'When you settle. Settlements moves it over CCTP and MeshPort pays the gas; it usually arrives in a few minutes.' },
 ]
 
 export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void }) {
+  const t = useBizTerms()
   const toast = useUIStore(s => s.showToastMessage)
   const [chain, setChain] = useState('Arc_Testnet')
   const [txHash, setTxHash] = useState('')
@@ -780,7 +798,7 @@ export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void
   const [result, setResult] = useState<{ tone: 'success' | 'danger' | 'warning'; title: string; text: string }>()
 
   const load = () => {
-    listMyIntents(200).then(l => {
+    listMyIntents(500).then(l => {
       const open = l.filter(i => OPEN.has(i.status) && !isExpired(i))
       setOrders(open); setOrder(o => o || open[0]?.code || '')
     }).catch(() => {})
@@ -790,7 +808,7 @@ export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void
 
   const check = async () => {
     if (!/^0x[0-9a-fA-F]{64}$/.test(txHash.trim())) { setResult({ tone: 'warning', title: 'Check the hash', text: 'A transaction hash starts with 0x and has 64 characters after it.' }); return }
-    if (!order) { setResult({ tone: 'warning', title: 'Pick an order', text: 'Choose the open order this payment was for.' }); return }
+    if (!order) { setResult({ tone: 'warning', title: `Pick the ${t.order}`, text: `Choose the open ${t.order} this payment was for.` }); return }
     setBusy(true); setResult(undefined)
     try {
       const v = await submitPayment(order, chain, txHash.trim(), { merchantVerify: true })
@@ -804,7 +822,7 @@ export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void
     setBusy(false)
   }
   const assign = async (id: string) => {
-    if (!order) { toast('Pick an open order first', 'error'); return }
+    if (!order) { toast(`Pick an open ${t.order} first`, 'error'); return }
     try { await assignDeposit(id, order); toast('Payment assigned', 'success'); load() }
     catch (e) { toast(e instanceof Error ? e.message : 'Could not assign', 'error') }
   }
@@ -814,7 +832,7 @@ export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void
       <div className="px-5 pt-5 pb-6">
         <HelpView chains={HELP_CHAINS.map(id => ({ id, label: chainLabel(id), logo: chainLogoSrc(id) }))} chain={chain} onChain={setChain}
           txHash={txHash} onTxHash={setTxHash}
-          orders={orders.map(i => ({ code: i.code, label: `${i.orderNumber ?? 'Order'} · ${money(i.amount - i.received)}` }))} order={order} onOrder={setOrder}
+          orders={orders.map(i => ({ code: i.code, label: `${i.orderNumber ?? cap(t.order)} · ${money(i.amount - i.received)}` }))} order={order} onOrder={setOrder}
           busy={busy} result={result} onCheck={check}
           unmatched={unmatched.map(u => ({ id: u.id, amount: money(u.amount), from: `${u.from.slice(0, 6)}…${u.from.slice(-4)}`, chainLabel: chainLabel(u.chain), when: u.createdAt }))}
           onAssign={id => { void assign(id) }} faq={FAQ} />

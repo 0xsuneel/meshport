@@ -257,7 +257,7 @@ async function transferOnChain(p: { chain: string; account: ReturnType<typeof pr
     } catch { /* next RPC */ }
   }
   if (!read) throw new Error('Could not reach this chain - try again')
-  if ((read.bal as bigint) < value) throw new Error('Not enough USDC left on this chain (it may already be settled to Arc) - refund on Arc instead')
+  if ((read.bal as bigint) < value) throw new Error('Not enough USDC left on this chain (it may already be settled to Arc)')
 
   const nonce = toHex(crypto.getRandomValues(new Uint8Array(32)))
   const validBefore = BigInt(Math.floor(Date.now() / 1000) + 60 * 60)
