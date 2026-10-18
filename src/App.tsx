@@ -87,6 +87,7 @@ const LandingPage           = lazyRetry(() => import('./features/landing/Landing
 import { PayPage } from './features/pay/PayPage'
 import { useSettingsStore } from './store/settingsStore'
 import { FeatureGate } from './components/admin/FeatureGate'
+import { RequireUnlockedAccount as Unlocked } from './components/LockedFeature'
 
 function LegacyMultichainRedirect({ tab }: { tab: 'transfer' | 'bring' }) {
   const location = useLocation()
@@ -360,8 +361,8 @@ const router = createBrowserRouter([
   // ── Public payment page - no auth required ─────────────────────────────────
   // Also phone-width on desktop - this is the page a payment-receive link opens to.
   // Merchant payment request (QR / link) - public, no sign-in needed.
-  { path: '/paylink/r/:code', element: <AuthShell><MerchantPayPage /></AuthShell> },
-  { path: '/paylink/:username', element: <AuthShell><PayPage /></AuthShell> },
+  { path: '/paylink/r/:code', element: <AuthShell><Unlocked title="Pay"><MerchantPayPage /></Unlocked></AuthShell> },
+  { path: '/paylink/:username', element: <AuthShell><Unlocked title="Pay"><PayPage /></Unlocked></AuthShell> },
   // Old public link paths → /paylink/… (see RenamedPathRedirect).
   { path: '/pay/r/:code', element: <RenamedPathRedirect from="/pay" to="/paylink" /> },
   { path: '/pay/:username', element: <RenamedPathRedirect from="/pay" to="/paylink" /> },
@@ -412,12 +413,12 @@ const router = createBrowserRouter([
     element: <MaintenanceGate><RootGate /></MaintenanceGate>,
     children: [
       { index: true,                        element: <HomePage /> },
-      { path: 'scanner',                    element: <FeatureGate feature="qr_payments_enabled"><ScannerPage /></FeatureGate> },
+      { path: 'scanner',                    element: <Unlocked title="Scan"><FeatureGate feature="qr_payments_enabled"><ScannerPage /></FeatureGate></Unlocked> },
       {
         // Pathless layout wrapper - paths/params/navigation for these two
         // routes are unchanged, this only adds the desktop list+conversation
         // split view (mobile: renders exactly what was here before).
-        element: <ChatDesktopSplit list={<FeatureGate feature="chat_enabled"><ChatListPage /></FeatureGate>} />,
+        element: <Unlocked title="Chats"><ChatDesktopSplit list={<FeatureGate feature="chat_enabled"><ChatListPage /></FeatureGate>} /></Unlocked>,
         children: [
           { path: 'chat',                     element: <FeatureGate feature="chat_enabled"><ChatListPage /></FeatureGate> },
           // Desktop: opens in the conversation column, the chat list stays.
@@ -446,20 +447,20 @@ const router = createBrowserRouter([
           { path: 'merchant', element: <MerchantApplyPage /> },
         ],
       },
-      { path: 'insights',                   element: <InsightsPage /> },
-      { path: 'pay',                        element: <FeatureGate feature="pay_send_enabled"><PaySendPage /></FeatureGate> },
+      { path: 'insights',                   element: <Unlocked title="Insights"><InsightsPage /></Unlocked> },
+      { path: 'pay',                        element: <Unlocked title="Pay"><FeatureGate feature="pay_send_enabled"><PaySendPage /></FeatureGate></Unlocked> },
       { path: 'pay-send',                   element: <RenamedPathRedirect from="/pay-send" to="/pay" /> },
-      { path: 'receive',                    element: <FeatureGate feature="receive_enabled"><ReceivePage /></FeatureGate> },
-      { path: 'receive/requests',           element: <FeatureGate feature="receive_enabled"><MyRequestsPage /></FeatureGate> },
-      { path: 'rewards',                    element: <FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate> },
+      { path: 'receive',                    element: <Unlocked title="Receive"><FeatureGate feature="receive_enabled"><ReceivePage /></FeatureGate></Unlocked> },
+      { path: 'receive/requests',           element: <Unlocked title="Requests"><FeatureGate feature="receive_enabled"><MyRequestsPage /></FeatureGate></Unlocked> },
+      { path: 'rewards',                    element: <Unlocked title="Rewards"><FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate></Unlocked> },
       { path: 'business',                   element: <BusinessPage /> },
-      { path: 'recent-paid',                element: <RecentPaidPage /> },
-      { path: 'asset/:token',               element: <AssetPage /> },
-      { path: 'news',                       element: <NewsPage /> },
-      { path: 'news/:id',                   element: <NewsArticlePage /> },
-      { path: 'bulk-payout',                element: <FeatureGate feature="bulk_payments_enabled"><BulkPayoutPage /></FeatureGate> },
-      { path: 'multichain',                 element: <MultichainPage /> },
-      { path: 'multichain-recovery',        element: <MultichainRecoveryPage /> },
+      { path: 'recent-paid',                element: <Unlocked title="Recent"><RecentPaidPage /></Unlocked> },
+      { path: 'asset/:token',               element: <Unlocked title="Asset"><AssetPage /></Unlocked> },
+      { path: 'news',                       element: <Unlocked title="News"><NewsPage /></Unlocked> },
+      { path: 'news/:id',                   element: <Unlocked title="News"><NewsArticlePage /></Unlocked> },
+      { path: 'bulk-payout',                element: <Unlocked title="Bulk Pay"><FeatureGate feature="bulk_payments_enabled"><BulkPayoutPage /></FeatureGate></Unlocked> },
+      { path: 'multichain',                 element: <Unlocked title="Multichain"><MultichainPage /></Unlocked> },
+      { path: 'multichain-recovery',        element: <Unlocked title="Multichain"><MultichainRecoveryPage /></Unlocked> },
       // Old standalone Transfer / Claim pages are gone - both live inside the
       // Multichain Hub now. Old links (notifications, bookmarks) land on the
       // matching Hub tab, keeping ?claim= / ?chain= / ?scannedAddress=.
@@ -473,14 +474,14 @@ const router = createBrowserRouter([
       // for new activity - especially now that notifications and the Home
       // popups deep-link straight to /p2p/trade/:tradeId, which would
       // otherwise strand people the moment they tap one during a disable.
-      { path: 'p2p',                        element: <FeatureGate feature="p2p_enabled"><P2PHubPage /></FeatureGate> },
-      { path: 'p2p/create',                 element: <FeatureGate feature="p2p_enabled"><P2PCreateOfferPage /></FeatureGate> },
-      { path: 'p2p/offer/:offerId',         element: <FeatureGate feature="p2p_enabled"><P2POfferDetailPage /></FeatureGate> },
-      { path: 'p2p/trade/:tradeId',         element: <P2PTradePage /> },
-      { path: 'p2p/my-offers',              element: <P2PMyOffersPage /> },
-      { path: 'p2p/my-trades',              element: <P2PMyTradesPage /> },
-      { path: 'p2p/history',                element: <P2PHistoryPage /> },
-      { path: 'swap',                        element: <FeatureGate feature="swap_enabled"><SwapPage /></FeatureGate> },
+      { path: 'p2p',                        element: <Unlocked title="P2P"><FeatureGate feature="p2p_enabled"><P2PHubPage /></FeatureGate></Unlocked> },
+      { path: 'p2p/create',                 element: <Unlocked title="P2P"><FeatureGate feature="p2p_enabled"><P2PCreateOfferPage /></FeatureGate></Unlocked> },
+      { path: 'p2p/offer/:offerId',         element: <Unlocked title="P2P"><FeatureGate feature="p2p_enabled"><P2POfferDetailPage /></FeatureGate></Unlocked> },
+      { path: 'p2p/trade/:tradeId',         element: <Unlocked title="P2P"><P2PTradePage /></Unlocked> },
+      { path: 'p2p/my-offers',              element: <Unlocked title="P2P"><P2PMyOffersPage /></Unlocked> },
+      { path: 'p2p/my-trades',              element: <Unlocked title="P2P"><P2PMyTradesPage /></Unlocked> },
+      { path: 'p2p/history',                element: <Unlocked title="P2P"><P2PHistoryPage /></Unlocked> },
+      { path: 'swap',                        element: <Unlocked title="Swap"><FeatureGate feature="swap_enabled"><SwapPage /></FeatureGate></Unlocked> },
       { path: 'activity/:id',               element: <TransactionDetailPage /> },
     ],
   },

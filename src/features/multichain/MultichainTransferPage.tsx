@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
+import { isAccountLockedNow, ACCOUNT_LOCKED_MESSAGE } from '@/lib/accountLockRule'
 import { PanelScanner } from '@/features/scanner/PanelScanner'
 import { ubFeeBreakdown, ubSpendAmount, ubQuoteFees } from '@/lib/transferFees'
 import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/motion'
@@ -1575,6 +1576,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     // real, already-successful transfers on "Transfer Status Unclear".
     // isConfirmingRef stays true for the whole attempt and is only released
     // in the outer finally below, closing that window entirely.
+    // Business not approved yet: no transfers (the guard on this route
+    // already shows why - this is the backstop).
+    if (isAccountLockedNow()) { showToastMessage(ACCOUNT_LOCKED_MESSAGE, 'error'); return }
     if (isConfirmingRef.current) return
     isConfirmingRef.current = true
 

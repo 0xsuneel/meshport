@@ -8,6 +8,7 @@ import { arcTransport, arcRpcJson } from './arc'
 import { ARC, ARC_TOKENS, ARC_CHAIN_INLINE as REGISTRY_ARC_CHAIN_INLINE } from '@/blockchain/chains'
 import { isSlowNetwork } from './connectivity'
 import { ARC_MEMO_CONTRACT, memoTransferData, type OrderMemo } from './arcMemo'
+import { assertAccountUnlocked } from './accountLockRule'
 
 // ─── Chain/token constants re-exported from the shared registry ─────────────
 // Definitions moved to src/blockchain/chains.ts (Phase 0 of
@@ -169,6 +170,8 @@ export function warmArcRpc(): void {
 }
 
 export function preparePayment(params: { token: PayToken; from: string; to: string; amount: number; idempotencyKey: string; recipientUsername?: string | null; memo?: OrderMemo | null }): void {
+  // Business not approved yet: no payment (pay-intent refuses it too).
+  assertAccountUnlocked()
   try {
     if (!isAddress(params.from) || !isAddress(params.to) || !(params.amount > 0)) return
     const sender = getAddress(params.from)
@@ -343,6 +346,8 @@ export async function relaySend(
 // ─── Send USDC - exact Arc docs pattern ──────────────────────────────────────
 /** Last check before signing: a real amount and a real recipient. */
 function assertSendable(to: string, amount: number) {
+  // Business not approved yet: nothing is sent (the server refuses it too).
+  assertAccountUnlocked()
   if (!(Number.isFinite(amount) && amount > 0)) throw new Error('Enter an amount greater than 0')
   if (/^0x0{40}$/i.test(String(to))) throw new Error('Cannot send to the zero address')
 }

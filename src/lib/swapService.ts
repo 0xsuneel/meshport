@@ -24,6 +24,7 @@
 import { ARC_NETWORK, arcRpcJson } from './arc'
 import { USDC_CONTRACT, EURC_CONTRACT, CIRBTC_CONTRACT } from './arcService'
 import { ARC_EXPLORER } from './chainExplorers'
+import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 // Derive the Arc chain key from env so a mainnet build targets Arc mainnet.
 // Hardcoding 'Arc_Testnet' here broke every swap on a mainnet deployment,
@@ -425,6 +426,7 @@ type ExecuteSwapParams = {
 }
 
 export async function executeSwapLocal(params: ExecuteSwapParams): Promise<{ txHash: string; amountOut: string; explorerUrl: string }> {
+  assertAccountUnlocked() // business not approved yet: nothing moves
   _onSwapProgress = params.onProgress ?? null
   _confirmedHashes = new Set()
   _swapBroadcast = false; _swapSendAttempted = false

@@ -43,7 +43,7 @@ type State = {
 let state: State = { loaded: false, status: 'none', application: null, accountType: 'personal', storeName: null }
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach(l => l())
-const set = (s: State) => { state = s; emit(); if (s.loaded) rememberHint(s.status === 'approved') }
+const set = (s: State) => { state = s; emit(); if (s.loaded) rememberHint(s.status === 'approved', s.accountType === 'business') }
 
 // Display hint only: the last known "is a merchant" for this wallet, so the
 // screen opens with the right labels (Merchant Hub / Ledger) instead of
@@ -54,17 +54,24 @@ const HINT_KEY = 'meshport_merchant_hint'
 function currentWallet(): string {
   try { return (useAuthStore.getState().walletAddress || '').toLowerCase() } catch { return '' }
 }
-function rememberHint(approved: boolean) {
+function rememberHint(approved: boolean, business: boolean) {
   try {
     const w = currentWallet()
-    if (w) localStorage.setItem(HINT_KEY, JSON.stringify({ w, approved }))
+    if (w) localStorage.setItem(HINT_KEY, JSON.stringify({ w, approved, business }))
   } catch { /* storage unavailable */ }
 }
-function readHint(): boolean {
+/** Last known merchant status for this wallet, or null when there is none
+ *  (first load on this device). `business` is null in hints written before
+ *  the account type was remembered. */
+export function readMerchantHint(): { approved: boolean; business: boolean | null } | null {
   try {
     const h = JSON.parse(localStorage.getItem(HINT_KEY) || 'null')
-    return !!h && h.approved === true && h.w === currentWallet()
-  } catch { return false }
+    if (!h || h.w !== currentWallet() || !h.w) return null
+    return { approved: h.approved === true, business: typeof h.business === 'boolean' ? h.business : null }
+  } catch { return null }
+}
+function readHint(): boolean {
+  return readMerchantHint()?.approved === true
 }
 
 function mapRow(r: any): MerchantApplication {
@@ -178,6 +185,10 @@ function subscribe(cb: () => void) {
   return () => { listeners.delete(cb) }
 }
 const getSnapshot = () => state
+/** Current merchant state (non-React code). */
+export function getMerchantState(): Readonly<State> { return state }
+/** Subscribe to merchant state changes (non-React code). Starts a load. */
+export function subscribeMerchant(cb: () => void): () => void { return subscribe(cb) }
 
 export function useMerchant(): State & { isMerchant: boolean; refresh: () => Promise<void> } {
   const s = useSyncExternalStore(subscribe, getSnapshot)

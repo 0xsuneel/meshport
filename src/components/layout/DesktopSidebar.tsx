@@ -12,6 +12,7 @@ import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { HomeIcon, ChatsIcon, RewardsIcon, ActivityIcon, BusinessIcon, getActiveTabId } from './BottomNav'
 import { useChatUnreadStore, useP2PTradesCountStore } from '@/store'
 import { useHubLabel, useBusinessTab } from '@/lib/merchant'
+import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 import { ArcStudioBadge } from '@/components/ui/ArcStudioBadge'
 
 const items = [
@@ -45,7 +46,10 @@ const MultichainHubIcon = actIcon('hub')
 const SettingsIcon = sideIcon('settings')
 export function DesktopSidebar() {
   const hub = useHubLabel()
-  const navItems = useBusinessTab() ? businessItems : items
+  const businessTab = useBusinessTab()
+  // Business not approved yet: the locked features are left out.
+  const { locked } = useAccountLock()
+  const navItems = (businessTab ? businessItems : items).filter(i => !locked || !isLockedPath(i.path))
   const location = useLocation()
   const navigate = useNavigate()
   // Every Settings page (Security, Appearance, About…) keeps Settings highlighted.
