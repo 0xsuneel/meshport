@@ -256,7 +256,10 @@ export function BulkPayoutPage() {
   const resolvedCount  = recipients.filter(r => r.status === 'resolved').length
   const hasPending     = recipients.some(r => r.status === 'pending')
   const hasUnresolved  = recipients.some(r => r.status === 'unresolved')
-  const hasDuplicates  = new Set(recipients.map(r => r.walletAddress.toLowerCase())).size < recipients.length
+  // Only known addresses can repeat: usernames not resolved yet (a Business
+  // payout opens here with them pending) have no address and aren't duplicates.
+  const knownWallets   = recipients.map(r => r.walletAddress.toLowerCase()).filter(Boolean)
+  const hasDuplicates  = new Set(knownWallets).size < knownWallets.length
   // One Multicall3 transaction pays everyone, so this is a flat single-tx gas
   // estimate rather than resolvedCount separate transaction fees.
   const estimatedFee   = resolvedCount > 0 ? 0.002 + resolvedCount * 0.0002 : 0

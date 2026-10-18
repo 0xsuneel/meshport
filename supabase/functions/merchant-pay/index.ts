@@ -826,7 +826,12 @@ Deno.serve(async (req: Request) => {
 
     if (action === 'cancel') {
       const who = await caller(req)
-      if (who?.authUid !== i.merchant_auth_uid) return jsonFor(req, { error: 'Not found' }, 404)
+      // The owner, or the active staff member who made this charge (staff mode
+      // shows Cancel payment on their own charges).
+      const ownStaffCharge = !!who?.authUid && who.authUid === i.created_by_staff
+        && !!(await db.from('business_staff').select('id').eq('owner_auth_uid', i.merchant_auth_uid)
+          .eq('staff_auth_uid', who.authUid).eq('status', 'active').maybeSingle()).data
+      if (who?.authUid !== i.merchant_auth_uid && !ownStaffCharge) return jsonFor(req, { error: 'Not found' }, 404)
       if (!['pending', 'expired'].includes(effectiveStatus(i)) || Number(i.received_amount) > 0) return jsonFor(req, { error: 'A payment was already made on this request.' }, 409)
       await db.from('merchant_payment_intents').update({ status: 'cancelled' }).eq('id', i.id)
       return jsonFor(req, publicView({ ...i, status: 'cancelled' }, []))

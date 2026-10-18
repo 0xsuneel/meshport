@@ -1128,6 +1128,9 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
     merchant_refund_sent:      { icon: <RefreshCw className="w-4 h-4" />, bg: 'bg-accent/20 text-accent-text', dot: 'bg-accent' },
     business_payout_due:       { icon: <ClockIcon className="w-4 h-4" />, bg: 'bg-warning/20 text-warning', dot: 'bg-warning' },
     merchant_bill_reminder:    { icon: <ClockIcon className="w-4 h-4" />, bg: 'bg-warning/20 text-warning', dot: 'bg-warning' },
+    merchant_payment_late:     { icon: <ClockIcon className="w-4 h-4" />, bg: 'bg-warning/20 text-warning', dot: 'bg-warning' },
+    merchant_payment_screened: { icon: <Ban className="w-4 h-4" />, bg: 'bg-danger/20 text-danger', dot: 'bg-danger' },
+    business_staff_invite:     { icon: <Store className="w-4 h-4" />, bg: 'bg-brand/20 text-brand-text', dot: 'bg-brand' },
   }
 
   const defaultConfig = {
