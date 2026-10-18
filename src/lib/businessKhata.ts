@@ -9,6 +9,8 @@ export type KhataOrder = {
   status: string
   expiresAt: string | null
   dueDate?: string | null
+  /** Marked completed by the business (paid outside MeshPort, e.g. cash) */
+  completedByMerchant?: boolean
 }
 
 export type Khata = {
@@ -41,7 +43,8 @@ export function khataOf(orders: KhataOrder[], now = Date.now(), today = new Date
     // A cancelled or expired order counts only for what was paid on it.
     if (dead) { if (o.received > 0) { k.billed += o.received; k.paid += o.received } continue }
     k.billed += o.amount
-    k.paid += Math.min(o.received, o.amount)
+    // Completed by the business: settled in full, whatever came in on-chain.
+    k.paid += o.completedByMerchant && o.status === 'paid' ? o.amount : Math.min(o.received, o.amount)
     if (isOutstanding(o, now)) {
       k.outstanding += o.amount - o.received
       k.open++
