@@ -13,6 +13,7 @@ import { Plus, Receipt, X } from 'lucide-react'
 import { formatAmount } from '@/lib/utils'
 import { createPaymentRequest, invoiceTotal, type InvoiceItem, type MerchantIntent } from '@/lib/merchantPay'
 import { ChatSheet, SheetPerson } from '@/features/chat/ChatSheet'
+import { DUE_PRESETS, duePresetDate, dueText, isoDay, type DuePresetId } from '@/lib/businessBills'
 
 export const MAX_BILL_ITEMS = 50 // the database's limit
 type Row = { id: number; name: string; qty: string; price: string }
@@ -50,6 +51,8 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
   const [rows, setRows] = useState<Row[]>([{ id: 1, name: '', qty: '1', price: '' }])
   const [editing, setEditing] = useState<number | null>(1)
   const [note, setNote] = useState('')
+  const [dueId, setDueId] = useState<DuePresetId>('none')
+  const [customDue, setCustomDue] = useState('')
   const [typing, setTyping] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -61,7 +64,7 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
   // A fresh bill every time the sheet opens.
   useEffect(() => {
     if (!open) return
-    setRows([{ id: 1, name: '', qty: '1', price: '' }]); setEditing(1); setNote(''); setError(null); setBusy(false); setTyping(false)
+    setRows([{ id: 1, name: '', qty: '1', price: '' }]); setEditing(1); setNote(''); setDueId('none'); setCustomDue(''); setError(null); setBusy(false); setTyping(false)
   }, [open])
   // The item being edited stays in view (keyboard opening, Next, Add item).
   useEffect(() => {
@@ -72,6 +75,11 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
 
   const valid: InvoiceItem[] = rows.filter(isComplete).map(r => ({ name: r.name.trim(), qty: num(r.qty), price: num(r.price) }))
   const total = invoiceTotal(valid)
+  // Same due-date choice as the Business bill composer. A bill with a due
+  // date stays open until it's paid; without one it's valid for 7 days.
+  const dueDate = dueId === 'custom' ? (customDue || null) : duePresetDate(dueId)
+  const due = dueText(dueDate, true)
+  const pickDue = (id: DuePresetId) => { setDueId(id); setError(null); if (id === 'custom' && !customDue) setCustomDue(duePresetDate('7') ?? '') }
   const atLimit = rows.length >= MAX_BILL_ITEMS
 
   const update = (id: number, patch: Partial<Row>) => { setRows(rs => rs.map(r => r.id === id ? { ...r, ...patch } : r)); setError(null) }
@@ -111,9 +119,11 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
       return
     }
     if (valid.length === 0 || !(total > 0)) { setError('Add at least one item with a price.'); return }
+    if (dueId === 'custom' && !customDue) { setError('Pick a due date.'); return }
     setBusy(true); setError(null)
     try {
-      const inv = await createPaymentRequest({ amount: total, items: valid, note: note.trim() || undefined, customer: customer.username, expiresInMinutes: 7 * 24 * 60 })
+      const inv = await createPaymentRequest({ amount: total, items: valid, note: note.trim() || undefined, customer: customer.username,
+        expiresInMinutes: dueDate ? null : 7 * 24 * 60, dueDate })
       await onSend(inv)
       onClose()
     } catch (e) {
@@ -129,7 +139,7 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
     <ChatSheet open={open} onClose={onClose} isDesktop={isDesktop} id="chat-bill">
       <div className="flex flex-col min-h-0 flex-1"
         // Any field in the sheet focused = the phone keyboard is up.
-        onFocus={e => { if ((e.target as HTMLElement).tagName === 'INPUT') setTyping(true) }}
+        onFocus={e => { const t = e.target as HTMLInputElement; if (t.tagName === 'INPUT' && t.type !== 'date') setTyping(true) }}
         onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setTyping(false) }}>
         <div className="px-5 flex-shrink-0" style={{ paddingTop: isDesktop ? 20 : 4, paddingBottom: compact ? 8 : 12 }}>
           <SheetPerson label="Bill to" name={customer.name} username={customer.username} avatar={customer.avatar}
@@ -218,6 +228,30 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
             enterKeyHint="done" onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
             className="w-full mt-3 mb-1 rounded-[14px] px-3.5 py-3 text-[14.5px] text-text-primary outline-none placeholder:text-text-muted focus:border-[var(--brand-text)]"
             style={{ background: 'var(--bg)', border: '1px solid var(--border)' }} />
+          {!compact && (
+            <div className="mt-3 mb-1">
+              <span className="block text-[12px] font-bold uppercase tracking-[0.06em] text-text-secondary px-0.5 mb-2">Due date</span>
+              <div role="radiogroup" aria-label="Due date" className="flex flex-wrap gap-1.5">
+                {DUE_PRESETS.map(d => {
+                  const on = dueId === d.id
+                  return (
+                    <button key={d.id} type="button" role="radio" aria-checked={on} onClick={() => pickDue(d.id)}
+                      className="px-3 rounded-full text-[13px] font-semibold"
+                      style={{ height: 32, border: `1px solid ${on ? 'var(--brand-text)' : 'var(--border)'}`, cursor: 'pointer',
+                        background: on ? 'color-mix(in srgb, var(--brand) 12%, transparent)' : 'var(--bg)', color: on ? 'var(--brand-text)' : 'var(--text-secondary)' }}>
+                      {d.label}
+                    </button>
+                  )
+                })}
+              </div>
+              {dueId === 'custom' && (
+                <input type="date" value={customDue} min={isoDay(new Date())} max={isoDay(new Date(Date.now() + 365 * 86_400_000))}
+                  onChange={e => { setCustomDue(e.target.value); setError(null) }} aria-label="Custom due date"
+                  className="w-full mt-2 px-3 focus:border-[var(--brand-text)]" style={{ ...field, height: 40 }} />
+              )}
+              {dueDate && <p className="text-[12px] text-text-muted mt-1.5 px-0.5">The bill stays open until it's paid.</p>}
+            </div>
+          )}
         </div>
 
         {/* Total + Send - always on screen. */}
@@ -249,7 +283,7 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
                 style={{ height: 52, background: 'var(--brand)' }}>
                 <Receipt size={18} /> {busy ? 'Sending…' : total > 0 ? `Send bill · $${billMoney(total)}` : 'Send bill'}
               </button>
-              <p className="text-[12px] text-text-secondary text-center mt-2">{firstName} gets a bill card with a Pay button</p>
+              <p className="text-[12px] text-text-secondary text-center mt-2">{firstName} gets a bill card with a Pay button{due ? ` · ${due.text}` : ''}</p>
             </>
           )}
         </div>

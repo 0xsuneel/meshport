@@ -24,7 +24,9 @@ export const hourLabel = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}
 
 /** Saves the payments as a CSV file. */
 export function exportPaymentsCsv(payments: MerchantPayment[], storeName: string, refunds: { paymentId: string; amount: number }[] = []) {
-  const refunded = new Map(refunds.map(r => [r.paymentId, r.amount]))
+  // A payment can be refunded several times: the column is the total.
+  const refunded = new Map<string, number>()
+  for (const r of refunds) refunded.set(r.paymentId, (refunded.get(r.paymentId) ?? 0) + r.amount)
   const cell = (v: unknown) => {
     const s = v == null ? '' : String(v)
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
@@ -34,7 +36,7 @@ export function exportPaymentsCsv(payments: MerchantPayment[], storeName: string
     ...payments.map(p => {
       const d = new Date(p.createdAt)
       return [d.toLocaleDateString('en-CA'), d.toLocaleTimeString('en-GB'), p.orderNumber, p.customerUsername ? `${p.customerUsername}.arc` : '',
-        p.from, chainLabel(p.chain), p.amount.toFixed(2), refunded.has(p.id) ? 'Refunded' : p.status === 'collected' || p.chain === 'Arc_Testnet' ? 'On Arc' : 'On ' + chainLabel(p.chain), refunded.get(p.id)?.toFixed(2) ?? '', p.txHash]
+        p.from, chainLabel(p.chain), p.amount.toFixed(2), refunded.has(p.id) ? (refunded.get(p.id)! >= p.amount - 1e-6 ? 'Refunded' : 'Partly refunded') : p.status === 'collected' || p.chain === 'Arc_Testnet' ? 'On Arc' : 'On ' + chainLabel(p.chain), refunded.get(p.id)?.toFixed(2) ?? '', p.txHash]
     }),
   ]
   const blob = new Blob([rows.map(r => r.map(cell).join(',')).join('\n')], { type: 'text/csv' })

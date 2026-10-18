@@ -36,7 +36,7 @@ export function StaffModePage() {
   }, [active?.id])
 
   const payments: Payment[] = useMemo(() => raw.map(p => ({ id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain),
-    chainLogo: chainLogoSrc(p.chain), time: p.createdAt, order: p.orderNumber ?? undefined, status: 'received' as const })), [raw])
+    chainLogo: chainLogoSrc(p.chain), time: p.createdAt, order: p.orderNumber ?? undefined, late: !!p.late, blocked: !!p.screenFlag, status: 'received' as const })), [raw])
   const today = raw.filter(p => new Date(p.createdAt).toDateString() === new Date().toDateString())
   const total = today.reduce((s, p) => s + p.amount, 0)
 

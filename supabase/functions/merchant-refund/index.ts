@@ -2,13 +2,20 @@
 //
 // Records a merchant refund that already happened (on Arc, or on the chain the customer paid on).
 //
-//   POST { action: 'record', paymentId | receiptId, txHash, route? }   merchant only
+//   POST { action: 'record', paymentId | receiptId, txHash, route?, amount? }   merchant only
+//
+// A payment can be refunded several times, as long as all its refunds
+// together stay within the payment (merchant_refunds_cap enforces it in the
+// database too). Idempotent per refund transaction (tx hash + chain), not
+// per payment: recording the same transaction again returns the same row.
 //
 // The merchant's wallet sends the refund itself, one of three ways:
 //   route 'contract' (default): on Arc through the MeshPortRefunds contract
-//     (deployed with Arc Studio; one refund per payment per merchant,
-//     enforced on-chain). Its Refunded event must name this merchant,
-//     keccak256(id) as the reference and the payer as the customer.
+//     (deployed with Arc Studio; one refund per reference per merchant,
+//     enforced on-chain). Its Refunded event must name this merchant, the
+//     payer as the customer and a refund reference of this payment:
+//     keccak256(id) for the 1st refund, keccak256(`${id}:${n}`) for the
+//     n-th (n >= 2) - see refundRef.
 //   route 'chain': from the merchant's USDC on the chain the customer paid
 //     on (the money is still there) - a USDC Transfer on that chain from the
 //     merchant to the payer, sent by MeshPort's relayer (EIP-3009).
@@ -17,8 +24,8 @@
 //     to the payer's address on that chain's domain.
 // Nothing from the client is trusted except "look at this transaction": the
 // receipt is read from Arc and checked against the payment (an order
-// payment, or a payment on another chain without an order); one refund per
-// payment is kept by merchant_refunds' unique keys. The customer is notified.
+// payment, or a payment on another chain without an order); all its refunds
+// together never exceed the payment. The customer is notified.
 
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { keccak256, toBytes, decodeEventLog, type Hex } from 'npm:viem@2'
@@ -152,8 +159,10 @@ async function rpc(method: string, params: unknown[], urls: string[] = ARC_RPCS)
   throw new Error(errors.join(' | ') || `${method} failed`)
 }
 
-/** The on-chain reference for a payment: keccak256 of its id. */
-const paymentRef = (paymentId: string) => keccak256(toBytes(paymentId))
+/** The on-chain reference for refund number `n` of a payment (same as src/lib/merchantRefunds.ts). */
+const refundRef = (paymentId: string, n = 1) => keccak256(toBytes(n <= 1 ? paymentId : `${paymentId}:${n}`))
+/** Highest refund number accepted for the contract route. */
+const MAX_REFUNDS = 200
 
 const usd = (n: number) => '$' + n.toFixed(2)
 
@@ -246,8 +255,19 @@ Deno.serve(async (req: Request) => {
   if (code !== '0x' && !code.toLowerCase().startsWith('0xef0100')) return jsonFor(req, { error: 'Paid from a contract (exchange, bridge or smart account) - it can’t be refunded automatically' }, 422)
 
   const key = paymentId ? 'payment_id' : 'receipt_id'
-  const { data: existing } = await db.from('merchant_refunds').select('*').eq(key, target.id).maybeSingle()
-  if (existing) return jsonFor(req, { refund: existing })
+  const refundChain = route === 'contract' ? 'Arc_Testnet' : target.chain
+  // Idempotent per refund transaction: the same tx recorded again is the same refund.
+  const byTx = async () => (await db.from('merchant_refunds').select('*').eq('tx_hash', txHash).eq('refund_chain', refundChain).maybeSingle()).data
+  const sameRefund = (row: any) => row[key] === target.id ? jsonFor(req, { refund: row })
+    : jsonFor(req, { error: 'This transaction is already recorded as another refund' }, 409)
+  const existing = await byTx()
+  if (existing) return sameRefund(existing)
+
+  // What can still go back on this payment (all its refunds so far, on any route).
+  const { data: leftRaw, error: leftErr } = await db.rpc('merchant_refund_remaining', paymentId ? { p_payment: paymentId } : { p_receipt: receiptId })
+  if (leftErr || leftRaw == null) return jsonFor(req, { error: "Couldn't check this payment's refunds - try again", pending: true }, 202)
+  const remaining = Number(leftRaw)
+  if (remaining + 1e-9 < MIN_REFUND) return jsonFor(req, { error: 'This payment is already fully refunded' }, 422)
 
   // Read the refund (on Arc, or on the payment's chain for route 'chain').
   const txRpcs = route === 'chain' ? (CHAIN_RPCS[target.chain] ?? []) : ARC_RPCS
@@ -269,7 +289,8 @@ Deno.serve(async (req: Request) => {
     : refundAt.time >= paidAt.time
   if (!after) return jsonFor(req, { error: 'This transaction was sent before the payment - it is not a refund of it' }, 422)
 
-  const ref = paymentRef(target.id).toLowerCase()
+  // Any refund reference of this payment (the contract takes each one once).
+  const refs = new Set(Array.from({ length: MAX_REFUNDS }, (_, i) => refundRef(target.id, i + 1).toLowerCase()))
   const merchantWallet = target.merchantWallet
   const customerWallet = target.customer
   let found: { amount: number; reason: string } | null = null
@@ -278,7 +299,7 @@ Deno.serve(async (req: Request) => {
     try {
       if (route === 'contract' && addr === REFUNDS_CONTRACT) {
         const a = decodeEventLog({ abi: REFUNDED_EVENT, data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]] }).args
-        if (a.paymentRef.toLowerCase() === ref && a.merchant.toLowerCase() === merchantWallet && a.customer.toLowerCase() === customerWallet) {
+        if (refs.has(a.paymentRef.toLowerCase()) && a.merchant.toLowerCase() === merchantWallet && a.customer.toLowerCase() === customerWallet) {
           found = { amount: Number(a.amount) / 1e18, reason: a.reason }
         }
       }
@@ -303,6 +324,7 @@ Deno.serve(async (req: Request) => {
   }
   if (!found) return jsonFor(req, { error: 'This transaction is not a refund of this payment' }, 422)
   if (found.amount > target.amount + 1e-6) return jsonFor(req, { error: 'Refund is larger than the payment' }, 422)
+  if (found.amount > remaining + 1e-6) return jsonFor(req, { error: `Refund is more than what's left on this payment (${usd(remaining)})` }, 422)
   if (found.amount + 1e-9 < MIN_REFUND) return jsonFor(req, { error: `A refund must be at least ${usd(MIN_REFUND)}` }, 422)
   if (claimed != null && Math.abs(found.amount - claimed) > 0.000001) {
     return jsonFor(req, { error: `This transaction refunds ${usd(found.amount)}, not ${usd(claimed)}` }, 422)
@@ -316,12 +338,14 @@ Deno.serve(async (req: Request) => {
   const { data: row, error } = await db.from('merchant_refunds').insert({
     payment_id: paymentId, receipt_id: receiptId, intent_id: target.intentId, merchant_auth_uid: uid, merchant_wallet: merchantWallet,
     customer_wallet: customerWallet, customer_user_id: target.customerUserId, route,
-    refund_chain: route === 'contract' ? 'Arc_Testnet' : target.chain,
+    refund_chain: refundChain,
     amount: Number(Math.max(found.amount, 0.000001).toFixed(6)), reason: found.reason.slice(0, 140), tx_hash: txHash,
   }).select('*').single()
   if (error) {
-    const { data: again } = await db.from('merchant_refunds').select('*').eq(key, target.id).maybeSingle()
-    if (again) return jsonFor(req, { refund: again })
+    const again = await byTx()
+    if (again) return sameRefund(again)
+    // merchant_refunds_cap: over the payment, or a blocked sender.
+    if (/more than this payment|blocked address/i.test(error.message)) return jsonFor(req, { error: error.message }, 422)
     return jsonFor(req, { error: error.message }, 500)
   }
 

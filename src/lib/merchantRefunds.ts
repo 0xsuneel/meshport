@@ -9,15 +9,18 @@
 //            sends it for a real, unrefunded payment from that wallet.
 //   'arc'    on Arc through the MeshPortRefunds contract (written, tested and
 //            deployed with Arc Studio): refund(paymentRef, customer, reason)
-//            with the USDC as the transaction value; one refund per payment
-//            per merchant, on-chain.
+//            with the USDC as the transaction value. The contract takes one
+//            refund per reference per merchant, so refund n of a payment uses
+//            its own reference (refundRef: the id for n = 1, `${id}:${n}`
+//            after) - a payment can be refunded several times.
 //   'origin' back on the chain the customer paid from: a CCTP burn on Arc
 //            (TokenMessengerV2) to the payer's address on that chain. Circle's
 //            Forwarding Service mints it there (or MeshPort's relayer, on
 //            chains where the forwarder doesn't mint). The merchant pays
 //            Circle's fee on top, so the customer gets the full amount.
 // merchant-refund then reads the transaction from Arc, checks it against
-// the payment and records it (one refund per payment).
+// the payment and records it. All refunds of a payment together never go
+// above the payment (checked here, by merchant-refund and in the database).
 import { createPublicClient, createWalletClient, encodeFunctionData, keccak256, toBytes, parseGwei, pad, type Hash, type Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { supabase } from '@/lib/supabase'
@@ -26,6 +29,7 @@ import { ARC_CHAIN_INLINE, circleForwarderMintsTo } from '@/blockchain/chains'
 import { describeFunctionsError } from '@/lib/describeFunctionsError'
 import { CCTP_DOMAINS } from '@/lib/cctpTracker'
 import { FORWARD_HOOK, FAST_FINALITY, ARC_DOMAIN } from '@/lib/gaslessBridge'
+import { refundRefText, MIN_REFUND } from '@/lib/refundTotals'
 
 export const REFUNDS_CONTRACT = '0x53e5c71290dc5147089b7b40679f3d6a164c8c2b' as `0x${string}`
 export const REFUND_REASONS = ['Order cancelled', 'Wrong amount', 'Item unavailable', 'Paid twice', 'Other']
@@ -36,6 +40,9 @@ const ARC_USDC = '0x3600000000000000000000000000000000000000' as Hex          //
 const ABI = [{
   type: 'function', name: 'refund', stateMutability: 'payable',
   inputs: [{ name: 'paymentRef', type: 'bytes32' }, { name: 'customer', type: 'address' }, { name: 'reason', type: 'string' }], outputs: [],
+}, {
+  type: 'function', name: 'isRefunded', stateMutability: 'view',
+  inputs: [{ name: 'merchant', type: 'address' }, { name: 'paymentRef', type: 'bytes32' }], outputs: [{ type: 'bool' }],
 }] as const
 const ERC20 = [{ type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ type: 'bool' }] }] as const
 const BURN_ARGS = [
@@ -53,8 +60,10 @@ export type MerchantRefund = { id: string; paymentId: string; amount: number; re
 const mapRefund = (r: any): MerchantRefund => ({ id: r.id, paymentId: r.payment_id ?? `rcpt_${r.receipt_id}`, amount: Number(r.amount), reason: r.reason ?? '',
   txHash: r.tx_hash, createdAt: r.created_at, chain: r.refund_chain ?? 'Arc_Testnet', route: r.route ?? 'contract' })
 
-/** The on-chain reference for a payment (same as merchant-refund). */
+/** The on-chain reference for a payment's first refund (same as merchant-refund). */
 export const paymentRef = (id: string) => keccak256(toBytes(id))
+/** The on-chain reference for refund number `n` of a payment (same as merchant-refund). */
+export const refundRef = (id: string, n: number) => keccak256(toBytes(refundRefText(id, n)))
 
 /** Can this chain take a refund back (a CCTP domain MeshPort knows)? */
 export const canRefundOnChain = (chain: string) => chain !== 'Arc_Testnet' && CCTP_DOMAINS[chain] !== undefined
@@ -161,13 +170,34 @@ async function sendArcTx(account: ReturnType<typeof privateKeyToAccount>, to: He
   return hash
 }
 
+/** Highest refund number per payment (same cap as merchant-refund). */
+const MAX_REFUNDS = 200
+
+type RefundReader = { readContract: (args: any) => Promise<unknown> }
+/**
+ * The first refund number whose reference this merchant hasn't used on the
+ * contract yet. Read from the chain (not the database), so a refund that is
+ * still being recorded is never reused.
+ */
+export async function nextRefundNo(client: RefundReader, merchant: string, id: string): Promise<number> {
+  for (let n = 1; n <= MAX_REFUNDS; n++) {
+    const used = await client.readContract({ address: REFUNDS_CONTRACT, abi: ABI, functionName: 'isRefunded', args: [merchant as Hex, refundRef(id, n)] })
+    if (!used) return n
+  }
+  throw new Error('This payment has too many refunds')
+}
+
 /** Sends the refund from the merchant's wallet and records it. */
 export async function refundPayment(p: {
   /** An order payment's id, or "rcpt_<id>" for a payment on another chain without an order. */
   paymentId: string; customer: string; amount: number; reason: string; privateKey: string
   route?: RefundRoute; chain?: string
+  /** What can still go back on this payment (amount minus its refunds so far). */
+  remaining?: number
 }): Promise<MerchantRefund> {
   if (!(p.amount > 0)) throw new Error('Nothing to refund')
+  if (p.amount + 1e-9 < MIN_REFUND) throw new Error(`A refund must be at least $${MIN_REFUND.toFixed(2)}`)
+  if (p.remaining != null && p.amount > p.remaining + 1e-9) throw new Error(`You can refund up to $${p.remaining.toFixed(2)} more on this payment`)
   const target = p.paymentId.startsWith('rcpt_') ? { receiptId: p.paymentId.slice(5) } : { paymentId: p.paymentId }
   const refId = target.receiptId ?? target.paymentId!
   const account = privateKeyToAccount(p.privateKey as Hex)
@@ -207,9 +237,11 @@ export async function refundPayment(p: {
 
   const value = BigInt(Math.round(p.amount * 1e6)) * 10n ** 12n // Arc native USDC has 18 decimals
   if (balance < value) throw new Error('Not enough USDC on Arc for this refund')
-  const data = encodeFunctionData({ abi: ABI, functionName: 'refund', args: [paymentRef(refId), p.customer as Hex, reason] })
+  // The next unused reference for this payment on the contract (refund 1, 2, …).
+  const n = await nextRefundNo(publicClient, account.address, refId)
+  const data = encodeFunctionData({ abi: ABI, functionName: 'refund', args: [refundRef(refId, n), p.customer as Hex, reason] })
   const hash = await sendArcTx(account, REFUNDS_CONTRACT, data, value, h => { void record(target, h, 'contract', reason, p.amount).catch(() => {}) }).catch((e: Error) => {
-    throw new Error(/AlreadyRefunded/i.test(e.message) ? 'This payment was already refunded' : /insufficient/i.test(e.message) ? 'Not enough USDC on Arc for this refund' : e.message)
+    throw new Error(/AlreadyRefunded/i.test(e.message) ? 'Another refund of this payment just went through - check it and try again' : /insufficient/i.test(e.message) ? 'Not enough USDC on Arc for this refund' : e.message)
   })
   return record(target, hash, 'contract', reason, p.amount)
 }

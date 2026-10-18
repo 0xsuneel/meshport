@@ -39,6 +39,7 @@ import {
 import { usePrint } from './printArea'
 import { salesByHour, hourLabel, statementRows, rangeLabel, rangeStart, exportPaymentsCsv } from './reports'
 import type { MerchantRefund } from '@/lib/merchantRefunds'
+import { groupRefunds, refundedSum, remainingAfter, isFullyRefunded, extraLeft, MIN_REFUND } from '@/lib/refundTotals'
 import { submitPayment, displayOrderNumber, listUnmatchedDeposits, assignDeposit, type UnmatchedDeposit } from '@/lib/merchantPay'
 import { chainLabel } from './settlement'
 import { DUE_PRESETS, duePresetDate, dueText, isoDay, canRemindAt, remindBill, remindCustomer, type DuePresetId } from '@/lib/businessBills'
@@ -420,7 +421,7 @@ const filterOf = (s: RequestStatus): OrderFilter => (s === 'completed' ? 'paid' 
 /** Business → Payments → Orders: everything the business asked to be paid
  *  (Receive amounts, bills, Shop QR orders), by status, with copy link /
  *  complete / cancel. */
-export function RequestsList({ active, storeId, mainStoreId = null, storeName = 'Your business', paymentsOf, onRefund }: {
+export function RequestsList({ active, storeId, mainStoreId = null, storeName = 'Your business', paymentsOf, refundedOf, onRefund }: {
   active: boolean; storeId?: string | null
   /** Orders without a store belong to the main store (same as sales). */
   mainStoreId?: string | null
@@ -428,6 +429,8 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
   storeName?: string
   /** The payments on an order (late / blocked sender badges, refunds) */
   paymentsOf?: (i: MerchantIntent) => MerchantPayment[]
+  /** Refunded so far on a payment (a payment can be refunded several times) */
+  refundedOf?: (p: MerchantPayment) => number
   /** Opens the refund sheet for this payment, prefilled with `amount` */
   onRefund?: (p: MerchantPayment, amount: number) => void
 }) {
@@ -479,9 +482,11 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not send the reminder', 'error') }
     setBusy(null)
   }
-  // The payment to refund on an order: the latest one that covers the amount.
+  // What can still go back on a payment, after its refunds so far.
+  const leftOn = (p: MerchantPayment) => remainingAfter(p.amount, refundedOf?.(p) ?? 0)
+  // The payment to refund on an order: the latest one with that much left.
   const refundable = (i: MerchantIntent, amount: number) => (paymentsOf?.(i) ?? [])
-    .filter(p => !p.screenFlag && p.amount >= amount - 1e-6).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0]
+    .filter(p => !p.screenFlag && leftOn(p) + 1e-9 >= Math.max(amount, MIN_REFUND)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0]
   const shareText = (i: MerchantIntent) => {
     const d = dueText(i.dueDate, true)
     return `${storeName}: ${i.kind === 'invoice' ? 'bill' : t.order} ${i.orderNumber ? displayOrderNumber(i.orderNumber) : ''} for ${money(Math.max(0, i.amount - i.received))}${i.note ? ` - ${i.note}` : ''}${d ? ` (${d.text.toLowerCase()})` : ''}. Pay in USDC:`
@@ -529,7 +534,9 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
               const due = dueText(i.dueDate, live)
               // Paid after it was cancelled (or expired): the money is here, the order isn't.
               const afterCancel = (status === 'cancelled' || status === 'expired') && i.received > 0
-              const extra = i.overpaid && i.overpaid > 0 ? refundable(i, i.overpaid) : undefined
+              // The extra still held: overpaid minus what was already refunded on this order.
+              const extraAmt = i.overpaid && i.overpaid > 0 ? extraLeft(i.overpaid, pays.reduce((s, p) => s + (refundedOf?.(p) ?? 0), 0)) : 0
+              const extra = extraAmt + 1e-9 >= MIN_REFUND ? refundable(i, extraAmt) : undefined
               const back = afterCancel ? refundable(i, 0) : undefined
               const remindIn = canRemindAt(i.lastRemindedAt)
               const badges = [
@@ -552,8 +559,8 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
                     { label: 'Copy link', tone: 'neutral', onClick: () => { void copy(paymentLink(i.code)); toast('Link copied', 'success') } },
                     ...(live ? [{ label: 'Share', tone: 'neutral' as const, onClick: () => setSharing(i) }] : []),
                     ...(live && i.customerUsername ? [{ label: remindIn.ok ? 'Remind' : `Remind in ${remindIn.inHours}h`, tone: 'neutral' as const, onClick: () => remind(i), disabled: busy === i.id || !remindIn.ok }] : []),
-                    ...(onRefund && extra && !blocked ? [{ label: `Refund extra ${money(i.overpaid!)}`, tone: 'danger' as const, onClick: () => onRefund(extra, i.overpaid!) }] : []),
-                    ...(onRefund && back && !blocked ? [{ label: 'Refund', tone: 'danger' as const, onClick: () => onRefund(back, back.amount) }] : []),
+                    ...(onRefund && extra && !blocked ? [{ label: `Refund extra ${money(extraAmt)}`, tone: 'danger' as const, onClick: () => onRefund(extra, extraAmt) }] : []),
+                    ...(onRefund && back && !blocked ? [{ label: 'Refund', tone: 'danger' as const, onClick: () => onRefund(back, leftOn(back)) }] : []),
                     ...(live ? [
                       { label: 'Mark completed', tone: 'brand' as const, onClick: () => act(i, 'complete'), disabled: busy === i.id },
                       { label: 'Cancel', tone: 'danger' as const, onClick: () => act(i, 'cancel'), disabled: busy === i.id },
@@ -803,11 +810,16 @@ function StatementBody({ storeName, handle, payments, refunds, settled, waiting,
   const rows = statementRows({ range, payments, refunds, settled, waiting, customersLabel: t.customers })
   const since = rangeStart(range).getTime()
   const inRange = payments.filter(p => Date.parse(p.createdAt) >= since)
-  const refunded = new Set(refunds.map(r => r.paymentId))
+  // A payment can have several refunds: "Refunded" when all of it went back.
+  const refundedBy = groupRefunds(refunds)
+  const status = (p: MerchantPayment) => {
+    const r = refundedSum(refundedBy.get(p.id))
+    return !r ? 'Paid' : isFullyRefunded(p.amount, r) ? 'Refunded' : `Partly refunded ${money(r)}`
+  }
   const name = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
   const pdf = () => printer.print(
     <PrintableStatement storeName={storeName} handle={handle} periodLabel={rangeLabel(range)} rows={rows}
-      payments={inRange.map(p => ({ time: p.createdAt, from: name(p), order: p.orderNumber ?? undefined, chain: chainLabel(p.chain), amount: money(p.amount), status: refunded.has(p.id) ? 'Refunded' : 'Paid' }))} />)
+      payments={inRange.map(p => ({ time: p.createdAt, from: name(p), order: p.orderNumber ?? undefined, chain: chainLabel(p.chain), amount: money(p.amount), status: status(p) }))} />)
   return (
     <>
       <div className="px-5 pt-4 pb-6">
@@ -886,7 +898,7 @@ const HELP_CHAINS = ['Arc_Testnet', 'Base_Sepolia', 'Ethereum_Sepolia', 'Arbitru
 const FAQ = [
   { q: 'A customer says they paid but nothing shows', a: 'Ask for the transaction hash (it is in their wallet history), pick the chain and the order, then Check & attach. MeshPort reads it from the chain and adds it to the order if it paid your wallet.' },
   { q: 'A payment came in without an order', a: 'It shows under "Payments without an order". Pick the open order it belongs to and tap Assign.' },
-  { q: 'How do I refund?', a: 'Open the payment in Payments and tap Refund. The USDC goes back to the wallet that paid, on the chain it was paid on: from your Arc balance for Arc payments; for another chain, from your USDC still there, or from Arc by CCTP to that chain. One refund per payment - a partial refund is final.' },
+  { q: 'How do I refund?', a: 'Open the payment in Payments and tap Refund. The USDC goes back to the wallet that paid, on the chain it was paid on: from your Arc balance for Arc payments; for another chain, from your USDC still there, or from Arc by CCTP to that chain. You can refund a payment in parts, several times, up to what they paid.' },
   { q: 'When does money from other chains reach Arc?', a: 'When you settle. Settlements moves it over CCTP and MeshPort pays the gas; it usually arrives in a few minutes.' },
 ]
 

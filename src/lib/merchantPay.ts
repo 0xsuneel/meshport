@@ -257,11 +257,13 @@ async function myAuthUid(): Promise<string | null> {
 /** Wallets of my approved merchant applications (as stored and lowercased). */
 async function myMerchantWallets(uid: string): Promise<string[]> {
   // Approved merchant wallet(s), plus a business account's own wallet.
-  const [{ data }, { data: me }] = await Promise.all([
+  // Own profile via RPC - users.auth_uid isn't readable from the app.
+  const [{ data }, { data: meRows }] = await Promise.all([
     supabase.from('merchant_applications').select('wallet_address').eq('auth_uid', uid).eq('status', 'approved'),
-    supabase.from('users').select('wallet_address').eq('auth_uid', uid).eq('account_type', 'business'),
+    supabase.rpc('my_profile'),
   ])
-  const raw = [...(data ?? []), ...(me ?? [])].map((r: any) => r.wallet_address).filter(Boolean) as string[]
+  const me = ((Array.isArray(meRows) ? meRows : meRows ? [meRows] : []) as any[]).filter(r => r?.account_type === 'business')
+  const raw = [...(data ?? []), ...me].map((r: any) => r.wallet_address).filter(Boolean) as string[]
   return [...new Set([...raw, ...raw.map(w => w.toLowerCase())])]
 }
 
