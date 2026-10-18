@@ -39,3 +39,7 @@ coverage/
 # gstack local security reports / session state
 .gstack/
 .vercel
+
+# deep-research notes and reports
+research_notes/
+reports/
