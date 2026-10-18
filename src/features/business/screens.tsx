@@ -2,7 +2,8 @@
 // of these over the tab instead of sending the merchant to another page:
 //
 //   ShopQrScreen      the store's fixed QR (customer types the amount)
-//   ReceiveScreen     an amount (keypad) or an itemised bill -> one order shown
+//   ReceiveScreen     Collect payment sheet: Shop QR · Charge (the chat's Request
+//                     form) · Bill (the chat's bill composer) -> one order shown
 //                     as a counter QR and a link to send, live until it's paid
 //   RequestsList      what the store asked to be paid (Payments → My requests)
 //   ReportsScreen     Insights (the selected period by day, hour, customer and
@@ -14,7 +15,7 @@
 // nothing here moves funds out.
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
-import { Store, ChevronDown, Clock, Printer, CalendarClock } from 'lucide-react'
+import { Store, Clock, Printer, CalendarClock } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName } from '@/lib/merchant'
 import { BUSINESS_CATEGORIES, toCategory, useBizTerms, cap } from '@/lib/businessCategories'
@@ -22,19 +23,23 @@ import { useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/ui/Avatar'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import {
-  createPaymentRequest, listMyIntents, cancelPayment, completeOrder, paymentLink, watchPayment, invoiceTotal,
-  type MerchantIntent, type MerchantPayment, type PaymentView, type InvoiceItem,
+  createPaymentRequest, listMyIntents, cancelPayment, completeOrder, paymentLink, watchPayment,
+  type MerchantIntent, type MerchantPayment, type PaymentView,
 } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
 import { timeAgo } from '@/lib/utils'
 import { listItems, rememberItems, deleteItem, type SavedItem } from '@/lib/businessItems'
 import { getShopLimits, setShopLimits } from '@/lib/shop'
 import { SearchField } from '@/components/ui/SearchField'
+import { ActionSheet, SheetPerson, SheetLabel, SheetChips, sheetInputClass, sheetInputStyle } from '@/components/ui/ActionSheet'
+import { RequestAmountForm } from '@/features/merchant/RequestComposer'
+import { BillComposer } from '@/features/merchant/InvoiceComposer'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import {
-  BusinessScreen, QrCard, AmountKeypad, LiveStatus, ShareLink, Field, TextInput, ChipSelect, BillItemsEditor,
+  BusinessScreen, QrCard, LiveStatus, ShareLink, Field, TextInput, ChipSelect,
   RequestRow, InsightsChart, RankList, ProfileStatusCard, DetailList, PrimaryBtn, GhostBtn, Skeleton,
   QrSticker, HourChart, StatTriple, StatementView, PrintableStatement, ReceiptCard, HelpView,
-  type KeypadKey, type LiveStatusKind, type BillItem, type RequestStatus, type StatusCardTone, type StatementRange,
+  type LiveStatusKind, type RequestStatus, type StatusCardTone, type StatementRange,
 } from './ui'
 import { usePrint } from './printArea'
 import { salesByHour, hourLabel, statementRows, rangeLabel, rangeStart, exportPaymentsCsv } from './reports'
@@ -42,7 +47,7 @@ import type { MerchantRefund } from '@/lib/merchantRefunds'
 import { groupRefunds, refundedSum, remainingAfter, isFullyRefunded, extraLeft, MIN_REFUND } from '@/lib/refundTotals'
 import { submitPayment, displayOrderNumber, listUnmatchedDeposits, assignDeposit, type UnmatchedDeposit } from '@/lib/merchantPay'
 import { chainLabel } from './settlement'
-import { DUE_PRESETS, duePresetDate, dueText, isoDay, canRemindAt, remindBill, remindCustomer, type DuePresetId } from '@/lib/businessBills'
+import { dueText, canRemindAt, remindBill, remindCustomer } from '@/lib/businessBills'
 import { logBusiness, type ActivityAction } from '@/lib/businessActivity'
 import { khataByCustomer, customerKey, isOutstanding, totalOutstanding } from '@/lib/businessKhata'
 import { Sheet, ShareChannels } from './ui'
@@ -193,12 +198,18 @@ export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo }:
 const VALID_FOR = [
   { id: '15', label: '15 min' }, { id: '60', label: '1 hour' }, { id: '1440', label: '1 day' },
   { id: '10080', label: '7 days' }, { id: '0', label: 'No limit' },
-]
+] as const
+type ValidFor = typeof VALID_FOR[number]['id']
+type CollectTab = 'qr' | 'charge' | 'bill'
 
-const blank = (): BillItem => ({ name: '', qty: 1, price: '' })
+/** "@Priya.arc " → "priya" (what the customer field holds). */
+const cleanUsername = (v: string) => v.trim().replace(/^@/, '').replace(/\.arc$/i, '').toLowerCase()
 
-/** Receive: an amount (Charge) or an itemised Bill -> one order with its QR.
- *  With `shopQr` it is Business → Collect payment: Shop QR · Charge · Bill. */
+/** Collect payment: a bottom sheet with Shop QR · Charge · Bill. Charge is
+ *  the chat's Request form (RequestAmountForm) and Bill the chat's bill
+ *  composer (BillComposer), so they look and work the same; the order they
+ *  make then shows here as a counter QR and a link, live until it's paid.
+ *  Without `shopQr` (staff mode) only Charge (and Bill for managers). */
 export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   open: boolean; onBack: () => void; storeName: string
   shopQr?: { outlet?: string | null; handle: string }
@@ -206,39 +217,24 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   onChanged?: () => void
 }) {
   const t = useBizTerms()
+  const isDesktop = useMediaQuery('(min-width: 980px)')
   // Business owners hear payments from PaymentReceivedWatcher (every screen).
   const owner = useBusinessTab()
-  const [showQr, setShowQr] = useState(!!shopQr)
   const make = useMakeRequest()
+  const toast = useUIStore(s => s.showToastMessage)
   // Cashiers take counter payments only: up to an hour, no named customer, no bills.
   const { canBill, savedItems = true, log = defaultLog } = useContext(RequestMaker)
+  const validFor: readonly { id: ValidFor; label: string }[] = canBill ? VALID_FOR : VALID_FOR.slice(0, 2)
+  const [tab, setTab] = useState<CollectTab>(shopQr ? 'qr' : 'charge')
+  const [customer, setCustomer] = useState('')
+  const [expiry, setExpiry] = useState<ValidFor>('15')
   // The owner's saved items (products and prices), tapped into a bill.
   const [catalog, setCatalog] = useState<SavedItem[]>([])
-  const [editItems, setEditItems] = useState(false)
   useEffect(() => { if (open && savedItems && canBill) listItems().then(setCatalog).catch(() => {}) }, [open, savedItems, canBill])
-  const addSaved = (it: SavedItem) => setRows(rs => {
-    const at = rs.findIndex(r => r.name.trim().toLowerCase() === it.name.toLowerCase())
-    if (at >= 0) return rs.map((r, i) => i === at ? { ...r, qty: r.qty + 1 } : r)
-    const base = rs.length === 1 && !rs[0].name.trim() && !rs[0].price ? [] : rs
-    return [...base, { name: it.name, qty: 1, price: it.price.toFixed(2) }].slice(0, 50)
-  })
   const removeSaved = async (it: SavedItem) => {
     setCatalog(c => c.filter(x => x.id !== it.id))
     await deleteItem(it.id).catch(() => toast('Could not remove', 'error'))
   }
-  const validFor = canBill ? VALID_FOR : VALID_FOR.slice(0, 2)
-  const toast = useUIStore(s => s.showToastMessage)
-  const [itemised, setItemised] = useState(false)
-  const [amount, setAmount] = useState('')
-  const [note, setNote] = useState('')
-  const [rows, setRows] = useState<BillItem[]>([blank()])
-  const [customer, setCustomer] = useState('')
-  const [expiry, setExpiry] = useState('15')
-  // Pay-by date for a bill (Today / 7 / 15 / 30 days / a picked day).
-  const [dueId, setDueId] = useState<DuePresetId>('none')
-  const [customDue, setCustomDue] = useState('')
-  const [more, setMore] = useState(false)
-  const [busy, setBusy] = useState(false)
   const [intent, setIntent] = useState<MerchantIntent | null>(null)
   const view = useLiveRequest(intent?.code ?? null)
   const link = intent ? paymentLink(intent.code) : null
@@ -246,37 +242,17 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   const paid = view?.status === 'paid'
 
   useEffect(() => { if (paid && !owner) speakPayment(view!.received) }, [paid])
-  const reset = () => {
-    setItemised(false); setShowQr(!!shopQr); setAmount(''); setNote(''); setRows([blank()]); setCustomer(''); setExpiry('15'); setMore(false); setIntent(null)
-    setDueId('none'); setCustomDue('')
-  }
+  const reset = () => { setTab(shopQr ? 'qr' : 'charge'); setCustomer(''); setExpiry('15'); setIntent(null) }
   useEffect(() => { if (!open) reset() }, [open])
-  // A bill usually goes to someone later: open for 7 days by default.
-  const toggleItems = (on: boolean) => { setShowQr(false); setItemised(on); setExpiry(on ? '10080' : '15'); if (!on) { setDueId('none'); setCustomDue('') } }
-  // A bill with a due date stays open until it's paid (no expiry before the due date).
-  const dueDate = canBill && itemised ? (dueId === 'custom' ? (customDue || null) : duePresetDate(dueId)) : null
-  const pickDue = (id: string) => { setDueId(id as DuePresetId); if (id === 'custom' && !customDue) setCustomDue(duePresetDate('7') ?? '') }
-  const due = dueText(dueDate, true)
 
-  const press = (k: KeypadKey) => setAmount(a => {
-    if (k === 'del') return a.slice(0, -1)
-    if (k === '.') return a.includes('.') ? a : (a || '0') + '.'
-    const next = a === '0' ? k : a + k
-    return /\.\d{3,}$/.test(next) || Number(next) > 100000 ? a : next
-  })
-  const items: InvoiceItem[] = rows.map(r => ({ name: r.name, qty: r.qty, price: Number(r.price) || 0 })).filter(i => i.name.trim() && i.qty > 0)
-  const value = itemised ? invoiceTotal(items) : Number(amount) || 0
-  const validLabel = dueDate ? 'until paid' : validFor.find(v => v.id === expiry)?.label ?? '15 min'
-
-  const create = async () => {
-    setBusy(true)
-    try {
-      setIntent(await make({ amount: value, ...(itemised ? { items } : {}), note: note || undefined,
-        customer: canBill && customer ? customer : undefined, expiresInMinutes: dueDate ? null : Number(expiry) || null, dueDate }))
-      onChanged?.()
-      if (itemised && savedItems) void rememberItems(items)
-    } catch (e) { toast(e instanceof Error ? e.message : 'Could not create the payment', 'error') }
-    setBusy(false)
+  const who = canBill ? cleanUsername(customer) : ''
+  const validLabel = validFor.find(v => v.id === expiry)?.label ?? '15 min'
+  /** Makes the order (a failure shows in the form) and shows its QR. */
+  const create = async (p: RequestInput) => {
+    const it = await make({ ...p, customer: who || undefined })
+    setIntent(it)
+    onChanged?.()
+    return it
   }
   const cancel = async () => {
     // Before the first status read the order is still open: cancel it too.
@@ -287,114 +263,130 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
     setIntent(null)
   }
 
-  if (intent) return (
-    <BusinessScreen open={open} title={intent.kind === 'invoice' ? 'Bill' : 'Receive'} onBack={onBack}
-      footer={paid ? <PrimaryBtn onClick={reset}>New payment</PrimaryBtn> : <GhostBtn onClick={cancel}>Cancel payment</GhostBtn>}>
-      <div className="flex flex-col items-center text-center px-5 pt-5 gap-4">
-        <div>
-          <p className="text-xs font-semibold text-text-muted uppercase tracking-widest">
-            {intent.kind === 'invoice' ? `Bill ${intent.orderNumber ?? ''}` : 'Amount due'}
-          </p>
-          <p className="display text-4xl font-bold tabular-nums text-text-primary mt-1">{money(intent.amount)}</p>
-          {intent.note && <p className="text-sm text-text-secondary mt-1">{intent.note}</p>}
-          {intent.customerUsername && <p className="text-xs text-text-muted mt-1">For {intent.customerUsername}.arc</p>}
-          {(() => { const d = dueText(intent.dueDate ?? dueDate, !paid); return d ? <p className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${dueTone[d.tone]}`}><CalendarClock className="size-3.5" /> {d.text}</p> : null })()}
+  const tabs: { id: CollectTab; label: string }[] = [
+    ...(shopQr ? [{ id: 'qr' as const, label: 'Shop QR' }] : []),
+    { id: 'charge', label: 'Charge' },
+    ...(canBill ? [{ id: 'bill' as const, label: 'Bill' }] : []),
+  ]
+  const outlet = shopQr?.outlet ?? null
+  // The store's handle beside its name (not twice when the name is the handle).
+  const handle = shopQr && cleanUsername(shopQr.handle) !== cleanUsername(storeName) ? shopQr.handle : null
+  // The sheet's top: the store (like the person in a chat sheet) + the tabs.
+  const head = (compact: boolean) => (
+    <div>
+      <SheetPerson label="Collect payment" name={storeName} username={handle} compact={compact} onClose={onBack} sub={outlet} />
+      {!compact && tabs.length > 1 && (
+        <div className="flex p-1 rounded-2xl mt-3" role="tablist" aria-label="How to collect" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+          {tabs.map(x => (
+            <button key={x.id} type="button" role="tab" aria-selected={tab === x.id} onClick={() => setTab(x.id)}
+              className={`flex-1 rounded-xl text-[14px] font-semibold transition-colors ${tab === x.id ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted'}`}
+              style={{ height: 36 }}>
+              {x.label}
+            </button>
+          ))}
         </div>
-        {intent.kind === 'invoice' && (
-          <div className="w-full text-left"><DetailList rows={(intent.items ?? items).map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
-        )}
-        <QrCard dataUrl={qr} paid={paid} subtitle={paid ? undefined : `Scan to pay · valid ${intent.expiresAt ? validLabel : 'until paid'}`} />
-        <Live view={view} />
-        {!paid && link && (
-          <div className="w-full">
-            <p className="text-xs text-text-muted mb-2">{t.customer} not here? Send the link</p>
-            <LinkShare url={link} subject={`${storeName}: ${intent.kind === 'invoice' ? 'bill' : 'payment'} ${intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''} for ${money(intent.amount)}`}
-              text={`${storeName}: ${intent.kind === 'invoice' ? `bill ${intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}${(() => { const d = dueText(intent.dueDate ?? dueDate, true); return d ? ` (${d.text.toLowerCase()})` : '' })()}. Pay in USDC:`} />
-          </div>
-        )}
-      </div>
-    </BusinessScreen>
+      )}
+    </div>
+  )
+  const customerInput = (label: string, hint?: string) => (
+    <div>
+      <SheetLabel>{label}</SheetLabel>
+      <input value={customer} onChange={e => setCustomer(e.target.value)} maxLength={40} placeholder="username.arc" aria-label={label}
+        autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false} enterKeyHint="done"
+        onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+        className={sheetInputClass} style={sheetInputStyle} />
+      {hint && <p className="text-[12px] text-text-muted mt-1.5 px-0.5">{hint}</p>}
+    </div>
   )
 
-  const tabs = [
-    ...(shopQr ? [{ id: 'qr', label: 'Shop QR', on: showQr, pick: () => setShowQr(true) }] : []),
-    { id: 'amount', label: shopQr ? 'Charge' : 'Amount', on: !showQr && !itemised, pick: () => toggleItems(false) },
-    ...(canBill ? [{ id: 'bill', label: shopQr ? 'Bill' : 'Itemised bill', on: !showQr && itemised, pick: () => toggleItems(true) }] : []),
-  ]
-  return (
-    <BusinessScreen open={open} title={shopQr ? 'Collect payment' : 'Receive'} onBack={onBack}
-      footer={showQr ? undefined : <PrimaryBtn disabled={!(value > 0) || busy} onClick={create}>
-        {busy ? 'Creating…' : value > 0 ? `${itemised ? 'Create bill' : 'Receive'} ${money(value)}` : itemised ? 'Add items' : 'Enter amount'}</PrimaryBtn>}>
-      {tabs.length > 1 && (
-        <div className="px-5 pt-4">
-          <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="How to collect">
-            {tabs.map(t => (
-              <button key={t.id} type="button" role="tab" aria-selected={t.on} onClick={t.pick}
-                className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${t.on ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
-                {t.label}
-              </button>
-            ))}
-          </div>
+  let body: React.ReactNode
+  if (intent) {
+    const bill = intent.kind === 'invoice'
+    const num = intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''
+    const d = dueText(intent.dueDate ?? null, !paid)
+    const dueShare = dueText(intent.dueDate ?? null, true)
+    body = (
+      <div className="flex flex-col min-h-0 flex-1">
+        <div className="px-5 flex-shrink-0" style={{ paddingTop: isDesktop ? 20 : 4, paddingBottom: 4 }}>
+          <SheetPerson label={bill ? `Bill ${num}` : `Charge ${num}`} name={storeName} username={handle} onClose={onBack} sub={outlet} />
         </div>
-      )}
-      {showQr && shopQr ? (
-        <ShopQrBody active={open && showQr} storeName={storeName} outlet={shopQr.outlet} handle={shopQr.handle} />
-      ) : <>
-      {itemised ? (
-        <div className="flex flex-col gap-5 px-5 pt-5">
-          {catalog.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">Saved items</span>
-                <button type="button" onClick={() => setEditItems(e => !e)} className="text-[13px] font-semibold text-brand-text">{editItems ? 'Done' : 'Edit'}</button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {catalog.map(it => (
-                  <button key={it.id} type="button" onClick={() => (editItems ? removeSaved(it) : addSaved(it))}
-                    className={`inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-full border text-[13px] font-semibold ${editItems ? 'border-danger/40 text-danger' : 'border-border bg-surface text-text-primary active:bg-border/30'}`}>
-                    {it.name} <span className={editItems ? '' : 'text-text-muted font-medium'}>{editItems ? '✕' : money(it.price)}</span>
-                  </button>
-                ))}
-              </div>
+        <div className="flex-1 min-h-0 overflow-y-auto" data-no-drag>
+          <div className="flex flex-col items-center text-center px-5 pt-3 pb-4 gap-4">
+            <div>
+              <p className="display text-4xl font-bold tabular-nums text-text-primary">{money(intent.amount)}</p>
+              {intent.note && <p className="text-sm text-text-secondary mt-1">{intent.note}</p>}
+              {intent.customerUsername && <p className="text-xs text-text-muted mt-1">For {intent.customerUsername}.arc</p>}
+              {d && <p className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${dueTone[d.tone]}`}><CalendarClock className="size-3.5" /> {d.text}</p>}
             </div>
-          )}
-          <Field label="Items" hint={savedItems && catalog.length === 0 ? 'Items you bill are saved here for next time' : undefined}><BillItemsEditor rows={rows} onChange={r => setRows(r.slice(0, 50))} total={money(value)} /></Field>
-          <Field label="Note (optional)"><TextInput value={note} onChange={e => setNote(e.target.value)} maxLength={140} placeholder="Thanks for shopping with us" /></Field>
-        </div>
-      ) : (
-        <AmountKeypad value={amount} onKey={press} note={note} onNote={setNote} />
-      )}
-      <div className="px-5 pt-5 pb-2">
-        <button type="button" onClick={() => setMore(m => !m)} aria-expanded={more}
-          className="w-full flex items-center justify-between min-h-[48px] px-4 rounded-2xl bg-card border border-border text-sm">
-          <span className="text-text-secondary truncate">{due ? <b className={`font-semibold ${due.tone === 'neutral' ? 'text-text-primary' : dueTone[due.tone]}`}>{due.text}</b> : <>Valid for <b className="font-semibold text-text-primary">{validLabel}</b></>}{canBill && customer ? <> · for <b className="font-semibold text-text-primary">{customer.replace(/\.arc$/, '')}.arc</b></> : null}</span>
-          <ChevronDown className={`size-4 text-text-muted transition-transform ${more ? 'rotate-180' : ''}`} />
-        </button>
-        {more && (
-          <div className="flex flex-col gap-4 pt-4">
-            {itemised && canBill && (
-              <Field label="Due date" hint={dueDate ? 'The bill stays open until it is paid. Reminders go out on the due date.' : undefined}>
-                <div className="flex flex-col gap-2">
-                  <ChipSelect options={DUE_PRESETS.map(d => ({ id: d.id, label: d.label }))} value={dueId} onChange={pickDue} />
-                  {dueId === 'custom' && (
-                    <TextInput type="date" value={customDue} min={isoDay(new Date())} max={isoDay(new Date(Date.now() + 365 * 86_400_000))}
-                      onChange={e => setCustomDue(e.target.value)} aria-label="Due date" />
-                  )}
-                </div>
-              </Field>
+            {bill && (intent.items?.length ?? 0) > 0 && (
+              <div className="w-full text-left"><DetailList rows={intent.items!.map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
             )}
-            {!dueDate && <Field label="Valid for"><ChipSelect options={validFor} value={expiry} onChange={setExpiry} /></Field>}
-            {canBill && (
-              <Field label={`${t.customer} (optional)`} hint="Their MeshPort username - they get it in their notifications.">
-                <TextInput value={customer} onChange={e => setCustomer(e.target.value)} placeholder="username.arc" />
-              </Field>
+            <QrCard dataUrl={qr} paid={paid} subtitle={paid ? undefined : `Scan to pay · valid ${intent.expiresAt && !intent.dueDate ? (bill ? '7 days' : validLabel) : 'until paid'}`} />
+            <Live view={view} />
+            {!paid && link && (
+              <div className="w-full text-left">
+                <p className="text-xs text-text-muted mb-2">{t.customer} not here? Send the link</p>
+                <LinkShare url={link} subject={`${storeName}: ${bill ? 'bill' : 'payment'} ${num} for ${money(intent.amount)}`}
+                  text={`${storeName}: ${bill ? `bill ${num} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}${dueShare ? ` (${dueShare.text.toLowerCase()})` : ''}. Pay in USDC:`} />
+              </div>
             )}
           </div>
-        )}
+        </div>
+        <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: 10, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 18px)' }}>
+          {paid ? (
+            <button type="button" onClick={() => setIntent(null)}
+              className="w-full rounded-2xl text-[16px] font-bold text-white active:scale-[0.98] transition-transform" style={{ height: 52, background: 'var(--brand)' }}>
+              New payment
+            </button>
+          ) : (
+            <button type="button" onClick={cancel}
+              className="w-full rounded-2xl text-[15px] font-semibold active:scale-[0.98] transition-transform"
+              style={{ height: 52, background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)', color: 'var(--text-secondary)' }}>
+              Cancel payment
+            </button>
+          )}
+        </div>
       </div>
-      </>}
-    </BusinessScreen>
-  )
+    )
+  } else if (tab === 'qr' && shopQr) {
+    body = (
+      <div className="flex flex-col min-h-0 flex-1">
+        <div className="px-5 flex-shrink-0" style={{ paddingTop: isDesktop ? 20 : 4 }}>{head(false)}</div>
+        <div className="flex-1 min-h-0 overflow-y-auto" data-no-drag>
+          <ShopQrBody active={open} storeName={storeName} outlet={outlet} handle={shopQr.handle} />
+        </div>
+      </div>
+    )
+  } else if (tab === 'bill' && canBill) {
+    body = (
+      <BillComposer open={open} isDesktop={isDesktop} header={head} submitLabel="Create bill" busyLabel="Creating…"
+        footerNote={due => `${who ? `${who}.arc gets it in their notifications` : 'Show the QR or send the link'}${due ? ` · ${due}` : ''}`}
+        saved={savedItems ? { items: catalog, onRemove: removeSaved, hint: 'Items you bill are saved here for next time' } : undefined}
+        extra={<div className="mt-3 mb-1">{customerInput('Bill to (optional)')}</div>}
+        onCreate={async ({ items, total, note, dueDate }) => {
+          // Same as a chat bill: open 7 days, or until paid with a due date.
+          await create({ amount: total, items, note, expiresInMinutes: dueDate ? null : 7 * 24 * 60, dueDate })
+          if (savedItems) void rememberItems(items)
+        }} />
+    )
+  } else {
+    body = (
+      <RequestAmountForm open={open} isDesktop={isDesktop} header={head} verb="Charge" busyText="Creating…" places={2}
+        ariaLabel="Amount to charge in USDC" hint={`${t.customer} scans the QR or opens the link`}
+        options={{
+          summary: <>Valid for <b className="font-semibold text-text-primary">{validLabel}</b>{canBill && (who
+            ? <> · for <b className="font-semibold text-text-primary">{who}.arc</b></>
+            : <> · any {t.customer.toLowerCase()}</>)}</>,
+          panel: <>
+            <div><SheetLabel>Valid for</SheetLabel><SheetChips<ValidFor> label="Valid for" options={validFor} value={expiry} onChange={setExpiry} /></div>
+            {canBill && customerInput(`${t.customer} (optional)`, 'Their MeshPort username - they get it in their notifications.')}
+          </>,
+        }}
+        onSubmit={async (amount, note) => { await create({ amount, note: note || undefined, expiresInMinutes: Number(expiry) || null }) }} />
+    )
+  }
+
+  return <ActionSheet open={open} onClose={onBack} isDesktop={isDesktop} id="biz-collect" fixed>{body}</ActionSheet>
 }
 
 // ── Requests ─────────────────────────────────────────────────────────────
