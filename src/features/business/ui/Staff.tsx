@@ -255,10 +255,12 @@ export function StaffForm({
 export interface StaffBannerProps {
   ownerStore: string
   role: StaffRole
+  /** Not accepted yet: the button accepts the invite. */
+  invited?: boolean
   onOpen: () => void
 }
 
-export function StaffBanner({ ownerStore, role, onOpen }: StaffBannerProps) {
+export function StaffBanner({ ownerStore, role, invited, onOpen }: StaffBannerProps) {
   const legend = ROLE_LEGEND[role]
   return (
     <div className="mx-5 bg-card border border-border rounded-2xl px-4 py-4 flex items-center gap-3">
@@ -267,7 +269,7 @@ export function StaffBanner({ ownerStore, role, onOpen }: StaffBannerProps) {
       </span>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-text-primary">
-          You're a {legend.label.toLowerCase()} at
+          {invited ? 'Invited as a' : "You're a"} {legend.label.toLowerCase()} at
         </p>
         <p className="text-sm text-text-secondary truncate">{ownerStore}</p>
       </div>
@@ -276,8 +278,7 @@ export function StaffBanner({ ownerStore, role, onOpen }: StaffBannerProps) {
         onClick={onOpen}
         className="shrink-0 h-9 px-4 rounded-xl bg-brand text-white text-sm font-semibold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
       >
-        Open
-        <ExternalLink className="size-3.5" />
+        {invited ? 'Accept' : <>Open<ExternalLink className="size-3.5" /></>}
       </button>
     </div>
   )

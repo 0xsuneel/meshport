@@ -9,13 +9,15 @@ import {
   paymentMethodSummary, inr, type BuyerOffer, type P2PTrade, type P2PPaymentMethod, type P2PMessage,
 } from '@/lib/businessCashOut'
 import { listStores, saveStore, deleteStore, listStaff, inviteStaff, updateStaff, removeStaff, type Store, type StaffMember, type StaffRole } from '@/lib/businessTeam'
-import { BUSINESS_CATEGORIES, useBizTerms } from '@/lib/businessCategories'
+import { BUSINESS_CATEGORIES, toCategory, useBizTerms } from '@/lib/businessCategories'
+import { useMerchant } from '@/lib/merchant'
 import {
   BusinessScreen, CashOutHero, CashOutAmount, BuyerOfferList, PayoutAccountPicker, PayoutAccountForm, CashOutTradeView, CashOutHistory,
   StoresView, StoreForm, StaffView, StaffForm, PasscodeSheet, PrimaryBtn, Skeleton,
   type PayoutMethod, type TradeStage, type CashOutHistoryStatus,
 } from './ui'
 import { unlockKey } from './settlement'
+import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
@@ -98,6 +100,7 @@ export function CashOutScreen({ open, onBack }: { open: boolean; onBack: () => v
       try {
         await unlockKey(code)
         const t = await startCashOut({ buyer, userId: user.id, wallet, amountUsdc: value, account: chosenAccount })
+        refreshBalancesAfterTx(wallet, { spent: value })
         setAmount(''); setTradeId(t.id); load()
       } catch (e) { toast(e instanceof Error ? e.message : 'Could not start the cash out', 'error') }
       setBusy(false)
@@ -230,6 +233,8 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
   paymentsByStore: Map<string, { total: number; count: number }>
 }) {
   const toast = useUIStore(s => s.showToastMessage)
+  // A new store starts with the category the business applied with.
+  const defaultType = toCategory(useMerchant().application?.businessType)
   const [stores, setStores] = useState<Store[] | null>(null)
   const [edit, setEdit] = useState<{ id?: string; name: string; type: string; address: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -263,7 +268,7 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
             return { id: s.id, name: s.name, type: s.type ?? 'Store', address: s.address ?? undefined, isDefault: s.isDefault,
               payments: p ? `${money(p.total)} · ${p.count} payment${p.count === 1 ? '' : 's'}` : 'No payments yet' }
           })}
-            onAdd={() => setEdit({ name: '', type: STORE_TYPES[0], address: '' })}
+            onAdd={() => setEdit({ name: '', type: defaultType, address: '' })}
             onEdit={id => { const s = stores.find(x => x.id === id); if (s) setEdit({ id, name: s.name, type: s.type ?? STORE_TYPES[0], address: s.address ?? '' }) }}
             onQr={onQr} addLockedNote={addLockedNote} />
         )}

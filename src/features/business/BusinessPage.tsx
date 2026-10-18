@@ -20,7 +20,7 @@ import { useAuthStore, useWalletStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLogoSrc } from '@/lib/chainLogos'
-import { listMyPayments, listMyIntents, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, createPaymentRequest, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
+import { listMyPayments, listMyIntents, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, createPaymentRequest, displayOrderNumber, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
 import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, VOICE_LANGS, type VoiceLang } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockKey } from './settlement'
@@ -34,6 +34,8 @@ import { ToolsScreen, type ToolId } from './toolsScreen'
 import { StaffModePage } from './staffMode'
 import { ActivityScreen } from './activityScreen'
 import { logBusiness } from '@/lib/businessActivity'
+import { readArcBalanceOrThrow } from '@/blockchain/BlockchainManager'
+import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useUIStore } from '@/store'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
@@ -190,7 +192,7 @@ function OwnerBusinessPage() {
   // A payment on another chain is "to settle" while that chain still holds USDC.
   const toRow = (p: MerchantPayment): Payment => ({
     id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain), chainLogo: chainLogoSrc(p.chain),
-    time: p.createdAt, order: p.orderNumber ?? undefined, late: !!p.late, blocked: !!p.screenFlag,
+    time: p.createdAt, order: p.orderNumber ? displayOrderNumber(p.orderNumber) : undefined, late: !!p.late, blocked: !!p.screenFlag,
     status: refundedIds.has(p.id) ? 'refunded' as const
       : p.chain !== 'Arc_Testnet' && p.status !== 'collected' && waitingOn.has(p.chain) ? 'to_settle' as const : 'received' as const,
     partlyRefunded: !refundedIds.has(p.id) && refundedOf(p.id) > 0 ? money(refundedOf(p.id)) : undefined,
@@ -209,6 +211,25 @@ function OwnerBusinessPage() {
     netOf(storeRaw.filter(p => inPrevious(p.createdAt, period))).reduce((s, p) => s + p.amount, 0)), [today.total, storeRaw, period, netOf])
   const refundedInPeriod = refunds.filter(r => inPeriod(r.createdAt, period) && (!activeStore || storeRaw.some(p => p.id === r.paymentId)))
   const arcBalance = useWalletStore(s => s.balance)
+  // The Arc balance is read here too (on open, when the app is back in front,
+  // after a settle arrives, a refund, or leaving Cash out / Payouts) - not only
+  // by Home's poll. Same reads as Home; a failed read keeps the shown balance.
+  const refreshArc = useCallback((afterTx = false) => {
+    if (!walletAddress) return
+    if (afterTx) { refreshBalancesAfterTx(walletAddress); return }
+    readArcBalanceOrThrow(walletAddress, 'USDC').then(b => {
+      if (useAuthStore.getState().walletAddress === walletAddress) useWalletStore.getState().setBalance(b)
+    }).catch(() => {})
+  }, [walletAddress])
+  useEffect(() => {
+    refreshArc()
+    const onFront = () => { if (document.visibilityState === 'visible') refreshArc() }
+    document.addEventListener('visibilitychange', onFront)
+    window.addEventListener('focus', onFront)
+    return () => { document.removeEventListener('visibilitychange', onFront); window.removeEventListener('focus', onFront) }
+  }, [refreshArc])
+  const settledArrived = settle.run.filter(r => r.stage === 'arrived').length
+  useEffect(() => { if (settledArrived > 0) refreshArc(true) }, [settledArrived, refreshArc])
   const autoSettle = useAutoSettle(settle.total)
 
   // ── Sheets ────────────────────────────────────────────────────────────
@@ -220,6 +241,12 @@ function OwnerBusinessPage() {
   const [pinError, setPinError] = useState<string | undefined>()
 
   const [screen, setScreen] = useState<ScreenId | null>(() => query.get('apply') ? 'profile' : null)
+  // Back from Cash out or Payouts: USDC may have moved (escrow, staff pay).
+  const prevScreen = useRef(screen)
+  useEffect(() => {
+    if ((prevScreen.current === 'cashout' || prevScreen.current === 'payouts') && screen !== prevScreen.current) refreshArc(true)
+    prevScreen.current = screen
+  }, [screen, refreshArc])
   // Until MeshPort approves the business, only the apply banner, the
   // application (Business profile) and Help are open.
   const locked = !isMerchant
@@ -324,6 +351,7 @@ function OwnerBusinessPage() {
       const route: RefundRoute = refundFor.chain === 'Arc_Testnet' ? 'arc' : refundDest === 'origin' ? 'origin' : 'chain'
       await refundPayment({ paymentId: refundFor.id, customer: refundFor.from, amount, reason, privateKey: key, route, chain: refundFor.chain, remaining: refundLeft })
       await loadRefunds()
+      refreshArc(true)
       toast(`Refunded ${money(amount)} to ${who(refundFor)} on ${chainLabel(refundFor.chain)}`, 'success')
       setRefundFor(null)
     } catch (e) { setRefundError(e instanceof Error ? e.message : 'Refund failed') }

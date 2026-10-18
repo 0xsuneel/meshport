@@ -165,6 +165,8 @@ const refundRef = (paymentId: string, n = 1) => keccak256(toBytes(n <= 1 ? payme
 const MAX_REFUNDS = 200
 
 const usd = (n: number) => '$' + n.toFixed(2)
+/** ORD-100014 → ORD-00014, as the app shows order numbers (src/lib/orderLabels.ts). */
+const orderDisplay = (n: string) => { const m = /^ORD-(\d+)$/i.exec(n); const k = m ? Number(m[1]) - 100000 : 0; return k > 0 ? `ORD-${String(k).padStart(5, '0')}` : n }
 
 // Stored chain names that mean the same chain.
 const chainKey = (c: string) => c === 'Polygon_Amoy_Testnet' ? 'Polygon_Sepolia' : c
@@ -353,7 +355,7 @@ Deno.serve(async (req: Request) => {
     await db.from('notifications').insert({
       user_id: target.customerUserId, type: 'merchant_refund', read: false,
       title: `Refund from ${target.merchantName || 'a merchant'}`,
-      message: `${usd(found.amount)} USDC was refunded${target.orderNumber ? ` for ${target.orderNumber}` : ''}${route !== 'contract' ? ` on ${target.chain.replace(/_(Sepolia|Testnet|Fuji)$/, '').replace(/_/g, ' ')}` : ''}${found.reason ? ` · ${found.reason}` : ''}`,
+      message: `${usd(found.amount)} USDC was refunded${target.orderNumber ? ` for ${orderDisplay(target.orderNumber)}` : ''}${route !== 'contract' ? ` on ${target.chain.replace(/_(Sepolia|Testnet|Fuji)$/, '').replace(/_/g, ' ')}` : ''}${found.reason ? ` · ${found.reason}` : ''}`,
     }).then(() => {}, () => {})
   }
   return jsonFor(req, { refund: row })

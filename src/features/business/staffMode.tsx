@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useUIStore } from '@/store'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { myMemberships, acceptInvite, staffCreateRequest, staffPayments, type Membership } from '@/lib/businessTeam'
-import type { MerchantPayment } from '@/lib/merchantPay'
+import { displayOrderNumber, type MerchantPayment } from '@/lib/merchantPay'
 import { RequestMaker, ShopQrScreen, ReceiveScreen } from './screens'
 import { setDueDate } from '@/lib/businessBills'
 import { logBusiness } from '@/lib/businessActivity'
@@ -36,7 +36,7 @@ export function StaffModePage() {
   }, [active?.id])
 
   const payments: Payment[] = useMemo(() => raw.map(p => ({ id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain),
-    chainLogo: chainLogoSrc(p.chain), time: p.createdAt, order: p.orderNumber ?? undefined, late: !!p.late, blocked: !!p.screenFlag, status: 'received' as const })), [raw])
+    chainLogo: chainLogoSrc(p.chain), time: p.createdAt, order: p.orderNumber ? displayOrderNumber(p.orderNumber) : undefined, late: !!p.late, blocked: !!p.screenFlag, status: 'received' as const })), [raw])
   const today = raw.filter(p => new Date(p.createdAt).toDateString() === new Date().toDateString())
   const total = today.reduce((s, p) => s + p.amount, 0)
 
@@ -47,7 +47,7 @@ export function StaffModePage() {
       <h1 className="text-xl font-bold text-text-primary">Business</h1>
       {list.length === 0 && <p className="text-sm text-text-secondary">Business is for business accounts. If a shop added you as staff, their invite shows here.</p>}
       {list.map(m => (
-        <StaffBanner key={m.id} ownerStore={m.storeName ? `${m.ownerName} · ${m.storeName}` : m.ownerName} role={m.role}
+        <StaffBanner key={m.id} ownerStore={m.storeName ? `${m.ownerName} · ${m.storeName}` : m.ownerName} role={m.role} invited={m.status === 'invited'}
           onOpen={async () => {
             if (m.status === 'invited') {
               try { await acceptInvite(m.id); toast(`You joined ${m.ownerName}`, 'success'); await load() }

@@ -553,10 +553,9 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
                     ...(live && i.customerUsername ? [{ label: remindIn.ok ? 'Remind' : `Remind in ${remindIn.inHours}h`, tone: 'neutral' as const, onClick: () => remind(i), disabled: busy === i.id || !remindIn.ok }] : []),
                     ...(onRefund && extra && !blocked ? [{ label: `Refund extra ${money(extraAmt)}`, tone: 'danger' as const, onClick: () => onRefund(extra, extraAmt) }] : []),
                     ...(onRefund && back && !blocked ? [{ label: 'Refund', tone: 'danger' as const, onClick: () => onRefund(back, leftOn(back)) }] : []),
-                    ...(live ? [
-                      { label: 'Mark completed', tone: 'brand' as const, onClick: () => act(i, 'complete'), disabled: busy === i.id },
-                      { label: 'Cancel', tone: 'danger' as const, onClick: () => act(i, 'cancel'), disabled: busy === i.id },
-                    ] : []),
+                    ...(live ? [{ label: 'Mark completed', tone: 'brand' as const, onClick: () => act(i, 'complete'), disabled: busy === i.id }] : []),
+                    // Only an order nothing was paid on can be cancelled (the server refuses the rest).
+                    ...(status === 'open' && i.received <= 0 ? [{ label: 'Cancel', tone: 'danger' as const, onClick: () => act(i, 'cancel'), disabled: busy === i.id }] : []),
                   ]} />
               )
             })}
@@ -811,7 +810,7 @@ function StatementBody({ storeName, handle, payments, refunds, settled, waiting,
   const name = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
   const pdf = () => printer.print(
     <PrintableStatement storeName={storeName} handle={handle} periodLabel={rangeLabel(range)} rows={rows}
-      payments={inRange.map(p => ({ time: p.createdAt, from: name(p), order: p.orderNumber ?? undefined, chain: chainLabel(p.chain), amount: money(p.amount), status: status(p) }))} />)
+      payments={inRange.map(p => ({ time: p.createdAt, from: name(p), order: p.orderNumber ? displayOrderNumber(p.orderNumber) : undefined, chain: chainLabel(p.chain), amount: money(p.amount), status: status(p) }))} />)
   return (
     <>
       <div className="px-5 pt-4 pb-6">
@@ -861,7 +860,7 @@ export function ReceiptScreen({ open, onBack, storeName, handle, payment, refund
   const from = payment.customerUsername ? `${payment.customerUsername}.arc` : `${payment.from.slice(0, 6)}…${payment.from.slice(-4)}`
   const card = (printable: boolean) => (
     <ReceiptCard storeName={storeName} handle={handle} amount={money(payment.amount)} from={from} chainLabel={chainLabel(payment.chain)}
-      order={payment.orderNumber ?? undefined} time={payment.createdAt} txHash={payment.txHash} refunded={refunded} printable={printable} />
+      order={payment.orderNumber ? displayOrderNumber(payment.orderNumber) : undefined} time={payment.createdAt} txHash={payment.txHash} refunded={refunded} printable={printable} />
   )
   const text = [`Receipt from ${storeName} (${handle})`, `${money(payment.amount)} USDC${refunded ? ' - refunded' : ''}`,
     payment.orderNumber ? `${cap(terms.order)} ${displayOrderNumber(payment.orderNumber)}` : '', `Paid by ${from} on ${chainLabel(payment.chain)}`,
@@ -921,7 +920,7 @@ export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void
     try {
       const v = await submitPayment(order, chain, txHash.trim(), { merchantVerify: true })
       setResult(v.status === 'paid' || v.status === 'processing' || v.status === 'partially_paid'
-        ? { tone: 'success', title: 'Payment found', text: `${money(v.received)} attached to ${v.orderNumber ?? 'the order'}.` }
+        ? { tone: 'success', title: 'Payment found', text: `${money(v.received)} attached to ${v.orderNumber ? displayOrderNumber(v.orderNumber) : 'the order'}.` }
         : { tone: 'warning', title: 'Still checking', text: 'The transaction is not confirmed yet. Try again in a minute.' })
       load()
     } catch (e) {
@@ -940,7 +939,7 @@ export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void
       <div className="px-5 pt-5 pb-6">
         <HelpView chains={HELP_CHAINS.map(id => ({ id, label: chainLabel(id), logo: chainLogoSrc(id) }))} chain={chain} onChain={setChain}
           txHash={txHash} onTxHash={setTxHash}
-          orders={orders.map(i => ({ code: i.code, label: `${i.orderNumber ?? cap(t.order)} · ${money(i.amount - i.received)}` }))} order={order} onOrder={setOrder}
+          orders={orders.map(i => ({ code: i.code, label: `${i.orderNumber ? displayOrderNumber(i.orderNumber) : cap(t.order)} · ${money(i.amount - i.received)}` }))} order={order} onOrder={setOrder}
           busy={busy} result={result} onCheck={check}
           unmatched={unmatched.map(u => ({ id: u.id, amount: money(u.amount), from: `${u.from.slice(0, 6)}…${u.from.slice(-4)}`, chainLabel: chainLabel(u.chain), when: u.createdAt }))}
           onAssign={id => { void assign(id) }} faq={FAQ} />
@@ -1124,7 +1123,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
                     className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-border/20">
                     <img src={chainLogoSrc(p.chain)} alt="" className="size-8 rounded-full shrink-0" />
                     <span className="flex-1 min-w-0">
-                      <span className="block text-sm font-medium text-text-primary truncate">{p.orderNumber ?? chainLabel(p.chain)}</span>
+                      <span className="block text-sm font-medium text-text-primary truncate">{p.orderNumber ? displayOrderNumber(p.orderNumber) : chainLabel(p.chain)}</span>
                       <span className="block text-xs text-text-muted">{chainLabel(p.chain)} · {new Date(p.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
                     </span>
                     <span className={`text-sm font-semibold tabular-nums ${refundedIds.has(p.id) ? 'text-text-muted line-through' : 'text-brand-text'}`}>+{money(p.amount)}</span>

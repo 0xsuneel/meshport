@@ -1,6 +1,6 @@
 // Business → numbers worked out from the store's own payments: day-over-day
 // trend, sales by hour, and the CSV export. Runs on this device only.
-import type { MerchantPayment } from '@/lib/merchantPay'
+import { displayOrderNumber, type MerchantPayment } from '@/lib/merchantPay'
 import { chainLabel } from './settlement'
 
 const sameDay = (iso: string, d: Date) => new Date(iso).toDateString() === d.toDateString()
@@ -35,7 +35,7 @@ export function exportPaymentsCsv(payments: MerchantPayment[], storeName: string
     ['Date', 'Time', 'Order', 'Customer', 'From address', 'Chain', 'Amount (USDC)', 'Status', 'Refunded (USDC)', 'Transaction'],
     ...payments.map(p => {
       const d = new Date(p.createdAt)
-      return [d.toLocaleDateString('en-CA'), d.toLocaleTimeString('en-GB'), p.orderNumber, p.customerUsername ? `${p.customerUsername}.arc` : '',
+      return [d.toLocaleDateString('en-CA'), d.toLocaleTimeString('en-GB'), p.orderNumber ? displayOrderNumber(p.orderNumber) : null, p.customerUsername ? `${p.customerUsername}.arc` : '',
         p.from, chainLabel(p.chain), p.amount.toFixed(2), refunded.has(p.id) ? (refunded.get(p.id)! >= p.amount - 1e-6 ? 'Refunded' : 'Partly refunded') : p.status === 'collected' || p.chain === 'Arc_Testnet' ? 'On Arc' : 'On ' + chainLabel(p.chain), refunded.get(p.id)?.toFixed(2) ?? '', p.txHash]
     }),
   ]
