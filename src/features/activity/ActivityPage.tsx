@@ -15,7 +15,7 @@ import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { SearchField } from '@/components/ui/SearchField'
 import { useMerchant, isMerchantClaim } from '@/lib/merchant'
-import { orderTitle, displayOrderNumber, type OrderKind } from '@/lib/merchantPay'
+import { orderTitle, displayOrderNumber, shortOrderNumber, type OrderKind } from '@/lib/merchantPay'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
 import { TokenMenu } from '@/components/ui/TokenMenu'
@@ -284,7 +284,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   const recoveredTitle = recoveredViaLabel(record)
   const title = isClaim && metadata.auto_convert ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
               : isClaim && isMerchantClaim(record as any) ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
-              : merchantOrder ? paidOrderTitle(metadata, merchantOrder, isReceive)
+              : merchantOrder ? paidOrderTitle(metadata, merchantOrder, isReceive, true)
               : recoveredTitle ? recoveredTitle
               // A rewards claim that didn't go through (lib/rewards.ts).
               : isReceive && isFailed && metadata.receiveKind === 'reward_claim' ? 'Reward claim'
@@ -355,11 +355,13 @@ export function activityOrderKind(md: any): OrderKind | null {
   if (md?.merchantPersonal === false) return 'merchant_request'
   return null
 }
-/** Payer: "Paid Bill ORD-00042"; receiver: "Bill ORD-00042 Received". */
-const paidOrderTitle = (md: any, number: string, received: boolean) => {
+/** Payer: "Paid Bill ORD-00042"; receiver: "Bill ORD-00042 Received".
+ *  `short` (history rows): "Paid Bill #42". */
+const paidOrderTitle = (md: any, number: string, received: boolean, short = false) => {
   const kind = activityOrderKind(md)
-  if (!kind) return received ? `${displayOrderNumber(number)} Received` : `Paid ${displayOrderNumber(number)}`
-  return orderTitle(kind, number, received ? { received: true } : { paid: true })
+  const no = short ? shortOrderNumber(number) : displayOrderNumber(number)
+  if (!kind) return received ? `${no} Received` : `Paid ${no}`
+  return orderTitle(kind, number, received ? { received: true, short } : { paid: true, short })
 }
 
 /** Bring / Transfer out: what was sent, what landed, and the fees (once known). */
