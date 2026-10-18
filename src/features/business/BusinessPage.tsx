@@ -11,7 +11,7 @@
 // The UI kit in ./ui was designed with Arc Studio.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { bizTerms } from '@/lib/businessCategories'
+import { useBizTerms } from '@/lib/businessCategories'
 import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
 import { copyToClipboard } from '@/lib/utils'
@@ -214,7 +214,7 @@ function OwnerBusinessPage() {
   // application (Business profile) and Help are open.
   const locked = !isMerchant
   // Labels follow the business's category (a café has guests, a freelancer invoices).
-  const terms = bizTerms(application?.businessType)
+  const terms = useBizTerms()
   useEffect(() => {
     if (!locked) return
     if (tab !== 'overview') setTab('overview')
@@ -538,7 +538,7 @@ function OwnerBusinessPage() {
       <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
       <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={storeName}
         shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} />
-      <CustomersScreen title={terms.customers} open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundOf.has(p.id) && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
+      <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundOf.has(p.id) && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
         onPayment={p => setDetail(toRow(p))} onChat={u => { setScreen(null); void openChat(u) }} />
       <ReportsScreen open={screen === 'reports'} onBack={back}
         insights={{ payments: netOf(storeRaw), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null }}
