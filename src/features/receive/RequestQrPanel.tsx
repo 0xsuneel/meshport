@@ -18,6 +18,8 @@ import {
 import { AmountHero } from '@/components/ui/AmountHero'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { drawMeshportQr } from '@/lib/qrLogo'
+import { useChatCardSender } from '@/hooks/useChatCardSender'
+import { ChatSentLine } from '@/components/ui/ChatSentLine'
 
 const EXPIRY = [{ label: '15 min', min: 15 }, { label: '1 hour', min: 60 }, { label: '24 hours', min: 1440 }, { label: 'No expiry', min: 0 }]
 const box: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: 'var(--shadow-1)' }
@@ -76,6 +78,9 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
     return () => { cancelled = true; clearTimeout(t) }
   }, [customer, walletAddress])
   const [live, setLive] = useState<PaymentView | null>(null)
+  // With a customer, the request's card goes into your chat with them in the
+  // background (lib/chatSend.ts) - this screen keeps showing the QR.
+  const sender = useChatCardSender()
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const link = order ? orderPayLink(order.code, order.orderNumber) : ''
@@ -100,17 +105,12 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
       }
       const who = match.state === 'found' && match.user ? match.user.username.replace(/\.arc$/i, '').toLowerCase() : ''
       const it = await createPaymentRequest({ amount: n, customer: who || undefined, note, expiresInMinutes: expiry || null })
-      // With a username: the request goes straight into your chat with them
-      // as a payment card (amount + order number fixed for them).
+      // With a username: the request goes into your chat with them as a
+      // payment card (amount + order number fixed for them), sent in the
+      // background while the QR shows here.
       if (who && match.user && user?.id) {
-        const { ensureConversation } = await import('@/lib/chatService')
-        const convId = await ensureConversation(String(user.id), match.user.id).catch(() => null)
-        if (convId) {
-          navigate(`/chat/${convId}`, { state: { autoSend: paymentRequestMessage(it, formatAmount(it.amount)) } })
-          return
-        }
-        showToastMessage(`${orderTitle(orderKindOf(it), orderLabel(it))} created - couldn't open the chat`, 'error')
-      }
+        void sender.send({ id: match.user.id, name: match.user.display_name || `${who}.arc` }, paymentRequestMessage(it, formatAmount(it.amount)))
+      } else sender.reset()
       setLive(null); setOrder(it)
     } catch (e) {
       showToastMessage(e instanceof Error ? e.message : 'Could not create the request', 'error')
@@ -159,14 +159,12 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
   const sendInChat = async () => {
     if (!order?.customerUsername || !user?.id) return
     try {
-      const [{ getUserByUsername }, { ensureConversation }] = await Promise.all([import('@/lib/supabase'), import('@/lib/chatService')])
+      const { getUserByUsername } = await import('@/lib/supabase')
       const other = await getUserByUsername(order.customerUsername)
       if (!other?.id) throw new Error(`${order.customerUsername}.arc isn't on MeshPort`)
-      const convId = await ensureConversation(String(user.id), String(other.id))
-      if (!convId) throw new Error('Could not open the chat')
-      navigate(`/chat/${convId}`, { state: { autoSend: paymentRequestMessage(order, formatAmount(order.amount)) } })
+      void sender.send({ id: String(other.id), name: other.display_name || `${order.customerUsername.replace(/\.arc$/i, '')}.arc` }, paymentRequestMessage(order, formatAmount(order.amount)))
     } catch (e) {
-      showToastMessage(e instanceof Error ? e.message : 'Could not open the chat', 'error')
+      showToastMessage(e instanceof Error ? e.message : 'Could not send in chat', 'error')
     }
   }
   const cancel = async () => {
@@ -264,7 +262,10 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
             <button onClick={async () => { const ok = await copyToClipboard(link); showToastMessage(ok ? 'Link copied' : 'Could not copy', ok ? 'success' : 'error') }} style={ghost}><Copy size={15} /> Copy link</button>
           </div>
         </>}
-        {order.customerUsername && !paid && !closed && (
+        {sender.status.state !== 'idle' && (
+          <ChatSentLine status={sender.status} onRetry={sender.retry} onOpen={id => navigate(`/chat/${id}`)} className="w-full" />
+        )}
+        {order.customerUsername && !paid && !closed && sender.status.state === 'idle' && (
           <button onClick={sendInChat} style={{ ...ghost, flex: 'none' }}><MessageCircle size={15} /> Send to {order.customerUsername}.arc in chat</button>
         )}
         <div style={{ display: 'flex', gap: 8 }}>
@@ -274,7 +275,7 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
           {paid && (
             <button onClick={() => navigate('/activity')} style={ghost}>View in Activity</button>
           )}
-          <button onClick={() => { if (onNewRequest) { onNewRequest(); return } setOrder(null); setLive(null); setAmount(''); setNote('') }} style={{ ...primary, flex: 2 }}><Plus size={16} /> New request</button>
+          <button onClick={() => { sender.reset(); if (onNewRequest) { onNewRequest(); return } setOrder(null); setLive(null); setAmount(''); setNote('') }} style={{ ...primary, flex: 2 }}><Plus size={16} /> New request</button>
         </div>
       </div>
     )

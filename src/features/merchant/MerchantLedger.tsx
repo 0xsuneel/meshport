@@ -13,7 +13,7 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { formatAmount, timeAgo, copyToClipboard } from '@/lib/utils'
 import {
   createPaymentRequest, listMyIntents, listMyPayments, subscribeMerchantPayments, paymentLink, orderPayLink, orderChainPayLink,
-  cancelPayment, submitPayment, STATUS_LABEL, paymentStageLabel, isArriving, orderLabel, paymentRequestMessage,
+  cancelPayment, submitPayment, STATUS_LABEL, paymentStageLabel, isArriving, orderLabel, chatCardMessage,
   listUnmatchedDeposits, assignDeposit, dismissDeposit, completeOrder,
   listChainReceipts, getAutoConvert, setAutoConvert, isOwnReceipt, isBridgeReceipt,
   type MerchantIntent, type MerchantPayment, type UnmatchedDeposit, type ChainReceipt, orderKindOf, orderTitle, orderDisplay } from '@/lib/merchantPay'
@@ -38,13 +38,7 @@ import { useLeaveGuard } from '@/lib/leaveGuard'
 import { drawMeshportQr } from '@/lib/qrLogo'
 
 /** Chat text for a request / bill - the chat renders it as a live card. */
-function chatMessageFor(i: MerchantIntent): string {
-  if (i.kind === 'invoice') {
-    const lines = (i.items ?? []).map(x => `${x.name} × ${x.qty}`).join(', ')
-    return `🧾 Bill · Order #${orderLabel(i)} · $${formatAmount(i.amount)} USDC${lines ? `\n${lines}` : ''}${i.note ? `\n${i.note}` : ''}\n${paymentLink(i.code)}`
-  }
-  return paymentRequestMessage(i, formatAmount(i.amount))
-}
+const chatMessageFor = (i: MerchantIntent): string => chatCardMessage(i, formatAmount(i.amount))
 
 const CHAIN_LABEL: Record<string, string> = {
   Arc_Testnet: 'Arc', Ethereum_Sepolia: 'Ethereum', Base_Sepolia: 'Base', Arbitrum_Sepolia: 'Arbitrum', Optimism_Sepolia: 'Optimism',
