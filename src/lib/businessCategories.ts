@@ -2,6 +2,8 @@
 // application and for each store - and the words the Business tab uses for
 // each (a café has guests, a freelancer sends invoices to clients).
 
+import { useMerchant } from './merchant'
+
 export const BUSINESS_CATEGORIES = [
   'Retail store', 'Restaurant / Café', 'Online shop', 'Services', 'Freelancer', 'Kiosk / Counter', 'Other',
 ] as const
@@ -34,3 +36,11 @@ export function bizTerms(category: string | null | undefined): BizTerms {
   const c = BUSINESS_CATEGORIES.find(x => x === category)
   return { ...DEFAULT, ...(c ? TERMS[c] : undefined) }
 }
+
+/** The signed-in business's words, from the category it applied with. */
+export function useBizTerms(): BizTerms {
+  return bizTerms(useMerchant().application?.businessType)
+}
+
+/** "invoice" → "Invoice" */
+export const cap = (w: string) => w.charAt(0).toUpperCase() + w.slice(1)

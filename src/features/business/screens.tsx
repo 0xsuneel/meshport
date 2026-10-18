@@ -17,7 +17,7 @@ import QRCode from 'qrcode'
 import { Store, ChevronDown, Clock, Printer } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, applyForMerchant, setBusinessName } from '@/lib/merchant'
-import { BUSINESS_CATEGORIES, toCategory } from '@/lib/businessCategories'
+import { BUSINESS_CATEGORIES, toCategory, useBizTerms, cap } from '@/lib/businessCategories'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/ui/Avatar'
 import { chainLogoSrc } from '@/lib/chainLogos'
@@ -179,6 +179,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr }: {
   open: boolean; onBack: () => void; storeName: string
   shopQr?: { outlet?: string | null; handle: string }
 }) {
+  const t = useBizTerms()
   const [showQr, setShowQr] = useState(!!shopQr)
   const make = useMakeRequest()
   // Cashiers take counter payments only: up to an hour, no named customer, no bills.
@@ -264,7 +265,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr }: {
         <Live view={view} />
         {!paid && link && (
           <div className="w-full">
-            <p className="text-xs text-text-muted mb-2">Customer not here? Send the link</p>
+            <p className="text-xs text-text-muted mb-2">{t.customer} not here? Send the link</p>
             <LinkShare url={link} text={`${storeName}: ${intent.kind === 'invoice' ? `bill ${intent.orderNumber ?? ''} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}`} />
           </div>
         )}
@@ -330,7 +331,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr }: {
           <div className="flex flex-col gap-4 pt-4">
             <Field label="Valid for"><ChipSelect options={validFor} value={expiry} onChange={setExpiry} /></Field>
             {canBill && (
-              <Field label="Customer (optional)" hint="Their MeshPort username - they get it in their notifications.">
+              <Field label={`${t.customer} (optional)`} hint="Their MeshPort username - they get it in their notifications.">
                 <TextInput value={customer} onChange={e => setCustomer(e.target.value)} placeholder="username.arc" />
               </Field>
             )}
@@ -350,10 +351,10 @@ const FILTERS = [
   { id: 'cancelled', label: 'Cancelled' }, { id: 'expired', label: 'Expired' }, { id: 'all', label: 'All' },
 ] as const
 type OrderFilter = typeof FILTERS[number]['id']
-const EMPTY: Record<OrderFilter, string> = {
-  open: 'No open orders', part: 'No partly paid orders', paid: 'Nothing paid yet',
-  cancelled: 'No cancelled orders', expired: 'No expired orders', all: 'No orders yet',
-}
+const EMPTY = (o: string): Record<OrderFilter, string> => ({
+  open: `No open ${o}`, part: `No partly paid ${o}`, paid: 'Nothing paid yet',
+  cancelled: `No cancelled ${o}`, expired: `No expired ${o}`, all: `No ${o} yet`,
+})
 
 function requestStatus(i: MerchantIntent): RequestStatus {
   if (i.status === 'paid') return i.completedByMerchant ? 'completed' : 'paid'
@@ -367,6 +368,8 @@ const filterOf = (s: RequestStatus): OrderFilter => (s === 'completed' ? 'paid' 
  *  (Receive amounts, bills, Shop QR orders), by status, with copy link /
  *  complete / cancel. */
 export function RequestsList({ active, storeId }: { active: boolean; storeId?: string | null }) {
+  const t = useBizTerms()
+  const orders = t.orders.toLowerCase()
   const toast = useUIStore(s => s.showToastMessage)
   const [list, setList] = useState<MerchantIntent[] | null>(null)
   const [filter, setFilter] = useState<OrderFilter>('open')
@@ -396,7 +399,7 @@ export function RequestsList({ active, storeId }: { active: boolean; storeId?: s
     setBusy(i.id)
     try {
       await (what === 'cancel' ? cancelPayment(i.code) : completeOrder(i.code))
-      toast(what === 'cancel' ? 'Order cancelled' : 'Marked as completed', 'success')
+      toast(what === 'cancel' ? `${cap(t.order)} cancelled` : 'Marked as completed', 'success')
       await load()
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not update', 'error') }
     setBusy(null)
@@ -405,9 +408,9 @@ export function RequestsList({ active, storeId }: { active: boolean; storeId?: s
   return (
     <>
       <div className="px-5 pt-3">
-        <SearchField value={query} onChange={setQuery} ariaLabel="Search orders" placeholder={['Search order, customer or note', 'Order, customer, note', 'Search']} />
+        <SearchField value={query} onChange={setQuery} ariaLabel={`Search ${orders}`} placeholder={[`Search ${t.order}, ${t.customer.toLowerCase()} or note`, `${cap(t.order)}, ${t.customer.toLowerCase()}, note`, 'Search']} />
       </div>
-      <div className="flex gap-2 overflow-x-auto px-5 pt-3 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Order status">
+      <div className="flex gap-2 overflow-x-auto px-5 pt-3 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label={`${cap(t.order)} status`}>
         {FILTERS.map(f => {
           const on = f.id === filter
           return (
@@ -428,7 +431,7 @@ export function RequestsList({ active, storeId }: { active: boolean; storeId?: s
         ) : shown.length === 0 ? (
           <div className="flex flex-col items-center text-center py-16">
             <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-surface border border-border mb-3"><Clock className="size-5 text-text-muted" /></span>
-            <p className="text-sm font-medium text-text-secondary">{q ? 'No orders match your search' : EMPTY[filter]}</p>
+            <p className="text-sm font-medium text-text-secondary">{q ? `No ${orders} match your search` : EMPTY(orders)[filter]}</p>
             {!q && <p className="text-xs text-text-muted mt-1">Charges and bills you create in Collect payment show up here.</p>}
           </div>
         ) : (
@@ -467,6 +470,7 @@ function InsightsBody({ payments, waiting, period, scope }: {
   /** Active store name when the owner has picked one. */
   scope?: string | null
 }) {
+  const t = useBizTerms()
   const data = useMemo(() => {
     const from = period.from.getTime(), to = period.to.getTime()
     const list = payments.filter(p => { const t = Date.parse(p.createdAt); return t >= from && t < to })
@@ -518,10 +522,10 @@ function InsightsBody({ payments, waiting, period, scope }: {
         <StatTriple items={[
           { label: 'Average ticket', value: money(data.count ? data.total / data.count : 0) },
           { label: 'Waiting to settle', value: waiting },
-          { label: 'Customers', value: String(data.buyers), hint: period.label.toLowerCase() },
+          { label: t.customers, value: String(data.buyers), hint: period.label.toLowerCase() },
         ]} />
         <HourChart title="Sales by hour" sub={period.label} bars={data.hours} peak={data.peak} />
-        <RankList title="Top customers" empty="No customers in this period" rows={data.customers} />
+        <RankList title={`Top ${t.customers.toLowerCase()}`} empty={`No ${t.customers.toLowerCase()} in this period`} rows={data.customers} />
         <RankList title="By chain" empty="No payments in this period" rows={data.chains} />
       </div>
   )
@@ -832,13 +836,14 @@ type Customer = {
 const ZERO_WALLET = /^0x0{40}$/i
 const shortWallet = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`
 
-export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment, onChat, title = 'Customers' }: {
-  title?: string
+export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment, onChat }: {
   open: boolean; onBack: () => void; payments: MerchantPayment[]
   /** Refunded payments still list the customer but don't count in totals */
   refundedIds: Set<string>
   onPayment: (p: MerchantPayment) => void; onChat: (username: string) => void
 }) {
+  const t = useBizTerms()
+  const title = t.customers
   const toast = useUIStore(s => s.showToastMessage)
   const { copy } = useShare()
   const [query, setQuery] = useState('')
@@ -920,13 +925,13 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
         </div>
       ) : (
         <div className="flex flex-col gap-4 px-5 pt-2 pb-6">
-          <SearchField value={query} onChange={setQuery} ariaLabel="Search customers" placeholder={['Search name or wallet', 'Search']} />
+          <SearchField value={query} onChange={setQuery} ariaLabel={`Search ${t.customers.toLowerCase()}`} placeholder={['Search name or wallet', 'Search']} />
           {customers.length > 0 && (
-            <p className="text-xs text-text-muted -mt-1">{customers.length} customer{customers.length === 1 ? '' : 's'} · {money(customers.reduce((s, c) => s + c.total, 0))} paid</p>
+            <p className="text-xs text-text-muted -mt-1">{customers.length} {(customers.length === 1 ? t.customer : t.customers).toLowerCase()} · {money(customers.reduce((s, c) => s + c.total, 0))} paid</p>
           )}
           {shown.length === 0 ? (
             <div className="flex flex-col items-center text-center py-16">
-              <p className="text-sm font-medium text-text-secondary">{q ? 'No customer matches' : 'No customers yet'}</p>
+              <p className="text-sm font-medium text-text-secondary">{q ? `No ${t.customer.toLowerCase()} matches` : `No ${t.customers.toLowerCase()} yet`}</p>
               <p className="text-xs text-text-muted mt-1">People who pay you show up here.</p>
             </div>
           ) : (
