@@ -89,6 +89,9 @@ let channelUid: string | null = null
 // the new login) - so a "no application" answer is re-checked once shortly
 // after, and again whenever a new session signs in.
 let recheckedUid: string | null = null
+// A failed load (network) keeps the last known state - never "personal" - and
+// is retried a few times with backoff.
+let failures = 0
 try {
   supabase.auth?.onAuthStateChange?.(event => {
     if (event === 'SIGNED_IN' && state.status !== 'approved') {
@@ -109,10 +112,12 @@ export function refreshMerchant(): Promise<void> {
     try {
       const uid = await authUid()
       if (!uid) { set({ loaded: true, status: 'none', application: null, accountType: 'personal', storeName: null }); return }
-      const [{ data }, { data: me }] = await Promise.all([
+      const [{ data, error }, { data: me, error: meErr }] = await Promise.all([
         supabase.from('merchant_applications').select('*').eq('auth_uid', uid).order('created_at', { ascending: false }).limit(1),
         supabase.from('users').select('account_type, store_name').eq('auth_uid', uid).limit(1).maybeSingle(),
       ])
+      if (error || meErr) throw error || meErr
+      failures = 0
       const app = data?.[0] ? mapRow(data[0]) : null
       set({ loaded: true, status: app?.status ?? 'none', application: app,
         accountType: me?.account_type === 'business' ? 'business' : 'personal', storeName: me?.store_name ?? null })
@@ -130,7 +135,8 @@ export function refreshMerchant(): Promise<void> {
           .subscribe()
       }
     } catch {
-      set({ ...state, loaded: true })
+      const wait = failures < 4 ? 1000 * 2 ** failures++ : 30_000
+      setTimeout(() => { loading = null; void refreshMerchant() }, wait)
     } finally {
       loading = null
     }

@@ -256,6 +256,13 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
     if (who?.wallet && who.wallet !== from) return { error: "This transaction wasn't sent from your wallet.", status: 409 }
     if (i.customer_wallet && String(i.customer_wallet).toLowerCase() !== from) return { error: "This transaction wasn't sent by this order's customer.", status: 409 }
     if (!who?.wallet && order.amount == null) return { error: 'Amount is required to confirm this payment.', status: 400 }
+    // Without a session nothing ties the sender to whoever is asking, so a
+    // transfer only confirms here when it names this order (Arc memo).
+    // Anything else waits for the watcher, which matches it on its own.
+    if (!who?.wallet) {
+      const ids = chain.route === 'direct' ? await txMemoIds(chain.rpcs, tx) : []
+      if (!ids.includes(memoIdOf(String(i.code)))) return { pending: true }
+    }
     const block = await rpc(chain.rpcs, 'eth_getBlockByNumber', [receipt.blockNumber, false]).catch(() => null)
     const minedAt = block?.timestamp ? parseInt(block.timestamp, 16) * 1000 : 0
     const createdAt = new Date(i.created_at).getTime()
@@ -287,6 +294,10 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
     if (/duplicate|unique/i.test(insErr.message)) return { ok: true, duplicate: true }
     throw insErr
   }
+  // The same transfer recorded as a plain receive on another chain is this
+  // order's payment now - named, so it isn't counted (or refunded) twice.
+  await db.from('merchant_chain_receipts').update({ order_number: i.order_number })
+    .eq('source_chain', chainId).eq('tx_hash', tx).is('order_number', null)
   // A deposit the watcher parked as "needs review" is settled now.
   await db.from('merchant_unmatched_deposits').update({ status: 'assigned', assigned_code: i.code, updated_at: new Date().toISOString() })
     .eq('source_chain', chainId).eq('tx_hash', tx).eq('status', 'needs_review')
@@ -523,7 +534,8 @@ async function watchDeposits() {
         // 0) Sent with the order attached (Arc memo): that order, whatever the amount.
         if (isArc && live.length) {
           const ids = new Set(await txMemoIds(chain.rpcs, tx))
-          const named = ids.size ? live.find((i: any) => ids.has(memoIdOf(String(i.code)))) : undefined
+          // An order made for a named customer still only takes that customer's payment.
+          const named = ids.size ? live.find((i: any) => ids.has(memoIdOf(String(i.code))) && (!custOf(i) || custOf(i) === from)) : undefined
           if (named) { await record(named); return }
         }
 
@@ -652,6 +664,7 @@ Deno.serve(async (req: Request) => {
       const who = await caller(req)
       if (who?.authUid !== i.merchant_auth_uid) return jsonFor(req, { error: 'Not found' }, 404)
       const { data: dep } = await db.from('merchant_unmatched_deposits').select('*').eq('id', String(b.depositId ?? '')).maybeSingle()
+      if (i.status === 'cancelled') return jsonFor(req, { error: 'This order was cancelled.' }, 409)
       if (!dep || dep.status !== 'needs_review' || dep.merchant_wallet !== String(i.merchant_wallet).toLowerCase()) return jsonFor(req, { error: 'Deposit not found' }, 404)
       const out: any = await recordPayment(req, i, dep.source_chain, dep.tx_hash, who, { orderNumber: null, amount: null }, 'merchant')
       if (out.error) return jsonFor(req, { error: out.error }, out.status ?? 400)

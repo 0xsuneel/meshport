@@ -41,6 +41,8 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
   useLeaveGuard(busy, 'Payment')
   const [error, setError] = useState('')
   const [hash, setHash] = useState('')
+  // Sent, but attaching it to the order failed: the shop's watcher still matches it.
+  const [unconfirmed, setUnconfirmed] = useState(false)
 
   useEffect(() => { discoverWallets(600).then(setWallets).catch(() => setWallets([])) }, [])
 
@@ -56,7 +58,8 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
       setHash(h)
       if (code) {
         setStep('confirming')
-        await submitPayment(code, chain.id, h, { orderNumber: orderNumber ?? undefined, amount: value }).catch(() => null)
+        const ok = await submitPayment(code, chain.id, h, { orderNumber: orderNumber ?? undefined, amount: value }).then(() => true, () => false)
+        setUnconfirmed(!ok)
       }
       setStep('done')
       onPaid?.()
@@ -91,6 +94,11 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
         <CheckCircle2 size={44} color="var(--success)" />
         <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>Payment sent</div>
         <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>${formatAmount(value)} USDC on {chain.label}{orderNumber ? ` · ${displayOrderNumber(orderNumber)}` : ''}</div>
+        {unconfirmed && (
+          <div style={{ fontSize: 12.5, color: 'var(--warning)' }}>
+            We&apos;re confirming it with the shop. Keep the transaction link below in case they ask for it.
+          </div>
+        )}
         {hash && txExplorerUrl(chain.id, hash) && (
           <a href={txExplorerUrl(chain.id, hash)!} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, color: 'var(--brand-text)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             View transaction <ExternalLink size={12} />

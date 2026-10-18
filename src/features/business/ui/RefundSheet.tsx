@@ -29,6 +29,8 @@ export interface RefundSheetProps {
   value?: string
   onValue?: (v: string) => void
   max?: number
+  /** Why this refund can't go now (e.g. not enough USDC on that chain). */
+  blocked?: string
 }
 
 export function RefundSheet({
@@ -51,6 +53,7 @@ export function RefundSheet({
   value,
   onValue,
   max,
+  blocked,
 }: RefundSheetProps) {
   const typed = Number(value)
   const badAmount = !!onValue && !(typed > 0 && max != null && typed <= max + 1e-9)
@@ -158,19 +161,22 @@ export function RefundSheet({
           <p className="text-xs text-text-secondary leading-relaxed">
             The USDC goes back to the wallet that paid you.
             This can&apos;t be undone.
+            {onValue && max != null && typed > 0 && typed < max - 1e-9 && (
+              <span className="block mt-1 font-medium">Only one refund per payment: the other {fmt(max - typed)} can&apos;t be refunded later.</span>
+            )}
             {note2 && <span className="block mt-1 text-text-muted">{note2}</span>}
           </p>
         </div>
 
         {/* Error */}
-        {error && (
-          <p className="text-xs text-danger text-center">{error}</p>
+        {(error || blocked) && (
+          <p className="text-xs text-danger text-center">{error || blocked}</p>
         )}
 
         {/* Confirm */}
         <button
           type="button"
-          disabled={!reason || busy || badAmount}
+          disabled={!reason || busy || badAmount || !!blocked}
           onClick={onConfirm}
           className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold border-2 border-danger text-danger hover:bg-danger/10 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
         >

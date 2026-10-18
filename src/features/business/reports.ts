@@ -13,11 +13,10 @@ export function dayTrend(payments: MerchantPayment[]): number | null {
   return before > 0 ? Math.round(((sum(today) - before) / before) * 1000) / 10 : null
 }
 
-/** Sales per hour of day over the last 7 days. */
+/** Sales per hour of day (the caller picks the period). */
 export function salesByHour(payments: MerchantPayment[]): number[] {
-  const since = Date.now() - 7 * 86_400_000
   const hours = Array(24).fill(0) as number[]
-  for (const p of payments) if (Date.parse(p.createdAt) >= since) hours[new Date(p.createdAt).getHours()] += p.amount
+  for (const p of payments) hours[new Date(p.createdAt).getHours()] += p.amount
   return hours
 }
 
@@ -66,6 +65,8 @@ export function rangeLabel(range: StatementRange): string {
 export function statementRows(p: {
   range: StatementRange; payments: MerchantPayment[]; refunds: { paymentId: string; amount: number; createdAt: string }[]
   settled: { amount: number; createdAt: string }[]; waiting: number
+  /** Label for the customers row ("Guests", "Clients"…). */
+  customersLabel?: string
 }): StatementRow[] {
   const since = rangeStart(p.range).getTime()
   const inRange = (iso: string) => Date.parse(iso) >= since
@@ -79,7 +80,7 @@ export function statementRows(p: {
   return [
     { label: 'Collected', value: money(collected), tone: 'success' },
     { label: 'Payments', value: String(pays.length) },
-    { label: 'Customers', value: String(customers) },
+    { label: p.customersLabel ?? 'Customers', value: String(customers) },
     { label: `Refunds (${refunds.length})`, value: refunded ? `−${money(refunded)}` : money(0), tone: refunded ? 'danger' : 'default' },
     { label: 'Net', value: money(collected - refunded) },
     { label: 'Settled to Arc', value: money(settled) },
