@@ -31,6 +31,8 @@ import { CashOutScreen, TeamScreen } from './teamScreens'
 import { PayoutsScreen } from './payoutsScreen'
 import { ToolsScreen, type ToolId } from './toolsScreen'
 import { StaffModePage } from './staffMode'
+import { ActivityScreen } from './activityScreen'
+import { logBusiness } from '@/lib/businessActivity'
 import { useUIStore } from '@/store'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
@@ -40,7 +42,7 @@ import {
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
-type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools'
+type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools' | 'activity'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.method === 'own_transfer' ? 'Your transfer'
@@ -108,7 +110,7 @@ function OwnerBusinessPage() {
       .map(r => ({ id: `rcpt_${r.id}`, intentId: '', chain: r.chain, txHash: r.txHash, from: r.from ?? '0x0000000000000000000000000000000000000000',
         amount: r.amount, method: isOwnReceipt(r, walletAddress) ? 'own_transfer' : 'chain_receipt',
         status: r.status === 'converted' ? 'collected' : 'in_ledger', customerUsername: null,
-        createdAt: r.createdAt, orderNumber: r.orderNumber, matchedBy: null }))
+        createdAt: r.createdAt, orderNumber: r.orderNumber, matchedBy: null, screenFlag: r.screenFlag ?? null }))
     const direct: MerchantPayment[] = activity
       .filter(a => a.activityType === 'receive' && a.status === 'completed' && (a.tokenSymbol || 'USDC').toUpperCase() === 'USDC'
         && a.txHash && !known.has(`Arc_Testnet:${a.txHash.toLowerCase()}`))
@@ -185,7 +187,7 @@ function OwnerBusinessPage() {
   // A payment on another chain is "to settle" while that chain still holds USDC.
   const toRow = (p: MerchantPayment): Payment => ({
     id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain), chainLogo: chainLogoSrc(p.chain),
-    time: p.createdAt, order: p.orderNumber ?? undefined,
+    time: p.createdAt, order: p.orderNumber ?? undefined, late: !!p.late, blocked: !!p.screenFlag,
     status: refundedIds.has(p.id) ? 'refunded' as const
       : p.chain !== 'Arc_Testnet' && p.status !== 'collected' && waitingOn.has(p.chain) ? 'to_settle' as const : 'received' as const,
   })
@@ -244,15 +246,22 @@ function OwnerBusinessPage() {
     if (!retry && !settle.ready) { setTab('settlements'); return }
     if (settle.needsPasscode) { setPinError(undefined); setPin({ kind: 'settle', retry }); return }
     setProgressOpen(true)
+    logSettle(retry)
     void settle.settle(undefined, retry)
+  }
+  // Activity log: what Settle is moving, by chain.
+  const logSettle = (retry?: string[], chainId?: string) => {
+    const list = chainId ? (chains ?? []).filter(c => c.id === chainId) : retry ? (chains ?? []).filter(c => retry.includes(c.id)) : settle.due
+    void logBusiness('settle_run', { target: list.map(c => chainLabel(c.id)).join(', ') || null, amount: list.reduce((t, c) => t + c.balance, 0) })
   }
   const onPin = async (code: string) => {
     if (!await settle.checkPasscode(code)) { setPinError('Incorrect passcode. Try again.'); return }
     const p = pin
     setPin(null)
     if (p?.kind === 'refund') { void runRefund(code); return }
-    if (p?.kind === 'one') { setProgressOpen(true); void settle.settleOne(p.chainId, code); return }
+    if (p?.kind === 'one') { setProgressOpen(true); logSettle(undefined, p.chainId); void settle.settleOne(p.chainId, code); return }
     setProgressOpen(true)
+    logSettle(p?.kind === 'settle' ? p.retry : undefined)
     void settle.settle(code, p?.kind === 'settle' ? p.retry : undefined)
   }
 
@@ -261,6 +270,7 @@ function OwnerBusinessPage() {
     if (settle.running) { setProgressOpen(true); return }
     if (settle.needsPasscode) { setPinError(undefined); setPin({ kind: 'one', chainId }); return }
     setProgressOpen(true)
+    logSettle(undefined, chainId)
     void settle.settleOne(chainId)
   }
 
@@ -277,8 +287,9 @@ function OwnerBusinessPage() {
   const [chainLeft, setChainLeft] = useState<number | null>(null)
   const [refundBusy, setRefundBusy] = useState(false)
   const [refundError, setRefundError] = useState<string>()
-  const openRefund = (p: MerchantPayment) => {
-    setRefundFor(p); refundId.current = p.id; setRefundAmount(p.amount.toFixed(2)); setRefundReason(REFUND_REASONS[0]); setRefundNote(''); setRefundError(undefined)
+  /** `amount` prefills a part (e.g. the extra on an overpaid order). */
+  const openRefund = (p: MerchantPayment, amount?: number) => {
+    setRefundFor(p); refundId.current = p.id; setRefundAmount(Math.min(amount ?? p.amount, p.amount).toFixed(2)); setRefundReason(REFUND_REASONS[0]); setRefundNote(''); setRefundError(undefined)
     // Paid on another chain: refund from the USDC still on that chain.
     setChainLeft(null)
     if (p.chain === 'Arc_Testnet') { setRefundDest('arc'); return }
@@ -329,6 +340,8 @@ function OwnerBusinessPage() {
     // no Refund here - send it back with Pay.
     if (p.method === 'own_transfer') { setSender({ id: p.id, check: { refundable: false, reason: 'Your own transfer from another chain - not a customer payment.' } }); return }
     if (p.method === 'direct') { setSender({ id: p.id, check: { refundable: false, reason: 'A direct transfer to your wallet. To give it back, send it with Pay.' } }); return }
+    // Screening: USDC can't be sent back to a blocklisted address.
+    if (p.screenFlag) { setSender({ id: p.id, check: { refundable: false, reason: "This address is on USDC's blocklist, so it can't be refunded. Don't ship goods; contact support." } }); return }
     setSender({ id: p.id, check: null })
     checkRefundableSender(p.chain, p.from).then(check => { if (live) setSender({ id: p.id, check }) })
     return () => { live = false }
@@ -381,6 +394,25 @@ function OwnerBusinessPage() {
     return { count: live.length, due: live.reduce((t, i) => t + Math.max(0, i.amount - i.received), 0) }
   }, [intents, activeStore, mainStoreId])
   const openOrders = () => { setPayView('requests'); setTab('payments') }
+  // Still owed by named customers (credit ledger), for the Customers row.
+  const pendingCredit = useMemo(() => (intents ?? []).filter(i => i.customerUsername && (i.status === 'pending' || i.status === 'partially_paid')
+    && (!i.expiresAt || Date.parse(i.expiresAt) > Date.now()) && (!activeStore || inStore(i, activeStore.id)))
+    .reduce((t, i) => t + Math.max(0, i.amount - i.received), 0), [intents, activeStore, mainStoreId])
+
+  // Order → its payments (badges and refunds on Manage orders).
+  const paymentsByIntent = useMemo(() => {
+    const m = new Map<string, MerchantPayment[]>()
+    for (const p of raw) if (p.intentId) m.set(p.intentId, [...(m.get(p.intentId) ?? []), p])
+    return m
+  }, [raw])
+  // Refund extra / refund a payment to a cancelled order: same checks as the payment's Refund.
+  const refundFromOrder = async (p: MerchantPayment, amount: number) => {
+    if (refundOf.has(p.id)) { toast('This payment was already refunded', 'error'); return }
+    if (p.screenFlag) { toast("This address is on USDC's blocklist - contact support", 'error'); return }
+    const check = await checkRefundableSender(p.chain, p.from).catch(() => null)
+    if (!check?.refundable) { toast(check?.reason ?? 'Could not check who sent this payment', 'error'); return }
+    openRefund(p, amount)
+  }
 
   const rawDetail = detail ? raw.find(p => p.id === detail.id) : undefined
   const detailRefund = detail ? refundOf.get(detail.id) : undefined
@@ -440,7 +472,8 @@ function OwnerBusinessPage() {
             tools={{ badge: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'}` : isMerchant ? 'Add a store' : 'Profile & help', onClick: open('tools') }}
             recent={payments.slice(0, 4)} onSeeAll={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onPayment={setDetail} />
         )}
-        {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} mainStoreId={mainStoreId} />}
+        {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} mainStoreId={mainStoreId}
+          storeName={storeName} paymentsOf={i => paymentsByIntent.get(i.id) ?? []} onRefund={refundFromOrder} />}
         {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter}
           loading={!loaded} payments={payList} onPayment={setDetail} />}
         {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out"
@@ -515,8 +548,9 @@ function OwnerBusinessPage() {
         groups={[
           { title: 'Business', rows: [
             { id: 'team', label: `${terms.stores} & staff`, hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers' },
-            { id: 'customers', label: terms.customers, hint: 'Everyone who paid, with their history' },
+            { id: 'customers', label: terms.customers, hint: pendingCredit > 0 ? `${money(pendingCredit)} outstanding · history and reminders` : 'Everyone who paid, with their history' },
             { id: 'reports', label: 'Reports', hint: 'Insights and statement · CSV and PDF' },
+            { id: 'activity', label: 'Activity log', hint: `Who billed, refunded, settled · you and staff` },
           ] },
           { title: 'Money', rows: [
             { id: 'payouts', label: 'Payouts', hint: 'Pay staff and suppliers · once or on a repeat' },
@@ -565,7 +599,8 @@ function OwnerBusinessPage() {
       <ReceiveScreen open={screen === 'receive'} onBack={() => { back(); reloadIntents() }} onChanged={reloadIntents} storeName={storeName}
         shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} />
       <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundOf.has(p.id) && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
-        onPayment={p => setDetail(toRow(p))} onChat={u => { close(); void openChat(u) }} />
+        onPayment={p => setDetail(toRow(p))} onChat={u => { close(); void openChat(u) }}
+        orders={(intents ?? []).filter(i => !activeStore || inStore(i, activeStore.id))} onOrdersChanged={reloadIntents} />
       <ReportsScreen open={screen === 'reports'} onBack={back}
         insights={{ payments: netOf(storeRaw), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null }}
         statement={{ storeName: stores.length > 1 && activeStore ? `${storeName} · ${activeStore.name}` : storeName, handle,
@@ -578,6 +613,7 @@ function OwnerBusinessPage() {
       </RequestMaker.Provider>
       <CashOutScreen open={screen === 'cashout'} onBack={back} />
       <PayoutsScreen open={screen === 'payouts'} onBack={back} />
+      <ActivityScreen open={screen === 'activity'} onBack={back} />
       <TeamScreen open={screen === 'team'} onBack={back} canAddStores={isMerchant} stores={stores} onChanged={setStores} paymentsByStore={paymentsByStore}
         onQr={id => { pickStore(id); child('qr') }} />
     </div>

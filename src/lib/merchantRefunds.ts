@@ -70,9 +70,10 @@ export function subscribeMyRefunds(onChange: () => void): () => void {
   return () => { supabase.removeChannel(ch) }
 }
 
-async function record(target: { paymentId?: string; receiptId?: string }, txHash: string, route: 'contract' | 'cctp' | 'chain', reason: string): Promise<MerchantRefund> {
+async function record(target: { paymentId?: string; receiptId?: string }, txHash: string, route: 'contract' | 'cctp' | 'chain', reason: string, amount?: number): Promise<MerchantRefund> {
   for (let i = 0; i < 6; i++) {
-    const { data, error } = await supabase.functions.invoke('merchant-refund', { body: { action: 'record', ...target, txHash, route, reason } })
+    // `amount` is what the customer gets; the server checks the transaction sends exactly that.
+    const { data, error } = await supabase.functions.invoke('merchant-refund', { body: { action: 'record', ...target, txHash, route, reason, amount } })
     if (error) throw new Error(await describeFunctionsError(error, 'Could not record the refund'))
     if (data?.refund) return mapRefund(data.refund)
     if (!data?.pending) throw new Error(data?.error || 'Could not record the refund')
@@ -103,18 +104,59 @@ async function cctpFee(chain: string, amount: bigint, forward: boolean): Promise
   return chain === 'Ethereum_Sepolia' ? 1_500_000n : 250_000n + amount / 1000n
 }
 
-async function sendArcTx(account: ReturnType<typeof privateKeyToAccount>, to: Hex, data: Hex, value = 0n) {
-  const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 250 })
+/** Shown when a refund was broadcast but isn't confirmed yet (it's recorded once it lands). */
+export const REFUND_STILL_CONFIRMING = 'Refund sent - still confirming on-chain. Check again in a minute.'
+
+// Arc's fee floor: a tx under 20 gwei max fee is dropped by the mempool.
+const ARC_MIN_FEE = parseGwei('20')
+
+type FeeReader = {
+  getBlock: (args: { blockTag: 'latest' }) => Promise<{ [k: string]: unknown }>
+  getGasPrice: () => Promise<bigint>
+}
+/** maxFeePerGas for Arc: twice the latest base fee (or the node's gas price), never under 20 gwei. */
+async function arcFees(publicClient: FeeReader): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }> {
+  const [block, gasPrice] = await Promise.all([
+    publicClient.getBlock({ blockTag: 'latest' }).catch(() => null),
+    publicClient.getGasPrice().catch(() => null),
+  ])
+  const base = typeof block?.baseFeePerGas === 'bigint' ? block.baseFeePerGas : null
+  let maxFee = ARC_MIN_FEE
+  if (base != null && base * 2n > maxFee) maxFee = base * 2n
+  if (gasPrice != null && gasPrice > maxFee) maxFee = gasPrice
+  const tip = parseGwei('1')
+  return { maxFeePerGas: maxFee, maxPriorityFeePerGas: tip < maxFee ? tip : maxFee }
+}
+
+/**
+ * Sends one Arc transaction and waits for it (up to 2 minutes). If it hasn't
+ * landed by then it may still: `onLate` runs if it confirms later (so the
+ * refund is still recorded) and this throws REFUND_STILL_CONFIRMING - never
+ * "failed" for a transaction that may yet succeed.
+ */
+async function sendArcTx(account: ReturnType<typeof privateKeyToAccount>, to: Hex, data: Hex, value = 0n, onLate?: (hash: Hash) => void) {
+  const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 1000 })
   const walletClient = createWalletClient({ account, transport: arcTransport() })
-  const [nonce, gas] = await Promise.all([
+  const [nonce, gas, fees] = await Promise.all([
     publicClient.getTransactionCount({ address: account.address, blockTag: 'pending' }),
     publicClient.estimateGas({ account: account.address, to, data, value }),
+    arcFees(publicClient),
   ])
   const hash: Hash = await walletClient.sendTransaction({
     to, data, value, nonce, gas: (gas * 130n) / 100n,
-    maxFeePerGas: parseGwei('25'), maxPriorityFeePerGas: parseGwei('1'), chain: ARC_CHAIN_INLINE,
+    ...fees, chain: ARC_CHAIN_INLINE,
   } as unknown as Parameters<typeof walletClient.sendTransaction>[0])
-  const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 30000 })
+  let receipt: Awaited<ReturnType<typeof publicClient.waitForTransactionReceipt>> | null = null
+  try {
+    receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 120_000 })
+  } catch {
+    // Not seen yet: keep watching in the background, and record it if it lands.
+    if (onLate) {
+      void publicClient.waitForTransactionReceipt({ hash, timeout: 15 * 60_000 })
+        .then(r => { if (r.status === 'success') onLate(hash) }).catch(() => {})
+    }
+    throw new Error(REFUND_STILL_CONFIRMING)
+  }
   if (receipt.status !== 'success') throw new Error('The refund transaction failed on-chain')
   return hash
 }
@@ -140,7 +182,7 @@ export async function refundPayment(p: {
   if (p.route === 'chain' && p.chain && p.chain !== 'Arc_Testnet') {
     const hash = await transferOnChain({ chain: p.chain, account, to: p.customer as Hex, amount: p.amount, target })
     void import('@/blockchain/BlockchainManager').then(m => m.notifyExternalBalanceChanged(p.chain!, account.address, { spent: p.amount })).catch(() => {})
-    return record(target, hash, 'chain', reason)
+    return record(target, hash, 'chain', reason, p.amount)
   }
 
   if (p.route === 'origin' && p.chain && canRefundOnChain(p.chain)) {
@@ -149,24 +191,27 @@ export async function refundPayment(p: {
     const fee = await cctpFee(p.chain, amount, forward)
     const burn = amount + fee
     if (balance < burn * 10n ** 12n + 50_000_000_000_000_000n) throw new Error(`Not enough USDC on Arc: this refund needs about $${(Number(burn) / 1e6 + 0.05).toFixed(2)} including fees`)
-    await sendArcTx(account, ARC_USDC, encodeFunctionData({ abi: ERC20, functionName: 'approve', args: [TOKEN_MESSENGER, burn] }))
+    await sendArcTx(account, ARC_USDC, encodeFunctionData({ abi: ERC20, functionName: 'approve', args: [TOKEN_MESSENGER, burn] })).catch((e: Error) => {
+      // Only the approval was sent - no money moved yet.
+      throw new Error(e.message === REFUND_STILL_CONFIRMING ? 'The approval is still confirming on-chain - try the refund again in a minute.' : e.message)
+    })
     const base = [burn, CCTP_DOMAINS[p.chain], pad(p.customer as Hex, { size: 32 }), ARC_USDC, pad('0x0', { size: 32 }), fee, FAST_FINALITY] as const
     const data = forward
       ? encodeFunctionData({ abi: MESSENGER, functionName: 'depositForBurnWithHook', args: [...base, FORWARD_HOOK] })
       : encodeFunctionData({ abi: MESSENGER, functionName: 'depositForBurn', args: base })
-    const hash = await sendArcTx(account, TOKEN_MESSENGER, data)
+    const hash = await sendArcTx(account, TOKEN_MESSENGER, data, 0n, h => { void record(target, h, 'cctp', reason, p.amount).catch(() => {}) })
     // No forwarder on that chain: MeshPort's relayer submits the mint.
     if (!forward) void import('@/lib/cctpRecovery').then(m => m.finishCctpMintViaRelayer({ sourceChain: 'Arc_Testnet', destinationChain: p.chain!, burnTxHash: hash, timeoutMs: 15 * 60_000 })).catch(() => {})
-    return record(target, hash, 'cctp', reason)
+    return record(target, hash, 'cctp', reason, p.amount)
   }
 
   const value = BigInt(Math.round(p.amount * 1e6)) * 10n ** 12n // Arc native USDC has 18 decimals
   if (balance < value) throw new Error('Not enough USDC on Arc for this refund')
   const data = encodeFunctionData({ abi: ABI, functionName: 'refund', args: [paymentRef(refId), p.customer as Hex, reason] })
-  const hash = await sendArcTx(account, REFUNDS_CONTRACT, data, value).catch((e: Error) => {
+  const hash = await sendArcTx(account, REFUNDS_CONTRACT, data, value, h => { void record(target, h, 'contract', reason, p.amount).catch(() => {}) }).catch((e: Error) => {
     throw new Error(/AlreadyRefunded/i.test(e.message) ? 'This payment was already refunded' : /insufficient/i.test(e.message) ? 'Not enough USDC on Arc for this refund' : e.message)
   })
-  return record(target, hash, 'contract', reason)
+  return record(target, hash, 'contract', reason, p.amount)
 }
 
 // ── Who can be refunded ───────────────────────────────────────────────────

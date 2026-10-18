@@ -220,12 +220,22 @@ export type MerchantIntent = {
   storeId?: string | null
   /** 'shop_qr' = opened by a customer from the Shop QR (open amount). */
   via?: string | null
+  /** Pay by this local date (YYYY-MM-DD); null = no due date. */
+  dueDate?: string | null
+  reminderCount?: number
+  lastRemindedAt?: string | null
+  /** Paid more than asked (the extra can be refunded). 0 when not. */
+  overpaid?: number
 }
 export type MerchantPayment = {
   id: string; intentId: string; chain: string; txHash: string; from: string; amount: number
   method: string; status: PaymentStage; customerUsername: string | null; createdAt: string; orderNumber: string | null
   /** How it was linked to its order: customer (pay link / chat), merchant (checked a tx), watcher (direct deposit auto-matched). */
   matchedBy: 'customer' | 'merchant' | 'watcher' | null
+  /** Arrived after the order expired. */
+  late?: boolean
+  /** Sender failed screening ('usdc_blocklisted': on USDC's blocklist). */
+  screenFlag?: string | null
 }
 
 /** A direct deposit that matched more than one open order - the merchant picks. */
@@ -281,6 +291,8 @@ function mapIntent(r: any): MerchantIntent {
     sourceChain: r.source_chain, paymentMethod: r.payment_method, createdAt: r.created_at, expiresAt: r.expires_at, paidAt: r.paid_at,
     kind: r.kind === 'invoice' ? 'invoice' : 'request', personal: typeof r.personal === 'boolean' ? r.personal : null,
     completedByMerchant: !!r.completed_by_merchant, completedNote: r.completed_note ?? null, storeId: r.store_id ?? null, via: r.via ?? null,
+    dueDate: r.due_date ?? null, reminderCount: Number(r.reminder_count) || 0, lastRemindedAt: r.last_reminded_at ?? null,
+    overpaid: Number(r.overpaid_amount) > 0 ? Number(r.overpaid_amount) : 0,
     items: Array.isArray(r.items) ? r.items.map((i: any) => ({ name: i.name, qty: Number(i.qty), price: Number(i.price), total: Number(i.total) })) : null,
   }
 }
@@ -290,7 +302,8 @@ export function invoiceTotal(items: InvoiceItem[]): number {
   return Number(items.reduce((s, i) => s + Math.round((i.qty || 0) * (i.price || 0) * 1e6) / 1e6, 0).toFixed(6))
 }
 
-export async function createPaymentRequest(p: { amount: number; customer?: string; note?: string; expiresInMinutes?: number | null; items?: InvoiceItem[]; storeId?: string | null }): Promise<MerchantIntent> {
+export async function createPaymentRequest(p: { amount: number; customer?: string; note?: string; expiresInMinutes?: number | null; items?: InvoiceItem[]; storeId?: string | null
+  /** Pay-by date (YYYY-MM-DD) */ dueDate?: string | null }): Promise<MerchantIntent> {
   const items = p.items?.filter(i => i.name.trim() && i.qty > 0 && i.price >= 0).map(i => ({ name: i.name.trim().slice(0, 80), qty: i.qty, price: i.price }))
   const amount = items?.length ? invoiceTotal(items) : p.amount
   if (!(amount > 0)) throw new Error(items ? 'Add at least one item with a price' : 'Enter an amount')
@@ -301,6 +314,7 @@ export async function createPaymentRequest(p: { amount: number; customer?: strin
     note: p.note?.trim().slice(0, 140) || null,
     expires_at: p.expiresInMinutes ? new Date(Date.now() + p.expiresInMinutes * 60_000).toISOString() : null,
     ...(p.storeId ? { store_id: p.storeId } : {}),
+    ...(p.dueDate ? { due_date: p.dueDate } : {}),
   }).select('*').single()
   if (error) throw new Error(/business accounts/i.test(error.message) ? 'Only business accounts can send bills.' : error.message)
   markPaymentRequestCreated()
@@ -365,6 +379,7 @@ function mapPayment(r: any): MerchantPayment {
     id: r.id, intentId: r.intent_id, chain: r.source_chain, txHash: r.tx_hash, from: r.from_address, amount: Number(r.amount),
     method: r.method, status: r.status, customerUsername: r.customer_username, createdAt: r.created_at,
     orderNumber: r.order_number ?? null, matchedBy: r.matched_by ?? null,
+    late: r.late === true, screenFlag: r.screen_flag ?? null,
   }
 }
 
@@ -614,6 +629,8 @@ export async function walletBalances(address: string, chains: PayChain[]): Promi
 export type ChainReceipt = {
   id: string; chain: string; txHash: string; from: string | null; amount: number; orderNumber: string | null
   status: 'received' | 'converting' | 'converted'; createdAt: string; convertedAt: string | null
+  /** Sender failed screening ('usdc_blocklisted'). */
+  screenFlag?: string | null
 }
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 /** The merchant's own Transfer Funds from Arc to that chain (sender = their own address; older rows: no sender). */
@@ -632,6 +649,7 @@ export async function listChainReceipts(limit = 50): Promise<ChainReceipt[]> {
   return (data ?? []).map((r: any) => ({
     id: r.id, chain: r.source_chain, txHash: r.tx_hash, from: r.from_address ?? null, amount: Number(r.amount),
     orderNumber: r.order_number ?? null, status: r.status, createdAt: r.created_at, convertedAt: r.converted_at ?? null,
+    screenFlag: r.screen_flag ?? null,
   }))
 }
 

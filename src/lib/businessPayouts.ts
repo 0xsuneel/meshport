@@ -40,7 +40,10 @@ export async function deletePayout(id: string): Promise<void> {
 
 /** Sent: a repeating payout moves to its next date. */
 export async function markPayoutPaid(id: string): Promise<void> {
+  const { data } = await supabase.from('business_payouts').select('name, recipients').eq('id', id).maybeSingle()
   await supabase.rpc('business_payout_paid', { p_id: id })
+  const { logBusiness } = await import('./businessActivity')
+  void logBusiness('payout_paid', { target: data?.name ?? null, amount: data ? payoutTotal({ recipients: Array.isArray(data.recipients) ? data.recipients : [] }) : null })
 }
 
 /** What Bulk Pay reads from the route state to start filled in. */

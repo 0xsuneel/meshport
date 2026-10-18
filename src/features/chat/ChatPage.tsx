@@ -3066,7 +3066,7 @@ export function ChatConversationPage() {
         const otherId = id.replace('new_', '')
 
         const [otherRes, convId] = await Promise.all([
-          supabase.from('users').select('id, username, display_name, email, wallet_address, avatar_url, created_at').eq('id', otherId).maybeSingle(),
+          supabase.from('users').select('id, username, display_name, wallet_address, avatar_url, created_at').eq('id', otherId).maybeSingle(),
           ensureConversation(user!.id, otherId),
         ])
 
@@ -3123,7 +3123,7 @@ export function ChatConversationPage() {
         }
 
         const otherId = conv.participant_a === user!.id ? conv.participant_b : conv.participant_a
-        const otherData = _cachedOtherUser[otherId] ?? (await supabase.from('users').select('id, username, display_name, email, wallet_address, avatar_url, created_at').eq('id', otherId).maybeSingle()).data
+        const otherData = _cachedOtherUser[otherId] ?? (await supabase.from('users').select('id, username, display_name, wallet_address, avatar_url, created_at').eq('id', otherId).maybeSingle()).data
         if (otherData) {
           setOtherUser(otherData)
           _cachedOtherUser[otherId] = otherData

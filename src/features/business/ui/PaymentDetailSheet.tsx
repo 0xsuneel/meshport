@@ -3,7 +3,7 @@
  * Supports received, to_settle, and refunded statuses.
  */
 import React from 'react'
-import { ExternalLink, ArrowDownToLine, RotateCcw, FileText, MessageCircle, Copy } from 'lucide-react'
+import { ExternalLink, ArrowDownToLine, RotateCcw, FileText, MessageCircle, Copy, ShieldAlert } from 'lucide-react'
 import type { Payment } from './types'
 import { formatTime } from './types'
 import { Sheet } from './primitives'
@@ -124,6 +124,20 @@ export function PaymentDetailSheet({
               {isRefunded ? 'Refunded' : toSettle ? 'To settle' : 'Paid'}
             </span>
           </div>
+
+          {/* Screening: sender on USDC's blocklist */}
+          {payment.blocked && (
+            <div role="alert" className="flex gap-3 rounded-2xl bg-danger/10 border border-danger/20 px-4 py-3.5">
+              <ShieldAlert className="size-5 text-danger shrink-0 mt-0.5" />
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-danger">Blocked sender</span>
+                <span className="block text-xs text-text-secondary leading-relaxed mt-0.5">This address is on USDC's blocklist. Don't ship goods; contact support.</span>
+              </span>
+            </div>
+          )}
+          {!payment.blocked && payment.late && (
+            <p className="-mt-2 text-xs font-semibold text-warning">Paid late · arrived after it expired</p>
+          )}
 
           {/* Two steps */}
           <div className="flex gap-2">

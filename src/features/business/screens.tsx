@@ -14,7 +14,7 @@
 // nothing here moves funds out.
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
-import { Store, ChevronDown, Clock, Printer } from 'lucide-react'
+import { Store, ChevronDown, Clock, Printer, CalendarClock } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName } from '@/lib/merchant'
 import { BUSINESS_CATEGORIES, toCategory, useBizTerms, cap } from '@/lib/businessCategories'
@@ -41,14 +41,21 @@ import { salesByHour, hourLabel, statementRows, rangeLabel, rangeStart, exportPa
 import type { MerchantRefund } from '@/lib/merchantRefunds'
 import { submitPayment, displayOrderNumber, listUnmatchedDeposits, assignDeposit, type UnmatchedDeposit } from '@/lib/merchantPay'
 import { chainLabel } from './settlement'
+import { DUE_PRESETS, duePresetDate, dueText, isoDay, canRemindAt, remindBill, remindCustomer, type DuePresetId } from '@/lib/businessBills'
+import { logBusiness, type ActivityAction } from '@/lib/businessActivity'
+import { khataByCustomer, customerKey, isOutstanding, totalOutstanding } from '@/lib/businessKhata'
+import { Sheet, ShareChannels } from './ui'
 
 /** How Charge / Payment link / Bill create requests: the owner's own
  *  (createPaymentRequest, for the active store) or, in staff mode, one that
  *  pays the business they work for (staff_create_request). */
 type RequestInput = Parameters<typeof createPaymentRequest>[0]
-export const RequestMaker = createContext<{ create: (p: RequestInput) => Promise<MerchantIntent>; storeId: string | null; canBill: boolean; savedItems?: boolean }>({
+export const RequestMaker = createContext<{ create: (p: RequestInput) => Promise<MerchantIntent>; storeId: string | null; canBill: boolean; savedItems?: boolean
+  /** Activity log (staff mode writes to the owner's log). */
+  log?: (action: ActivityAction, p?: { target?: string | null; amount?: number | null }) => void }>({
   create: createPaymentRequest, storeId: null, canBill: true, savedItems: true,
 })
+const defaultLog = (action: ActivityAction, p?: { target?: string | null; amount?: number | null }) => { void logBusiness(action, p) }
 function useMakeRequest() {
   const m = useContext(RequestMaker)
   return (p: RequestInput) => m.create({ ...p, storeId: p.storeId ?? m.storeId })
@@ -87,10 +94,26 @@ function useShare() {
   return { copied, copy, share }
 }
 
-function LinkShare({ url, text }: { url: string; text: string }) {
+function LinkShare({ url, text, subject }: { url: string; text: string
+  /** With a subject, WhatsApp / SMS / Email buttons are shown too */ subject?: string }) {
   const { copied, copy, share } = useShare()
-  return <ShareLink url={url} copied={copied} onCopy={() => copy(url)} onShare={() => share(text, url)} />
+  return <ShareLink url={url} copied={copied} onCopy={() => copy(url)} onShare={() => share(text, url)}
+    channels={subject ? { subject, text: `${text}\n${url}` } : undefined} />
 }
+
+/** Share a payment link: copy, native share, WhatsApp, SMS, email. */
+function ShareSheet({ open, onClose, title, url, text, subject }: { open: boolean; onClose: () => void; title: string; url: string; text: string; subject: string }) {
+  return (
+    <Sheet open={open} onClose={onClose}>
+      <div className="flex flex-col gap-4 px-5 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+20px)]">
+        <p className="text-base font-bold text-text-primary">{title}</p>
+        <LinkShare url={url} text={text} subject={subject} />
+      </div>
+    </Sheet>
+  )
+}
+
+const dueTone = { neutral: 'text-text-muted', warning: 'text-warning', danger: 'text-danger' } as const
 
 /** Live status of one request (polls until it's final). */
 function useLiveRequest(code: string | null) {
@@ -187,7 +210,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   const [showQr, setShowQr] = useState(!!shopQr)
   const make = useMakeRequest()
   // Cashiers take counter payments only: up to an hour, no named customer, no bills.
-  const { canBill, savedItems = true } = useContext(RequestMaker)
+  const { canBill, savedItems = true, log = defaultLog } = useContext(RequestMaker)
   // The owner's saved items (products and prices), tapped into a bill.
   const [catalog, setCatalog] = useState<SavedItem[]>([])
   const [editItems, setEditItems] = useState(false)
@@ -210,6 +233,9 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   const [rows, setRows] = useState<BillItem[]>([blank()])
   const [customer, setCustomer] = useState('')
   const [expiry, setExpiry] = useState('15')
+  // Pay-by date for a bill (Today / 7 / 15 / 30 days / a picked day).
+  const [dueId, setDueId] = useState<DuePresetId>('none')
+  const [customDue, setCustomDue] = useState('')
   const [more, setMore] = useState(false)
   const [busy, setBusy] = useState(false)
   const [intent, setIntent] = useState<MerchantIntent | null>(null)
@@ -221,10 +247,15 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   useEffect(() => { if (paid && !owner) speakPayment(view!.received) }, [paid])
   const reset = () => {
     setItemised(false); setShowQr(!!shopQr); setAmount(''); setNote(''); setRows([blank()]); setCustomer(''); setExpiry('15'); setMore(false); setIntent(null)
+    setDueId('none'); setCustomDue('')
   }
   useEffect(() => { if (!open) reset() }, [open])
   // A bill usually goes to someone later: open for 7 days by default.
-  const toggleItems = (on: boolean) => { setShowQr(false); setItemised(on); setExpiry(on ? '10080' : '15') }
+  const toggleItems = (on: boolean) => { setShowQr(false); setItemised(on); setExpiry(on ? '10080' : '15'); if (!on) { setDueId('none'); setCustomDue('') } }
+  // A bill with a due date stays open until it's paid (no expiry before the due date).
+  const dueDate = canBill && itemised ? (dueId === 'custom' ? (customDue || null) : duePresetDate(dueId)) : null
+  const pickDue = (id: string) => { setDueId(id as DuePresetId); if (id === 'custom' && !customDue) setCustomDue(duePresetDate('7') ?? '') }
+  const due = dueText(dueDate, true)
 
   const press = (k: KeypadKey) => setAmount(a => {
     if (k === 'del') return a.slice(0, -1)
@@ -234,13 +265,13 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   })
   const items: InvoiceItem[] = rows.map(r => ({ name: r.name, qty: r.qty, price: Number(r.price) || 0 })).filter(i => i.name.trim() && i.qty > 0)
   const value = itemised ? invoiceTotal(items) : Number(amount) || 0
-  const validLabel = validFor.find(v => v.id === expiry)?.label ?? '15 min'
+  const validLabel = dueDate ? 'until paid' : validFor.find(v => v.id === expiry)?.label ?? '15 min'
 
   const create = async () => {
     setBusy(true)
     try {
       setIntent(await make({ amount: value, ...(itemised ? { items } : {}), note: note || undefined,
-        customer: canBill && customer ? customer : undefined, expiresInMinutes: Number(expiry) || null }))
+        customer: canBill && customer ? customer : undefined, expiresInMinutes: dueDate ? null : Number(expiry) || null, dueDate }))
       onChanged?.()
       if (itemised && savedItems) void rememberItems(items)
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not create the payment', 'error') }
@@ -248,7 +279,10 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   }
   const cancel = async () => {
     // Before the first status read the order is still open: cancel it too.
-    if (intent && (!view || OPEN.has(view.status))) { await cancelPayment(intent.code).catch(() => {}); onChanged?.() }
+    if (intent && (!view || OPEN.has(view.status))) {
+      const ok = await cancelPayment(intent.code).then(() => true, () => false); onChanged?.()
+      if (ok) log('order_cancelled', { target: intent.orderNumber ?? intent.code, amount: intent.amount })
+    }
     setIntent(null)
   }
 
@@ -263,6 +297,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
           <p className="display text-4xl font-bold tabular-nums text-text-primary mt-1">{money(intent.amount)}</p>
           {intent.note && <p className="text-sm text-text-secondary mt-1">{intent.note}</p>}
           {intent.customerUsername && <p className="text-xs text-text-muted mt-1">For {intent.customerUsername}.arc</p>}
+          {(() => { const d = dueText(intent.dueDate ?? dueDate, !paid); return d ? <p className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${dueTone[d.tone]}`}><CalendarClock className="size-3.5" /> {d.text}</p> : null })()}
         </div>
         {intent.kind === 'invoice' && (
           <div className="w-full text-left"><DetailList rows={(intent.items ?? items).map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
@@ -272,7 +307,8 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
         {!paid && link && (
           <div className="w-full">
             <p className="text-xs text-text-muted mb-2">{t.customer} not here? Send the link</p>
-            <LinkShare url={link} text={`${storeName}: ${intent.kind === 'invoice' ? `bill ${intent.orderNumber ?? ''} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}`} />
+            <LinkShare url={link} subject={`${storeName}: ${intent.kind === 'invoice' ? 'bill' : 'payment'} ${intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''} for ${money(intent.amount)}`}
+              text={`${storeName}: ${intent.kind === 'invoice' ? `bill ${intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}${(() => { const d = dueText(intent.dueDate ?? dueDate, true); return d ? ` (${d.text.toLowerCase()})` : '' })()}. Pay in USDC:`} />
           </div>
         )}
       </div>
@@ -330,12 +366,23 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
       <div className="px-5 pt-5 pb-2">
         <button type="button" onClick={() => setMore(m => !m)} aria-expanded={more}
           className="w-full flex items-center justify-between min-h-[48px] px-4 rounded-2xl bg-card border border-border text-sm">
-          <span className="text-text-secondary">Valid for <b className="font-semibold text-text-primary">{validLabel}</b>{canBill && customer ? <> · for <b className="font-semibold text-text-primary">{customer.replace(/\.arc$/, '')}.arc</b></> : null}</span>
+          <span className="text-text-secondary truncate">{due ? <b className={`font-semibold ${due.tone === 'neutral' ? 'text-text-primary' : dueTone[due.tone]}`}>{due.text}</b> : <>Valid for <b className="font-semibold text-text-primary">{validLabel}</b></>}{canBill && customer ? <> · for <b className="font-semibold text-text-primary">{customer.replace(/\.arc$/, '')}.arc</b></> : null}</span>
           <ChevronDown className={`size-4 text-text-muted transition-transform ${more ? 'rotate-180' : ''}`} />
         </button>
         {more && (
           <div className="flex flex-col gap-4 pt-4">
-            <Field label="Valid for"><ChipSelect options={validFor} value={expiry} onChange={setExpiry} /></Field>
+            {itemised && canBill && (
+              <Field label="Due date" hint={dueDate ? 'The bill stays open until it is paid. Reminders go out on the due date.' : undefined}>
+                <div className="flex flex-col gap-2">
+                  <ChipSelect options={DUE_PRESETS.map(d => ({ id: d.id, label: d.label }))} value={dueId} onChange={pickDue} />
+                  {dueId === 'custom' && (
+                    <TextInput type="date" value={customDue} min={isoDay(new Date())} max={isoDay(new Date(Date.now() + 365 * 86_400_000))}
+                      onChange={e => setCustomDue(e.target.value)} aria-label="Due date" />
+                  )}
+                </div>
+              </Field>
+            )}
+            {!dueDate && <Field label="Valid for"><ChipSelect options={validFor} value={expiry} onChange={setExpiry} /></Field>}
             {canBill && (
               <Field label={`${t.customer} (optional)`} hint="Their MeshPort username - they get it in their notifications.">
                 <TextInput value={customer} onChange={e => setCustomer(e.target.value)} placeholder="username.arc" />
@@ -373,10 +420,16 @@ const filterOf = (s: RequestStatus): OrderFilter => (s === 'completed' ? 'paid' 
 /** Business → Payments → Orders: everything the business asked to be paid
  *  (Receive amounts, bills, Shop QR orders), by status, with copy link /
  *  complete / cancel. */
-export function RequestsList({ active, storeId, mainStoreId = null }: {
+export function RequestsList({ active, storeId, mainStoreId = null, storeName = 'Your business', paymentsOf, onRefund }: {
   active: boolean; storeId?: string | null
   /** Orders without a store belong to the main store (same as sales). */
   mainStoreId?: string | null
+  /** Name in shared links and messages */
+  storeName?: string
+  /** The payments on an order (late / blocked sender badges, refunds) */
+  paymentsOf?: (i: MerchantIntent) => MerchantPayment[]
+  /** Opens the refund sheet for this payment, prefilled with `amount` */
+  onRefund?: (p: MerchantPayment, amount: number) => void
 }) {
   const t = useBizTerms()
   const orders = t.orders.toLowerCase()
@@ -386,6 +439,7 @@ export function RequestsList({ active, storeId, mainStoreId = null }: {
   const [query, setQuery] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [sharing, setSharing] = useState<MerchantIntent | null>(null)
   const { copy } = useShare()
 
   const load = () => listMyIntents(500).then(setList).catch(() => setList([]))
@@ -409,14 +463,35 @@ export function RequestsList({ active, storeId, mainStoreId = null }: {
     setBusy(i.id)
     try {
       await (what === 'cancel' ? cancelPayment(i.code) : completeOrder(i.code))
+      void logBusiness(what === 'cancel' ? 'order_cancelled' : 'order_completed', { target: i.orderNumber ?? i.code, amount: i.amount })
       toast(what === 'cancel' ? `${cap(t.order)} cancelled` : 'Marked as completed', 'success')
       await load()
     } catch (e) { toast(e instanceof Error ? e.message : 'Could not update', 'error') }
     setBusy(null)
   }
+  const remind = async (i: MerchantIntent) => {
+    setBusy(i.id)
+    try {
+      await remindBill(i.id)
+      void logBusiness('reminder_sent', { target: i.orderNumber ?? i.code, amount: i.amount - i.received, meta: { customer: i.customerUsername } })
+      toast(`Reminder sent to ${i.customerUsername}.arc`, 'success')
+      await load()
+    } catch (e) { toast(e instanceof Error ? e.message : 'Could not send the reminder', 'error') }
+    setBusy(null)
+  }
+  // The payment to refund on an order: the latest one that covers the amount.
+  const refundable = (i: MerchantIntent, amount: number) => (paymentsOf?.(i) ?? [])
+    .filter(p => !p.screenFlag && p.amount >= amount - 1e-6).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0]
+  const shareText = (i: MerchantIntent) => {
+    const d = dueText(i.dueDate, true)
+    return `${storeName}: ${i.kind === 'invoice' ? 'bill' : t.order} ${i.orderNumber ? displayOrderNumber(i.orderNumber) : ''} for ${money(Math.max(0, i.amount - i.received))}${i.note ? ` - ${i.note}` : ''}${d ? ` (${d.text.toLowerCase()})` : ''}. Pay in USDC:`
+  }
 
   return (
     <>
+      {sharing && <ShareSheet open onClose={() => setSharing(null)} title={`Share ${sharing.orderNumber ? displayOrderNumber(sharing.orderNumber) : cap(t.order)}`}
+        url={paymentLink(sharing.code)} text={shareText(sharing)}
+        subject={`${storeName}: ${sharing.kind === 'invoice' ? 'bill' : t.order} ${sharing.orderNumber ? displayOrderNumber(sharing.orderNumber) : ''}`} />}
       <div className="px-5 pt-3">
         <SearchField value={query} onChange={setQuery} ariaLabel={`Search ${orders}`} placeholder={[`Search ${t.order}, ${t.customer.toLowerCase()} or note`, `${cap(t.order)}, ${t.customer.toLowerCase()}, note`, 'Search']} />
       </div>
@@ -449,14 +524,36 @@ export function RequestsList({ active, storeId, mainStoreId = null }: {
             {shown.map(i => {
               const status = requestStatus(i)
               const live = status === 'open' || status === 'part'
+              const pays = paymentsOf?.(i) ?? []
+              const blocked = pays.some(p => p.screenFlag)
+              const due = dueText(i.dueDate, live)
+              // Paid after it was cancelled (or expired): the money is here, the order isn't.
+              const afterCancel = (status === 'cancelled' || status === 'expired') && i.received > 0
+              const extra = i.overpaid && i.overpaid > 0 ? refundable(i, i.overpaid) : undefined
+              const back = afterCancel ? refundable(i, 0) : undefined
+              const remindIn = canRemindAt(i.lastRemindedAt)
+              const badges = [
+                ...(due ? [{ label: due.text, tone: due.tone }] : []),
+                ...(blocked ? [{ label: 'Blocked sender', tone: 'danger' as const }] : []),
+                ...(i.overpaid && i.overpaid > 0 ? [{ label: `Overpaid ${money(i.overpaid)}`, tone: 'warning' as const }] : []),
+                ...(afterCancel ? [{ label: `Paid after ${status === 'cancelled' ? 'cancel' : 'expiry'}`, tone: 'danger' as const }] : []),
+                ...(!afterCancel && pays.some(p => p.late) ? [{ label: 'Paid late', tone: 'warning' as const }] : []),
+              ]
+              const note = blocked ? "A payment came from an address on USDC's blocklist. Don't ship goods; contact support."
+                : afterCancel ? `${money(i.received)} arrived after this ${t.order} was ${status === 'cancelled' ? 'cancelled' : 'closed'} - refund it or reopen with a new ${t.order}.`
+                : undefined
               return (
-                <RequestRow key={i.id} kind={i.kind} status={status} amount={money(i.amount)}
+                <RequestRow key={i.id} kind={i.kind} status={status} amount={money(i.amount)} badges={badges} note={note}
                   title={i.note || (i.kind === 'invoice' ? 'Bill' : i.via === 'shop_qr' ? 'Shop QR' : 'Payment request')}
                   sub={[i.orderNumber && displayOrderNumber(i.orderNumber), status === 'part' && `${money(i.received)} received`, i.customerUsername && `${i.customerUsername}.arc`,
                     new Date(i.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })].filter(Boolean).join(' · ')}
                   expanded={openId === i.id} onToggle={() => setOpenId(openId === i.id ? null : i.id)}
                   actions={[
                     { label: 'Copy link', tone: 'neutral', onClick: () => { void copy(paymentLink(i.code)); toast('Link copied', 'success') } },
+                    ...(live ? [{ label: 'Share', tone: 'neutral' as const, onClick: () => setSharing(i) }] : []),
+                    ...(live && i.customerUsername ? [{ label: remindIn.ok ? 'Remind' : `Remind in ${remindIn.inHours}h`, tone: 'neutral' as const, onClick: () => remind(i), disabled: busy === i.id || !remindIn.ok }] : []),
+                    ...(onRefund && extra && !blocked ? [{ label: `Refund extra ${money(i.overpaid!)}`, tone: 'danger' as const, onClick: () => onRefund(extra, i.overpaid!) }] : []),
+                    ...(onRefund && back && !blocked ? [{ label: 'Refund', tone: 'danger' as const, onClick: () => onRefund(back, back.amount) }] : []),
                     ...(live ? [
                       { label: 'Mark completed', tone: 'brand' as const, onClick: () => act(i, 'complete'), disabled: busy === i.id },
                       { label: 'Cancel', tone: 'danger' as const, onClick: () => act(i, 'cancel'), disabled: busy === i.id },
@@ -563,7 +660,7 @@ function ShopLimitsCard({ open, handle }: { open: boolean; handle: string }) {
     : lo != null && hi != null && lo > hi ? 'Minimum is more than the maximum' : null
   const save = async () => {
     setBusy(true)
-    try { await setShopLimits(lo, hi); setSaved({ min, max }); toast(lo == null && hi == null ? 'Limits removed' : 'Limits saved', 'success') }
+    try { await setShopLimits(lo, hi); setSaved({ min, max }); void logBusiness('limits_changed', { meta: { min: lo, max: hi } }); toast(lo == null && hi == null ? 'Limits removed' : 'Limits saved', 'success') }
     catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
     setBusy(false)
   }
@@ -755,6 +852,7 @@ export function ReceiptScreen({ open, onBack, storeName, handle, payment, refund
 }) {
   const printer = usePrint()
   const { share } = useShare()
+  const terms = useBizTerms()
   if (!payment) return <BusinessScreen open={false} title="Receipt" onBack={onBack}>{null}</BusinessScreen>
   const from = payment.customerUsername ? `${payment.customerUsername}.arc` : `${payment.from.slice(0, 6)}…${payment.from.slice(-4)}`
   const card = (printable: boolean) => (
@@ -762,7 +860,7 @@ export function ReceiptScreen({ open, onBack, storeName, handle, payment, refund
       order={payment.orderNumber ?? undefined} time={payment.createdAt} txHash={payment.txHash} refunded={refunded} printable={printable} />
   )
   const text = [`Receipt from ${storeName} (${handle})`, `${money(payment.amount)} USDC${refunded ? ' - refunded' : ''}`,
-    payment.orderNumber ? `Order ${payment.orderNumber}` : '', `Paid by ${from} on ${chainLabel(payment.chain)}`,
+    payment.orderNumber ? `${cap(terms.order)} ${displayOrderNumber(payment.orderNumber)}` : '', `Paid by ${from} on ${chainLabel(payment.chain)}`,
     new Date(payment.createdAt).toLocaleString(), `Transaction ${payment.txHash}`].filter(Boolean).join('\n')
   return (
     <BusinessScreen open={open} title="Receipt" onBack={onBack}
@@ -770,7 +868,13 @@ export function ReceiptScreen({ open, onBack, storeName, handle, payment, refund
         <GhostBtn onClick={() => printer.print(card(true))}>Print</GhostBtn>
         <PrimaryBtn onClick={() => share(text, `${window.location.origin}/paylink/${handle.replace(/\.arc$/, '')}`)}>Send receipt</PrimaryBtn>
       </div>}>
-      <div className="px-5 pt-5 pb-6 flex justify-center">{card(false)}</div>
+      <div className="px-5 pt-5 pb-6 flex flex-col items-center gap-4">
+        {card(false)}
+        <div className="w-full max-w-[360px]">
+          <p className="text-xs text-text-muted mb-2">Send it on</p>
+          <ShareChannels subject={`Receipt from ${storeName}${payment.orderNumber ? ` · ${displayOrderNumber(payment.orderNumber)}` : ''}`} text={text} />
+        </div>
+      </div>
       {printer.portal}
     </BusinessScreen>
   )
@@ -844,7 +948,9 @@ export function HelpScreen({ open, onBack }: { open: boolean; onBack: () => void
 // ── Customers ────────────────────────────────────────────────────────────
 // Everyone who paid the business (the selected store), from its payments:
 // MeshPort users by username, others by wallet; bridge payments (no paying
-// wallet on that chain) are grouped. Tap one for their payments.
+// wallet on that chain) are grouped. Named customers also get their credit
+// ledger (khata): billed, paid and outstanding on their bills, with
+// reminders. Tap one for their payments and open bills.
 
 type Customer = {
   key: string; name: string; username: string | null; wallet: string | null; bridge: boolean
@@ -853,12 +959,17 @@ type Customer = {
 
 const ZERO_WALLET = /^0x0{40}$/i
 const shortWallet = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`
+const toKhataOrder = (i: MerchantIntent) => ({ customerUsername: i.customerUsername, amount: i.amount, received: i.received, status: i.status, expiresAt: i.expiresAt, dueDate: i.dueDate ?? null })
 
-export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment, onChat }: {
+export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment, onChat, orders = [], onOrdersChanged }: {
   open: boolean; onBack: () => void; payments: MerchantPayment[]
   /** Refunded payments still list the customer but don't count in totals */
   refundedIds: Set<string>
   onPayment: (p: MerchantPayment) => void; onChat: (username: string) => void
+  /** The business's orders (credit ledger: billed, paid, outstanding) */
+  orders?: MerchantIntent[]
+  /** A reminder was sent (refreshes the orders) */
+  onOrdersChanged?: () => void
 }) {
   const t = useBizTerms()
   const title = t.customers
@@ -866,13 +977,17 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
   const { copy } = useShare()
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
   useEffect(() => { if (!open) { setQuery(''); setSelected(null) } }, [open])
+
+  const khata = useMemo(() => khataByCustomer(orders.map(toKhataOrder)), [orders])
+  const outstanding = totalOutstanding(khata)
 
   const customers = useMemo(() => {
     const m = new Map<string, Customer>()
     for (const p of payments) {
       const bridge = !p.customerUsername && ZERO_WALLET.test(p.from)
-      const key = p.customerUsername ? `u:${p.customerUsername.toLowerCase()}` : bridge ? 'bridge' : `w:${p.from.toLowerCase()}`
+      const key = p.customerUsername ? customerKey(p.customerUsername) : bridge ? 'bridge' : `w:${p.from.toLowerCase()}`
       const c = m.get(key) ?? {
         key, bridge, username: p.customerUsername ?? null, wallet: p.customerUsername || bridge ? null : p.from,
         name: p.customerUsername ? `${p.customerUsername}.arc` : bridge ? 'Bridge payments' : shortWallet(p.from),
@@ -884,11 +999,44 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
       if (Date.parse(p.createdAt) > Date.parse(c.last)) c.last = p.createdAt
       m.set(key, c)
     }
-    return [...m.values()].sort((a, b) => b.total - a.total)
-  }, [payments, refundedIds])
+    // Billed customers who haven't paid yet are customers too.
+    for (const i of orders) {
+      if (!i.customerUsername || !khata.get(customerKey(i.customerUsername))?.billed) continue
+      const key = customerKey(i.customerUsername)
+      const c = m.get(key)
+      if (!c) m.set(key, { key, bridge: false, username: i.customerUsername, wallet: null, name: `${i.customerUsername}.arc`, payments: [], total: 0, last: i.createdAt, refunded: 0 })
+      else if (Date.parse(i.createdAt) > Date.parse(c.last)) c.last = i.createdAt
+    }
+    return [...m.values()].sort((a, b) => (khata.get(b.key)?.outstanding ?? 0) - (khata.get(a.key)?.outstanding ?? 0) || b.total - a.total)
+  }, [payments, refundedIds, orders, khata])
   const q = query.trim().toLowerCase()
   const shown = q ? customers.filter(c => c.name.toLowerCase().includes(q) || (c.wallet ?? '').toLowerCase().includes(q)) : customers
   const current = customers.find(c => c.key === selected) ?? null
+  const currentKhata = current ? khata.get(current.key) : undefined
+  const openBills = useMemo(() => !current?.username ? [] : orders
+    .filter(i => i.customerUsername && customerKey(i.customerUsername) === current.key && isOutstanding(toKhataOrder(i)))
+    .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || Date.parse(a.createdAt) - Date.parse(b.createdAt)), [orders, current?.key])
+
+  const remindOne = async (i: MerchantIntent) => {
+    setBusy(i.id)
+    try {
+      await remindBill(i.id)
+      void logBusiness('reminder_sent', { target: i.orderNumber ?? i.code, amount: i.amount - i.received, meta: { customer: i.customerUsername } })
+      toast(`Reminder sent to ${i.customerUsername}.arc`, 'success'); onOrdersChanged?.()
+    } catch (e) { toast(e instanceof Error ? e.message : 'Could not send the reminder', 'error') }
+    setBusy(null)
+  }
+  const remindAll = async (c: Customer) => {
+    if (!c.username) return
+    setBusy('all')
+    try {
+      const n = await remindCustomer(c.username)
+      void logBusiness('reminder_sent', { target: c.name, amount: khata.get(c.key)?.outstanding ?? null, meta: { customer: c.username, bills: n } })
+      toast(`Reminder sent to ${c.name} for ${n} ${n === 1 ? t.order : t.orders.toLowerCase()}`, 'success'); onOrdersChanged?.()
+    } catch (e) { toast(e instanceof Error ? e.message : 'Could not send the reminder', 'error') }
+    setBusy(null)
+  }
+
   const avatar = (c: Customer, size: number) => (
     <span className="shrink-0 rounded-full p-[2px] bg-brand" style={{ width: size, height: size }}>
       <span className="flex items-center justify-center w-full h-full rounded-full bg-brand text-white font-bold text-sm" style={{ border: '2px solid var(--bg)' }}>
@@ -897,6 +1045,12 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
     </span>
   )
   const sub = (c: Customer) => `${c.username ? '' : c.bridge ? 'Through a bridge · ' : 'Not on MeshPort · '}${c.payments.length} payment${c.payments.length === 1 ? '' : 's'}${c.refunded ? ` · ${c.refunded} refunded` : ''}`
+  const stat = (label: string, value: string, tone = 'text-text-primary') => (
+    <div className="rounded-2xl bg-surface border border-border px-4 py-3 min-w-0">
+      <p className="text-xs text-text-muted truncate">{label}</p>
+      <p className={`text-lg font-bold tabular-nums truncate ${tone}`}>{value}</p>
+    </div>
+  )
 
   return (
     <BusinessScreen open={open} title={current ? current.name : title} onBack={current ? () => setSelected(null) : onBack}>
@@ -910,42 +1064,80 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
             </span>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
-            <div className="rounded-2xl bg-surface border border-border px-4 py-3">
-              <p className="text-xs text-text-muted">Total paid</p>
-              <p className="text-xl font-bold tabular-nums text-text-primary">{money(current.total)}</p>
-            </div>
-            <div className="rounded-2xl bg-surface border border-border px-4 py-3">
-              <p className="text-xs text-text-muted">Average</p>
-              <p className="text-xl font-bold tabular-nums text-text-primary">{money(current.payments.length > current.refunded ? current.total / (current.payments.length - current.refunded) : 0)}</p>
-            </div>
+            {stat('Total paid', money(current.total))}
+            {stat('Average', money(current.payments.length > current.refunded ? current.total / (current.payments.length - current.refunded) : 0))}
           </div>
+          {currentKhata && currentKhata.billed > 0 && (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-baseline justify-between">
+                <p className="text-base font-bold text-text-primary">Credit ledger</p>
+                {currentKhata.overdue > 0 && <span className="text-xs font-semibold text-danger">{currentKhata.overdue} overdue</span>}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {stat('Billed', money(currentKhata.billed))}
+                {stat('Paid', money(currentKhata.paid))}
+                {stat('Outstanding', money(currentKhata.outstanding), currentKhata.outstanding > 0 ? 'text-warning' : 'text-text-primary')}
+              </div>
+              {openBills.length > 0 && (
+                <div className="rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
+                  {openBills.map(i => {
+                    const d = dueText(i.dueDate, true)
+                    const r = canRemindAt(i.lastRemindedAt)
+                    return (
+                      <div key={i.id} className="flex items-center gap-3 px-4 py-3">
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-medium text-text-primary truncate">{i.orderNumber ? displayOrderNumber(i.orderNumber) : cap(t.order)}{i.note ? ` · ${i.note}` : ''}</span>
+                          <span className={`block text-xs truncate ${d ? dueTone[d.tone] : 'text-text-muted'}`}>
+                            {[d?.text, i.received > 0 && `${money(i.received)} of ${money(i.amount)} paid`].filter(Boolean).join(' · ') || new Date(i.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}
+                          </span>
+                        </span>
+                        <span className="text-sm font-semibold tabular-nums text-text-primary">{money(i.amount - i.received)}</span>
+                        <button type="button" onClick={() => remindOne(i)} disabled={!!busy || !r.ok}
+                          className="shrink-0 min-h-[36px] px-3 rounded-full border border-border text-[13px] font-semibold text-text-primary active:bg-border/30 disabled:opacity-40">
+                          {r.ok ? 'Remind' : `${r.inHours}h`}
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {openBills.length > 1 && (
+                <GhostBtn disabled={!!busy} onClick={() => remindAll(current)}>{busy === 'all' ? 'Sending…' : 'Send reminder for all'}</GhostBtn>
+              )}
+            </div>
+          )}
           {current.username ? (
             <PrimaryBtn onClick={() => onChat(current.username!)}>Chat with {current.name}</PrimaryBtn>
           ) : current.wallet ? (
             <GhostBtn onClick={() => { void copy(current.wallet!); toast('Address copied', 'success') }}>Copy wallet address</GhostBtn>
           ) : null}
-          <div>
-            <p className="text-base font-bold text-text-primary mb-3">Payments</p>
-            <div className="rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
-              {current.payments.map(p => (
-                <button key={p.id} type="button" onClick={() => onPayment(p)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-border/20">
-                  <img src={chainLogoSrc(p.chain)} alt="" className="size-8 rounded-full shrink-0" />
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-sm font-medium text-text-primary truncate">{p.orderNumber ?? chainLabel(p.chain)}</span>
-                    <span className="block text-xs text-text-muted">{chainLabel(p.chain)} · {new Date(p.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
-                  </span>
-                  <span className={`text-sm font-semibold tabular-nums ${refundedIds.has(p.id) ? 'text-text-muted line-through' : 'text-brand-text'}`}>+{money(p.amount)}</span>
-                </button>
-              ))}
+          {current.payments.length > 0 && (
+            <div>
+              <p className="text-base font-bold text-text-primary mb-3">Payments</p>
+              <div className="rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
+                {current.payments.map(p => (
+                  <button key={p.id} type="button" onClick={() => onPayment(p)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-border/20">
+                    <img src={chainLogoSrc(p.chain)} alt="" className="size-8 rounded-full shrink-0" />
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-medium text-text-primary truncate">{p.orderNumber ?? chainLabel(p.chain)}</span>
+                      <span className="block text-xs text-text-muted">{chainLabel(p.chain)} · {new Date(p.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
+                    </span>
+                    <span className={`text-sm font-semibold tabular-nums ${refundedIds.has(p.id) ? 'text-text-muted line-through' : 'text-brand-text'}`}>+{money(p.amount)}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-4 px-5 pt-2 pb-6">
           <SearchField value={query} onChange={setQuery} ariaLabel={`Search ${t.customers.toLowerCase()}`} placeholder={['Search name or wallet', 'Search']} />
           {customers.length > 0 && (
-            <p className="text-xs text-text-muted -mt-1">{customers.length} {(customers.length === 1 ? t.customer : t.customers).toLowerCase()} · {money(customers.reduce((s, c) => s + c.total, 0))} paid</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              {stat(`Paid · ${customers.length} ${(customers.length === 1 ? t.customer : t.customers).toLowerCase()}`, money(customers.reduce((s, c) => s + c.total, 0)))}
+              {stat('Outstanding', money(outstanding), outstanding > 0 ? 'text-warning' : 'text-text-primary')}
+            </div>
           )}
           {shown.length === 0 ? (
             <div className="flex flex-col items-center text-center py-16">
@@ -954,17 +1146,23 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
             </div>
           ) : (
             <div className="rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
-              {shown.map(c => (
-                <button key={c.key} type="button" onClick={() => setSelected(c.key)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-border/20">
-                  {avatar(c, 42)}
-                  <span className="flex-1 min-w-0">
-                    <span className="block text-sm font-semibold text-text-primary truncate">{c.name}</span>
-                    <span className="block text-xs text-text-muted truncate">{sub(c)} · {timeAgo(c.last)}</span>
-                  </span>
-                  <span className="text-sm font-semibold tabular-nums text-text-primary">{money(c.total)}</span>
-                </button>
-              ))}
+              {shown.map(c => {
+                const k = khata.get(c.key)
+                return (
+                  <button key={c.key} type="button" onClick={() => setSelected(c.key)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-border/20">
+                    {avatar(c, 42)}
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-sm font-semibold text-text-primary truncate">{c.name}</span>
+                      <span className="block text-xs text-text-muted truncate">{c.payments.length || !k ? sub(c) : `${k.open} open ${(k.open === 1 ? t.order : t.orders).toLowerCase()}`} · {timeAgo(c.last)}</span>
+                    </span>
+                    <span className="flex flex-col items-end shrink-0">
+                      <span className="text-sm font-semibold tabular-nums text-text-primary">{money(c.total)}</span>
+                      {k && k.outstanding > 0 && <span className={`text-[11px] font-semibold tabular-nums ${k.overdue ? 'text-danger' : 'text-warning'}`}>{money(k.outstanding)} due</span>}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           )}
         </div>

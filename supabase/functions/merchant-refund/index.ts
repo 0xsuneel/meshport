@@ -157,6 +157,31 @@ const paymentRef = (paymentId: string) => keccak256(toBytes(paymentId))
 
 const usd = (n: number) => '$' + n.toFixed(2)
 
+// Stored chain names that mean the same chain.
+const chainKey = (c: string) => c === 'Polygon_Amoy_Testnet' ? 'Polygon_Sepolia' : c
+const ARC_USDC = '0x3600000000000000000000000000000000000000'
+const MIN_REFUND = 0.01
+
+/** USDC's own blocklist (FiatToken isBlacklisted) for `who` on `chain`; null when unreadable. */
+async function usdcBlocked(chain: string, who: string): Promise<boolean | null> {
+  const token = chain === 'Arc_Testnet' ? ARC_USDC : CHAIN_USDC[chainKey(chain)]
+  const urls = chain === 'Arc_Testnet' ? ARC_RPCS : (CHAIN_RPCS[chainKey(chain)] ?? [])
+  if (!token || !urls.length) return null
+  const data = '0xfe575a87' + who.replace(/^0x/, '').toLowerCase().padStart(64, '0')
+  const out = await rpc('eth_call', [{ to: token, data }, 'latest'], urls).catch(() => null)
+  if (typeof out !== 'string' || !/^0x[0-9a-f]*$/i.test(out) || out.length < 3) return null
+  return BigInt(out) !== 0n
+}
+
+/** Block number, index and time (ms) of a transaction on a chain; null when unreadable. */
+async function txPosition(urls: string[], hash: string, receipt?: any): Promise<{ block: number; index: number; time: number } | null> {
+  const r = receipt ?? await rpc('eth_getTransactionReceipt', [hash], urls).catch(() => null)
+  if (!r?.blockNumber) return null
+  const blk = await rpc('eth_getBlockByNumber', [r.blockNumber, false], urls).catch(() => null)
+  if (!blk?.timestamp) return null
+  return { block: parseInt(r.blockNumber, 16), index: parseInt(r.transactionIndex ?? '0x0', 16), time: parseInt(blk.timestamp, 16) * 1000 }
+}
+
 Deno.serve(async (req: Request) => {
   const preflight = handleOptionsFor(req)
   if (preflight) return preflight
@@ -174,13 +199,15 @@ Deno.serve(async (req: Request) => {
   const paymentId = b.paymentId ? String(b.paymentId) : null
   const receiptId = b.receiptId ? String(b.receiptId) : null
   const route = b.route === 'cctp' ? 'cctp' : b.route === 'chain' ? 'chain' : 'contract'
+  const claimed = b.amount == null ? null : Number(b.amount)
+  if (claimed != null && !(Number.isFinite(claimed) && claimed > 0)) return jsonFor(req, { error: 'Bad request' }, 400)
   const txHash = String(b.txHash ?? '').toLowerCase()
   const uuid = /^[0-9a-f-]{36}$/i
   if (!!paymentId === !!receiptId || !uuid.test(paymentId ?? receiptId ?? '') || !/^0x[0-9a-f]{64}$/.test(txHash)) return jsonFor(req, { error: 'Bad request' }, 400)
   if (route === 'contract' && /^0x0+$/.test(REFUNDS_CONTRACT)) return jsonFor(req, { error: 'Refunds are not set up yet' }, 503)
 
   // What is being refunded: an order payment, or a payment on another chain.
-  let target: { id: string; intentId: string | null; merchantWallet: string; customer: string; customerUserId: string | null; amount: number; chain: string; merchantName: string | null; orderNumber: string | null }
+  let target: { id: string; intentId: string | null; merchantWallet: string; customer: string; customerUserId: string | null; amount: number; chain: string; txHash: string; merchantName: string | null; orderNumber: string | null }
   if (paymentId) {
     const { data: pay } = await db.from('merchant_payments').select('*').eq('id', paymentId).maybeSingle()
     if (!pay) return jsonFor(req, { error: 'Payment not found' }, 404)
@@ -188,7 +215,7 @@ Deno.serve(async (req: Request) => {
     if (!intent || intent.merchant_auth_uid !== uid) return jsonFor(req, { error: 'Payment not found' }, 404)
     target = { id: paymentId, intentId: pay.intent_id, merchantWallet: String(intent.merchant_wallet || pay.merchant_wallet || '').toLowerCase(),
       customer: String(pay.from_address || '').toLowerCase(), customerUserId: pay.customer_user_id ?? null, amount: Number(pay.amount),
-      chain: pay.source_chain, merchantName: intent.merchant_name, orderNumber: intent.order_number }
+      chain: chainKey(pay.source_chain), txHash: String(pay.tx_hash).toLowerCase(), merchantName: intent.merchant_name, orderNumber: intent.order_number }
   } else {
     const { data: rc } = await db.from('merchant_chain_receipts').select('*').eq('id', receiptId).maybeSingle()
     if (!rc) return jsonFor(req, { error: 'Payment not found' }, 404)
@@ -198,10 +225,19 @@ Deno.serve(async (req: Request) => {
     if (!mine.has(String(rc.merchant_wallet).toLowerCase())) return jsonFor(req, { error: 'Payment not found' }, 404)
     const { data: payer } = await db.from('users').select('id').ilike('wallet_address', String(rc.from_address || '')).maybeSingle()
     target = { id: receiptId!, intentId: null, merchantWallet: String(rc.merchant_wallet).toLowerCase(), customer: String(rc.from_address || '').toLowerCase(),
-      customerUserId: payer?.id ? String(payer.id) : null, amount: Number(rc.amount), chain: rc.source_chain,
+      customerUserId: payer?.id ? String(payer.id) : null, amount: Number(rc.amount), chain: chainKey(rc.source_chain), txHash: String(rc.tx_hash).toLowerCase(),
       merchantName: (apps ?? [])[0]?.business_name || u?.store_name || u?.username || null, orderNumber: rc.order_number ?? null }
   }
   if (!/^0x[0-9a-f]{40}$/.test(target.customer) || /^0x0+$/.test(target.customer)) return jsonFor(req, { error: 'This payment has no wallet to refund to' }, 422)
+
+  // A refund goes back the way the money came: on Arc (refunds contract) for
+  // an Arc payment; for a payment on another chain, on that chain (USDC
+  // transfer) or to that chain from Arc (CCTP).
+  const fromArc = target.chain === 'Arc_Testnet'
+  if (route === 'contract' && !fromArc) return jsonFor(req, { error: 'This payment came in on another chain - refund it on that chain' }, 422)
+  if (route !== 'contract' && fromArc) return jsonFor(req, { error: 'This payment came in on Arc - refund it on Arc' }, 422)
+  if (route === 'chain' && !CHAIN_RPCS[target.chain]) return jsonFor(req, { error: 'Refunds on this chain are not available' }, 422)
+  if (route === 'cctp' && CCTP_DOMAINS[target.chain] === undefined) return jsonFor(req, { error: 'Refunds to this chain are not available' }, 422)
 
   // Only a person's own wallet: a contract (exchange, bridge, smart account)
   // may not be the customer's on the refund chain. EIP-7702 wallets are fine.
@@ -223,6 +259,16 @@ Deno.serve(async (req: Request) => {
   if (!receipt) return jsonFor(req, { error: 'Refund transaction not found yet - try again in a moment', pending: true }, 202)
   if (receipt.status !== '0x1') return jsonFor(req, { error: 'The refund transaction failed on-chain' }, 422)
 
+  // The refund must come after the payment (not some older transfer).
+  const payRpcs = fromArc ? ARC_RPCS : (CHAIN_RPCS[target.chain] ?? [])
+  const [paidAt, refundAt] = await Promise.all([txPosition(payRpcs, target.txHash), txPosition(txRpcs, txHash, receipt)])
+  if (!paidAt || !refundAt) return jsonFor(req, { error: "Couldn't check the refund's timing - try again in a moment", pending: true }, 202)
+  const sameChain = route === 'chain' || route === 'contract'
+  const after = sameChain
+    ? (refundAt.block > paidAt.block || (refundAt.block === paidAt.block && refundAt.index > paidAt.index))
+    : refundAt.time >= paidAt.time
+  if (!after) return jsonFor(req, { error: 'This transaction was sent before the payment - it is not a refund of it' }, 422)
+
   const ref = paymentRef(target.id).toLowerCase()
   const merchantWallet = target.merchantWallet
   const customerWallet = target.customer
@@ -239,7 +285,10 @@ Deno.serve(async (req: Request) => {
       if (route === 'chain' && addr === CHAIN_USDC[target.chain] && log.topics?.[0] === TRANSFER_TOPIC) {
         const from = ('0x' + String(log.topics[1]).slice(-40)).toLowerCase()
         const to = ('0x' + String(log.topics[2]).slice(-40)).toLowerCase()
-        if (from === merchantWallet && to === customerWallet) found = { amount: Number(BigInt(log.data)) / 1e6, reason: String(b.reason ?? '').slice(0, 140) }
+        if (from === merchantWallet && to === customerWallet) {
+          if (found) return jsonFor(req, { error: 'This transaction holds more than one transfer to the customer - record a single refund transfer' }, 422)
+          found = { amount: Number(BigInt(log.data)) / 1e6, reason: String(b.reason ?? '').slice(0, 140) }
+        }
       }
       if (route === 'cctp' && addr === TOKEN_MESSENGER) {
         const a = decodeEventLog({ abi: DEPOSIT_FOR_BURN, data: log.data as Hex, topics: log.topics as [Hex, ...Hex[]] }).args
@@ -254,6 +303,15 @@ Deno.serve(async (req: Request) => {
   }
   if (!found) return jsonFor(req, { error: 'This transaction is not a refund of this payment' }, 422)
   if (found.amount > target.amount + 1e-6) return jsonFor(req, { error: 'Refund is larger than the payment' }, 422)
+  if (found.amount + 1e-9 < MIN_REFUND) return jsonFor(req, { error: `A refund must be at least ${usd(MIN_REFUND)}` }, 422)
+  if (claimed != null && Math.abs(found.amount - claimed) > 0.000001) {
+    return jsonFor(req, { error: `This transaction refunds ${usd(found.amount)}, not ${usd(claimed)}` }, 422)
+  }
+
+  // USDC's blocklist, on the chain the refund lands on.
+  const blocked = await usdcBlocked(route === 'contract' ? 'Arc_Testnet' : target.chain, customerWallet)
+  if (blocked === null) return jsonFor(req, { error: "Couldn't check this address - try again in a moment", pending: true }, 202)
+  if (blocked) return jsonFor(req, { error: "This customer's address is blocked by USDC - the refund can't be recorded" }, 422)
 
   const { data: row, error } = await db.from('merchant_refunds').insert({
     payment_id: paymentId, receipt_id: receiptId, intent_id: target.intentId, merchant_auth_uid: uid, merchant_wallet: merchantWallet,

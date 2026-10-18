@@ -1,0 +1,1 @@
+alter table public.merchant_payments drop constraint if exists merchant_payments_source_chain_tx_hash_key;

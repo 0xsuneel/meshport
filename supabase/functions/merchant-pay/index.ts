@@ -16,7 +16,8 @@
 // Nothing is trusted from the client except "look at this transaction":
 // the receipt is fetched from the chain, the USDC Transfer to the merchant's
 // wallet is read from its logs, and one chain tx can only ever count once
-// (merchant_payments unique source_chain + tx_hash).
+// per merchant (merchant_payments unique source_chain + tx_hash + merchant_wallet).
+// Other chains are credited only once the block is CONFIRMATIONS deep.
 //
 // Routes:
 //   Arc_Testnet                → paid immediately (direct Arc transfer, no UB)
@@ -73,6 +74,20 @@ export const PAY_CHAINS: Record<string, ChainDef> = {
 }
 
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+
+// Blocks a payment must be under the chain head before it's credited (reorg
+// safety). Arc has deterministic finality: a block is final when produced.
+export const CONFIRMATIONS: Record<string, number> = {
+  Arc_Testnet: 0,
+  Ethereum_Sepolia: 12,
+  Base_Sepolia: 10, Optimism_Sepolia: 10, Unichain_Sepolia: 10, World_Chain_Sepolia: 10, Ink_Testnet: 10, Linea_Sepolia: 10,
+  Arbitrum_Sepolia: 20, // ~0.25 s blocks
+  Polygon_Sepolia: 64,
+  Avalanche_Fuji: 3, Sonic_Testnet: 3, Sei_Testnet: 3, Injective_Testnet: 3, // fast-finality chains
+  XDC_Apothem: 5, HyperEVM_Testnet: 5,
+}
+export const DEFAULT_CONFIRMATIONS = 10
+export const confirmationsFor = (chainId: string) => CONFIRMATIONS[chainId] ?? DEFAULT_CONFIRMATIONS
 
 function serviceKey(): string {
   const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -144,13 +159,13 @@ function publicView(i: any, payments: any[]) {
   return {
     code: i.code, orderNumber: i.order_number ?? null, merchantName: i.merchant_name, merchantWallet: i.merchant_wallet,
     merchantUsername: i._merchant_username ?? null, merchantAvatar: i._merchant_avatar ?? null,
-    amount: Number(i.requested_amount), received: Number(i.received_amount), currency: i.currency,
+    amount: Number(i.requested_amount), received: Number(i.received_amount), overpaid: Number(i.overpaid_amount ?? 0), currency: i.currency,
     note: i.note, customerUsername: i.customer_username, status: effectiveStatus(i),
     kind: i.kind ?? 'request', personal: typeof i.personal === 'boolean' ? i.personal : null, items: Array.isArray(i.items) ? i.items : null,
     createdAt: i.created_at, expiresAt: i.expires_at, paidAt: i.paid_at,
     completedByMerchant: !!i.completed_by_merchant, completedNote: i.completed_note ?? null,
     chains: Object.entries(PAY_CHAINS).map(([id, c]) => ({ id, label: c.label, chainId: c.chainId, usdc: c.usdc, route: c.route })),
-    payments: payments.map(p => ({ chain: p.source_chain, amount: Number(p.amount), status: p.status, txHash: p.tx_hash, method: p.method, createdAt: p.created_at })),
+    payments: payments.map(p => ({ chain: p.source_chain, amount: Number(p.amount), status: p.status, txHash: p.tx_hash, method: p.method, late: !!p.late, createdAt: p.created_at })),
   }
 }
 
@@ -208,10 +223,38 @@ function usdcToMerchant(receipt: any, usdc: string, to: string, chainId: string)
   return sum(usdc.toLowerCase(), TRANSFER_TOPIC, 6)
 }
 
+// ── Incoming payment screening ───────────────────────────────────────────
+// USDC's own blocklist (FiatToken isBlacklisted(address) → bool) on the chain
+// the money came in on. A hit is still recorded (the money arrived) but
+// flagged, and the merchant is told. Cached per address for a while.
+export type ScreenFlag = 'usdc_blocklisted'
+const screenCache = new Map<string, { at: number; flag: ScreenFlag | null }>()
+const SCREEN_TTL_MS = 10 * 60_000
+async function screenSender(chainId: string, from: string | null): Promise<ScreenFlag | null> {
+  const chain = PAY_CHAINS[chainId]
+  if (!chain || !from || !/^0x[0-9a-f]{40}$/i.test(from) || /^0x0{40}$/i.test(from)) return null
+  const key = `${chainId}:${from.toLowerCase()}`
+  const hit = screenCache.get(key)
+  if (hit && Date.now() - hit.at < SCREEN_TTL_MS) return hit.flag
+  const data = '0xfe575a87' + from.replace(/^0x/, '').toLowerCase().padStart(64, '0')
+  const out = await rpc(chain.rpcs, 'eth_call', [{ to: chain.usdc, data }, 'latest']).catch(() => null)
+  if (typeof out !== 'string' || !/^0x[0-9a-f]+$/i.test(out)) return null // unreadable: not flagged, not cached
+  const flag: ScreenFlag | null = BigInt(out) !== 0n ? 'usdc_blocklisted' : null
+  screenCache.set(key, { at: Date.now(), flag })
+  return flag
+}
+
+const usd2 = (n: number) => '$' + n.toFixed(2)
+const short = (a: string) => a.slice(0, 6) + '…' + a.slice(-4)
+async function notifyMerchant(wallet: string, type: string, title: string, message: string) {
+  await db.rpc('merchant_notify', { p_wallet: wallet, p_type: type, p_title: title, p_message: message }).then(() => {}, () => {})
+}
+
 type OrderCheck = { orderNumber: string | null; amount: number | null }
 type MatchedBy = 'customer' | 'merchant' | 'watcher'
 
-async function recordPayment(req: Request | null, i: any, chainId: string, txHash: string, who: Awaited<ReturnType<typeof caller>>, order: OrderCheck, matchedBy: MatchedBy = 'customer') {
+type RecordOpts = { minedAt?: number }
+async function recordPayment(req: Request | null, i: any, chainId: string, txHash: string, who: Awaited<ReturnType<typeof caller>>, order: OrderCheck, matchedBy: MatchedBy = 'customer', opts: RecordOpts = {}) {
   const chain = PAY_CHAINS[chainId]
   if (!chain) return { error: "This network isn't supported for this payment.", status: 400 }
   // Personal requests (non-merchant users) are paid on Arc only - there's no
@@ -221,7 +264,9 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   const tx = txHash.toLowerCase()
 
   // Already counted (idempotent: same answer, never a second credit).
-  const { data: dup } = await db.from('merchant_payments').select('intent_id').eq('source_chain', chainId).eq('tx_hash', tx).maybeSingle()
+  // (Per merchant: one tx can pay two different merchants.)
+  const merchantWallet = String(i.merchant_wallet).toLowerCase()
+  const { data: dup } = await db.from('merchant_payments').select('intent_id').eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', merchantWallet).maybeSingle()
   if (dup) {
     if (dup.intent_id !== i.id) return { error: 'This transaction was already used for another payment.', status: 409 }
     return { ok: true, duplicate: true }
@@ -242,10 +287,27 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   const receipt = await rpc(chain.rpcs, 'eth_getTransactionReceipt', [tx]).catch(() => null)
   if (!receipt) return { pending: true }
   if (receipt.status !== '0x1') return { error: 'The transaction failed on-chain.', status: 409 }
+  // Other chains: credited once the block is deep enough (the watcher only
+  // scans that deep already).
+  const depth = confirmationsFor(chainId)
+  if (depth > 0 && matchedBy !== 'watcher') {
+    const head = parseInt(await rpc(chain.rpcs, 'eth_blockNumber', []).catch(() => '0x0'), 16)
+    if (!(head - parseInt(receipt.blockNumber, 16) >= depth)) return { pending: true }
+  }
   const { amount, from } = usdcToMerchant(receipt, chain.usdc, i.merchant_wallet, chainId)
   if (!(amount > 0) || !from) return { error: `This transaction didn't send USDC to ${i.merchant_name ?? 'the merchant'} on ${chain.label}.`, status: 409 }
   if (order.amount != null && amount + 0.000001 < order.amount) {
     return { error: `This transaction sent $${amount} USDC, but ${orderName(i)} is for $${order.amount} USDC.`, status: 409 }
+  }
+
+  // When the transfer was mined (for the customer checks and "late").
+  let minedAtCache = opts.minedAt ?? 0
+  const blockTime = async () => {
+    if (!minedAtCache) {
+      const block = await rpc(chain.rpcs, 'eth_getBlockByNumber', [receipt.blockNumber, false]).catch(() => null)
+      minedAtCache = block?.timestamp ? parseInt(block.timestamp, 16) * 1000 : 0
+    }
+    return minedAtCache
   }
 
   // A payer claiming a transfer for an order must show it's really theirs and
@@ -263,8 +325,7 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
       const ids = chain.route === 'direct' ? await txMemoIds(chain.rpcs, tx) : []
       if (!ids.includes(memoIdOf(String(i.code)))) return { pending: true }
     }
-    const block = await rpc(chain.rpcs, 'eth_getBlockByNumber', [receipt.blockNumber, false]).catch(() => null)
-    const minedAt = block?.timestamp ? parseInt(block.timestamp, 16) * 1000 : 0
+    const minedAt = await blockTime()
     const createdAt = new Date(i.created_at).getTime()
     if (!minedAt) return { pending: true }
     if (minedAt + 60_000 < createdAt) return { error: 'This transaction was sent before the order was created.', status: 409 }
@@ -284,10 +345,18 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   }
   const method = chain.route === 'ub' ? 'external_ub' : (customerUserId && who?.wallet === from ? 'arc_direct' : 'external_arc')
 
+  // Late: paid after the order expired, or onto an order that was already
+  // cancelled / marked expired. Still recorded against the order.
+  const statusNow = String(i.status)
+  const expiresAt = i.expires_at ? new Date(i.expires_at).getTime() : null
+  const minedAt = (statusNow === 'cancelled' || statusNow === 'expired' || expiresAt != null) ? await blockTime() : minedAtCache
+  const late = statusNow === 'cancelled' || statusNow === 'expired' || (expiresAt != null && minedAt > 0 && minedAt > expiresAt)
+  const screenFlag = await screenSender(chainId, from)
+
   const { error: insErr } = await db.from('merchant_payments').insert({
-    intent_id: i.id, merchant_wallet: i.merchant_wallet, source_chain: chainId, tx_hash: tx, from_address: from,
+    intent_id: i.id, merchant_wallet: merchantWallet, source_chain: chainId, tx_hash: tx, from_address: from,
     amount, method, status: 'confirmed', customer_user_id: customerUserId, customer_username: customerUsername,
-    order_number: i.order_number, matched_by: matchedBy,
+    order_number: i.order_number, matched_by: matchedBy, late, screen_flag: screenFlag,
     ...(chain.route === 'direct' ? { arc_tx_hash: tx } : {}),
   })
   if (insErr) {
@@ -297,25 +366,27 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   // The same transfer recorded as a plain receive on another chain is this
   // order's payment now - named, so it isn't counted (or refunded) twice.
   await db.from('merchant_chain_receipts').update({ order_number: i.order_number })
-    .eq('source_chain', chainId).eq('tx_hash', tx).is('order_number', null)
+    .eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', merchantWallet).is('order_number', null)
   // A deposit the watcher parked as "needs review" is settled now.
   await db.from('merchant_unmatched_deposits').update({ status: 'assigned', assigned_code: i.code, updated_at: new Date().toISOString() })
-    .eq('source_chain', chainId).eq('tx_hash', tx).eq('status', 'needs_review')
+    .eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', merchantWallet).eq('status', 'needs_review')
 
-  const payments = await loadPayments(i.id)
-  const received = payments.reduce((s, p) => s + Number(p.amount), 0)
-  // Paid on arrival, whichever chain - the money is the merchant's; only its
-  // conversion to Arc waits for auto-convert.
-  const full = received >= Number(i.requested_amount) * 0.999
-  const status = !full ? 'partially_paid' : 'paid'
-  await db.from('merchant_payment_intents').update({
-    received_amount: Number(received.toFixed(6)), status,
-    ...(status === 'paid' ? { paid_at: new Date().toISOString(), destination_tx_hash: chain.route === 'direct' ? tx : undefined } : {}),
-    payment_method: method, source_chain: chainId, source_tx_hash: tx,
-    customer_wallet: i.customer_wallet ?? from,
-    ...(customerUsername && !i.customer_username ? { customer_username: customerUsername } : {}),
-    ...(customerUserId && !i.customer_user_id ? { customer_user_id: customerUserId } : {}),
-  }).eq('id', i.id)
+  // Received total, overpayment and status in one locked step in the
+  // database (no read-then-write race with a concurrent payment). A
+  // cancelled order stays cancelled; paid on arrival otherwise, whichever
+  // chain - only the conversion to Arc waits for the merchant's Claim All.
+  const { error: rcErr } = await db.rpc('merchant_intent_recompute', { p_intent: i.id })
+  if (rcErr) throw rcErr
+
+  const label = `${usd2(amount)} USDC${chain.route === 'direct' ? '' : ` on ${chain.label}`}`
+  if (screenFlag === 'usdc_blocklisted') {
+    await notifyMerchant(merchantWallet, 'merchant_payment_screened', 'Payment from a blocked address',
+      `${label} for ${orderName(i)} came from ${short(from)}, which is on USDC's blocklist. Check before you hand over goods or refund.`)
+  }
+  if (late && statusNow === 'cancelled') {
+    await notifyMerchant(merchantWallet, 'merchant_payment_late', `Payment for cancelled ${orderName(i)}`,
+      `${label} from ${customerUsername ?? short(from)} arrived after the order was cancelled - refund it or reopen the sale.`)
+  }
   return { ok: true }
 }
 
@@ -401,14 +472,23 @@ async function txMemoIds(rpcs: string[], tx: string): Promise<string[]> {
     .map((l: any) => String(l.topics?.[3] ?? '').toLowerCase())
 }
 
+// A payment up to a day after an order expired (or was cancelled) is still
+// recorded against it, flagged late.
+const LATE_WINDOW_MS = 86400_000
+
 const pad = (a: string) => '0x' + a.replace(/^0x/, '').toLowerCase().padStart(64, '0')
 const hex = (n: number) => '0x' + n.toString(16)
 
 async function watchDeposits() {
+  // Open orders, plus orders that expired or were cancelled within the last
+  // day: a payment for one of those is still recorded against it (late).
   const { data: open } = await db.from('merchant_payment_intents').select('*')
-    .in('status', ['pending', 'partially_paid'])
+    .in('status', ['pending', 'partially_paid', 'expired', 'cancelled'])
     .gt('created_at', new Date(Date.now() - 30 * 86400_000).toISOString())
-  const intents = (open ?? []).filter((i: any) => !i.expires_at || new Date(i.expires_at).getTime() > Date.now() - 86400_000)
+  const dayAgo = Date.now() - LATE_WINDOW_MS
+  const intents = (open ?? []).filter((i: any) => i.status === 'cancelled'
+    ? new Date(i.updated_at ?? i.created_at).getTime() > dayAgo
+    : !i.expires_at || new Date(i.expires_at).getTime() > dayAgo)
   // Every approved merchant's address is watched on the other chains, so any
   // payment there (order or not) is recorded and notified ("Payment received
   // on Base"). It stays on that chain until the merchant's auto-convert.
@@ -436,24 +516,37 @@ async function watchDeposits() {
   // trips), then handle the payments one chain after another.
   type Fetched = { fromBlock: number; toBlock: number; logs: any[] | null } | { error: unknown } | null
   const fetched = new Map<string, Fetched>(await Promise.all(Object.entries(PAY_CHAINS).map(async ([chainId, chain]): Promise<[string, Fetched]> => {
-    try {
-      const latest = parseInt(await rpc(chain.rpcs, 'eth_blockNumber', []), 16)
-      if (!Number.isFinite(latest)) return [chainId, null]
-      const fromBlock = (cursorOf.get(chainId) ?? (latest - START_LOOKBACK)) + 1
-      const toBlock = Math.min(latest, fromBlock + (SCAN_RANGE[chainId] ?? DEFAULT_RANGE) - 1)
-      if (fromBlock > toBlock) return [chainId, null]
-      const isArc = chainId === 'Arc_Testnet'
-      // Arc: open orders only (plain Arc receives are handled by the app).
-      const wallets = isArc ? orderWallets : [...new Set([...orderWallets, ...merchantWallets])]
-      if (wallets.length === 0) return [chainId, { fromBlock, toBlock, logs: null }]
-      const read = await scanLogs(chain.rpcs, {
-        address: isArc ? ARC_NATIVE_EMITTER : chain.usdc,
-        topics: [TRANSFER_TOPIC, null, wallets.map(pad)],
-      }, fromBlock, toBlock, latest)
-      return [chainId, read]
-    } catch (e) {
-      return [chainId, { error: e }]
+    const isArc = chainId === 'Arc_Testnet'
+    // Arc: open orders only (plain Arc receives are handled by the app).
+    const wallets = isArc ? orderWallets : [...new Set([...orderWallets, ...merchantWallets])]
+    // One RPC endpoint per chain per run for the head, the logs and the
+    // check below, so the logs come from a node that has reached toBlock
+    // (two load-balanced endpoints can be at different heights, and a
+    // lagging one would let the cursor skip blocks it hadn't indexed).
+    let lastErr: unknown = null
+    for (const url of chain.rpcs.filter(u => u && !u.endsWith('/'))) {
+      try {
+        const head = parseInt(await rpc([url], 'eth_blockNumber', []), 16)
+        if (!Number.isFinite(head)) throw new Error('bad eth_blockNumber')
+        // Only blocks deep enough to be safe from reorgs (Arc: final at once).
+        const latest = head - confirmationsFor(chainId)
+        const fromBlock = (cursorOf.get(chainId) ?? (latest - START_LOOKBACK)) + 1
+        const toBlock = Math.min(latest, fromBlock + (SCAN_RANGE[chainId] ?? DEFAULT_RANGE) - 1)
+        if (fromBlock > toBlock) return [chainId, null]
+        if (wallets.length === 0) return [chainId, { fromBlock, toBlock, logs: null }]
+        const read = await scanLogs([url], {
+          address: isArc ? ARC_NATIVE_EMITTER : chain.usdc,
+          topics: [TRANSFER_TOPIC, null, wallets.map(pad)],
+        }, fromBlock, toBlock, latest)
+        // The node that answered must have the last block it was asked about.
+        const end = await rpc([url], 'eth_getBlockByNumber', [hex(read.toBlock), false])
+        if (!end?.hash) throw new Error(`node behind block ${read.toBlock}`)
+        return [chainId, read]
+      } catch (e) {
+        lastErr = e
+      }
     }
+    return [chainId, { error: lastErr ?? new Error('no RPC answered') }]
   })))
 
   for (const [chainId, chain] of Object.entries(PAY_CHAINS)) {
@@ -490,8 +583,8 @@ async function watchDeposits() {
         if (!(amount > 0)) continue
         const tx = String(log.transactionHash).toLowerCase()
 
-        const { data: known } = await db.from('merchant_payments').select('id').eq('source_chain', chainId).eq('tx_hash', tx).maybeSingle()
-        const { data: queued } = await db.from('merchant_unmatched_deposits').select('id').eq('source_chain', chainId).eq('tx_hash', tx).maybeSingle()
+        const { data: known } = await db.from('merchant_payments').select('id').eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', to).maybeSingle()
+        const { data: queued } = await db.from('merchant_unmatched_deposits').select('id').eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', to).maybeSingle()
         const matchOrder = async () => {
 
         if (!blockTime.has(log.blockNumber)) {
@@ -500,27 +593,33 @@ async function watchDeposits() {
         }
         const at = blockTime.get(log.blockNumber)!
 
-        // Open orders of this merchant that were open when the deposit landed.
-        const live = intents.filter((i: any) => {
+        // This merchant's orders that existed when the deposit landed: open
+        // ones, and (as a last resort, recorded late) ones that had expired
+        // within a day or were cancelled.
+        const mine = intents.filter((i: any) => {
           if (String(i.merchant_wallet).toLowerCase() !== to) return false
           if (i.personal && !isArc) return false
           if (new Date(i.created_at).getTime() > at + 60_000) return false
-          if (i.expires_at && new Date(i.expires_at).getTime() < at) return false
           return true
         })
+        const isLate = (i: any) => i.status === 'cancelled' || i.status === 'expired'
+          || (!!i.expires_at && new Date(i.expires_at).getTime() < at)
+        const live = mine.filter((i: any) => !isLate(i))
+        const lateOnes = mine.filter((i: any) => isLate(i)
+          && (i.status === 'cancelled' || !i.expires_at || at - new Date(i.expires_at).getTime() <= LATE_WINDOW_MS))
         const dueOf = (i: any) => Number(i.requested_amount) - Number(i.received_amount)
         const custOf = (i: any) => (i.customer_user_id ? custWallet.get(String(i.customer_user_id)) : null) ?? null
         // An order naming a customer only ever takes deposits from that customer.
         const allowed = live.filter((i: any) => { const cw = custOf(i); return !cw || cw === from })
 
         const record = async (i: any) => {
-          const out: any = await recordPayment(null, i, chainId, tx, null, { orderNumber: null, amount: null }, 'watcher')
+          const out: any = await recordPayment(null, i, chainId, tx, null, { orderNumber: null, amount: null }, 'watcher', { minedAt: at })
           if (out?.ok && !out.duplicate) {
             matched += 1
             // Refresh what's still due for the next deposit in this run.
             const { data: fresh } = await db.from('merchant_payment_intents').select('*').eq('id', i.id).maybeSingle()
             const k = intents.indexOf(i)
-            if (k >= 0) { if (fresh && ['pending', 'partially_paid'].includes(fresh.status)) intents[k] = fresh; else intents.splice(k, 1) }
+            if (k >= 0) { if (fresh && ['pending', 'partially_paid', 'expired'].includes(fresh.status)) intents[k] = fresh; else intents.splice(k, 1) }
           }
         }
         const park = async (list: any[], reason: 'multiple_orders' | 'amount_mismatch') => {
@@ -531,11 +630,13 @@ async function watchDeposits() {
           review += 1
         }
 
-        // 0) Sent with the order attached (Arc memo): that order, whatever the amount.
-        if (isArc && live.length) {
+        // 0) Sent with the order attached (Arc memo): that order, whatever the
+        //    amount - also an expired or cancelled one (recorded late).
+        if (isArc && mine.length) {
           const ids = new Set(await txMemoIds(chain.rpcs, tx))
           // An order made for a named customer still only takes that customer's payment.
-          const named = ids.size ? live.find((i: any) => ids.has(memoIdOf(String(i.code))) && (!custOf(i) || custOf(i) === from)) : undefined
+          const byMemo = (list: any[]) => list.find((i: any) => ids.has(memoIdOf(String(i.code))) && (!custOf(i) || custOf(i) === from))
+          const named = ids.size ? (byMemo(live) ?? byMemo(lateOnes)) : undefined
           if (named) { await record(named); return }
         }
 
@@ -555,7 +656,16 @@ async function watchDeposits() {
           .filter((i: any) => !custOf(i) && Math.abs(dueOf(i) - amount) <= Math.max(0.1 * dueOf(i), 0.01))
           .sort((a: any, b: any) => Math.abs(dueOf(a) - amount) - Math.abs(dueOf(b) - amount))
         if (close.length > 0) { await park(close, 'amount_mismatch'); return }
-        // 4) Nothing close - an ordinary transfer, not an order payment.
+
+        // 4) No open order fits: one that expired within a day or was
+        //    cancelled, for exactly this amount (or from its named customer),
+        //    gets it - recorded late. Ambiguous → left as a plain transfer.
+        const lateAllowed = lateOnes.filter((i: any) => { const cw = custOf(i); return !cw || cw === from })
+        const lateExact = lateAllowed.filter((i: any) => Math.abs(dueOf(i) - amount) <= 0.000001)
+        if (lateExact.length === 1) { await record(lateExact[0]); return }
+        const lateTheirs = lateOnes.filter((i: any) => custOf(i) === from)
+        if (lateExact.length === 0 && lateTheirs.length === 1) { await record(lateTheirs[0]); return }
+        // 5) Nothing close - an ordinary transfer, not an order payment.
         }
         if (!known && !queued && !minted) await matchOrder()
 
@@ -563,7 +673,7 @@ async function watchDeposits() {
         // "Payment received on Base"; orders are named, so they aren't
         // notified twice). Moved to Arc by the merchant's Claim All.
         if (!isArc && merchantWallets.has(to)) {
-          const { data: paid } = await db.from('merchant_payments').select('order_number').eq('source_chain', chainId).eq('tx_hash', tx).maybeSingle()
+          const { data: paid } = await db.from('merchant_payments').select('order_number').eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', to).maybeSingle()
           // Own transfer: the merchant sent USDC from Arc to this chain lately.
           let sender = from
           if (minted) {
@@ -587,10 +697,20 @@ async function watchDeposits() {
             }
             sender = own?.length ? to : ZERO
           }
-          await db.from('merchant_chain_receipts').upsert({
-            merchant_wallet: to, source_chain: chainId, tx_hash: tx, from_address: sender, amount,
-            order_number: paid?.order_number ?? null,
-          }, { onConflict: 'source_chain,tx_hash,merchant_wallet', ignoreDuplicates: true })
+          const { data: already } = await db.from('merchant_chain_receipts').select('id')
+            .eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', to).maybeSingle()
+          if (!already) {
+            const screenFlag = sender !== to ? await screenSender(chainId, sender) : null
+            const { data: added } = await db.from('merchant_chain_receipts').upsert({
+              merchant_wallet: to, source_chain: chainId, tx_hash: tx, from_address: sender, amount,
+              order_number: paid?.order_number ?? null, screen_flag: screenFlag,
+            }, { onConflict: 'source_chain,tx_hash,merchant_wallet', ignoreDuplicates: true }).select('id')
+            // An order payment was already flagged (and notified) by recordPayment.
+            if (screenFlag && added?.length && !paid) {
+              await notifyMerchant(to, 'merchant_payment_screened', 'Payment from a blocked address',
+                `${usd2(amount)} USDC on ${chain.label} came from ${short(sender)}, which is on USDC's blocklist. Check before you hand over goods or refund.`)
+            }
+          }
         }
       }
       // A held mint's block is read again next run (every write above is idempotent).

@@ -28,6 +28,10 @@ export interface RequestRowProps {
   expanded: boolean
   onToggle: () => void
   actions: RequestAction[]
+  /** Extra state shown under the status: "Due 25 Oct", "Overpaid $2.00", "Blocked sender"… */
+  badges?: Array<{ label: string; tone: 'neutral' | 'warning' | 'danger' }>
+  /** Shown above the actions when expanded (why an action is needed) */
+  note?: string
 }
 
 const STATUS_STYLES: Record<RequestStatus, { label: string; bg: string; text: string }> = {
@@ -38,6 +42,12 @@ const STATUS_STYLES: Record<RequestStatus, { label: string; bg: string; text: st
   expired:   { label: 'Expired',   bg: 'bg-border/40',  text: 'text-text-muted' },
   cancelled: { label: 'Cancelled', bg: 'bg-border/40',  text: 'text-text-muted' },
 }
+
+const BADGE_STYLES = {
+  neutral: 'bg-border/40 text-text-secondary',
+  warning: 'bg-warning/10 text-warning',
+  danger:  'bg-danger/10 text-danger',
+} as const
 
 const KIND_LABEL: Record<RequestKind, string> = {
   request: 'Request',
@@ -59,6 +69,8 @@ export function RequestRow({
   expanded,
   onToggle,
   actions,
+  badges = [],
+  note,
 }: RequestRowProps) {
   const s = STATUS_STYLES[status]
 
@@ -81,6 +93,13 @@ export function RequestRow({
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-text-primary truncate">{title}</p>
           <p className="text-xs text-text-muted mt-0.5 truncate">{sub}</p>
+          {badges.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {badges.map(b => (
+                <span key={b.label} className={`text-[10px] font-semibold rounded-full px-2 py-0.5 ${BADGE_STYLES[b.tone]}`}>{b.label}</span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Amount + status + chevron */}
@@ -102,7 +121,7 @@ export function RequestRow({
 
       {/* Expandable actions */}
       <AnimatePresence initial={false}>
-        {expanded && actions.length > 0 && (
+        {expanded && (actions.length > 0 || note) && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -110,7 +129,8 @@ export function RequestRow({
             transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
             className="overflow-hidden"
           >
-            <div className="flex flex-wrap gap-2 px-4 pb-4 pt-1 border-t border-border">
+            {note && <p className="px-4 pt-3 text-xs text-text-secondary leading-relaxed border-t border-border">{note}</p>}
+            <div className={`flex flex-wrap gap-2 px-4 pb-4 ${note ? 'pt-3' : 'pt-1 border-t border-border'}`}>
               {actions.map((a) => (
                 <button
                   key={a.label}
