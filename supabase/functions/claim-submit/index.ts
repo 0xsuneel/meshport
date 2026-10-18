@@ -11,7 +11,7 @@
 // response is sent). From this point on, processing is 100% server-side -
 // the browser tab can be closed and the claim still completes.
 
-import { callerWallet } from '../_shared/callerWallet.ts'
+import { callerWallet, callerCanSpend, ACCOUNT_LOCKED_ERROR } from '../_shared/callerWallet.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { corsHeaders, handleOptions, json } from '../_shared/cors.ts'
 import { getArcNativeBalance } from '../_shared/chains.ts'
@@ -77,12 +77,19 @@ Deno.serve(async (req: Request) => {
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+  // Started alongside the wallet lookup so it adds no wait (checked below).
+  const canSpendCheck = callerCanSpend(req, supabase)
+  canSpendCheck.catch(() => {})
 
   // Claims can only be filed for the caller's own wallet.
   const myWallet = await callerWallet(req, supabase)
   if (!myWallet) return json({ success: false, error: 'Please sign in again' }, 401)
   if (walletAddress.toLowerCase() !== myWallet) return json({ success: false, error: 'You can only claim to your own wallet' }, 403)
   if (txHash.length > 128) return json({ success: false, error: 'Invalid transaction hash' }, 400)
+  // Business accounts can't spend until approved (public.account_can_spend).
+  const canSpend = await canSpendCheck
+  if (canSpend === false) return json({ success: false, error: ACCOUNT_LOCKED_ERROR }, 403)
+  if (canSpend === null) return json({ success: false, error: 'Could not check your account - please try again' }, 503)
 
   // Best-effort: try to identify the calling user from their JWT (anonymous
   // wallet sessions still carry a valid auth.users id). Not required.

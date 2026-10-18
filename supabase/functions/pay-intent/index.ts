@@ -4,7 +4,7 @@
 // supabase/functions/bulkpay-intent/index.ts byte-for-byte in structure --
 // the same production-validated wiring, applied to Pay.
 
-import { callerWallet, attemptOwnedBy } from '../_shared/callerWallet.ts'
+import { callerWallet, attemptOwnedBy, callerCanSpend, ACCOUNT_LOCKED_ERROR } from '../_shared/callerWallet.ts'
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { createPayIntent, markPayAttemptSubmitted } from './logic.ts'
 import type { IntentRepository, NonceFetcher, CreatePayIntentRequest } from './logic.ts'
@@ -166,6 +166,9 @@ Deno.serve(async (req: Request) => {
   if (b.action === 'ping') return json({ success: true, pong: true })
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+  // Started alongside the wallet lookup so it adds no wait (checked below).
+  const canSpendCheck = callerCanSpend(req, supabase)
+  canSpendCheck.catch(() => {})
   // Only for the caller's own wallet (see _shared/callerWallet.ts).
   const myWallet = await callerWallet(req, supabase)
   if (!myWallet) return json({ success: false, error: 'Please sign in again' }, 401)
@@ -188,6 +191,10 @@ Deno.serve(async (req: Request) => {
   if (typeof b.walletAddress !== 'string' || b.walletAddress.toLowerCase() !== myWallet) {
     return json({ success: false, error: 'You can only create transactions for your own wallet' }, 403)
   }
+  // Business accounts can't spend until approved (public.account_can_spend).
+  const canSpend = await canSpendCheck
+  if (canSpend === false) return json({ success: false, error: ACCOUNT_LOCKED_ERROR }, 403)
+  if (canSpend === null) return json({ success: false, error: 'Could not check your account - please try again' }, 503)
   const req_: CreatePayIntentRequest = {
     walletAddress: typeof b.walletAddress === 'string' ? b.walletAddress : '',
     idempotencyKey: typeof b.idempotencyKey === 'string' ? b.idempotencyKey : '',

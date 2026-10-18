@@ -32,6 +32,7 @@
  */
 import { ensureAnonSession, invokeLinked } from './supabase'
 import { describeFunctionsError } from './describeFunctionsError'
+import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
 export interface CreateSwapIntentResult {
   success: boolean
@@ -58,6 +59,7 @@ export async function createSwapIntent(params: {
   slippageBps: number | null
   routerAddress: string | null
 }): Promise<CreateSwapIntentResult> {
+  assertAccountUnlocked() // business not approved yet: nothing moves
   try {
     await ensureAnonSession()
     const { data, error } = await invokeLinked('swap-intent', params as Record<string, unknown>)

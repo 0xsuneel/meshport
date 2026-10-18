@@ -6,6 +6,7 @@ import { useAuthStore, useChatUnreadStore } from '@/store'
 import { NavIcon, type NavIconName } from './navIcons'
 import { Store } from 'lucide-react'
 import { useBusinessTab } from '@/lib/merchant'
+import { useAccountLock, isLockedPath } from '@/lib/accountLock'
 
 // Icons (navIcons.tsx, Phosphor): outline when idle. `filled` (the phone
 // bottom bar) shows the selected tab as the solid version in white on a
@@ -49,7 +50,10 @@ export function BottomNav() {
   const navigate = useNavigate()
   const user = useAuthStore(s => s.user)
   const { unreadChats, setUnreadChats } = useChatUnreadStore()
-  const tabList = useBusinessTab() ? businessTabs : tabs
+  const businessTab = useBusinessTab()
+  // Business not approved yet: only Home, Business and Activity.
+  const { locked } = useAccountLock()
+  const tabList = (businessTab ? businessTabs : tabs).filter(t => !locked || !isLockedPath(t.path))
 
   useEffect(() => {
     if (!user?.id) return

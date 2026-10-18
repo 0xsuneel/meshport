@@ -25,6 +25,8 @@ import { deriveAddressFromPrivateKey } from '@/lib/arc'
 import { getRemovedContacts, unblockIfNewerActivity } from '@/lib/removedContacts'
 import { searchUsersDb, getOrCreateConversation, fetchContactsDb, type DbUser } from '@/lib/supabase'
 import { filterServices } from '@/lib/searchServices'
+import { useAccountLock, isLockedPath } from '@/lib/accountLock'
+import { LockBadge } from '@/components/LockedFeature'
 import { RecentNewsRow } from './RecentNewsRow'
 import { BALANCES_STALE_EVENT } from '@/lib/balanceRefresh'
 import { onReconnect, isSlowNetwork, noteRequestTime, whenNetworkOk } from '@/lib/connectivity'
@@ -518,6 +520,9 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
   // Staff of a business (invited by its owner) get "Staff mode" here.
   const business = useBusinessTab()
   const [staffOf, setStaffOf] = useState(false)
+  // Business not approved yet: the actions stay visible with a lock - tapping
+  // one opens the "available after approval" screen. No staff mode.
+  const { locked } = useAccountLock()
   useEffect(() => {
     if (business) return
     import('@/lib/businessTeam').then(m => m.myMemberships()).then(l => setStaffOf(l.length > 0)).catch(() => {})
@@ -535,7 +540,7 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
       { label: 'P2P',            path: '/p2p',        icon: <ActionIcon name="p2p" size={27} /> },
       ...(isMerchant ? [] : [{ label: 'Rewards', path: '/rewards', icon: <ActionIcon name="rewards" size={27} /> }]),
       { label: 'Insights',       path: '/insights',   icon: <ActionIcon name="insights" size={27} /> },
-      ...(staffOf ? [{ label: 'Staff mode', path: '/business', icon: <ActionIcon name="clock" size={27} /> }] : []),
+      ...(staffOf && !locked ? [{ label: 'Staff mode', path: '/business', icon: <ActionIcon name="clock" size={27} /> }] : []),
     ] },
   ]
   const content = (
@@ -550,8 +555,10 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
                 onClick={() => { if (a.path === '/scanner') prewarmCamera(); onClose(); navigate(a.path) }}
                 style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '14px 4px', cursor: 'pointer' }}>
                 <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--brand)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative',
+                  opacity: locked && isLockedPath(a.path) ? 0.45 : 1 }}>
                   {a.icon}
+                  {locked && isLockedPath(a.path) && <LockBadge />}
                   {a.label === 'P2P' && hasOngoingP2P && (
                     <span style={{
                       position: 'absolute', top: 2, right: 2, width: 12, height: 12, borderRadius: '50%',
@@ -725,6 +732,7 @@ const MAX_QUICK_ACTIONS = 8
 function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: { navigate: (p: string) => void; actionIds: string[]; onCustomize: () => void; hasOngoingP2P?: boolean }) {
   const hub = useHubLabel()
   const tiles = actionIds.map(id => QUICK_ACTION_POOL.find(a => a.id === id)).filter((a): a is typeof QUICK_ACTION_POOL[number] => !!a)
+  const { locked } = useAccountLock()
   return (
     <div style={{
       background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
@@ -742,8 +750,10 @@ function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: {
               border: '1px solid var(--border)',
             }}>
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--surface)',
-              border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
+              opacity: locked && isLockedPath(t.path) ? 0.5 : 1 }}>
               {t.icon}
+              {locked && isLockedPath(t.path) && <LockBadge size={14} />}
               {t.id === 'p2p' && hasOngoingP2P && (
                 <span style={{
                   position: 'absolute', top: -1, right: -1, width: 9, height: 9, borderRadius: '50%',
@@ -2335,7 +2345,8 @@ export function HomePage() {
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
 
   const isMerchantSearch = useMerchant().isMerchant
-  const searchServices = filterServices(searchQuery, isMerchantSearch)
+  const accountLock = useAccountLock()
+  const searchServices = filterServices(searchQuery, isMerchantSearch, accountLock.locked)
 
   // Fetch known people once, lazily, the first time search is opened -
   // merges explicit saved contacts with people from recent send/receive
@@ -2424,6 +2435,8 @@ export function HomePage() {
   const openChatWithUser = async (otherUser: { id: string; display_name?: string; username?: string; avatar_url?: string; wallet_address?: string }) => {
     const otherUserId = otherUser.id
     if (!user?.id || navigatingId) return
+    // Business not approved yet: Chats is locked (the route shows why).
+    if (accountLock.locked) { navigate('/chat'); return }
     setNavigatingId(otherUserId)
     try {
       const { id: convId, error } = await getOrCreateConversation(user.id, otherUserId)
@@ -3892,8 +3905,10 @@ export function HomePage() {
               <div style={{
                 width: 55, height: 55, borderRadius: '50%', background: 'var(--brand)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
+                opacity: accountLock.locked && a.path ? 0.45 : 1,
               }}>
                 {a.icon}
+                {accountLock.locked && a.path && <LockBadge />}
                 {a.label === 'More' && ongoingTradesCount > 0 && (
                   <span style={{
                     position: 'absolute', top: 2, right: 2, width: 11, height: 11, borderRadius: '50%',
@@ -3909,16 +3924,18 @@ export function HomePage() {
 
         {/* ── FEATURE BANNERS - promo carousel for what MeshPort can do ─────── */}
         {/* Same width/radius as the old Multichain Hub row, 10% taller. */}
-        <FeatureBanner height={isDesktop ? 64 : 75} onOpen={path => navigate(path)} />
+        {/* Business not approved yet: no promos, recents, news or QR - the
+            balance, assets and activity stay. */}
+        {!accountLock.locked && <FeatureBanner height={isDesktop ? 64 : 75} onOpen={path => navigate(path)} />}
 
         {/* ── RECENT + UPDATES - side by side, same on desktop and mobile ───── */}
-        <RecentNewsRow navigate={navigate} />
+        {!accountLock.locked && <RecentNewsRow navigate={navigate} />}
 
         {/* ── ASSETS - all 3 tokens ────────────────────────────────────────── */}
         <div ref={assetsCardRef}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isDesktop ? 6 : 12 }}>
             <span style={{ fontSize: 16, fontWeight: 700 }}>Assets</span>
-            <button onClick={handleFaucet}
+            {!accountLock.locked && <button onClick={handleFaucet}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
                 background: 'none', border: 'none', cursor: 'pointer', padding: 0,
@@ -3928,7 +3945,7 @@ export function HomePage() {
                 <path d="M12 3s6 6.5 6 10.5a6 6 0 01-12 0C6 9.5 12 3 12 3z" stroke="var(--brand-text)" strokeWidth="1.8" strokeLinejoin="round"/>
               </svg>
               Faucet
-            </button>
+            </button>}
           </div>
           {isDesktop && (
             <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px', marginBottom: 4, fontSize: 10.5, color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -3980,7 +3997,7 @@ export function HomePage() {
         {isDesktop && <BiometricFooterRow isDesktop />}
 
         {/* ── MY QR - below Assets card. Mobile only. ─────────────────────── */}
-        {!isDesktop && <MyQrCard walletAddress={walletAddress} username={username} scrollContainerRef={scrollContainerRef} assetsCardRef={assetsCardRef} />}
+        {!isDesktop && !accountLock.locked && <MyQrCard walletAddress={walletAddress} username={username} scrollContainerRef={scrollContainerRef} assetsCardRef={assetsCardRef} />}
         {/* ── Biometric row - mobile: right below the QR card. ─────────────── */}
         {!isDesktop && <BiometricFooterRow isDesktop={false} />}
         </div>

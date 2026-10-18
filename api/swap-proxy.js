@@ -151,27 +151,41 @@ const KIT_KEY = (process.env.KIT_KEY || '').trim()
 const SVC_ORIGIN = 'https://api.circle.com'
 const SVC_PREFIX = '/v1/stablecoinKits/'
 
-// Session check cache (token → { uid, wallet, exp }) so each quote refresh
-// doesn't cost two extra Supabase round-trips.
+// Session check cache (token → { wallet, canSpend, exp }) so each quote
+// refresh doesn't cost extra Supabase round-trips. canSpend is
+// public.account_can_spend (false for a business account MeshPort hasn't
+// approved yet); only accounts that can spend are cached, so an approval or
+// revocation is seen on the next request.
 const _sessions = new Map()
-async function sessionWallet(req) {
+async function sessionInfo(req) {
   const token = String((req.headers && req.headers.authorization) || '').replace(/^Bearer\s+/i, '')
   if (!token) return null
   const hit = _sessions.get(token)
-  if (hit && hit.exp > Date.now()) return hit.wallet
+  if (hit && hit.exp > Date.now()) return hit
   const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${token}` } })
   if (!r.ok) return null
   const u = await r.json().catch(() => null)
   const authUid = (u && typeof u.id === 'string') ? u.id : ''
   if (!authUid) return null
-  const ur = await fetch(`${SUPABASE_URL}/rest/v1/users?auth_uid=eq.${authUid}&select=wallet_address`, {
-    headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
-  })
+  const [ur, cr] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/users?auth_uid=eq.${authUid}&select=wallet_address`, {
+      headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}` },
+    }),
+    fetch(`${SUPABASE_URL}/rest/v1/rpc/account_can_spend`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_SERVICE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_auth_uid: authUid }),
+    }).catch(() => null),
+  ])
   const rows = ur.ok ? await ur.json().catch(() => []) : []
   const wallet = String((Array.isArray(rows) && rows[0] && rows[0].wallet_address) || '').toLowerCase()
-  if (_sessions.size > 500) _sessions.clear()
-  _sessions.set(token, { wallet, exp: Date.now() + 5 * 60_000 })
-  return wallet
+  const canSpendRaw = cr && cr.ok ? await cr.json().catch(() => null) : null
+  const info = { wallet, canSpend: typeof canSpendRaw === 'boolean' ? canSpendRaw : null, exp: Date.now() + 5 * 60_000 }
+  if (info.canSpend === true) {
+    if (_sessions.size > 500) _sessions.clear()
+    _sessions.set(token, info)
+  }
+  return info
 }
 
 async function relayStablecoinService(req, res, svcPath) {
@@ -185,8 +199,12 @@ async function relayStablecoinService(req, res, svcPath) {
   const ALLOWED = ['/v1/stablecoinKits/swap', '/v1/stablecoinKits/swap/status']
   if (target.origin !== SVC_ORIGIN || !ALLOWED.includes(target.pathname)) return res.status(400).json({ message: 'Bad service path' })
   if (target.pathname.endsWith('/swap') && req.method !== 'POST') return res.status(405).json({ message: 'POST only' })
-  const wallet = await sessionWallet(req)
+  const session = await sessionInfo(req)
+  const wallet = session && session.wallet
   if (!wallet) return res.status(403).json({ message: 'Not signed in' })
+  // Business accounts can't swap until MeshPort approves them.
+  if (session.canSpend === false) return res.status(403).json({ message: 'Available after your business is approved', error: 'Available after your business is approved' })
+  if (session.canSpend !== true) return res.status(503).json({ message: 'Could not check your account - please try again' })
   let body
   if (req.method === 'POST') {
     body = req.body && typeof req.body === 'object' ? req.body : {}

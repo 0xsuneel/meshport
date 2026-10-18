@@ -22,6 +22,7 @@ export { UB_CLAIM_CHAINS }
 
 import { isMerchantNow } from './merchant'
 import { ubQuoteFees, ubSpendCost, ubSpendMargin, ubForwarderPart } from './transferFees'
+import { assertAccountUnlocked, isAccountLockedNow } from '@/lib/accountLockRule'
 
 const FAST_FINALITY = new Set(['Avalanche_Fuji', 'Polygon_Amoy_Testnet', 'Sonic_Testnet', 'Sei_Testnet', 'HyperEVM_Testnet'])
 
@@ -150,6 +151,7 @@ async function confirmedOn(kit: any, walletAddr: string, chain: string): Promise
 export async function spendUnifiedToArc(params: {
   kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number; dust?: number
 }): Promise<{ txHash?: string; received: number }> {
+  assertAccountUnlocked() // business not approved yet: nothing moves
   const { dust, ...rest } = params
   return spendUnifiedTo({ ...rest, amount: params.amount + claimDust(dust), toChain: ARC_CHAIN_KEY, recipient: params.walletAddr })
 }
@@ -256,6 +258,7 @@ export async function spendUnifiedTo(params: {
    *  only that chain's gas, instead of Circle's forwarder. */
   selfMint?: boolean
 }): Promise<{ txHash?: string; received: number }> {
+  assertAccountUnlocked() // business not approved yet: nothing moves
   const { kit, adapter, fromChain, amount, toChain, recipient } = params
   const destAdapter = params.destAdapter ?? adapter
   const forwarderTo = { chain: toChain, recipientAddress: recipient, useForwarder: true }
@@ -299,6 +302,7 @@ export async function spendUnifiedTo(params: {
 export async function runUbClaim(params: {
   kit: any; adapter: any; walletAddr: string; sdkChainId: string; chainLabel: string; amount: number; onStep: StepFn
 }): Promise<void> {
+  assertAccountUnlocked() // business not approved yet: nothing moves
   const { kit, adapter, walletAddr, sdkChainId, chainLabel, amount, onStep } = params
   if (!UB_CLAIM_CHAINS.has(sdkChainId)) throw new Error(`${chainLabel} does not support Unified Balance`)
   const ran = await withChainLock(walletAddr, sdkChainId, () =>
@@ -399,6 +403,7 @@ async function runUbClaimInner(params: {
 export async function spendDustToArc(params: {
   kit: any; adapter: any; walletAddr: string; dust: Array<{ chain: string; amount: number }>
 }): Promise<{ txHash?: string; received: number }> {
+  assertAccountUnlocked() // business not approved yet: nothing moves
   const { kit, adapter, walletAddr } = params
   const dust = params.dust.filter(d => d.amount > 0.000001)
   const total = dust.reduce((s, d) => s + d.amount, 0)
@@ -489,6 +494,7 @@ async function _runWithFetchPatch<T>(fn: (realFetch: typeof fetch) => Promise<T>
 export async function signSpendToArc(params: {
   kit: any; adapter: any; walletAddr: string; fromChain: string; amount: number; dust?: number
 }): Promise<{ body: any; send: number }> {
+  assertAccountUnlocked() // business not approved yet: nothing moves
   const { kit, adapter, walletAddr, fromChain, amount } = params
   const base = {
     from: { adapter, allocations: [{ amount: amount.toFixed(6), chain: fromChain }] },
@@ -540,6 +546,7 @@ export async function signSpendToArc(params: {
 export async function signSpendAllToArc(params: {
   kit: any; adapter: any; walletAddr: string; parts: Array<{ chain: string; amount: number }>
 }): Promise<{ body: any; send: number; allocations: Array<{ chain: string; amount: number }> }> {
+  assertAccountUnlocked() // business not approved yet: nothing moves
   const { kit, adapter, walletAddr } = params
   const parts = params.parts.filter(p => p.amount > 0.000001)
   const total = parts.reduce((s, p) => s + p.amount, 0)
@@ -613,6 +620,7 @@ async function registerServerClaim(p: {
 export async function finishHeldUbToArc(p: {
   kit: any; adapter: any; walletAddr: string; chain: string; amount: number
 }): Promise<{ serverId: string | null; received: number; txHash?: string }> {
+  assertAccountUnlocked() // business not approved yet: nothing moves
   const { Activity } = await import('./ActivityService')
   const depositTx = await Activity.pendingUbClaimTx({ walletAddress: p.walletAddr, sourceChain: SDK_TO_APP_CHAIN[p.chain] ?? p.chain })
   try {
@@ -710,6 +718,7 @@ export async function merchantClaimAll(p: {
   chains: Array<{ chainId: string; balance: number }>
   onStep?: (s: ClaimAllStep) => void
 }): Promise<{ cctp: number; failed: string[] }> {
+  assertAccountUnlocked() // business not approved yet: nothing moves
   if (claimingAll) throw new Error('Claim All is already running')
   claimingAll = true
   const step = (chainId: string, state: ClaimAllStep['state'], msg: string, claimId?: string) => p.onStep?.({ chainId, state, msg, claimId })
@@ -778,6 +787,7 @@ export function autoFinishWorthIt(fee: { total: number; approx?: boolean; receiv
 let _sweepingSameTab = false
 
 export async function autoFinishUbClaims(p: { walletAddress: string; privateKey: string }): Promise<number> {
+  if (isAccountLockedNow()) return 0 // business not approved yet
   if (_sweepingSameTab) return 0
   const locks = typeof navigator !== 'undefined' ? (navigator as any).locks : undefined
   const lockName = `meshport-ub-autosweep:${p.walletAddress.toLowerCase()}`

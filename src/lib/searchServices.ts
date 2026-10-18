@@ -1,3 +1,5 @@
+import { isLockedPath } from './accountLockRule'
+
 // Shared "Services" list for people+services search - used by both Home's
 // own mobile search overlay and DesktopHeader's search dropdown, so the two
 // surfaces can never drift apart on which real routes are searchable.
@@ -18,14 +20,17 @@ export const SERVICES = [
 // findable by its name and the merchant things inside it.
 const MERCHANT_HUB_KEYWORDS = ['merchant', 'merchant hub', 'ledger', 'payment requests', 'requests', 'customers', 'orders', 'bills', 'claim all', 'auto convert', 'auto-convert']
 
-export function filterServices(query: string, isMerchant = false) {
+/** `locked`: a business account that isn't approved yet - its locked
+ *  features (lib/accountLock.ts) are left out of the results. */
+export function filterServices(query: string, isMerchant = false, locked = false) {
   const q = query.trim().toLowerCase()
   if (!q) return []
+  const base = locked ? SERVICES.filter(s => !isLockedPath(s.path)) : SERVICES
   const list = isMerchant
-    ? SERVICES.map(s => s.path === '/multichain' ? { ...s, label: 'Merchant Hub', keywords: [...s.keywords, ...MERCHANT_HUB_KEYWORDS] }
+    ? base.map(s => s.path === '/multichain' ? { ...s, label: 'Merchant Hub', keywords: [...s.keywords, ...MERCHANT_HUB_KEYWORDS] }
         : s.path === '/insights' ? { ...s, label: 'Ledger Insights', keywords: [...s.keywords, 'ledger insights', 'sales', 'revenue', 'customers'] }
         : s)
-    : SERVICES
+    : base
   return list.filter(s =>
     s.label.toLowerCase().includes(q) ||
     s.keywords.some(k => k.includes(q))

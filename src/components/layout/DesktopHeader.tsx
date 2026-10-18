@@ -19,6 +19,7 @@ import { searchUsersDb, getOrCreateConversation, fetchContactsDb, type DbUser } 
 import { getRemovedContacts } from '@/lib/removedContacts'
 import { filterServices } from '@/lib/searchServices'
 import { useMerchant } from '@/lib/merchant'
+import { useAccountLock } from '@/lib/accountLock'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 
 // Loaded on demand - the notifications popup's own content (list rendering,
@@ -93,7 +94,8 @@ export function DesktopHeader() {
   const [showHelp, setShowHelp] = useState(false)
 
   const isMerchant = useMerchant().isMerchant
-  const services = filterServices(query, isMerchant)
+  const { locked } = useAccountLock()
+  const services = filterServices(query, isMerchant, locked)
 
   // Close on outside click / Escape.
   useEffect(() => {
@@ -190,6 +192,8 @@ export function DesktopHeader() {
 
   const openChatWithUser = async (otherUser: DbUser) => {
     if (!user?.id || navigatingId) return
+    // Business not approved yet: Chats is locked (the route shows why).
+    if (locked) { closeSearch(); navigate('/chat'); return }
     setNavigatingId(otherUser.id)
     try {
       const { id: convId, error } = await getOrCreateConversation(user.id, otherUser.id)

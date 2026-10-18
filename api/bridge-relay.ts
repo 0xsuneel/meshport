@@ -166,7 +166,7 @@ function routers(): Record<string, `0x${string}`> {
 // forcing a double Supabase round-trip on every subsequent relay until the
 // cache refilled. Replaced with LRU: only the oldest entry is evicted, so
 // the 499 most-recently-used sessions stay warm.
-const _sessionCache = new Map<string, { wallet: string; exp: number }>()
+const _sessionCache = new Map<string, { wallet: string; canSpend: boolean; exp: number }>()
 const SESSION_CACHE_TTL_MS = 5 * 60_000
 const SESSION_CACHE_MAX = 500
 
@@ -175,26 +175,57 @@ function _evictOldestSession() {
   if (firstKey !== undefined) _sessionCache.delete(firstKey)
 }
 
-/** The wallet of the caller's Supabase session, or null when not signed in. */
-async function sessionWallet(req: VercelRequest): Promise<string | null> {
+/** Business accounts can't spend until MeshPort approves them. */
+export const ACCOUNT_LOCKED_ERROR = 'Available after your business is approved'
+
+/**
+ * The caller's Supabase session: its wallet, and whether the account may
+ * spend (public.account_can_spend - false for a business that isn't approved
+ * yet, null when it couldn't be checked). Null when not signed in. Only an
+ * account that can spend is cached, so an approval/revocation is seen on the
+ * next relay rather than after the cache TTL.
+ */
+async function sessionInfo(req: VercelRequest): Promise<{ wallet: string; canSpend: boolean | null } | null> {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
   if (!token || !SERVICE_KEY) return null
   const hit = _sessionCache.get(token)
-  if (hit && hit.exp > Date.now()) return hit.wallet
+  if (hit && hit.exp > Date.now()) return { wallet: hit.wallet, canSpend: hit.canSpend }
   const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` } })
   if (!r.ok) return null
   const u = await r.json().catch(() => null) as { id?: string } | null
   if (!u?.id) return null
-  const ur = await fetch(`${SUPABASE_URL}/rest/v1/users?auth_uid=eq.${u.id}&select=wallet_address`, {
-    headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
-  })
+  const [ur, cr] = await Promise.all([
+    fetch(`${SUPABASE_URL}/rest/v1/users?auth_uid=eq.${u.id}&select=wallet_address`, {
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+    }),
+    fetch(`${SUPABASE_URL}/rest/v1/rpc/account_can_spend`, {
+      method: 'POST',
+      headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_auth_uid: u.id }),
+    }).catch(() => null),
+  ])
   const rows = ur.ok ? await ur.json().catch(() => []) as Array<{ wallet_address?: string }> : []
   const wallet = rows[0]?.wallet_address ? rows[0].wallet_address.toLowerCase() : null
-  if (wallet) {
+  const canSpendRaw = cr && cr.ok ? await cr.json().catch(() => null) : null
+  const canSpend = typeof canSpendRaw === 'boolean' ? canSpendRaw : null
+  if (!wallet) return null
+  if (canSpend === true) {
     if (_sessionCache.size >= SESSION_CACHE_MAX) _evictOldestSession()
-    _sessionCache.set(token, { wallet, exp: Date.now() + SESSION_CACHE_TTL_MS })
+    _sessionCache.set(token, { wallet, canSpend, exp: Date.now() + SESSION_CACHE_TTL_MS })
   }
-  return wallet
+  return { wallet, canSpend }
+}
+
+/** The wallet of the caller's Supabase session, or null when not signed in. */
+async function sessionWallet(req: VercelRequest): Promise<string | null> {
+  return (await sessionInfo(req))?.wallet ?? null
+}
+
+/** 403/503 for an account that can't spend (business not approved yet); null when it can. */
+function spendBlock(canSpend: boolean | null | undefined): { status: number; error: string } | null {
+  if (canSpend === true) return null
+  if (canSpend === false) return { status: 403, error: ACCOUNT_LOCKED_ERROR }
+  return { status: 503, error: 'Could not check your account - please try again' }
 }
 
 /** The caller's Supabase session must own `address`. */
@@ -483,15 +514,27 @@ async function checkP2PRegistration(tradeId: string, data: `0x${string}`, caller
   return null
 }
 
+// Relayable calls that spend the caller's funds or start a P2P order.
+const SPEND_CALLS = new Set(['depositWithAuthorization', 'depositWithPermit', 'transferWithAuthorization', 'registerTrade', 'markPaidFor'])
+
 async function relayCall(req: VercelRequest, res: VercelResponse) {
   const { chain, to, data } = (req.body ?? {}) as any
   const chainKey = CHAIN_ALIASES[chain] ?? String(chain || '')
   if (!isHex(to, 20) || !isHex(data) || data.length < 10) return res.status(400).json({ error: 'Malformed call' })
-  const caller = await sessionWallet(req)
+  const session = await sessionInfo(req)
+  const caller = session?.wallet ?? null
   if (!caller) return res.status(403).json({ error: 'Not signed in' })
   if (!allowRelay(caller)) return res.status(429).json({ error: 'Too many requests - try again in a few minutes' })
   const reason = await checkRelayable(to, data, caller)
   if (reason) return res.status(400).json({ error: reason })
+  // Calls that move the caller's money or start a P2P order need an account
+  // that can spend; finishing an incoming mint or cancelling doesn't.
+  const { decodeFunctionData } = await import('viem')
+  const fnName = (decodeFunctionData({ abi: RELAYABLE_ABI, data }) as { functionName: string }).functionName
+  if (SPEND_CALLS.has(fnName)) {
+    const block = spendBlock(session?.canSpend)
+    if (block) return res.status(block.status).json({ error: block.error })
+  }
   const cl = await callClients(chainKey)
   if (!cl) return res.status(400).json({ error: 'This chain is not supported' })
   if (!cl.wallet) return res.status(503).json({ error: 'Relayer is not configured' })
@@ -716,7 +759,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const value = BigInt(a.value), fee = BigInt(b.fee), maxFee = BigInt(b.maxFee)
     if (value < MIN_TOTAL_UNITS) return res.status(400).json({ error: 'Minimum is 1 USDC' })
 
-    if (!(await sessionOwns(req, a.from))) return res.status(403).json({ error: 'Not signed in to this wallet' })
+    const session = await sessionInfo(req)
+    if (!session || session.wallet !== String(a.from).toLowerCase()) return res.status(403).json({ error: 'Not signed in to this wallet' })
+    const block = spendBlock(session.canSpend)
+    if (block) return res.status(block.status).json({ error: block.error })
 
     const c = CHAINS[chainKey]
     const { pub, wallet } = await clients(chainKey)
