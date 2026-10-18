@@ -42,6 +42,9 @@ window.addEventListener('vite:preloadError', (e) => {
   recoverFromStaleBuild()
 })
 window.setTimeout(markBuildHealthy, 15_000)
+// Uncaught errors reach client_errors too (the error screen reports its own).
+window.addEventListener('error', e => { void import('./lib/errorReport').then(m => m.reportClientError('uncaught', e.error ?? e.message)) })
+window.addEventListener('unhandledrejection', e => { void import('./lib/errorReport').then(m => m.reportClientError('rejection', e.reason)) })
 // The ?_v=… an update reload adds is only for the service worker's handling of
 // that one page load (sw.ts) - take it out of the address bar straight away so
 // the app never shows meshport.xyz/?_v=123… instead of the normal address.
