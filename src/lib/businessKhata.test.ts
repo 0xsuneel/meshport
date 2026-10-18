@@ -46,3 +46,10 @@ describe('isOutstanding', () => {
     expect(isOutstanding(o({}), now)).toBe(true)
   })
 })
+
+describe('khataOf · completed by the business', () => {
+  it('counts a cash-completed order as paid in full', () => {
+    const k = khataOf([{ customerUsername: 'a', amount: 10, received: 0, status: 'paid', expiresAt: null, completedByMerchant: true }])
+    expect(k).toMatchObject({ billed: 10, paid: 10, outstanding: 0, open: 0 })
+  })
+})

@@ -305,6 +305,9 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
     const num = intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''
     const d = dueText(intent.dueDate ?? null, !paid)
     const dueShare = dueText(intent.dueDate ?? null, true)
+    // Expired or cancelled: nothing left to pay, so no QR to share or order to cancel.
+    const ended = !paid && (['expired', 'cancelled', 'failed'].includes(view?.status ?? '')
+      || (!!intent.expiresAt && !intent.dueDate && Date.parse(intent.expiresAt) < Date.now()))
     body = (
       <div className="flex flex-col min-h-0 flex-1">
         <div className="px-5 flex-shrink-0" style={{ paddingTop: isDesktop ? 20 : 4, paddingBottom: 4 }}>
@@ -321,9 +324,9 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
             {bill && (intent.items?.length ?? 0) > 0 && (
               <div className="w-full text-left"><DetailList rows={intent.items!.map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
             )}
-            <QrCard dataUrl={qr} paid={paid} subtitle={paid ? undefined : `Scan to pay · valid ${intent.expiresAt && !intent.dueDate ? (bill ? '7 days' : validLabel) : 'until paid'}`} />
+            {!ended && <QrCard dataUrl={qr} paid={paid} subtitle={paid ? undefined : `Scan to pay · valid ${intent.expiresAt && !intent.dueDate ? (bill ? '7 days' : validLabel) : 'until paid'}`} />}
             <Live view={view} />
-            {!paid && link && (
+            {!paid && !ended && link && (
               <div className="w-full text-left">
                 <p className="text-xs text-text-muted mb-2">{t.customer} not here? Send the link</p>
                 <LinkShare url={link} subject={`${storeName}: ${bill ? 'bill' : 'payment'} ${num} for ${money(intent.amount)}`}
@@ -333,7 +336,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
           </div>
         </div>
         <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: 10, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 18px)' }}>
-          {paid ? (
+          {paid || ended ? (
             <button type="button" onClick={() => setIntent(null)}
               className="w-full rounded-2xl text-[16px] font-bold text-white active:scale-[0.98] transition-transform" style={{ height: 52, background: 'var(--brand)' }}>
               New payment
@@ -962,7 +965,7 @@ type Customer = {
 
 const ZERO_WALLET = /^0x0{40}$/i
 const shortWallet = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`
-const toKhataOrder = (i: MerchantIntent) => ({ customerUsername: i.customerUsername, amount: i.amount, received: i.received, status: i.status, expiresAt: i.expiresAt, dueDate: i.dueDate ?? null })
+const toKhataOrder = (i: MerchantIntent) => ({ customerUsername: i.customerUsername, amount: i.amount, received: i.received, status: i.status, expiresAt: i.expiresAt, dueDate: i.dueDate ?? null, completedByMerchant: i.completedByMerchant })
 
 export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment, onChat, orders = [], onOrdersChanged }: {
   open: boolean; onBack: () => void; payments: MerchantPayment[]
