@@ -83,6 +83,13 @@ Deno.serve(async req => {
     const { data: current } = await db.auth.admin.getUserById(user.auth_uid).catch(() => ({ data: null as any }))
     if (current?.user && !current.user.is_anonymous) return jsonFor(req, { ok: true, changed: false, kept: true })
   }
+  // One MeshPort account per Google / email login: a real sign-in already
+  // linked to another account never takes on a second one. (Guest sessions
+  // are per device, not an identity - a wallet identifies those accounts.)
+  if (user.auth_uid !== sessionId && !authData?.user?.is_anonymous) {
+    const { data: other } = await db.from('users').select('id').eq('auth_uid', sessionId).neq('id', userId).limit(1).maybeSingle()
+    if (other) return jsonFor(req, { error: 'This login already has a MeshPort account' }, 409)
+  }
   if (user.auth_uid !== sessionId) {
     const { error } = await db.from('users').update({ auth_uid: sessionId }).eq('id', userId)
     if (error) return jsonFor(req, { error: 'Could not link session' }, 500)

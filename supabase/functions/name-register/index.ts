@@ -266,6 +266,8 @@ Deno.serve(async (req) => {
       // Business is chosen at sign-up (users.account_type, set by
       // start_business_account) - a signature alone can't make one.
       if (kindName === 'business' && u.account_type !== 'business') return json({ error: 'Business accounts are chosen at sign-up' }, 403)
+      // ...and the type is fixed: a business account is never registered as Personal.
+      if (kindName === 'personal' && u.account_type === 'business') return json({ error: 'This is a business account' }, 403)
 
       await setStatus(u.id, {
         store_name: kindName === 'business' ? displayName : u.store_name,

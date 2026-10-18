@@ -20,11 +20,16 @@ import { generateWallet, importFromMnemonic, importFromPrivateKey, validateMnemo
 import { copySensitiveToClipboard } from '@/lib/utils'
 import {
   supabase, upsertUserProfile,
-  isUsernameTakenDb, getUserByWalletAddress, ensureAnonSession, resolveAccountForSession,
+  isUsernameTakenDb, getUserByWalletAddress, ensureAnonSession, resolveAccountForSession, lookupAccountByWallet,
+  type DbUser,
 } from '@/lib/supabase'
 import {encryptPrivateKey, storeEncryptedKey, encryptMnemonic, storeEncryptedMnemonic, markWalletBackedUp} from '@/lib/security'
 import { LoadingDots } from '@/components/ui/LoadingDots'
-import { getSignupKind, setSignupKind, registerNameOnchain, type AccountKind } from '@/lib/onchainNames'
+import {
+  getSignupKind, getChosenKind, getAuthMode, setAuthIntent, clearAuthIntent, registerNameOnchain, type AccountKind,
+} from '@/lib/onchainNames'
+import { decideAccountAccess, foundAccountOf, type AuthMode, type AccessDecision } from '@/lib/accountRules'
+import { AccountRuleNotice } from './AccountRuleNotice'
 import { refreshMerchant } from '@/lib/merchant'
 import type { User } from '@/types'
 
@@ -115,11 +120,18 @@ function getAndClearReturnTo(): string | null {
 }
 
 
-// ─── Sign-up: account type ──────────────────────────────────────────────────
-// The very first choice. A business account claims a store username
-// (sharmachai.arc) plus a store name, and its merchant application is sent
-// at the same time. Both kinds are registered on-chain (MeshPortNames).
-function AccountKindPicker({ onChoose }: { onChoose: (k: AccountKind | null) => void }) {
+// ─── Entry: Create account / Log in + account type ──────────────────────────
+// The very first choice, for BOTH paths. A business account claims a store
+// username (sharmachai.arc) and its merchant application is sent at the same
+// time; both kinds are registered on-chain (MeshPortNames). An account's type
+// is fixed, so logging in asks for it too and refuses the other type (see
+// src/lib/accountRules.ts).
+function AccountKindPicker({ mode, onChoose, onSwitchMode }: {
+  mode: AuthMode
+  onChoose: (k: AccountKind) => void
+  onSwitchMode: () => void
+}) {
+  const login = mode === 'login'
   const option = (k: AccountKind, icon: React.ReactNode, title: string, text: string) => (
     <button type="button" onClick={() => onChoose(k)}
       className="w-full flex items-center gap-4 text-left p-4 rounded-2xl bg-surface border border-border active:scale-[0.98] transition-transform hover:border-brand">
@@ -136,15 +148,20 @@ function AccountKindPicker({ onChoose }: { onChoose: (k: AccountKind | null) => 
       <div className="flex-1 flex flex-col justify-center max-w-sm mx-auto w-full">
         <div className="text-center mb-10">
           <MeshPortLogo className="w-20 h-20 mx-auto mb-5" />
-          <h1 className="text-3xl font-bold text-text-primary">MeshPort</h1>
-          <p className="text-text-secondary mt-2">How will you use MeshPort?</p>
+          <h1 className="text-3xl font-bold text-text-primary">{login ? 'Welcome back' : 'MeshPort'}</h1>
+          <p className="text-text-secondary mt-2">{login ? 'Which account are you logging in to?' : 'How will you use MeshPort?'}</p>
         </div>
         <div className="space-y-3">
-          {option('personal', <UserIcon className="w-6 h-6" />, 'Personal', 'Send, receive and swap USDC with friends')}
-          {option('business', <Store className="w-6 h-6" />, 'Business', 'Everything in Personal, plus accept payments from customers')}
+          {login ? <>
+            {option('personal', <UserIcon className="w-6 h-6" />, 'Personal account', 'Log in to your personal MeshPort account')}
+            {option('business', <Store className="w-6 h-6" />, 'Business account', 'Log in to your business MeshPort account')}
+          </> : <>
+            {option('personal', <UserIcon className="w-6 h-6" />, 'Personal', 'Send, receive and swap USDC with friends')}
+            {option('business', <Store className="w-6 h-6" />, 'Business', 'Everything in Personal, plus accept payments from customers')}
+          </>}
         </div>
-        <button type="button" onClick={() => onChoose(null)} className="mt-8 text-sm font-semibold text-brand-text text-center">
-          I already have an account
+        <button type="button" onClick={onSwitchMode} className="mt-8 text-sm font-semibold text-brand-text text-center">
+          {login ? 'New to MeshPort? Create an account' : 'I already have an account'}
         </button>
       </div>
     </div>
@@ -154,13 +171,16 @@ function AccountKindPicker({ onChoose }: { onChoose: (k: AccountKind | null) => 
 export function LoginPage() {
   const navigate = useNavigate()
   const [agreed, setAgreed] = useState(false)
-  // First screen: what kind of account. "I already have an account" skips
-  // the choice (the account already has its type).
-  const [kind, setKind] = useState<AccountKind | null>(() => getSignupKind())
-  const [choosing, setChoosing] = useState(() => getSignupKind() === null)
-  const choose = (k: AccountKind | null) => { setSignupKind(k); setKind(k); setChoosing(false) }
+  // First screen: Create account or Log in, and Personal or Business.
+  const [mode, setMode] = useState<AuthMode>(() => getAuthMode())
+  const [kind, setKind] = useState<AccountKind | null>(() => getChosenKind())
+  const [choosing, setChoosing] = useState(() => getChosenKind() === null)
+  const choose = (k: AccountKind) => { setAuthIntent(mode, k); setKind(k); setChoosing(false) }
+  const switchMode = () => { const m: AuthMode = mode === 'login' ? 'create' : 'login'; setAuthIntent(m, null); setMode(m); setKind(null) }
 
-  if (choosing) return <AccountKindPicker onChoose={choose} />
+  if (choosing || !kind) return <AccountKindPicker mode={mode} onChoose={choose} onSwitchMode={switchMode} />
+  const login = mode === 'login'
+  const isBiz = kind === 'business'
 
   const handleGoogleLogin = async () => {
     if (!agreed) return
@@ -193,15 +213,16 @@ export function LoginPage() {
         <div className="text-center mb-8">
           <MeshPortLogo className="w-16 h-16 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-text-primary">
-            {kind === 'business' ? 'Set up your business' : kind === 'personal' ? 'Create your account' : 'Welcome back'}
+            {login ? 'Welcome back' : isBiz ? 'Set up your business' : 'Create your account'}
           </h1>
           <p className="text-text-secondary mt-2">
-            {kind === 'business' ? 'Sign in, then claim your store username' : kind === 'personal' ? 'Sign in, then claim your username' : 'Sign in to MeshPort'}
+            {login ? `Log in to your ${isBiz ? 'business' : 'personal'} account`
+              : isBiz ? 'Sign in, then claim your store username' : 'Sign in, then claim your username'}
           </p>
-          <button type="button" onClick={() => { setSignupKind(null); setKind(null); setChoosing(true) }}
+          <button type="button" onClick={() => { setAuthIntent(mode, null); setKind(null); setChoosing(true) }}
             className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-text px-3 py-1.5 rounded-full bg-brand/10">
-            {kind === 'business' ? <Store className="w-3.5 h-3.5" /> : <UserIcon className="w-3.5 h-3.5" />}
-            {kind === 'business' ? 'Business account' : kind === 'personal' ? 'Personal account' : 'Existing account'} · Change
+            {isBiz ? <Store className="w-3.5 h-3.5" /> : <UserIcon className="w-3.5 h-3.5" />}
+            {login ? 'Log in' : 'New'} · {isBiz ? 'Business account' : 'Personal account'} · Change
           </button>
         </div>
 
@@ -255,15 +276,18 @@ export function LoginPage() {
             <span className="text-xs text-text-secondary">OR</span>
             <div className="flex-1 h-px bg-text-primary/10" />
           </div>
-          <button onClick={() => agreed && navigate('/auth/passcode?next=create')}
-            disabled={!agreed}
-            className="w-full flex items-center justify-center gap-3 bg-surface border border-border text-text-primary font-semibold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
-            <Sparkles className="w-5 h-5" /> Create New Wallet
-          </button>
+          {/* A brand-new wallet never has an account - Create account only. */}
+          {!login && (
+            <button onClick={() => agreed && navigate('/auth/passcode?next=create')}
+              disabled={!agreed}
+              className="w-full flex items-center justify-center gap-3 bg-surface border border-border text-text-primary font-semibold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
+              <Sparkles className="w-5 h-5" /> Create New Wallet
+            </button>
+          )}
           <button onClick={() => agreed && navigate('/auth/passcode?next=import')}
             disabled={!agreed}
             className="w-full flex items-center justify-center gap-3 bg-surface border border-border text-text-primary font-semibold py-4 rounded-2xl active:scale-95 transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100">
-            <Download className="w-5 h-5" /> Import Existing Wallet
+            <Download className="w-5 h-5" /> {login ? 'Log in with Wallet' : 'Import Existing Wallet'}
           </button>
           <div className="flex items-center justify-center gap-2 pt-2">
             <motion.span
@@ -293,12 +317,52 @@ export function LoginPage() {
 const ACCOUNT_CONFLICT_MESSAGE =
   'This email already belongs to a MeshPort account that this sign-in isn\'t linked to. Sign in with the method you used to create that account.'
 
+/**
+ * Applies the account-type rules to a Google / email-code sign-in once its
+ * account is known. 'allow' → go on; otherwise the caller shows the notice
+ * (the session is kept until the person picks an option, so "Continue as
+ * Business" / "Log in as Personal" needs no second sign-in).
+ */
+function decideForSession(existing: DbUser | null): AccessDecision {
+  return decideAccountAccess(getChosenKind(), foundAccountOf(existing), getAuthMode())
+}
+
+type BlockedDecision = Exclude<AccessDecision, { kind: 'allow' }>
+
+/** Shared by Google and email-code sign-in: the notice and what its buttons do. */
+function useSessionRuleNotice(enterExisting: () => void) {
+  const navigate = useNavigate()
+  const [blocked, setBlocked] = useState<BlockedDecision | null>(null)
+  const leave = async (to: { mode: AuthMode; kind: AccountKind | null }) => {
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+    setAuthIntent(to.mode, to.kind)
+    navigate('/auth', { replace: true })
+  }
+  const notice = blocked && (
+    <AccountRuleNotice
+      decision={blocked}
+      via="login"
+      onContinue={() => {
+        if (blocked.kind === 'no_account') { void leave({ mode: 'create', kind: null }); return }
+        // The account's real type, on the Log in path.
+        setAuthIntent('login', blocked.existing)
+        setBlocked(null)
+        enterExisting()
+      }}
+      onBack={() => { void leave({ mode: getAuthMode(), kind: getChosenKind() }) }}
+    />
+  )
+  return { notice, setBlocked }
+}
+
 export function GoogleAuthPage() {
   const navigate = useNavigate()
   const setUser = useAuthStore(s => s.setUser)
   const setUsername = useAuthStore(s => s.setUsername)
   const setLoginType = useAuthStore(s => s.setLoginType)
   const [error, setError] = useState('')
+  const pending = useRef<(() => void) | null>(null)
+  const { notice, setBlocked } = useSessionRuleNotice(() => pending.current?.())
 
   useEffect(() => {
     (async () => {
@@ -309,8 +373,6 @@ export function GoogleAuthPage() {
         setTimeout(() => navigate('/auth', { replace: true }), 1500)
         return
       }
-
-      setLoginType('social')
 
       // The account this Google login belongs to - through the session's
       // own binding only, never by matching emails (see
@@ -329,7 +391,9 @@ export function GoogleAuthPage() {
       }
       const existing = resolved.kind === 'existing' ? resolved.user : null
 
-      if (existing) {
+      const enterExisting = () => {
+        if (!existing) return
+        setLoginType('social')
         useWalletStore.getState().setBalance(0)
         setUser(makeUser(existing.id, supaUser.email || '', {
           username:      existing.username ? existing.username + '.arc' : '',
@@ -345,21 +409,31 @@ export function GoogleAuthPage() {
         // A new sign-in always unlocks the wallet with the passkey or
         // Recovery QR - never a copy left on this device from before.
         clearSocialDeviceState()
+        clearAuthIntent()
         markReturningSignIn()
         navigate('/auth/passcode?returning=1', { replace: true })
-        return
       }
+      pending.current = enterExisting
 
-      // New user - identical starting point to verifyOTP's new-user path.
-      // No 'next' param here on purpose: PasscodeSetup routes loginType
-      // === 'social' straight to AutoWalletPage automatically, same as
-      // the email OTP flow - adding next=create here would incorrectly
+      // Account-type rules: Log in needs an account of the chosen type;
+      // only Create account makes a new one.
+      const decision = decideForSession(existing)
+      if (decision.kind !== 'allow') { setBlocked(decision); return }
+
+      if (existing) { enterExisting(); return }
+
+      // New user (Create account) - identical starting point to verifyOTP's
+      // new-user path. No 'next' param here on purpose: PasscodeSetup routes
+      // loginType === 'social' straight to AutoWalletPage automatically, same
+      // as the email OTP flow - adding next=create here would incorrectly
       // route through the manual create-wallet flow instead.
+      setLoginType('social')
       setUser(makeUser(supaUser.id, supaUser.email || ''))
       navigate('/auth/passcode', { replace: true })
     })()
   }, [])
 
+  if (notice) return notice
   return (
     <div className="flex flex-col items-center justify-center h-full bg-bg px-6 text-center">
       {error ? (
@@ -391,6 +465,8 @@ export function EmailOTPPage() {
   const [resendTimer, setResendTimer] = useState(0)
   const [error, setError] = useState('')
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+  const pending = useRef<(() => void) | null>(null)
+  const { notice, setBlocked } = useSessionRuleNotice(() => pending.current?.())
 
   useEffect(() => {
     if (resendTimer <= 0) return
@@ -444,7 +520,6 @@ export function EmailOTPPage() {
     }
 
     const supaUser = data.user
-    setLoginType('social')
 
     // ── Returning user: restore full account ────────────────────────────────
     // The account this session is bound to (users.auth_uid). Google and
@@ -465,7 +540,8 @@ export function EmailOTPPage() {
     }
     const existing = resolved.kind === 'existing' ? resolved.user : null
 
-    if (existing) {
+    const enterExisting = () => {
+      if (!existing) return
       setLoginType('social')
       // Clear any prior wallet's transaction history before restoring this account
       useWalletStore.getState().setBalance(0)
@@ -478,8 +554,8 @@ export function EmailOTPPage() {
       if (existing.username) setUsername((existing.username || '').replace(/\.arc$/, ''))
       if (existing.wallet_address) {
         // Same reasoning as GoogleAuthPage above - tag walletSource so the
-      // server-side key backup fallback is reachable on a fresh device.
-      useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: 'social-auto' })
+        // server-side key backup fallback is reachable on a fresh device.
+        useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: 'social-auto' })
       }
       setLoading(false)
       showToastMessage(`Welcome back, ${existing.username || existing.display_name}! 👋`, 'success')
@@ -487,18 +563,29 @@ export function EmailOTPPage() {
       // unlock the wallet with the passkey or Recovery QR (never a copy left
       // on this device from before this sign-in).
       clearSocialDeviceState()
+      clearAuthIntent()
       markReturningSignIn()
       navigate('/auth/passcode?returning=1', { replace: true })
-      return
     }
+    pending.current = enterExisting
 
-    // ── New user: start onboarding ────────────────────────────────────────────
+    // Account-type rules: Log in needs an account of the chosen type; only
+    // Create account makes a new one.
+    const decision = decideForSession(existing)
+    if (decision.kind !== 'allow') { setLoading(false); setBlocked(decision); return }
+
+    // ── Returning user: restore full account ────────────────────────────────
+    if (existing) { enterExisting(); return }
+
+    // ── New user (Create account): start onboarding ─────────────────────────
     setLoginType('social')
     setUser(makeUser(supaUser.id, supaUser.email || ''))
     setLoading(false)
     showToastMessage('Email verified! Set up your account.', 'success')
     navigate('/auth/passcode', { replace: true })
   }
+
+  if (notice) return notice
 
   return (
     <div className="flex flex-col h-full bg-bg px-6 py-12">
@@ -835,6 +922,14 @@ export function ImportWalletPage() {
     walletSource: 'import-seed' | 'import-privkey'
   } | null>(null)
 
+  // Set when the wallet's account doesn't fit the chosen path (see
+  // src/lib/accountRules.ts). Nothing is saved until the person picks an option.
+  const [blocked, setBlocked] = useState<{
+    decision: BlockedDecision
+    result: { address: string; privateKey: string; mnemonic?: string }
+    walletSource: 'import-seed' | 'import-privkey'
+  } | null>(null)
+
   // No inline guards - handled entirely by RequireNoWallet in App.tsx router
 
   const handleImport = async () => {
@@ -860,6 +955,15 @@ export function ImportWalletPage() {
       setMismatch({ result, walletSource })
       setLoading(false)
       return
+    }
+
+    // Account-type rules - for a sign-in / sign-up with this wallet, not for
+    // restoring the key of an account this device is already signed in to.
+    if (!existingWalletAddress) {
+      const found = await lookupAccountByWallet(result.address)
+      if (found.kind === 'error') { setError("Couldn't reach MeshPort. Please try again."); setLoading(false); return }
+      const decision = decideAccountAccess(getChosenKind(), foundAccountOf(found.user), getAuthMode())
+      if (decision.kind !== 'allow') { setBlocked({ decision, result, walletSource }); setLoading(false); return }
     }
 
     await finishImport(result, walletSource)
@@ -925,6 +1029,29 @@ export function ImportWalletPage() {
     navigate('/auth/claim-username', { replace: true })
     setLoading(false)
     showToastMessage('Wallet imported!', 'success')
+  }
+
+  if (blocked) {
+    const { decision } = blocked
+    return (
+      <AccountRuleNotice
+        decision={decision}
+        via="wallet"
+        busy={loading}
+        onContinue={() => {
+          if (decision.kind === 'no_account') {
+            // Back to the first screen, on Create account.
+            setAuthIntent('create', null)
+            navigate('/auth', { replace: true })
+            return
+          }
+          // The wallet's real account type, on the Log in path.
+          setAuthIntent('login', decision.existing)
+          void finishImport(blocked.result, blocked.walletSource)
+        }}
+        onBack={() => { setBlocked(null); setInput('') }}
+      />
+    )
   }
 
   if (mismatch) {
@@ -1031,6 +1158,8 @@ export function ClaimUsernamePage() {
   const [statusMsg, setStatusMsg] = useState('')
   const [loading, setLoading] = useState(false)
   const [checking, setChecking] = useState(true)
+  const [noAccount, setNoAccount] = useState(false)
+  const logout = useAuthStore(s => s.logout)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Focused without scrolling (the page is still sliding in - see useAutoFocus).
   const handleRef = useRef<HTMLInputElement>(null)
@@ -1065,8 +1194,12 @@ export function ClaimUsernamePage() {
         // reinstall, even though the real values were one field away.
         setUser(mergeExistingWalletProfile(user, walletAddress, existing))
         setUsername(existing.username)
+        clearAuthIntent()
         navigate(getAndClearReturnTo() || '/', { replace: true })
       } else {
+        // Only Create account makes a new account - a Log in that got this
+        // far without one (e.g. a typed URL) is stopped here too.
+        if (getAuthMode() === 'login') setNoAccount(true)
         setChecking(false)
       }
     }).catch(() => setChecking(false))
@@ -1081,6 +1214,14 @@ export function ClaimUsernamePage() {
   // which is exactly what reads as "the claim page shows up late" right
   // after creating a wallet.
   if (checking) return <LoadingDots />
+
+  if (noAccount) {
+    const startOver = (mode: AuthMode) => { logout(); setAuthIntent(mode, null); navigate('/auth', { replace: true }) }
+    return (
+      <AccountRuleNotice decision={{ kind: 'no_account' }} via={loginType === 'social' ? 'login' : 'wallet'}
+        onContinue={() => startOver('create')} onBack={() => startOver('login')} />
+    )
+  }
 
   // ── Route guard ────────────────────────────────────────────────────────────
   if (username) return <Navigate to="/" replace />
@@ -1159,7 +1300,7 @@ export function ClaimUsernamePage() {
       new Promise<{ status: 'pending' }>(r => setTimeout(() => r({ status: 'pending' }), 35_000)),
     ])
     setOnchainStep(null)
-    setSignupKind(null)
+    clearAuthIntent()
     void refreshMerchant()
 
     setUsername(handle)

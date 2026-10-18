@@ -224,6 +224,8 @@ async function restInsertMessage(row: Record<string, unknown>): Promise<{ data: 
 // never selected (and isn't readable by the app); your own comes from the
 // sign-in (supabase.auth) or the my_profile() RPC.
 const USER_COLS = 'id, username, display_name, wallet_address, avatar_url, created_at'
+// Plus the account's type (personal / business) - for sign-in decisions.
+const ACCOUNT_COLS = 'id, username, display_name, wallet_address, avatar_url, created_at, account_type'
 
 export interface DbUser {
   id: string
@@ -234,6 +236,8 @@ export interface DbUser {
   wallet_address: string
   avatar_url: string | null
   created_at: string
+  /** 'personal' | 'business' - only selected where sign-in needs it. */
+  account_type?: string | null
 }
 
 export interface DbConversation {
@@ -498,7 +502,6 @@ export async function fetchUserProfile(userId: string): Promise<DbUser | null> {
 export async function resolveAccountForSession(authUid: string, email: string | null | undefined): Promise<
   { kind: 'existing'; user: DbUser } | { kind: 'new' } | { kind: 'conflict' } | { kind: 'error' }
 > {
-  const cols = USER_COLS
   // The account bound to this session (server-side: auth_uid = this session).
   const byAuth = await supabase.rpc('my_profile')
   if (byAuth.error) return { kind: 'error' }
@@ -507,7 +510,7 @@ export async function resolveAccountForSession(authUid: string, email: string | 
   // Accounts first created by this same sign-in have users.id = its auth id.
   // That still identifies the owner even if auth_uid was later re-pointed
   // (e.g. at a guest session on another device).
-  const byId = await supabase.from('users').select(cols).eq('id', authUid).maybeSingle()
+  const byId = await supabase.from('users').select(ACCOUNT_COLS).eq('id', authUid).maybeSingle()
   if (byId.error) return { kind: 'error' }
   if (byId.data) return { kind: 'existing', user: byId.data as DbUser }
   if (email) {
@@ -956,6 +959,22 @@ export async function getUserByWalletAddress(walletAddress: string): Promise<DbU
     .maybeSingle()
   if (error) { console.error('[Supabase] getUserByWalletAddress:', error.message); return null }
   return data as DbUser | null
+}
+
+/**
+ * The MeshPort account (with its type) a wallet belongs to, for sign-in -
+ * unlike getUserByWalletAddress, a failed lookup is an error, never "none".
+ */
+export async function lookupAccountByWallet(walletAddress: string): Promise<
+  { kind: 'ok'; user: DbUser | null } | { kind: 'error' }
+> {
+  const { data, error } = await supabase
+    .from('users')
+    .select(ACCOUNT_COLS)
+    .ilike('wallet_address', walletAddress.toLowerCase())
+    .maybeSingle()
+  if (error) return { kind: 'error' }
+  return { kind: 'ok', user: (data as DbUser | null) ?? null }
 }
 
 /** Batch lookup - fetch multiple users by wallet address in one query */
