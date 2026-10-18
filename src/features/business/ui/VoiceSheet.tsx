@@ -129,7 +129,7 @@ export function VoiceSheet({
           className="w-full flex items-center justify-center gap-2 rounded-2xl py-3.5 border border-border text-sm font-medium text-text-secondary hover:border-text-muted active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed mb-3"
         >
           <Volume2 className="size-4" />
-          Test voice — &ldquo;Payment received: $10.00&rdquo;
+          Test voice — &ldquo;Received 24 dollars&rdquo;
         </button>
 
         <PrimaryBtn onClick={onClose}>Done</PrimaryBtn>

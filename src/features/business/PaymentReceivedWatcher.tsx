@@ -23,7 +23,11 @@ export function PaymentReceivedWatcher() {
     seen.current = null
     if (!business || !wallet) return
     let live = true
-    const check = async () => {
+    // One check at a time: a live update landing while the first load is
+    // still out would otherwise count its payment as already seen (silent).
+    let running: Promise<void> = Promise.resolve()
+    const check = () => { running = running.then(load, load); return running }
+    const load = async () => {
       const [paid, receipts] = await Promise.all([listMyPayments(50).catch(() => null), listChainReceipts(30).catch(() => [])])
       if (!live || !paid) return
       // Order payments are already in `paid`; own transfers aren't payments.
