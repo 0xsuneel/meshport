@@ -165,7 +165,7 @@ export function orderLabel(v: { code: string; orderNumber?: string | null }): st
 
 // How orders are named on screen: src/lib/orderLabels.ts (pure, no network).
 export {
-  displayOrderNumber, orderKindOf, orderTitle, PAYMENT_ORDER_TAG, paymentOrderTag, parsePaymentOrderTag,
+  displayOrderNumber, shortOrderNumber, orderKindOf, orderTitle, PAYMENT_ORDER_TAG, paymentOrderTag, parsePaymentOrderTag,
   paidTitleFromTag, orderCardPreview, type OrderKind,
 } from './orderLabels'
 import { displayOrderNumber } from './orderLabels'
