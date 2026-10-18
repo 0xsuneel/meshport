@@ -8,7 +8,7 @@
 import { supabase } from './supabase'
 
 export type ActivityAction =
-  | 'charge_created' | 'bill_created' | 'order_cancelled' | 'order_completed' | 'refund_sent'
+  | 'charge_created' | 'bill_created' | 'order_cancelled' | 'order_reopened' | 'order_completed' | 'refund_sent'
   | 'settle_run' | 'payout_paid' | 'staff_invited' | 'staff_removed' | 'staff_left' | 'staff_joined' | 'staff_role_changed'
   | 'store_added' | 'store_edited' | 'store_removed' | 'limits_changed' | 'reminder_sent' | 'due_date_set'
 
@@ -22,6 +22,7 @@ export const ACTION_LABEL: Record<ActivityAction, string> = {
   charge_created: 'Created a request',
   bill_created: 'Created a bill',
   order_cancelled: 'Cancelled',
+  order_reopened: 'Reopened',
   order_completed: 'Marked completed',
   refund_sent: 'Sent a refund',
   settle_run: 'Settled to Arc',
