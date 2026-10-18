@@ -20,6 +20,10 @@ export type AccountKind = 'personal' | 'business'
 const SIGNUP_KIND_KEY = 'meshport_signup_kind'
 const DEADLINE_SEC = 7 * 24 * 60 * 60
 
+// Create account or Log in - picked on the same first screen as the type.
+// Missing = 'create' (sign-ins started before this existed behave as before).
+const AUTH_MODE_KEY = 'meshport_auth_mode'
+
 export function setSignupKind(kind: AccountKind | null) {
   try {
     if (kind) sessionStorage.setItem(SIGNUP_KIND_KEY, kind)
@@ -27,12 +31,33 @@ export function setSignupKind(kind: AccountKind | null) {
   } catch { /* storage unavailable */ }
 }
 
-/** The account type picked on the first sign-up screen, or null (sign-in / not chosen). */
-export function getSignupKind(): AccountKind | null {
+/** The account type picked on the first screen (Create account or Log in), or null. */
+export function getChosenKind(): AccountKind | null {
   try {
     const v = sessionStorage.getItem(SIGNUP_KIND_KEY)
     return v === 'business' || v === 'personal' ? v : null
   } catch { return null }
+}
+
+/** The account type picked for a NEW account, or null (log in / not chosen). */
+export function getSignupKind(): AccountKind | null {
+  return getAuthMode() === 'create' ? getChosenKind() : null
+}
+
+export function getAuthMode(): 'create' | 'login' {
+  try { return sessionStorage.getItem(AUTH_MODE_KEY) === 'login' ? 'login' : 'create' } catch { return 'create' }
+}
+
+/** Create account / Log in plus the chosen type, kept across the Google redirect. */
+export function setAuthIntent(mode: 'create' | 'login', kind: AccountKind | null) {
+  try { sessionStorage.setItem(AUTH_MODE_KEY, mode) } catch { /* storage unavailable */ }
+  setSignupKind(kind)
+}
+
+/** Forget the choice once signed in (or signed up). */
+export function clearAuthIntent() {
+  try { sessionStorage.removeItem(AUTH_MODE_KEY) } catch { /* storage unavailable */ }
+  setSignupKind(null)
 }
 
 const KIND_INDEX: Record<AccountKind, number> = { personal: 0, business: 1 }
