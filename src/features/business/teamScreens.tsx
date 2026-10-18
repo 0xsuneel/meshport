@@ -9,6 +9,7 @@ import {
   paymentMethodSummary, inr, type BuyerOffer, type P2PTrade, type P2PPaymentMethod, type P2PMessage,
 } from '@/lib/businessCashOut'
 import { listStores, saveStore, deleteStore, listStaff, inviteStaff, updateStaff, removeStaff, type Store, type StaffMember, type StaffRole } from '@/lib/businessTeam'
+import { BUSINESS_CATEGORIES } from '@/lib/businessCategories'
 import {
   BusinessScreen, CashOutHero, CashOutAmount, BuyerOfferList, PayoutAccountPicker, PayoutAccountForm, CashOutTradeView, CashOutHistory,
   StoresView, StoreForm, StaffView, StaffForm, PasscodeSheet, PrimaryBtn, Skeleton,
@@ -210,7 +211,7 @@ function CashOutTradeScreen({ tradeId, accounts, onBack, gate }: {
 
 // ── Stores & outlets ─────────────────────────────────────────────────────
 
-const STORE_TYPES = ['Retail store', 'Restaurant / Café', 'Online shop', 'Services', 'Kiosk / Counter', 'Other']
+const STORE_TYPES: string[] = [...BUSINESS_CATEGORIES]
 
 type Editing = { title: string; back: () => void } | null
 

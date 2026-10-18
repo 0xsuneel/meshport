@@ -11,6 +11,7 @@
 // The UI kit in ./ui was designed with Arc Studio.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { bizTerms } from '@/lib/businessCategories'
 import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
 import { copyToClipboard } from '@/lib/utils'
@@ -212,6 +213,8 @@ function OwnerBusinessPage() {
   // Until MeshPort approves the business, only the apply banner, the
   // application (Business profile) and Help are open.
   const locked = !isMerchant
+  // Labels follow the business's category (a café has guests, a freelancer invoices).
+  const terms = bizTerms(application?.businessType)
   useEffect(() => {
     if (!locked) return
     if (tab !== 'overview') setTab('overview')
@@ -384,13 +387,13 @@ function OwnerBusinessPage() {
             <button type="button" aria-label="Back to overview" onClick={() => { setPayFilter('all'); setTab('overview') }} className="back-btn">
               <ArrowLeft className="w-5 h-5 text-text-primary" />
             </button>
-            <h1 className="header-title">{tab === 'payments' ? 'Manage orders' : 'Manage money'}</h1>
+            <h1 className="header-title">{tab === 'payments' ? `Manage ${terms.orders.toLowerCase()}` : 'Manage money'}</h1>
             {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? 'All stores'}</span>}
           </header>
         )}
         {tab === 'payments' && <div className="px-5 pt-2">
           <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Orders or payments">
-            {([['requests', 'Orders'], ['payments', 'Payments']] as const).map(([id, label]) => (
+            {([['requests', terms.orders], ['payments', 'Payments']] as const).map(([id, label]) => (
               <button key={id} type="button" role="tab" aria-selected={payView === id} onClick={() => setPayView(id)}
                 className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${payView === id ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
                 {label}
@@ -402,14 +405,14 @@ function OwnerBusinessPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
-        {tab === 'overview' && locked && <LockedHubView banner={banner} />}
+        {tab === 'overview' && locked && <LockedHubView banner={banner} terms={terms} />}
         {tab === 'overview' && !locked && (
-          <HubView loading={!loaded} banner={banner} periodLabel={period.label} onPeriod={() => setPeriodSheet(true)}
+          <HubView terms={terms} loading={!loaded} banner={banner} periodLabel={period.label} onPeriod={() => setPeriodSheet(true)}
             sales={{ total: money(today.total), trend: <TrendChip pct={trend} compare={period.compareLabel} /> }}
             pending={pending ? { count: pending.count, due: money(pending.due) } : null}
             available={money(arcBalance)} onPending={openOrders} onAvailable={() => setTab('settlements')}
             collect={{ badge: stores.length > 1 ? `${activeStore?.name ?? 'Main store'} QR` : 'Show your QR', tone: 'brand', onClick: open('receive') }}
-            orders={{ badge: !pending ? 'Loading…' : pending.count ? `${pending.count} open` : 'No open orders', tone: pending?.count ? 'warning' : 'neutral', onClick: openOrders }}
+            orders={{ badge: !pending ? 'Loading…' : pending.count ? `${pending.count} open` : `No open ${terms.orders.toLowerCase()}`, tone: pending?.count ? 'warning' : 'neutral', onClick: openOrders }}
             money={{ badge: settle.total > 0 ? `${money(settle.total)} to settle` : scanning ? 'Checking chains…' : 'All on Arc', tone: settle.total > 0 ? 'brand' : 'neutral', onClick: () => setTab('settlements') }}
             tools={{ badge: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'}` : isMerchant ? 'Add a store' : 'Profile & help', onClick: open('tools') }}
             recent={payments.slice(0, 4)} onSeeAll={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onPayment={setDetail} />
@@ -485,8 +488,8 @@ function OwnerBusinessPage() {
         onOpen={(id: ToolId) => { if (id === 'voice') { setVoiceOpen(true); return } fromTools.current = true; setScreen(id) }}
         groups={[
           { title: 'Business', rows: [
-            { id: 'team', label: 'Stores & staff', hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers' },
-            { id: 'customers', label: 'Customers', hint: 'Everyone who paid, with their history' },
+            { id: 'team', label: `${terms.stores} & staff`, hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers' },
+            { id: 'customers', label: terms.customers, hint: 'Everyone who paid, with their history' },
             { id: 'reports', label: 'Reports', hint: 'Insights and statement · CSV and PDF' },
           ] },
           { title: 'Money', rows: [
@@ -535,7 +538,7 @@ function OwnerBusinessPage() {
       <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
       <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={storeName}
         shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} />
-      <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundOf.has(p.id) && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
+      <CustomersScreen title={terms.customers} open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundOf.has(p.id) && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
         onPayment={p => setDetail(toRow(p))} onChat={u => { setScreen(null); void openChat(u) }} />
       <ReportsScreen open={screen === 'reports'} onBack={back}
         insights={{ payments: netOf(storeRaw), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null }}

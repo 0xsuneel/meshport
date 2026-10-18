@@ -17,6 +17,7 @@ import QRCode from 'qrcode'
 import { Store, ChevronDown, Clock, Printer } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, applyForMerchant, setBusinessName } from '@/lib/merchant'
+import { BUSINESS_CATEGORIES, toCategory } from '@/lib/businessCategories'
 import { useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/ui/Avatar'
 import { chainLogoSrc } from '@/lib/chainLogos'
@@ -572,8 +573,6 @@ function ShopLimitsCard({ open, handle }: { open: boolean; handle: string }) {
   )
 }
 
-const APPLY_TYPES = ['Retail store', 'Restaurant / Café', 'Online shop', 'Services', 'Freelancer', 'Other']
-
 export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack: () => void; handle: string }) {
   const toast = useUIStore(s => s.showToastMessage)
   const { status, application, storeName } = useMerchant()
@@ -590,7 +589,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
   }
   const [contact, setContact] = useState(() => application?.contact || '')
   const [reason, setReason] = useState('')
-  const [bizType, setBizType] = useState(() => APPLY_TYPES.find(t => t === application?.businessType) ?? APPLY_TYPES[0])
+  const [bizType, setBizType] = useState<string>(() => toCategory(application?.businessType))
   const [busy, setBusy] = useState(false)
   const [again, setAgain] = useState(false)
 
@@ -653,7 +652,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
               <TextInput value={bizName} onChange={e => setBizName(e.target.value)} maxLength={60} placeholder="e.g. Royal Bakes" />
             </Field>
             <Field label="Type">
-              <ChipSelect options={APPLY_TYPES.map(t => ({ id: t, label: t }))} value={bizType} onChange={setBizType} />
+              <ChipSelect options={BUSINESS_CATEGORIES.map(t => ({ id: t, label: t }))} value={bizType} onChange={setBizType} />
             </Field>
             <Field label="Why do you need a business account?" hint={`${reason.trim().length}/10 characters minimum`}>
               <textarea value={reason} onChange={e => setReason(e.target.value)} maxLength={500} rows={4}
@@ -833,7 +832,8 @@ type Customer = {
 const ZERO_WALLET = /^0x0{40}$/i
 const shortWallet = (w: string) => `${w.slice(0, 6)}…${w.slice(-4)}`
 
-export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment, onChat }: {
+export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment, onChat, title = 'Customers' }: {
+  title?: string
   open: boolean; onBack: () => void; payments: MerchantPayment[]
   /** Refunded payments still list the customer but don't count in totals */
   refundedIds: Set<string>
@@ -876,7 +876,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
   const sub = (c: Customer) => `${c.username ? '' : c.bridge ? 'Through a bridge · ' : 'Not on MeshPort · '}${c.payments.length} payment${c.payments.length === 1 ? '' : 's'}${c.refunded ? ` · ${c.refunded} refunded` : ''}`
 
   return (
-    <BusinessScreen open={open} title={current ? current.name : 'Customers'} onBack={current ? () => setSelected(null) : onBack}>
+    <BusinessScreen open={open} title={current ? current.name : title} onBack={current ? () => setSelected(null) : onBack}>
       {current ? (
         <div className="flex flex-col gap-5 px-5 pt-2 pb-6">
           <div className="flex items-center gap-3 rounded-2xl bg-surface border border-border p-4">
