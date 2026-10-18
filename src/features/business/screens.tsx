@@ -572,6 +572,8 @@ function ShopLimitsCard({ open, handle }: { open: boolean; handle: string }) {
   )
 }
 
+const APPLY_TYPES = ['Retail store', 'Restaurant / Café', 'Online shop', 'Services', 'Freelancer', 'Other']
+
 export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack: () => void; handle: string }) {
   const toast = useUIStore(s => s.showToastMessage)
   const { status, application, storeName } = useMerchant()
@@ -588,6 +590,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
   }
   const [contact, setContact] = useState(() => application?.contact || '')
   const [reason, setReason] = useState('')
+  const [bizType, setBizType] = useState(() => APPLY_TYPES.find(t => t === application?.businessType) ?? APPLY_TYPES[0])
   const [busy, setBusy] = useState(false)
   const [again, setAgain] = useState(false)
 
@@ -595,8 +598,13 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
   const canApply = status === 'none' || (closed && again)
   const submit = async () => {
     setBusy(true)
-    // The business is its username; shops are added as stores after approval.
-    try { await applyForMerchant({ businessName: handle, contact, description: reason }); toast('Sent for review', 'success'); setAgain(false) }
+    // The application carries the business name customers will see; the
+    // account stays its username and shops are added as stores after approval.
+    try {
+      await applyForMerchant({ businessName: bizName, businessType: bizType, contact, description: reason })
+      if (bizName.trim() !== (storeName ?? '')) await setBusinessName(bizName).catch(() => {})
+      toast('Sent for review', 'success'); setAgain(false)
+    }
     catch (e) { toast(e instanceof Error ? e.message : 'Could not send', 'error') }
     setBusy(false)
   }
@@ -605,11 +613,11 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
     status === 'approved' ? { tone: 'success', title: 'Verified business', text: 'All merchant tools are on. Add your shops in Stores & staff.' }
     : status === 'pending' ? { tone: 'warning', title: 'Under review', text: "MeshPort is reviewing your business. You'll get a notification when it's approved." }
     : closed ? { tone: 'danger', title: status === 'revoked' ? 'Merchant access removed' : 'Not approved', text: application?.reviewNote || 'Check the details and send it again.' }
-    : { tone: 'brand', title: 'Complete your business account', text: 'Tell MeshPort why you need a business account. Once approved, you can add your stores.' }
+    : { tone: 'brand', title: 'Complete your business account', text: 'Add your business name and tell MeshPort why you need a business account. Once approved, you can add your stores.' }
 
   return (
     <BusinessScreen open={open} title="Business profile" onBack={onBack}
-      footer={canApply ? <PrimaryBtn disabled={busy || reason.trim().length < 10} onClick={submit}>{busy ? 'Sending…' : 'Send for review'}</PrimaryBtn>
+      footer={canApply ? <PrimaryBtn disabled={busy || bizName.trim().length < 2 || reason.trim().length < 10} onClick={submit}>{busy ? 'Sending…' : 'Send for review'}</PrimaryBtn>
         : closed ? <PrimaryBtn onClick={() => setAgain(true)}>Apply again</PrimaryBtn> : undefined}>
       <div className="flex flex-col gap-6 px-5 pt-5 pb-6">
         {/* Name and logo customers see on the pay page, receipts and notifications */}
@@ -625,20 +633,28 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
               {avatar ? 'Change' : 'Add'}
             </button>
           </div>
-          <Field label="Business name" hint={`Customers see this. Leave empty to show ${handle}.`}>
-            <div className="flex gap-2">
-              <TextInput value={bizName} onChange={e => setBizName(e.target.value)} maxLength={60} placeholder="e.g. Sharma Chai Corner" />
-              <button type="button" onClick={saveName} disabled={savingName || bizName.trim() === (storeName ?? '')}
-                className="shrink-0 min-h-[48px] px-4 rounded-2xl bg-brand text-white text-sm font-semibold disabled:opacity-40">
-                {savingName ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          </Field>
+          {!canApply && (
+            <Field label="Business name" hint={`Customers see this. Leave empty to show ${handle}.`}>
+              <div className="flex gap-2">
+                <TextInput value={bizName} onChange={e => setBizName(e.target.value)} maxLength={60} placeholder="e.g. Sharma Chai Corner" />
+                <button type="button" onClick={saveName} disabled={savingName || bizName.trim() === (storeName ?? '')}
+                  className="shrink-0 min-h-[48px] px-4 rounded-2xl bg-brand text-white text-sm font-semibold disabled:opacity-40">
+                  {savingName ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </Field>
+          )}
         </div>
         <ShopLimitsCard open={open} handle={handle} />
         <ProfileStatusCard {...card} />
         {canApply ? (
           <>
+            <Field label="Business name" hint="Your store or business name. Customers see this on the pay page and receipts.">
+              <TextInput value={bizName} onChange={e => setBizName(e.target.value)} maxLength={60} placeholder="e.g. Royal Bakes" />
+            </Field>
+            <Field label="Type">
+              <ChipSelect options={APPLY_TYPES.map(t => ({ id: t, label: t }))} value={bizType} onChange={setBizType} />
+            </Field>
             <Field label="Why do you need a business account?" hint={`${reason.trim().length}/10 characters minimum`}>
               <textarea value={reason} onChange={e => setReason(e.target.value)} maxLength={500} rows={4}
                 placeholder="e.g. I run a bakery and want customers to pay in USDC at the counter."
@@ -648,7 +664,8 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
           </>
         ) : (
           <DetailList rows={[
-            { label: 'Business', value: handle },
+            { label: 'Business', value: application?.businessName && application.businessName !== handle ? `${application.businessName} · ${handle}` : handle },
+            ...(application?.businessType ? [{ label: 'Type', value: application.businessType }] : []),
             ...(application?.contact ? [{ label: 'Contact', value: application.contact }] : []),
             ...(application ? [{ label: 'Applied', value: new Date(application.createdAt).toLocaleDateString() }] : []),
           ]} />
