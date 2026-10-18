@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useRouteError } from 'react-router-dom'
 import { isChunkLoadError, recoverFromStaleBuild } from '@/lib/lazyRetry'
 import { useOnline, useOnReconnect } from '@/lib/connectivity'
+import { reportClientError } from '@/lib/errorReport'
 
 // Replaces React Router's default "Unexpected Application Error!" screen.
 // A stale-build error (app updated while this tab was open) reloads onto the
@@ -22,7 +23,7 @@ export function RouteErrorPage() {
   // Whatever failed while offline is tried again once the connection is back.
   useOnReconnect(wave => { if (wave === 0 && !stale) window.location.reload() })
 
-  useEffect(() => { console.error('[route error]', error) }, [error])
+  useEffect(() => { console.error('[route error]', error); reportClientError('route', error) }, [error])
 
   return (
     <div style={{
