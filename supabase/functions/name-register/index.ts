@@ -244,7 +244,12 @@ Deno.serve(async (req) => {
       if (!isAddress(wallet)) return json({ error: 'Bad wallet' }, 400)
       if (!NAME_RE.test(name)) return json({ error: 'Use 3–20 letters a–z, numbers or _' }, 400)
       if (!(kindName in KIND)) return json({ error: 'Bad kind' }, 400)
-      if (kindName === 'business' && (displayName.length < 2 || displayName.length > 64)) return json({ error: 'Enter your store name (2–64 characters)' }, 400)
+      // A business account IS its username (stores are created after
+      // approval), so no store name is needed: like a personal name it may be
+      // registered with an empty display name - the contract accepts that, and
+      // the signature covers exactly what the user signed, so the server can't
+      // substitute one. A name that IS given must still be 2–64 characters.
+      if (kindName === 'business' && displayName && displayName.length < 2) return json({ error: 'Enter your store name (2–64 characters)' }, 400)
       if (new TextEncoder().encode(displayName).length > 64) return json({ error: 'Store name is too long' }, 400)
       const now = Math.floor(Date.now() / 1000)
       if (!/^\d+$/.test(deadline) || Number(deadline) < now || Number(deadline) > now + MAX_DEADLINE_SEC) return json({ error: 'Bad deadline' }, 400)
@@ -270,7 +275,7 @@ Deno.serve(async (req) => {
       if (kindName === 'personal' && u.account_type === 'business') return json({ error: 'This is a business account' }, 403)
 
       await setStatus(u.id, {
-        store_name: kindName === 'business' ? displayName : u.store_name,
+        store_name: kindName === 'business' && displayName ? displayName : u.store_name,
         name_onchain_status: 'pending',
         name_onchain_error: null,
         name_onchain_request: { name, kind: KIND[kindName], displayName, deadline, signature },

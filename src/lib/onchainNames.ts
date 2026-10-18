@@ -125,3 +125,14 @@ export async function onchainNameStatus(walletAddress: string): Promise<string> 
   const { data } = await supabase.functions.invoke('name-register', { body: { action: 'status', wallet: walletAddress } })
   return typeof data?.status === 'string' ? data.status : 'none'
 }
+
+/** Signed-in account whose name never made it on-chain (sign-up failed or
+ *  predates registration): register it now, once per session, in the
+ *  background. Needs the wallet key on this device - otherwise next time. */
+export async function ensureNameOnchain(walletAddress: string, name: string, kind: AccountKind): Promise<void> {
+  const key = `meshport_name_onchain_tried:${walletAddress.toLowerCase()}`
+  try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1') } catch { /* storage unavailable */ }
+  const status = await onchainNameStatus(walletAddress).catch(() => 'unknown')
+  if (status !== 'none' && status !== 'failed') return
+  await registerNameOnchain({ walletAddress, name: name.replace(/\.arc$/i, ''), kind, displayName: '' }).catch(() => {})
+}

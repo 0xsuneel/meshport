@@ -52,6 +52,19 @@ let _anonSignInPromise: Promise<void> | null = null
 // non-fatal) - it should never be able to block the caller forever.
 const ANON_SESSION_TIMEOUT_MS = 6000
 
+/** Forget that a session was set up, so the next ensureAnonSession() checks
+ *  again. Called on sign-out: without it, logging out and back in without a
+ *  reload skipped creating the new session. */
+export function resetAnonSession(): void {
+  _anonSignInDone = false
+}
+
+// Any sign-out (Log out, the auth screens' local sign-outs, admin) ends the
+// session, so the "already signed in" flag must go with it.
+try {
+  supabase.auth.onAuthStateChange?.((event) => { if (event === 'SIGNED_OUT') resetAnonSession() })
+} catch { /* test doubles without auth events */ }
+
 export async function ensureAnonSession(): Promise<void> {
   if (_anonSignInDone) return
   // Deduplicate concurrent calls - only run one sign-in at a time

@@ -329,7 +329,9 @@ export const useAuthStore = create<AuthStore>()(
         // actually re-authenticate. Fire-and-forget (not awaited) so the
         // local state clear above still happens instantly, same UX as
         // before - this just also does the part that was silently missing.
-        import('@/lib/supabase').then(({ supabase }) => {
+        import('@/lib/supabase').then(({ supabase, resetAnonSession }) => {
+          // Logging in again without a reload must set up a new session.
+          resetAnonSession()
           // scope 'local': ends THIS device's session only. The default
           // ('global') revoked every session of the account, so signing out
           // on one device signed the person out everywhere - their phone or
@@ -554,7 +556,9 @@ export const useNotificationStore = create<NotificationStore>()((set, get) => ({
       // itself no longer depends on local storage surviving.
       const userId = useAuthStore.getState().user?.id
       if (userId) {
-        import('@/lib/supabase').then(({ supabase }) => {
+        import('@/lib/supabase').then(({ supabase, resetAnonSession }) => {
+          // Logging in again without a reload must set up a new session.
+          resetAnonSession()
           supabase.from('users').update({ notifications_cleared_at: new Date().toISOString() }).eq('id', userId)
             .then(({ error }) => { if (error) console.warn('[notifications] failed to persist clear watermark:', error.message) })
         }).catch(() => {})
