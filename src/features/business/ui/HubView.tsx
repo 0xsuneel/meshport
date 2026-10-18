@@ -98,7 +98,7 @@ export function HubView({
       {/* Four feature areas */}
       <FadeUp delay={0.08} className="mx-5">
         <div className="grid grid-cols-2 gap-2.5">
-          <Tile icon={QrCode} title="Collect payment" sub="Shop QR · Charge · Bill" tile={collect} />
+          <Tile icon={QrCode} title="Collect payment" sub="Shop QR · Request · Bill" tile={collect} />
           <Tile icon={ShoppingBag} title={`Manage ${terms.orders.toLowerCase()}`} sub={`Status · ${terms.customer} · Receipt`} tile={orders} />
           <Tile icon={Wallet} title="Manage money" sub="Arc balance · Other chains · Settle" tile={money} />
           <Tile icon={Settings2} title="Business tools" sub={`${terms.stores} · Staff · Reports · Settings`} tile={tools} />
@@ -143,7 +143,7 @@ export function HubView({
  *  turns on - the business tools stay hidden until MeshPort approves it. */
 export function LockedHubView({ banner, terms = bizTerms(null) }: { banner: ReactNode; terms?: BizTerms }) {
   const rows: Array<[React.ElementType, string, string]> = [
-    [QrCode, 'Collect payment', 'Shop QR, charges and bills'],
+    [QrCode, 'Collect payment', 'Shop QR, requests and bills'],
     [ShoppingBag, `Manage ${terms.orders.toLowerCase()}`, `Open, paid and cancelled ${terms.orders.toLowerCase()}`],
     [Wallet, 'Manage money', 'Arc balance, other chains and settle'],
     [Settings2, 'Business tools', `${terms.stores}, staff, reports and payouts`],

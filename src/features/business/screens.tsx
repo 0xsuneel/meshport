@@ -2,7 +2,7 @@
 // of these over the tab instead of sending the merchant to another page:
 //
 //   ShopQrScreen      the store's fixed QR (customer types the amount)
-//   ReceiveScreen     Collect payment sheet: Shop QR · Charge (the chat's Request
+//   ReceiveScreen     Collect payment sheet: Shop QR · Request (the chat's Request
 //                     form) · Bill (the chat's bill composer) -> one order shown
 //                     as a counter QR and a link to send, live until it's paid
 //   RequestsList      what the store asked to be paid (Payments → My requests)
@@ -212,11 +212,11 @@ type CollectTab = 'qr' | 'charge' | 'bill'
 /** "@Priya.arc " → "priya" (what the customer field holds). */
 const cleanUsername = (v: string) => v.trim().replace(/^@/, '').replace(/\.arc$/i, '').toLowerCase()
 
-/** Collect payment: a bottom sheet with Shop QR · Charge · Bill. Charge is
+/** Collect payment: a bottom sheet with Shop QR · Request · Bill. Request is
  *  the chat's Request form (RequestAmountForm) and Bill the chat's bill
  *  composer (BillComposer), so they look and work the same; the order they
  *  make then shows here as a counter QR and a link, live until it's paid.
- *  Without `shopQr` (staff mode) only Charge (and Bill for managers). */
+ *  Without `shopQr` (staff mode) only Request (and Bill for managers). */
 export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   open: boolean; onBack: () => void; storeName: string
   shopQr?: { outlet?: string | null; handle: string }
@@ -298,7 +298,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
 
   const tabs: { id: CollectTab; label: string }[] = [
     ...(shopQr ? [{ id: 'qr' as const, label: 'Shop QR' }] : []),
-    { id: 'charge', label: 'Charge' },
+    { id: 'charge', label: 'Request' },
     ...(canBill ? [{ id: 'bill' as const, label: 'Bill' }] : []),
   ]
   const outlet = shopQr?.outlet ?? null
@@ -338,7 +338,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
     body = (
       <div className="flex flex-col min-h-0 flex-1">
         <div className="px-5 flex-shrink-0" style={{ paddingTop: isDesktop ? 20 : 4, paddingBottom: 4 }}>
-          <SheetPerson label={bill ? `Bill ${num}` : `Charge ${num}`} name={storeName} username={handle} onClose={onBack} sub={outlet} />
+          <SheetPerson label={bill ? `Bill ${num}` : `Request ${num}`} name={storeName} username={handle} onClose={onBack} sub={outlet} />
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto" data-no-drag>
           <div className="flex flex-col items-center text-center px-5 pt-3 pb-4 gap-4">
@@ -402,8 +402,8 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
     )
   } else {
     body = (
-      <RequestAmountForm open={open} isDesktop={isDesktop} header={head} verb="Charge" busyText="Creating…" places={2}
-        ariaLabel="Amount to charge in USDC" hint={`${t.customer} scans the QR or opens the link`}
+      <RequestAmountForm open={open} isDesktop={isDesktop} header={head} verb="Request" busyText="Creating…" places={2}
+        ariaLabel="Amount to request in USDC" hint={`${t.customer} scans the QR or opens the link`}
         options={{
           summary: <>Valid for <b className="font-semibold text-text-primary">{validLabel}</b>{canBill && (who
             ? <> · for <b className="font-semibold text-text-primary">{who}.arc</b></>
@@ -545,7 +545,7 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
           <div className="flex flex-col items-center text-center py-16">
             <span className="inline-flex items-center justify-center size-12 rounded-2xl bg-surface border border-border mb-3"><Clock className="size-5 text-text-muted" /></span>
             <p className="text-sm font-medium text-text-secondary">{q ? `No ${orders} match your search` : EMPTY(orders)[filter]}</p>
-            {!q && <p className="text-xs text-text-muted mt-1">Charges and bills you create in Collect payment show up here.</p>}
+            {!q && <p className="text-xs text-text-muted mt-1">Requests and bills you create in Collect payment show up here.</p>}
           </div>
         ) : (
           <div className="flex flex-col gap-2">
