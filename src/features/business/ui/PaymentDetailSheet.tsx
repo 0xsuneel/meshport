@@ -9,9 +9,12 @@ import { formatTime } from './types'
 import { Sheet } from './primitives'
 
 export interface RefundInfo {
+  id: string
   amount: string
   reason: string
   when: string    // ISO
+  /** Chain the refund went out on (e.g. "Arc", "Base") */
+  chainLabel?: string
   txUrl?: string
 }
 
@@ -24,8 +27,10 @@ export interface PaymentDetailSheetProps {
   onReceipt?: () => void
   /** Why there's no Refund (e.g. paid from a contract or exchange); shown instead. */
   refundNote?: string
-  /** Present when payment has already been refunded */
-  refund?: RefundInfo
+  /** Every refund of this payment, oldest first (a payment can be refunded several times) */
+  refunds?: RefundInfo[]
+  /** Refunded so far and what can still go back (pre-formatted) */
+  refundTotals?: { refunded: string; left: string }
   /** This customer's history with the business, for the customer card */
   customer?: { payments: number; total: string }
   /** Opens a chat with the customer (MeshPort users only) */
@@ -67,7 +72,7 @@ function RoundAction({ label, onClick, href, tone = 'brand', children }: {
 }
 
 export function PaymentDetailSheet({
-  payment, explorerUrl, onClose, onSettle, onRefund, onReceipt, refundNote, refund, customer, onChat, store, wallet, onCopyWallet,
+  payment, explorerUrl, onClose, onSettle, onRefund, onReceipt, refundNote, refunds = [], refundTotals, customer, onChat, store, wallet, onCopyWallet,
 }: PaymentDetailSheetProps) {
   const isRefunded = payment?.status === 'refunded'
   // Paid through a bridge: there's no paying wallet on that chain.
@@ -172,16 +177,31 @@ export function PaymentDetailSheet({
             <Tile label="Time" value={new Date(payment.time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} />
           </div>
 
-          {/* Refund */}
-          {refund && (
-            <div className="rounded-2xl bg-danger/10 border border-danger/20 px-4 py-3.5 flex flex-col gap-1">
-              <p className="text-xs font-semibold text-danger uppercase tracking-wider">{isRefunded ? `Refunded ${refund.amount}` : `Partly refunded · ${refund.amount} of ${payment.amount}`}</p>
-              <p className="text-sm text-text-secondary">{refund.reason} · {new Date(refund.when).toLocaleDateString([], { day: 'numeric', month: 'short' })}</p>
-              {refund.txUrl && (
-                <a href={refund.txUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1.5 text-xs text-danger font-medium">
-                  View refund transaction <ExternalLink className="size-3.5" />
-                </a>
-              )}
+          {/* Refunds (one or more) */}
+          {refunds.length > 0 && (
+            <div className="rounded-2xl bg-danger/10 border border-danger/20 px-4 py-3.5 flex flex-col gap-2">
+              <p className="text-xs font-semibold text-danger uppercase tracking-wider">
+                {isRefunded ? `Refunded ${refundTotals?.refunded ?? ''}` : `Partly refunded · ${refundTotals?.refunded ?? ''} of ${payment.amount}`}
+              </p>
+              {!isRefunded && refundTotals && <p className="-mt-1 text-xs text-text-muted">{refundTotals.left} left to refund</p>}
+              <ul className="flex flex-col divide-y divide-danger/15">
+                {refunds.map(r => (
+                  <li key={r.id} className="flex items-start justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold tabular-nums text-text-primary">{r.amount}</span>
+                      <span className="block text-xs text-text-secondary truncate">
+                        {[r.reason, new Date(r.when).toLocaleDateString([], { day: 'numeric', month: 'short' }), r.chainLabel].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                    {r.txUrl && (
+                      <a href={r.txUrl} target="_blank" rel="noreferrer" aria-label="View refund transaction"
+                        className="shrink-0 inline-flex items-center gap-1 min-h-[32px] text-xs text-danger font-medium">
+                        View <ExternalLink className="size-3.5" />
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

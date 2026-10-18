@@ -46,6 +46,7 @@ function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payme
           <span className="text-xs text-text-muted">{payment.chainLabel}</span>
           {payment.blocked && <span className="shrink-0 text-[10px] font-semibold rounded-full px-1.5 py-px bg-danger/10 text-danger">Blocked sender</span>}
           {!payment.blocked && payment.late && <span className="shrink-0 text-[10px] font-semibold rounded-full px-1.5 py-px bg-warning/10 text-warning">Paid late</span>}
+          {payment.partlyRefunded && <span className="shrink-0 text-[10px] font-semibold rounded-full px-1.5 py-px bg-danger/10 text-danger">Partly refunded {payment.partlyRefunded}</span>}
           {payment.order && (
             <>
               <span className="text-text-muted opacity-30">·</span>

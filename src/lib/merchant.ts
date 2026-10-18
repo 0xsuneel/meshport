@@ -112,11 +112,13 @@ export function refreshMerchant(): Promise<void> {
     try {
       const uid = await authUid()
       if (!uid) { set({ loaded: true, status: 'none', application: null, accountType: 'personal', storeName: null }); return }
-      const [{ data, error }, { data: me, error: meErr }] = await Promise.all([
+      const [{ data, error }, { data: meRows, error: meErr }] = await Promise.all([
         supabase.from('merchant_applications').select('*').eq('auth_uid', uid).order('created_at', { ascending: false }).limit(1),
-        supabase.from('users').select('account_type, store_name').eq('auth_uid', uid).limit(1).maybeSingle(),
+        // Own profile via RPC - users.auth_uid isn't readable from the app.
+        supabase.rpc('my_profile'),
       ])
       if (error || meErr) throw error || meErr
+      const me = (Array.isArray(meRows) ? meRows[0] : meRows) as { account_type?: string | null; store_name?: string | null } | null | undefined
       failures = 0
       const app = data?.[0] ? mapRow(data[0]) : null
       set({ loaded: true, status: app?.status ?? 'none', application: app,

@@ -105,5 +105,6 @@ export async function staffPayments(owner: string): Promise<MerchantPayment[]> {
   const { data, error } = await supabase.rpc('staff_payments', { p_owner: owner, p_limit: 200 })
   fail(error)
   return (data ?? []).map((r: any) => ({ id: r.id, intentId: r.intent_id, chain: r.source_chain, txHash: r.tx_hash, from: r.from_address, amount: Number(r.amount),
-    method: '', status: r.status, customerUsername: r.customer_username, createdAt: r.created_at, orderNumber: r.order_number ?? null, matchedBy: null }))
+    method: '', status: r.status, customerUsername: r.customer_username, createdAt: r.created_at, orderNumber: r.order_number ?? null, matchedBy: null,
+    late: r.late === true, screenFlag: r.screen_flag ?? null }))
 }

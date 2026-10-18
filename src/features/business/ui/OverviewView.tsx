@@ -20,7 +20,7 @@ const initials = (name: string) => {
 }
 
 export function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payment) => void }) {
-  const tag = payment.status === 'to_settle' ? ' · to settle' : payment.status === 'refunded' ? ' · refunded' : ''
+  const tag = payment.status === 'to_settle' ? ' · to settle' : payment.status === 'refunded' ? ' · refunded' : payment.partlyRefunded ? ` · partly refunded ${payment.partlyRefunded}` : ''
   return (
     <button
       type="button"

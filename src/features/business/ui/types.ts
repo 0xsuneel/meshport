@@ -17,6 +17,8 @@ export interface Payment {
   late?: boolean
   /** Sender is on USDC's blocklist (screening) - don't ship, no refund */
   blocked?: boolean
+  /** Part of it was refunded (pre-formatted total, e.g. "$5.00"); absent when none or all of it */
+  partlyRefunded?: string
 }
 
 export interface Chain {

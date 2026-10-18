@@ -25,6 +25,7 @@ import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/b
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, VOICE_LANGS, type VoiceLang } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockKey } from './settlement'
 import { listMyRefunds, subscribeMyRefunds, refundPayment, chainUsdcBalance, canRefundOnChain, checkRefundableSender, type SenderCheck, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
+import { groupRefunds, refundedSum, remainingAfter, isFullyRefunded, canRefundMore, netPayments, MIN_REFUND } from '@/lib/refundTotals'
 import { makePeriod, inPeriod, inPrevious, periodTrend, savedPeriod, savePeriod, type PeriodId } from './period'
 import { useAutoSettle } from './autoSettle'
 import { CashOutScreen, TeamScreen } from './teamScreens'
@@ -129,15 +130,17 @@ function OwnerBusinessPage() {
   const [refunds, setRefunds] = useState<MerchantRefund[]>([])
   const loadRefunds = useCallback(() => listMyRefunds().then(setRefunds).catch(() => {}), [])
   useEffect(() => { void loadRefunds(); return subscribeMyRefunds(() => { void loadRefunds() }) }, [loadRefunds])
-  const refundOf = useMemo(() => new Map(refunds.map(r => [r.paymentId, r])), [refunds])
-  // Refunds can be partial: a payment counts for what the business kept, and
-  // is "refunded" only when all of it went back.
-  const kept = useCallback((p: MerchantPayment) => p.amount - (refundOf.get(p.id)?.amount ?? 0), [refundOf])
-  const refundedIds = useMemo(() => new Set(refunds.filter(r => {
-    const p = raw.find(x => x.id === r.paymentId); return !p || r.amount >= p.amount - 1e-6
-  }).map(r => r.paymentId)), [refunds, raw])
+  // A payment can be refunded several times (never more than it in total):
+  // it counts for what the business kept, and is "refunded" only when all of
+  // it went back.
+  const refundsOf = useMemo(() => groupRefunds(refunds), [refunds])
+  const refundedOf = useCallback((id: string) => refundedSum(refundsOf.get(id)), [refundsOf])
+  const kept = useCallback((p: MerchantPayment) => remainingAfter(p.amount, refundedOf(p.id)), [refundedOf])
+  const refundedIds = useMemo(() => new Set([...refundsOf.keys()].filter(id => {
+    const p = raw.find(x => x.id === id); return !p || isFullyRefunded(p.amount, refundedOf(id))
+  })), [refundsOf, raw, refundedOf])
   /** Payments with refunds taken off (fully refunded ones dropped). */
-  const netOf = useCallback((list: MerchantPayment[]) => list.filter(p => p.method !== 'own_transfer' && kept(p) > 1e-6).map(p => refundOf.has(p.id) ? { ...p, amount: kept(p) } : p), [kept, refundOf])
+  const netOf = useCallback((list: MerchantPayment[]) => netPayments(list.filter(p => p.method !== 'own_transfer'), refundedOf), [refundedOf])
 
   // ── Stores (which store this device works as; null = all) ─────────────
   const [stores, setStores] = useState<Store[]>([])
@@ -190,10 +193,11 @@ function OwnerBusinessPage() {
     time: p.createdAt, order: p.orderNumber ?? undefined, late: !!p.late, blocked: !!p.screenFlag,
     status: refundedIds.has(p.id) ? 'refunded' as const
       : p.chain !== 'Arc_Testnet' && p.status !== 'collected' && waitingOn.has(p.chain) ? 'to_settle' as const : 'received' as const,
+    partlyRefunded: !refundedIds.has(p.id) && refundedOf(p.id) > 0 ? money(refundedOf(p.id)) : undefined,
   })
-  const payments: Payment[] = useMemo(() => periodRaw.map(toRow), [periodRaw, chains, refundOf, refundedIds])
+  const payments: Payment[] = useMemo(() => periodRaw.map(toRow), [periodRaw, chains, refundedOf, refundedIds])
   // Payments screen: every payment, grouped by day (Today, Yesterday… headers).
-  const payList: Payment[] = useMemo(() => storeRaw.map(toRow), [storeRaw, chains, refundOf, refundedIds])
+  const payList: Payment[] = useMemo(() => storeRaw.map(toRow), [storeRaw, chains, refundedOf, refundedIds])
 
   const today = useMemo(() => {
     const t = netOf(periodRaw)
@@ -287,9 +291,10 @@ function OwnerBusinessPage() {
   const [chainLeft, setChainLeft] = useState<number | null>(null)
   const [refundBusy, setRefundBusy] = useState(false)
   const [refundError, setRefundError] = useState<string>()
-  /** `amount` prefills a part (e.g. the extra on an overpaid order). */
+  /** `amount` prefills a part (e.g. the extra on an overpaid order); never more than what's left. */
   const openRefund = (p: MerchantPayment, amount?: number) => {
-    setRefundFor(p); refundId.current = p.id; setRefundAmount(Math.min(amount ?? p.amount, p.amount).toFixed(2)); setRefundReason(REFUND_REASONS[0]); setRefundNote(''); setRefundError(undefined)
+    const left = kept(p)
+    setRefundFor(p); refundId.current = p.id; setRefundAmount((Math.floor(Math.min(amount ?? left, left) * 100 + 1e-6) / 100).toFixed(2)); setRefundReason(REFUND_REASONS[0]); setRefundNote(''); setRefundError(undefined)
     // Paid on another chain: refund from the USDC still on that chain.
     setChainLeft(null)
     if (p.chain === 'Arc_Testnet') { setRefundDest('arc'); return }
@@ -298,10 +303,12 @@ function OwnerBusinessPage() {
     chainUsdcBalance(p.chain, walletAddress).then(b => {
       if (refundId.current !== p.id) return
       setChainLeft(b)
-      if (b !== null && b < p.amount && canRefundOnChain(p.chain)) setRefundDest('origin')
+      if (b !== null && b < Math.min(amount ?? left, left) && canRefundOnChain(p.chain)) setRefundDest('origin')
     })
   }
   const [refundAmount, setRefundAmount] = useState('')
+  // What can still go back on the payment being refunded.
+  const refundLeft = refundFor ? kept(refundFor) : 0
   const confirmRefund = () => {
     if (settle.needsPasscode) { setPinError(undefined); setPin({ kind: 'refund' }); return }
     void runRefund()
@@ -313,9 +320,9 @@ function OwnerBusinessPage() {
       const key = await unlockKey(passcode)
       const reason = (refundNote.trim() ? `${refundReason}: ${refundNote.trim()}` : refundReason).slice(0, 140)
       const amount = Number(refundAmount)
-      if (!(amount > 0) || amount > refundFor.amount + 1e-9) throw new Error(`Enter up to ${money(refundFor.amount)}`)
+      if (!(amount + 1e-9 >= MIN_REFUND) || amount > refundLeft + 1e-9) throw new Error(`Enter ${money(MIN_REFUND)} to ${money(refundLeft)}`)
       const route: RefundRoute = refundFor.chain === 'Arc_Testnet' ? 'arc' : refundDest === 'origin' ? 'origin' : 'chain'
-      await refundPayment({ paymentId: refundFor.id, customer: refundFor.from, amount, reason, privateKey: key, route, chain: refundFor.chain })
+      await refundPayment({ paymentId: refundFor.id, customer: refundFor.from, amount, reason, privateKey: key, route, chain: refundFor.chain, remaining: refundLeft })
       await loadRefunds()
       toast(`Refunded ${money(amount)} to ${who(refundFor)} on ${chainLabel(refundFor.chain)}`, 'success')
       setRefundFor(null)
@@ -324,7 +331,7 @@ function OwnerBusinessPage() {
   }
   // Not enough USDC on the payment's chain for the route picked.
   const refundShort = !!refundFor && refundFor.chain !== 'Arc_Testnet' && refundDest === 'chain' && chainLeft !== null
-    && chainLeft < (Number(refundAmount) || refundFor.amount) - 1e-9
+    && chainLeft < (Number(refundAmount) || refundLeft) - 1e-9
   const refundBlocked = refundShort && refundFor ? (canRefundOnChain(refundFor.chain)
     ? `Not enough USDC on ${chainLabel(refundFor.chain)} - pick From Arc to send it there`
     : `Not enough USDC on ${chainLabel(refundFor.chain)} - add some to refund`) : undefined
@@ -407,7 +414,7 @@ function OwnerBusinessPage() {
   }, [raw])
   // Refund extra / refund a payment to a cancelled order: same checks as the payment's Refund.
   const refundFromOrder = async (p: MerchantPayment, amount: number) => {
-    if (refundOf.has(p.id)) { toast('This payment was already refunded', 'error'); return }
+    if (!canRefundMore(p.amount, refundedOf(p.id))) { toast('This payment is already fully refunded', 'error'); return }
     if (p.screenFlag) { toast("This address is on USDC's blocklist - contact support", 'error'); return }
     const check = await checkRefundableSender(p.chain, p.from).catch(() => null)
     if (!check?.refundable) { toast(check?.reason ?? 'Could not check who sent this payment', 'error'); return }
@@ -415,7 +422,8 @@ function OwnerBusinessPage() {
   }
 
   const rawDetail = detail ? raw.find(p => p.id === detail.id) : undefined
-  const detailRefund = detail ? refundOf.get(detail.id) : undefined
+  const detailRefunds = detail ? refundsOf.get(detail.id) ?? [] : []
+  const detailCanRefund = !!rawDetail && canRefundMore(rawDetail.amount, refundedOf(rawDetail.id))
   // The payer's history with this business, for the detail's customer card.
   const detailCustomer = useMemo(() => {
     if (!rawDetail) return undefined
@@ -473,7 +481,7 @@ function OwnerBusinessPage() {
             recent={payments.slice(0, 4)} onSeeAll={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onPayment={setDetail} />
         )}
         {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} mainStoreId={mainStoreId}
-          storeName={storeName} paymentsOf={i => paymentsByIntent.get(i.id) ?? []} onRefund={refundFromOrder} />}
+          storeName={storeName} paymentsOf={i => paymentsByIntent.get(i.id) ?? []} refundedOf={p => refundedOf(p.id)} onRefund={refundFromOrder} />}
         {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter}
           loading={!loaded} payments={payList} onPayment={setDetail} />}
         {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out"
@@ -502,27 +510,30 @@ function OwnerBusinessPage() {
       <PaymentDetailSheet payment={detail} explorerUrl={rawDetail ? explorerTxUrl(rawDetail.chain, rawDetail.txHash) ?? undefined : undefined}
         onClose={() => setDetail(null)} onSettle={() => { setDetail(null); setTab('settlements') }}
         onReceipt={() => { if (rawDetail) { setReceiptFor(rawDetail); setDetail(null); child('receipt') } }}
-        onRefund={rawDetail && !detailRefund && sender?.id === rawDetail.id && sender.check?.refundable ? () => { openRefund(rawDetail); setDetail(null) } : undefined}
+        onRefund={rawDetail && detailCanRefund && sender?.id === rawDetail.id && sender.check?.refundable ? () => { openRefund(rawDetail); setDetail(null) } : undefined}
         refundNote={sender?.id === detail?.id ? (sender?.check ? sender.check.reason : 'Checking who sent this payment…') : undefined}
         wallet={rawDetail && !rawDetail.customerUsername && rawDetail.method !== 'own_transfer' ? rawDetail.from : undefined}
         onCopyWallet={rawDetail ? () => { void copyToClipboard(rawDetail.from).then(ok => toast(ok ? 'Address copied' : 'Could not copy', ok ? 'success' : 'error')) } : undefined}
         customer={detailCustomer} store={rawDetail && stores.length ? stores.find(st => st.id === storeOf(rawDetail))?.name : undefined}
         onChat={rawDetail?.customerUsername ? () => { const u = rawDetail.customerUsername!; setDetail(null); void openChat(u) } : undefined}
-        refund={detailRefund ? { amount: money(detailRefund.amount), reason: detailRefund.reason, when: detailRefund.createdAt, txUrl: explorerTxUrl(detailRefund.route === 'chain' ? detailRefund.chain : 'Arc_Testnet', detailRefund.txHash) ?? undefined } : undefined} />
+        refunds={detailRefunds.map(r => ({ id: r.id, amount: money(r.amount), reason: r.reason, when: r.createdAt, chainLabel: chainLabel(r.chain),
+          txUrl: explorerTxUrl(r.route === 'chain' ? r.chain : 'Arc_Testnet', r.txHash) ?? undefined }))}
+        refundTotals={rawDetail && detailRefunds.length ? { refunded: money(refundedOf(rawDetail.id)), left: money(kept(rawDetail)) } : undefined} />
 
-      <RefundSheet open={!!refundFor} amount={refundFor ? money(refundFor.amount) : ''} customer={refundFor ? who(refundFor) : ''}
+      <RefundSheet open={!!refundFor} amount={refundFor ? money(refundLeft) : ''} customer={refundFor ? who(refundFor) : ''}
+        already={refundFor && refundedOf(refundFor.id) > 0 ? `${money(refundedOf(refundFor.id))} of ${money(refundFor.amount)} already refunded` : undefined}
         reasons={REFUND_REASONS} reason={refundReason} onReason={setRefundReason} note={refundNote} onNote={setRefundNote}
-        value={refundAmount} onValue={setRefundAmount} max={refundFor?.amount}
+        value={refundAmount} onValue={setRefundAmount} max={refundFor ? refundLeft : undefined}
         busy={refundBusy} error={refundError} onConfirm={confirmRefund} onClose={() => { if (!refundBusy) setRefundFor(null) }}
         destinations={refundFor && refundFor.chain !== 'Arc_Testnet' ? [
           { id: 'chain', label: `From ${chainLabel(refundFor.chain)}`,
-            hint: chainLeft === null ? `Checking your ${chainLabel(refundFor.chain)} balance…` : chainLeft >= (Number(refundAmount) || refundFor.amount)
+            hint: chainLeft === null ? `Checking your ${chainLabel(refundFor.chain)} balance…` : chainLeft >= (Number(refundAmount) || refundLeft)
               ? `Your ${money(chainLeft)} there · back to their wallet` : `Only ${money(chainLeft)} left there (settled)` },
           ...(canRefundOnChain(refundFor.chain) ? [{ id: 'origin', label: 'From Arc',
             hint: `Your Arc balance · arrives on ${chainLabel(refundFor.chain)}` }] : []),
         ] : undefined}
         destination={refundDest}
-        onDestination={id => { if (id === 'chain' && refundFor && chainLeft !== null && chainLeft < (Number(refundAmount) || refundFor.amount)) return; setRefundDest(id as RefundRoute) }}
+        onDestination={id => { if (id === 'chain' && refundFor && chainLeft !== null && chainLeft < (Number(refundAmount) || refundLeft)) return; setRefundDest(id as RefundRoute) }}
         blocked={refundBlocked}
         note2={refundFor && refundDest === 'chain' ? `Sent from your USDC on ${chainLabel(refundFor.chain)} - MeshPort pays the gas.`
           : refundFor && refundDest === 'origin' ? `Sent from Arc to their wallet on ${chainLabel(refundFor.chain)} by CCTP - Circle's small fee is added on top.` : undefined} />
@@ -598,7 +609,7 @@ function OwnerBusinessPage() {
       <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
       <ReceiveScreen open={screen === 'receive'} onBack={() => { back(); reloadIntents() }} onChanged={reloadIntents} storeName={storeName}
         shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} />
-      <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundOf.has(p.id) && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
+      <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundedOf(p.id) > 0 && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
         onPayment={p => setDetail(toRow(p))} onChat={u => { close(); void openChat(u) }}
         orders={(intents ?? []).filter(i => !activeStore || inStore(i, activeStore.id))} onOrdersChanged={reloadIntents} />
       <ReportsScreen open={screen === 'reports'} onBack={back}

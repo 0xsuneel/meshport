@@ -410,7 +410,7 @@ const TRANSFER_WITH_AUTH_SELECTOR = '0xe3ee160e'
 /**
  * A relayed USDC transfer must be a Business refund (null = ok): the chain's
  * USDC, from the merchant to the wallet that paid them on this chain, no more
- * than that payment, and the payment not refunded yet.
+ * than what is still left on that payment after its earlier refunds.
  */
 async function checkRefundTransfer(chainKey: string, to: string, data: `0x${string}`, caller: string, refundFor: any): Promise<string | null> {
   const usdc = CHAINS[chainKey]?.usdc
@@ -439,9 +439,16 @@ async function checkRefundTransfer(chainKey: string, to: string, data: `0x${stri
   if (String(p.from_address).toLowerCase() !== customer) return 'Refunds go back to the wallet that paid'
   if ((CHAIN_ALIASES[p.source_chain] ?? p.source_chain) !== chainKey) return 'Refund on the chain it was paid on'
   if (value <= 0n || value > BigInt(Math.round(Number(p.amount) * 1e6))) return 'More than this payment'
-  const done = await get(`merchant_refunds?${isReceipt ? 'receipt_id' : 'payment_id'}=eq.${id}&select=id&limit=1`)
-  if (!done) return 'Could not verify this payment - please try again'
-  if (done.length) return 'Already refunded'
+  // Several refunds per payment: no more than what is still left on it
+  // (all refunds of the same transfer, whichever row they were recorded on).
+  const r = await fetch(`${supabaseUrl}/rest/v1/rpc/merchant_refund_remaining`, {
+    method: 'POST', headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(isReceipt ? { p_receipt: id } : { p_payment: id }),
+  }).catch(() => null)
+  const left = r?.ok ? Number(await r.json().catch(() => NaN)) : NaN
+  if (!Number.isFinite(left)) return 'Could not verify this payment - please try again'
+  if (left < 0.01 - 1e-9) return 'Already refunded'
+  if (value > BigInt(Math.round(left * 1e6))) return `More than what's left on this payment ($${left.toFixed(2)})`
   return null
 }
 

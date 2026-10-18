@@ -31,6 +31,8 @@ export interface RefundSheetProps {
   max?: number
   /** Why this refund can't go now (e.g. not enough USDC on that chain). */
   blocked?: string
+  /** Earlier refunds of this payment, e.g. "$5.00 of $20.00 already refunded". */
+  already?: string
 }
 
 export function RefundSheet({
@@ -54,9 +56,12 @@ export function RefundSheet({
   onValue,
   max,
   blocked,
+  already,
 }: RefundSheetProps) {
   const typed = Number(value)
-  const badAmount = !!onValue && !(typed > 0 && max != null && typed <= max + 1e-9)
+  // Refunds are whole cents, at least $0.01; `max` is what's still left on the payment.
+  const top = max != null ? Math.floor(max * 100 + 1e-6) / 100 : 0
+  const badAmount = !!onValue && !(typed + 1e-9 >= 0.01 && max != null && typed <= max + 1e-9)
   const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   return (
     <Sheet open={open} onClose={onClose}>
@@ -86,14 +91,14 @@ export function RefundSheet({
                   className="w-44 bg-transparent text-4xl font-bold tabular-nums text-danger text-center outline-none" />
               </label>
               <div className="flex gap-2 mt-1">
-                {[{ l: 'Full', v: max }, { l: 'Half', v: Math.floor(max * 50) / 100 }].map(o => (
+                {[{ l: already ? 'All left' : 'Full', v: top }, { l: 'Half', v: Math.floor(max * 50) / 100 }].filter(o => o.v >= 0.01).map(o => (
                   <button key={o.l} type="button" onClick={() => onValue(o.v.toFixed(2))}
                     className={`min-h-[32px] px-3 rounded-full text-xs font-semibold border ${Math.abs(typed - o.v) < 1e-9 ? 'border-danger bg-danger/10 text-danger' : 'border-border text-text-secondary'}`}>
                     {o.l} · {fmt(o.v)}
                   </button>
                 ))}
               </div>
-              {typed > (max ?? 0) + 1e-9 && <p className="text-xs text-danger mt-1">At most {fmt(max)} - what they paid</p>}
+              {typed > (max ?? 0) + 1e-9 && <p className="text-xs text-danger mt-1">At most {fmt(top)} - what's left on this payment</p>}
             </>
           ) : (
             <p className="display text-4xl font-bold tabular-nums text-danger">{amount}</p>
@@ -101,6 +106,7 @@ export function RefundSheet({
           <p className="text-sm text-text-muted">
             Refund to <span className="font-medium text-text-secondary">{customer}</span>
           </p>
+          {already && <p className="text-xs text-text-muted">{already}</p>}
         </div>
 
         {/* Where it goes back */}
@@ -161,8 +167,8 @@ export function RefundSheet({
           <p className="text-xs text-text-secondary leading-relaxed">
             The USDC goes back to the wallet that paid you.
             This can&apos;t be undone.
-            {onValue && max != null && typed > 0 && typed < max - 1e-9 && (
-              <span className="block mt-1 font-medium">Only one refund per payment: the other {fmt(max - typed)} can&apos;t be refunded later.</span>
+            {onValue && max != null && typed > 0 && typed < max - 1e-9 && max - typed >= 0.01 - 1e-9 && (
+              <span className="block mt-1 font-medium">You can refund up to {fmt(Math.floor((max - typed) * 100 + 1e-6) / 100)} more later.</span>
             )}
             {note2 && <span className="block mt-1 text-text-muted">{note2}</span>}
           </p>
