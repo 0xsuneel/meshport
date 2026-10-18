@@ -107,8 +107,10 @@ export function syncAuthUidToProfile(userId: string, privateKey?: string | null)
       const { data: { session } } = await supabase.auth.getSession()
       const sessionId = session?.user?.id
       if (!sessionId) return false
-      const { data: row } = await supabase.from('users').select('auth_uid').eq('id', userId).maybeSingle()
-      if (row?.auth_uid === sessionId) return true
+      // Already linked? Asked server-side - users.auth_uid isn't something
+      // the app reads for an account.
+      const { data: owns, error: ownsErr } = await supabase.rpc('session_owns_user', { p_user_id: userId })
+      if (!ownsErr && owns === true) return true
 
       const { privateKeyToAccount } = await import('viem/accounts')
       const key = (privateKey.startsWith('0x') ? privateKey : '0x' + privateKey) as `0x${string}`
@@ -218,11 +220,17 @@ async function restInsertMessage(row: Record<string, unknown>): Promise<{ data: 
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+// Public profile columns. users.email is private: other people's email is
+// never selected (and isn't readable by the app); your own comes from the
+// sign-in (supabase.auth) or the my_profile() RPC.
+const USER_COLS = 'id, username, display_name, wallet_address, avatar_url, created_at'
+
 export interface DbUser {
   id: string
   username: string
   display_name: string
-  email: string
+  /** Never read for other people (the column isn't readable); only set for your own profile. */
+  email?: string | null
   wallet_address: string
   avatar_url: string | null
   created_at: string
@@ -283,7 +291,7 @@ export async function searchUsersDb(
   if (/^0x[0-9a-fA-F]{10,}$/.test(raw)) {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, display_name, email, wallet_address, avatar_url, created_at')
+      .select(USER_COLS)
       .ilike('wallet_address', raw)
       .limit(5)
     if (error) { console.error('[Supabase] wallet search error:', error.message); return [] }
@@ -303,7 +311,7 @@ export async function searchUsersDb(
 
   const { data, error } = await supabase
     .from('users')
-    .select('id, username, display_name, email, wallet_address, avatar_url, created_at')
+    .select(USER_COLS)
     .eq('username', base)
     .not('wallet_address', 'is', null)
     .neq('wallet_address', '')
@@ -333,7 +341,7 @@ export async function searchUsersPartialDb(
   if (/^0x[0-9a-fA-F]{6,}$/.test(raw)) {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, display_name, email, wallet_address, avatar_url, created_at')
+      .select(USER_COLS)
       .ilike('wallet_address', `${raw}%`)
       .limit(limit)
     if (error) { console.error('[Supabase] partial wallet search error:', error.message); return [] }
@@ -345,7 +353,7 @@ export async function searchUsersPartialDb(
 
   const { data, error } = await supabase
     .from('users')
-    .select('id, username, display_name, email, wallet_address, avatar_url, created_at')
+    .select(USER_COLS)
     .or(`username.ilike.${term}%,display_name.ilike.${term}%`)
     .not('wallet_address', 'is', null)
     .neq('wallet_address', '')
@@ -373,36 +381,29 @@ export async function upsertUserProfile(params: {
   // server-side.
   const loginTypeField = params.loginType ? { login_type: params.loginType } : {}
 
-  // Use onConflict: 'username' as fallback in case id conflicts
-  const { error } = await supabase.from('users').upsert({
-    id: params.id,
-    email: params.email.toLowerCase().trim(),
+  // users.email is private (not readable by the app), so it's only written
+  // when the row is created: insert-if-missing (ON CONFLICT DO NOTHING needs
+  // no read of email), then update the public profile fields. An upsert's
+  // DO UPDATE SET email = excluded.email would need SELECT on email.
+  const email = params.email.toLowerCase().trim()
+  const profile = {
     username: params.username.toLowerCase().replace(/\.arc$/, '').trim(),
     display_name: params.displayName.trim() || params.username,
     wallet_address: params.walletAddress.toLowerCase(),
     avatar_url: null,
     ...loginTypeField,
-  }, { onConflict: 'id' })
-
+  }
+  const { error } = await supabase.from('users')
+    .upsert({ id: params.id, email, ...profile }, { onConflict: 'id', ignoreDuplicates: true })
   if (error) {
     console.error('[Supabase] upsertUserProfile error:', error.code, error.message)
-    // If id conflict (rare), try upsert by username
-    if (error.code === '23505') {
-      const { error: e2 } = await supabase.from('users').upsert({
-        id: params.id,
-        email: params.email.toLowerCase().trim(),
-        username: params.username.toLowerCase().replace(/\.arc$/, '').trim(),
-        display_name: params.displayName.trim() || params.username,
-        wallet_address: params.walletAddress.toLowerCase(),
-        avatar_url: null,
-        ...loginTypeField,
-      }, { onConflict: 'username' })
-      if (e2) return { error: e2.message }
-      return { error: null }
-    }
     return { error: error.message }
   }
-
+  const { error: updErr } = await supabase.from('users').update(profile).eq('id', params.id)
+  if (updErr) {
+    console.error('[Supabase] upsertUserProfile update error:', updErr.code, updErr.message)
+    return { error: updErr.message }
+  }
   return { error: null }
 }
 
@@ -467,8 +468,8 @@ export async function getAvatarByWallet(walletAddress: string): Promise<string |
 }
 
 // Security-audit note: every users-table select below is an explicit column
-// list - id, username, display_name, email, wallet_address, avatar_url,
-// created_at - matching DbUser exactly, rather than select('*'). This is
+// list (USER_COLS) - id, username, display_name, wallet_address, avatar_url,
+// created_at - matching DbUser (email is private and never selected), rather than select('*'). This is
 // deliberate, not stylistic: the users table also holds encrypted_wallet_key
 // and wallet_auth_share (legacy server-side wallet columns, no longer
 // used), which the app never needs client-side and which have a
@@ -478,17 +479,10 @@ export async function getAvatarByWallet(walletAddress: string): Promise<string |
 export async function fetchUserProfile(userId: string): Promise<DbUser | null> {
   const { data, error } = await supabase
     .from('users')
-    .select('id, username, display_name, email, wallet_address, avatar_url, created_at')
+    .select(USER_COLS)
     .eq('id', userId)
     .maybeSingle()
   if (error) { console.error('[Supabase] fetchUserProfile:', error.message); return null }
-  return data as DbUser | null
-}
-
-export async function fetchUserByEmail(email: string): Promise<DbUser | null> {
-  const { data } = await supabase
-    .from('users').select('id, username, display_name, email, wallet_address, avatar_url, created_at')
-    .eq('email', email.toLowerCase()).maybeSingle()
   return data as DbUser | null
 }
 
@@ -504,10 +498,12 @@ export async function fetchUserByEmail(email: string): Promise<DbUser | null> {
 export async function resolveAccountForSession(authUid: string, email: string | null | undefined): Promise<
   { kind: 'existing'; user: DbUser } | { kind: 'new' } | { kind: 'conflict' } | { kind: 'error' }
 > {
-  const cols = 'id, username, display_name, email, wallet_address, avatar_url, created_at'
-  const byAuth = await supabase.from('users').select(cols).eq('auth_uid', authUid).maybeSingle()
+  const cols = USER_COLS
+  // The account bound to this session (server-side: auth_uid = this session).
+  const byAuth = await supabase.rpc('my_profile')
   if (byAuth.error) return { kind: 'error' }
-  if (byAuth.data) return { kind: 'existing', user: byAuth.data as DbUser }
+  const mine = (Array.isArray(byAuth.data) ? byAuth.data[0] : byAuth.data) as DbUser | null | undefined
+  if (mine?.id) return { kind: 'existing', user: mine }
   // Accounts first created by this same sign-in have users.id = its auth id.
   // That still identifies the owner even if auth_uid was later re-pointed
   // (e.g. at a guest session on another device).
@@ -515,9 +511,11 @@ export async function resolveAccountForSession(authUid: string, email: string | 
   if (byId.error) return { kind: 'error' }
   if (byId.data) return { kind: 'existing', user: byId.data as DbUser }
   if (email) {
-    const byEmail = await supabase.from('users').select('id').eq('email', email.toLowerCase()).maybeSingle()
+    // Another account already uses this sign-in's email (checked server-side;
+    // other people's emails aren't readable).
+    const byEmail = await supabase.rpc('session_email_conflict')
     if (byEmail.error) return { kind: 'error' }
-    if (byEmail.data) return { kind: 'conflict' }
+    if (byEmail.data === true) return { kind: 'conflict' }
   }
   return { kind: 'new' }
 }
@@ -525,7 +523,7 @@ export async function resolveAccountForSession(authUid: string, email: string | 
 export async function getUserByUsername(username: string): Promise<DbUser | null> {
   const name = username.toLowerCase().replace(/\.arc$/, '').trim()
   const { data } = await supabase
-    .from('users').select('id, username, display_name, email, wallet_address, avatar_url, created_at').eq('username', name).maybeSingle()
+    .from('users').select(USER_COLS).eq('username', name).maybeSingle()
   return data as DbUser | null
 }
 
@@ -620,7 +618,7 @@ export async function fetchContactsDbStrict(ownerId: string): Promise<DbUser[]> 
   // Fetch user profiles for those IDs
   const { data: users, error: usersError } = await supabase
     .from('users')
-    .select('id, username, display_name, email, wallet_address, avatar_url, created_at')
+    .select(USER_COLS)
     .in('id', ids)
 
   if (usersError) { console.error('[Supabase] fetchContactsDb users:', usersError.message); throw usersError }
@@ -715,7 +713,7 @@ export async function fetchConversations(myId: string): Promise<DbConversation[]
   const otherIds = Array.from(new Set(otherIdByConv.values()))
 
   const [usersRes, unreadRes, msgsRes] = await Promise.all([
-    supabase.from('users').select('id, username, display_name, email, wallet_address, avatar_url, created_at').in('id', otherIds),
+    supabase.from('users').select(USER_COLS).in('id', otherIds),
     supabase.from('messages').select('conversation_id, sender_id')
       .in('conversation_id', convIds).eq('is_read', false),
     // Fetches a shared window across all conversations (not just 1 each) so
@@ -953,7 +951,7 @@ export async function getUserByWalletAddress(walletAddress: string): Promise<DbU
   const addr = walletAddress.toLowerCase()
   const { data, error } = await supabase
     .from('users')
-    .select('id, username, display_name, email, wallet_address, avatar_url, created_at')
+    .select(USER_COLS)
     .ilike('wallet_address', addr)
     .maybeSingle()
   if (error) { console.error('[Supabase] getUserByWalletAddress:', error.message); return null }
@@ -968,7 +966,7 @@ export async function getUsersByWalletAddresses(addresses: string[]): Promise<Ma
   // Build OR filter: wallet_address.ilike.0x1a2b,wallet_address.ilike.0x3c4d
   const orFilter = addrs.map(a => `wallet_address.ilike.${a}`).join(',')
   const { data, error } = await supabase
-    .from('users').select('id, username, display_name, email, wallet_address, avatar_url, created_at')
+    .from('users').select(USER_COLS)
     .or(orFilter)
   if (error) { console.error('[Supabase] getUsersByWalletAddresses:', error.message); return new Map() }
   const map = new Map<string, DbUser>()

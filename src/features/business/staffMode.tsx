@@ -9,6 +9,8 @@ import { chainLogoSrc } from '@/lib/chainLogos'
 import { myMemberships, acceptInvite, staffCreateRequest, staffPayments, type Membership } from '@/lib/businessTeam'
 import type { MerchantPayment } from '@/lib/merchantPay'
 import { RequestMaker, ShopQrScreen, ReceiveScreen } from './screens'
+import { setDueDate } from '@/lib/businessBills'
+import { logBusiness } from '@/lib/businessActivity'
 import { StaffBanner, StaffModeHeader, PaymentsView, OverviewView, Skeleton, type Payment } from './ui'
 import { chainLabel } from './settlement'
 
@@ -73,7 +75,17 @@ export function StaffModePage() {
           onRefunded={() => toast('Refunds are done by the owner', 'info')}
           onSeeAllPayments={() => setScreen('payments')} onPayment={() => {}} />
       </div>
-      <RequestMaker.Provider value={{ create: p => staffCreateRequest(active.ownerAuthUid, { ...p, storeId: p.storeId ?? active.storeId }), storeId: active.storeId, canBill: manager, savedItems: false }}>
+      <RequestMaker.Provider value={{
+        create: async p => {
+          const i = await staffCreateRequest(active.ownerAuthUid, { ...p, storeId: p.storeId ?? active.storeId })
+          // A manager's bill can carry a due date (set right after it's made).
+          if (p.dueDate) { await setDueDate(i.id, p.dueDate).catch(() => toast('Bill made, but the due date was not saved', 'error')); return { ...i, dueDate: p.dueDate } }
+          return i
+        },
+        storeId: active.storeId, canBill: manager, savedItems: false,
+        // Staff actions go into the owner's activity log.
+        log: (action, x) => { void logBusiness(action, { ...x, owner: active.ownerAuthUid }) },
+      }}>
         <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={active.ownerName} outlet={active.storeName} handle={`${active.ownerUsername}.arc`} payTo={active.ownerUsername} />
         <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={active.ownerName} />
       </RequestMaker.Provider>

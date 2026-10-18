@@ -3,15 +3,18 @@
  */
 import React from 'react'
 import { Copy, Check, Share2 } from 'lucide-react'
+import { ShareChannels } from './ShareChannels'
 
 export interface ShareLinkProps {
   url: string
   copied: boolean
   onCopy: () => void
   onShare: () => void
+  /** WhatsApp / SMS / Email under the Share button (subject + message) */
+  channels?: { subject: string; text: string }
 }
 
-export function ShareLink({ url, copied, onCopy, onShare }: ShareLinkProps) {
+export function ShareLink({ url, copied, onCopy, onShare, channels }: ShareLinkProps) {
   return (
     <div className="flex flex-col gap-3 w-full">
       {/* Link pill */}
@@ -41,6 +44,7 @@ export function ShareLink({ url, copied, onCopy, onShare }: ShareLinkProps) {
         <Share2 className="size-4" />
         Share link
       </button>
+      {channels && <ShareChannels subject={channels.subject} text={channels.text} />}
     </div>
   )
 }

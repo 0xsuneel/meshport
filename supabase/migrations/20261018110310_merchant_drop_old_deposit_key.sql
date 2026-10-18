@@ -1,0 +1,1 @@
+alter table public.merchant_unmatched_deposits drop constraint if exists merchant_unmatched_deposits_source_chain_tx_hash_key;

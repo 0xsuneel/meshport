@@ -13,6 +13,10 @@ export interface Payment {
   time: string        // ISO timestamp
   order?: string      // optional order reference
   status: PaymentStatus
+  /** Arrived after its order expired */
+  late?: boolean
+  /** Sender is on USDC's blocklist (screening) - don't ship, no refund */
+  blocked?: boolean
 }
 
 export interface Chain {

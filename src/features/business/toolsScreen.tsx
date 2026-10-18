@@ -1,14 +1,14 @@
 // Business → Business tools: everything that runs the business besides
 // taking payments (stores, staff, customers, reports, payouts, cash out,
-// profile and limits, voice alerts, help). Opened from the home tile and
+// profile and limits, voice alerts, help, activity log). Opened from the home tile and
 // the header's menu button.
-import { ChevronRight, Store, Users, UserRound, BarChart2, Send, Banknote, ShieldCheck, Mic, HelpCircle } from 'lucide-react'
+import { ChevronRight, Store, Users, UserRound, BarChart2, Send, Banknote, ShieldCheck, Mic, HelpCircle, History } from 'lucide-react'
 import { BusinessScreen } from './ui'
 
-export type ToolId = 'team' | 'customers' | 'reports' | 'payouts' | 'cashout' | 'profile' | 'voice' | 'help'
+export type ToolId = 'team' | 'customers' | 'reports' | 'activity' | 'payouts' | 'cashout' | 'profile' | 'voice' | 'help'
 
 const ICONS: Record<ToolId, React.ElementType> = {
-  team: Store, customers: UserRound, reports: BarChart2, payouts: Send, cashout: Banknote, profile: ShieldCheck, voice: Mic, help: HelpCircle,
+  team: Store, customers: UserRound, reports: BarChart2, activity: History, payouts: Send, cashout: Banknote, profile: ShieldCheck, voice: Mic, help: HelpCircle,
 }
 
 export type ToolRow = { id: ToolId; label: string; hint: string }

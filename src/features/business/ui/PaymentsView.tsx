@@ -44,6 +44,8 @@ function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payme
         <p className="text-sm font-medium text-text-primary truncate">{payment.from}</p>
         <div className="flex items-center gap-1.5 mt-0.5">
           <span className="text-xs text-text-muted">{payment.chainLabel}</span>
+          {payment.blocked && <span className="shrink-0 text-[10px] font-semibold rounded-full px-1.5 py-px bg-danger/10 text-danger">Blocked sender</span>}
+          {!payment.blocked && payment.late && <span className="shrink-0 text-[10px] font-semibold rounded-full px-1.5 py-px bg-warning/10 text-warning">Paid late</span>}
           {payment.order && (
             <>
               <span className="text-text-muted opacity-30">·</span>
