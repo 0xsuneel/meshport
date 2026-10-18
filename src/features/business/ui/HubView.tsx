@@ -5,7 +5,7 @@
  * latest verified payments.
  */
 import React from 'react'
-import { ChevronDown, CreditCard, QrCode, ShoppingBag, Wallet, Settings2 } from 'lucide-react'
+import { ChevronDown, CreditCard, QrCode, ShoppingBag, Wallet, Settings2, Lock } from 'lucide-react'
 import type { Payment, ReactNode } from './types'
 import { Skeleton, FadeUp } from './primitives'
 import { PaymentRow } from './OverviewView'
@@ -130,6 +130,39 @@ export function HubView({
           ) : (
             <div className="divide-y divide-border">{recent.slice(0, 4).map(p => <PaymentRow key={p.id} payment={p} onClick={onPayment} />)}</div>
           )}
+        </div>
+      </FadeUp>
+    </div>
+  )
+}
+
+/** Business home before approval: only the apply banner and what approval
+ *  turns on - the business tools stay hidden until MeshPort approves it. */
+export function LockedHubView({ banner }: { banner: ReactNode }) {
+  const rows: Array<[React.ElementType, string, string]> = [
+    [QrCode, 'Collect payment', 'Shop QR, charges and bills'],
+    [ShoppingBag, 'Manage orders', 'Open, paid and cancelled orders'],
+    [Wallet, 'Manage money', 'Arc balance, other chains and settle'],
+    [Settings2, 'Business tools', 'Stores, staff, reports and payouts'],
+  ]
+  return (
+    <div className="flex flex-col gap-3 pb-8">
+      {banner}
+      <FadeUp delay={0.04} className="mx-5">
+        <div className="rounded-2xl bg-card border border-border overflow-hidden">
+          <p className="px-4 pt-4 pb-2 text-[13px] font-semibold text-text-muted">Turns on after approval</p>
+          <div className="divide-y divide-border">
+            {rows.map(([Icon, title, sub]) => (
+              <div key={title} className="flex items-center gap-3 px-4 py-3">
+                <span className="inline-flex items-center justify-center size-9 rounded-xl bg-surface text-text-muted shrink-0"><Icon className="size-[18px]" /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-[15px] font-semibold text-text-primary">{title}</span>
+                  <span className="block text-xs text-text-muted truncate">{sub}</span>
+                </span>
+                <Lock className="size-4 text-text-muted shrink-0" aria-label="Locked" />
+              </div>
+            ))}
+          </div>
         </div>
       </FadeUp>
     </div>

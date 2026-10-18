@@ -2023,6 +2023,29 @@ function FeatureBanner({ height, onOpen }: { height: number; onOpen: (path: stri
 }
 
 
+// Business accounts that aren't approved yet: a banner that stays until they
+// are, leading to the application (or its status while under review).
+function BusinessApprovalBanner() {
+  const navigate = useNavigate()
+  const { loaded, isMerchant, status, application } = useMerchant()
+  if (!loaded || isMerchant) return null
+  const c = status === 'pending'
+    ? { tone: 'var(--warning)', title: 'Business account under review', text: "We're reviewing your business. You'll get a notification when it's approved.", action: 'View application' }
+    : status === 'rejected' || status === 'revoked'
+      ? { tone: 'var(--danger)', title: status === 'revoked' ? 'Merchant access removed' : 'Business account not approved', text: application?.reviewNote || 'Check the details and send it again.', action: 'Apply again' }
+      : { tone: 'var(--brand)', title: 'Apply for business approval', text: 'Payments, orders and business tools turn on once MeshPort approves your business.', action: 'Apply for approval' }
+  return (
+    <div style={{ margin: '12px 0 0', padding: 16, borderRadius: 20, background: 'var(--card)', border: '1px solid var(--border)', borderLeft: `4px solid ${c.tone}` }}>
+      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{c.title}</div>
+      <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 3, lineHeight: 1.4 }}>{c.text}</div>
+      <button type="button" onClick={() => navigate('/business?apply=1')}
+        style={{ marginTop: 12, minHeight: 40, padding: '0 16px', borderRadius: 12, border: 'none', background: c.tone, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+        {c.action}
+      </button>
+    </div>
+  )
+}
+
 export function HomePage() {
   const navigate = useNavigate()
   const businessAccount = useBusinessTab()
@@ -3824,10 +3847,13 @@ export function HomePage() {
         ) : businessAccount ? (
           // Business accounts: the balance card only - no Cross-chain card
           // or carousel edges (Cross-chain Transfer is in More actions).
-          <AvailableBalanceCard
-            portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
-            walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
-          />
+          <>
+            <AvailableBalanceCard
+              portfolioTotal={portfolioTotal} balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden}
+              walletAddress={walletAddress} shortAddr={shortAddr} showToastMessage={showToastMessage} navigate={navigate} fmt={fmt}
+            />
+            <BusinessApprovalBanner />
+          </>
         ) : (
           <MobileHeroCarousel
             portfolioTotal={portfolioTotal}

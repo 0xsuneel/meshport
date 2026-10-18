@@ -613,7 +613,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
     status === 'approved' ? { tone: 'success', title: 'Verified business', text: 'All merchant tools are on. Add your shops in Stores & staff.' }
     : status === 'pending' ? { tone: 'warning', title: 'Under review', text: "MeshPort is reviewing your business. You'll get a notification when it's approved." }
     : closed ? { tone: 'danger', title: status === 'revoked' ? 'Merchant access removed' : 'Not approved', text: application?.reviewNote || 'Check the details and send it again.' }
-    : { tone: 'brand', title: 'Complete your business account', text: 'Add your business name and tell MeshPort why you need a business account. Once approved, you can add your stores.' }
+    : { tone: 'brand', title: 'Apply for business approval', text: 'Add your business name and tell MeshPort why you need a business account. Payments, orders and business tools turn on once approved.' }
 
   return (
     <BusinessScreen open={open} title="Business profile" onBack={onBack}
@@ -645,7 +645,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
             </Field>
           )}
         </div>
-        <ShopLimitsCard open={open} handle={handle} />
+        {status === 'approved' && <ShopLimitsCard open={open} handle={handle} />}
         <ProfileStatusCard {...card} />
         {canApply ? (
           <>

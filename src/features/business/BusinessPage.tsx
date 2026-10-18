@@ -33,7 +33,7 @@ import { StaffModePage } from './staffMode'
 import { useUIStore } from '@/store'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
-  BusinessHeader, SetupBanner, HubView, PaymentsView, PaymentDetailSheet,
+  BusinessHeader, SetupBanner, HubView, LockedHubView, PaymentsView, PaymentDetailSheet,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
   DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
@@ -208,7 +208,15 @@ function OwnerBusinessPage() {
   const [pin, setPin] = useState<{ kind: 'settle'; retry?: string[] } | { kind: 'one'; chainId: string } | { kind: 'refund' } | null>(null)
   const [pinError, setPinError] = useState<string | undefined>()
 
-  const [screen, setScreen] = useState<ScreenId | null>(null)
+  const [screen, setScreen] = useState<ScreenId | null>(() => query.get('apply') ? 'profile' : null)
+  // Until MeshPort approves the business, only the apply banner, the
+  // application (Business profile) and Help are open.
+  const locked = !isMerchant
+  useEffect(() => {
+    if (!locked) return
+    if (tab !== 'overview') setTab('overview')
+    if (screen && screen !== 'profile' && screen !== 'help') setScreen(null)
+  }, [locked, tab, screen])
   const open = (id: ScreenId) => () => setScreen(id)
   // A screen opened from Business tools goes back to Business tools.
   const fromTools = useRef(false)
@@ -323,7 +331,7 @@ function OwnerBusinessPage() {
       ? <SetupBanner tone="warning" title="Business account under review" text={`We're reviewing ${storeInText}. You'll get a notification when it's approved.`} action="View application" onAction={open('profile')} />
       : status === 'rejected' || status === 'revoked'
         ? <SetupBanner tone="danger" title={status === 'revoked' ? 'Merchant access removed' : 'Business account not approved'} text={application?.reviewNote || 'Check the details and send it again.'} action="Apply again" onAction={open('profile')} />
-        : <SetupBanner tone="brand" title="Complete your business account" text={`Tell us why ${storeInText} needs a business account. Once approved, merchant tools turn on.`} action="Complete" onAction={open('profile')} />
+        : <SetupBanner tone="brand" title="Apply for business approval" text={`Send ${storeInText} for review. Payments, orders and business tools turn on once MeshPort approves it.`} action="Apply for approval" onAction={open('profile')} />
 
   // History rows from claims; a tapped one opens in the progress sheet.
   const historyItems = (history ?? []).slice(0, 30).map(c => ({
@@ -366,7 +374,7 @@ function OwnerBusinessPage() {
           // the line under it is the business account itself.
           <BusinessHeader storeName={activeStore?.name ?? (stores.length > 1 ? 'All stores' : storeName)} handle={handle}
             status={headerStatus} voiceOn={voice.enabled}
-            onVoice={() => setVoiceOpen(true)} onMenu={() => setScreen('tools')} onSwitchStore={stores.length ? () => setSwitcher(true) : undefined}
+            onVoice={() => setVoiceOpen(true)} onMenu={() => setScreen(locked ? 'profile' : 'tools')} onSwitchStore={stores.length ? () => setSwitcher(true) : undefined}
             avatarName={storeName} avatarUrl={userAvatar ?? undefined}
             outlet={(activeStore || stores.length > 1) && activeStore?.name !== storeName ? storeName : null} />
         ) : (
@@ -394,7 +402,8 @@ function OwnerBusinessPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
-        {tab === 'overview' && (
+        {tab === 'overview' && locked && <LockedHubView banner={banner} />}
+        {tab === 'overview' && !locked && (
           <HubView loading={!loaded} banner={banner} periodLabel={period.label} onPeriod={() => setPeriodSheet(true)}
             sales={{ total: money(today.total), trend: <TrendChip pct={trend} compare={period.compareLabel} /> }}
             pending={pending ? { count: pending.count, due: money(pending.due) } : null}
