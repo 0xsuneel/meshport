@@ -15,11 +15,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
-    <!-- Two variants so the OS status bar / browser chrome tint matches
-         whichever theme actually resolved - see the header colors in
-         src/index.css (--header). -->
-    <meta name="theme-color" content="#F5F6F8" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0B0E11" media="(prefers-color-scheme: dark)" />
+    <!-- NO static theme-color meta here on purpose. boot.js creates and keeps
+         #mp-theme-color up to date (via themeStore) from the RESOLVED in-app
+         theme - not the OS preference - so the OS status + navigation bars and
+         browser chrome follow the app's light/dark choice. The old
+         prefers-color-scheme media variants were removed because they tracked
+         the SYSTEM theme, going off-theme when the in-app theme differed (app
+         light, phone dark); a static one here would likewise override boot.js's
+         live value. With no manifest theme_color either, the installed PWA's
+         bars fall back to this same live meta instead of a fixed colour. -->
     <!-- Lets native browser chrome (scrollbars, overscroll glow, form
          controls, autofill) render as light or dark to match whichever
          theme is active - MeshPort now supports both, driven by
