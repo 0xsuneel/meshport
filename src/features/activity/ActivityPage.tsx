@@ -814,7 +814,10 @@ function FilterMenu({ anchor, active, onSelect, onClose }: {
   onSelect: (id: ActivityTab) => void
   onClose: () => void
 }) {
-  const isMerchant = useMerchant().isMerchant
+  const { isMerchant, accountType } = useMerchant()
+  // Business accounts (approved merchant or business sign-up) don't earn
+  // rewards, so the Rewards filter is hidden for them; Merchant is theirs.
+  const isBusiness = isMerchant || accountType === 'business'
   // Portalled over the page at the icon's spot - the search row's collapse
   // wrapper clips anything that overflows it.
   const r = anchor?.getBoundingClientRect()
@@ -823,7 +826,7 @@ function FilterMenu({ anchor, active, onSelect, onClose }: {
     <div style={{ position: 'fixed', top: r.top, left: r.left, width: r.width, height: r.height, zIndex: 60 }}>
     <TokenMenu width={200} ariaLabel="Filter activity" selected={active} onClose={onClose}
       onSelect={id => onSelect(id as ActivityTab)}
-      options={FILTERS.filter(f => f.id !== 'merchant' || isMerchant).map(f => ({
+      options={FILTERS.filter(f => (f.id !== 'merchant' || isBusiness) && (f.id !== 'rewards' || !isBusiness)).map(f => ({
         id: f.id, label: f.label,
         icon: (
           <span className="flex items-center justify-center rounded-full flex-shrink-0"
