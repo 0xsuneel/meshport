@@ -814,7 +814,7 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
                 className="w-full rounded-2xl bg-surface border border-border px-4 py-3 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-brand resize-none" />
             </Field>
             <Field label="Contact (optional)"><TextInput value={contact} onChange={e => setContact(e.target.value)} maxLength={120} placeholder="Phone or email" /></Field>
-            <Field label="Registration number (optional)"><TextInput value={registration} onChange={e => setRegistration(e.target.value)} maxLength={40} placeholder="GSTIN, Udyam or shop licence number" /></Field>
+            <Field label="Registration number (optional)"><TextInput value={registration} onChange={e => setRegistration(e.target.value)} maxLength={40} placeholder="GST, VAT, EIN, ABN or business licence number" /></Field>
             <Field label="Documents" hint="Add at least one: your ID or a photo of your shop. A registration certificate helps.">
               <BusinessDocsField docs={docs} onChange={setDocs} onError={m => toast(m, 'error')} />
             </Field>
