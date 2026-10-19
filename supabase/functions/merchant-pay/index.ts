@@ -164,6 +164,7 @@ function publicView(i: any, payments: any[]) {
     amount: Number(i.requested_amount), received: Number(i.received_amount), overpaid: Number(i.overpaid_amount ?? 0), currency: i.currency,
     note: i.note, customerUsername: i.customer_username, status: effectiveStatus(i),
     kind: i.kind ?? 'request', personal: typeof i.personal === 'boolean' ? i.personal : null, items: Array.isArray(i.items) ? i.items : null,
+    taxPercent: Number(i.tax_percent ?? 0),
     createdAt: i.created_at, expiresAt: i.expires_at, paidAt: i.paid_at, dueDate: i.due_date ?? null,
     completedByMerchant: !!i.completed_by_merchant, completedNote: i.completed_note ?? null,
     chains: Object.entries(PAY_CHAINS).map(([id, c]) => ({ id, label: c.label, chainId: c.chainId, usdc: c.usdc, route: c.route })),

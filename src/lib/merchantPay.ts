@@ -57,6 +57,8 @@ export type PaymentView = {
   /** A normal user's request (true) vs an approved merchant's (false); unknown on older servers. */
   personal?: boolean | null
   items?: InvoiceItem[] | null
+  /** Tax rate on a bill (percent); the amount is tax-inclusive. 0 = none. */
+  taxPercent?: number
   status: 'pending' | 'payment_detected' | 'processing' | 'paid' | 'partially_paid' | 'expired' | 'failed' | 'cancelled'
   createdAt: string
   expiresAt: string | null

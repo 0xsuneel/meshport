@@ -110,9 +110,20 @@ export function MerchantPayPage() {
                   <span className="text-text-primary font-semibold">${formatAmount(Number(i.total ?? i.qty * i.price))}</span>
                 </div>
               ))}
-              <div className="flex justify-between border-t border-border mt-2 pt-2 text-sm font-bold text-text-primary">
-                <span>Total</span><span>${formatAmount(view.amount)} USDC</span>
-              </div>
+              {(() => {
+                const sub = view.items!.reduce((s, i) => s + Number(i.total ?? Number(i.qty) * Number(i.price)), 0)
+                return (
+                  <div className="border-t border-border mt-2 pt-2">
+                    {!!view.taxPercent && (
+                      <>
+                        <div className="flex justify-between text-sm text-text-secondary py-0.5"><span>Subtotal</span><span>${formatAmount(sub)}</span></div>
+                        <div className="flex justify-between text-sm text-text-secondary py-0.5"><span>Tax ({view.taxPercent}%)</span><span>+ ${formatAmount(Math.max(0, view.amount - sub))}</span></div>
+                      </>
+                    )}
+                    <div className="flex justify-between text-sm font-bold text-text-primary py-0.5"><span>Total</span><span>${formatAmount(view.amount)} USDC</span></div>
+                  </div>
+                )
+              })()}
             </div>
           )}
           {/* Paid / arriving / expired / cancelled get their own card below. */}
