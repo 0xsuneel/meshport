@@ -31,7 +31,7 @@ export type MerchantApplication = {
   createdAt: string
   walletAddress: string | null
   username: string | null
-  /** GSTIN, Udyam, shop licence… as typed (upper-cased). */
+  /** GST, VAT, EIN, ABN, business licence… as typed (upper-cased). */
   registrationNumber: string | null
   documents: BusinessDoc[]
 }
