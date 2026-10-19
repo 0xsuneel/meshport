@@ -182,7 +182,13 @@ async function sessionInfo(req) {
   const canSpendRaw = cr && cr.ok ? await cr.json().catch(() => null) : null
   const info = { wallet, canSpend: typeof canSpendRaw === 'boolean' ? canSpendRaw : null, exp: Date.now() + 5 * 60_000 }
   if (info.canSpend === true) {
-    if (_sessions.size > 500) _sessions.clear()
+    // LRU eviction: drop only the oldest entry at the cap, not the whole
+    // cache - a full .clear() caused a thundering herd of auth lookups under
+    // load (same fix already applied to bridge-relay.ts).
+    if (_sessions.size >= 500) {
+      const firstKey = _sessions.keys().next().value
+      if (firstKey !== undefined) _sessions.delete(firstKey)
+    }
     _sessions.set(token, info)
   }
   return info

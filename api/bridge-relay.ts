@@ -242,7 +242,9 @@ async function clients(chainKey: string) {
   const { createPublicClient, createWalletClient, http, defineChain } = await import('viem')
   const c = CHAINS[chainKey]
   const rpc = process.env[`BRIDGE_RPC_${chainKey.toUpperCase()}`] || c.rpc
-  const chain = defineChain({ id: c.id, name: c.name, nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } })
+  // Arc's native currency is USDC, not Ether (18 native decimals on both).
+  const nativeCurrency = c.id === 5042002 ? { name: 'USDC', symbol: 'USDC', decimals: 18 } : { name: 'Ether', symbol: 'ETH', decimals: 18 }
+  const chain = defineChain({ id: c.id, name: c.name, nativeCurrency, rpcUrls: { default: { http: [rpc] } } })
   // Receipt waits check every 250ms on Arc (sub-second blocks) and every 1s
   // elsewhere - viem's 4s default added seconds to every relayed step.
   const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }), pollingInterval: pollMsFor(c.id) })
@@ -435,6 +437,25 @@ function allowRelay(wallet: string): boolean {
   return true
 }
 
+// The GET ?action=quote path is unauthenticated by design (a fee estimate is
+// shown before sign-in), but each hit makes a live getGasPrice() + Circle
+// IRIS call. Without a limit it can be flooded to exhaust the source-chain RPC
+// and Circle's API at no cost, so cap it per client IP (generous for real use,
+// cheap to hold). Same LRU eviction as _relayHits.
+const _quoteHits = new Map<string, number[]>()
+function allowQuote(ip: string): boolean {
+  const now = Date.now(), win = 60_000
+  const hits = (_quoteHits.get(ip) || []).filter(t => now - t < win)
+  if (hits.length >= 30) return false
+  hits.push(now)
+  _quoteHits.set(ip, hits)
+  if (_quoteHits.size > RELAY_HITS_MAX) {
+    const firstKey = _quoteHits.keys().next().value
+    if (firstKey !== undefined) _quoteHits.delete(firstKey)
+  }
+  return true
+}
+
 // transferWithAuthorization(address,address,uint256,uint256,uint256,bytes32,uint8,bytes32,bytes32)
 const TRANSFER_WITH_AUTH_SELECTOR = '0xe3ee160e'
 
@@ -469,7 +490,7 @@ async function checkRefundTransfer(chainKey: string, to: string, data: `0x${stri
   if (String(p.merchant_wallet).toLowerCase() !== caller) return 'Not your payment'
   if (String(p.from_address).toLowerCase() !== customer) return 'Refunds go back to the wallet that paid'
   if ((CHAIN_ALIASES[p.source_chain] ?? p.source_chain) !== chainKey) return 'Refund on the chain it was paid on'
-  if (value <= 0n || value > BigInt(Math.round(Number(p.amount) * 1e6))) return 'More than this payment'
+  if (value <= 0n || value > BigInt(Math.ceil(Number(p.amount) * 1e6))) return 'More than this payment'
   // Several refunds per payment: no more than what is still left on it
   // (all refunds of the same transfer, whichever row they were recorded on).
   const r = await fetch(`${supabaseUrl}/rest/v1/rpc/merchant_refund_remaining`, {
@@ -479,7 +500,7 @@ async function checkRefundTransfer(chainKey: string, to: string, data: `0x${stri
   const left = r?.ok ? Number(await r.json().catch(() => NaN)) : NaN
   if (!Number.isFinite(left)) return 'Could not verify this payment - please try again'
   if (left < 0.01 - 1e-9) return 'Already refunded'
-  if (value > BigInt(Math.round(left * 1e6))) return `More than what's left on this payment ($${left.toFixed(2)})`
+  if (value > BigInt(Math.ceil(left * 1e6))) return `More than what's left on this payment ($${left.toFixed(2)})`
   return null
 }
 
@@ -684,6 +705,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // ── Quote ────────────────────────────────────────────────────────────
+      const quoteIp = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown'
+      if (!allowQuote(quoteIp)) return res.status(429).json({ error: 'Too many requests - try again shortly' })
       const chainKey = String(req.query.chain || '')
       const total = String(req.query.amount || '')
       if (!CHAINS[chainKey] || !routers()[chainKey]) return res.status(400).json({ error: 'Gasless bridging is not available for this chain' })

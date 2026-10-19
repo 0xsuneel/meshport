@@ -293,6 +293,10 @@ const ESCROW_ABI = [
     outputs: [
       { name: 'seller', type: 'address' }, { name: 'remaining', type: 'uint256' },
       { name: 'reserved', type: 'uint256' }, { name: 'state', type: 'uint8' }, { name: 'frozen', type: 'bool' },
+      // V3's OfferEscrow returns three more fields; declare them so the ABI
+      // matches the deployed getter (current callers word-slice manually and
+      // read only `frozen`, but this keeps the tuple correct for any decoder).
+      { name: 'operator', type: 'address' }, { name: 'minTrade', type: 'uint256' }, { name: 'maxTrade', type: 'uint256' },
     ],
   },
   {
