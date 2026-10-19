@@ -48,12 +48,20 @@ export interface SettleProgressRow {
   message?: string
 }
 
-// ─── Spring presets ──────────────────────────────────────────────────────────
+// ─── Motion presets ──────────────────────────────────────────────────────────
+// The business UI kit was prototyped with its own springs, which overshoot and
+// settle back (a rubber-band bounce). The rest of the app moved to tweens that
+// land once, iOS-style (src/lib/motion.ts). These keep the old names but now
+// ARE those shared tweens, so every business surface - tab pills, the keypad,
+// QR cards, list rows, the passcode and voice sheets - moves like the rest of
+// the app instead of bouncing differently.
+import type { Transition } from 'framer-motion'
+import { EASE_OUT, PAGE_TRANSITION, SHEET_SPRING } from '@/lib/motion'
 
-export const springs = {
-  snappy: { type: 'spring' as const, stiffness: 420, damping: 32 },
-  gentle: { type: 'spring' as const, stiffness: 300, damping: 26 },
-  sheet:  { type: 'spring' as const, stiffness: 400, damping: 36 },
+export const springs: Record<'snappy' | 'gentle' | 'sheet', Transition> = {
+  snappy: { duration: 0.18, ease: EASE_OUT },
+  gentle: PAGE_TRANSITION,
+  sheet:  SHEET_SPRING,
 }
 
 // ─── Tiny formatting helpers (pure, no deps) ─────────────────────────────────

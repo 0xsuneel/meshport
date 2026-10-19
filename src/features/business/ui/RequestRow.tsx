@@ -6,6 +6,7 @@
 import React from 'react'
 import { ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { EASE_OUT } from '@/lib/motion'
 import { springs } from './types'
 
 export type RequestStatus = 'open' | 'part' | 'paid' | 'completed' | 'expired' | 'cancelled'
@@ -126,7 +127,7 @@ export function RequestRow({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
+            transition={{ duration: 0.22, ease: EASE_OUT }}
             className="overflow-hidden"
           >
             {note && <p className="px-4 pt-3 text-xs text-text-secondary leading-relaxed border-t border-border">{note}</p>}
