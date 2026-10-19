@@ -165,8 +165,8 @@ const refundRef = (paymentId: string, n = 1) => keccak256(toBytes(n <= 1 ? payme
 const MAX_REFUNDS = 200
 
 const usd = (n: number) => '$' + n.toFixed(2)
-/** ORD-100014 → ORD-00014, as the app shows order numbers (src/lib/orderLabels.ts). */
-const orderDisplay = (n: string) => { const m = /^ORD-(\d+)$/i.exec(n); const k = m ? Number(m[1]) - 100000 : 0; return k > 0 ? `ORD-${String(k).padStart(5, '0')}` : n }
+/** ORD-100014 → #14, as the app shows order numbers (src/lib/orderLabels.ts). */
+const orderDisplay = (n: string) => { const m = /^ORD-(\d+)$/i.exec(n); const k = m ? Number(m[1]) - 100000 : 0; return k > 0 ? `#${k}` : n }
 
 // Stored chain names that mean the same chain.
 const chainKey = (c: string) => c === 'Polygon_Amoy_Testnet' ? 'Polygon_Sepolia' : c
