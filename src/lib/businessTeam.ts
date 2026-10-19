@@ -9,12 +9,12 @@
 import { supabase } from '@/lib/supabase'
 import type { MerchantIntent, MerchantPayment, InvoiceItem } from '@/lib/merchantPay'
 
-export type Store = { id: string; name: string; type: string | null; address: string | null; isDefault: boolean; createdAt: string }
+export type Store = { id: string; name: string; type: string | null; address: string | null; taxId: string | null; isDefault: boolean; createdAt: string }
 export type StaffRole = 'cashier' | 'manager'
 export type StaffMember = { id: string; username: string; role: StaffRole; status: 'invited' | 'active'; storeId: string | null; createdAt: string }
 export type Membership = { id: string; ownerAuthUid: string; ownerName: string; ownerUsername: string; role: StaffRole; status: 'invited' | 'active'; storeId: string | null; storeName: string | null }
 
-const mapStore = (r: any): Store => ({ id: r.id, name: r.name, type: r.type ?? null, address: r.address ?? null, isDefault: !!r.is_default, createdAt: r.created_at })
+const mapStore = (r: any): Store => ({ id: r.id, name: r.name, type: r.type ?? null, address: r.address ?? null, taxId: r.tax_id ?? null, isDefault: !!r.is_default, createdAt: r.created_at })
 const fail = (e: { message: string } | null) => { if (e) throw new Error(e.message.replace(/^.*?ERROR:\s*/, '')) }
 
 async function myUid(): Promise<string | null> {
@@ -31,10 +31,12 @@ export async function listStores(): Promise<Store[]> {
   return (data ?? []).map(mapStore)
 }
 
-export async function saveStore(s: { id?: string; name: string; type?: string; address?: string; isDefault?: boolean }): Promise<Store> {
+export async function saveStore(s: { id?: string; name: string; type?: string; address?: string; taxId?: string; isDefault?: boolean }): Promise<Store> {
   const name = s.name.trim()
   if (name.length < 2) throw new Error('Enter the store name')
-  const row = { name: name.slice(0, 60), type: s.type || null, address: s.address?.trim().slice(0, 160) || null, ...(s.isDefault !== undefined ? { is_default: s.isDefault } : {}) }
+  const row = { name: name.slice(0, 60), type: s.type || null, address: s.address?.trim().slice(0, 160) || null,
+    ...(s.taxId !== undefined ? { tax_id: s.taxId.trim().toUpperCase().slice(0, 40) || null } : {}),
+    ...(s.isDefault !== undefined ? { is_default: s.isDefault } : {}) }
   const q = s.id ? supabase.from('business_stores').update(row).eq('id', s.id) : supabase.from('business_stores').insert(row)
   const { data, error } = await q.select('*').single()
   fail(error)

@@ -236,7 +236,7 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
   // A new store starts with the category the business applied with.
   const defaultType = toCategory(useMerchant().application?.businessType)
   const [stores, setStores] = useState<Store[] | null>(null)
-  const [edit, setEdit] = useState<{ id?: string; name: string; type: string; address: string } | null>(null)
+  const [edit, setEdit] = useState<{ id?: string; name: string; type: string; address: string; taxId: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const load = () => listStores().then(s => { setStores(s); onChanged(s) }).catch(() => setStores([]))
   useEffect(() => { if (open) void load(); else setEdit(null) }, [open])
@@ -260,16 +260,16 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
       <div className="px-5 pt-4 pb-6">
         {edit ? (
           <StoreForm name={edit.name} onName={v => setEdit({ ...edit, name: v })} type={edit.type} types={STORE_TYPES} onType={v => setEdit({ ...edit, type: v })}
-            address={edit.address} onAddress={v => setEdit({ ...edit, address: v })} busy={busy} onSave={save}
+            address={edit.address} onAddress={v => setEdit({ ...edit, address: v })} taxId={edit.taxId} onTaxId={v => setEdit({ ...edit, taxId: v })} busy={busy} onSave={save}
             onDelete={edit.id ? remove : undefined} onCancel={() => setEdit(null)} />
         ) : stores === null ? <Skeleton className="h-40 w-full" /> : (
           <StoresView stores={stores.map(s => {
             const p = paymentsByStore.get(s.id)
-            return { id: s.id, name: s.name, type: s.type ?? 'Store', address: s.address ?? undefined, isDefault: s.isDefault,
+            return { id: s.id, name: s.name, type: s.type ?? 'Store', address: s.address ?? undefined, taxId: s.taxId ?? undefined, isDefault: s.isDefault,
               payments: p ? `${money(p.total)} · ${p.count} payment${p.count === 1 ? '' : 's'}` : 'No payments yet' }
           })}
-            onAdd={() => setEdit({ name: '', type: defaultType, address: '' })}
-            onEdit={id => { const s = stores.find(x => x.id === id); if (s) setEdit({ id, name: s.name, type: s.type ?? STORE_TYPES[0], address: s.address ?? '' }) }}
+            onAdd={() => setEdit({ name: '', type: defaultType, address: '', taxId: '' })}
+            onEdit={id => { const s = stores.find(x => x.id === id); if (s) setEdit({ id, name: s.name, type: s.type ?? STORE_TYPES[0], address: s.address ?? '', taxId: s.taxId ?? '' }) }}
             onSetPrimary={async id => { try { await setDefaultStore(id); await load(); toast('Main store updated', 'success') } catch (e) { toast(e instanceof Error ? e.message : 'Could not update', 'error') } }}
             onQr={onQr} addLockedNote={addLockedNote} />
         )}
