@@ -12,7 +12,10 @@ import { useLocation, useNavigationType } from 'react-router-dom'
 
 export type NavKind = 'forward' | 'back' | 'tab' | 'none'
 
-const TAB_ROOTS = new Set(['/', '/chat', '/scanner', '/rewards', '/activity'])
+// Every bottom-nav root (merchants see /business where others see /rewards) -
+// must match BottomNav's own TAB_ROOTS so switching to/from the Business tab
+// cross-fades like every other tab instead of sliding like an opened page.
+const TAB_ROOTS = new Set(['/', '/chat', '/scanner', '/rewards', '/business', '/activity'])
 const isAncestor = (a: string, b: string) => a !== '/' && b.startsWith(a.endsWith('/') ? a : a + '/')
 
 let last: { path: string; kind: NavKind } = { path: '', kind: 'none' }
