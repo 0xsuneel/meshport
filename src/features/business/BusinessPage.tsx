@@ -10,7 +10,10 @@
 //
 // The UI kit in ./ui was designed with Arc Studio.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { pushLook } from '@/lib/pushLook'
+import { PAGE_TRANSITION } from '@/lib/motion'
 import { useBizTerms } from '@/lib/businessCategories'
 import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
@@ -46,6 +49,10 @@ import {
 } from './ui'
 
 type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools' | 'activity'
+
+// A sub-view leaves a touch quicker on an ease-in, like the OS (matches
+// BusinessScreen's PANEL_EXIT / the app's SHEET_EXIT).
+const PANEL_EXIT = { x: '100%', transition: { duration: 0.25, ease: [0.4, 0, 1, 1] as const } }
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.method === 'own_transfer' ? 'Your transfer'
@@ -460,87 +467,103 @@ function OwnerBusinessPage() {
     return { payments: mine.length, total: money(mine.reduce((s, p) => s + p.amount, 0)) }
   }, [rawDetail, raw, netOf])
 
-  // Hub parallax: while a sub-screen slides in over the business tab,
-  // the tab content shifts left — the "old page moves -28%" half of the
-  // app's shared page push (PageTransition/ScreenPush). BusinessScreen
-  // supplies the matching slide, dim veil and edge shadow, so opening a
-  // Business page now reads like opening any other page. Applied to the two
-  // hub blocks (header + body) so the fixed overlays below are unaffected.
-  const hubShift = { transform: screen ? 'translateX(-28%)' : undefined, transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)', willChange: 'transform' }
+  // Opening a sub-view (Manage orders / Manage money) now reads like opening
+  // any other page: the overview hub stays mounted and parallaxes left (the
+  // "old page moves -28%" half of the app's shared page push), while the
+  // sub-tab slides the full width in from the right over a dim veil with the
+  // same edge shadow - the exact PageTransition / ScreenPush look. (Screen
+  // overlays below already supply this themselves.)
+  const subOpen = tab !== 'overview'
+  const look = useMemo(() => (typeof window === 'undefined' ? { dim: 0.22, shadow: '-10px 0 28px rgba(0,0,0,0.28)' } : pushLook()), [])
+  const hubShift = { transform: (screen || subOpen) ? 'translateX(-28%)' : undefined, transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)', willChange: 'transform' }
+  const bodyPad = { paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }
   return (
-    <div className="flex flex-col h-full min-h-0 bg-bg">
-      <div style={hubShift}>
-        {tab === 'overview' ? (
-          // Title = the store being viewed ("All stores" for the totals);
-          // the line under it is the business account itself.
-          <BusinessHeader storeName={activeStore?.name ?? (stores.length > 1 ? allStores : storeName)} handle={handle}
-            status={headerStatus} voiceOn={voice.enabled}
-            onVoice={() => setVoiceOpen(true)} onMenu={open(locked ? 'profile' : 'tools')} onSwitchStore={stores.length ? () => setSwitcher(true) : undefined}
-            avatarName={storeName} avatarUrl={userAvatar ?? undefined}
-            outlet={(activeStore || stores.length > 1) && activeStore?.name !== storeName ? storeName : null} />
-        ) : (
-          // Payments and Settlements open from Overview (See all, the settle
-          // bar, the menu) and come back with the arrow - no tab bar.
-          <header className="header-row gap-3 px-5 pt-header pb-header">
-            <button type="button" aria-label="Back to overview" onClick={() => { setPayFilter('all'); setTab('overview') }} className="back-btn">
-              <ArrowLeft className="w-5 h-5 text-text-primary" />
-            </button>
-            <h1 className="header-title">{tab === 'payments' ? `Manage ${terms.orders.toLowerCase()}` : 'Manage money'}</h1>
-            {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? allStores}</span>}
-          </header>
-        )}
-        {tab === 'payments' && <div className="px-5 pt-2">
-          <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Orders or payments">
-            {([['requests', terms.orders], ['payments', 'Payments']] as const).map(([id, label]) => (
-              <button key={id} type="button" role="tab" aria-selected={payView === id} onClick={() => setPayView(id)}
-                className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${payView === id ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>}
-
+    <div className="relative flex flex-col h-full min-h-0 bg-bg overflow-hidden">
+      {/* ── Overview hub: always mounted; parallaxes left under a sub-view ── */}
+      <div className="flex-1 min-h-0 flex flex-col" style={hubShift}>
+        {/* Title = the store being viewed ("All stores" for the totals);
+            the line under it is the business account itself. */}
+        <BusinessHeader storeName={activeStore?.name ?? (stores.length > 1 ? allStores : storeName)} handle={handle}
+          status={headerStatus} voiceOn={voice.enabled}
+          onVoice={() => setVoiceOpen(true)} onMenu={open(locked ? 'profile' : 'tools')} onSwitchStore={stores.length ? () => setSwitcher(true) : undefined}
+          avatarName={storeName} avatarUrl={userAvatar ?? undefined}
+          outlet={(activeStore || stores.length > 1) && activeStore?.name !== storeName ? storeName : null} />
+        <div className="flex-1 min-h-0 overflow-y-auto" style={bodyPad}>
+          {locked && <LockedHubView banner={banner} terms={terms} />}
+          {!locked && (
+            <HubView terms={terms} loading={!loaded} banner={banner} periodLabel={period.label} onPeriod={() => setPeriodSheet(true)}
+              sales={{ total: money(today.total), trend: <TrendChip pct={trend} compare={period.compareLabel} /> }}
+              pending={pending ? { count: pending.count, due: money(pending.due) } : null}
+              available={money(arcBalance)} onPending={openOrders} onAvailable={() => setTab('settlements')}
+              collect={{ badge: stores.length > 1 ? `${activeStore?.name ?? 'Main store'} QR` : 'Show your QR', tone: 'brand', onClick: open('receive') }}
+              orders={{ badge: !pending ? 'Loading…' : pending.count ? `${pending.count} open` : `No open ${terms.orders.toLowerCase()}`, tone: pending?.count ? 'warning' : 'neutral', onClick: openOrders }}
+              money={{ badge: settle.total > 0 ? `${money(settle.total)} to settle` : scanning ? 'Checking chains…' : 'All on Arc', tone: settle.total > 0 ? 'brand' : 'neutral', onClick: () => setTab('settlements') }}
+              tools={{ badge: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'}` : isMerchant ? 'Add a store' : 'Profile & help', onClick: open('tools') }}
+              recent={payments.slice(0, 4)} onSeeAll={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onPayment={setDetail} />
+          )}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)', ...hubShift }}>
-        {tab === 'overview' && locked && <LockedHubView banner={banner} terms={terms} />}
-        {tab === 'overview' && !locked && (
-          <HubView terms={terms} loading={!loaded} banner={banner} periodLabel={period.label} onPeriod={() => setPeriodSheet(true)}
-            sales={{ total: money(today.total), trend: <TrendChip pct={trend} compare={period.compareLabel} /> }}
-            pending={pending ? { count: pending.count, due: money(pending.due) } : null}
-            available={money(arcBalance)} onPending={openOrders} onAvailable={() => setTab('settlements')}
-            collect={{ badge: stores.length > 1 ? `${activeStore?.name ?? 'Main store'} QR` : 'Show your QR', tone: 'brand', onClick: open('receive') }}
-            orders={{ badge: !pending ? 'Loading…' : pending.count ? `${pending.count} open` : `No open ${terms.orders.toLowerCase()}`, tone: pending?.count ? 'warning' : 'neutral', onClick: openOrders }}
-            money={{ badge: settle.total > 0 ? `${money(settle.total)} to settle` : scanning ? 'Checking chains…' : 'All on Arc', tone: settle.total > 0 ? 'brand' : 'neutral', onClick: () => setTab('settlements') }}
-            tools={{ badge: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'}` : isMerchant ? 'Add a store' : 'Profile & help', onClick: open('tools') }}
-            recent={payments.slice(0, 4)} onSeeAll={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onPayment={setDetail} />
+      {/* ── Manage orders / Manage money: slide in over the hub on the shared
+          page push (dim veil + edge shadow), the bottom nav staying put. ── */}
+      <AnimatePresence>
+        {subOpen && (
+          <>
+            <motion.div className="absolute inset-0 z-20 pointer-events-none" aria-hidden
+              style={{ background: '#000' }} initial={{ opacity: 0 }} animate={{ opacity: look.dim }}
+              exit={{ opacity: 0, transition: { duration: 0.25, ease: [0.4, 0, 1, 1] } }} transition={PAGE_TRANSITION} />
+            <motion.div className="absolute inset-0 z-30 flex flex-col bg-bg" style={{ boxShadow: look.shadow }}
+              initial={{ x: '100%' }} animate={{ x: 0 }} exit={PANEL_EXIT} transition={PAGE_TRANSITION}>
+              {/* Payments and Settlements open from Overview (See all, the settle
+                  bar, the menu) and come back with the arrow - no tab bar. */}
+              <header className="header-row gap-3 px-5 pt-header pb-header">
+                <button type="button" aria-label="Back to overview" onClick={() => { setPayFilter('all'); setTab('overview') }} className="back-btn">
+                  <ArrowLeft className="w-5 h-5 text-text-primary" />
+                </button>
+                <h1 className="header-title">{tab === 'payments' ? `Manage ${terms.orders.toLowerCase()}` : 'Manage money'}</h1>
+                {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? allStores}</span>}
+              </header>
+              {tab === 'payments' && <div className="px-5 pt-2">
+                <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Orders or payments">
+                  {([['requests', terms.orders], ['payments', 'Payments']] as const).map(([id, label]) => (
+                    <button key={id} type="button" role="tab" aria-selected={payView === id} onClick={() => setPayView(id)}
+                      className={`flex-1 min-h-[40px] rounded-xl text-sm font-semibold transition-colors ${payView === id ? 'bg-card text-text-primary shadow-sm' : 'text-text-muted'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>}
+              <div className="flex-1 min-h-0 overflow-y-auto" style={bodyPad}>
+                {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} mainStoreId={mainStoreId}
+                  storeName={storeName} paymentsOf={i => paymentsByIntent.get(i.id) ?? []} refundedOf={p => refundedOf(p.id)} onRefund={refundFromOrder} />}
+                {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter}
+                  loading={!loaded} payments={payList} onPayment={setDetail} />}
+                {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out"
+                  action={<span className="flex gap-2 shrink-0">
+                    <button type="button" onClick={open('payouts')} className="min-h-[40px] px-3.5 rounded-xl border border-border bg-card text-text-primary text-[13px] font-semibold active:bg-border/30">Pay staff</button>
+                    <button type="button" onClick={open('cashout')} className="min-h-[40px] px-3.5 rounded-xl bg-brand text-white text-[13px] font-semibold active:opacity-90">Cash out</button>
+                  </span>} /></div>}
+                {tab === 'settlements' && (
+                  <SettlementsView scanning={scanning}
+                    chains={(settle.allChains ?? []).map(c => ({ id: c.id, label: c.label, logo: c.logo, balance: money(c.balance),
+                      onSettle: () => beginSettleOne(c.id), settleDisabled: settle.running || c.balance < settle.singleMin }))}
+                    total={money(settle.total)}
+                    settle={{ enabled: !scanning && settle.ready && !settle.running && settle.due.length > 0, label: settleLabel, note: settleNote }}
+                    onSettle={() => beginSettle()} onRefresh={settle.rescan}
+                    history={historyItems} onHistory={id => { setProgressOpen(false); setHistoryId(id) }}
+                    lastRun={settle.run.length ? { running: settle.running, onOpen: () => { setHistoryId(null); setProgressOpen(true) } } : undefined} />
+                )}
+                {tab === 'settlements' && (
+                  <div className="mx-5 mt-5">
+                    <AutoSettleCard schedule={autoSettle.settings.schedule} time={autoSettle.settings.time}
+                      onSchedule={s => autoSettle.update({ schedule: s })} onTime={t => autoSettle.update({ time: t, lastPrompt: Date.now() })} nextLabel={autoSettle.nextLabel} />
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </>
         )}
-        {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} mainStoreId={mainStoreId}
-          storeName={storeName} paymentsOf={i => paymentsByIntent.get(i.id) ?? []} refundedOf={p => refundedOf(p.id)} onRefund={refundFromOrder} />}
-        {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter}
-          loading={!loaded} payments={payList} onPayment={setDetail} />}
-        {tab === 'settlements' && <div className="mx-5 mt-2 mb-1"><ArcBalanceCard amount={money(arcBalance)} note="Ready to spend, refund or cash out"
-          action={<span className="flex gap-2 shrink-0">
-            <button type="button" onClick={open('payouts')} className="min-h-[40px] px-3.5 rounded-xl border border-border bg-card text-text-primary text-[13px] font-semibold active:bg-border/30">Pay staff</button>
-            <button type="button" onClick={open('cashout')} className="min-h-[40px] px-3.5 rounded-xl bg-brand text-white text-[13px] font-semibold active:opacity-90">Cash out</button>
-          </span>} /></div>}
-        {tab === 'settlements' && (
-          <SettlementsView scanning={scanning}
-            chains={(settle.allChains ?? []).map(c => ({ id: c.id, label: c.label, logo: c.logo, balance: money(c.balance),
-              onSettle: () => beginSettleOne(c.id), settleDisabled: settle.running || c.balance < settle.singleMin }))}
-            total={money(settle.total)}
-            settle={{ enabled: !scanning && settle.ready && !settle.running && settle.due.length > 0, label: settleLabel, note: settleNote }}
-            onSettle={() => beginSettle()} onRefresh={settle.rescan}
-            history={historyItems} onHistory={id => { setProgressOpen(false); setHistoryId(id) }}
-            lastRun={settle.run.length ? { running: settle.running, onOpen: () => { setHistoryId(null); setProgressOpen(true) } } : undefined} />
-        )}
-        {tab === 'settlements' && (
-          <div className="mx-5 mt-5">
-            <AutoSettleCard schedule={autoSettle.settings.schedule} time={autoSettle.settings.time}
-              onSchedule={s => autoSettle.update({ schedule: s })} onTime={t => autoSettle.update({ time: t, lastPrompt: Date.now() })} nextLabel={autoSettle.nextLabel} />
-          </div>
-        )}
-      </div>
+      </AnimatePresence>
 
       <PaymentDetailSheet payment={detail} explorerUrl={rawDetail ? explorerTxUrl(rawDetail.chain, rawDetail.txHash) ?? undefined : undefined}
         onClose={() => setDetail(null)} onSettle={() => { setDetail(null); setTab('settlements') }}
