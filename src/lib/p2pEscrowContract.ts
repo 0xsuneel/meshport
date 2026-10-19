@@ -1499,7 +1499,8 @@ export async function getRecentGovernanceEvents(blockLookback = 43200): Promise<
         return perRange.flat()
       }),
     )
-    const flat = allLogs.flat().sort((a, b) => (b.blockNumber > a.blockNumber ? 1 : b.blockNumber < a.blockNumber ? -1 : 0))
+    const flat: Omit<GovernanceEvent, 'timestamp'>[] = allLogs.flat()
+    flat.sort((a, b) => (b.blockNumber > a.blockNumber ? 1 : b.blockNumber < a.blockNumber ? -1 : 0))
 
     // Best-effort timestamp enrichment, one lookup per unique block.
     const uniqueBlocks = [...new Set(flat.map(e => e.blockNumber))]
