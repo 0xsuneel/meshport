@@ -45,8 +45,8 @@ const TONE: Record<HubTone, string> = {
 function Tile({ icon: Icon, title, sub, tile }: { icon: React.ElementType; title: string; sub: string; tile: HubTile }) {
   return (
     <button type="button" onClick={tile.onClick} aria-label={`${title}: ${tile.badge}`}
-      className="flex flex-col items-start gap-1.5 min-h-[104px] p-3 rounded-2xl bg-card border border-border text-left active:scale-[0.98] transition-transform">
-      <span className="inline-flex items-center justify-center size-[32px] rounded-xl bg-brand/10 text-brand-text"><Icon className="size-[17px]" /></span>
+      className="flex flex-col items-start gap-1 min-h-[84px] p-2.5 rounded-2xl bg-card border border-border text-left active:scale-[0.98] transition-transform">
+      <span className="inline-flex items-center justify-center size-[28px] rounded-xl bg-brand/10 text-brand-text"><Icon className="size-[15px]" /></span>
       <span className="flex flex-col gap-0.5">
         <span className="text-[15px] font-semibold text-text-primary leading-tight">{title}</span>
         <span className="text-xs text-text-muted leading-snug">{sub}</span>
@@ -61,35 +61,35 @@ export function HubView({
   collect, orders, money, tools, recent, onSeeAll, onPayment, terms = bizTerms(null),
 }: HubViewProps) {
   return (
-    <div className="flex flex-col gap-3 pb-8">
+    <div className="flex flex-col gap-2.5 pb-6">
       {banner}
 
       {/* Sales · pending orders · available balance */}
       <FadeUp delay={0.04} className="mx-5">
-        <div className="rounded-2xl bg-card border border-border p-4 flex flex-col gap-3">
+        <div className="rounded-2xl bg-card border border-border p-3.5 flex flex-col gap-2.5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[13px] text-text-muted">{periodLabel === 'Today' ? "Today's sales" : 'Sales'}</p>
             {onPeriod && (
               <button type="button" onClick={onPeriod} aria-label="Change period"
-                className="inline-flex items-center gap-1 min-h-[32px] px-3 rounded-full bg-surface border border-border text-xs font-semibold text-text-secondary active:bg-border/30">
+                className="inline-flex items-center gap-1 min-h-[28px] px-2.5 rounded-full bg-surface border border-border text-xs font-semibold text-text-secondary active:bg-border/30">
                 {periodLabel} <ChevronDown className="size-3.5" />
               </button>
             )}
           </div>
-          {loading ? <Skeleton className="h-9 w-40 rounded-xl" /> : (
+          {loading ? <Skeleton className="h-8 w-36 rounded-xl" /> : (
             <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
-              <p className="text-[34px] font-bold tabular-nums leading-none tracking-tight text-text-primary">{sales.total}</p>
+              <p className="text-[28px] font-bold tabular-nums leading-none tracking-tight text-text-primary">{sales.total}</p>
               {sales.trend}
             </div>
           )}
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={onPending} className="flex flex-col gap-0.5 rounded-xl bg-surface px-3 py-2.5 text-left active:bg-border/30">
+            <button type="button" onClick={onPending} className="flex flex-col gap-0.5 rounded-xl bg-surface px-2.5 py-2 text-left active:bg-border/30">
               <span className="text-xs text-text-muted">Pending orders</span>
-              {pending ? <span className="text-base font-semibold text-text-primary tabular-nums truncate">{pending.count} · {pending.due}</span> : <Skeleton className="h-5 w-20 mt-0.5" />}
+              {pending ? <span className="text-[15px] font-semibold text-text-primary tabular-nums truncate">{pending.count} · {pending.due}</span> : <Skeleton className="h-5 w-20 mt-0.5" />}
             </button>
-            <button type="button" onClick={onAvailable} className="flex flex-col gap-0.5 rounded-xl bg-surface px-3 py-2.5 text-left active:bg-border/30">
+            <button type="button" onClick={onAvailable} className="flex flex-col gap-0.5 rounded-xl bg-surface px-2.5 py-2 text-left active:bg-border/30">
               <span className="text-xs text-text-muted">Available on Arc</span>
-              <span className="text-base font-semibold text-text-primary tabular-nums truncate">{available}</span>
+              <span className="text-[15px] font-semibold text-text-primary tabular-nums truncate">{available}</span>
             </button>
           </div>
         </div>
@@ -97,7 +97,7 @@ export function HubView({
 
       {/* Four feature areas */}
       <FadeUp delay={0.08} className="mx-5">
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 gap-2">
           <Tile icon={QrCode} title="Collect payment" sub="Shop QR · Request · Bill" tile={collect} />
           <Tile icon={ShoppingBag} title={`Manage ${terms.orders.toLowerCase()}`} sub={`Status · ${terms.customer} · Receipt`} tile={orders} />
           <Tile icon={Wallet} title="Manage money" sub="Arc balance · Other chains · Settle" tile={money} />
@@ -108,14 +108,14 @@ export function HubView({
       {/* Latest verified payments */}
       <FadeUp delay={0.12} className="mx-5">
         <div className="rounded-2xl bg-card border border-border overflow-hidden">
-          <div className="flex items-center justify-between px-4 pt-3 pb-1">
+          <div className="flex items-center justify-between px-3.5 pt-2.5 pb-1">
             <p className="text-[15px] font-semibold text-text-primary">Verified payments</p>
             {recent.length > 0 && (
-              <button type="button" onClick={onSeeAll} className="min-h-[36px] text-[13px] font-semibold text-brand-text active:opacity-70">See all</button>
+              <button type="button" onClick={onSeeAll} className="min-h-[32px] text-[13px] font-semibold text-brand-text active:opacity-70">See all</button>
             )}
           </div>
           {loading ? (
-            <div className="flex flex-col gap-3 px-4 pt-2 pb-4">
+            <div className="flex flex-col gap-2.5 px-3.5 pt-1.5 pb-3">
               {[0, 1, 2].map(i => (
                 <div key={i} className="flex items-center gap-3">
                   <Skeleton className="size-9 rounded-full" />
@@ -125,8 +125,8 @@ export function HubView({
               ))}
             </div>
           ) : recent.length === 0 ? (
-            <div className="flex flex-col items-center text-center px-6 pt-3 pb-6">
-              <span className="inline-flex items-center justify-center size-11 rounded-2xl bg-surface border border-border mb-2.5"><CreditCard className="size-5 text-text-muted" /></span>
+            <div className="flex flex-col items-center text-center px-6 pt-2 pb-5">
+              <span className="inline-flex items-center justify-center size-10 rounded-2xl bg-surface border border-border mb-2"><CreditCard className="size-[18px] text-text-muted" /></span>
               <p className="text-sm font-medium text-text-secondary">No payments yet</p>
               <p className="text-xs text-text-muted mt-1">Open Collect payment to show your QR</p>
             </div>
