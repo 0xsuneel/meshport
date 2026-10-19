@@ -73,5 +73,5 @@ export function report(): string {
 // Dev-only console handle. Guarded so it never runs during SSR/build and never
 // ships behavior - it only exposes the counters that already exist.
 if (typeof window !== 'undefined' && (import.meta as any).env?.DEV) {
-  ;(window as any).__meshportRpc = { snapshot, reset: resetMetrics, report: () => console.log(report()) }
+  (window as any).__meshportRpc = { snapshot, reset: resetMetrics, report: () => console.log(report()) }
 }

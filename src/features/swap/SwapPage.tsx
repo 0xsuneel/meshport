@@ -557,7 +557,7 @@ export function SwapPage() {
   useEffect(() => {
     import('@/lib/swapService').then(({ warmSwapSdk }) => warmSwapSdk())
     import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [])
 
   // ─── Success screen - same full-screen flash → hero-card takeover
@@ -969,7 +969,7 @@ export function SwapPage() {
     if (Date.now() - quoteAtRef.current > QUOTE_FRESH_MS) void fetchQuote(true)
     const interval = setInterval(() => fetchQuote(true), 20000)
     return () => { cancelled = true; clearInterval(interval) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [step, amountIn, tokenIn, tokenOut, slippage, callProxy])
 
   // ── Fetch the quote once, transitioning the form into Review on success ──

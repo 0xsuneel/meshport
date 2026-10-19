@@ -158,7 +158,7 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
       const el = i === -1 ? s.node : copies[i]
       if (el) { el.scrollTop = t; el.scrollLeft = l }
     }
-    ;(back ? layer : page).style.boxShadow = look.shadow
+    (back ? layer : page).style.boxShadow = look.shadow
 
     const anims: Animation[] = back
       ? [

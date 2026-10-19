@@ -32,7 +32,7 @@ vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'test-anon-key')
 let fetchActivity: typeof import('./ActivityService').fetchActivity
 
 beforeAll(async () => {
-  ;({ fetchActivity } = await import('./ActivityService'))
+  ({ fetchActivity } = await import('./ActivityService'))
 })
 
 function mockFetchOnce(rows: unknown[] = []) {

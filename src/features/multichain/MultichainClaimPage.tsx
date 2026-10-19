@@ -1577,7 +1577,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   useEffect(() => {
     if (effectiveRoute === 'ub' && cctpAvailable && selected
       && (ubFeeTooHigh || (ubFeeHigh && ubPickedFor.current !== ubFeeKey))) setClaimRoute('cctp')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [effectiveRoute, ubFeeTooHigh, ubFeeHigh, cctpAvailable, selected, ubFeeKey])
   const pickRoute = (id: 'ub' | 'cctp') => {
     if (id === 'ub') ubPickedFor.current = ubFeeKey

@@ -571,7 +571,7 @@ export function PaySendPage() {
     // their real fee by roughly 3x on this exact screen.
     estimateTransferFee(0, token !== 'USDC').then(fee => { if (!cancelled) setEstimatedFee(fee) })
     return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [token, recipient?.walletAddress])
 
   useEffect(() => {

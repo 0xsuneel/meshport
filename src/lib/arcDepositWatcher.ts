@@ -659,7 +659,7 @@ export function createArcDepositWatcher(opts: {
     ws = socket
 
     socket.onopen = () => {
-      if (stopped || ws !== socket) { try { socket.close() } catch {} ; return }
+      if (stopped || ws !== socket) { try { socket.close() } catch {}  return }
       stats.connected = true
       reconnectAttempt = 0
       lastMessageAt = now()
@@ -1045,7 +1045,7 @@ export const arcDepositWatcher = new ArcDepositWatcherController()
 //   __arcDepositWatcher.recent()          -> the buffered recent deposits
 //   __arcDepositWatcher.wake()            -> force a reconnect + catch-up now
 if (typeof window !== 'undefined') {
-  ;(window as unknown as Record<string, unknown>).__arcDepositWatcher = {
+  (window as unknown as Record<string, unknown>).__arcDepositWatcher = {
     status: () => arcDepositWatcher.status(),
     currentWallet: () => arcDepositWatcher.currentWallet(),
     recent: () => getRecentArcDeposits(),

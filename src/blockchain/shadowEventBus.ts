@@ -275,5 +275,5 @@ export const shadowEventBus = new ShadowEventBus()
 // Dev-console access, so latency can be inspected during testnet traffic
 // without building any UI for it (Phase 4 must not change the UI).
 if (typeof window !== 'undefined') {
-  ;(window as unknown as Record<string, unknown>).__meshportShadowBus = shadowEventBus
+  (window as unknown as Record<string, unknown>).__meshportShadowBus = shadowEventBus
 }
