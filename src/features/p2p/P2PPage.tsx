@@ -1768,6 +1768,11 @@ export function P2PTradePage() {
                   </div>
                 )
               })()}
+              {isBuyer && trade.status === 'waiting_for_buyer' && !expired && trade.disputeStatus !== 'open' && (
+                <div style={{ textAlign: 'center', fontSize: 11.5, color: COLORS.muted, marginBottom: 8, lineHeight: 1.45 }}>
+                  Tap <strong>Transferred, notify seller</strong> as soon as you send the payment — that locks the trade so the seller can’t cancel it.
+                </div>
+              )}
               {(trade.status === 'waiting_for_buyer' || trade.status === 'payment_sent') && trade.disputeStatus !== 'open' && (
                 <div style={{ textAlign: 'center', fontSize: 12.5, color: COLORS.muted, marginBottom: 10 }}>
                   Problem with this order?{' '}
@@ -1942,7 +1947,9 @@ export function P2PTradePage() {
             ? <>Release {trade.amountUsdc} USDC from escrow to the buyer</>
             : pendingAction === 'confirm'
             ? <>Register this trade on-chain so the buyer can pay</>
-            : <>Cancel this trade{!isBuyer ? ' and return escrowed USDC' : ''}</>}
+            : !isBuyer
+            ? <>Only cancel if you have <strong>not</strong> received payment. If the buyer has already paid, cancelling takes their money — open a dispute instead. Escrowed USDC returns to you.</>
+            : <>Cancel this trade</>}
           storedPasscode={storedPasscode}
           passEntry={passEntry} setPassEntry={setPassEntry}
           passError={passError} setPassError={setPassError}
