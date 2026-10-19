@@ -68,17 +68,25 @@ function Face({ c, i, size = AVATAR }: { c: RecentContact; i: number; size?: num
 const FRONT_SHADOW = '0 6px 16px -6px color-mix(in srgb, var(--brand) 60%, transparent), 0 2px 4px rgba(0,0,0,0.08)'
 
 // Slot 0 = front (right edge, full size); the queue fans out to the left,
-// each place smaller and quieter. Short queues (≤3) overlap more so the
-// front person's name fits beside them.
-function slotPose(slot: number, right: number, n: number) {
+// each place smaller and quieter. Only the front QUEUE_VISIBLE faces are
+// actually shown - on this half-width card a longer queue would fan so far
+// left it crowded out the "Tap to pay" label (so with 4-5 recents the label
+// used to vanish). Deeper slots sit at the last visible spot, invisible, and
+// fade in as the queue rotates them forward, so the label always has room.
+const QUEUE_VISIBLE = 3
+function slotPose(slot: number, right: number) {
   if (slot === 0) return { x: right, scale: 1, opacity: 1 }
-  const [first, step] = n <= 3 ? [24, 12] : [30, 16]
-  return { x: right - first - (slot - 1) * step, scale: 0.76 - (slot - 1) * 0.07, opacity: 0.95 - (slot - 1) * 0.18 }
+  const depth = Math.min(slot, QUEUE_VISIBLE - 1)
+  return {
+    x: right - 24 - (depth - 1) * 12,
+    scale: 0.76 - (depth - 1) * 0.07,
+    opacity: slot < QUEUE_VISIBLE ? 0.95 - (slot - 1) * 0.18 : 0,
+  }
 }
 
 /** Left edge of the queue as drawn (avatars shrink around their centre). */
 function queueLeftEdge(n: number, right: number) {
-  const back = slotPose(n - 1, right, n)
+  const back = slotPose(Math.min(n - 1, QUEUE_VISIBLE - 1), right)
   return back.x + (AVATAR * (1 - back.scale)) / 2
 }
 
@@ -172,8 +180,8 @@ function RecentBox({ navigate }: { navigate: NavigateFunction }) {
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pay(front) } }}
         onPointerDown={hold} onPointerUp={release} onPointerLeave={release} onPointerCancel={release}
         style={{ position: 'relative', height: CONTENT_H, cursor: 'pointer', WebkitTapHighlightColor: 'transparent', touchAction: 'pan-y' }}>
-        {n <= 3 && front && width > 0 && (
-          // Who is in front, for short queues. Re-keyed per person so it fades between names.
+        {front && width > 0 && (
+          // Who is in front. Re-keyed per person so it fades between names.
           <motion.div key={front.wallet_address} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
             style={{ position: 'absolute', left: 0, top: 0, bottom: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center',
               maxWidth: Math.max(0, leftmost - 4), minWidth: 0 }}>
@@ -183,7 +191,7 @@ function RecentBox({ navigate }: { navigate: NavigateFunction }) {
         )}
         {width > 0 && people.map((c, i) => {
           const slot = Math.max(0, order.indexOf(i))
-          const pose = slotPose(slot, right, n)
+          const pose = slotPose(slot, right)
           const justLeftFront = rotating && step > 0 && slot === n - 1
           return (
             <motion.div key={c.wallet_address}
