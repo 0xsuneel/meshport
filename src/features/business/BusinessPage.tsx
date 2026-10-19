@@ -375,8 +375,8 @@ function OwnerBusinessPage() {
     // no Refund here - send it back with Pay.
     if (p.method === 'own_transfer') { setSender({ id: p.id, check: { refundable: false, reason: 'Your own transfer from another chain - not a customer payment.' } }); return }
     if (p.method === 'direct') { setSender({ id: p.id, check: { refundable: false, reason: 'A direct transfer to your wallet. To give it back, send it with Pay.' } }); return }
-    // Screening: USDC can't be sent back to a blocklisted address.
-    if (p.screenFlag) { setSender({ id: p.id, check: { refundable: false, reason: "This address is on USDC's blocklist, so it can't be refunded. Don't ship goods; contact support." } }); return }
+    // Screening: a flagged sender (USDC blocklist, sanctions, frozen, high-risk) can't be refunded.
+    if (p.screenFlag) { setSender({ id: p.id, check: { refundable: false, reason: "This address failed compliance screening, so it can't be refunded. Don't ship goods; contact support." } }); return }
     setSender({ id: p.id, check: null })
     checkRefundableSender(p.chain, p.from).then(check => { if (live) setSender({ id: p.id, check }) })
     return () => { live = false }
@@ -443,7 +443,7 @@ function OwnerBusinessPage() {
   // Refund extra / refund a payment to a cancelled order: same checks as the payment's Refund.
   const refundFromOrder = async (p: MerchantPayment, amount: number) => {
     if (!canRefundMore(p.amount, refundedOf(p.id))) { toast('This payment is already fully refunded', 'error'); return }
-    if (p.screenFlag) { toast("This address is on USDC's blocklist - contact support", 'error'); return }
+    if (p.screenFlag) { toast('This address failed compliance screening - contact support', 'error'); return }
     const check = await checkRefundableSender(p.chain, p.from).catch(() => null)
     if (!check?.refundable) { toast(check?.reason ?? 'Could not check who sent this payment', 'error'); return }
     openRefund(p, amount)
