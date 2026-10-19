@@ -1648,6 +1648,14 @@ export const CANCEL_BLOCKED_MESSAGE =
 export const DISPUTE_LOCKED_MESSAGE =
   'This trade is currently under dispute and is locked until an administrator resolves it.'
 
+// Mirrors P2PMeshportEscrowV3.SELLER_CANCEL_AFTER: once a trade is registered,
+// only the BUYER may cancel for the first 30 minutes (their payment window);
+// the seller/operator can cancel only after it elapses, and never once the
+// buyer has marked paid. Gating the seller's Cancel button on this is what
+// stops a seller (incl. auto-accept operators) from pulling the rug while the
+// buyer is in the middle of paying.
+export const SELLER_CANCEL_AFTER_MS = 30 * 60 * 1000
+
 /**
  * Same idea as updateTradeStatusIf, generalized to any column - used to
  * atomically CLAIM a transition before doing anything irreversible (moving
@@ -1722,6 +1730,19 @@ export function canCancelTrade(trade: P2PTrade, actorId: string): { allowed: boo
   // by the time the trade exists, so the buyer can never cancel it.
   if (isBuyer && trade.offerType === 'buy') {
     return { allowed: false, reason: CANCEL_BLOCKED_MESSAGE }
+  }
+  // Seller (and auto-accept operators) may only cancel once the buyer's
+  // payment window has elapsed - the same SELLER_CANCEL_AFTER gate the
+  // contract enforces on-chain. Until then only the buyer may cancel, so a
+  // buyer who has sent money (but not yet marked paid) isn't left exposed to
+  // the seller cancelling out from under them. The buyer is never gated here.
+  if (isSeller && !isBuyer && trade.status === 'waiting_for_buyer') {
+    const openedMs = Date.parse(trade.createdAt)
+    const readyAt = openedMs + SELLER_CANCEL_AFTER_MS
+    if (Number.isFinite(openedMs) && Date.now() < readyAt) {
+      const mins = Math.max(1, Math.ceil((readyAt - Date.now()) / 60000))
+      return { allowed: false, reason: `The buyer still has ${mins} min to pay. You can cancel after that, or open a dispute if something's wrong - never cancel a trade you've been paid for.` }
+    }
   }
   return { allowed: true, reason: '' }
 }
