@@ -227,12 +227,56 @@ function usdcToMerchant(receipt: any, usdc: string, to: string, chainId: string)
 }
 
 // ── Incoming payment screening ───────────────────────────────────────────
-// USDC's own blocklist (FiatToken isBlacklisted(address) → bool) on the chain
-// the money came in on. A hit is still recorded (the money arrived) but
-// flagged, and the merchant is told. Cached per address for a while.
-export type ScreenFlag = 'usdc_blocklisted'
+// Two independent checks on the paying address, run in parallel:
+//   1. USDC's own blocklist (FiatToken isBlacklisted(address) → bool) on the
+//      chain the money came in on - authoritative for USDC freezes.
+//   2. Circle's Compliance Engine (address screening) - sanctions, frozen
+//      wallets and other high-risk categories USDC's own list doesn't cover.
+// A hit is still recorded (the money arrived) but flagged, and the merchant
+// is told. Cached per address for a while. Circle's richer flag wins when
+// present; the on-chain result stands otherwise.
+export type ScreenFlag = 'usdc_blocklisted' | 'sanctions' | 'frozen' | 'high_risk'
 const screenCache = new Map<string, { at: number; flag: ScreenFlag | null }>()
 const SCREEN_TTL_MS = 10 * 60_000
+
+const CIRCLE_API_KEY = Deno.env.get('CIRCLE_API_KEY') ?? ''
+// MeshPort chain → Circle Compliance Engine chain enum. Circle has no Arc
+// value (and no Base/Optimism/… testnet), but every MeshPort chain is EVM and
+// Circle's address risk is address-keyed: a sanctions/blocklist hit is the
+// same address on any EVM chain. So unmapped chains screen under ETH-SEPOLIA
+// as an EVM proxy rather than going unscreened.
+const CIRCLE_CHAIN: Record<string, string> = {
+  Ethereum_Sepolia: 'ETH-SEPOLIA',
+  Arbitrum_Sepolia: 'ARB-SEPOLIA',
+  Polygon_Sepolia:  'MATIC-AMOY',
+  Avalanche_Fuji:   'AVAX-FUJI',
+  Unichain_Sepolia: 'UNI-SEPOLIA',
+}
+const circleChainFor = (chainId: string) => CIRCLE_CHAIN[chainId] ?? 'ETH-SEPOLIA'
+
+// Best-effort: any failure (no key, network, timeout, unexpected shape, a
+// non-DENIED result) returns null so the on-chain check still stands and
+// payment recording never blocks on screening.
+async function screenWithCircle(chainId: string, addr: string): Promise<ScreenFlag | null> {
+  if (!CIRCLE_API_KEY) return null
+  try {
+    const res = await fetch('https://api.circle.com/v1/w3s/compliance/screening/addresses', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${CIRCLE_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idempotencyKey: crypto.randomUUID(), address: addr, chain: circleChainFor(chainId) }),
+      signal: AbortSignal.timeout(6000),
+    })
+    if (!res.ok) return null
+    // Response is wrapped: { data: { result, decision: { reasons: [{ riskCategories }] } } }.
+    const d = (await res.json().catch(() => null) as any)?.data
+    if (!d || d.result !== 'DENIED') return null
+    const cats: string[] = (d.decision?.reasons ?? []).flatMap((r: any) => r?.riskCategories ?? [])
+    if (cats.includes('SANCTIONS') || cats.includes('TERRORIST_FINANCING')) return 'sanctions'
+    if (cats.includes('FROZEN')) return 'frozen'
+    return 'high_risk'
+  } catch { return null }
+}
+
 async function screenSender(chainId: string, from: string | null): Promise<ScreenFlag | null> {
   const chain = PAY_CHAINS[chainId]
   if (!chain || !from || !/^0x[0-9a-f]{40}$/i.test(from) || /^0x0{40}$/i.test(from)) return null
@@ -240,11 +284,28 @@ async function screenSender(chainId: string, from: string | null): Promise<Scree
   const hit = screenCache.get(key)
   if (hit && Date.now() - hit.at < SCREEN_TTL_MS) return hit.flag
   const data = '0xfe575a87' + from.replace(/^0x/, '').toLowerCase().padStart(64, '0')
-  const out = await rpc(chain.rpcs, 'eth_call', [{ to: chain.usdc, data }, 'latest']).catch(() => null)
-  if (typeof out !== 'string' || !/^0x[0-9a-f]+$/i.test(out)) return null // unreadable: not flagged, not cached
-  const flag: ScreenFlag | null = BigInt(out) !== 0n ? 'usdc_blocklisted' : null
-  screenCache.set(key, { at: Date.now(), flag })
+  const [out, circleFlag] = await Promise.all([
+    rpc(chain.rpcs, 'eth_call', [{ to: chain.usdc, data }, 'latest']).catch(() => null),
+    screenWithCircle(chainId, from),
+  ])
+  const onchainReadable = typeof out === 'string' && /^0x[0-9a-f]+$/i.test(out)
+  const onchain: ScreenFlag | null = onchainReadable && BigInt(out as string) !== 0n ? 'usdc_blocklisted' : null
+  // Circle's richer flag wins when present; otherwise the on-chain result.
+  const flag: ScreenFlag | null = circleFlag ?? onchain
+  // Cache only a definitive read: if the on-chain call was unreadable and
+  // Circle gave nothing, a null here might be a false "clear" - don't cache.
+  if (onchainReadable || circleFlag) screenCache.set(key, { at: Date.now(), flag })
   return flag
+}
+
+// Merchant-facing wording for each screening flag.
+function screenMsg(flag: ScreenFlag): { title: string; why: string } {
+  switch (flag) {
+    case 'sanctions': return { title: 'Payment from a sanctioned address', why: 'is on a sanctions blocklist' }
+    case 'frozen':    return { title: 'Payment from a frozen wallet',       why: 'is a frozen wallet' }
+    case 'high_risk': return { title: 'Payment flagged by screening',       why: 'was flagged as high-risk by compliance screening' }
+    default:          return { title: 'Payment from a blocked address',     why: "is on USDC's blocklist" }
+  }
 }
 
 const usd2 = (n: number) => '$' + n.toFixed(2)
@@ -382,9 +443,10 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   if (rcErr) throw rcErr
 
   const label = `${usd2(amount)} USDC${chain.route === 'direct' ? '' : ` on ${chain.label}`}`
-  if (screenFlag === 'usdc_blocklisted') {
-    await notifyMerchant(merchantWallet, 'merchant_payment_screened', 'Payment from a blocked address',
-      `${label} for ${orderName(i)} came from ${short(from)}, which is on USDC's blocklist. Check before you hand over goods or refund.`)
+  if (screenFlag) {
+    const m = screenMsg(screenFlag)
+    await notifyMerchant(merchantWallet, 'merchant_payment_screened', m.title,
+      `${label} for ${orderName(i)} came from ${short(from)}, which ${m.why}. Check before you hand over goods or refund.`)
   }
   if (late && statusNow === 'cancelled') {
     await notifyMerchant(merchantWallet, 'merchant_payment_late', `Payment for cancelled ${orderName(i)}`,
@@ -710,8 +772,9 @@ async function watchDeposits() {
             }, { onConflict: 'source_chain,tx_hash,merchant_wallet', ignoreDuplicates: true }).select('id')
             // An order payment was already flagged (and notified) by recordPayment.
             if (screenFlag && added?.length && !paid) {
-              await notifyMerchant(to, 'merchant_payment_screened', 'Payment from a blocked address',
-                `${usd2(amount)} USDC on ${chain.label} came from ${short(sender)}, which is on USDC's blocklist. Check before you hand over goods or refund.`)
+              const m = screenMsg(screenFlag)
+              await notifyMerchant(to, 'merchant_payment_screened', m.title,
+                `${usd2(amount)} USDC on ${chain.label} came from ${short(sender)}, which ${m.why}. Check before you hand over goods or refund.`)
             }
           }
         }

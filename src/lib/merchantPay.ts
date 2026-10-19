@@ -254,7 +254,7 @@ export type MerchantPayment = {
   matchedBy: 'customer' | 'merchant' | 'watcher' | null
   /** Arrived after the order expired. */
   late?: boolean
-  /** Sender failed screening ('usdc_blocklisted': on USDC's blocklist). */
+  /** Sender failed screening: 'usdc_blocklisted' (USDC's blocklist), 'sanctions', 'frozen' or 'high_risk' (Circle Compliance). */
   screenFlag?: string | null
 }
 
@@ -663,7 +663,7 @@ export async function walletBalances(address: string, chains: PayChain[]): Promi
 export type ChainReceipt = {
   id: string; chain: string; txHash: string; from: string | null; amount: number; orderNumber: string | null
   status: 'received' | 'converting' | 'converted'; createdAt: string; convertedAt: string | null
-  /** Sender failed screening ('usdc_blocklisted'). */
+  /** Sender failed screening ('usdc_blocklisted', 'sanctions', 'frozen' or 'high_risk'). */
   screenFlag?: string | null
 }
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
