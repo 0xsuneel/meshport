@@ -45,7 +45,7 @@ const TONE: Record<HubTone, string> = {
 function Tile({ icon: Icon, title, sub, tile }: { icon: React.ElementType; title: string; sub: string; tile: HubTile }) {
   return (
     <button type="button" onClick={tile.onClick} aria-label={`${title}: ${tile.badge}`}
-      className="flex flex-col items-start gap-1 min-h-[84px] p-2.5 rounded-2xl bg-card border border-border text-left active:scale-[0.98] transition-transform">
+      className="flex flex-col items-start gap-1 min-h-[72px] p-2.5 rounded-2xl bg-card border border-border text-left active:scale-[0.98] transition-transform">
       <span className="inline-flex items-center justify-center size-[28px] rounded-xl bg-brand/10 text-brand-text"><Icon className="size-[15px]" /></span>
       <span className="flex flex-col gap-0.5">
         <span className="text-[15px] font-semibold text-text-primary leading-tight">{title}</span>
@@ -66,7 +66,7 @@ export function HubView({
 
       {/* Sales · pending orders · available balance */}
       <FadeUp delay={0.04} className="mx-5">
-        <div className="rounded-2xl bg-card border border-border p-3.5 flex flex-col gap-2.5">
+        <div className="rounded-2xl bg-card border border-border p-4 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[13px] text-text-muted">{periodLabel === 'Today' ? "Today's sales" : 'Sales'}</p>
             {onPeriod && (
@@ -76,20 +76,21 @@ export function HubView({
               </button>
             )}
           </div>
-          {loading ? <Skeleton className="h-8 w-36 rounded-xl" /> : (
+          {loading ? <Skeleton className="h-9 w-40 rounded-xl" /> : (
             <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
-              <p className="text-[28px] font-bold tabular-nums leading-none tracking-tight text-text-primary">{sales.total}</p>
+              <p className="text-[34px] font-bold tabular-nums leading-none tracking-tight text-text-primary">{sales.total}</p>
               {sales.trend}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={onPending} className="flex flex-col gap-0.5 rounded-xl bg-surface px-2.5 py-2 text-left active:bg-border/30">
-              <span className="text-xs text-text-muted">Pending orders</span>
-              {pending ? <span className="text-[15px] font-semibold text-text-primary tabular-nums truncate">{pending.count} · {pending.due}</span> : <Skeleton className="h-5 w-20 mt-0.5" />}
+          {/* One compact bottom row, like the home balance card's bottom line. */}
+          <div className="flex items-center justify-between gap-3 mt-0.5 pt-2.5 border-t border-border">
+            <button type="button" onClick={onPending} className="flex items-baseline gap-1.5 min-w-0 text-left active:opacity-70">
+              <span className="text-xs text-text-muted shrink-0">Pending</span>
+              {pending ? <span className="text-sm font-semibold text-text-primary tabular-nums truncate">{pending.count} · {pending.due}</span> : <Skeleton className="h-4 w-16" />}
             </button>
-            <button type="button" onClick={onAvailable} className="flex flex-col gap-0.5 rounded-xl bg-surface px-2.5 py-2 text-left active:bg-border/30">
-              <span className="text-xs text-text-muted">Available on Arc</span>
-              <span className="text-[15px] font-semibold text-text-primary tabular-nums truncate">{available}</span>
+            <button type="button" onClick={onAvailable} className="flex items-baseline gap-1.5 min-w-0 text-left active:opacity-70">
+              <span className="text-xs text-text-muted shrink-0">Available</span>
+              <span className="text-sm font-semibold text-text-primary tabular-nums truncate">{available}</span>
             </button>
           </div>
         </div>
