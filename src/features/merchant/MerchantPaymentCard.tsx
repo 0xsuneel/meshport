@@ -174,6 +174,15 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
               </div>
             ))}
             {v.items!.length > 8 && <span style={{ color: muted }}>+{v.items!.length - 8} more</span>}
+            {!!v.taxPercent && (() => {
+              const sub = v.items!.reduce((s, i) => { const t = Number(i.total ?? Number(i.qty) * Number(i.price)); return s + (Number.isFinite(t) ? t : 0) }, 0)
+              return sub > 0 ? (
+                <div style={{ display: 'contents' }}>
+                  <span style={{ color: muted }}>Tax ({v.taxPercent}%)</span>
+                  <span style={{ textAlign: 'right', fontWeight: 700 }}>+ ${formatAmount(Math.max(0, v.amount - sub))}</span>
+                </div>
+              ) : null
+            })()}
           </div>
         )}
         {v.note && <div style={{ fontSize: 12, color: muted, marginTop: isBill ? 5 : 0 }}>{v.note}</div>}
