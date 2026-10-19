@@ -2519,7 +2519,7 @@ export function ChatConversationPage() {
   const startReply = useCallback((msg: any) => {
     setReplyTo(msg)
     requestAnimationFrame(() => messageInputRef.current?.focus())
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
   const jumpToMessage = useCallback((mid: string) => {
     const el = messageRefs.current[mid]
@@ -2528,7 +2528,7 @@ export function ChatConversationPage() {
     try {
       el.animate([{ backgroundColor: 'color-mix(in srgb, var(--link) 28%, transparent)' }, { backgroundColor: 'transparent' }], { duration: 1400, easing: 'ease-out', delay: 250 })
     } catch { /* no Web Animations */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesAreaRef = useRef<HTMLDivElement>(null)
@@ -3696,7 +3696,7 @@ export function ChatConversationPage() {
     if (job) URL.revokeObjectURL(job.localUrl)
     delete uploadJobsRef.current[msg.id]
     setMessages(prev => { const n = prev.filter(m => m.id !== msg.id); if (convId) _cachedMessages[convId] = n; return n })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [conversationId])
 
   const retryMessage = useCallback((msg: any) => {

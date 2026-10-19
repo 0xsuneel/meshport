@@ -1161,6 +1161,7 @@ export async function saveTransactionNote(params: {
   }, { onConflict: 'tx_hash' })
   if (error) {
     if (!error.message?.includes('does not exist')) {
+      // best-effort: transaction notes are optional, ignore write failures
     }
   }
 }
@@ -1186,6 +1187,7 @@ export async function fetchTransactionNotes(
   if (error) {
     // Table may not exist yet - fail silently, notes are optional
     if (!error.message?.includes('does not exist')) {
+      // a real (non-missing-table) error is still non-fatal here
     }
     return new Map()
   }

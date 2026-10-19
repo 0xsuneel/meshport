@@ -3304,7 +3304,7 @@ export function HomePage() {
   useEffect(() => {
     const total = sumChainBalances(chainBalancesRef.current)
     if (Object.keys(chainBalancesRef.current).length) setUnifiedBalance(total > 0.001 ? total : null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [isMerchant])
   useEffect(() => {
     if (!walletAddress) return

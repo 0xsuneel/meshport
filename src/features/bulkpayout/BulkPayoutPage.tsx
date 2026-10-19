@@ -152,7 +152,7 @@ export function BulkPayoutPage() {
   // by the time the user actually taps Pay.
   useEffect(() => {
     import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [])
   const payoutInFlightRef = useRef(false)
   const [showBulkAmountPad, setShowBulkAmountPad] = useState(false)
@@ -165,7 +165,7 @@ export function BulkPayoutPage() {
   const keyboardOpen = useKeyboardOpen(!isDesktop)
   const openBulkAmountPad = () => {
     // Close the phone keyboard first (e.g. from the username field).
-    ;(document.activeElement as HTMLElement | null)?.blur?.()
+    (document.activeElement as HTMLElement | null)?.blur?.()
     setShowBulkAmountPad(true)
   }
   const [passError, setPassError] = useState('')

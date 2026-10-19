@@ -643,7 +643,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // drop the extra entry so the next back press behaves normally.
       if (!poppedByBack && window.location.pathname === '/multichain') { skipSheetPop.current = true; window.history.back() }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [inBackableStep])
   // Hub on a phone: processing and its result open as a full page that
   // slides in from the right, like the form and Review before them.

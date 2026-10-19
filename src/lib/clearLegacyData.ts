@@ -46,9 +46,6 @@ export function clearLegacyData(): void {
     }
   })
 
-  if (cleared > 0) {
-  }
-
   // Clear all wallet-specific transaction slots (meshport-wallet-v2-0x...)
   // Transactions are now read from ArcScan, not localStorage
   const keysToScan = Object.keys(localStorage)
