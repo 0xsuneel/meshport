@@ -1,17 +1,18 @@
 // How bills and payment requests are named on screen. Pure (no network), so
 // chat text helpers and tests can use it.
 //
-// Order numbers count from 100001 in the database; people see them from
-// 00001: ORD-100042 → ORD-00042. Display only - links, card anchors, the
-// text stored in chat messages and payment verification keep the stored one.
+// Order numbers count from 100001 in the database; people see them as a
+// short #N: ORD-100042 → #42. This is the one number people see everywhere
+// (bills, requests, receipts, the Ledger, chat, exports). Display only -
+// links, card anchors, the text stored in chat messages and payment
+// verification keep the stored ORD-100042.
 export function displayOrderNumber(n: string | null | undefined): string {
-  const m = /^ORD-(\d+)$/i.exec(n || '')
-  if (!m) return n || ''
-  const k = Number(m[1]) - 100000
-  return k > 0 ? `ORD-${String(k).padStart(5, '0')}` : (n as string)
+  // Kept as a named helper so call sites read clearly; same #N form as
+  // shortOrderNumber (the number format is the same everywhere now).
+  return shortOrderNumber(n)
 }
 
-/** Where space is tight (history rows, card bands): ORD-100042 → #42. */
+/** The number people see for an order: ORD-100042 → #42. */
 export function shortOrderNumber(n: string | null | undefined): string {
   const m = /^ORD-(\d+)$/i.exec(n || '')
   if (!m) return n || ''
