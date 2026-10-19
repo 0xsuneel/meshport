@@ -45,8 +45,8 @@ const TONE: Record<HubTone, string> = {
 function Tile({ icon: Icon, title, sub, tile }: { icon: React.ElementType; title: string; sub: string; tile: HubTile }) {
   return (
     <button type="button" onClick={tile.onClick} aria-label={`${title}: ${tile.badge}`}
-      className="flex flex-col items-start gap-2.5 min-h-[136px] p-3.5 rounded-2xl bg-card border border-border text-left active:scale-[0.98] transition-transform">
-      <span className="inline-flex items-center justify-center size-[38px] rounded-xl bg-brand/10 text-brand-text"><Icon className="size-5" /></span>
+      className="flex flex-col items-start gap-1.5 min-h-[104px] p-3 rounded-2xl bg-card border border-border text-left active:scale-[0.98] transition-transform">
+      <span className="inline-flex items-center justify-center size-[32px] rounded-xl bg-brand/10 text-brand-text"><Icon className="size-[17px]" /></span>
       <span className="flex flex-col gap-0.5">
         <span className="text-[15px] font-semibold text-text-primary leading-tight">{title}</span>
         <span className="text-xs text-text-muted leading-snug">{sub}</span>
