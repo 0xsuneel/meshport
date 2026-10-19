@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // ⚠️ Deploy with EVM VERSION: paris — Arc Testnet does not support PUSH0 (solc 0.8.20's default target is Shanghai). See contracts/README.md.
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import { ReentrancyGuard } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
