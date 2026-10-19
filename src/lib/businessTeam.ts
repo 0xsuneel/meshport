@@ -46,6 +46,12 @@ export async function deleteStore(id: string): Promise<void> {
   fail(error)
 }
 
+/** Make `id` the business's main (default) store - clears the old default. */
+export async function setDefaultStore(id: string): Promise<void> {
+  const { error } = await supabase.rpc('business_set_default_store', { p_id: id })
+  fail(error)
+}
+
 /** Which store this device is working as (null = all stores). */
 const ACTIVE_KEY = 'meshport_business_store'
 export function activeStoreId(): string | null { try { return localStorage.getItem(ACTIVE_KEY) } catch { return null } }

@@ -4,7 +4,7 @@
  * StoreForm — create/edit form for a store.
  */
 import React from 'react'
-import { Store, QrCode, Pencil, Plus, Loader2, ChevronDown, Trash2, CheckCircle2, LayoutGrid, Lock } from 'lucide-react'
+import { Store, QrCode, Pencil, Plus, Loader2, ChevronDown, Trash2, CheckCircle2, LayoutGrid, Lock, Star } from 'lucide-react'
 
 // ─── StoreSwitcher ────────────────────────────────────────────────────────────
 
@@ -81,11 +81,13 @@ export interface StoresViewProps {
   onAdd: () => void
   onEdit: (id: string) => void
   onQr: (id: string) => void
+  /** Make a store the main (default) one. Omitted → no "Make main" button. */
+  onSetPrimary?: (id: string) => void
   /** Set when stores can't be added yet (business not approved) */
   addLockedNote?: string
 }
 
-export function StoresView({ stores, onAdd, onEdit, onQr, addLockedNote }: StoresViewProps) {
+export function StoresView({ stores, onAdd, onEdit, onQr, onSetPrimary, addLockedNote }: StoresViewProps) {
   return (
     <div className="flex flex-col gap-4 px-5 py-4">
       {stores.length === 0 ? (
@@ -143,6 +145,18 @@ export function StoresView({ stores, onAdd, onEdit, onQr, addLockedNote }: Store
                   <Pencil className="size-4" />
                 </button>
               </div>
+
+              {onSetPrimary && !store.isDefault && stores.length > 1 && (
+                <button
+                  type="button"
+                  aria-label={`Make ${store.name} the main store`}
+                  onClick={() => onSetPrimary(store.id)}
+                  className="h-9 rounded-xl border border-border text-text-secondary text-sm font-medium flex items-center justify-center gap-2 hover:bg-border/30 transition-colors"
+                >
+                  <Star className="size-4" />
+                  Make main
+                </button>
+              )}
             </div>
           ))}
         </div>
