@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // ⚠️ Deploy with EVM VERSION: paris — Arc Testnet does not support PUSH0 (solc 0.8.20's default target is Shanghai). See contracts/README.md.
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
@@ -86,6 +86,7 @@ contract MeshPortRewards {
     error ZeroPoints();
     error TransferFailed();
     error InvalidSignature();
+    error SignerNotSet();
     error OperationNotScheduled(bytes32 id);
     error TimelockNotReady(uint256 readyAt);
     error NotPendingOwner();
@@ -148,6 +149,10 @@ contract MeshPortRewards {
      *                  wrapped with toEthSignedMessageHash (standard Ethereum signed message).
      */
     function claimRewards(uint256 points, bytes32 claimId, bytes calldata signature) external whenNotPaused returns (uint256 usdcAmount) {
+        // Before the signer is configured, every recovered address differs
+        // from the unset pointsSigner, so a claim would revert with the
+        // misleading InvalidSignature(). Surface the real state explicitly.
+        if (pointsSigner == address(0)) revert SignerNotSet();
         // ── Signature verification — added authorization gate ──────────────
         // Prefix with EIP-191 personal_sign header so a backend can sign with
         // account.signMessage({ message: { raw: digest } }) (viem) or
