@@ -72,6 +72,7 @@ export interface StoreEntry {
   name: string
   type: string
   address?: string
+  taxId?: string
   isDefault: boolean
   payments: string   // "$1,240 · 32 payments"
 }
@@ -121,6 +122,9 @@ export function StoresView({ stores, onAdd, onEdit, onQr, onSetPrimary, addLocke
                   <p className="text-xs text-text-muted mt-0.5">{store.type}</p>
                   {store.address && (
                     <p className="text-xs text-text-muted truncate mt-0.5">{store.address}</p>
+                  )}
+                  {store.taxId && (
+                    <p className="text-xs text-text-muted truncate mt-0.5">Tax ID · {store.taxId}</p>
                   )}
                   <p className="text-xs text-text-secondary mt-1 tabular-nums">{store.payments}</p>
                 </div>
@@ -188,6 +192,8 @@ export interface StoreFormProps {
   onType: (v: string) => void
   address: string
   onAddress: (v: string) => void
+  taxId: string
+  onTaxId: (v: string) => void
   busy?: boolean
   onSave: () => void
   onDelete?: () => void
@@ -195,7 +201,7 @@ export interface StoreFormProps {
 }
 
 export function StoreForm({
-  name, onName, type, types, onType, address, onAddress,
+  name, onName, type, types, onType, address, onAddress, taxId, onTaxId,
   busy, onSave, onDelete, onCancel,
 }: StoreFormProps) {
   return (
@@ -234,6 +240,19 @@ export function StoreForm({
           placeholder="e.g. 12 MG Road, Bangalore"
           className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
         />
+      </label>
+
+      <label className="flex flex-col gap-1.5">
+        <span className="text-xs text-text-muted font-medium uppercase tracking-wide">Tax / registration no. <span className="normal-case font-normal opacity-60">(optional)</span></span>
+        <input
+          type="text"
+          value={taxId}
+          onChange={e => onTaxId(e.target.value)}
+          maxLength={40}
+          placeholder="GST, VAT, EIN, ABN…"
+          className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-brand/40"
+        />
+        <span className="text-xs text-text-muted">This store's own tax number — leave empty to use the business's.</span>
       </label>
 
       <div className="flex gap-3 pt-2">
