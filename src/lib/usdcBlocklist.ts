@@ -50,7 +50,7 @@ export async function isUsdcBlocked(address: string, chain = 'Arc_Testnet'): Pro
   const raw = await ethCall(chain, usdc, encodeFunctionData({ abi: ABI, functionName: 'isBlacklisted', args: [address as Hex] }))
   if (!raw || raw === '0x') return false
   let blocked = false
-  try { blocked = decodeFunctionResult({ abi: ABI, functionName: 'isBlacklisted', data: raw as Hex }) } catch { return false }
+  try { blocked = Boolean(decodeFunctionResult({ abi: ABI, functionName: 'isBlacklisted', data: raw as Hex })) } catch { return false }
   cache.set(key, { blocked, at: Date.now() })
   return blocked
 }

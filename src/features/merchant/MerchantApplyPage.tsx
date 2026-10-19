@@ -116,7 +116,7 @@ export function MerchantApplyPage() {
               </div>
               <div>
                 <p className="text-xs font-semibold text-text-secondary mb-2">Registration number - optional</p>
-                <input value={registration} onChange={e => setRegistration(e.target.value)} maxLength={40} placeholder="GSTIN, Udyam or shop licence number" className={input} />
+                <input value={registration} onChange={e => setRegistration(e.target.value)} maxLength={40} placeholder="GST, VAT, EIN, ABN or business licence number" className={input} />
               </div>
               <div>
                 <p className="text-xs font-semibold text-text-secondary mb-2">Documents</p>
