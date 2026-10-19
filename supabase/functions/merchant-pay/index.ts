@@ -145,12 +145,12 @@ function effectiveStatus(i: any): string {
 }
 
 // How an order is named (same as the app's src/lib/orderLabels.ts):
-// "Bill ORD-00042" / "Request ORD-00043" / "Requested Payment ORD-00044".
-// Stored numbers count from 100001; they're shown from 00001.
+// "Bill #42" / "Request #43" / "Requested Payment #44".
+// Stored numbers count from 100001; they're shown as #N from #1.
 function orderDisplay(n: string | null | undefined): string {
   const m = /^ORD-(\d+)$/i.exec(n || '')
   if (!m || Number(m[1]) <= 100000) return n || ''
-  return `ORD-${String(Number(m[1]) - 100000).padStart(5, '0')}`
+  return `#${Number(m[1]) - 100000}`
 }
 function orderName(i: any): string {
   const no = orderDisplay(i.order_number)
