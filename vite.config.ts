@@ -107,8 +107,15 @@ export default defineConfig({
         name: 'MeshPort - USDC Payments',
         short_name: 'MeshPort',
         description: 'One Gateway Every Chain',
-        // Launch screen: brand teal with the white logo tile in the middle.
-        theme_color: '#0F5C57',
+        // theme_color tints the Android system bars for the installed PWA -
+        // notably the BOTTOM navigation/gesture bar, which (unlike the top
+        // status bar) a standalone PWA colours from the manifest, not from
+        // the dynamic <meta name="theme-color"> boot.js maintains. A brand
+        // teal here showed a green band under the dark app, so use the dark
+        // app background instead; the live status bar still follows the
+        // in-app light/dark theme via #mp-theme-color. background_color is
+        // the native launch-screen tile behind the logo - kept brand teal.
+        theme_color: '#0B0E11',
         background_color: '#0F5C57',
         display: 'standalone',
         orientation: 'portrait',
