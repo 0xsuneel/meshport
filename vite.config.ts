@@ -107,15 +107,16 @@ export default defineConfig({
         name: 'MeshPort - USDC Payments',
         short_name: 'MeshPort',
         description: 'One Gateway Every Chain',
-        // theme_color tints the Android system bars for the installed PWA -
-        // notably the BOTTOM navigation/gesture bar, which (unlike the top
-        // status bar) a standalone PWA colours from the manifest, not from
-        // the dynamic <meta name="theme-color"> boot.js maintains. A brand
-        // teal here showed a green band under the dark app, so use the dark
-        // app background instead; the live status bar still follows the
-        // in-app light/dark theme via #mp-theme-color. background_color is
+        // NO theme_color on purpose. A manifest theme_color tints the
+        // installed PWA's Android system bars - including the BOTTOM
+        // navigation/gesture bar - with a STATIC value that never changes
+        // with the theme, so a brand-teal (or any fixed) value left that bar
+        // off-theme: green/dark under a light app, etc. Omitting it makes
+        // Chrome fall back to the live <meta name="theme-color"> (#mp-theme-
+        // color, maintained by boot.js + themeStore from the resolved in-app
+        // light/dark theme), so both system bars follow the app's theme, the
+        // same way they already do in a browser tab. background_color is only
         // the native launch-screen tile behind the logo - kept brand teal.
-        theme_color: '#0B0E11',
         background_color: '#0F5C57',
         display: 'standalone',
         orientation: 'portrait',
