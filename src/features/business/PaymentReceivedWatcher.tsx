@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/store'
 import { useBusinessTab } from '@/lib/merchant'
-import { listMyPayments, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, type MerchantPayment } from '@/lib/merchantPay'
+import { listMyPayments, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, displayOrderNumber, type MerchantPayment } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
 import { PaymentReceivedOverlay } from './ui'
 import { chainLabel } from './settlement'
@@ -58,6 +58,6 @@ export function PaymentReceivedWatcher() {
   return (
     <PaymentReceivedOverlay open={!!shown} amount={shown ? money(shown.amount) : ''}
       from={shown ? (shown.customerUsername ? `${shown.customerUsername}.arc` : (/^0x0{40}$/i.test(shown.from) ? 'a bridge' : `${shown.from.slice(0, 6)}…${shown.from.slice(-4)}`)) : ''}
-      chainLabel={shown ? chainLabel(shown.chain) : ''} order={shown?.orderNumber ?? undefined} onDone={() => setShown(null)} />
+      chainLabel={shown ? chainLabel(shown.chain) : ''} order={shown?.orderNumber ? displayOrderNumber(shown.orderNumber) : undefined} onDone={() => setShown(null)} />
   )
 }
