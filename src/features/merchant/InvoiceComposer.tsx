@@ -12,7 +12,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Plus, Receipt, X } from 'lucide-react'
 import { formatAmount } from '@/lib/utils'
-import { createPaymentRequest, invoiceTotal, type InvoiceItem, type MerchantIntent } from '@/lib/merchantPay'
+import { createPaymentRequest, invoiceTotal, invoiceBreakdown, type InvoiceItem, type MerchantIntent } from '@/lib/merchantPay'
 import { ActionSheet, SheetPerson, SheetLabel, SheetChips, sheetInputClass, sheetInputStyle } from '@/components/ui/ActionSheet'
 import { DUE_PRESETS, duePresetDate, dueText, isoDay, type DuePresetId } from '@/lib/businessBills'
 import type { SavedItem } from '@/lib/businessItems'
@@ -42,7 +42,7 @@ const field: React.CSSProperties = {
 }
 
 /** What BillComposer hands back on Send / Create. */
-export type BillDraft = { items: InvoiceItem[]; total: number; note?: string; dueDate: string | null }
+export type BillDraft = { items: InvoiceItem[]; total: number; taxPercent?: number; note?: string; dueDate: string | null }
 
 export function BillComposer({ open, isDesktop, header, footerNote, submitLabel = 'Send bill', busyLabel = 'Sending…', saved, extra, onCreate }: {
   /** Reset to a blank bill whenever this turns true. */
@@ -64,6 +64,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
   const [rows, setRows] = useState<Row[]>([{ id: 1, name: '', qty: '1', price: '' }])
   const [editing, setEditing] = useState<number | null>(1)
   const [note, setNote] = useState('')
+  const [tax, setTax] = useState('')
   const [dueId, setDueId] = useState<DuePresetId>('none')
   const [customDue, setCustomDue] = useState('')
   const [typing, setTyping] = useState(false)
@@ -78,7 +79,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
   // A fresh bill every time the sheet opens.
   useEffect(() => {
     if (!open) return
-    setRows([{ id: 1, name: '', qty: '1', price: '' }]); setEditing(1); setNote(''); setDueId('none'); setCustomDue(''); setError(null); setBusy(false); setTyping(false); setEditSaved(false)
+    setRows([{ id: 1, name: '', qty: '1', price: '' }]); setEditing(1); setNote(''); setTax(''); setDueId('none'); setCustomDue(''); setError(null); setBusy(false); setTyping(false); setEditSaved(false)
   }, [open])
   // The item being edited stays in view (keyboard opening, Next, Add item).
   useEffect(() => {
@@ -88,7 +89,9 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
   }, [editing, typing])
 
   const valid: InvoiceItem[] = rows.filter(isComplete).map(r => ({ name: r.name.trim(), qty: num(r.qty), price: num(r.price) }))
-  const total = invoiceTotal(valid)
+  const taxPct = Math.min(100, Math.max(0, num(tax)))
+  const bill = invoiceBreakdown(valid, taxPct)
+  const total = bill.total
   // A bill with a due date stays open until it's paid; without one it's
   // valid for 7 days.
   const dueDate = dueId === 'custom' ? (customDue || null) : duePresetDate(dueId)
@@ -148,7 +151,7 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
     if (dueId === 'custom' && !customDue) { setError('Pick a due date.'); return }
     setBusy(true); setError(null)
     try {
-      await onCreate({ items: valid, total, note: note.trim() || undefined, dueDate })
+      await onCreate({ items: valid, total, taxPercent: taxPct || undefined, note: note.trim() || undefined, dueDate })
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send the bill')
     } finally { setBusy(false) }
@@ -299,6 +302,18 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
           </div>
         ) : (
           <>
+            <div className="flex items-center justify-between mb-2 px-0.5">
+              <span className="text-[13px] font-medium text-text-secondary">Tax %</span>
+              <input value={tax} onChange={e => { setTax(e.target.value.replace(/[^0-9.]/g, '').slice(0, 5)); setError(null) }}
+                inputMode="decimal" placeholder="0" aria-label="Tax percent"
+                className="w-20 h-9 px-3 rounded-xl bg-surface border border-border text-right text-[14px] tabular-nums text-text-primary focus:outline-none focus:ring-2 focus:ring-brand/40" />
+            </div>
+            {taxPct > 0 && valid.length > 0 && (
+              <div className="flex flex-col gap-1 mb-2 px-0.5 text-[13px] text-text-secondary tabular-nums">
+                <div className="flex justify-between"><span>Subtotal</span><span>${billMoney(bill.subtotal)}</span></div>
+                <div className="flex justify-between"><span>Tax ({taxPct}%)</span><span>+ ${billMoney(bill.tax)}</span></div>
+              </div>
+            )}
             <div className="flex items-baseline justify-between mb-3 px-0.5">
               <span className="text-[14px] font-semibold text-text-secondary">Total{valid.length ? ` · ${valid.length} item${valid.length === 1 ? '' : 's'}` : ''}</span>
               <span className="flex items-baseline gap-1.5">
@@ -336,8 +351,8 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
         header={compact => <SheetPerson label="Bill to" name={customer.name} username={customer.username} avatar={customer.avatar}
           compact={compact} onClose={onClose} sub={merchantName ? `From ${merchantName}` : null} />}
         footerNote={due => `${firstName} gets a bill card with a Pay button${due ? ` · ${due}` : ''}`}
-        onCreate={async ({ items, total, note, dueDate }) => {
-          const inv = await createPaymentRequest({ amount: total, items, note, customer: customer.username,
+        onCreate={async ({ items, total, taxPercent, note, dueDate }) => {
+          const inv = await createPaymentRequest({ amount: total, items, taxPercent, note, customer: customer.username,
             expiresInMinutes: dueDate ? null : 7 * 24 * 60, dueDate })
           await onSend(inv)
           onClose()

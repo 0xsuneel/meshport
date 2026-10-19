@@ -395,9 +395,9 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
         footerNote={due => `${who ? `${who}.arc gets it ${chat ? 'in your chat' : 'in their notifications'}` : 'Show the QR or send the link'}${due ? ` · ${due}` : ''}`}
         saved={savedItems ? { items: catalog, onRemove: removeSaved, hint: 'Items you bill are saved here for next time' } : undefined}
         extra={<div className="mt-3 mb-1">{customerInput('Bill to (optional)')}</div>}
-        onCreate={async ({ items, total, note, dueDate }) => {
+        onCreate={async ({ items, total, taxPercent, note, dueDate }) => {
           // Same as a chat bill: open 7 days, or until paid with a due date.
-          await create({ amount: total, items, note, expiresInMinutes: dueDate ? null : 7 * 24 * 60, dueDate }, 'bill')
+          await create({ amount: total, items, taxPercent, note, expiresInMinutes: dueDate ? null : 7 * 24 * 60, dueDate }, 'bill')
           if (savedItems) void rememberItems(items)
         }} />
     )
