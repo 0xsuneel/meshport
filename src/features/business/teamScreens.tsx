@@ -8,7 +8,7 @@ import {
   fetchMyPaymentMethods, savePaymentMethod, fetchTradeMessages, sendTradeMessage, subscribeToTradeMessages, subscribeToTradeUpdates,
   paymentMethodSummary, inr, type BuyerOffer, type P2PTrade, type P2PPaymentMethod, type P2PMessage,
 } from '@/lib/businessCashOut'
-import { listStores, saveStore, deleteStore, listStaff, inviteStaff, updateStaff, removeStaff, type Store, type StaffMember, type StaffRole } from '@/lib/businessTeam'
+import { listStores, saveStore, deleteStore, setDefaultStore, listStaff, inviteStaff, updateStaff, removeStaff, type Store, type StaffMember, type StaffRole } from '@/lib/businessTeam'
 import { BUSINESS_CATEGORIES, toCategory, useBizTerms } from '@/lib/businessCategories'
 import { useMerchant } from '@/lib/merchant'
 import {
@@ -270,6 +270,7 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
           })}
             onAdd={() => setEdit({ name: '', type: defaultType, address: '' })}
             onEdit={id => { const s = stores.find(x => x.id === id); if (s) setEdit({ id, name: s.name, type: s.type ?? STORE_TYPES[0], address: s.address ?? '' }) }}
+            onSetPrimary={async id => { try { await setDefaultStore(id); await load(); toast('Main store updated', 'success') } catch (e) { toast(e instanceof Error ? e.message : 'Could not update', 'error') } }}
             onQr={onQr} addLockedNote={addLockedNote} />
         )}
       </div>
