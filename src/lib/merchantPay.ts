@@ -242,6 +242,8 @@ export type MerchantIntent = {
   lastRemindedAt?: string | null
   /** Paid more than asked (the extra can be refunded). 0 when not. */
   overpaid?: number
+  /** Tax rate on a bill (percent). The amount is tax-inclusive. 0 = none. */
+  taxPercent?: number
 }
 export type MerchantPayment = {
   id: string; intentId: string; chain: string; txHash: string; from: string; amount: number
@@ -311,23 +313,35 @@ function mapIntent(r: any): MerchantIntent {
     completedByMerchant: !!r.completed_by_merchant, completedNote: r.completed_note ?? null, storeId: r.store_id ?? null, via: r.via ?? null,
     dueDate: r.due_date ?? null, reminderCount: Number(r.reminder_count) || 0, lastRemindedAt: r.last_reminded_at ?? null,
     overpaid: Number(r.overpaid_amount) > 0 ? Number(r.overpaid_amount) : 0,
+    taxPercent: Number(r.tax_percent) || 0,
     items: Array.isArray(r.items) ? r.items.map((i: any) => ({ name: i.name, qty: Number(i.qty), price: Number(i.price), total: Number(i.total) })) : null,
   }
 }
 
-/** Bill total = Σ qty × price (rounded like the server). */
+/** Bill subtotal = Σ qty × price (rounded like the server). */
 export function invoiceTotal(items: InvoiceItem[]): number {
   return Number(items.reduce((s, i) => s + Math.round((i.qty || 0) * (i.price || 0) * 1e6) / 1e6, 0).toFixed(6))
 }
 
+/** Subtotal, tax and tax-inclusive total for a bill (same rounding as the server). */
+export function invoiceBreakdown(items: InvoiceItem[], taxPercent = 0): { subtotal: number; tax: number; total: number } {
+  const subtotal = invoiceTotal(items)
+  const pct = Math.min(100, Math.max(0, taxPercent || 0))
+  const total = Math.round(subtotal * (1 + pct / 100) * 1e6) / 1e6
+  return { subtotal, tax: Number((total - subtotal).toFixed(6)), total }
+}
+
 export async function createPaymentRequest(p: { amount: number; customer?: string; note?: string; expiresInMinutes?: number | null; items?: InvoiceItem[]; storeId?: string | null
+  /** Tax rate on a bill (percent); the server makes the total tax-inclusive. */ taxPercent?: number
   /** Pay-by date (YYYY-MM-DD) */ dueDate?: string | null }): Promise<MerchantIntent> {
   const items = p.items?.filter(i => i.name.trim() && i.qty > 0 && i.price >= 0).map(i => ({ name: i.name.trim().slice(0, 80), qty: i.qty, price: i.price }))
   const amount = items?.length ? invoiceTotal(items) : p.amount
   if (!(amount > 0)) throw new Error(items ? 'Add at least one item with a price' : 'Enter an amount')
+  const taxPercent = items?.length && p.taxPercent && p.taxPercent > 0 ? Math.min(100, p.taxPercent) : null
   const { data, error } = await supabase.from('merchant_payment_intents').insert({
     requested_amount: Number(amount.toFixed(6)),
     ...(items?.length ? { items } : {}),
+    ...(taxPercent ? { tax_percent: taxPercent } : {}),
     customer_username: p.customer?.trim().replace(/^@/, '') || null,
     note: p.note?.trim().slice(0, 140) || null,
     expires_at: p.expiresInMinutes ? new Date(Date.now() + p.expiresInMinutes * 60_000).toISOString() : null,
