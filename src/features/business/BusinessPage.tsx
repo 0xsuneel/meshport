@@ -476,7 +476,11 @@ function OwnerBusinessPage() {
   const subOpen = tab !== 'overview'
   const look = useMemo(() => (typeof window === 'undefined' ? { dim: 0.22, shadow: '-10px 0 28px rgba(0,0,0,0.28)' } : pushLook()), [])
   const hubShift = { transform: (screen || subOpen) ? 'translateX(-28%)' : undefined, transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)', willChange: 'transform' }
+  // The hub shows the bottom nav, so its body clears it (65px + safe area).
+  // A sub-view covers the nav (like every other detail page), so its body
+  // only needs the safe area.
   const bodyPad = { paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }
+  const panelPad = { paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }
   return (
     <div className="relative flex flex-col h-full min-h-0 bg-bg overflow-hidden">
       {/* ── Overview hub: always mounted; parallaxes left under a sub-view ── */}
@@ -504,16 +508,19 @@ function OwnerBusinessPage() {
         </div>
       </div>
 
-      {/* ── Manage orders / Manage money: slide in over the hub on the shared
-          page push (dim veil + edge shadow), the bottom nav staying put. ── */}
+      {/* ── Manage orders / Manage money: a full page that slides in from the
+          right over a dim veil with the edge shadow - the same page push the
+          rest of the app uses. Like every other detail page (Pay, Receive) and
+          the Business screens, it covers the bottom nav (fixed, z-40). ── */}
       <AnimatePresence>
         {subOpen && (
           <>
-            <motion.div className="absolute inset-0 z-20 pointer-events-none" aria-hidden
+            <motion.div className="fixed inset-0 z-40 pointer-events-none" aria-hidden
               style={{ background: '#000' }} initial={{ opacity: 0 }} animate={{ opacity: look.dim }}
               exit={{ opacity: 0, transition: { duration: 0.25, ease: [0.4, 0, 1, 1] } }} transition={PAGE_TRANSITION} />
-            <motion.div className="absolute inset-0 z-30 flex flex-col bg-bg" style={{ boxShadow: look.shadow }}
+            <motion.div className="fixed inset-0 z-40 flex justify-center bg-bg" style={{ boxShadow: look.shadow }}
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={PANEL_EXIT} transition={PAGE_TRANSITION}>
+             <div className="relative w-full max-w-md flex flex-col h-full">
               {/* Payments and Settlements open from Overview (See all, the settle
                   bar, the menu) and come back with the arrow - no tab bar. */}
               <header className="header-row gap-3 px-5 pt-header pb-header">
@@ -533,7 +540,7 @@ function OwnerBusinessPage() {
                   ))}
                 </div>
               </div>}
-              <div className="flex-1 min-h-0 overflow-y-auto" style={bodyPad}>
+              <div className="flex-1 min-h-0 overflow-y-auto" style={panelPad}>
                 {tab === 'payments' && payView === 'requests' && <RequestsList active storeId={activeStore?.id ?? null} mainStoreId={mainStoreId}
                   storeName={storeName} paymentsOf={i => paymentsByIntent.get(i.id) ?? []} refundedOf={p => refundedOf(p.id)} onRefund={refundFromOrder} />}
                 {tab === 'payments' && payView === 'payments' && <PaymentsView key={payFilter} initialFilter={payFilter}
@@ -560,6 +567,7 @@ function OwnerBusinessPage() {
                   </div>
                 )}
               </div>
+             </div>
             </motion.div>
           </>
         )}

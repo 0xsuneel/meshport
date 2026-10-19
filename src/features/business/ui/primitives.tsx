@@ -129,7 +129,7 @@ export function FadeUp({
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1], delay }}
+      transition={{ duration: 0.22, ease: EASE_OUT, delay }}
       className={className}
     >
       {children}
@@ -140,7 +140,8 @@ export function FadeUp({
 // ─── Sheet backdrop + container ─────────────────────────────────────────────
 
 import { AnimatePresence } from 'framer-motion'
-import { springs } from './types'
+import { EASE_OUT, SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
+import { sheetDrag } from '@/lib/sheetDrag'
 
 interface SheetProps {
   open: boolean
@@ -148,40 +149,32 @@ interface SheetProps {
   children: React.ReactNode
   /** "half" for payment detail; "full" for progress / passcode */
   height?: 'half' | 'full'
+  /** Unique per sheet, for drag-to-close bookkeeping. */
+  id?: string
 }
 
-export function Sheet({ open, onClose, children, height = 'half' }: SheetProps) {
+// One bottom sheet for the whole business UI - the same motion, backdrop,
+// corner radius, handle and drag-to-close as the app's ActionSheet, so a
+// business sheet opens and lands exactly like every other sheet in the app
+// (shared tween, not the old spring bounce).
+export function Sheet({ open, onClose, children, height = 'half', id = 'biz-sheet' }: SheetProps) {
   return (
     <AnimatePresence>
-      {open && (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-end justify-center"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
-          onClick={onClose}
-        >
-          {/* backdrop */}
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
-          <motion.section
-            className={`relative w-full max-w-md overflow-hidden rounded-t-[28px] bg-surface shadow-2xl ${
-              height === 'full' ? 'h-[92dvh] flex flex-col' : ''
-            }`}
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={springs.sheet}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* drag handle */}
-            <div className="flex justify-center pt-3 pb-1 shrink-0">
-              <div className="h-[4px] w-10 rounded-full bg-border" />
-            </div>
-            {children}
-          </motion.section>
-        </motion.div>
-      )}
+      {open && [
+        <motion.div key={id + '-dim'} transition={SHEET_BACKDROP.transition}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 bg-black/70" onClick={onClose} />,
+        <motion.div key={id} {...sheetDrag(id, onClose)}
+          initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT} transition={SHEET_SPRING}
+          role="dialog" aria-modal="true"
+          className={`fixed bottom-0 left-0 right-0 z-50 mx-auto max-w-md bg-surface border-t border-border rounded-t-3xl flex flex-col${height === 'full' ? ' h-[92dvh]' : ''}`}
+          style={{ maxHeight: 'calc(100% - 40px)' }}>
+          <div data-sheet-handle className="flex justify-center pt-2.5 pb-1 flex-shrink-0">
+            <div style={{ width: 38, height: 5, borderRadius: 3, background: 'var(--border)' }} />
+          </div>
+          {children}
+        </motion.div>,
+      ]}
     </AnimatePresence>
   )
 }
