@@ -187,8 +187,13 @@ export function recentInitial(c: { display_name?: string | null; username?: stri
 
 export function recentShortName(c: { display_name?: string | null; username?: string | null; isSelf?: boolean }) {
   if (c.isSelf) return 'You'
+  // Prefer the person's display name, shown as just their first name
+  // ("Suraj Rathod" → "Suraj"); fall back to the username.
+  if (c.display_name && c.display_name.trim()) {
+    const first = c.display_name.trim().replace(/\.arc$/, '').split(/\s+/)[0]
+    if (first) return first
+  }
   if (c.username) return c.username.replace(/\.arc$/, '')
-  if (c.display_name) return c.display_name.replace(/\.arc$/, '').split(' ')[0]
   return '??'
 }
 
