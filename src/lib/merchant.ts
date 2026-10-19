@@ -181,6 +181,16 @@ export function isMerchantNow(): boolean {
   return state.status === 'approved'
 }
 
+/** True for any business/merchant account (business sign-up, or an approved
+ *  merchant). Business accounts don't earn transaction rewards, so this gates
+ *  reward awarding/notifications. Falls back to the cached hint before the
+ *  server state has loaded. Safe to call from non-React code. */
+export function isBusinessAccountNow(): boolean {
+  if (state.loaded) return state.accountType === 'business' || state.status === 'approved'
+  const hint = readMerchantHint()
+  return hint?.business === true || hint?.approved === true
+}
+
 /**
  * A claim from another chain by an approved merchant moves customer payments
  * to Arc - shown as "Ledger payment received". New rows carry metadata.merchant

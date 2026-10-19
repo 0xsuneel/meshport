@@ -28,6 +28,7 @@ import type { ActionIconName } from '@/components/ui/ActionIcon'
 import { createPublicClient, createWalletClient } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { supabase } from './supabase'
+import { isBusinessAccountNow } from './merchant'
 import { trimTrailingZeros } from './utils'
 import { ARC_RPCS, arcTransport, arcRpcJson } from './arc'
 import { useAuthStore } from '@/store'
@@ -134,6 +135,10 @@ export async function awardTransactionPoints(params: {
   txHash: string
   actionType: RewardActionType
 }): Promise<{ pointsAwarded: number; error: string | null }> {
+  // Business/merchant accounts don't earn transaction rewards. Gating here
+  // means no points are recorded, so no reward-earned notification fires and
+  // nothing shows under Rewards in their Activity.
+  if (isBusinessAccountNow()) return { pointsAwarded: 0, error: null }
   const today = new Date().toISOString().split('T')[0]
   const todayStartIso = `${today}T00:00:00.000Z`
   const reason = rewardReasonFor(params.actionType)
