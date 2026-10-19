@@ -509,7 +509,12 @@ async function sendAndWait(id, params) {
 module.exports = async function handler(req, res) {
   const origin = req.headers.origin || ''
   const localDev = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
-  res.setHeader('Access-Control-Allow-Origin', localDev ? origin : (process.env.ALLOWED_ORIGIN || '*'))
+  // Never '*' in production: this proxy injects signed RPC keys and accepts
+  // eth_sendRawTransaction. Use ALLOWED_ORIGIN when set, else fall back to the
+  // app's own domain (a fixed, non-wildcard value - cross-origin callers are
+  // rejected, same-origin app calls are unaffected).
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://meshport.xyz'
+  res.setHeader('Access-Control-Allow-Origin', localDev ? origin : allowedOrigin)
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.status(200).end()
