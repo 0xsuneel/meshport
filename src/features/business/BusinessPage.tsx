@@ -460,9 +460,16 @@ function OwnerBusinessPage() {
     return { payments: mine.length, total: money(mine.reduce((s, p) => s + p.amount, 0)) }
   }, [rawDetail, raw, netOf])
 
+  // Hub parallax: while a sub-screen slides in over the business tab,
+  // the tab content shifts left — the "old page moves -28%" half of the
+  // app's shared page push (PageTransition/ScreenPush). BusinessScreen
+  // supplies the matching slide, dim veil and edge shadow, so opening a
+  // Business page now reads like opening any other page. Applied to the two
+  // hub blocks (header + body) so the fixed overlays below are unaffected.
+  const hubShift = { transform: screen ? 'translateX(-28%)' : undefined, transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)', willChange: 'transform' }
   return (
     <div className="flex flex-col h-full min-h-0 bg-bg">
-      <div>
+      <div style={hubShift}>
         {tab === 'overview' ? (
           // Title = the store being viewed ("All stores" for the totals);
           // the line under it is the business account itself.
@@ -495,7 +502,7 @@ function OwnerBusinessPage() {
 
       </div>
 
-      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
+      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)', ...hubShift }}>
         {tab === 'overview' && locked && <LockedHubView banner={banner} terms={terms} />}
         {tab === 'overview' && !locked && (
           <HubView terms={terms} loading={!loaded} banner={banner} periodLabel={period.label} onPeriod={() => setPeriodSheet(true)}
