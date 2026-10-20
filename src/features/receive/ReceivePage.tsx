@@ -166,12 +166,14 @@ export function ReceivePage() {
   const copyBox = (label: string, value: string, full: string, key: string) => (
     <button type="button" onClick={() => handleCopy(full, key)} aria-label={`Copy ${label.toLowerCase()}`}
       className="flex-1 min-w-0 flex items-center gap-2 rounded-xl px-3 py-2 text-left active:scale-[0.98] transition-transform"
-      style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+      // A light brand tint (not the page colour, which looked like an empty
+      // hole on the card in dark mode).
+      style={{ background: 'color-mix(in srgb, var(--brand) 12%, var(--surface))', border: '1px solid color-mix(in srgb, var(--brand) 28%, transparent)' }}>
       <span className="flex-1 min-w-0">
-        <span className="block text-[11px] text-text-muted">{label}</span>
+        <span className="block text-[11px] font-semibold text-brand-text">{label}</span>
         <span className="block text-[13px] font-semibold text-text-primary truncate" style={{ fontFamily: 'ui-monospace, monospace' }}>{value}</span>
       </span>
-      {copied === key ? <CheckCircle className="w-4 h-4 text-success flex-shrink-0" /> : <Copy className="w-4 h-4 text-text-secondary flex-shrink-0" />}
+      {copied === key ? <CheckCircle className="w-4 h-4 text-success flex-shrink-0" /> : <Copy className="w-4 h-4 text-brand-text flex-shrink-0" />}
     </button>
   )
   const cardTop = !shopQr && (displayUsername || walletAddress) ? (
