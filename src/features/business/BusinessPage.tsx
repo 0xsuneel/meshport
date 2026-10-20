@@ -9,11 +9,12 @@
 //                claims, MeshPort pays the gas), live progress and history
 //
 // The UI kit in ./ui was designed with Arc Studio.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { pushLook } from '@/lib/pushLook'
-import { PAGE_TRANSITION } from '@/lib/motion'
+import { DESKTOP_QUERY, DESKTOP_FADE_TRANSITION, PAGE_SLIDE_X, PAGE_TRANSITION } from '@/lib/motion'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useBizTerms } from '@/lib/businessCategories'
 import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
@@ -44,15 +45,15 @@ import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScree
 import {
   BusinessHeader, SetupBanner, HubView, LockedHubView, PaymentsView, PaymentDetailSheet,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
-  DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet,
+  DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet, ScreenLevel, PUSH_BACK,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
 type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools' | 'activity'
 
-// A sub-view leaves a touch quicker on an ease-in, like the OS (matches
-// BusinessScreen's PANEL_EXIT / the app's SHEET_EXIT).
-const PANEL_EXIT = { x: '100%', transition: { duration: 0.25, ease: [0.4, 0, 1, 1] as const } }
+// Back is the app's back push: 250ms on the same ease-out (BusinessScreen).
+const PANEL_EXIT = { x: '100%', transition: PUSH_BACK }
+const EASE_CSS = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.method === 'own_transfer' ? 'Your transfer'
@@ -247,7 +248,11 @@ function OwnerBusinessPage() {
   const [pin, setPin] = useState<{ kind: 'settle'; retry?: string[] } | { kind: 'one'; chainId: string } | { kind: 'refund' } | null>(null)
   const [pinError, setPinError] = useState<string | undefined>()
 
-  const [screen, setScreen] = useState<ScreenId | null>(() => query.get('apply') ? 'profile' : null)
+  // Open screens, bottom to top: a screen opened from another one (Business
+  // tools → Stores & staff, Stores → a store's QR, a payment → its receipt)
+  // pushes over it, and back uncovers the one beneath - like pages.
+  const [stack, setStack] = useState<ScreenId[]>(() => query.get('apply') ? ['profile'] : [])
+  const screen = stack.length ? stack[stack.length - 1] : null
   // Back from Cash out or Payouts: USDC may have moved (escrow, staff pay).
   const prevScreen = useRef(screen)
   useEffect(() => {
@@ -263,20 +268,18 @@ function OwnerBusinessPage() {
   useEffect(() => {
     if (!locked) return
     if (tab !== 'overview') setTab('overview')
-    if (screen && screen !== 'profile' && screen !== 'help') { fromTools.current = false; parent.current = null; setScreen(null) }
-  }, [locked, tab, screen])
-  // A screen opened from Business tools goes back to Business tools; a
-  // screen opened from another one (receipt, store QR) back to that one.
-  const fromTools = useRef(false)
-  const parent = useRef<ScreenId | null>(null)
-  const open = (id: ScreenId) => () => { fromTools.current = false; parent.current = null; setScreen(id) }
-  const close = () => { fromTools.current = false; parent.current = null; setScreen(null) }
-  const back = () => {
-    if (parent.current && screen !== parent.current) { const to = parent.current; parent.current = null; setScreen(to); return }
-    if (fromTools.current && screen !== 'tools') { setScreen('tools'); return }
-    close()
+    if (stack.some(id => id !== 'profile' && id !== 'help')) setStack([])
+  }, [locked, tab, stack])
+  const open = (id: ScreenId) => () => setStack([id])
+  const close = () => setStack([])
+  const back = () => setStack(s => s.slice(0, -1))
+  /** Opened from the screen on top: pushes over it, back returns to it. */
+  const child = (id: ScreenId) => setStack(s => [...s.filter(x => x !== id), id])
+  /** Where a screen sits in the stack (BusinessScreen reads it). */
+  const level = (id: ScreenId, children: ReactNode) => {
+    const i = stack.indexOf(id)
+    return <ScreenLevel.Provider value={{ level: Math.max(0, i), covered: i >= 0 && i < stack.length - 1 }}>{children}</ScreenLevel.Provider>
   }
-  const child = (id: ScreenId) => { parent.current = screen; setScreen(id) }
 
   const beginSettle = (retry?: string[]) => {
     if (settle.running) { setProgressOpen(true); return }
@@ -475,7 +478,27 @@ function OwnerBusinessPage() {
   // overlays below already supply this themselves.)
   const subOpen = tab !== 'overview'
   const look = useMemo(() => (typeof window === 'undefined' ? { dim: 0.22, shadow: '-10px 0 28px rgba(0,0,0,0.28)' } : pushLook()), [])
-  const hubShift = { transform: (screen || subOpen) ? 'translateX(-28%)' : undefined, transition: 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)', willChange: 'transform' }
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
+  const reduce = useReducedMotion()
+  // Desktop: screens fade in the content area (no sliding), nothing shifts.
+  const hubCovered = !isDesktop && (!!screen || subOpen)
+  // Opening shifts on the 300ms push, coming back on the 250ms back push.
+  const shiftCss = (on: boolean) => `transform ${reduce ? 0 : on ? 0.3 : 0.25}s ${EASE_CSS}`
+  const hubShift = { transform: hubCovered ? `translateX(-${PAGE_SLIDE_X})` : undefined, transition: shiftCss(hubCovered), willChange: 'transform' }
+  // The bottom tab bar belongs to the hub: like a page push from a tab, it
+  // shifts left with it under the dim (PageTransition moves it the same way).
+  useLayoutEffect(() => {
+    const nav = document.querySelector<HTMLElement>('[data-bottom-nav]')
+    if (!nav) return
+    nav.style.transition = shiftCss(hubCovered)
+    nav.style.transform = hubCovered ? `translateX(-${PAGE_SLIDE_X})` : ''
+  }, [hubCovered]) // eslint-disable-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => () => {
+    const nav = document.querySelector<HTMLElement>('[data-bottom-nav]')
+    if (nav) { nav.style.transform = ''; nav.style.transition = '' }
+  }, [])
+  // Manage orders / money shifts left too when a screen opens over it.
+  const subCovered = !isDesktop && !!screen
   // The hub shows the bottom nav, so its body clears it (65px + safe area).
   // A sub-view covers the nav (like every other detail page), so its body
   // only needs the safe area.
@@ -515,11 +538,14 @@ function OwnerBusinessPage() {
       <AnimatePresence>
         {subOpen && (
           <>
-            <motion.div className="fixed inset-0 z-40 pointer-events-none" aria-hidden
+            {!isDesktop && <motion.div className="fixed inset-0 z-40 pointer-events-none" aria-hidden
               style={{ background: '#000' }} initial={{ opacity: 0 }} animate={{ opacity: look.dim }}
-              exit={{ opacity: 0, transition: { duration: 0.25, ease: [0.4, 0, 1, 1] } }} transition={PAGE_TRANSITION} />
-            <motion.div className="fixed inset-0 z-40 flex justify-center bg-bg" style={{ boxShadow: look.shadow }}
-              initial={{ x: '100%' }} animate={{ x: 0 }} exit={PANEL_EXIT} transition={PAGE_TRANSITION}>
+              exit={{ opacity: 0, transition: PUSH_BACK }} transition={reduce ? { duration: 0 } : PAGE_TRANSITION} />}
+            <motion.div className={`${isDesktop ? 'absolute' : 'fixed'} inset-0 z-40 flex justify-center bg-bg`} style={{ boxShadow: isDesktop ? undefined : look.shadow }}
+              initial={isDesktop ? { opacity: 0, y: 4 } : { x: '100%' }}
+              animate={isDesktop ? { opacity: 1, y: 0 } : { x: subCovered ? `-${PAGE_SLIDE_X}` : 0, transition: subCovered ? PAGE_TRANSITION : PUSH_BACK }}
+              exit={isDesktop ? { opacity: 0, transition: { duration: 0.12 } } : PANEL_EXIT}
+              transition={reduce ? { duration: 0 } : isDesktop ? DESKTOP_FADE_TRANSITION : PAGE_TRANSITION}>
              <div className="relative w-full max-w-md flex flex-col h-full">
               {/* Payments and Settlements open from Overview (See all, the settle
                   bar, the menu) and come back with the arrow - no tab bar. */}
@@ -620,25 +646,27 @@ function OwnerBusinessPage() {
         onToggle={() => setVoiceAlerts({ enabled: !voice.enabled })} onLang={id => setVoiceAlerts({ lang: id as VoiceLang })}
         onTest={() => speakPayment(24, { test: true })} onClose={() => setVoiceOpen(false)} />
 
-      <ToolsScreen open={screen === 'tools'} onBack={back}
-        onOpen={(id: ToolId) => { if (id === 'voice') { setVoiceOpen(true); return } fromTools.current = true; parent.current = null; setScreen(id) }}
-        groups={[
-          { title: 'Business', rows: [
-            { id: 'team', label: `${terms.stores} & staff`, hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers' },
-            { id: 'customers', label: terms.customers, hint: pendingCredit > 0 ? `${money(pendingCredit)} outstanding · history and reminders` : 'Everyone who paid, with their history' },
-            { id: 'reports', label: 'Reports', hint: 'Insights and statement · CSV and PDF' },
-            { id: 'activity', label: 'Activity log', hint: `Who billed, refunded, settled · you and staff` },
-          ] },
-          { title: 'Money', rows: [
-            { id: 'payouts', label: 'Payouts', hint: 'Pay staff and suppliers · once or on a repeat' },
-            { id: 'cashout', label: 'Cash out to bank', hint: 'Sell USDC for INR to UPI or bank' },
-          ] },
-          { title: 'Settings', rows: [
-            { id: 'profile', label: 'Business profile', hint: `${headerStatus === 'verified' ? 'Verified' : 'Complete your application'} · name, logo, payment limits` },
-            { id: 'voice', label: 'Voice alerts', hint: voice.enabled ? 'On · speaks each payment' : 'Off' },
-            { id: 'help', label: 'Help & disputes', hint: 'Customer says they paid' },
-          ] },
-        ]} />
+      {level('tools', (
+        <ToolsScreen open={stack.includes('tools')} onBack={back}
+          onOpen={(id: ToolId) => { if (id === 'voice') { setVoiceOpen(true); return } child(id) }}
+          groups={[
+            { title: 'Business', rows: [
+              { id: 'team', label: `${terms.stores} & staff`, hint: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'} · cashiers and managers` : 'Add outlets, invite cashiers' },
+              { id: 'customers', label: terms.customers, hint: pendingCredit > 0 ? `${money(pendingCredit)} outstanding · history and reminders` : 'Everyone who paid, with their history' },
+              { id: 'reports', label: 'Reports', hint: 'Insights and statement · CSV and PDF' },
+              { id: 'activity', label: 'Activity log', hint: `Who billed, refunded, settled · you and staff` },
+            ] },
+            { title: 'Money', rows: [
+              { id: 'payouts', label: 'Payouts', hint: 'Pay staff and suppliers · once or on a repeat' },
+              { id: 'cashout', label: 'Cash out to bank', hint: 'Sell USDC for INR to UPI or bank' },
+            ] },
+            { title: 'Settings', rows: [
+              { id: 'profile', label: 'Business profile', hint: `${headerStatus === 'verified' ? 'Verified' : 'Complete your application'} · name, logo, payment limits` },
+              { id: 'voice', label: 'Voice alerts', hint: voice.enabled ? 'On · speaks each payment' : 'Off' },
+              { id: 'help', label: 'Help & disputes', hint: 'Customer says they paid' },
+            ] },
+          ]} />
+      ))}
 
       <Sheet open={switcher} onClose={() => setSwitcher(false)}>
         <StoreSwitcher stores={[{ id: '', name: allStores, handle: `${stores.length} store${stores.length === 1 ? '' : 's'} together`, active: !activeStore, all: true },
@@ -672,27 +700,49 @@ function OwnerBusinessPage() {
         onSettle={() => { autoSettle.dismiss(); setTab('settlements'); beginSettle() }} onLater={autoSettle.dismiss} />
 
       <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: qrStore?.id ?? null, canBill: true, chat: true }}>
-      <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
-      <ReceiveScreen open={screen === 'receive'} onBack={() => { back(); reloadIntents() }} onChanged={reloadIntents} storeName={storeName}
-        shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} />
-      <CustomersScreen open={screen === 'customers'} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundedOf(p.id) > 0 && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
-        onPayment={p => setDetail(toRow(p))} onChat={u => { close(); void openChat(u) }}
-        orders={(intents ?? []).filter(i => !activeStore || inStore(i, activeStore.id))} onOrdersChanged={reloadIntents} />
-      <ReportsScreen open={screen === 'reports'} onBack={back}
-        insights={{ payments: netOf(storeRaw), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null }}
-        statement={{ storeName: stores.length > 1 && activeStore ? `${storeName} · ${activeStore.name}` : storeName, handle,
-          payments: storeRaw.filter(p => p.method !== 'own_transfer'), refunds: activeStore ? refunds.filter(r => storeRaw.some(p => p.id === r.paymentId)) : refunds,
-          settled: (history ?? []).filter(c => c.status === 'completed').map(c => ({ amount: c.arrivedAmount ?? c.amount, createdAt: c.createdAt })),
-          waiting: (chains ?? []).reduce((s, c) => s + c.balance, 0), loading: !loaded }} />
-      <ReceiptScreen open={screen === 'receipt'} onBack={back} storeName={storeName} handle={handle} payment={receiptFor} refunded={!!(receiptFor && refundedIds.has(receiptFor.id))} />
-      <HelpScreen open={screen === 'help'} onBack={back} />
-      <ProfileScreen open={screen === 'profile'} onBack={back} handle={handle} />
+      {level('qr', (
+        <ShopQrScreen open={stack.includes('qr')} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
+      ))}
+      {level('receive', (
+        <ReceiveScreen open={stack.includes('receive')} onBack={() => { back(); reloadIntents() }} onChanged={reloadIntents} storeName={storeName}
+          shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} />
+      ))}
+      {level('customers', (
+        <CustomersScreen open={stack.includes('customers')} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundedOf(p.id) > 0 && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
+          onPayment={p => setDetail(toRow(p))} onChat={u => { close(); void openChat(u) }}
+          orders={(intents ?? []).filter(i => !activeStore || inStore(i, activeStore.id))} onOrdersChanged={reloadIntents} />
+      ))}
+      {level('reports', (
+        <ReportsScreen open={stack.includes('reports')} onBack={back}
+          insights={{ payments: netOf(storeRaw), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null }}
+          statement={{ storeName: stores.length > 1 && activeStore ? `${storeName} · ${activeStore.name}` : storeName, handle,
+            payments: storeRaw.filter(p => p.method !== 'own_transfer'), refunds: activeStore ? refunds.filter(r => storeRaw.some(p => p.id === r.paymentId)) : refunds,
+            settled: (history ?? []).filter(c => c.status === 'completed').map(c => ({ amount: c.arrivedAmount ?? c.amount, createdAt: c.createdAt })),
+            waiting: (chains ?? []).reduce((s, c) => s + c.balance, 0), loading: !loaded }} />
+      ))}
+      {level('receipt', (
+        <ReceiptScreen open={stack.includes('receipt')} onBack={back} storeName={storeName} handle={handle} payment={receiptFor} refunded={!!(receiptFor && refundedIds.has(receiptFor.id))} />
+      ))}
+      {level('help', (
+        <HelpScreen open={stack.includes('help')} onBack={back} />
+      ))}
+      {level('profile', (
+        <ProfileScreen open={stack.includes('profile')} onBack={back} handle={handle} />
+      ))}
       </RequestMaker.Provider>
-      <CashOutScreen open={screen === 'cashout'} onBack={back} />
-      <PayoutsScreen open={screen === 'payouts'} onBack={back} />
-      <ActivityScreen open={screen === 'activity'} onBack={back} />
-      <TeamScreen open={screen === 'team'} onBack={back} canAddStores={isMerchant} stores={stores} onChanged={setStores} paymentsByStore={paymentsByStore}
-        onQr={id => { pickStore(id); child('qr') }} />
+      {level('cashout', (
+        <CashOutScreen open={stack.includes('cashout')} onBack={back} />
+      ))}
+      {level('payouts', (
+        <PayoutsScreen open={stack.includes('payouts')} onBack={back} />
+      ))}
+      {level('activity', (
+        <ActivityScreen open={stack.includes('activity')} onBack={back} />
+      ))}
+      {level('team', (
+        <TeamScreen open={stack.includes('team')} onBack={back} canAddStores={isMerchant} stores={stores} onChanged={setStores} paymentsByStore={paymentsByStore}
+          onQr={id => { pickStore(id); child('qr') }} />
+      ))}
     </div>
   )
 }

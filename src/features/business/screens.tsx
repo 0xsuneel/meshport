@@ -1101,7 +1101,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
   )
 
   return (
-    <BusinessScreen open={open} title={current ? current.name : title} onBack={current ? () => setSelected(null) : onBack}>
+    <BusinessScreen open={open} title={current ? current.name : title} onBack={current ? () => setSelected(null) : onBack} step={current?.key ?? ''}>
       {current ? (
         <div className="flex flex-col gap-5 px-5 pt-2 pb-6">
           <div className="flex items-center gap-3 rounded-2xl bg-surface border border-border p-4">

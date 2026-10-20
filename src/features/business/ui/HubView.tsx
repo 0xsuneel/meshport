@@ -7,7 +7,7 @@
 import React from 'react'
 import { ChevronDown, CreditCard, QrCode, ShoppingBag, Wallet, Settings2, Lock } from 'lucide-react'
 import type { Payment, ReactNode } from './types'
-import { Skeleton, FadeUp } from './primitives'
+import { Skeleton } from './primitives'
 import { PaymentRow } from './OverviewView'
 import { bizTerms, type BizTerms } from '@/lib/businessCategories'
 
@@ -65,7 +65,7 @@ export function HubView({
       {banner}
 
       {/* Sales · pending orders · available balance */}
-      <FadeUp delay={0.04} className="mx-5">
+      <div className="mx-5">
         <div className="rounded-2xl bg-card border border-border p-4 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[13px] text-text-muted">{periodLabel === 'Today' ? "Today's sales" : 'Sales'}</p>
@@ -94,20 +94,20 @@ export function HubView({
             </button>
           </div>
         </div>
-      </FadeUp>
+      </div>
 
       {/* Four feature areas */}
-      <FadeUp delay={0.08} className="mx-5">
+      <div className="mx-5">
         <div className="grid grid-cols-2 gap-2">
           <Tile icon={QrCode} title="Collect payment" sub="Shop QR · Request · Bill" tile={collect} />
           <Tile icon={ShoppingBag} title={`Manage ${terms.orders.toLowerCase()}`} sub={`Status · ${terms.customer} · Receipt`} tile={orders} />
           <Tile icon={Wallet} title="Manage money" sub="Arc balance · Other chains · Settle" tile={money} />
           <Tile icon={Settings2} title="Business tools" sub={`${terms.stores} · Staff · Reports · Settings`} tile={tools} />
         </div>
-      </FadeUp>
+      </div>
 
       {/* Latest verified payments */}
-      <FadeUp delay={0.12} className="mx-5">
+      <div className="mx-5">
         <div className="rounded-2xl bg-card border border-border overflow-hidden">
           <div className="flex items-center justify-between px-3.5 pt-2.5 pb-1">
             <p className="text-[15px] font-semibold text-text-primary">Verified payments</p>
@@ -135,7 +135,7 @@ export function HubView({
             <div className="divide-y divide-border">{recent.slice(0, 4).map(p => <PaymentRow key={p.id} payment={p} onClick={onPayment} />)}</div>
           )}
         </div>
-      </FadeUp>
+      </div>
     </div>
   )
 }
@@ -152,7 +152,7 @@ export function LockedHubView({ banner, terms = bizTerms(null) }: { banner: Reac
   return (
     <div className="flex flex-col gap-3 pb-8">
       {banner}
-      <FadeUp delay={0.04} className="mx-5">
+      <div className="mx-5">
         <div className="rounded-2xl bg-card border border-border overflow-hidden">
           <p className="px-4 pt-4 pb-2 text-[13px] font-semibold text-text-muted">Turns on after approval</p>
           <div className="divide-y divide-border">
@@ -168,7 +168,7 @@ export function LockedHubView({ banner, terms = bizTerms(null) }: { banner: Reac
             ))}
           </div>
         </div>
-      </FadeUp>
+      </div>
     </div>
   )
 }

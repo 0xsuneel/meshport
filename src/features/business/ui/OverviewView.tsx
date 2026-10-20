@@ -9,7 +9,7 @@ import { ActionIcon } from '@/components/ui/ActionIcon'
 import { motion } from 'framer-motion'
 import type { Payment, ReactNode } from './types'
 import { formatTime } from './types'
-import { Skeleton, ChainLogo, FadeUp } from './primitives'
+import { Skeleton, ChainLogo } from './primitives'
 
 // ─── Local helpers ────────────────────────────────────────────────────────────
 
@@ -130,7 +130,7 @@ export function OverviewView({
       {banner}
 
       {/* ── Collection card ─────────────────────────────────────────────── */}
-      <FadeUp delay={0.04} className="mx-5">
+      <div className="mx-5">
         <div className="rounded-3xl bg-brand text-white p-5 flex flex-col gap-3.5">
           <div className="flex items-center justify-between gap-3">
             <p className="text-[13px] text-white/85">
@@ -167,11 +167,11 @@ export function OverviewView({
             </div>
           )}
         </div>
-      </FadeUp>
+      </div>
 
       {/* ── Quick actions ───────────────────────────────────────────────── */}
       {/* Same round brand buttons as Home's Pay / Receive / Swap / More. */}
-      <FadeUp delay={0.08} className="mx-5">
+      <div className="mx-5">
         <div className={`flex ${actions.length > 2 ? 'justify-between' : 'justify-center gap-12'} w-[95%] mx-auto`}>
           {actions.map(({ icon, label, onClick }) => (
             <button key={label} type="button" onClick={onClick}
@@ -183,10 +183,10 @@ export function OverviewView({
             </button>
           ))}
         </div>
-      </FadeUp>
+      </div>
 
       {/* ── Settle bar (always) ──────────────────────────────── */}
-      <FadeUp delay={0.12} className="mx-5 flex flex-col gap-2">
+      <div className="mx-5 flex flex-col gap-2">
         {!toSettle.hidden && <div className="flex items-center gap-3 rounded-2xl bg-card border border-border px-3.5 py-3">
           <span className="flex shrink-0">
             {hasSettle ? chains.slice(0, 3).map((c, i) => (
@@ -220,10 +220,10 @@ export function OverviewView({
             {hasSettle ? 'Settle' : 'View'}
           </button>
         </div>}
-      </FadeUp>
+      </div>
 
       {/* ── Recent payments ─────────────────────────────────────────────── */}
-      <FadeUp delay={0.16} className="mx-5">
+      <div className="mx-5">
         {/* Heading outside the card, like Home's "Assets". */}
         <div className="flex items-center justify-between mb-3">
           <p className="text-base font-bold text-text-primary">Recent payments</p>
@@ -257,7 +257,7 @@ export function OverviewView({
             <>{recent.slice(0, 4).map(p => <PaymentRow key={p.id} payment={p} onClick={onPayment} />)}</>
           )}
         </div>
-      </FadeUp>
+      </div>
     </div>
   )
 }
