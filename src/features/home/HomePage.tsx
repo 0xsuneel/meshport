@@ -455,21 +455,21 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 10, width: isDesktop ? '100%' : '95%',
+      display: 'flex', alignItems: 'center', gap: 9.5, width: isDesktop ? '100%' : '95%',
       // Mobile: pull up into the column's 18px gap so it sits 10px under
       // the QR's Download · Request · Share row.
       margin: isDesktop ? '10px auto 0' : '-8px auto 0', boxSizing: 'border-box',
-      background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16,
-      padding: '12px 14px', boxShadow: isDesktop ? 'var(--shadow-1)' : undefined,
+      background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 15,
+      padding: '11.5px 13.5px', boxShadow: isDesktop ? 'var(--shadow-1)' : undefined,
     }}>
       <div style={{
-        width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+        width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
         background: 'var(--bg-accent, rgba(59,130,246,0.12))',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <BiometricIcon size={18} style={{ color: 'var(--brand-text)' }} />
+        <BiometricIcon size={17} style={{ color: 'var(--brand-text)' }} />
       </div>
-      <p style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', margin: 0, lineHeight: 1.35 }}>
+      <p style={{ flex: 1, minWidth: 0, fontSize: 12.35, fontWeight: 500, color: 'var(--text-primary)', margin: 0, lineHeight: 1.35 }}>
         Unlock MeshPort and approve payments faster with biometrics
       </p>
       {biometricEnabled ? (
@@ -484,8 +484,8 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
         <button
           onClick={openConfirm}
           style={{
-            flexShrink: 0, padding: '7px 14px', borderRadius: 10, border: '1px solid var(--border)',
-            background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            flexShrink: 0, padding: '6.5px 13.5px', borderRadius: 9.5, border: '1px solid var(--border)',
+            background: 'transparent', color: 'var(--text-primary)', fontSize: 12.35, fontWeight: 600, cursor: 'pointer',
           }}>
           Enable
         </button>
