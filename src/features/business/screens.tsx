@@ -138,7 +138,7 @@ function ShopQrBody({ active, storeName, outlet, handle, payTo }: { active: bool
   }
   return (
     <div className="flex flex-col items-center text-center px-5 pt-6 pb-6 gap-5">
-      <QrCard dataUrl={qr} title={storeName} subtitle={sub} />
+      <QrCard dataUrl={qr} title={storeName} subtitle={sub} caption="Scan, type the amount and pay" />
       <p className="text-xs text-text-muted max-w-[260px]">Customers scan, type the amount and pay. USDC from Arc or any CCTP chain is accepted{outlet ? ` and counted for ${outlet}` : ''}.</p>
       <div className="w-full grid grid-cols-2 gap-2">
         <GhostBtn disabled={!qr} onClick={() => void downloadQr()}><span className="inline-flex items-center gap-2"><Download className="size-4" /> Download QR</span></GhostBtn>

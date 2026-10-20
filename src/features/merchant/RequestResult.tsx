@@ -150,7 +150,7 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
           {bill && (intent.items?.length ?? 0) > 0 && (
             <div className="w-full text-left"><DetailList rows={intent.items!.map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
           )}
-          {!ended && <QrCard dataUrl={qr} paid={paid} subtitle={paid ? undefined : `Scan to pay · valid ${valid ?? 'until it expires'}`} />}
+          {!ended && <QrCard dataUrl={qr} paid={paid} title={name} subtitle={`${bill ? 'Bill' : 'Request'} ${num}${paid ? '' : ` · valid ${valid ?? 'until it expires'}`}`} caption="Scan to pay - the amount is fixed" />}
           <Live view={live} />
           {paid && (paidBy || tx) && (
             <div className="w-full text-left"><DetailList rows={[
