@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Copy, Share2, CheckCircle, ArrowLeft, Lightbulb, DollarSign, Download, ListChecks, User, Store as StoreIcon } from 'lucide-react'
+import { Copy, Share2, CheckCircle, ArrowLeft, Lightbulb, Download, ListChecks, User, Store as StoreIcon } from 'lucide-react'
 import { AnimatePresence } from 'framer-motion'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -52,11 +52,11 @@ export function ReceivePage() {
 
   // One QR for everyone (merchants too - no separate MeshPort / Merchant QR tabs).
   const merchant = useMerchant()
-  const isMerchant = merchant.isMerchant
   const [params] = useSearchParams()
-  // "Request payment" (replaces the old Collect USDC): an order-numbered
-  // request whose QR / link / share carry the order.
-  const [requesting, setRequesting] = useState(() => params.get('request') === '1' || !!params.get('customer'))
+  // My QR | Request, side by side like Business → Collect payment. Request
+  // makes an order-numbered payment request (same form and screen as Business).
+  const [tab, setTab] = useState<'qr' | 'request'>(() => params.get('request') === '1' || params.get('customer') ? 'request' : 'qr')
+  const requesting = tab === 'request'
   // Business accounts pick which QR to show, like Pay's token picker:
   // Personal first (a plain payment to the account), then each store's Shop
   // QR (main store first), so each store's payments land in it.
@@ -230,19 +230,6 @@ export function ReceivePage() {
         )}
       </div>
 
-      {/* Request payment - an order-numbered request (replaces Collect USDC).
-          Orders are in USDC, so it shows on USDC only. */}
-      <button
-        onClick={() => setRequesting(true)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          background: 'transparent', border: '1px solid var(--border)', borderRadius: 10,
-          padding: '8px 14px', cursor: 'pointer', color: 'var(--text-primary)',
-        }}>
-        <DollarSign size={14} />
-        <span style={{ fontSize: 13, fontWeight: 600 }}>Request payment</span>
-      </button>
-
       {/* Divider + Download/Share row - same layout as Home's MyQrCard */}
       <div style={{ width: '100%', height: 1, background: 'var(--border)', margin: '6px 0 2px' }} />
       <div style={{ display: 'flex', width: '100%', alignItems: 'stretch' }}>
@@ -335,13 +322,34 @@ export function ReceivePage() {
         </button>
       </div>
 
-      {isDesktop ? (
+      {/* My QR | Request - the same switch as Business → Collect payment. */}
+      <div className="px-4 pb-3 flex-shrink-0" style={isDesktop ? { padding: '0 24px 4px', maxWidth: 520 } : undefined}>
+        <div className="flex p-1 rounded-2xl" role="tablist" aria-label="How to receive" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+          {([['qr', 'My QR'], ['request', 'Request']] as const).map(([id, label]) => (
+            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+              className={`flex-1 rounded-xl text-[14px] font-semibold transition-colors ${tab === id ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted'}`}
+              style={{ height: 36 }}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {requesting ? (
+        // The request fills the page like Business's Collect payment (its own
+        // keypad and button at the bottom); a centred card on desktop.
+        <div className="flex-1 min-h-0 flex flex-col" style={isDesktop ? { padding: '12px 24px 20px', alignItems: 'center' } : undefined}>
+          <div className="flex-1 min-h-0 flex flex-col w-full" style={isDesktop ? { maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 24, boxShadow: 'var(--shadow-1)', overflow: 'hidden' } : undefined}>
+            <RequestQrPanel initialCustomer={params.get('customer') ?? undefined} />
+          </div>
+        </div>
+      ) : isDesktop ? (
         // Full-bleed 2-column split (no maxWidth cap), same gap/padding
         // treatment as Swap's desktop layout. Left: QR only. Right:
         // username/address + share + tip.
         <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
           <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {requesting ? <RequestQrPanel withCustomer={isMerchant} initialCustomer={params.get('customer') ?? undefined} onClose={() => setRequesting(false)} /> : qrCardSection}
+            {qrCardSection}
           </div>
           <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
             {copyFieldsSection}
@@ -352,7 +360,7 @@ export function ReceivePage() {
       ) : (
         <div className="flex-1 overflow-y-auto">
           <div className="px-4 space-y-4 pb-8">
-            {requesting ? <RequestQrPanel withCustomer={isMerchant} initialCustomer={params.get('customer') ?? undefined} onClose={() => setRequesting(false)} /> : qrCardSection}
+            {qrCardSection}
             {copyFieldsSection}
             {shareButtonSection}
             {tipSection}
