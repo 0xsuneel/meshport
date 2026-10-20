@@ -43,7 +43,7 @@ import { UserPicker, exactPick, pickerProblem, type PickedUser } from '@/compone
 import { useChatCardSender } from '@/hooks/useChatCardSender'
 import type { DbUser } from '@/lib/supabase'
 import {
-  BusinessScreen, QrCard, Field, TextInput, ChipSelect,
+  BusinessScreen, QrCard, QrInfoBox, Field, TextInput, ChipSelect,
   RequestRow, InsightsChart, RankList, ProfileStatusCard, DetailList, PrimaryBtn, GhostBtn, Skeleton,
   QrSticker, HourChart, StatTriple, StatementView, PrintableStatement, ReceiptCard, HelpView,
   type RequestStatus, type StatusCardTone, type StatementRange,
@@ -124,6 +124,7 @@ function ShopQrBody({ active, storeName, outlet, handle, payTo }: { active: bool
   const sub = outlet ? `${outlet} · ${handle}` : handle
   const from = shopFrom(storeName, outlet)
   const toast = useUIStore(s => s.showToastMessage)
+  const { copy, copied } = useShare()
   // Download / Share QR - the same as Home's and Receive's QR card.
   // Saves the QR card (the same card as on screen, light), not the bare code.
   const qrFile = async () => qr ? qrCardFile({ data: url, title: storeName, subtitle: sub, tag: 'USDC · any network', caption: 'Scan, type the amount and pay' },
@@ -143,13 +144,17 @@ function ShopQrBody({ active, storeName, outlet, handle, payTo }: { active: bool
   }
   return (
     <div className="flex flex-col items-center text-center px-5 pt-6 pb-6 gap-5">
-      <QrCard dataUrl={qr} title={storeName} subtitle={sub} caption="Scan, type the amount and pay" />
-      <p className="text-xs text-text-muted max-w-[260px]">Customers scan, type the amount and pay. USDC from Arc or any CCTP chain is accepted{outlet ? ` and counted for ${outlet}` : ''}.</p>
+      {/* The store and its pay link over the QR (tap the link to copy), like
+          Receive's QR - in place of the name lines and the link box below. */}
+      <QrCard dataUrl={qr} caption="Scan, type the amount and pay"
+        top={<div className="w-full flex gap-2">
+          <QrInfoBox label="Store" value={outlet || storeName} mono={false} />
+          <QrInfoBox label="Pay link" value={copied ? 'Copied' : 'Tap to copy'} mono={false} onCopy={() => void copy(url)} copied={copied} />
+        </div>} />
       <div className="w-full grid grid-cols-2 gap-2">
         <GhostBtn disabled={!qr} onClick={() => void downloadQr()}><span className="inline-flex items-center gap-2"><Download className="size-4" /> Download QR</span></GhostBtn>
         <GhostBtn disabled={!qr} onClick={() => void shareQr()}><span className="inline-flex items-center gap-2"><Share2 className="size-4" /> Share QR</span></GhostBtn>
       </div>
-      <div className="w-full"><LinkShare url={url} text={`Pay ${from} on MeshPort`} /></div>
       <GhostBtn disabled={!qr} onClick={() => sticker.print(<QrSticker dataUrl={qr} storeName={outlet ? `${storeName} · ${outlet}` : storeName} handle={handle} />)}>
         <span className="inline-flex items-center gap-2"><Printer className="size-4" /> Print counter sticker</span>
       </GhostBtn>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Copy, Share2, CheckCircle, ArrowLeft, Download, ListChecks } from 'lucide-react'
+import { Share2, ArrowLeft, Download, ListChecks } from 'lucide-react'
 import { StorePicker, type PickerStore } from '@/features/merchant/StorePicker'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
@@ -8,12 +8,11 @@ import { arcAddressUri } from '@/lib/merchantQr'
 import { personalPayLink, shopPayLink } from '@/lib/payLinks'
 import { shopFrom } from '@/lib/orderLabels'
 import { RequestQrPanel } from './RequestQrPanel'
-import { LinkShare } from '@/features/merchant/RequestResult'
 import { useAuthStore, useUIStore } from '@/store'
 import { shortenAddress, copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { drawMeshportQr } from '@/lib/qrLogo'
-import { QrCard } from '@/features/business/ui/QrCard'
+import { QrCard, QrInfoBox } from '@/features/business/ui/QrCard'
 import { qrCardFile } from '@/lib/qrCardImage'
 
 const APP_URL = 'https://meshport.xyz'
@@ -161,22 +160,19 @@ export function ReceivePage() {
     }
   }
 
-  // Personal QR: username and address side by side over the QR, tap to copy
-  // (in place of the name, and of the copy rows that sat under the page).
+  // Over the QR, side by side, in place of the name (and of the copy rows /
+  // link box that sat under the page): a personal QR's username and address,
+  // a store's QR the store and its pay link - tap to copy.
   const copyBox = (label: string, value: string, full: string, key: string) => (
-    <button type="button" onClick={() => handleCopy(full, key)} aria-label={`Copy ${label.toLowerCase()}`}
-      className="flex-1 min-w-0 flex items-center gap-2 rounded-xl px-3 py-2 text-left active:scale-[0.98] transition-transform"
-      // A light brand tint (not the page colour, which looked like an empty
-      // hole on the card in dark mode).
-      style={{ background: 'color-mix(in srgb, var(--brand) 12%, var(--surface))', border: '1px solid color-mix(in srgb, var(--brand) 28%, transparent)' }}>
-      <span className="flex-1 min-w-0">
-        <span className="block text-[11px] font-semibold text-brand-text">{label}</span>
-        <span className="block text-[13px] font-semibold text-text-primary truncate" style={{ fontFamily: 'ui-monospace, monospace' }}>{value}</span>
-      </span>
-      {copied === key ? <CheckCircle className="w-4 h-4 text-success flex-shrink-0" /> : <Copy className="w-4 h-4 text-brand-text flex-shrink-0" />}
-    </button>
+    <QrInfoBox label={label} value={value} onCopy={() => handleCopy(full, key)} copied={copied === key} />
   )
-  const cardTop = !shopQr && (displayUsername || walletAddress) ? (
+  const cardTop = shopQr ? (
+    <div className="w-full flex gap-2">
+      <QrInfoBox label="Store" value={store?.name || merchant.storeName || 'Shop'} mono={false} />
+      <QrInfoBox label="Pay link" value={copied === 'link' ? 'Copied' : 'Tap to copy'} mono={false}
+        onCopy={() => handleCopy(paymentLink, 'link')} copied={copied === 'link'} />
+    </div>
+  ) : displayUsername || walletAddress ? (
     <div className="w-full flex gap-2">
       {displayUsername && copyBox('Username', `${displayUsername}.arc`, `${displayUsername}.arc`, 'username')}
       {walletAddress && copyBox('Address', `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`, walletAddress, 'address')}
@@ -239,11 +235,9 @@ export function ReceivePage() {
     </div>
   )
 
-  // A store's QR: its pay link to copy and share (as Business → Shop QR).
-  // Personal: the username and address are on the QR card itself (cardTop).
-  const copyFieldsSection = shopQr ? (
-    <LinkShare url={paymentLink} text={`Pay ${shopName} on MeshPort`} />
-  ) : null
+  // Username / address (personal) and the store's pay link are on the QR
+  // card itself (cardTop); Share QR sends the link.
+  const copyFieldsSection = null
 
   const shareButtonSection = shopQr ? null : (
     <button onClick={handleShare}
