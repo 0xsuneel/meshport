@@ -469,9 +469,8 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
       }}>
         <BiometricIcon size={16} style={{ color: 'var(--brand-text)' }} />
       </div>
-      {/* Short enough to stay on two lines down to a 320px phone. */}
       <p style={{ flex: 1, minWidth: 0, fontSize: 'clamp(10.5px, 3vw, 12px)', fontWeight: 500, color: 'var(--text-primary)', margin: 0, lineHeight: 1.3 }}>
-        Unlock MeshPort &amp; approve payments with biometrics
+        Unlock MeshPort and approve payments faster with biometrics
       </p>
       {biometricEnabled ? (
         <span style={{
