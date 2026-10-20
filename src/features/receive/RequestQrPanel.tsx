@@ -99,7 +99,7 @@ export function RequestQrPanel({ initialCustomer, initialOrder, onClose, onNewRe
     return (
       <RequestResult intent={intent} view={view} isDesktop={isDesktop} name={name} username={handle} avatar={user?.avatar}
         sub={view?.storeName && view.storeName !== view.merchantName ? view.storeName : null}
-        from={view ? shopFrom(view.merchantName, view.storeName) : name} payer="They're" validLabel={intent === initialOrder ? undefined : validLabel}
+        from={view ? shopFrom(view.merchantName, view.storeName) : name} validLabel={intent === initialOrder ? undefined : validLabel}
         sender={sender} onOpenChat={id => navigate(`/chat/${id}`)} onClose={onClose} onCancel={() => void cancel()} onNew={newRequest} newLabel="New request" />
     )
   }

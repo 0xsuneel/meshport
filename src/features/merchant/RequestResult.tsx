@@ -3,15 +3,16 @@
 // payment and Receive → Request show this same screen, so a request looks and
 // works the same for a shop and a person.
 import { useEffect, useState } from 'react'
-import { CalendarClock } from 'lucide-react'
+import { CalendarClock, Share2, MessageCircle, MessageSquare, Mail } from 'lucide-react'
 import { useUIStore } from '@/store'
 import { drawMeshportQr } from '@/lib/qrLogo'
 import { paymentLink, watchPayment, displayOrderNumber, type MerchantIntent, type PaymentView } from '@/lib/merchantPay'
 import { dueText } from '@/lib/businessBills'
+import { shareChannels } from '@/lib/shareLinks'
 import { SheetPerson } from '@/components/ui/ActionSheet'
 import { ChatSentLine } from '@/components/ui/ChatSentLine'
 import type { useChatCardSender } from '@/hooks/useChatCardSender'
-import { QrCard } from '@/features/business/ui/QrCard'
+import { QrCard, QrInfoBox } from '@/features/business/ui/QrCard'
 import { LiveStatus, type LiveStatusKind } from '@/features/business/ui/LiveStatus'
 import { ShareLink } from '@/features/business/ui/ShareLink'
 import { DetailList } from '@/features/business/ui/ProfileCards'
@@ -65,6 +66,24 @@ export function LinkShare({ url, text, subject }: { url: string; text: string
     channels={subject ? { subject, text: `${text}\n${url}` } : undefined} />
 }
 
+const CHANNEL_ICON = { whatsapp: MessageCircle, sms: MessageSquare, email: Mail } as const
+
+/** Share · WhatsApp · SMS · Email in one row - a waiting request's link
+ *  (the card's Pay link box copies it). */
+function ShareRow({ url, text, subject }: { url: string; text: string; subject: string }) {
+  const { share } = useShare()
+  const cls = 'min-h-[48px] flex flex-col items-center justify-center gap-0.5 rounded-2xl border border-border bg-surface text-[12px] font-semibold text-text-primary active:scale-[0.97] transition-transform'
+  return (
+    <div className="grid grid-cols-4 gap-2 w-full max-w-[340px]">
+      <button type="button" onClick={() => void share(text, url)} className={cls}><Share2 className="size-4 text-brand-text" />Share</button>
+      {shareChannels(subject, `${text}\n${url}`).map(c => {
+        const Icon = CHANNEL_ICON[c.id]
+        return <a key={c.id} href={c.href} target={c.id === 'whatsapp' ? '_blank' : undefined} rel="noreferrer" className={cls}><Icon className="size-4 text-brand-text" />{c.label}</a>
+      })}
+    </div>
+  )
+}
+
 /** Live status of one request (polls until it's final). */
 export function useLiveRequest(code: string | null) {
   const [view, setView] = useState<PaymentView | null>(null)
@@ -95,7 +114,7 @@ const savedStatus = (i: MerchantIntent) =>
 
 const short = (h: string) => `${h.slice(0, 6)}…${h.slice(-4)}`
 
-export function RequestResult({ intent, view, isDesktop, name, username, avatar, sub, from, payer = 'Customer', validLabel,
+export function RequestResult({ intent, view, isDesktop, name, username, avatar, sub, from, validLabel,
   sender, onOpenChat, onClose, onCancel, onNew, newLabel = 'New payment' }: {
   intent: MerchantIntent
   view: PaymentView | null
@@ -107,8 +126,6 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
   sub?: string | null
   /** Who it's from in the shared text ("Royal Salons · Cutting Edge"). */
   from: string
-  /** "Customer" / "Client"…: "<payer> not here? Send the link". */
-  payer?: string
   /** How long it was made for ("15 min"); otherwise its expiry time. */
   validLabel?: string
   /** The chat card being sent to the named customer. */
@@ -133,24 +150,38 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
   const valid = intent.expiresAt && !intent.dueDate ? (bill ? '7 days' : validLabel) : 'until paid'
   const tx = view?.payments.find(p => p.txHash)?.txHash
   const paidBy = view?.customerUsername ?? intent.customerUsername
+  const { copied, copy } = useShare()
+  // Waiting: laid out like Receive → My QR - the amount and the pay link in
+  // two boxes on the card over the QR, the share buttons in one row - so it
+  // all fits on a phone without scrolling. Paid / ended keep the big amount.
+  const open = !paid && !ended
+  const shareText = `${from}: ${bill ? `bill ${num} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}${dueShare ? ` (${dueShare.text.toLowerCase()})` : ''}. Pay in USDC:`
+  const extras = intent.note || intent.customerUsername || sender || d
   return (
     <div className="flex flex-col min-h-0 flex-1">
       <div className="px-5 flex-shrink-0" style={{ paddingTop: isDesktop ? 20 : 4, paddingBottom: 4 }}>
         <SheetPerson label={bill ? `Bill ${num}` : `Request ${num}`} name={name} username={username} avatar={avatar} onClose={isDesktop ? onClose : undefined} sub={sub} />
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto" data-no-drag>
-        <div className="flex flex-col items-center text-center px-5 pt-3 pb-4 gap-4">
-          <div>
-            <p className="display text-4xl font-bold tabular-nums text-text-primary">{money(intent.amount)}</p>
-            {intent.note && <p className="text-sm text-text-secondary mt-1">{intent.note}</p>}
-            {intent.customerUsername && <p className="text-xs text-text-muted mt-1">For {intent.customerUsername.replace(/\.arc$/i, '')}.arc</p>}
-            {sender && <ChatSentLine status={sender.status} onRetry={sender.retry} onOpen={onOpenChat} className="mt-1.5" />}
-            {d && <p className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${dueTone[d.tone]}`}><CalendarClock className="size-3.5" /> {d.text}</p>}
-          </div>
+        <div className={`flex flex-col items-center text-center px-5 ${open ? 'pt-0.5 pb-3 gap-2.5' : 'pt-3 pb-4 gap-4'}`}>
+          {(!open || extras) && (
+            <div>
+              {!open && <p className="display text-4xl font-bold tabular-nums text-text-primary">{money(intent.amount)}</p>}
+              {intent.note && <p className={`text-sm text-text-secondary ${open ? '' : 'mt-1'}`}>{intent.note}</p>}
+              {intent.customerUsername && <p className="text-xs text-text-muted mt-1">For {intent.customerUsername.replace(/\.arc$/i, '')}.arc</p>}
+              {sender && <ChatSentLine status={sender.status} onRetry={sender.retry} onOpen={onOpenChat} className="mt-1.5" />}
+              {d && <p className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${dueTone[d.tone]}`}><CalendarClock className="size-3.5" /> {d.text}</p>}
+            </div>
+          )}
           {bill && (intent.items?.length ?? 0) > 0 && (
             <div className="w-full text-left"><DetailList rows={intent.items!.map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
           )}
-          {!ended && <QrCard dataUrl={qr} paid={paid} title={name} subtitle={`${bill ? 'Bill' : 'Request'} ${num}${paid ? '' : ` · valid ${valid ?? 'until it expires'}`}`} caption="Scan to pay - the amount is fixed" />}
+          {open && <QrCard dataUrl={qr} caption={`Scan to pay · valid ${valid ?? 'until it expires'}`}
+            top={<div className="w-full flex gap-2">
+              <QrInfoBox label={bill ? 'Bill amount' : 'Amount'} value={money(intent.amount)} mono={false} />
+              <QrInfoBox label="Pay link" value={copied ? 'Copied' : 'Tap to copy'} mono={false} onCopy={() => void copy(link)} copied={copied} />
+            </div>} />}
+          {paid && <QrCard dataUrl={qr} paid title={name} subtitle={`${bill ? 'Bill' : 'Request'} ${num}`} />}
           <Live view={live} />
           {paid && (paidBy || tx) && (
             <div className="w-full text-left"><DetailList rows={[
@@ -158,13 +189,7 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
               ...(tx ? [{ label: 'Transaction', value: short(tx) }] : []),
             ]} /></div>
           )}
-          {!paid && !ended && (
-            <div className="w-full text-left">
-              <p className="text-xs text-text-muted mb-2">{payer} not here? Send the link</p>
-              <LinkShare url={link} subject={`${from}: ${bill ? 'bill' : 'payment'} ${num} for ${money(intent.amount)}`}
-                text={`${from}: ${bill ? `bill ${num} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}${dueShare ? ` (${dueShare.text.toLowerCase()})` : ''}. Pay in USDC:`} />
-            </div>
-          )}
+          {open && <ShareRow url={link} text={shareText} subject={`${from}: ${bill ? 'bill' : 'payment'} ${num} for ${money(intent.amount)}`} />}
         </div>
       </div>
       <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: 10, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 18px)' }}>
