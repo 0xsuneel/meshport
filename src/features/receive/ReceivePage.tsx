@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Copy, Share2, CheckCircle, ArrowLeft, Lightbulb, Download, ListChecks } from 'lucide-react'
+import { Copy, Share2, CheckCircle, ArrowLeft, Download, ListChecks } from 'lucide-react'
 import { StorePicker, type PickerStore } from '@/features/merchant/StorePicker'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
@@ -251,17 +251,6 @@ export function ReceivePage() {
     </button>
   )
 
-  const tipSection = (
-    <div className="p-3 bg-surface rounded-2xl border border-border flex items-start gap-2">
-      <Lightbulb className="w-4 h-4 text-text-secondary flex-shrink-0 mt-0.5" />
-      <p className="text-xs text-text-secondary flex-1">
-        {shopQr
-          ? `Customers scan, type the amount and pay${store ? ` - counted for ${store.name}` : ''}`
-          : 'Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) - it opens your payment page on Arc'}
-      </p>
-    </div>
-  )
-
   return (
     <div className={`flex flex-col h-full bg-bg overflow-hidden ${isDesktop ? '' : 'lg:max-w-[720px]'}`}>
 
@@ -308,8 +297,8 @@ export function ReceivePage() {
         </div>
       ) : isDesktop ? (
         // Full-bleed 2-column split (no maxWidth cap), same gap/padding
-        // treatment as Swap's desktop layout. Left: QR only. Right:
-        // username/address + share + tip.
+        // treatment as Swap's desktop layout. Left: the QR card. Right:
+        // the store's link / Share Payment Link.
         <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
           <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
             {qrCardSection}
@@ -317,7 +306,6 @@ export function ReceivePage() {
           <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
             {copyFieldsSection}
             {shareButtonSection}
-            {tipSection}
           </div>
         </div>
       ) : (
@@ -326,7 +314,6 @@ export function ReceivePage() {
             {qrCardSection}
             {copyFieldsSection}
             {shareButtonSection}
-            {tipSection}
           </div>
         </div>
       )}
