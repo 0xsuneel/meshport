@@ -338,7 +338,7 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
         <span role="alert" style={{ fontSize: 12, color: 'var(--text-secondary)', padding: 8, textAlign: 'center' }}>Couldn't load QR</span>
       ) : (
         <QrCard title={displayName || (username ? `${username.replace(/\.arc$/, '')}.arc` : undefined)}
-          subtitle={username ? `${username.replace(/\.arc$/, '')}.arc` : undefined} tag="Arc network"
+          subtitle={username ? `${username.replace(/\.arc$/, '')}.arc` : undefined} tag="USDC · EURC · cirBTC"
           caption={activeAmount ? `Scan to pay $${activeAmount}` : undefined}>
           <canvas ref={canvasRef} style={{ display: 'block', opacity: qrReady ? 1 : 0 }} />
         </QrCard>
