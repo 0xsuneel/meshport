@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { Copy, Share2, CheckCircle, ArrowLeft, Lightbulb, DollarSign, Download, ListChecks } from 'lucide-react'
+import { Copy, Share2, CheckCircle, ArrowLeft, Lightbulb, DollarSign, Download, ListChecks, User, Store as StoreIcon } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
+import { TokenMenu } from '@/components/ui/TokenMenu'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { listStores, type Store } from '@/lib/businessTeam'
@@ -52,27 +54,35 @@ export function ReceivePage() {
   // "Request payment" (replaces the old Collect USDC): an order-numbered
   // request whose QR / link / share carry the order.
   const [requesting, setRequesting] = useState(() => params.get('request') === '1' || !!params.get('customer'))
-  // Business accounts with stores: My QR is the shop QR of the store picked in
-  // the chips (main store first), so each store's payments land in it.
+  // Business accounts pick which QR to show, like Pay's token picker:
+  // Personal first (a plain payment to the account), then each store's Shop
+  // QR (main store first), so each store's payments land in it.
   const business = useBusinessTab()
   const [stores, setStores] = useState<Store[]>([])
-  const [storeId, setStoreId] = useState<string | null>(null)
+  const [qrPick, setQrPick] = useState<string>('personal')
+  const [qrMenu, setQrMenu] = useState(false)
   useEffect(() => {
     if (!business) return
-    listStores().then(list => {
-      const sorted = [...list].sort((a, b) => Number(b.isDefault) - Number(a.isDefault))
-      setStores(sorted)
-      setStoreId(id => id ?? sorted[0]?.id ?? null)
-    }).catch(() => {})
+    listStores().then(list => setStores([...list].sort((a, b) => Number(b.isDefault) - Number(a.isDefault)))).catch(() => {})
   }, [business])
-  const store = stores.find(s => s.id === storeId) ?? null
+  const store = stores.find(s => s.id === qrPick) ?? null
+  // No stores yet: the business itself is the one shop.
+  const shopQr = business && qrPick !== 'personal'
+  const qrOptions = business ? [
+    { id: 'personal', label: 'Personal', icon: <span className="inline-flex items-center justify-center size-[22px] rounded-full bg-brand/15 text-brand-text"><User className="size-3.5" /></span> },
+    ...(stores.length ? stores.map(st => ({ id: st.id, label: st.name, icon: <span className="inline-flex items-center justify-center size-[22px] rounded-full bg-brand/15 text-brand-text"><StoreIcon className="size-3.5" /></span> }))
+      : [{ id: 'shop', label: 'Shop QR', icon: <span className="inline-flex items-center justify-center size-[22px] rounded-full bg-brand/15 text-brand-text"><StoreIcon className="size-3.5" /></span> }]),
+  ] : []
+  const picked = qrOptions.find(o => o.id === qrPick) ?? qrOptions[0]
   if (!user) return null
 
   const displayUsername = (username || (user?.username || '')).replace(/\.arc$/, '')
 
   // Payment link - the real shareable URL
+  // A business's plain username link is its Shop QR, so the Personal QR says
+  // personal=1 (the pay page and the scanner then make a normal payment).
   const paymentLink = displayUsername
-    ? `${APP_URL}/paylink/${displayUsername}${store ? `?store=${store.id}` : ''}`
+    ? `${APP_URL}/paylink/${displayUsername}${shopQr ? (store ? `?store=${store.id}` : '') : business ? '?personal=1' : ''}`
     : walletAddress
     ? `${APP_URL}/paylink/${walletAddress}`
     : APP_URL
@@ -162,17 +172,23 @@ export function ReceivePage() {
       background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
       padding: 16, boxShadow: 'var(--shadow-1)', width: '100%', boxSizing: 'border-box',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>My QR</span>
-      </div>
-      {stores.length > 1 && (
-        <div role="tablist" aria-label="Store" className="flex gap-2 overflow-x-auto no-scrollbar w-full justify-center flex-wrap">
-          {stores.map(s => (
-            <button key={s.id} type="button" role="tab" aria-selected={s.id === storeId} onClick={() => setStoreId(s.id)}
-              className={`shrink-0 min-h-[34px] px-3.5 rounded-full text-[13px] font-semibold border transition-colors ${s.id === storeId ? 'bg-brand border-brand text-white' : 'bg-transparent border-border text-text-secondary'}`}>
-              {s.name}
-            </button>
-          ))}
+      {business && picked ? (
+        // Which QR: the same pill + floating list as Pay's token picker.
+        <div style={{ position: 'relative', zIndex: qrMenu ? 41 : undefined, minWidth: 200, maxWidth: '100%' }}>
+          <button type="button" onClick={e => { e.stopPropagation(); setQrMenu(v => !v) }} aria-expanded={qrMenu} aria-label={`QR: ${picked.label}`}
+            className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
+            style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
+            {picked.icon}
+            <span className="flex-1 min-w-0 truncate text-left text-sm font-bold text-text-primary">{picked.label}</span>
+            <svg className="w-2.5 h-2.5 flex-shrink-0" style={{ color: 'var(--brand-text)', transform: qrMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
+          </button>
+          <AnimatePresence>
+            {qrMenu && <TokenMenu ariaLabel="Choose QR" selected={picked.id} options={qrOptions} onSelect={setQrPick} onClose={() => setQrMenu(false)} />}
+          </AnimatePresence>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
+          <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>My QR</span>
         </div>
       )}
 
