@@ -6,6 +6,9 @@
 // the wallet's send with address, amount and network filled in.
 // The server (merchant-pay) confirms every payment from the chain itself.
 import { useEffect, useRef, useState } from 'react'
+import { AnimatePresence } from 'framer-motion'
+import { TokenMenu } from '@/components/ui/TokenMenu'
+import { MERCHANT_QR_CHAINS, MERCHANT_QR_EXTERNAL, merchantQrChain } from '@/lib/merchantQr'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -59,7 +62,19 @@ export function MerchantPayPage() {
   const [params] = useSearchParams()
   // Merchant QR: ?chain=<network> - a wallet pays there (default Arc).
   const wantChain = params.get('chain')
-  const payChain = (wantChain && view?.chains?.find(c => c.id === wantChain)) || ARC_PAY_CHAIN
+  // Opened in a wallet app (not signed in to MeshPort): the payer picks the
+  // network - Arc, or any network MeshPort watches for payments (a business
+  // settles those to Arc; a person brings them to Arc from the Multichain Hub).
+  const [netId, setNetId] = useState('Arc_Testnet')
+  const [netMenu, setNetMenu] = useState(false)
+  const net = merchantQrChain(netId)
+  const netOptions = [MERCHANT_QR_CHAINS[0], ...MERCHANT_QR_EXTERNAL]
+    .filter(c => c.native || view?.chains?.some(v => v.id === c.id))
+    .map(c => ({ id: c.id, label: c.label,
+      icon: <img src={c.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} /> }))
+  const pickedChain = wantChain || netId
+  const payChain = (pickedChain && view?.chains?.find(c => c.id === pickedChain)) || ARC_PAY_CHAIN
+  const onArc = payChain.id === ARC_PAY_CHAIN.id
   // A QR made for one network (Sepolia, Base…) is paid on that network only:
   // no "Pay with MeshPort" (Arc) and no jump to the Arc pay screen. The plain
   // order QR / link is the one that pays with MeshPort.
@@ -164,10 +179,32 @@ export function MerchantPayPage() {
         {/* Pay */}
         {!closed && !isMerchantSelf && (
           <>
-            {(!isAuthenticated || chainOnly) && remaining > 0 && (
-              <WalletPayPanel to={view.merchantWallet} amount={remaining} code={view.code} orderNumber={view.orderNumber} chain={payChain} onPaid={() => setWalletPaid(true)} />
+            {!isAuthenticated && !chainOnly && remaining > 0 && !walletPaid && netOptions.length > 1 && (
+              // Which network to pay on - the same pill + list as Pay's token picker.
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold text-text-secondary">Pay on network</p>
+                <div style={{ position: 'relative', zIndex: netMenu ? 41 : undefined }}>
+                  <button type="button" onClick={e => { e.stopPropagation(); setNetMenu(v => !v) }} aria-expanded={netMenu} aria-label={`Network: ${net.label}`}
+                    className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
+                    style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
+                    <img src={net.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} />
+                    <span className="flex-1 min-w-0 truncate text-left text-sm font-bold text-text-primary">{net.label}</span>
+                    <svg className="w-2.5 h-2.5 flex-shrink-0" style={{ color: 'var(--brand-text)', transform: netMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
+                  </button>
+                  <AnimatePresence>
+                    {netMenu && <TokenMenu ariaLabel="Choose network" maxHeight={320} selected={netId} options={netOptions} onSelect={setNetId} onClose={() => setNetMenu(false)} />}
+                  </AnimatePresence>
+                </div>
+                <p className="text-[11.5px] leading-snug text-text-muted">
+                  Send only <b className="text-text-primary">USDC on {net.label}</b> - other tokens or networks won't reach {view.merchantName ?? 'them'}.
+                </p>
+              </div>
             )}
-            {!walletPaid && !chainOnly && <button onClick={payWithMeshPort} disabled={isAuthenticated && arcBalance < remaining}
+            {(!isAuthenticated || chainOnly) && remaining > 0 && (
+              <WalletPayPanel key={payChain.id} to={view.merchantWallet} amount={remaining} code={view.code} orderNumber={view.orderNumber} chain={payChain} onPaid={() => setWalletPaid(true)} />
+            )}
+            {/* MeshPort pays on Arc only. */}
+            {!walletPaid && !chainOnly && onArc && <button onClick={payWithMeshPort} disabled={isAuthenticated && arcBalance < remaining}
               className="w-full bg-surface border border-border rounded-3xl p-4 flex items-center gap-3 text-left disabled:opacity-60">
               <img src={logo('Arc_Testnet')} alt="" className="w-10 h-10 rounded-full" />
               <div className="flex-1 min-w-0">

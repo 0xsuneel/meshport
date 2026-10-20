@@ -322,9 +322,9 @@ type RecordOpts = { minedAt?: number }
 async function recordPayment(req: Request | null, i: any, chainId: string, txHash: string, who: Awaited<ReturnType<typeof caller>>, order: OrderCheck, matchedBy: MatchedBy = 'customer', opts: RecordOpts = {}) {
   const chain = PAY_CHAINS[chainId]
   if (!chain) return { error: "This network isn't supported for this payment.", status: 400 }
-  // Personal requests (non-merchant users) are paid on Arc only - there's no
-  // merchant auto-collect to move funds from other chains.
-  if (i.personal && chainId !== 'Arc_Testnet') return { error: 'This request can only be paid on Arc.', status: 400 }
+  // Personal requests can be paid on another chain too: the USDC lands in the
+  // requester's own wallet there (same address), shows in their Multichain
+  // Hub, and they bring it to Arc - the order is paid on arrival either way.
   if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return { error: 'Invalid transaction', status: 400 }
   const tx = txHash.toLowerCase()
 
@@ -664,7 +664,6 @@ async function watchDeposits() {
         // within a day or were cancelled.
         const mine = intents.filter((i: any) => {
           if (String(i.merchant_wallet).toLowerCase() !== to) return false
-          if (i.personal && !isArc) return false
           if (new Date(i.created_at).getTime() > at + 60_000) return false
           return true
         })
