@@ -1,17 +1,20 @@
 // Business → staff mode: what a cashier or manager sees on their own phone.
 // They take payments that go straight to the business they work for
 // (staff_create_request) and see its payments (staff_payments: cashiers
-// today only). No balances, refunds, settlements or cash out - those stay
-// with the owner. Pending invites are accepted here.
+// today only). Managers also get the store's Requests (staff_intents) and a
+// Statement (with staff_refunds). No balances, refunds, settlements or cash
+// out - those stay with the owner. Pending invites are accepted here.
 import { useEffect, useMemo, useState } from 'react'
 import { useUIStore } from '@/store'
 import { chainLogoSrc } from '@/lib/chainLogos'
-import { myMemberships, acceptInvite, staffCreateRequest, staffPayments, type Membership } from '@/lib/businessTeam'
-import { displayOrderNumber, type MerchantPayment } from '@/lib/merchantPay'
-import { RequestMaker, ShopQrScreen, ReceiveScreen } from './screens'
+import { myMemberships, acceptInvite, staffCreateRequest, staffPayments, staffRefunds, type Membership } from '@/lib/businessTeam'
+import type { MerchantRefund } from '@/lib/merchantRefunds'
+import { ChevronRight, ClipboardList, FileText } from 'lucide-react'
+import { displayOrderNumber, myAuthUid, type MerchantPayment } from '@/lib/merchantPay'
+import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, StatementBody } from './screens'
 import { setDueDate } from '@/lib/businessBills'
 import { logBusiness } from '@/lib/businessActivity'
-import { StaffBanner, StaffModeHeader, PaymentsView, OverviewView, Skeleton, type Payment } from './ui'
+import { StaffBanner, StaffModeHeader, PaymentsView, OverviewView, Skeleton, BusinessScreen, type Payment } from './ui'
 import { chainLabel } from './settlement'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -22,7 +25,10 @@ export function StaffModePage() {
   const [list, setList] = useState<Membership[] | null>(null)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [raw, setRaw] = useState<MerchantPayment[]>([])
-  const [screen, setScreen] = useState<'qr' | 'receive' | 'payments' | null>(null)
+  const [screen, setScreen] = useState<'qr' | 'receive' | 'payments' | 'requests' | 'statement' | null>(null)
+  const [me, setMe] = useState<string | null>(null)
+  useEffect(() => { void myAuthUid().then(setMe) }, [])
+  const [refunds, setRefunds] = useState<MerchantRefund[]>([])
 
   const load = () => myMemberships().then(setList).catch(() => setList([]))
   useEffect(() => { void load() }, [])
@@ -61,6 +67,15 @@ export function StaffModePage() {
 
   const manager = active.role === 'manager'
   const back = () => setScreen(null)
+  const openStatement = () => { setScreen('statement'); void staffRefunds(active.ownerAuthUid).then(setRefunds).catch(() => setRefunds([])) }
+  const where = active.storeName ? `${active.ownerName} · ${active.storeName}` : active.ownerName
+  const row = (icon: React.ReactNode, label: string, hint: string, onClick: () => void) => (
+    <button type="button" onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3.5 text-left active:bg-card">
+      <span className="size-9 rounded-xl flex items-center justify-center bg-brand/10 text-brand-text shrink-0">{icon}</span>
+      <span className="flex-1 min-w-0"><span className="block text-sm font-semibold text-text-primary">{label}</span><span className="block text-xs text-text-muted truncate">{hint}</span></span>
+      <ChevronRight className="size-4 text-text-muted shrink-0" />
+    </button>
+  )
   return (
     <div className="flex flex-col h-full min-h-0 bg-bg">
       <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
@@ -74,7 +89,25 @@ export function StaffModePage() {
           onToSettle={() => toast('Settlements are done by the owner', 'info')}
           onRefunded={() => toast('Refunds are done by the owner', 'info')}
           onSeeAllPayments={() => setScreen('payments')} onPayment={() => {}} />
+        {/* Managers: the store's requests and its statement. */}
+        {manager && (
+          <div className="mx-5 mt-4 rounded-2xl bg-surface border border-border overflow-hidden divide-y divide-border">
+            {row(<ClipboardList className="size-[18px]" />, 'Requests', 'Requests and bills · share, cancel your own', () => setScreen('requests'))}
+            {row(<FileText className="size-[18px]" />, 'Statement', 'CSV or PDF of the store\'s payments', openStatement)}
+          </div>
+        )}
       </div>
+      {manager && (
+        <>
+          <BusinessScreen open={screen === 'requests'} title="Requests" onBack={back}>
+            <RequestsList active={screen === 'requests'} storeName={where} staff={{ owner: active.ownerAuthUid, me }} />
+          </BusinessScreen>
+          <BusinessScreen open={screen === 'statement'} title="Statement" onBack={back}>
+            <StatementBody storeName={where} handle={`${active.ownerUsername}.arc`} payments={raw} refunds={refunds}
+              settled={[]} waiting={0} loading={false} staff />
+          </BusinessScreen>
+        </>
+      )}
       <RequestMaker.Provider value={{
         create: async p => {
           const i = await staffCreateRequest(active.ownerAuthUid, { ...p, storeId: p.storeId ?? active.storeId })
