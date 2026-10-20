@@ -163,9 +163,16 @@ function ShopQrBody({ active, storeName, outlet, handle, payTo }: { active: bool
   )
 }
 
-export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo }: { open: boolean; onBack: () => void; storeName: string; outlet?: string | null; handle: string; payTo?: string }) {
+/** Several stores: the store chip in a screen's title row - tap to switch. */
+export type ScreenStorePick = { stores: PickerStore[]; value: string; onChange: (id: string) => void; onManage?: () => void }
+const storeChip = (p?: ScreenStorePick) => p && p.stores.length > 1
+  ? <StorePicker variant="pill" stores={p.stores} value={p.value} onChange={p.onChange} onManage={p.onManage}
+      hint="Sales, payments, requests and the QR show this store only" />
+  : undefined
+
+export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo, storePick }: { open: boolean; onBack: () => void; storeName: string; outlet?: string | null; handle: string; payTo?: string; storePick?: ScreenStorePick }) {
   return (
-    <BusinessScreen open={open} title="Shop QR" onBack={onBack}>
+    <BusinessScreen open={open} title="Shop QR" onBack={onBack} action={storeChip(storePick)}>
       <ShopQrBody active={open} storeName={storeName} outlet={outlet} handle={handle} payTo={payTo} />
     </BusinessScreen>
   )
@@ -183,11 +190,14 @@ const cleanUsername = (v: string) => v.trim().replace(/^@/, '').replace(/\.arc$/
  *  composer (BillComposer), so they look and work the same; the order they
  *  make then shows here as a counter QR and a link, live until it's paid.
  *  Without `shopQr` (staff mode) only Request (and Bill for managers). */
-export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
+export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, storePick }: {
   open: boolean; onBack: () => void; storeName: string
   shopQr?: { outlet?: string | null; handle: string }
   /** An order was created or cancelled here (refreshes open-order counts). */
   onChanged?: () => void
+  /** Several stores: the store chip in the title row (phone), in place of
+   *  the "Paid to" block - the card / form already says who's paid. */
+  storePick?: ScreenStorePick
 }) {
   const t = useBizTerms()
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -269,11 +279,14 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   // The store's handle beside its name (not twice when the name is the handle).
   const handle = shopQr && cleanUsername(shopQr.handle) !== cleanUsername(storeName) ? shopQr.handle : null
   // The sheet's top: the store (like the person in a chat sheet) + the tabs.
+  // Phone with several stores: the store is the chip in the title row, so
+  // just the tabs here.
+  const chip = isDesktop ? undefined : storeChip(storePick)
   const head = (compact: boolean) => (
     <div>
-      <SheetPerson label={isDesktop ? 'Collect payment' : 'Paid to'} name={storeName} username={handle} compact={compact} onClose={isDesktop ? onBack : undefined} sub={outlet} />
+      {!chip && <SheetPerson label={isDesktop ? 'Collect payment' : 'Paid to'} name={storeName} username={handle} compact={compact} onClose={isDesktop ? onBack : undefined} sub={outlet} />}
       {!compact && tabs.length > 1 && (
-        <div className="flex p-1 rounded-2xl mt-3" role="tablist" aria-label="How to collect" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+        <div className={`flex p-1 rounded-2xl ${chip ? '' : 'mt-3'}`} role="tablist" aria-label="How to collect" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
           {tabs.map(x => (
             <button key={x.id} type="button" role="tab" aria-selected={tab === x.id} onClick={() => setTab(x.id)}
               className={`flex-1 rounded-xl text-[14px] font-semibold transition-colors ${tab === x.id ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted'}`}
@@ -338,7 +351,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   // Desktop: the centred dialog, like the chat's Request / Bill. Phone: a page
   // that slides in from the right, like every other Business screen.
   if (isDesktop) return <ActionSheet open={open} onClose={onBack} isDesktop id="biz-collect" fixed>{body}</ActionSheet>
-  return <BusinessScreen open={open} title="Collect payment" onBack={onBack} fill>{body}</BusinessScreen>
+  return <BusinessScreen open={open} title="Collect payment" onBack={onBack} fill action={chip}>{body}</BusinessScreen>
 }
 
 // ── Requests ─────────────────────────────────────────────────────────────

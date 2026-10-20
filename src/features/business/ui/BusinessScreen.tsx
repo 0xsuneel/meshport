@@ -23,6 +23,8 @@ export interface BusinessScreenProps {
   /** The body is a flex column that fills the screen and scrolls itself
    *  (Collect payment's forms, which pin their own buttons). */
   fill?: boolean
+  /** Right of the title (e.g. the store chip on Collect payment / Shop QR). */
+  action?: ReactNode
 }
 
 /** Where a screen sits in the Business screen stack: `level` 0 is opened from
@@ -38,7 +40,7 @@ export const useScreenLevel = () => React.useContext(ScreenLevel)
 // 300ms in, 250ms back, both on the same ease-out. Desktop: a quick fade in
 // the content area, like desktop pages (no sliding over the sidebar).
 
-export function BusinessScreen({ open, title, onBack, children, footer, step = '', fill = false }: BusinessScreenProps) {
+export function BusinessScreen({ open, title, onBack, children, footer, step = '', fill = false, action }: BusinessScreenProps) {
   const { level, covered } = useScreenLevel()
   // Phone / browser Back = the header's back arrow (a step inside first).
   useBackLayer(open, onBack)
@@ -54,6 +56,7 @@ export function BusinessScreen({ open, title, onBack, children, footer, step = '
             <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
           <h2 className="header-title flex-1 truncate">{title}</h2>
+          {action}
         </header>
 
         {/* Scrollable body */}
