@@ -145,7 +145,7 @@ function effectiveStatus(i: any): string {
 }
 
 // How an order is named (same as the app's src/lib/orderLabels.ts):
-// "Bill #42" / "Request #43" / "Requested Payment #44".
+// "Bill #42" / "Request #43" / "Requested Payment #44" / "Payment #45" (Shop QR).
 // Stored numbers count from 100001; they're shown as #N from #1.
 function orderDisplay(n: string | null | undefined): string {
   const m = /^ORD-(\d+)$/i.exec(n || '')
@@ -154,7 +154,7 @@ function orderDisplay(n: string | null | undefined): string {
 }
 function orderName(i: any): string {
   const no = orderDisplay(i.order_number)
-  return i.kind === 'invoice' ? `Bill ${no}` : i.personal === false ? `Requested Payment ${no}` : `Request ${no}`
+  return i.kind === 'invoice' ? `Bill ${no}` : i.via === 'shop_qr' ? `Payment ${no}` : i.personal === false ? `Requested Payment ${no}` : `Request ${no}`
 }
 
 function publicView(i: any, payments: any[]) {
@@ -164,6 +164,7 @@ function publicView(i: any, payments: any[]) {
     amount: Number(i.requested_amount), received: Number(i.received_amount), overpaid: Number(i.overpaid_amount ?? 0), currency: i.currency,
     note: i.note, customerUsername: i.customer_username, status: effectiveStatus(i),
     kind: i.kind ?? 'request', personal: typeof i.personal === 'boolean' ? i.personal : null, items: Array.isArray(i.items) ? i.items : null,
+    via: i.via ?? null,
     taxPercent: Number(i.tax_percent ?? 0),
     createdAt: i.created_at, expiresAt: i.expires_at, paidAt: i.paid_at, dueDate: i.due_date ?? null,
     completedByMerchant: !!i.completed_by_merchant, completedNote: i.completed_note ?? null,

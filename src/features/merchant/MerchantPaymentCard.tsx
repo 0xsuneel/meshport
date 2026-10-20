@@ -221,7 +221,7 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
   const paid = v.status === 'paid'
   const closed = ['expired', 'cancelled', 'failed'].includes(v.status)
   const orderKind = orderKindOf(v)
-  const kind = orderKind === 'bill' ? 'Bill' : orderKind === 'merchant_request' ? 'Requested Payment' : 'Request'
+  const kind = orderKind === 'bill' ? 'Bill' : orderKind === 'merchant_request' ? 'Requested Payment' : orderKind === 'shop' ? 'Payment' : 'Request'
   const number = orderLabel(v)
   const due = Math.max(0, v.amount - v.received)
   const payment = v.payments.find(p => p.txHash) ?? null

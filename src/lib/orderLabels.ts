@@ -21,10 +21,13 @@ export function shortOrderNumber(n: string | null | undefined): string {
 }
 
 /** bill: a merchant's itemised bill · request: a normal user's payment
- *  request · merchant_request: a merchant's request from Receive. */
-export type OrderKind = 'bill' | 'request' | 'merchant_request'
-export function orderKindOf(v: { kind?: string | null; personal?: boolean | null }): OrderKind {
+ *  request · merchant_request: a merchant's request from Receive · shop: a
+ *  payment through a business's Shop QR (the customer typed the amount -
+ *  nobody requested it). */
+export type OrderKind = 'bill' | 'request' | 'merchant_request' | 'shop'
+export function orderKindOf(v: { kind?: string | null; personal?: boolean | null; via?: string | null }): OrderKind {
   if (v.kind === 'invoice') return 'bill'
+  if (v.via === 'shop_qr') return 'shop'
   return v.personal === false ? 'merchant_request' : 'request'
 }
 /**
@@ -33,6 +36,7 @@ export function orderKindOf(v: { kind?: string | null; personal?: boolean | null
  * "Requested Payment Paid ORD-00044".
  * Paid, receiver's side (`received`): "Bill ORD-00042 Received" /
  * "Request ORD-00043 Amount Received" / "Requested ORD-00044 Payment Received".
+ * Shop QR: "Payment #45" / "Payment Paid #45" / "Payment #45 Received".
  * `short` (history rows, card bands): "#42" numbers - "Bill #42", "Requested #44",
  * "Request Paid · #43", "Request #43 Received".
  */
@@ -40,11 +44,13 @@ export function orderTitle(kind: OrderKind, number: string | null | undefined, o
   const no = opts.short ? shortOrderNumber(number) : displayOrderNumber(number)
   if (opts.received) {
     if (kind === 'bill') return `Bill ${no} Received`
+    if (kind === 'shop') return `Payment ${no} Received`
     if (kind === 'merchant_request') return opts.short ? `Requested ${no} Received` : `Requested ${no} Payment Received`
     return opts.short ? `Request ${no} Received` : `Request ${no} Amount Received`
   }
   const sep = opts.short ? ' · ' : ' '
   if (kind === 'bill') return opts.paid ? `Paid Bill ${no}` : `Bill ${no}`
+  if (kind === 'shop') return opts.paid ? `Payment Paid${sep}${no}` : `Payment ${no}`
   if (kind === 'merchant_request') return opts.paid ? `Requested Payment Paid${sep}${no}` : opts.short ? `Requested ${no}` : `Requested Payment ${no}`
   return opts.paid ? (opts.short ? `Request Paid · ${no}` : `Request Amount Paid ${no}`) : `Request ${no}`
 }
@@ -52,15 +58,15 @@ export function orderTitle(kind: OrderKind, number: string | null | undefined, o
 // A payment that settles an order ends with a tag naming it, e.g.
 // "Sent 3 USDC to bob.arc · Bill #ORD-100042". Older payments say "Order"
 // (or "Bill #ABC123" before order numbers existed).
-export const PAYMENT_ORDER_TAG = / · (Bill|Request|Requested|Order) #([A-Z0-9-]{6,20})$/
+export const PAYMENT_ORDER_TAG = / · (Bill|Request|Requested|Payment|Order) #([A-Z0-9-]{6,20})$/
 export function paymentOrderTag(kind: OrderKind, number: string): string {
-  return ` · ${kind === 'bill' ? 'Bill' : kind === 'merchant_request' ? 'Requested' : 'Request'} #${number}`
+  return ` · ${kind === 'bill' ? 'Bill' : kind === 'merchant_request' ? 'Requested' : kind === 'shop' ? 'Payment' : 'Request'} #${number}`
 }
 /** The order a payment message settles: its stored number and kind (null kind = older "Order" tag). */
 export function parsePaymentOrderTag(text: string): { number: string; kind: OrderKind | null; index: number } | null {
   const m = PAYMENT_ORDER_TAG.exec(text)
   if (!m) return null
-  const kind: OrderKind | null = m[1] === 'Request' ? 'request' : m[1] === 'Requested' ? 'merchant_request' : m[1] === 'Bill' ? 'bill' : null
+  const kind: OrderKind | null = m[1] === 'Request' ? 'request' : m[1] === 'Requested' ? 'merchant_request' : m[1] === 'Bill' ? 'bill' : m[1] === 'Payment' ? 'shop' : null
   return { number: m[2], kind, index: m.index }
 }
 /** Title for a paid order from a payment tag; an older untyped tag reads "Paid ORD-00042". */

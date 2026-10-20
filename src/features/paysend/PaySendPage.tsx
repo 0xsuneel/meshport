@@ -931,7 +931,7 @@ export function PaySendPage() {
       const noteFailed = (err: unknown, txHash?: string) => void recordFailure({
         feature: 'pay', walletAddress: useAuthStore.getState().walletAddress, amount: numAmount, token,
         counterparty: toAddr, txHash, failure: classifyFailure(err, { reverted: !!txHash }),
-        metadata: { toUsername: recipient?.isUsername ? recipient.display : undefined, ...(merchantPayCode ? { merchantOrder: merchantOrderNumber ?? undefined, merchantOrderKind: merchantOrderKind === 'bill' ? 'invoice' : 'request', merchantPersonal: merchantOrderKind === 'bill' ? undefined : merchantOrderKind === 'request' } : {}) },
+        metadata: { toUsername: recipient?.isUsername ? recipient.display : undefined, ...(merchantPayCode ? { merchantOrder: merchantOrderNumber ?? undefined, merchantOrderKind: merchantOrderKind === 'bill' ? 'invoice' : 'request', merchantPersonal: merchantOrderKind === 'bill' ? undefined : merchantOrderKind === 'request', merchantVia: merchantOrderKind === 'shop' ? 'shop_qr' : undefined } : {}) },
       })
       const result = await (token === 'EURC'
         ? sendEURC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
@@ -1142,7 +1142,11 @@ export function PaySendPage() {
   }
 
   const finishDone = () => {
-    if (merchantPayCode) { navigate(`/paylink/r/${merchantPayCode}?stay=1`, { replace: true }); return }
+    // An order paid with MeshPort (a Shop QR, a bill or request link): this
+    // success screen is the receipt - Done goes Home like any payment. The
+    // order page's "Payment received" is for people paying from another
+    // wallet, never a second success screen here.
+    if (merchantPayCode) { navigate('/', { replace: true }); return }
     if (returnTo === 'contacts') navigate('/contacts', { replace: true })
     else if (returnTo === 'chat' && returnConvId) navigate(`/chat/${returnConvId}`, { replace: true })
     else if (isDesktop) {
