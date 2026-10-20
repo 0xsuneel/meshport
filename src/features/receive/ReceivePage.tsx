@@ -42,6 +42,10 @@ function CopyRow({ label, value, onCopy, copied }: CopyRowProps) {
 
 export function ReceivePage() {
   const isDesktop  = useMediaQuery('(min-width: 980px)')
+  // Short phones: a smaller QR so the card and its buttons fit on one screen.
+  const shortScreen = useMediaQuery('(max-height: 700px)')
+  const tinyScreen = useMediaQuery('(max-height: 620px)')
+  const qrSize = tinyScreen ? 176 : shortScreen ? 196 : 232
   const navigate   = useNavigate()
   const user = useAuthStore(s => s.user)
   const username = useAuthStore(s => s.username)
@@ -104,12 +108,12 @@ export function ReceivePage() {
     setQrReady(false)
     setQrError(false)
 
-    drawMeshportQr(canvasRef.current, qrData, 232)
+    drawMeshportQr(canvasRef.current, qrData, qrSize)
       .then(() => setQrReady(true))
       .catch(() => setQrError(true))
     // Redraw when My QR comes back into view (after Request payment) - the
     // canvas is a fresh, empty element then.
-  }, [qrData, requesting])
+  }, [qrData, requesting, qrSize])
 
   const handleCopy = async (value: string, key: string) => {
     const ok = await copyToClipboard(value)
@@ -143,7 +147,8 @@ export function ReceivePage() {
   // (qrCardImage, its light version).
   const card = {
     title: shopQr ? (merchant.storeName || user.displayName || `${displayUsername}.arc`) : (user.displayName || (displayUsername ? `${displayUsername}.arc` : undefined)),
-    subtitle: shopQr ? (store?.name ? `${store.name} · ${displayUsername}.arc` : `${displayUsername}.arc`) : displayUsername ? `${displayUsername}.arc` : shortenAddress(walletAddress ?? ''),
+    subtitle: shopQr ? (store?.name ? `${store.name} · ${displayUsername}.arc` : `${displayUsername}.arc`)
+      : `${business ? 'Personal · ' : ''}${displayUsername ? `${displayUsername}.arc` : shortenAddress(walletAddress ?? '')}`,
     tag: shopQr ? 'USDC · any network' : 'USDC · EURC · cirBTC',
     caption: shopQr ? 'Scan, type the amount and pay' : undefined,
   }
@@ -188,11 +193,6 @@ export function ReceivePage() {
   // share) never duplicate this JSX.
   const qrCardSection = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: '100%', boxSizing: 'border-box' }}>
-      {business && qrOptions.length > 1 && (
-        <div style={{ width: '100%', maxWidth: 340 }}>
-          <StorePicker stores={qrOptions} value={qrPick} onChange={setQrPick} label="Showing QR for store" hint="Payments to this QR go to the store you pick" />
-        </div>
-      )}
 
       {/* The app's one QR style (QrCard), holding this page's own canvas - the
           one Download / Share save. Captioned with whose QR it is. */}
@@ -204,38 +204,48 @@ export function ReceivePage() {
           <button onClick={() => { setQrError(false); setQrReady(false) }} className="text-brand text-xs underline">Retry</button>
         </div>
       ) : (
-        <QrCard title={card.title} subtitle={card.subtitle} tag={card.tag} caption={card.caption}>
+        <QrCard title={card.title} subtitle={card.subtitle} tag={card.tag} caption={card.caption} size={qrSize} compact={shortScreen}
+          // Business: switch Personal / store right here (no extra row).
+          extra={business && qrOptions.length > 1
+            ? <StorePicker variant="chip" stores={qrOptions} value={qrPick} onChange={setQrPick} hint="Payments to this QR go to the store you pick" />
+            : undefined}>
           <canvas ref={canvasRef} width={236} height={236} style={{ display: 'block', opacity: qrReady ? 1 : 0, transition: 'opacity 0.2s ease-out' }} />
         </QrCard>
       )}
 
-      {/* Download / Share - under the card, like the payment apps' */}
-      <div style={{ display: 'flex', width: '100%', maxWidth: 340, gap: 10, alignItems: 'stretch' }}>
-        <button
-          onClick={handleDownloadQr}
-          disabled={!qrReady}
-          style={{
-            flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'clamp(5px, 1.6vw, 8px)',
-            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px 6px', whiteSpace: 'nowrap',
-            color: qrReady ? 'var(--text-primary)' : 'var(--text-secondary)',
-            fontSize: 'clamp(12.5px, 3.8vw, 14px)', fontWeight: 600, cursor: qrReady ? 'pointer' : 'default',
-          }}>
-          <Download size={17} />
-          Download QR
-        </button>
-        <button
-          onClick={handleShareQr}
-          disabled={!qrReady}
-          style={{
-            flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'clamp(5px, 1.6vw, 8px)',
-            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px 6px', whiteSpace: 'nowrap',
-            color: qrReady ? 'var(--text-primary)' : 'var(--text-secondary)',
-            fontSize: 'clamp(12.5px, 3.8vw, 14px)', fontWeight: 600, cursor: qrReady ? 'pointer' : 'default',
-          }}>
-          <Share2 size={17} />
-          Share QR
-        </button>
+      {/* Download · Share · Copy link - one row under the card (the old
+          Share Payment Link button and the store's link box were the same
+          link, and pushed the page below small screens). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', width: '100%', maxWidth: 340, gap: 8 }}>
+        {([
+          { label: 'Download', icon: <Download size={18} />, onClick: handleDownloadQr, off: !qrReady },
+          { label: 'Share', icon: <Share2 size={18} />, onClick: handleShareQr, off: !qrReady },
+          { label: copied === 'link' ? 'Copied' : 'Copy link', icon: copied === 'link' ? <CheckCircle size={18} /> : <Copy size={18} />, onClick: () => handleCopy(paymentLink, 'link'), off: false },
+        ]).map(b => (
+          <button key={b.label} onClick={b.onClick} disabled={b.off}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 56,
+              background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '8px 4px',
+              color: b.off ? 'var(--text-secondary)' : 'var(--text-primary)', fontSize: 12.5, fontWeight: 600, cursor: b.off ? 'default' : 'pointer' }}>
+            {b.icon}{b.label}
+          </button>
+        ))}
       </div>
+
+      {/* Personal: username and address to copy, in one small line. */}
+      {!shopQr && !isDesktop && (displayUsername || walletAddress) && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12.5, color: 'var(--text-secondary)' }}>
+          {displayUsername && (
+            <button onClick={() => handleCopy(displayUsername + '.arc', 'username')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: '4px 6px', color: 'inherit', cursor: 'pointer', fontFamily: 'ui-monospace, monospace' }}>
+              {displayUsername}.arc {copied === 'username' ? <CheckCircle size={13} className="text-success" /> : <Copy size={13} />}
+            </button>
+          )}
+          {walletAddress && (
+            <button onClick={() => handleCopy(walletAddress, 'address')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: '4px 6px', color: 'inherit', cursor: 'pointer', fontFamily: 'ui-monospace, monospace' }}>
+              {shortenAddress(walletAddress)} {copied === 'address' ? <CheckCircle size={13} className="text-success" /> : <Copy size={13} />}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 
@@ -295,7 +305,7 @@ export function ReceivePage() {
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 className="text-xl font-bold text-text-primary">Receive</h1>
-          <p className="text-text-secondary text-xs mt-0.5">One QR for USDC, EURC and cirBTC</p>
+          {isDesktop && <p className="text-text-secondary text-xs mt-0.5">One QR for USDC, EURC and cirBTC</p>}
         </div>
         {/* Requests you made and whether they're paid (Receive → My requests). */}
         <button onClick={() => navigate('/receive/requests')}
@@ -344,11 +354,8 @@ export function ReceivePage() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
-          <div className="px-4 space-y-4 pb-8">
+          <div className="px-4 pb-6">
             {qrCardSection}
-            {copyFieldsSection}
-            {shareButtonSection}
-            {tipSection}
           </div>
         </div>
       )}
