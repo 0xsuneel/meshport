@@ -105,9 +105,10 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
   )
 
   return (
-    // Top (person / store) and the button stay put; the amount, note, options
-    // and keypad scroll between them, so the button is never pushed below the
-    // screen (a store row on top made the form taller than short phones).
+    // Top (person / store), the keypad and the button stay put; the amount,
+    // note and options scroll between them, so neither the keypad nor the
+    // button is pushed below the screen (a store row on top made the form
+    // taller than short phones).
     <div className="flex flex-col min-h-0 flex-1"
       // Any text box focused = the phone keyboard is up.
       onFocus={e => { if ((e.target as HTMLElement).tagName === 'INPUT') setTyping(true) }}
@@ -135,11 +136,16 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
         )}
         {options && more && <div className="flex flex-col gap-3">{options.panel}</div>}
 
+      </div>
+
+      {/* Keypad and button stay on screen; the amount, note and options above
+          scroll if a phone is too short for all of it. */}
+      <div className="px-5 flex-shrink-0" style={{ paddingTop: 10, paddingBottom: compact ? 12 : 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>
         {!isDesktop && !compact && !more && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, width: '100%', maxWidth: 320, margin: '2px auto 0', flexShrink: 0 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, width: '100%', maxWidth: 320, margin: '0 auto 10px' }}>
             {KEYS.map(key => (
               <button key={key} type="button" onClick={() => press(key)} aria-label={key === 'del' ? 'Delete' : key}
-                style={{ height: 52, borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)',
+                style={{ height: 'clamp(40px, 6.4dvh, 52px)', borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                   fontSize: key === '.' ? 28 : 24, fontWeight: 600, color: key === 'del' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
                 {key === 'del'
@@ -149,9 +155,6 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
             ))}
           </div>
         )}
-      </div>
-
-      <div className="px-5 flex-shrink-0" style={{ paddingTop: 10, paddingBottom: compact ? 12 : 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
         {error && <p role="alert" className="text-sm text-danger text-center mb-2">{error}</p>}
         <div className="flex gap-3">
           {onCancel && !compact && (
