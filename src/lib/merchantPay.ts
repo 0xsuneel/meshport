@@ -58,6 +58,8 @@ export type PaymentView = {
   personal?: boolean | null
   /** 'shop_qr': opened from a business's Shop QR (a plain payment, not a request). */
   via?: string | null
+  /** The business's store (branch) the order is for - its own, else the main store. */
+  storeName?: string | null
   items?: InvoiceItem[] | null
   /** Tax rate on a bill (percent); the amount is tax-inclusive. 0 = none. */
   taxPercent?: number
@@ -170,7 +172,7 @@ export function orderLabel(v: { code: string; orderNumber?: string | null }): st
 // How orders are named on screen: src/lib/orderLabels.ts (pure, no network).
 export {
   displayOrderNumber, shortOrderNumber, orderKindOf, orderTitle, PAYMENT_ORDER_TAG, paymentOrderTag, parsePaymentOrderTag,
-  paidTitleFromTag, orderCardPreview, type OrderKind,
+  paidTitleFromTag, orderCardPreview, shopFrom, type OrderKind,
 } from './orderLabels'
 import { displayOrderNumber } from './orderLabels'
 export const orderDisplay = (v: { code: string; orderNumber?: string | null }) => displayOrderNumber(orderLabel(v))

@@ -14,7 +14,7 @@ import { useAuthStore, useUIStore } from '@/store'
 import { formatAmount, copyToClipboard } from '@/lib/utils'
 import {
   createPaymentRequest, watchPayment, orderLabel, orderPayLink, paymentRequestMessage, cancelPayment, expiryText, STATUS_LABEL,
-  type MerchantIntent, type PaymentView, orderKindOf, orderTitle, orderDisplay } from '@/lib/merchantPay'
+  type MerchantIntent, type PaymentView, orderKindOf, orderTitle, orderDisplay, shopFrom } from '@/lib/merchantPay'
 import { AmountHero } from '@/components/ui/AmountHero'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { drawMeshportQr } from '@/lib/qrLogo'
@@ -118,8 +118,11 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
     setBusy(false)
   }
 
+  // Who it's from - the business and its store, or the person - from the
+  // order's live view (the server names the store).
+  const from = live ? shopFrom(live.merchantName, live.storeName) : ''
   const shareText = () => order
-    ? `Pay $${formatAmount(order.amount)} USDC · ${orderTitle(orderKindOf(order), orderLabel(order))}${order.note ? ` · ${order.note}` : ''}${expiryText(order.expiresAt) ? `\n${expiryText(order.expiresAt)}` : ''}\n${link}`
+    ? `${from ? `${from}\n` : ''}Pay $${formatAmount(order.amount)} USDC · ${orderTitle(orderKindOf(order), orderLabel(order))}${order.note ? ` · ${order.note}` : ''}${expiryText(order.expiresAt) ? `\n${expiryText(order.expiresAt)}` : ''}\n${link}`
     : ''
   const qrFile = async (): Promise<File | null> => {
     const qr = canvasRef.current
@@ -129,7 +132,8 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H
     const g = cv.getContext('2d'); if (!g) return null
     g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.textAlign = 'center'
-    g.fillStyle = '#111'; g.font = '700 26px system-ui, sans-serif'; g.fillText('Pay with MeshPort', W / 2, 58)
+    g.fillStyle = '#111'; g.font = '700 26px system-ui, sans-serif'
+    g.fillText(from ? `Pay ${from.length > 36 ? from.slice(0, 35) + '…' : from}` : 'Pay with MeshPort', W / 2, 58)
     g.font = '800 44px system-ui, sans-serif'; g.fillText(`$${formatAmount(order.amount)} USDC`, W / 2, 118)
     g.fillStyle = '#444'; g.font = '600 22px system-ui, sans-serif'; g.fillText(`${orderTitle(orderKindOf(order), orderLabel(order))}`, W / 2, 156)
     g.drawImage(qr, (W - 420) / 2, 182, 420, 420)

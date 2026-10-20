@@ -25,8 +25,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import {
   createPaymentRequest, listMyIntents, cancelPayment, reopenOrder, completeOrder, paymentLink, watchPayment, billCardMessage, paymentRequestMessage,
-  type MerchantIntent, type MerchantPayment, type PaymentView,
-} from '@/lib/merchantPay'
+  type MerchantIntent, type MerchantPayment, type PaymentView, shopFrom } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
 import { timeAgo, formatAmount } from '@/lib/utils'
 import { listItems, rememberItems, deleteItem, type SavedItem } from '@/lib/businessItems'
@@ -358,8 +357,9 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
             {!paid && !ended && link && (
               <div className="w-full text-left">
                 <p className="text-xs text-text-muted mb-2">{t.customer} not here? Send the link</p>
-                <LinkShare url={link} subject={`${storeName}: ${bill ? 'bill' : 'payment'} ${num} for ${money(intent.amount)}`}
-                  text={`${storeName}: ${bill ? `bill ${num} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}${dueShare ? ` (${dueShare.text.toLowerCase()})` : ''}. Pay in USDC:`} />
+                {/* Names the shop and its store (branch): "Royal Salons · Cutting Edge". */}
+                <LinkShare url={link} subject={`${shopFrom(storeName, outlet)}: ${bill ? 'bill' : 'payment'} ${num} for ${money(intent.amount)}`}
+                  text={`${shopFrom(storeName, outlet)}: ${bill ? `bill ${num} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}${dueShare ? ` (${dueShare.text.toLowerCase()})` : ''}. Pay in USDC:`} />
               </div>
             )}
           </div>
@@ -448,12 +448,14 @@ const filterOf = (s: RequestStatus): OrderFilter => (s === 'completed' ? 'paid' 
 /** Business → Payments → Orders: everything the business asked to be paid
  *  (Receive amounts, bills, Shop QR orders), by status, with copy link /
  *  complete / cancel. */
-export function RequestsList({ active, storeId, mainStoreId = null, storeName = 'Your business', paymentsOf, refundedOf, onRefund }: {
+export function RequestsList({ active, storeId, mainStoreId = null, storeName = 'Your business', storeNameOf, paymentsOf, refundedOf, onRefund }: {
   active: boolean; storeId?: string | null
   /** Orders without a store belong to the main store (same as sales). */
   mainStoreId?: string | null
   /** Name in shared links and messages */
   storeName?: string
+  /** An order's store (branch) name, shown with the business name when shared */
+  storeNameOf?: (i: MerchantIntent) => string | null
   /** The payments on an order (late / blocked sender badges, refunds) */
   paymentsOf?: (i: MerchantIntent) => MerchantPayment[]
   /** Refunded so far on a payment (a payment can be refunded several times) */
@@ -518,14 +520,14 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
     .filter(p => !p.screenFlag && leftOn(p) + 1e-9 >= Math.max(amount, MIN_REFUND)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0]
   const shareText = (i: MerchantIntent) => {
     const d = dueText(i.dueDate, true)
-    return `${storeName}: ${i.kind === 'invoice' ? 'bill' : t.order} ${i.orderNumber ? displayOrderNumber(i.orderNumber) : ''} for ${money(Math.max(0, i.amount - i.received))}${i.note ? ` - ${i.note}` : ''}${d ? ` (${d.text.toLowerCase()})` : ''}. Pay in USDC:`
+    return `${shopFrom(storeName, storeNameOf?.(i))}: ${i.kind === 'invoice' ? 'bill' : t.order} ${i.orderNumber ? displayOrderNumber(i.orderNumber) : ''} for ${money(Math.max(0, i.amount - i.received))}${i.note ? ` - ${i.note}` : ''}${d ? ` (${d.text.toLowerCase()})` : ''}. Pay in USDC:`
   }
 
   return (
     <>
       {sharing && <ShareSheet open onClose={() => setSharing(null)} title={`Share ${sharing.orderNumber ? displayOrderNumber(sharing.orderNumber) : cap(t.order)}`}
         url={paymentLink(sharing.code)} text={shareText(sharing)}
-        subject={`${storeName}: ${sharing.kind === 'invoice' ? 'bill' : t.order} ${sharing.orderNumber ? displayOrderNumber(sharing.orderNumber) : ''}`} />}
+        subject={`${shopFrom(storeName, storeNameOf?.(sharing))}: ${sharing.kind === 'invoice' ? 'bill' : t.order} ${sharing.orderNumber ? displayOrderNumber(sharing.orderNumber) : ''}`} />}
       <div className="px-5 pt-3">
         <SearchField value={query} onChange={setQuery} ariaLabel={`Search ${orders}`} placeholder={[`Search ${t.order}, ${t.customer.toLowerCase()} or note`, `${cap(t.order)}, ${t.customer.toLowerCase()}, note`, 'Search']} />
       </div>

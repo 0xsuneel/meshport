@@ -113,6 +113,10 @@ export function MerchantPayPage() {
         <div className="text-center space-y-2">
           <p className="text-sm text-text-secondary">Pay</p>
           <p className="text-xl font-bold text-text-primary">{view.merchantName ?? 'Merchant'}</p>
+          {/* The store (branch) it's for, when it isn't just the business name. */}
+          {view.storeName && view.storeName.toLowerCase() !== (view.merchantName ?? '').toLowerCase() && (
+            <p className="text-sm font-semibold text-text-secondary -mt-1">{view.storeName}</p>
+          )}
           <p className="text-4xl font-extrabold text-text-primary">${formatAmount(view.amount)} <span className="text-lg font-semibold text-text-secondary">USDC</span></p>
           {view.orderNumber && <p className="text-sm font-semibold text-text-primary">{orderTitle(orderKindOf(view), view.orderNumber, { paid: view.status === 'paid' })}</p>}
           {view.note && <p className="text-sm text-text-secondary">{view.note}</p>}

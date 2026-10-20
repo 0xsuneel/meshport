@@ -12,6 +12,14 @@ export function displayOrderNumber(n: string | null | undefined): string {
   return shortOrderNumber(n)
 }
 
+/** Who a bill / request is from: the business, and its store (branch) when
+ *  that's a different name - "Royal Salons · Cutting Edge". */
+export function shopFrom(name: string | null | undefined, store?: string | null): string {
+  const n = (name ?? '').trim(), s = (store ?? '').trim()
+  if (!s || s.toLowerCase() === n.toLowerCase()) return n
+  return n ? `${n} · ${s}` : s
+}
+
 /** The number people see for an order: ORD-100042 → #42. */
 export function shortOrderNumber(n: string | null | undefined): string {
   const m = /^ORD-(\d+)$/i.exec(n || '')
