@@ -15,6 +15,7 @@ import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
 import { personalPayLink } from '@/lib/payLinks'
 import { drawMeshportQr } from '@/lib/qrLogo'
+import { QrCard } from '@/features/business/ui/QrCard'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
 import { copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { readArcBalanceOrThrow, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT, EXTERNAL_SCAN_PROGRESS_EVENT } from '@/blockchain/BlockchainManager'
@@ -218,7 +219,7 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
     if (!qrData || !canvasRef.current) return
     setQrReady(false)
     setQrError(false)
-    drawMeshportQr(canvasRef.current, qrData)
+    drawMeshportQr(canvasRef.current, qrData, 232)
       .then(() => setQrReady(true))
       .catch(() => setQrError(true))
   }, [qrData])
@@ -331,17 +332,15 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
           </button>
         )}
       </div>
-      {/* The frame hugs the QR: drawMeshportQr sizes the canvas to whole pixels per module (≤236px). */}
-      <div style={{
-        padding: 3, minWidth: 200, minHeight: 200, borderRadius: 12, background: '#DEE6E8',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>
-        {qrError ? (
-          <span role="alert" style={{ fontSize: 12, color: 'var(--text-secondary)', padding: 8, textAlign: 'center' }}>Couldn't load QR</span>
-        ) : (
-          <canvas ref={canvasRef} style={{ display: qrReady ? 'block' : 'none', borderRadius: 10 }} />
-        )}
-      </div>
+      {/* The app's one QR style (QrCard), holding this card's own canvas - the
+          one Download / Share save. */}
+      {qrError ? (
+        <span role="alert" style={{ fontSize: 12, color: 'var(--text-secondary)', padding: 8, textAlign: 'center' }}>Couldn't load QR</span>
+      ) : (
+        <QrCard subtitle={activeAmount ? `Scan to pay $${activeAmount}` : username ? `${username.replace(/\.arc$/, '')}.arc` : undefined}>
+          <canvas ref={canvasRef} style={{ display: 'block', opacity: qrReady ? 1 : 0 }} />
+        </QrCard>
+      )}
 
       {/* Request payment - opens Receive's request form (order-numbered
           request; its QR / link carry the order and the payer can't edit
