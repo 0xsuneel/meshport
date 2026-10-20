@@ -307,7 +307,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   if (intent) {
     body = (
       <RequestResult intent={intent} view={view} isDesktop={isDesktop} name={storeName} username={handle} sub={outlet}
-        from={shopFrom(storeName, outlet)} payer={t.customer} validLabel={validLabel}
+        from={shopFrom(storeName, outlet)} validLabel={validLabel}
         sender={sender} onOpenChat={id => navigate(`/chat/${id}`)} onClose={onBack} onCancel={cancel} onNew={newPayment} />
     )
   } else if (tab === 'qr' && shopQr) {
