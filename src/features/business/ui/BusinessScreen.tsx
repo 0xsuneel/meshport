@@ -25,6 +25,9 @@ export interface BusinessScreenProps {
   fill?: boolean
   /** Right of the title (e.g. the store chip on Collect payment / Shop QR). */
   action?: ReactNode
+  /** Shown in place of the title text (Collect payment: the business and
+   *  its store); `title` stays as the screen's name for screen readers. */
+  heading?: ReactNode
 }
 
 /** Where a screen sits in the Business screen stack: `level` 0 is opened from
@@ -40,7 +43,7 @@ export const useScreenLevel = () => React.useContext(ScreenLevel)
 // 300ms in, 250ms back, both on the same ease-out. Desktop: a quick fade in
 // the content area, like desktop pages (no sliding over the sidebar).
 
-export function BusinessScreen({ open, title, onBack, children, footer, step = '', fill = false, action }: BusinessScreenProps) {
+export function BusinessScreen({ open, title, onBack, children, footer, step = '', fill = false, action, heading }: BusinessScreenProps) {
   const { level, covered } = useScreenLevel()
   // Phone / browser Back = the header's back arrow (a step inside first).
   useBackLayer(open, onBack)
@@ -55,7 +58,7 @@ export function BusinessScreen({ open, title, onBack, children, footer, step = '
           <button type="button" aria-label="Go back" onClick={onBack} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
-          <h2 className="header-title flex-1 truncate">{title}</h2>
+          {heading ? <><h2 className="sr-only">{title}</h2>{heading}</> : <h2 className="header-title flex-1 truncate">{title}</h2>}
           {action}
         </header>
 
