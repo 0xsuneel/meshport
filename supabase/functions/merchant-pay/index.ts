@@ -165,6 +165,7 @@ function publicView(i: any, payments: any[]) {
     note: i.note, customerUsername: i.customer_username, status: effectiveStatus(i),
     kind: i.kind ?? 'request', personal: typeof i.personal === 'boolean' ? i.personal : null, items: Array.isArray(i.items) ? i.items : null,
     via: i.via ?? null,
+    storeName: i._store_name ?? null,
     taxPercent: Number(i.tax_percent ?? 0),
     createdAt: i.created_at, expiresAt: i.expires_at, paidAt: i.paid_at, dueDate: i.due_date ?? null,
     completedByMerchant: !!i.completed_by_merchant, completedNote: i.completed_note ?? null,
@@ -179,6 +180,15 @@ async function loadIntent(code: string) {
     const { data: u } = await db.from('users').select('username, avatar_url').eq('id', data.merchant_user_id).maybeSingle()
     ;(data as any)._merchant_username = u?.username ?? null
     ;(data as any)._merchant_avatar = u?.avatar_url ?? null
+  }
+  // The store (branch) it's for, shown with the business name on the pay page
+  // and link previews: the order's own store, else the business's main store.
+  if (data?.merchant_auth_uid) {
+    const q = data.store_id
+      ? db.from('business_stores').select('name').eq('id', data.store_id)
+      : db.from('business_stores').select('name').eq('owner_auth_uid', data.merchant_auth_uid).eq('is_default', true)
+    const { data: st } = await q.limit(1).maybeSingle()
+    ;(data as any)._store_name = st?.name ?? null
   }
   return data
 }

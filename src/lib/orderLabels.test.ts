@@ -1,6 +1,6 @@
 // How bills and payment requests are named on screen.
 import { describe, it, expect } from 'vitest'
-import { displayOrderNumber, shortOrderNumber, orderKindOf, orderTitle, paymentOrderTag, parsePaymentOrderTag, paidTitleFromTag, orderCardPreview } from './orderLabels'
+import { displayOrderNumber, shortOrderNumber, orderKindOf, orderTitle, paymentOrderTag, parsePaymentOrderTag, paidTitleFromTag, orderCardPreview, shopFrom } from './orderLabels'
 
 describe('displayOrderNumber', () => {
   it('shows the short #N form everywhere', () => {
@@ -103,5 +103,14 @@ describe('Shop QR payments', () => {
     const t = parsePaymentOrderTag('Sent 1 USDC to royal.arc' + paymentOrderTag('shop', 'ORD-100108'))!
     expect(t.kind).toBe('shop')
     expect(paidTitleFromTag(t, true, true)).toBe('Payment Received')
+  })
+})
+
+describe('shopFrom', () => {
+  it('names the business and its store when they differ', () => {
+    expect(shopFrom('Royal Salons', 'Cutting Edge')).toBe('Royal Salons · Cutting Edge')
+    expect(shopFrom('Royal Salons', 'royal salons')).toBe('Royal Salons')
+    expect(shopFrom('Royal Salons', null)).toBe('Royal Salons')
+    expect(shopFrom('Sunil R')).toBe('Sunil R')
   })
 })

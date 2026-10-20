@@ -1,15 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-// Same names as the app (src/lib/orderLabels.ts): ORD-100042 shows as
-// ORD-00042; "Bill / Request / Requested Payment ORD-…", "Paid Bill …" etc.
+// Same names as the app (src/lib/orderLabels.ts): ORD-100042 shows as #42;
+// "Bill / Request / Requested Payment #…", "Paid Bill …", a Shop QR order is
+// just "Payment" (no number) etc.
 function orderDisplay(n: string): string {
   const m = /^ORD-(\d+)$/i.exec(n || '')
   if (!m || Number(m[1]) <= 100000) return n || ''
-  return `ORD-${String(Number(m[1]) - 100000).padStart(5, '0')}`
+  return `#${Number(m[1]) - 100000}`
 }
-function orderName(kind: string | undefined, personal: boolean | null | undefined, n: string, paid: boolean): string {
+function orderName(kind: string | undefined, personal: boolean | null | undefined, n: string, paid: boolean, via?: string | null): string {
   const no = orderDisplay(n)
   if (kind === 'invoice') return paid ? `Paid Bill ${no}` : `Bill ${no}`
+  if (via === 'shop_qr') return paid ? 'Payment Paid' : 'Payment'
   if (personal === false) return paid ? `Requested Payment Paid ${no}` : `Requested Payment ${no}`
   return paid ? `Request Amount Paid ${no}` : `Request ${no}`
 }
@@ -141,6 +143,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let token = linkToken
   let status = ''
   let memo = ''
+  let store = ''
 
   if (code) {
     // Merchant bill / payment request: the public view the pay page shows.
@@ -157,14 +160,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const v = await r.json()
         if (v && !v.error) {
           displayName = v.merchantName || v.merchantUsername || displayName
+          // The store (branch) it's for, when it isn't just the business name:
+          // the preview's title reads "Royal Salons · Cutting Edge" (app:
+          // shopFrom); on the card image it leads the memo line (the name
+          // line is short).
+          const s = String(v.storeName || '').trim()
+          if (s && s.toLowerCase() !== displayName.toLowerCase()) store = s
           handle = v.merchantUsername || ''
           avatarUrl = v.merchantAvatar || ''
           const due = Math.max(0, Number(v.amount) - Number(v.received || 0))
           amount = v.status === 'paid' ? Number(v.amount) : (due > 0 ? due : Number(v.amount))
-          label = v.orderNumber ? orderName(v.kind, v.personal, v.orderNumber, v.status === 'paid') : v.status === 'paid' ? 'Paid' : v.kind === 'invoice' ? 'Bill' : ''
+          label = v.orderNumber ? orderName(v.kind, v.personal, v.orderNumber, v.status === 'paid', v.via) : v.status === 'paid' ? 'Paid' : v.kind === 'invoice' ? 'Bill' : ''
           if (TOKENS[v.currency]) token = v.currency
           status = String(v.status || '')
-          memo = billMemo(v)
+          memo = [store, billMemo(v)].filter(Boolean).join(' · ')
         }
       } catch { /* plainer card below */ }
     }
@@ -191,7 +200,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const amountText = formatAmount(amount, token)
-  const title = amountText ? `Pay ${amountText} to ${displayName} on MeshPort` : `Pay ${displayName} on MeshPort`
+  const fromName = store ? `${displayName} · ${store}` : displayName
+  const title = amountText ? `Pay ${amountText} to ${fromName} on MeshPort` : `Pay ${fromName} on MeshPort`
   const description = [
     handle ? `${handle}.arc` : '',
     label,
@@ -213,7 +223,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (memo) imageParams.set('memo', memo)
   if (code) imageParams.set('kind', 'merchant')
   imageParams.set('path', displayHost + displayPath)
-  imageParams.set('v', '4') // ticket redesign - a fresh URL for every preview cache
+  imageParams.set('v', '5') // shop · store names and #N numbers - a fresh URL for every preview cache
   const image = `${proto}://${host}/api/og-image?${imageParams.toString()}`
   const shareQuery = new URLSearchParams()
   if (amountText && !code) shareQuery.set('amount', String(amount))
