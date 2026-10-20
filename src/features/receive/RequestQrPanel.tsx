@@ -155,7 +155,9 @@ export function RequestQrPanel({ withCustomer, initialCustomer, onClose, initial
     const f = await qrFile().catch(() => null)
     try {
       if (f && navigator.canShare?.({ files: [f] })) { await navigator.share({ files: [f], title: 'Payment request', text: shareText() }); return }
-      if (navigator.share) { await navigator.share({ title: 'Payment request', text: shareText(), url: link }); return }
+      // The text already ends with the link: passing it as `url` too made share
+      // targets (WhatsApp…) show it twice.
+      if (navigator.share) { await navigator.share({ title: 'Payment request', text: shareText() }); return }
     } catch (e: any) { if (e?.name === 'AbortError') return }
     const ok = await copyToClipboard(shareText())
     showToastMessage(ok ? 'Link copied' : 'Could not copy', ok ? 'success' : 'error')

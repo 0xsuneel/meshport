@@ -561,7 +561,8 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
         const withFile = file && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })
         await navigator.share(withFile
           ? { title: 'Payment request', text: message, files: [file!] }
-          : { title: 'Payment request', text: message, url: qrMode === 'wallet' ? qrValue : link })
+          // The message already carries the link / QR value - not again as `url` (it showed twice).
+          : { title: 'Payment request', text: message })
         return
       } catch (e: any) { if (e?.name === 'AbortError') return }
     }
