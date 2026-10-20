@@ -366,46 +366,26 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
         </QrCard>
       )}
 
-      {/* Request payment - opens Receive's request form (order-numbered
-          request; its QR / link carry the order and the payer can't edit
-          the amount). Replaces the old Collect USDC. */}
-      <button
-        onClick={() => navigate('/receive?request=1')}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          background: 'transparent', border: '1px solid var(--border)', borderRadius: 10,
-          padding: '8px 14px', cursor: 'pointer', color: 'var(--text-primary)',
-        }}>
-        <DollarSign size={14} />
-        <span style={{ fontSize: 13, fontWeight: 600 }}>Request payment</span>
-      </button>
-
-      {/* Download / Share - under the card, like the payment apps' */}
-      <div style={{ display: 'flex', width: '100%', maxWidth: 340, gap: 10, alignItems: 'stretch' }}>
-        <button
-          onClick={handleDownload}
-          disabled={!qrReady}
-          style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px 8px',
-            color: qrReady ? 'var(--text-primary)' : 'var(--text-secondary)',
-            fontSize: 14, fontWeight: 600, cursor: qrReady ? 'pointer' : 'default',
-          }}>
-          <Download size={17} />
-          Download QR
-        </button>
-        <button
-          onClick={handleShare}
-          disabled={!qrReady}
-          style={{
-            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px 8px',
-            color: qrReady ? 'var(--text-primary)' : 'var(--text-secondary)',
-            fontSize: 14, fontWeight: 600, cursor: qrReady ? 'pointer' : 'default',
-          }}>
-          <Share2 size={17} />
-          Share QR
-        </button>
+      {/* Download · Request · Share - one row under the card, like the
+          payment apps'. Request opens Receive's request form (an order-
+          numbered request; its QR / link carry the order and the payer can't
+          edit the amount). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', width: '100%', maxWidth: 340, gap: 8 }}>
+        {([
+          { label: 'Download', icon: <Download size={18} />, onClick: handleDownload, off: !qrReady },
+          { label: 'Request', icon: <DollarSign size={18} />, onClick: () => navigate('/receive?request=1'), off: false },
+          { label: 'Share', icon: <Share2 size={18} />, onClick: handleShare, off: !qrReady },
+        ]).map(b => (
+          <button key={b.label} onClick={b.onClick} disabled={b.off}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 48,
+              background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '10px 4px', whiteSpace: 'nowrap',
+              color: b.off ? 'var(--text-secondary)' : 'var(--text-primary)',
+              fontSize: 'clamp(12.5px, 3.6vw, 14px)', fontWeight: 600, cursor: b.off ? 'default' : 'pointer',
+            }}>
+            {b.icon}{b.label}
+          </button>
+        ))}
       </div>
     </motion.div>
   )
