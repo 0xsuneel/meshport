@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { Copy, Share2, CheckCircle, ArrowLeft, Lightbulb, Download, ListChecks, User, Store as StoreIcon } from 'lucide-react'
-import { AnimatePresence } from 'framer-motion'
-import { TokenMenu } from '@/components/ui/TokenMenu'
+import { Copy, Share2, CheckCircle, ArrowLeft, Lightbulb, Download, ListChecks } from 'lucide-react'
+import { StorePicker, type PickerStore } from '@/features/merchant/StorePicker'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { listStores, type Store } from '@/lib/businessTeam'
@@ -66,7 +65,6 @@ export function ReceivePage() {
   const business = useBusinessTab()
   const [stores, setStores] = useState<Store[]>([])
   const [qrPick, setQrPick] = useState<string>('personal')
-  const [qrMenu, setQrMenu] = useState(false)
   useEffect(() => {
     if (!business) return
     listStores().then(list => setStores([...list].sort((a, b) => Number(b.isDefault) - Number(a.isDefault)))).catch(() => {})
@@ -74,12 +72,11 @@ export function ReceivePage() {
   const store = stores.find(s => s.id === qrPick) ?? null
   // No stores yet: the business itself is the one shop.
   const shopQr = business && qrPick !== 'personal'
-  const qrOptions = business ? [
-    { id: 'personal', label: 'Personal', icon: <span className="inline-flex items-center justify-center size-[22px] rounded-full bg-brand/15 text-brand-text"><User className="size-3.5" /></span> },
-    ...(stores.length ? stores.map(st => ({ id: st.id, label: st.name, icon: <span className="inline-flex items-center justify-center size-[22px] rounded-full bg-brand/15 text-brand-text"><StoreIcon className="size-3.5" /></span> }))
-      : [{ id: 'shop', label: 'Shop QR', icon: <span className="inline-flex items-center justify-center size-[22px] rounded-full bg-brand/15 text-brand-text"><StoreIcon className="size-3.5" /></span> }]),
+  // Which QR (Switch store): Personal first, then each store (main first).
+  const qrOptions: PickerStore[] = business ? [
+    { id: 'personal', name: 'Personal', personal: true },
+    ...(stores.length ? stores.map(st => ({ id: st.id, name: st.name, isDefault: st.isDefault })) : [{ id: 'shop', name: merchant.storeName || 'Shop QR', isDefault: true }]),
   ] : []
-  const picked = qrOptions.find(o => o.id === qrPick) ?? qrOptions[0]
   if (!user) return null
 
   const displayUsername = (username || (user?.username || '')).replace(/\.arc$/, '')
@@ -191,21 +188,11 @@ export function ReceivePage() {
   // share) never duplicate this JSX.
   const qrCardSection = (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: '100%', boxSizing: 'border-box' }}>
-      {business && picked ? (
-        // Which QR: the same pill + floating list as Pay's token picker.
-        <div style={{ position: 'relative', zIndex: qrMenu ? 41 : undefined, minWidth: 200, maxWidth: '100%' }}>
-          <button type="button" onClick={e => { e.stopPropagation(); setQrMenu(v => !v) }} aria-expanded={qrMenu} aria-label={`QR: ${picked.label}`}
-            className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
-            style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-            {picked.icon}
-            <span className="flex-1 min-w-0 truncate text-left text-sm font-bold text-text-primary">{picked.label}</span>
-            <svg className="w-2.5 h-2.5 flex-shrink-0" style={{ color: 'var(--brand-text)', transform: qrMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
-          </button>
-          <AnimatePresence>
-            {qrMenu && <TokenMenu ariaLabel="Choose QR" selected={picked.id} options={qrOptions} onSelect={setQrPick} onClose={() => setQrMenu(false)} />}
-          </AnimatePresence>
+      {business && qrOptions.length > 1 && (
+        <div style={{ width: '100%', maxWidth: 340 }}>
+          <StorePicker stores={qrOptions} value={qrPick} onChange={setQrPick} label="Showing QR for store" hint="Payments to this QR go to the store you pick" />
         </div>
-      ) : null}
+      )}
 
       {/* The app's one QR style (QrCard), holding this page's own canvas - the
           one Download / Share save. Captioned with whose QR it is. */}

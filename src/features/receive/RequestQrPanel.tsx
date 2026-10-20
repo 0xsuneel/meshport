@@ -14,7 +14,7 @@ import { UserPicker, exactPick, pickerProblem, type PickedUser } from '@/compone
 import { useChatCardSender } from '@/hooks/useChatCardSender'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { RequestAmountForm } from '@/features/merchant/RequestComposer'
-import { StorePicker } from '@/features/merchant/StorePicker'
+import { StorePicker, type PickerStore } from '@/features/merchant/StorePicker'
 import { RequestResult, OPEN, VALID_FOR, useLiveRequest, type ValidFor } from '@/features/merchant/RequestResult'
 import type { DbUser } from '@/lib/supabase'
 
@@ -46,7 +46,7 @@ export function RequestQrPanel({ initialCustomer, initialOrder, onClose, onNewRe
   /** "New request" goes here instead of clearing to the form (My requests). */
   onNewRequest?: () => void
   /** A business's stores (main first): pick which one the request is for. */
-  stores?: { id: string; name: string }[]
+  stores?: PickerStore[]
   storeId?: string | null
   onStore?: (id: string) => void
 }) {
@@ -108,7 +108,7 @@ export function RequestQrPanel({ initialCustomer, initialOrder, onClose, onNewRe
       ariaLabel="Amount to request in USDC" hint="They scan the QR or open the link"
       header={compact => <div className="flex flex-col gap-3">
         <SheetPerson label="Paid to" name={name} username={handle} avatar={user?.avatar} compact={compact} onClose={isDesktop ? onClose : undefined} />
-        {!compact && stores && stores.length > 1 && onStore && store && <StorePicker stores={stores} value={store.id} onChange={onStore} />}
+        {!compact && stores && stores.length > 1 && onStore && store && <StorePicker stores={stores} value={store.id} onChange={onStore} label="Request for store" />}
       </div>}
       options={{
         summary: <>Valid for <b className="font-semibold text-text-primary">{validLabel}</b>{who

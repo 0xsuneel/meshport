@@ -16,7 +16,7 @@ import { createPaymentRequest, invoiceTotal, invoiceBreakdown, type InvoiceItem,
 import { ActionSheet, SheetPerson, SheetLabel, SheetChips, sheetInputClass, sheetInputStyle } from '@/components/ui/ActionSheet'
 import { DUE_PRESETS, duePresetDate, dueText, isoDay, type DuePresetId } from '@/lib/businessBills'
 import type { SavedItem } from '@/lib/businessItems'
-import { StorePicker } from './StorePicker'
+import { StorePicker, type PickerStore } from './StorePicker'
 
 export const MAX_BILL_ITEMS = 50 // the database's limit
 type Row = { id: number; name: string; qty: string; price: string }
@@ -343,7 +343,7 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
   merchantName?: string | null
   customer: { name: string; username: string; avatar?: string | null }
   /** Several stores: which one the bill is from. */
-  store?: { list: { id: string; name: string }[]; value: string; onChange: (id: string) => void }
+  store?: { list: PickerStore[]; value: string; onChange: (id: string) => void }
   /** Called with the created bill; the caller posts it into the chat. */
   onSend: (invoice: MerchantIntent) => Promise<void> | void
 }) {
@@ -354,7 +354,7 @@ export function ChatBillSheet({ open, onClose, isDesktop, merchantName, customer
         header={compact => <div className="flex flex-col gap-3">
           <SheetPerson label="Bill to" name={customer.name} username={customer.username} avatar={customer.avatar}
             compact={compact} onClose={onClose} sub={merchantName && !(store && store.list.length > 1) ? `From ${merchantName}` : null} />
-          {!compact && store && store.list.length > 1 && <StorePicker stores={store.list} value={store.value} onChange={store.onChange} />}
+          {!compact && store && store.list.length > 1 && <StorePicker stores={store.list} value={store.value} onChange={store.onChange} label="Bill from store" />}
         </div>}
         footerNote={due => `${firstName} gets a bill card with a Pay button${due ? ` · ${due}` : ''}`}
         onCreate={async ({ items, total, taxPercent, note, dueDate }) => {

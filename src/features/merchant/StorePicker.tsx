@@ -1,28 +1,58 @@
-// Which of a business's stores a request or bill is for: a pill that opens
-// the same floating list as Pay's token picker. Receive → Request and the
+// Which of a business's stores a QR, request or bill is for: one row naming
+// only the current store, with Switch - the same "Switch store" sheet as the
+// Business tab (StoreSwitcher) picks another. Receive (My QR, Request) and the
 // chat's Request / Bill use it.
 import { useState } from 'react'
-import { AnimatePresence } from 'framer-motion'
-import { Store as StoreIcon } from 'lucide-react'
-import { TokenMenu } from '@/components/ui/TokenMenu'
+import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeftRight, Store as StoreIcon, User } from 'lucide-react'
+import { Sheet } from '@/features/business/ui/primitives'
+import { StoreSwitcher } from '@/features/business/ui/Stores'
 
-/** Which store a business's request is for: the same pill + list as My QR's picker. */
-export function StorePicker({ stores, value, onChange }: { stores: { id: string; name: string }[]; value: string; onChange: (id: string) => void }) {
+export type PickerStore = { id: string; name: string; isDefault?: boolean; personal?: boolean }
+
+export function StorePicker({ stores, value, onChange, label = 'Request for store', hint = 'Payments go to the store you pick' }: {
+  stores: PickerStore[]
+  value: string
+  onChange: (id: string) => void
+  /** Over the store's name: "Showing QR for store", "Bill from store". */
+  label?: string
+  hint?: string
+}) {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
-  const icon = <span className="inline-flex items-center justify-center size-[22px] rounded-full bg-brand/15 text-brand-text"><StoreIcon className="size-3.5" /></span>
   const picked = stores.find(s => s.id === value) ?? stores[0]
   return (
-    <div style={{ position: 'relative', zIndex: open ? 41 : undefined, alignSelf: 'flex-start', minWidth: 180, maxWidth: '100%' }}>
-      <button type="button" onClick={e => { e.stopPropagation(); setOpen(v => !v) }} aria-expanded={open} aria-label={`Store: ${picked.name}`}
-        className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
-        style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-        {icon}
-        <span className="flex-1 min-w-0 truncate text-left text-sm font-bold text-text-primary">{picked.name}</span>
-        <svg className="w-2.5 h-2.5 flex-shrink-0" style={{ color: 'var(--brand-text)', transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
-      </button>
-      <AnimatePresence>
-        {open && <TokenMenu ariaLabel="Choose store" selected={picked.id} options={stores.map(s => ({ id: s.id, label: s.name, icon }))} onSelect={onChange} onClose={() => setOpen(false)} />}
-      </AnimatePresence>
-    </div>
+    <>
+      <div className="w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 bg-surface border border-border">
+        <span className="size-9 rounded-xl flex items-center justify-center bg-brand text-white shrink-0">
+          {picked.personal ? <User className="size-[18px]" /> : <StoreIcon className="size-[18px]" />}
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-[11.5px] text-text-muted truncate">{picked.personal ? label.replace(/ store$/, '') : label}</p>
+          <p className="text-sm font-bold text-text-primary truncate">{picked.name}</p>
+        </div>
+        <button type="button" onClick={() => setOpen(true)} aria-label={`Switch store (now ${picked.name})`}
+          className="flex items-center gap-1.5 h-9 px-3 rounded-xl text-[13px] font-semibold text-brand-text shrink-0 active:scale-95 transition-transform"
+          style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)' }}>
+          <ArrowLeftRight className="size-4" /> Switch
+        </button>
+      </div>
+      {/* On top of whatever sheet this row sits in (chat Request / Bill). */}
+      {createPortal(
+        <Sheet open={open} onClose={() => setOpen(false)} id="store-switch">
+          <div className="px-4 pt-1 pb-[calc(env(safe-area-inset-bottom,0px)+16px)]">
+            <p className="text-base font-bold text-text-primary px-1 pb-1">Switch store</p>
+            <p className="text-xs text-text-muted px-1 pb-3">{hint}</p>
+            <StoreSwitcher
+              stores={stores.map(s => ({ id: s.id, name: s.name, active: s.id === picked.id, personal: s.personal,
+                handle: s.personal ? 'Payments to your account' : s.isDefault ? 'Main store' : 'Store' }))}
+              onSwitch={id => { onChange(id); setOpen(false) }}
+              onManage={() => { setOpen(false); navigate('/business') }} />
+          </div>
+        </Sheet>,
+        document.body,
+      )}
+    </>
   )
 }
