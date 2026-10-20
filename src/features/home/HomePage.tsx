@@ -456,7 +456,9 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10, width: isDesktop ? '100%' : '95%',
-      margin: '10px auto 0', boxSizing: 'border-box',
+      // Mobile: pull up into the column's 18px gap so it sits 10px under
+      // the QR's Download · Request · Share row.
+      margin: isDesktop ? '10px auto 0' : '-8px auto 0', boxSizing: 'border-box',
       background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16,
       padding: '12px 14px', boxShadow: isDesktop ? 'var(--shadow-1)' : undefined,
     }}>
