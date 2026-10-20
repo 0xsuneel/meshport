@@ -27,6 +27,8 @@ export interface QrCardProps {
   paid?: boolean
   /** The QR itself (a canvas) instead of `dataUrl`. */
   children?: React.ReactNode
+  /** Over the QR in place of the name (Receive: username and address to copy). */
+  top?: React.ReactNode
 }
 
 const TEAL = '#0F5C57'
@@ -38,7 +40,7 @@ function Badge() {
   return <canvas ref={ref} width={22} height={22} aria-hidden style={{ width: 22, height: 22, flexShrink: 0 }} />
 }
 
-export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with MeshPort or any wallet', tag = 'USDC · any network', paid = false, children }: QrCardProps) {
+export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with MeshPort or any wallet', tag = 'USDC · any network', paid = false, children, top }: QrCardProps) {
   return (
     <div className="w-full max-w-[340px] mx-auto rounded-3xl overflow-hidden bg-surface border border-border" style={{ boxShadow: 'var(--shadow-1)' }}>
       {/* Header */}
@@ -49,12 +51,12 @@ export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with M
       </div>
 
       <div className="flex flex-col items-center gap-2.5 px-4 pt-3.5 pb-4">
-        {(title || subtitle) && (
+        {top ?? ((title || subtitle) && (
           <div className="text-center min-w-0 max-w-full">
             {title && <p className="text-[17px] font-extrabold text-text-primary leading-snug truncate">{title}</p>}
             {subtitle && <p className="text-[12.5px] text-text-secondary mt-0.5 truncate">{subtitle}</p>}
           </div>
-        )}
+        ))}
 
         {/* The QR: black on a white tile in either theme */}
         <div className="bg-white rounded-[18px] p-2.5 flex">

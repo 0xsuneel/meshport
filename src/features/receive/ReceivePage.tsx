@@ -10,7 +10,6 @@ import { shopFrom } from '@/lib/orderLabels'
 import { RequestQrPanel } from './RequestQrPanel'
 import { LinkShare } from '@/features/merchant/RequestResult'
 import { useAuthStore, useUIStore } from '@/store'
-import { Card } from '@/components/ui/Card'
 import { shortenAddress, copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { drawMeshportQr } from '@/lib/qrLogo'
@@ -18,27 +17,6 @@ import { QrCard } from '@/features/business/ui/QrCard'
 import { qrCardFile } from '@/lib/qrCardImage'
 
 const APP_URL = 'https://meshport.xyz'
-
-interface CopyRowProps {
-  label: string
-  value: string
-  onCopy: () => void
-  copied: boolean
-}
-
-function CopyRow({ label, value, onCopy, copied }: CopyRowProps) {
-  return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-border last:border-0">
-      <div className="min-w-0 flex-1">
-        <p className="text-xs text-text-secondary mb-0.5">{label}</p>
-        <p className="text-sm font-mono text-text-primary truncate">{value}</p>
-      </div>
-      <button onClick={onCopy} className="ml-3 p-2 rounded-xl bg-surface border border-border flex-shrink-0 active:scale-90 transition-transform">
-        {copied ? <CheckCircle className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4 text-text-secondary" />}
-      </button>
-    </div>
-  )
-}
 
 export function ReceivePage() {
   const isDesktop  = useMediaQuery('(min-width: 980px)')
@@ -183,6 +161,26 @@ export function ReceivePage() {
     }
   }
 
+  // Personal QR: username and address side by side over the QR, tap to copy
+  // (in place of the name, and of the copy rows that sat under the page).
+  const copyBox = (label: string, value: string, full: string, key: string) => (
+    <button type="button" onClick={() => handleCopy(full, key)} aria-label={`Copy ${label.toLowerCase()}`}
+      className="flex-1 min-w-0 flex items-center gap-2 rounded-xl px-3 py-2 text-left active:scale-[0.98] transition-transform"
+      style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+      <span className="flex-1 min-w-0">
+        <span className="block text-[11px] text-text-muted">{label}</span>
+        <span className="block text-[13px] font-semibold text-text-primary truncate" style={{ fontFamily: 'ui-monospace, monospace' }}>{value}</span>
+      </span>
+      {copied === key ? <CheckCircle className="w-4 h-4 text-success flex-shrink-0" /> : <Copy className="w-4 h-4 text-text-secondary flex-shrink-0" />}
+    </button>
+  )
+  const cardTop = !shopQr && (displayUsername || walletAddress) ? (
+    <div className="w-full flex gap-2">
+      {displayUsername && copyBox('Username', `${displayUsername}.arc`, `${displayUsername}.arc`, 'username')}
+      {walletAddress && copyBox('Address', `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`, walletAddress, 'address')}
+    </div>
+  ) : undefined
+
   // Held in variables so mobile (single stacked column, unchanged order/
   // output) and desktop (left column: QR, right column: username/address +
   // share) never duplicate this JSX.
@@ -204,7 +202,7 @@ export function ReceivePage() {
           <button onClick={() => { setQrError(false); setQrReady(false) }} className="text-brand text-xs underline">Retry</button>
         </div>
       ) : (
-        <QrCard title={card.title} subtitle={card.subtitle} tag={card.tag} caption={card.caption}>
+        <QrCard title={card.title} subtitle={card.subtitle} tag={card.tag} caption={card.caption} top={cardTop}>
           <canvas ref={canvasRef} width={236} height={236} style={{ display: 'block', opacity: qrReady ? 1 : 0, transition: 'opacity 0.2s ease-out' }} />
         </QrCard>
       )}
@@ -239,30 +237,11 @@ export function ReceivePage() {
     </div>
   )
 
-  // A store's QR: its pay link to copy and share (as Business → Shop QR) -
-  // not the account's username and address.
+  // A store's QR: its pay link to copy and share (as Business → Shop QR).
+  // Personal: the username and address are on the QR card itself (cardTop).
   const copyFieldsSection = shopQr ? (
     <LinkShare url={paymentLink} text={`Pay ${shopName} on MeshPort`} />
-  ) : (
-    <Card className="divide-y divide-border">
-      {displayUsername && (
-        <CopyRow
-          label="Username"
-          value={displayUsername + '.arc'}
-          onCopy={() => handleCopy(displayUsername + '.arc', 'username')}
-          copied={copied === 'username'}
-        />
-      )}
-      {walletAddress && (
-        <CopyRow
-          label="Wallet Address"
-          value={shortenAddress(walletAddress)}
-          onCopy={() => handleCopy(walletAddress, 'address')}
-          copied={copied === 'address'}
-        />
-      )}
-    </Card>
-  )
+  ) : null
 
   const shareButtonSection = shopQr ? null : (
     <button onClick={handleShare}
@@ -295,7 +274,6 @@ export function ReceivePage() {
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 className="text-xl font-bold text-text-primary">Receive</h1>
-          <p className="text-text-secondary text-xs mt-0.5">One QR for USDC, EURC and cirBTC</p>
         </div>
         {/* Requests you made and whether they're paid (Receive → My requests). */}
         <button onClick={() => navigate('/receive/requests')}
