@@ -35,7 +35,7 @@ import { getShopLimits, setShopLimits } from '@/lib/shop'
 import { SearchField } from '@/components/ui/SearchField'
 import { ActionSheet, SheetPerson, SheetLabel, SheetChips } from '@/components/ui/ActionSheet'
 import { RequestAmountForm } from '@/features/merchant/RequestComposer'
-import { StorePicker, type PickerStore } from '@/features/merchant/StorePicker'
+import { StorePicker, BusinessTitle, type PickerStore } from '@/features/merchant/StorePicker'
 import { RequestResult, money, OPEN, VALID_FOR, dueTone, useQr, useShare, LinkShare, useLiveRequest, type ValidFor } from '@/features/merchant/RequestResult'
 import { BillComposer } from '@/features/merchant/InvoiceComposer'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -190,8 +190,10 @@ const cleanUsername = (v: string) => v.trim().replace(/^@/, '').replace(/\.arc$/
  *  composer (BillComposer), so they look and work the same; the order they
  *  make then shows here as a counter QR and a link, live until it's paid.
  *  Without `shopQr` (staff mode) only Request (and Bill for managers). */
-export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, storePick }: {
+export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, storePick, avatar }: {
   open: boolean; onBack: () => void; storeName: string
+  /** The business's logo, in the phone's title. */
+  avatar?: string | null
   shopQr?: { outlet?: string | null; handle: string }
   /** An order was created or cancelled here (refreshes open-order counts). */
   onChanged?: () => void
@@ -281,12 +283,17 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   // The sheet's top: the store (like the person in a chat sheet) + the tabs.
   // Phone with several stores: the store is the chip in the title row, so
   // just the tabs here.
-  const chip = isDesktop ? undefined : storeChip(storePick)
+  // Phone: the title is the business - its logo and name, with the store
+  // under it (tap to switch) or, with one store, its handle.
+  const heading = isDesktop ? undefined : storePick && storePick.stores.length > 1
+    ? <StorePicker variant="title" business={storeName} avatar={avatar} stores={storePick.stores} value={storePick.value} onChange={storePick.onChange} onManage={storePick.onManage}
+        hint="Sales, payments, requests and the QR show this store only" />
+    : <BusinessTitle business={storeName} avatar={avatar} line={shopQr?.handle ?? (handle ? `${cleanUsername(handle)}.arc` : 'Collect payment')} />
   const head = (compact: boolean) => (
     <div>
-      {!chip && <SheetPerson label={isDesktop ? 'Collect payment' : 'Paid to'} name={storeName} username={handle} compact={compact} onClose={isDesktop ? onBack : undefined} sub={outlet} />}
+      {isDesktop && <SheetPerson label="Collect payment" name={storeName} username={handle} compact={compact} onClose={onBack} sub={outlet} />}
       {!compact && tabs.length > 1 && (
-        <div className={`flex p-1 rounded-2xl ${chip ? '' : 'mt-3'}`} role="tablist" aria-label="How to collect" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
+        <div className={`flex p-1 rounded-2xl ${isDesktop ? 'mt-3' : ''}`} role="tablist" aria-label="How to collect" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
           {tabs.map(x => (
             <button key={x.id} type="button" role="tab" aria-selected={tab === x.id} onClick={() => setTab(x.id)}
               className={`flex-1 rounded-xl text-[14px] font-semibold transition-colors ${tab === x.id ? 'bg-surface text-text-primary shadow-sm' : 'text-text-muted'}`}
@@ -351,7 +358,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   // Desktop: the centred dialog, like the chat's Request / Bill. Phone: a page
   // that slides in from the right, like every other Business screen.
   if (isDesktop) return <ActionSheet open={open} onClose={onBack} isDesktop id="biz-collect" fixed>{body}</ActionSheet>
-  return <BusinessScreen open={open} title="Collect payment" onBack={onBack} fill action={chip}>{body}</BusinessScreen>
+  return <BusinessScreen open={open} title="Collect payment" onBack={onBack} fill heading={heading}>{body}</BusinessScreen>
 }
 
 // ── Requests ─────────────────────────────────────────────────────────────

@@ -701,7 +701,7 @@ function OwnerBusinessPage() {
       ))}
       {level('receive', (
         <ReceiveScreen open={stack.includes('receive')} onBack={() => { back(); reloadIntents() }} onChanged={reloadIntents} storeName={storeName}
-          shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} storePick={screenStorePick} />
+          shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} storePick={screenStorePick} avatar={userAvatar} />
       ))}
       {level('customers', (
         <CustomersScreen open={stack.includes('customers')} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundedOf(p.id) > 0 && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}
