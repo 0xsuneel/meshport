@@ -34,6 +34,7 @@ import { getShopLimits, setShopLimits } from '@/lib/shop'
 import { SearchField } from '@/components/ui/SearchField'
 import { ActionSheet, SheetPerson, SheetLabel, SheetChips } from '@/components/ui/ActionSheet'
 import { RequestAmountForm } from '@/features/merchant/RequestComposer'
+import { StorePicker, type PickerStore } from '@/features/merchant/StorePicker'
 import { RequestResult, money, OPEN, VALID_FOR, dueTone, useQr, useShare, LinkShare, useLiveRequest, type ValidFor } from '@/features/merchant/RequestResult'
 import { BillComposer } from '@/features/merchant/InvoiceComposer'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -520,8 +521,10 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
 
 // ── Insights ─────────────────────────────────────────────────────────────
 
-function InsightsBody({ payments, waiting, period, scope }: {
+function InsightsBody({ payments, waiting, period, scope, compare }: {
   payments: MerchantPayment[]; waiting: string
+  /** Every store's own sales in the period, side by side (never added up). */
+  compare?: { id: string; name: string; isDefault: boolean; total: number; count: number }[]
   /** The Business date filter - Insights reads the same range. */
   period: { from: Date; to: Date; label: string }
   /** Active store name when the owner has picked one. */
@@ -584,6 +587,12 @@ function InsightsBody({ payments, waiting, period, scope }: {
         <HourChart title="Sales by hour" sub={period.label} bars={data.hours} peak={data.peak} />
         <RankList title={`Top ${t.customers.toLowerCase()}`} empty={`No ${t.customers.toLowerCase()} in this period`} rows={data.customers} />
         <RankList title="By chain" empty="No payments in this period" rows={data.chains} />
+        {compare && compare.length > 1 && (
+          <RankList title={`Compare stores · ${period.label}`} empty="" rows={[...compare].sort((a, b) => b.total - a.total).map(c => ({
+            id: c.id, left: c.name, right: money(c.total),
+            sub: `${c.isDefault ? 'Main store · ' : ''}${c.count} payment${c.count === 1 ? '' : 's'}`,
+          }))} />
+        )}
       </div>
   )
 }
@@ -784,15 +793,23 @@ function StatementBody({ storeName, handle, payments, refunds, settled, waiting,
 
 // ── Reports: Insights + Statement ────────────────────────────────────────
 
-export function ReportsScreen({ open, onBack, insights, statement }: {
+export function ReportsScreen({ open, onBack, insights, statement, storePick }: {
   open: boolean; onBack: () => void
   insights: Parameters<typeof InsightsBody>[0]
   statement: Parameters<typeof StatementBody>[0]
+  /** Several stores: the report is for one (Switch picks another). */
+  storePick?: { stores: PickerStore[]; value: string; onChange: (id: string) => void; onManage?: () => void }
 }) {
   const [view, setView] = useState<'insights' | 'statement'>('insights')
   useEffect(() => { if (!open) setView('insights') }, [open])
   return (
     <BusinessScreen open={open} title="Reports" onBack={onBack}>
+      {storePick && storePick.stores.length > 1 && (
+        <div className="px-5 pt-4">
+          <StorePicker stores={storePick.stores} value={storePick.value} onChange={storePick.onChange} onManage={storePick.onManage}
+            label="Report for store" hint="Insights and the statement show this store only" />
+        </div>
+      )}
       <div className="px-5 pt-4">
         <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Report">
           {([['insights', 'Insights'], ['statement', 'Statement']] as const).map(([id, label]) => (
