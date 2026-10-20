@@ -26,6 +26,7 @@ import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { listMyPayments, listMyIntents, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, createPaymentRequest, displayOrderNumber, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
 import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
+import { StorePicker } from '@/features/merchant/StorePicker'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, VOICE_LANGS, type VoiceLang } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockKey } from './settlement'
 import { listMyRefunds, subscribeMyRefunds, refundPayment, chainUsdcBalance, canRefundOnChain, checkRefundableSender, type SenderCheck, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
@@ -45,7 +46,7 @@ import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScree
 import {
   BusinessHeader, SetupBanner, HubView, LockedHubView, PaymentsView, PaymentDetailSheet,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
-  DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet, ScreenLevel, PushLayer,
+  DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, ScreenLevel, PushLayer,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
@@ -150,14 +151,14 @@ function OwnerBusinessPage() {
   /** Payments with refunds taken off (fully refunded ones dropped). */
   const netOf = useCallback((list: MerchantPayment[]) => netPayments(list.filter(p => p.method !== 'own_transfer'), refundedOf), [refundedOf])
 
-  // ── Stores (which store this device works as; null = all) ─────────────
+  // ── Stores (which store this device works as - always one; mixing every
+  // store's numbers together confused owners) ─────────────────────────────
   const [stores, setStores] = useState<Store[]>([])
   const [storeId, setStoreId] = useState<string | null>(activeStoreId)
   const [intents, setIntents] = useState<MerchantIntent[] | null>(null)
   const intentStore = useMemo(() => new Map((intents ?? []).map(i => [i.id, i.storeId ?? null] as const)), [intents])
   // Other-chain receipts carry the order number, not the order id.
   const orderStore = useMemo(() => new Map((intents ?? []).filter(i => i.orderNumber).map(i => [i.orderNumber!, i.storeId ?? null] as const)), [intents])
-  const [switcher, setSwitcher] = useState(false)
   const [periodSheet, setPeriodSheet] = useState(false)
   const [payView, setPayView] = useState<'payments' | 'requests'>('payments')
   useEffect(() => { if (tab !== 'payments') setPayView('payments') }, [tab])
@@ -165,14 +166,15 @@ function OwnerBusinessPage() {
   useEffect(() => { listStores().then(setStores).catch(() => {}) }, [])
   const reloadIntents = useCallback(() => { listMyIntents(500).then(setIntents).catch(() => setIntents(l => l ?? [])) }, [])
   useEffect(reloadIntents, [raw.length, tab, reloadIntents])
-  const activeStore = stores.find(s => s.id === storeId) ?? null
-  // Requests and the Shop QR belong to the picked store; with "All stores"
-  // they go to the main (default) store.
-  const qrStore = activeStore ?? stores.find(s => s.isDefault) ?? null
-  const pickStore = (id: string | null) => { setStoreId(id); setActiveStoreId(id); setSwitcher(false) }
+  // The picked store, else the main store (also after its store was removed).
+  const activeStore = stores.find(s => s.id === storeId) ?? stores.find(s => s.isDefault) ?? stores[0] ?? null
+  // Requests and the Shop QR belong to the store being viewed.
+  const qrStore = activeStore
+  const pickStore = (id: string) => { setStoreId(id); setActiveStoreId(id) }
+  const storePickList = useMemo(() => [...stores].sort((a, b) => Number(b.isDefault) - Number(a.isDefault)).map(st => ({ id: st.id, name: st.name, isDefault: st.isDefault })), [stores])
   // A payment's store is its order's store; anything without one (taken
   // before stores, other-chain receipts, plain transfers) is the main store's.
-  const mainStoreId = stores.find(s => s.isDefault)?.id ?? null
+  const mainStoreId = stores.find(s => s.isDefault)?.id ?? stores[0]?.id ?? null
   const storeOf = useCallback((p: MerchantPayment) => (p.intentId ? intentStore.get(p.intentId) : p.orderNumber ? orderStore.get(p.orderNumber) : null) ?? mainStoreId, [intentStore, orderStore, mainStoreId])
   const inStore = (i: MerchantIntent, id: string) => (i.storeId ?? mainStoreId) === id
   const storeRaw = useMemo(() => activeStore ? raw.filter(p => storeOf(p) === activeStore.id) : raw, [raw, activeStore, storeOf])
@@ -188,6 +190,11 @@ function OwnerBusinessPage() {
   const choosePeriod = (v: { id: PeriodId; from: string; to: string }) => { setPeriodSel(v); savePeriod(v) }
   const period = useMemo(() => makePeriod(periodSel.id, periodSel), [periodSel])
   const periodRaw = useMemo(() => storeRaw.filter(p => inPeriod(p.createdAt, period)), [storeRaw, period])
+  // Reports → Compare stores: each store's own sales in the period.
+  const storeCompare = useMemo(() => stores.map(st => {
+    const list = netOf(raw.filter(p => storeOf(p) === st.id && inPeriod(p.createdAt, period)))
+    return { id: st.id, name: st.name, isDefault: st.isDefault, total: list.reduce((t, p) => t + p.amount, 0), count: list.length }
+  }), [stores, raw, storeOf, netOf, period])
 
   // ── Settlements ───────────────────────────────────────────────────────
   const settle = useSettlement()
@@ -262,7 +269,6 @@ function OwnerBusinessPage() {
   const locked = !isMerchant
   // Labels follow the business's category (a café has guests, a freelancer invoices).
   const terms = useBizTerms()
-  const allStores = `All ${terms.stores.toLowerCase()}`
   useEffect(() => {
     if (!locked) return
     if (tab !== 'overview') setTab('overview')
@@ -508,21 +514,26 @@ function OwnerBusinessPage() {
     <div className="relative flex flex-col h-full min-h-0 bg-bg overflow-hidden">
       {/* ── Overview hub: always mounted; parallaxes left under a sub-view ── */}
       <div className="flex-1 min-h-0 flex flex-col" style={hubShift}>
-        {/* Title = the store being viewed ("All stores" for the totals);
-            the line under it is the business account itself. */}
-        <BusinessHeader storeName={activeStore?.name ?? (stores.length > 1 ? allStores : storeName)} handle={handle}
+        {/* The business, then (several stores) the one store everything below
+            is for, with Switch - never every store mixed together. */}
+        <BusinessHeader storeName={storeName} handle={handle}
           status={headerStatus} voiceOn={voice.enabled}
-          onVoice={() => setVoiceOpen(true)} onMenu={open(locked ? 'profile' : 'tools')} onSwitchStore={stores.length ? () => setSwitcher(true) : undefined}
-          avatarName={storeName} avatarUrl={userAvatar ?? undefined}
-          outlet={(activeStore || stores.length > 1) && activeStore?.name !== storeName ? storeName : null} />
+          onVoice={() => setVoiceOpen(true)} onMenu={open(locked ? 'profile' : 'tools')}
+          avatarName={storeName} avatarUrl={userAvatar ?? undefined} />
+        {stores.length > 1 && activeStore && (
+          <div className="px-5 pb-2">
+            <StorePicker stores={storePickList} value={activeStore.id} onChange={pickStore} onManage={open('team')}
+              label="Showing store" hint="Sales, payments, requests and the QR show this store only" />
+          </div>
+        )}
         <div className="flex-1 min-h-0 overflow-y-auto" style={bodyPad}>
           {locked && <LockedHubView banner={banner} terms={terms} />}
           {!locked && (
             <HubView terms={terms} loading={!loaded} banner={banner} periodLabel={period.label} onPeriod={() => setPeriodSheet(true)}
               sales={{ total: money(today.total), trend: <TrendChip pct={trend} compare={period.compareLabel} /> }}
               pending={pending ? { count: pending.count, due: money(pending.due) } : null}
-              available={money(arcBalance)} onPending={openOrders} onAvailable={() => setTab('settlements')}
-              collect={{ badge: stores.length > 1 ? `${activeStore?.name ?? 'Main store'} QR` : 'Show your QR', tone: 'brand', onClick: open('receive') }}
+              available={stores.length > 1 ? money(today.onArc) : money(arcBalance)} availableLabel={stores.length > 1 ? 'On Arc' : undefined} onPending={openOrders} onAvailable={() => setTab('settlements')}
+              collect={{ badge: stores.length > 1 ? `${activeStore?.name} QR` : 'Show your QR', tone: 'brand', onClick: open('receive') }}
               orders={{ badge: !pending ? 'Loading…' : pending.count ? `${pending.count} open` : `No open ${terms.orders.toLowerCase()}`, tone: pending?.count ? 'warning' : 'neutral', onClick: openOrders }}
               money={{ badge: settle.total > 0 ? `${money(settle.total)} to settle` : scanning ? 'Checking chains…' : 'All on Arc', tone: settle.total > 0 ? 'brand' : 'neutral', onClick: () => setTab('settlements') }}
               tools={{ badge: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'}` : isMerchant ? 'Add a store' : 'Profile & help', onClick: open('tools') }}
@@ -544,7 +555,7 @@ function OwnerBusinessPage() {
                   <ArrowLeft className="w-5 h-5 text-text-primary" />
                 </button>
                 <h1 className="header-title">{tab === 'payments' ? `Manage ${terms.orders.toLowerCase()}` : 'Manage money'}</h1>
-                {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name ?? allStores}</span>}
+                {tab === 'payments' && stores.length > 1 && <span className="ml-auto mr-2 text-xs text-text-muted truncate">{activeStore?.name}</span>}
               </header>
               {tab === 'payments' && <div className="px-5 pt-2">
                 <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Orders or payments">
@@ -655,11 +666,6 @@ function OwnerBusinessPage() {
           ]} />
       ))}
 
-      <Sheet open={switcher} onClose={() => setSwitcher(false)}>
-        <StoreSwitcher stores={[{ id: '', name: allStores, handle: `${stores.length} store${stores.length === 1 ? '' : 's'} together`, active: !activeStore, all: true },
-          ...stores.map(s => ({ id: s.id, name: s.name, handle: `${s.isDefault ? 'Main store · ' : ''}${s.type ?? 'Store'}`, active: activeStore?.id === s.id }))]}
-          onSwitch={id => pickStore(id || null)} onManage={() => { setSwitcher(false); open('team')() }} />
-      </Sheet>
 
       <DateRangeSheet open={!!rangeSheet} from={rangeSheet?.from ?? ''} to={rangeSheet?.to ?? ''}
         onFrom={v => setRangeSheet(r => r && { ...r, from: v })} onTo={v => setRangeSheet(r => r && { ...r, to: v })}
@@ -701,7 +707,8 @@ function OwnerBusinessPage() {
       ))}
       {level('reports', (
         <ReportsScreen open={stack.includes('reports')} onBack={back}
-          insights={{ payments: netOf(storeRaw), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null }}
+          insights={{ payments: netOf(storeRaw), waiting: money(settle.total), period, scope: stores.length > 1 ? activeStore?.name : null, compare: storeCompare }}
+          storePick={stores.length > 1 && activeStore ? { stores: storePickList, value: activeStore.id, onChange: pickStore, onManage: open('team') } : undefined}
           statement={{ storeName: stores.length > 1 && activeStore ? `${storeName} · ${activeStore.name}` : storeName, handle,
             payments: storeRaw.filter(p => p.method !== 'own_transfer'), refunds: activeStore ? refunds.filter(r => storeRaw.some(p => p.id === r.paymentId)) : refunds,
             settled: (history ?? []).filter(c => c.status === 'completed').map(c => ({ amount: c.arrivedAmount ?? c.amount, createdAt: c.createdAt })),

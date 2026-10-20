@@ -11,13 +11,15 @@ import { StoreSwitcher } from '@/features/business/ui/Stores'
 
 export type PickerStore = { id: string; name: string; isDefault?: boolean; personal?: boolean }
 
-export function StorePicker({ stores, value, onChange, label = 'Request for store', hint = 'Payments go to the store you pick' }: {
+export function StorePicker({ stores, value, onChange, label = 'Request for store', hint = 'Payments go to the store you pick', onManage }: {
   stores: PickerStore[]
   value: string
   onChange: (id: string) => void
   /** Over the store's name: "Showing QR for store", "Bill from store". */
   label?: string
   hint?: string
+  /** "Manage all stores" (default: open the Business tab). */
+  onManage?: () => void
 }) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
@@ -48,7 +50,7 @@ export function StorePicker({ stores, value, onChange, label = 'Request for stor
               stores={stores.map(s => ({ id: s.id, name: s.name, active: s.id === picked.id, personal: s.personal,
                 handle: s.personal ? 'Payments to your account' : s.isDefault ? 'Main store' : 'Store' }))}
               onSwitch={id => { onChange(id); setOpen(false) }}
-              onManage={() => { setOpen(false); navigate('/business') }} />
+              onManage={() => { setOpen(false); if (onManage) onManage(); else navigate('/business') }} />
           </div>
         </Sheet>,
         document.body,

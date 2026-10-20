@@ -23,6 +23,8 @@ export interface HubViewProps {
   /** Open + partly paid orders; null while loading */
   pending: { count: number; due: string } | null
   available: string
+  /** The label beside `available` (default "Available" - the wallet). */
+  availableLabel?: string
   onPending: () => void
   onAvailable: () => void
   collect: HubTile
@@ -57,7 +59,7 @@ function Tile({ icon: Icon, title, sub, tile }: { icon: React.ElementType; title
 }
 
 export function HubView({
-  loading, banner, periodLabel, onPeriod, sales, pending, available, onPending, onAvailable,
+  loading, banner, periodLabel, onPeriod, sales, pending, available, availableLabel = 'Available', onPending, onAvailable,
   collect, orders, money, tools, recent, onSeeAll, onPayment, terms = bizTerms(null),
 }: HubViewProps) {
   return (
@@ -89,7 +91,7 @@ export function HubView({
               {pending ? <span className="text-sm font-semibold text-text-primary tabular-nums truncate">{pending.count} · {pending.due}</span> : <Skeleton className="h-4 w-16" />}
             </button>
             <button type="button" onClick={onAvailable} className="flex items-baseline gap-1.5 min-w-0 text-left active:opacity-70">
-              <span className="text-xs text-text-muted shrink-0">Available</span>
+              <span className="text-xs text-text-muted shrink-0">{availableLabel}</span>
               <span className="text-sm font-semibold text-text-primary tabular-nums truncate">{available}</span>
             </button>
           </div>
