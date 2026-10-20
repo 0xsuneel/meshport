@@ -89,6 +89,7 @@ export function PayPage() {
   const [netId, setNetId] = useState('Arc_Testnet')
   const [netMenu, setNetMenu] = useState(false)
   const net = merchantQrChain(netId)
+  const onArc = !personal || !!net.native
   const payChain: PayChain = net.native ? ARC_PAY_CHAIN
     : { id: net.id, label: net.label, chainId: net.chainId, usdc: net.usdc ?? '', route: 'ub' }
   const netOptions = [MERCHANT_QR_CHAINS[0], ...MERCHANT_QR_EXTERNAL].map(c => ({
@@ -234,38 +235,41 @@ export function PayPage() {
           <WalletPayPanel key={personal ? netId : 'arc'} to={recipient.wallet_address} amount={requestedAmount ? Number(requestedAmount) : null} chain={personal ? payChain : undefined} />
         )}
 
-        {/* Pay button - Option C */}
-        <button onClick={handlePay}
-          className="w-full flex items-center gap-4 active:scale-[.98] transition-all"
-          style={{
-            background: 'var(--brand)',
-            border: '1px solid color-mix(in srgb, black 12%, transparent)',
-            borderRadius: 18,
-            padding: '0',
-            overflow: 'hidden',
-          }}>
-          {/* Icon panel */}
-          <div className="flex items-center justify-center flex-shrink-0"
-            style={{ width: 64, height: 64, background: 'rgba(0,0,0,0.22)' }}>
-            <Zap className="w-6 h-6 text-white" />
-          </div>
-          {/* Text */}
-          <div className="flex-1 text-left">
-            <p className="text-white font-extrabold text-[17px] leading-tight">
-              {!isAuthenticated ? 'Pay with MeshPort' : requestedAmount ? `Pay ${token === 'cirBTC' ? `${requestedAmount} cirBTC` : `${symbol}${requestedAmount}`}` : `Pay ${clean}.arc`}
-            </p>
-            <p className="text-xs font-medium mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
-              {requestedAmount ? `to ${clean}.arc` : token === 'USDC' ? 'Tap to enter amount' : `Tap to enter amount in ${token}`}
-            </p>
-          </div>
-          {/* Arrow circle */}
-          <div className="flex items-center justify-center flex-shrink-0 rounded-full mr-4"
-            style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.12)' }}>
-            <ArrowRight className="w-4 h-4 text-white" />
-          </div>
-        </button>
+        {/* Pay button - Option C. MeshPort pays on Arc only, so it's left out
+            while a Personal QR payer has another network picked. */}
+        {onArc && (
+          <button onClick={handlePay}
+            className="w-full flex items-center gap-4 active:scale-[.98] transition-all"
+            style={{
+              background: 'var(--brand)',
+              border: '1px solid color-mix(in srgb, black 12%, transparent)',
+              borderRadius: 18,
+              padding: '0',
+              overflow: 'hidden',
+            }}>
+            {/* Icon panel */}
+            <div className="flex items-center justify-center flex-shrink-0"
+              style={{ width: 64, height: 64, background: 'rgba(0,0,0,0.22)' }}>
+              <Zap className="w-6 h-6 text-white" />
+            </div>
+            {/* Text */}
+            <div className="flex-1 text-left">
+              <p className="text-white font-extrabold text-[17px] leading-tight">
+                {!isAuthenticated ? 'Pay with MeshPort' : requestedAmount ? `Pay ${token === 'cirBTC' ? `${requestedAmount} cirBTC` : `${symbol}${requestedAmount}`}` : `Pay ${clean}.arc`}
+              </p>
+              <p className="text-xs font-medium mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                {requestedAmount ? `to ${clean}.arc` : token === 'USDC' ? 'Tap to enter amount' : `Tap to enter amount in ${token}`}
+              </p>
+            </div>
+            {/* Arrow circle */}
+            <div className="flex items-center justify-center flex-shrink-0 rounded-full mr-4"
+              style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.12)' }}>
+              <ArrowRight className="w-4 h-4 text-white" />
+            </div>
+          </button>
+        )}
 
-        {!isAuthenticated && (
+        {!isAuthenticated && onArc && (
           <p className="text-xs text-center -mt-3" style={{ color: 'var(--text-muted)' }}>
             Or sign in to MeshPort to pay from your Arc balance
           </p>
