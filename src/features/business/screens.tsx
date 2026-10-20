@@ -163,16 +163,22 @@ function ShopQrBody({ active, storeName, outlet, handle, payTo }: { active: bool
   )
 }
 
-/** Several stores: the store chip in a screen's title row - tap to switch. */
+/** Several stores: the store to switch to from a screen's title. */
 export type ScreenStorePick = { stores: PickerStore[]; value: string; onChange: (id: string) => void; onManage?: () => void }
-const storeChip = (p?: ScreenStorePick) => p && p.stores.length > 1
-  ? <StorePicker variant="pill" stores={p.stores} value={p.value} onChange={p.onChange} onManage={p.onManage}
-      hint="Sales, payments, requests and the QR show this store only" />
-  : undefined
 
-export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo, storePick }: { open: boolean; onBack: () => void; storeName: string; outlet?: string | null; handle: string; payTo?: string; storePick?: ScreenStorePick }) {
+/** A phone screen's title as the business - its logo and name, with the
+ *  store under it (tap to switch) or, with one store, `line` (its handle). */
+function businessHeading(business: string, avatar: string | null | undefined, line: string, pick?: ScreenStorePick) {
+  return pick && pick.stores.length > 1
+    ? <StorePicker variant="title" business={business} avatar={avatar} stores={pick.stores} value={pick.value} onChange={pick.onChange} onManage={pick.onManage}
+        hint="Sales, payments, requests and the QR show this store only" />
+    : <BusinessTitle business={business} avatar={avatar} line={line} />
+}
+
+export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo, storePick, avatar }: { open: boolean; onBack: () => void; storeName: string; outlet?: string | null; handle: string; payTo?: string; storePick?: ScreenStorePick; avatar?: string | null }) {
+  const isDesktop = useMediaQuery('(min-width: 980px)')
   return (
-    <BusinessScreen open={open} title="Shop QR" onBack={onBack} action={storeChip(storePick)}>
+    <BusinessScreen open={open} title="Shop QR" onBack={onBack} heading={isDesktop ? undefined : businessHeading(storeName, avatar, handle, storePick)}>
       <ShopQrBody active={open} storeName={storeName} outlet={outlet} handle={handle} payTo={payTo} />
     </BusinessScreen>
   )
@@ -285,10 +291,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   // just the tabs here.
   // Phone: the title is the business - its logo and name, with the store
   // under it (tap to switch) or, with one store, its handle.
-  const heading = isDesktop ? undefined : storePick && storePick.stores.length > 1
-    ? <StorePicker variant="title" business={storeName} avatar={avatar} stores={storePick.stores} value={storePick.value} onChange={storePick.onChange} onManage={storePick.onManage}
-        hint="Sales, payments, requests and the QR show this store only" />
-    : <BusinessTitle business={storeName} avatar={avatar} line={shopQr?.handle ?? (handle ? `${cleanUsername(handle)}.arc` : 'Collect payment')} />
+  const heading = isDesktop ? undefined : businessHeading(storeName, avatar, shopQr?.handle ?? 'Collect payment', storePick)
   const head = (compact: boolean) => (
     <div>
       {isDesktop && <SheetPerson label="Collect payment" name={storeName} username={handle} compact={compact} onClose={onBack} sub={outlet} />}
