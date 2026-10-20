@@ -4,7 +4,7 @@
  * StoreForm — create/edit form for a store.
  */
 import React from 'react'
-import { Store, QrCode, Pencil, Plus, Loader2, ChevronDown, Trash2, CheckCircle2, LayoutGrid, Lock, Star } from 'lucide-react'
+import { Store, QrCode, Pencil, Plus, Loader2, ChevronDown, Trash2, CheckCircle2, LayoutGrid, Lock, Star, User } from 'lucide-react'
 
 // ─── StoreSwitcher ────────────────────────────────────────────────────────────
 
@@ -15,12 +15,14 @@ export interface SwitcherStore {
   active: boolean
   /** The "All stores" row - totals for every store, not a store itself */
   all?: boolean
+  /** A business's Personal row (payments to the account, not a store) */
+  personal?: boolean
 }
 
 export interface StoreSwitcherProps {
   stores: SwitcherStore[]
   onSwitch: (id: string) => void
-  onManage: () => void
+  onManage?: () => void
 }
 
 export function StoreSwitcher({ stores, onSwitch, onManage }: StoreSwitcherProps) {
@@ -40,7 +42,7 @@ export function StoreSwitcher({ stores, onSwitch, onManage }: StoreSwitcherProps
             'size-9 rounded-xl flex items-center justify-center shrink-0',
             store.active ? 'bg-brand text-white' : 'bg-card border border-border text-text-muted',
           ].join(' ')}>
-            {store.all ? <LayoutGrid className="size-4.5" /> : <Store className="size-4.5" />}
+            {store.all ? <LayoutGrid className="size-4.5" /> : store.personal ? <User className="size-4.5" /> : <Store className="size-4.5" />}
           </span>
           <div className="flex-1 min-w-0">
             <p className={`text-sm font-semibold truncate ${store.active ? 'text-brand-text' : 'text-text-primary'}`}>
@@ -52,7 +54,7 @@ export function StoreSwitcher({ stores, onSwitch, onManage }: StoreSwitcherProps
         </button>
       ))}
 
-      <div className="pt-2 border-t border-border mt-1">
+      {onManage && <div className="pt-2 border-t border-border mt-1">
         <button
           type="button"
           onClick={onManage}
@@ -60,7 +62,7 @@ export function StoreSwitcher({ stores, onSwitch, onManage }: StoreSwitcherProps
         >
           Manage all stores
         </button>
-      </div>
+      </div>}
     </div>
   )
 }
