@@ -38,7 +38,7 @@ function Badge() {
   return <canvas ref={ref} width={22} height={22} aria-hidden style={{ width: 22, height: 22, flexShrink: 0 }} />
 }
 
-export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with MeshPort or any wallet', tag = 'Arc · USDC', paid = false, children }: QrCardProps) {
+export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with MeshPort or any wallet', tag = 'USDC · any network', paid = false, children }: QrCardProps) {
   return (
     <div className="w-full max-w-[340px] mx-auto rounded-3xl overflow-hidden bg-surface border border-border" style={{ boxShadow: 'var(--shadow-1)' }}>
       {/* Header */}

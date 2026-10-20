@@ -547,7 +547,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
     g.font = '600 24px system-ui, sans-serif'; g.fillStyle = '#444444'; g.fillText(`${orderTitle(orderKindOf(intent), orderLabel(intent))}`, W / 2, 162)
     g.drawImage(qr, (W - 420) / 2, 190, 420, 420)
     g.font = '500 18px system-ui, sans-serif'; g.fillStyle = '#555555'
-    g.fillText(qrMode === 'wallet' ? `Scan with any wallet · ${merchantQrChain(qrChain).label} · amount fills in` : 'Scan with MeshPort or any wallet · Arc network', W / 2, 650)
+    g.fillText(qrMode === 'wallet' ? `Scan with any wallet · ${merchantQrChain(qrChain).label} · amount fills in` : 'Scan with MeshPort or any wallet · USDC, any network', W / 2, 650)
     g.font = '500 17px ui-monospace, monospace'; g.fillStyle = '#111111'
     g.fillText(qrMode === 'wallet' ? (walletAddress ?? '') : (link.length > 52 ? link.slice(0, 52) + '…' : link), W / 2, 690)
 
@@ -680,7 +680,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
             </div>
             {qrMode === 'wallet' && <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}><ChainPicker value={qrChain} onChange={setQrChain} /></div>}
             <QrCard subtitle={intent ? `${orderTitle(orderKindOf(intent), orderLabel(intent))} · $${formatAmount(intent.amount)}` : undefined}
-              tag={qrMode === 'wallet' ? `${merchantQrChain(qrChain).label} · USDC` : 'Arc · USDC'}
+              tag={qrMode === 'wallet' ? `${merchantQrChain(qrChain).label} · USDC` : undefined}
               caption={qrMode === 'wallet' ? `Pay on ${merchantQrChain(qrChain).label} - the amount fills in` : 'Scan to pay - the amount is fixed'}>
               <canvas ref={canvasRef} width={232} height={232} style={{ display: 'block' }} />
             </QrCard>

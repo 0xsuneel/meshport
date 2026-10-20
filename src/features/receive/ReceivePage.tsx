@@ -207,7 +207,7 @@ export function ReceivePage() {
       ) : (
         <QrCard title={shopQr ? (merchant.storeName || user.displayName || `${displayUsername}.arc`) : (user.displayName || (displayUsername ? `${displayUsername}.arc` : undefined))}
           subtitle={shopQr ? (store?.name ? `${store.name} · ${displayUsername}.arc` : `${displayUsername}.arc`) : displayUsername ? `${displayUsername}.arc` : shortenAddress(walletAddress ?? '')}
-          tag={shopQr ? 'Arc · USDC' : 'Arc network'} caption={shopQr ? 'Scan, type the amount and pay' : undefined}>
+          tag={shopQr ? undefined : 'USDC · EURC · cirBTC'} caption={shopQr ? 'Scan, type the amount and pay' : undefined}>
           <canvas ref={canvasRef} width={236} height={236} style={{ display: 'block', opacity: qrReady ? 1 : 0 }} />
         </QrCard>
       )}
