@@ -351,6 +351,7 @@ export function activityRowIcon(record: ActivityRecord): ActionIconName | null {
  *  doesn't say - shown as "Paid ORD-00042". */
 export function activityOrderKind(md: any): OrderKind | null {
   if (md?.merchantOrderKind === 'invoice') return 'bill'
+  if (md?.merchantVia === 'shop_qr') return 'shop'
   if (md?.merchantPersonal === true) return 'request'
   if (md?.merchantPersonal === false) return 'merchant_request'
   return null
@@ -649,7 +650,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const rows = [
     { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Settlement from ${chain || 'other chain'}` : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
     { label: 'Chain',  value: chain },
-    ...(merchantOrderDetail ? [{ label: activityOrderKind(metadata) === 'bill' ? 'Bill' : activityOrderKind(metadata) === 'merchant_request' ? 'Requested Payment' : 'Request', value: displayOrderNumber(merchantOrderDetail) }] : []),
+    ...(merchantOrderDetail ? [{ label: activityOrderKind(metadata) === 'bill' ? 'Bill' : activityOrderKind(metadata) === 'merchant_request' ? 'Requested Payment' : activityOrderKind(metadata) === 'shop' ? 'Payment' : 'Request', value: displayOrderNumber(merchantOrderDetail) }] : []),
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Merchant', value: String((metadata as any).merchantName) }] : []),
     ...(isClaim && (metadata as any)?.merchant && (record as any).walletAddress
       ? [{ label: 'Paid to', value: `${String((record as any).walletAddress).slice(0, 6)}…${String((record as any).walletAddress).slice(-6)}`, copy: String((record as any).walletAddress) }]

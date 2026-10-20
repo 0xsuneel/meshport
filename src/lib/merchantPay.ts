@@ -56,6 +56,8 @@ export type PaymentView = {
   kind?: 'request' | 'invoice'
   /** A normal user's request (true) vs an approved merchant's (false); unknown on older servers. */
   personal?: boolean | null
+  /** 'shop_qr': opened from a business's Shop QR (a plain payment, not a request). */
+  via?: string | null
   items?: InvoiceItem[] | null
   /** Tax rate on a bill (percent); the amount is tax-inclusive. 0 = none. */
   taxPercent?: number

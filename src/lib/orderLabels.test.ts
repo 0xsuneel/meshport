@@ -87,3 +87,21 @@ describe('orderCardPreview', () => {
     expect(orderCardPreview('hello')).toBeNull()
   })
 })
+
+describe('Shop QR payments', () => {
+  it('a Shop QR order is a payment, not a request', () => {
+    expect(orderKindOf({ kind: 'request', personal: false, via: 'shop_qr' })).toBe('shop')
+    expect(orderKindOf({ kind: 'request', personal: false, via: null })).toBe('merchant_request')
+  })
+  it('is titled Payment on both sides', () => {
+    expect(orderTitle('shop', 'ORD-100108')).toBe('Payment #108')
+    expect(orderTitle('shop', 'ORD-100108', { paid: true })).toBe('Payment Paid #108')
+    expect(orderTitle('shop', 'ORD-100108', { received: true, short: true })).toBe('Payment #108 Received')
+    expect(orderTitle('shop', 'ORD-100108', { paid: true, short: true })).toBe('Payment Paid · #108')
+  })
+  it('round-trips through the chat payment tag', () => {
+    const t = parsePaymentOrderTag('Sent 1 USDC to royal.arc' + paymentOrderTag('shop', 'ORD-100108'))!
+    expect(t.kind).toBe('shop')
+    expect(paidTitleFromTag(t, true, true)).toBe('Payment #108 Received')
+  })
+})
