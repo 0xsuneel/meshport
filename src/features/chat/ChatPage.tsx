@@ -2490,6 +2490,18 @@ export function ChatConversationPage() {
   const [attachMode, setAttachMode] = useState<'attachments' | 'bill'>('attachments')
   // Merchants: "Bill" in the attach menu - build a bill and send it here.
   const merchant = useMerchant()
+  // A business's stores (main first): its chat Request / Bill pick which
+  // store they're for, like Receive → Request.
+  const [bizStores, setBizStores] = useState<{ id: string; name: string; isDefault: boolean }[]>([])
+  const [bizStoreId, setBizStoreId] = useState('')
+  useEffect(() => {
+    if (!merchant.isMerchant) return
+    import('@/lib/businessTeam').then(m => m.listStores()).then(list => {
+      const sorted = [...list].sort((a, b) => Number(b.isDefault) - Number(a.isDefault))
+      setBizStores(sorted); setBizStoreId(id => id || sorted[0]?.id || '')
+    }).catch(() => {})
+  }, [merchant.isMerchant])
+  const storePick = bizStores.length > 1 ? { list: bizStores, value: bizStoreId, onChange: setBizStoreId } : undefined
   const [showBill, setShowBill] = useState(false)
   const [deleteMsg, setDeleteMsg] = useState<any | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -5099,8 +5111,9 @@ export function ChatConversationPage() {
                 padding: 6, borderRadius: 20, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 14px 32px rgba(0,0,0,0.38)' }}>
               {[
                 { key: 'pay',     label: 'Pay',     tint: 'var(--brand)',     icon: <ActionIcon name="pay" size={18} /> },
-                // Merchants send a Bill instead; nobody requests from a merchant.
-                ...(!merchant.isMerchant && canRequestThem ? [{ key: 'request', label: 'Request', tint: 'var(--usdc-icon)', icon: <ActionIcon name="receive" size={18} /> }] : []),
+                // A business requests as the business (any customer); a person
+                // only when the server allows it (privacy, blocks, merchants).
+                ...(merchant.isMerchant || canRequestThem ? [{ key: 'request', label: 'Request', tint: 'var(--usdc-icon)', icon: <ActionIcon name="receive" size={18} /> }] : []),
                 { key: 'gallery', label: 'Photo',   tint: '#7B61FF',          icon: <Image className="w-[18px] h-[18px] text-white" /> },
                 { key: 'camera',  label: 'Camera',  tint: '#E9967A',          icon: (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -5143,11 +5156,13 @@ export function ChatConversationPage() {
           here; it then shows "Paid" for them and "Payment received" for you. */}
       <ChatRequestSheet open={showRequest} onClose={() => setShowRequest(false)} isDesktop={isDesktop}
         name={otherUser?.display_name || recipientClean} username={recipientClean} avatar={otherUser?.avatar_url ?? null}
+        store={merchant.isMerchant ? storePick : undefined}
         onRequest={async (amount, note) => {
           // A real order (not a plain pay link): only an order can flip the
           // card to Paid / Payment received.
           const { createPaymentRequest, paymentRequestMessage } = await import('@/lib/merchantPay')
-          const it = await createPaymentRequest({ amount, customer: recipientClean, note: note || undefined })
+          const it = await createPaymentRequest({ amount, customer: recipientClean, note: note || undefined,
+            ...(merchant.isMerchant && bizStoreId ? { storeId: bizStoreId } : {}) })
           // The sheet closes once the request exists; the card then posts like
           // any message (a failed send shows Retry in the chat itself).
           void handleSend(paymentRequestMessage(it, formatAmount(it.amount)))
@@ -5157,6 +5172,7 @@ export function ChatConversationPage() {
         <ChatBillSheet open={showAttach && attachMode === 'bill'} isDesktop={isDesktop}
           onClose={() => { setShowAttach(false); setAttachMode('attachments') }}
           merchantName={merchant.application?.businessName}
+          store={storePick}
           customer={{ name: otherUser?.display_name || recipientClean, username: otherUser?.username || recipientClean, avatar: otherUser?.avatar_url ?? null }}
           onSend={async inv => {
             void handleSend(billCardMessage(inv, formatAmount(inv.amount)))
