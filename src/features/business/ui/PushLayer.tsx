@@ -1,0 +1,90 @@
+/**
+ * PushLayer — the slide-over page under every Business screen and the
+ * Manage orders / money panel: a dim veil over what's beneath and a panel
+ * that slides the full width in from the right, shifts 28% left while
+ * another screen covers it, and slides off to the right on back.
+ *
+ * Runs on the browser's own animation engine (Web Animations, on the
+ * compositor) like PageTransition / ScreenPush - not framer-motion's `x`,
+ * which is stepped from JavaScript every frame: a screen that loads and
+ * renders its data while it slides in (Stores, Reports, Payouts) stalled
+ * those frames on phones and the slide jumped / flickered.
+ */
+import React from 'react'
+import { useReducedMotion } from 'framer-motion'
+import { pushLook } from '@/lib/pushLook'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DESKTOP_QUERY, PAGE_SLIDE_X } from '@/lib/motion'
+
+const OPEN_MS = 300
+const BACK_MS = 250
+const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
+
+/** Animates one property of `el` from where it is now to `to` (and leaves it
+ *  there). Interrupting a running move starts from the current spot. */
+function move(el: HTMLElement, prop: 'transform' | 'opacity', to: string, ms: number, from?: string): Animation | null {
+  const now = from ?? getComputedStyle(el)[prop]
+  el.getAnimations().forEach(a => a.cancel())
+  el.style[prop] = to
+  if (ms <= 0 || now === to) return null
+  return el.animate([{ [prop]: now }, { [prop]: to }], { duration: ms, easing: EASE })
+}
+
+export function PushLayer({ open, covered = false, zIndex, children }: {
+  open: boolean
+  /** Another screen is on top: shift left under its dim. */
+  covered?: boolean
+  zIndex: number
+  children: React.ReactNode
+}) {
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
+  const reduce = useReducedMotion()
+  const look = React.useMemo(() => (typeof window === 'undefined' ? { dim: 0.22, shadow: '-10px 0 28px rgba(0,0,0,0.28)' } : pushLook()), [])
+  // Stays mounted while it slides out, showing what it showed when it closed.
+  const [present, setPresent] = React.useState(open)
+  if (open && !present) setPresent(true)
+  const last = React.useRef(children)
+  if (open) last.current = children
+  const panel = React.useRef<HTMLDivElement>(null)
+  const veil = React.useRef<HTMLDivElement>(null)
+  const shown = React.useRef(false)
+
+  React.useLayoutEffect(() => {
+    const p = panel.current, v = veil.current
+    if (!p) return
+    const k = reduce ? 0 : 1
+    if (open) {
+      const fresh = !shown.current && !p.style.transform && !p.style.opacity
+      shown.current = true
+      if (isDesktop) {
+        // Desktop: a quick fade in the content area, like desktop pages.
+        if (fresh) { p.style.opacity = '1'; if (k) p.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 150, easing: EASE }) }
+        else move(p, 'opacity', '1', 150 * k)
+        return
+      }
+      move(p, 'transform', covered ? `translateX(-${PAGE_SLIDE_X})` : 'translateX(0)', (covered || fresh ? OPEN_MS : BACK_MS) * k, fresh ? 'translateX(100%)' : undefined)
+      if (v) move(v, 'opacity', String(look.dim), OPEN_MS * k, fresh ? '0' : undefined)
+      return
+    }
+    if (!shown.current) return
+    shown.current = false
+    const done = () => setPresent(false)
+    const out = isDesktop
+      ? move(p, 'opacity', '0', 120 * k)
+      : (v && move(v, 'opacity', '0', BACK_MS * k), move(p, 'transform', 'translateX(100%)', BACK_MS * k))
+    // Cancelled (opened again mid-slide) = stays.
+    if (out) out.finished.then(done, () => {})
+    else done()
+  }, [open, covered, present, isDesktop, reduce, look.dim])
+
+  if (!present) return null
+  return (
+    <>
+      {!isDesktop && <div ref={veil} aria-hidden className="fixed inset-0 pointer-events-none" style={{ background: '#000', zIndex }} />}
+      <div ref={panel} className={`${isDesktop ? 'absolute' : 'fixed'} inset-0 flex justify-center bg-bg`}
+        style={{ zIndex, boxShadow: isDesktop ? undefined : look.shadow, willChange: 'transform', pointerEvents: open ? undefined : 'none' }}>
+        {open ? children : last.current}
+      </div>
+    </>
+  )
+}
