@@ -329,7 +329,8 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
           const urlObj = new URL(value.startsWith('http') ? value : 'https://' + value)
           // A business's Shop QR (/paylink/<username>[?store=]) - checked below.
           const seg = urlObj.pathname.split('/').filter(Boolean)
-          if (seg.length === 2 && (seg[0] === 'paylink' || seg[0] === 'pay') && !isValidAddress(seg[1]) && !urlObj.searchParams.get('token')) {
+          // A business's Personal QR (?personal=1) is a normal payment, not the shop.
+          if (seg.length === 2 && (seg[0] === 'paylink' || seg[0] === 'pay') && !isValidAddress(seg[1]) && !urlObj.searchParams.get('token') && urlObj.searchParams.get('personal') !== '1') {
             shopLink = { username: seg[1], store: urlObj.searchParams.get('store'), amount: urlObj.searchParams.get('amount') }
           }
           const toParam = urlObj.searchParams.get('to')

@@ -75,11 +75,13 @@ export function PayPage() {
   // instead, so the payment is recorded as an order for that store.
   // `?store=` picks the outlet. USDC only; other tokens keep the plain flow.
   const storeParam = searchParams.get('store')
-  const [shop, setShop] = useState<ShopInfo | null | undefined>(token === 'USDC' ? undefined : null)
+  // A business's Personal QR (?personal=1): a normal payment to the account.
+  const personal = searchParams.get('personal') === '1'
+  const [shop, setShop] = useState<ShopInfo | null | undefined>(token === 'USDC' && !personal ? undefined : null)
 
   useEffect(() => {
     if (!clean) { setShop(null); setNotFound(true); setLoading(false); return }
-    if (token === 'USDC') getShopInfo(clean, storeParam).then(setShop).catch(() => setShop(null))
+    if (token === 'USDC' && !personal) getShopInfo(clean, storeParam).then(setShop).catch(() => setShop(null))
     getUserByUsername(clean)
       .then(u => { if (u) { recipientCache.set(clean, u); setRecipient(u) } else setNotFound(true) })
       .catch(() => setNotFound(true))
