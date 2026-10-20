@@ -284,7 +284,7 @@ export function ReceivePage() {
   )
 
   return (
-    <div className={`flex flex-col h-screen bg-bg overflow-hidden ${isDesktop ? '' : 'lg:max-w-[720px]'}`}>
+    <div className={`flex flex-col h-full bg-bg overflow-hidden ${isDesktop ? '' : 'lg:max-w-[720px]'}`}>
 
       {/* Header */}
       <div className="header-row sticky top-0 z-20 backdrop-blur-md bg-bg/95 flex-shrink-0 gap-3 px-5 pt-header pb-header">

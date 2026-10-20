@@ -105,63 +105,71 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
   )
 
   return (
-    <div className="px-5 pb-5 flex flex-col gap-3 overflow-y-auto min-h-0"
-      style={{ paddingTop: isDesktop ? 20 : 6, paddingBottom: compact ? 12 : 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}
+    // Top (person / store) and the button stay put; the amount, note, options
+    // and keypad scroll between them, so the button is never pushed below the
+    // screen (a store row on top made the form taller than short phones).
+    <div className="flex flex-col min-h-0 flex-1"
       // Any text box focused = the phone keyboard is up.
       onFocus={e => { if ((e.target as HTMLElement).tagName === 'INPUT') setTyping(true) }}
       onBlur={e => { if ((e.target as HTMLElement).tagName === 'INPUT') setTyping(false) }}>
-      {header(compact)}
-      {amountBox}
+      <div className="px-5 flex-shrink-0" style={{ paddingTop: isDesktop ? 20 : 6, paddingBottom: 12 }}>
+        {header(compact)}
+      </div>
 
-      <input ref={noteRef} value={note} maxLength={140} placeholder="What's it for? (optional)" aria-label="Note for the request"
-        onChange={e => setNote(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') noteRef.current?.blur() }}
-        enterKeyHint="done"
-        className={sheetInputClass} style={sheetInputStyle} />
+      <div className="flex-1 min-h-0 overflow-y-auto px-5 flex flex-col gap-3" data-no-drag>
+        {amountBox}
 
-      {options && (!compact || more) && (
-        <button type="button" onClick={() => setMore(m => !m)} aria-expanded={more}
-          className="w-full flex items-center justify-between gap-2 rounded-[14px] px-3.5 text-[13.5px] text-text-secondary text-left"
-          style={{ minHeight: 44, background: 'var(--bg)', border: '1px solid var(--border)', cursor: 'pointer' }}>
-          <span className="min-w-0 truncate">{options.summary}</span>
-          <ChevronDown className={`size-4 flex-shrink-0 text-text-muted transition-transform ${more ? 'rotate-180' : ''}`} />
-        </button>
-      )}
-      {options && more && <div className="flex flex-col gap-3">{options.panel}</div>}
+        <input ref={noteRef} value={note} maxLength={140} placeholder="What's it for? (optional)" aria-label="Note for the request"
+          onChange={e => setNote(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') noteRef.current?.blur() }}
+          enterKeyHint="done"
+          className={sheetInputClass} style={sheetInputStyle} />
 
-      {!isDesktop && !compact && !more && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, width: '100%', maxWidth: 320, margin: '2px auto 0' }}>
-          {KEYS.map(key => (
-            <button key={key} type="button" onClick={() => press(key)} aria-label={key === 'del' ? 'Delete' : key}
-              style={{ height: 52, borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                fontSize: key === '.' ? 28 : 24, fontWeight: 600, color: key === 'del' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
-              {key === 'del'
-                ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z" /><line x1="18" y1="9" x2="12" y2="15" /><line x1="12" y1="9" x2="18" y2="15" /></svg>
-                : key}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {error && <p role="alert" className="text-sm text-danger text-center">{error}</p>}
-
-      <div className="flex gap-3 pt-1">
-        {onCancel && !compact && (
-          <button type="button" onClick={onCancel}
-            className="py-3.5 rounded-2xl text-[15px] font-semibold active:scale-95 transition-transform"
-            style={{ flex: 0.8, background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)', color: 'var(--text-secondary)' }}>
-            Cancel
+        {options && (!compact || more) && (
+          <button type="button" onClick={() => setMore(m => !m)} aria-expanded={more}
+            className="w-full flex items-center justify-between gap-2 rounded-[14px] px-3.5 text-[13.5px] text-text-secondary text-left flex-shrink-0"
+            style={{ minHeight: 44, background: 'var(--bg)', border: '1px solid var(--border)', cursor: 'pointer' }}>
+            <span className="min-w-0 truncate">{options.summary}</span>
+            <ChevronDown className={`size-4 flex-shrink-0 text-text-muted transition-transform ${more ? 'rotate-180' : ''}`} />
           </button>
         )}
-        <button type="button" onClick={submit} disabled={!valid || busy}
-          // Keep the keyboard up while tapping the button (the text box blur
-          // would otherwise move it before the tap lands).
-          onMouseDown={e => e.preventDefault()}
-          className="flex-1 py-3.5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40 active:scale-95 transition-transform"
-          style={{ background: 'var(--brand)' }}>
-          {busy ? busyText : valid ? `${verb} $${amtLabel}` : verb}
-        </button>
+        {options && more && <div className="flex flex-col gap-3">{options.panel}</div>}
+
+        {!isDesktop && !compact && !more && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, width: '100%', maxWidth: 320, margin: '2px auto 0', flexShrink: 0 }}>
+            {KEYS.map(key => (
+              <button key={key} type="button" onClick={() => press(key)} aria-label={key === 'del' ? 'Delete' : key}
+                style={{ height: 52, borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                  fontSize: key === '.' ? 28 : 24, fontWeight: 600, color: key === 'del' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
+                {key === 'del'
+                  ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z" /><line x1="18" y1="9" x2="12" y2="15" /><line x1="12" y1="9" x2="18" y2="15" /></svg>
+                  : key}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="px-5 flex-shrink-0" style={{ paddingTop: 10, paddingBottom: compact ? 12 : 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
+        {error && <p role="alert" className="text-sm text-danger text-center mb-2">{error}</p>}
+        <div className="flex gap-3">
+          {onCancel && !compact && (
+            <button type="button" onClick={onCancel}
+              className="py-3.5 rounded-2xl text-[15px] font-semibold active:scale-95 transition-transform"
+              style={{ flex: 0.8, background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)', color: 'var(--text-secondary)' }}>
+              Cancel
+            </button>
+          )}
+          <button type="button" onClick={submit} disabled={!valid || busy}
+            // Keep the keyboard up while tapping the button (the text box blur
+            // would otherwise move it before the tap lands).
+            onMouseDown={e => e.preventDefault()}
+            className="flex-1 py-3.5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40 active:scale-95 transition-transform"
+            style={{ background: 'var(--brand)' }}>
+            {busy ? busyText : valid ? `${verb} $${amtLabel}` : verb}
+          </button>
+        </div>
       </div>
     </div>
   )
