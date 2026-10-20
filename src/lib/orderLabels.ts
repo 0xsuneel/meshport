@@ -36,7 +36,8 @@ export function orderKindOf(v: { kind?: string | null; personal?: boolean | null
  * "Requested Payment Paid ORD-00044".
  * Paid, receiver's side (`received`): "Bill ORD-00042 Received" /
  * "Request ORD-00043 Amount Received" / "Requested ORD-00044 Payment Received".
- * Shop QR: "Payment #45" / "Payment Paid #45" / "Payment #45 Received".
+ * Shop QR (nobody requested it - a plain payment, no number shown): "Payment" /
+ * "Payment Paid" / "Payment Received".
  * `short` (history rows, card bands): "#42" numbers - "Bill #42", "Requested #44",
  * "Request Paid · #43", "Request #43 Received".
  */
@@ -44,13 +45,13 @@ export function orderTitle(kind: OrderKind, number: string | null | undefined, o
   const no = opts.short ? shortOrderNumber(number) : displayOrderNumber(number)
   if (opts.received) {
     if (kind === 'bill') return `Bill ${no} Received`
-    if (kind === 'shop') return `Payment ${no} Received`
+    if (kind === 'shop') return 'Payment Received'
     if (kind === 'merchant_request') return opts.short ? `Requested ${no} Received` : `Requested ${no} Payment Received`
     return opts.short ? `Request ${no} Received` : `Request ${no} Amount Received`
   }
   const sep = opts.short ? ' · ' : ' '
   if (kind === 'bill') return opts.paid ? `Paid Bill ${no}` : `Bill ${no}`
-  if (kind === 'shop') return opts.paid ? `Payment Paid${sep}${no}` : `Payment ${no}`
+  if (kind === 'shop') return opts.paid ? 'Payment Paid' : 'Payment'
   if (kind === 'merchant_request') return opts.paid ? `Requested Payment Paid${sep}${no}` : opts.short ? `Requested ${no}` : `Requested Payment ${no}`
   return opts.paid ? (opts.short ? `Request Paid · ${no}` : `Request Amount Paid ${no}`) : `Request ${no}`
 }
