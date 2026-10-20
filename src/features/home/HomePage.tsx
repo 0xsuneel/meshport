@@ -16,6 +16,7 @@ import { arcAddressUri } from '@/lib/merchantQr'
 import { personalPayLink } from '@/lib/payLinks'
 import { drawMeshportQr } from '@/lib/qrLogo'
 import { QrCard } from '@/features/business/ui/QrCard'
+import { qrCardFile } from '@/lib/qrCardImage'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
 import { copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { readArcBalanceOrThrow, readExternalBalances, readExternalChainBalance, EXTERNAL_BALANCE_EVENT, EXTERNAL_SCAN_PROGRESS_EVENT } from '@/blockchain/BlockchainManager'
@@ -225,8 +226,17 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
       .catch(() => setQrError(true))
   }, [qrData])
 
-  const handleDownload = () => {
-    if (!canvasRef.current) return
+  // Download / Share save the QR card (qrCardImage), not the bare code: the
+  // same card as on screen, in its light version.
+  const handle = (username || '').replace(/\.arc$/, '')
+  const cardFile = (name: string) => qrCardFile({
+    data: qrData!, title: displayName || (handle ? `${handle}.arc` : undefined), subtitle: handle ? `${handle}.arc` : undefined,
+    amount: activeAmount ? `$${activeAmount}` : undefined, tag: 'USDC · EURC · cirBTC',
+    caption: activeAmount ? 'Scan to pay - the amount fills in' : undefined,
+  }, name)
+
+  const handleDownload = async () => {
+    if (!qrData) return
     try {
       const link = document.createElement('a')
       // Filename reflects the requested amount when there is one, so a
@@ -236,52 +246,53 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
       link.download = activeAmount
         ? `meshport-qr-${walletAddress?.slice(0, 8)}-$${activeAmount}.png`
         : `meshport-qr-${walletAddress?.slice(0, 8)}.png`
-      link.href = canvasRef.current.toDataURL('image/png')
+      const file = await cardFile(link.download)
+      if (!file) throw new Error('no image')
+      link.href = URL.createObjectURL(file)
       link.click()
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000)
     } catch {
       showToastMessage('Could not download QR', 'error')
     }
   }
 
   const handleShare = async () => {
-    if (!canvasRef.current || !qrData || !walletAddress) return
+    if (!qrData || !walletAddress) return
     try {
-      canvasRef.current.toBlob(async (blob) => {
-        if (!blob) { showToastMessage('Could not share QR', 'error'); return }
-        const file = new File([blob], 'meshport-qr.png', { type: 'image/png' })
-        // Shareable link - same /paylink/:username?amount= format ReceivePage
-        // already builds, and the one PayPage already reads back (see
-        // requestedAmount above). Previously this fell back to the raw
-        // wallet address even when an amount was set, which meant sharing
-        // a "Collect $20" QR to someone without MeshPort's scanner handy
-        // (e.g. a chat preview, or anyone on desktop) gave them nothing
-        // but a bare address - no amount, no one-tap link. A pay link
-        // carries the amount as a real query param the recipient's own
-        // browser/app resolves, not just something printed in the caption.
-        const cleanUsername = (username || '').replace(/\.arc$/, '')
-        // No amount: the same link as Receive's My QR (a business's Personal
-        // link carries ?personal=1 - its plain link is its Shop QR).
-        const paymentLink = cleanUsername && !activeAmount
-          ? personalPayLink(cleanUsername, businessAccount)
-          : (cleanUsername
-            ? `${APP_URL}/paylink/${cleanUsername}`
-            : `${APP_URL}/paylink/${walletAddress}`
-          ) + (activeAmount ? `?amount=${encodeURIComponent(activeAmount)}` : '')
-        const shareText = activeAmount
-          ? `Pay me $${activeAmount} USDC on MeshPort - ${paymentLink}`
-          : `Pay me on MeshPort - ${paymentLink}`
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'My QR', text: shareText })
-        } else if (navigator.share) {
-          await navigator.share({ title: 'My QR', text: shareText })
-        } else {
-          // Same reasoning as shareText above: copy something a human (or
-          // another wallet's "paste address" field) can actually use, not
-          // the raw EIP-681 URI qrData now carries when an amount is set.
-          await navigator.clipboard.writeText(shareText)
-          showToastMessage('Copied to clipboard', 'success')
-        }
-      }, 'image/png')
+      const file = await cardFile('meshport-qr.png')
+      if (!file) { showToastMessage('Could not share QR', 'error'); return }
+      // Shareable link - same /paylink/:username?amount= format ReceivePage
+      // already builds, and the one PayPage already reads back (see
+      // requestedAmount above). Previously this fell back to the raw
+      // wallet address even when an amount was set, which meant sharing
+      // a "Collect $20" QR to someone without MeshPort's scanner handy
+      // (e.g. a chat preview, or anyone on desktop) gave them nothing
+      // but a bare address - no amount, no one-tap link. A pay link
+      // carries the amount as a real query param the recipient's own
+      // browser/app resolves, not just something printed in the caption.
+      const cleanUsername = (username || '').replace(/\.arc$/, '')
+      // No amount: the same link as Receive's My QR (a business's Personal
+      // link carries ?personal=1 - its plain link is its Shop QR).
+      const paymentLink = cleanUsername && !activeAmount
+        ? personalPayLink(cleanUsername, businessAccount)
+        : (cleanUsername
+          ? `${APP_URL}/paylink/${cleanUsername}`
+          : `${APP_URL}/paylink/${walletAddress}`
+        ) + (activeAmount ? `?amount=${encodeURIComponent(activeAmount)}` : '')
+      const shareText = activeAmount
+        ? `Pay me $${activeAmount} USDC on MeshPort - ${paymentLink}`
+        : `Pay me on MeshPort - ${paymentLink}`
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'My QR', text: shareText })
+      } else if (navigator.share) {
+        await navigator.share({ title: 'My QR', text: shareText })
+      } else {
+        // Same reasoning as shareText above: copy something a human (or
+        // another wallet's "paste address" field) can actually use, not
+        // the raw EIP-681 URI qrData now carries when an amount is set.
+        await navigator.clipboard.writeText(shareText)
+        showToastMessage('Copied to clipboard', 'success')
+      }
     } catch (err: any) {
       if (err?.name !== 'AbortError') showToastMessage('Could not share QR', 'error')
     }
