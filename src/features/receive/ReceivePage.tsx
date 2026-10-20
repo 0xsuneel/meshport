@@ -9,6 +9,7 @@ import { arcAddressUri } from '@/lib/merchantQr'
 import { personalPayLink, shopPayLink } from '@/lib/payLinks'
 import { shopFrom } from '@/lib/orderLabels'
 import { RequestQrPanel } from './RequestQrPanel'
+import { LinkShare } from '@/features/merchant/RequestResult'
 import { useAuthStore, useUIStore } from '@/store'
 import { Card } from '@/components/ui/Card'
 import { shortenAddress, copyToClipboard } from '@/lib/utils'
@@ -262,7 +263,11 @@ export function ReceivePage() {
     </div>
   )
 
-  const copyFieldsSection = (
+  // A store's QR: its pay link to copy and share (as Business → Shop QR) -
+  // not the account's username and address.
+  const copyFieldsSection = shopQr ? (
+    <LinkShare url={paymentLink} text={`Pay ${shopName} on MeshPort`} />
+  ) : (
     <Card className="divide-y divide-border">
       {displayUsername && (
         <CopyRow
@@ -283,7 +288,7 @@ export function ReceivePage() {
     </Card>
   )
 
-  const shareButtonSection = (
+  const shareButtonSection = shopQr ? null : (
     <button onClick={handleShare}
       className="w-full flex items-center justify-center gap-2 py-4 bg-brand text-white font-semibold rounded-2xl shadow-elevation-2 active:scale-95 transition-transform"
       style={{ border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
@@ -295,7 +300,9 @@ export function ReceivePage() {
     <div className="p-3 bg-surface rounded-2xl border border-border flex items-start gap-2">
       <Lightbulb className="w-4 h-4 text-text-secondary flex-shrink-0 mt-0.5" />
       <p className="text-xs text-text-secondary flex-1">
-        Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) - it opens your payment page on Arc
+        {shopQr
+          ? `Customers scan, type the amount and pay${store ? ` - counted for ${store.name}` : ''}`
+          : 'Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) - it opens your payment page on Arc'}
       </p>
     </div>
   )
