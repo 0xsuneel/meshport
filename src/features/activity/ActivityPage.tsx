@@ -14,7 +14,7 @@ import { cn, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { SearchField } from '@/components/ui/SearchField'
-import { useMerchant, isMerchantClaim } from '@/lib/merchant'
+import { useMerchant, isMerchantClaim, isBusinessAccountNow } from '@/lib/merchant'
 import { orderTitle, displayOrderNumber, shortOrderNumber, type OrderKind } from '@/lib/merchantPay'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { ActionIcon, type ActionIconName } from '@/components/ui/ActionIcon'
@@ -292,6 +292,9 @@ export function deriveActivityRow(record: ActivityRecord) {
               : merchantOrder ? paidOrderTitle(metadata, merchantOrder, isReceive, true)
               : shopPay && isReceive ? 'Payment Received'
               : recoveredTitle ? recoveredTitle
+              // A business account's direct receive (paid to its username /
+              // Personal QR): money in for the business, not a personal receive.
+              : isReceive && !isSelfTransfer && !isFailed && metadata.receiveKind !== 'reward_claim' && isBusinessAccountNow() ? 'Payment Received'
               // A rewards claim that didn't go through (lib/rewards.ts).
               : isReceive && isFailed && metadata.receiveKind === 'reward_claim' ? 'Reward claim'
               : isSelfTransfer && isSend    ? 'Paid to'
@@ -575,6 +578,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const title = isClaim && (metadata as any)?.merchant ? `Payment received · ${chainLabel(sourceChain) || 'External'}`
               : merchantOrderDetail ? orderWord
               : type === 'receive' && activityOrderKind(metadata) === 'shop' ? 'Payment Received'
+              : type === 'receive' && !isSelfTransferDetail && !recoveredDetail && !isFailed && (metadata as any)?.receiveKind !== 'reward_claim' && isBusinessAccountNow() ? 'Payment Received'
               : recoveredDetail && isClaim ? `${recoveredDetail} · ${chainLabel(sourceChain) || 'External'}`
               : recoveredDetail ? recoveredDetail
               : isSelfTransferDetail && type === 'send'    ? 'Paid to Self'
