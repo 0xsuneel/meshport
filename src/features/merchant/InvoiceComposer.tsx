@@ -273,6 +273,14 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
           className={`${sheetInputClass} mt-3 mb-1`} style={sheetInputStyle} />
         {extra}
         {!compact && (
+          <div className="flex items-center justify-between mt-3 px-0.5">
+            <SheetLabel>Tax %</SheetLabel>
+            <input value={tax} onChange={e => { setTax(e.target.value.replace(/[^0-9.]/g, '').slice(0, 5)); setError(null) }}
+              inputMode="decimal" placeholder="0" aria-label="Tax percent"
+              className="w-20 h-9 px-3 rounded-xl bg-surface border border-border text-right text-[14px] tabular-nums text-text-primary focus:outline-none focus:ring-2 focus:ring-brand/40" />
+          </div>
+        )}
+        {!compact && (
           <div className="mt-3 mb-1">
             <SheetLabel>Due date</SheetLabel>
             <SheetChips label="Due date" options={DUE_PRESETS} value={dueId} onChange={pickDue} />
@@ -284,52 +292,27 @@ export function BillComposer({ open, isDesktop, header, footerNote, submitLabel 
             {dueDate && <p className="text-[12px] text-text-muted mt-1.5 px-0.5">The bill stays open until it's paid.</p>}
           </div>
         )}
+        {!compact && <p className="text-[12px] text-text-muted mt-3 mb-2 px-0.5">{footerNote(due?.text ?? null)}</p>}
       </div>
 
       {/* Total + Send - always on screen. */}
       <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: compact ? 8 : 10, paddingBottom: compact ? 10 : 'calc(env(safe-area-inset-bottom, 0px) + 18px)' }}>
         {error && <p role="alert" className="text-[13px] text-danger mb-2">{error}</p>}
-        {compact ? (
-          <div className="flex items-center gap-3">
-            <div className="min-w-0">
-              <p className="text-[12px] font-semibold text-text-secondary">Total{valid.length ? ` · ${valid.length} item${valid.length === 1 ? '' : 's'}` : ''}</p>
-              <p className="text-[20px] font-extrabold tabular-nums text-text-primary leading-tight">${billMoney(total)}</p>
-            </div>
-            <button type="button" onClick={send} disabled={sendDisabled} onMouseDown={e => e.preventDefault()}
-              className="ml-auto flex items-center gap-1.5 px-5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40"
-              style={{ height: 46, background: 'var(--brand)' }}>
-              <Receipt size={16} /> {busy ? busyLabel : submitLabel}
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center justify-between mb-2 px-0.5">
-              <span className="text-[13px] font-medium text-text-secondary">Tax %</span>
-              <input value={tax} onChange={e => { setTax(e.target.value.replace(/[^0-9.]/g, '').slice(0, 5)); setError(null) }}
-                inputMode="decimal" placeholder="0" aria-label="Tax percent"
-                className="w-20 h-9 px-3 rounded-xl bg-surface border border-border text-right text-[14px] tabular-nums text-text-primary focus:outline-none focus:ring-2 focus:ring-brand/40" />
-            </div>
-            {taxPct > 0 && valid.length > 0 && (
-              <div className="flex flex-col gap-1 mb-2 px-0.5 text-[13px] text-text-secondary tabular-nums">
-                <div className="flex justify-between"><span>Subtotal</span><span>${billMoney(bill.subtotal)}</span></div>
-                <div className="flex justify-between"><span>Tax ({taxPct}%)</span><span>+ ${billMoney(bill.tax)}</span></div>
-              </div>
-            )}
-            <div className="flex items-baseline justify-between mb-3 px-0.5">
-              <span className="text-[14px] font-semibold text-text-secondary">Total{valid.length ? ` · ${valid.length} item${valid.length === 1 ? '' : 's'}` : ''}</span>
-              <span className="flex items-baseline gap-1.5">
-                <span className="text-[28px] font-extrabold tabular-nums tracking-tight" style={{ color: total > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>${billMoney(total)}</span>
-                <span className="text-[13px] font-bold text-text-secondary">USDC</span>
-              </span>
-            </div>
-            <button type="button" onClick={send} disabled={sendDisabled}
-              className="w-full flex items-center justify-center gap-2 rounded-2xl text-[16px] font-bold text-white disabled:opacity-40 active:scale-[0.98] transition-transform"
-              style={{ height: 52, background: 'var(--brand)' }}>
-              <Receipt size={18} /> {busy ? busyLabel : total > 0 ? `${submitLabel} · $${billMoney(total)}` : submitLabel}
-            </button>
-            <p className="text-[12px] text-text-secondary text-center mt-2">{footerNote(due?.text ?? null)}</p>
-          </>
+        {/* One row - the total and the button - so the items get the screen. */}
+        {!compact && taxPct > 0 && valid.length > 0 && (
+          <p className="text-[12px] text-text-muted tabular-nums mb-1.5 px-0.5">Subtotal ${billMoney(bill.subtotal)} · Tax ({taxPct}%) + ${billMoney(bill.tax)}</p>
         )}
+        <div className="flex items-center gap-3">
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold text-text-secondary">Total{valid.length ? ` · ${valid.length} item${valid.length === 1 ? '' : 's'}` : ''}</p>
+            <p className="text-[22px] font-extrabold tabular-nums leading-tight" style={{ color: total > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>${billMoney(total)} <span className="text-[12px] font-bold text-text-secondary">USDC</span></p>
+          </div>
+          <button type="button" onClick={send} disabled={sendDisabled} onMouseDown={e => { if (compact) e.preventDefault() }}
+            className="ml-auto flex items-center gap-1.5 px-5 rounded-2xl text-[15px] font-bold text-white disabled:opacity-40 active:scale-[0.98] transition-transform"
+            style={{ height: compact ? 46 : 50, background: 'var(--brand)' }}>
+            <Receipt size={16} /> {busy ? busyLabel : submitLabel}
+          </button>
+        </div>
       </div>
     </div>
   )
