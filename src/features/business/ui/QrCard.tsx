@@ -1,6 +1,9 @@
 /**
- * QrCard — white card housing a 232 × 232 QR image.
- * Shows a skeleton while dataUrl is missing; animates to green "paid" state.
+ * QrCard — the app's one QR style: a white card housing a 232 × 232 QR, an
+ * optional caption under it, and the green "paid" state. Home, Receive,
+ * requests, bills, Shop QR and the order list all show their QR in it.
+ * Pass `dataUrl` (an image; skeleton until it's there) or `children` (a
+ * screen's own canvas, e.g. one it downloads / shares from).
  */
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -13,15 +16,17 @@ export interface QrCardProps {
   title?: string
   subtitle?: string
   paid?: boolean
+  /** The QR itself (a canvas) instead of `dataUrl`. */
+  children?: React.ReactNode
 }
 
-export function QrCard({ dataUrl, title, subtitle, paid = false }: QrCardProps) {
+export function QrCard({ dataUrl, title, subtitle, paid = false, children }: QrCardProps) {
   return (
     <div className="flex flex-col items-center">
       {/* Card */}
       <div className="relative bg-white rounded-3xl p-5 shadow-sm border border-border flex flex-col items-center gap-3 w-[280px]">
         {/* QR area */}
-        <div className="relative w-[232px] h-[232px] rounded-2xl overflow-hidden">
+        <div className="relative w-[232px] h-[232px] rounded-2xl overflow-hidden flex items-center justify-center">
           <AnimatePresence mode="wait">
             {paid ? (
               /* Paid overlay */
@@ -40,6 +45,10 @@ export function QrCard({ dataUrl, title, subtitle, paid = false }: QrCardProps) 
                   <CheckCircle2 className="size-14 text-success" strokeWidth={1.5} />
                 </motion.div>
                 <p className="text-sm font-semibold text-success">Payment received</p>
+              </motion.div>
+            ) : children ? (
+              <motion.div key="own" className="absolute inset-0 flex items-center justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
+                {children}
               </motion.div>
             ) : dataUrl ? (
               <motion.img

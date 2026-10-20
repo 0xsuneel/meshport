@@ -15,6 +15,7 @@ import { Card } from '@/components/ui/Card'
 import { shortenAddress, copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { drawMeshportQr } from '@/lib/qrLogo'
+import { QrCard } from '@/features/business/ui/QrCard'
 
 const APP_URL = 'https://meshport.xyz'
 
@@ -105,7 +106,7 @@ export function ReceivePage() {
     setQrReady(false)
     setQrError(false)
 
-    drawMeshportQr(canvasRef.current, qrData)
+    drawMeshportQr(canvasRef.current, qrData, 232)
       .then(() => setQrReady(true))
       .catch(() => setQrError(true))
     // Redraw when My QR comes back into view (after Request payment) - the
@@ -202,34 +203,20 @@ export function ReceivePage() {
         </div>
       )}
 
-      {/* The frame hugs the QR: drawMeshportQr sizes the canvas to whole pixels per module (≤236px). */}
-      <div className="relative" style={{
-        padding: 3, minWidth: 200, minHeight: 200, borderRadius: 12, background: '#DEE6E8',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-      }}>
-        <canvas
-          ref={canvasRef}
-          width={236}
-          height={236}
-          className={qrReady ? 'opacity-100' : 'opacity-0'}
-          style={{ borderRadius: 10 }}
-        />
-        {!qrReady && !qrError && qrData && (
-          <div className="absolute inset-0 flex items-center justify-center rounded-xl">
-            <div className="w-8 h-8 border-2 border-brand border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
-        {qrError && (
-          <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl bg-white">
-            <p className="text-danger text-xs text-center px-2">QR generation failed</p>
-            <button onClick={() => { setQrError(false); setQrReady(false) }}
-              className="text-brand text-xs underline">Retry</button>
-          </div>
-        )}
-        {!qrData && (
-          <p className="text-text-secondary text-xs text-center px-4">No wallet connected</p>
-        )}
-      </div>
+      {/* The app's one QR style (QrCard), holding this page's own canvas - the
+          one Download / Share save. Captioned with whose QR it is. */}
+      {!qrData ? (
+        <p className="text-text-secondary text-xs text-center px-4">No wallet connected</p>
+      ) : qrError ? (
+        <div role="alert" className="flex flex-col items-center gap-2 py-6">
+          <p className="text-danger text-xs text-center px-2">QR generation failed</p>
+          <button onClick={() => { setQrError(false); setQrReady(false) }} className="text-brand text-xs underline">Retry</button>
+        </div>
+      ) : (
+        <QrCard subtitle={shopQr ? (store?.name ? `${store.name} · ${displayUsername}.arc` : `${displayUsername}.arc`) : displayUsername ? `${displayUsername}.arc` : shortenAddress(walletAddress ?? '')}>
+          <canvas ref={canvasRef} width={236} height={236} style={{ display: 'block', opacity: qrReady ? 1 : 0 }} />
+        </QrCard>
+      )}
 
       {/* Divider + Download/Share row - same layout as Home's MyQrCard */}
       <div style={{ width: '100%', height: 1, background: 'var(--border)', margin: '6px 0 2px' }} />
