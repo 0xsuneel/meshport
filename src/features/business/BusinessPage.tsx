@@ -10,10 +10,9 @@
 //
 // The UI kit in ./ui was designed with Arc Studio.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { useReducedMotion } from 'framer-motion'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { pushLook } from '@/lib/pushLook'
-import { DESKTOP_QUERY, DESKTOP_FADE_TRANSITION, PAGE_SLIDE_X, PAGE_TRANSITION } from '@/lib/motion'
+import { DESKTOP_QUERY, PAGE_SLIDE_X } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useBackLayer } from '@/lib/backLayers'
 import { useBizTerms } from '@/lib/businessCategories'
@@ -46,14 +45,12 @@ import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScree
 import {
   BusinessHeader, SetupBanner, HubView, LockedHubView, PaymentsView, PaymentDetailSheet,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
-  DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet, ScreenLevel, PUSH_BACK,
+  DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, StoreSwitcher, Sheet, ScreenLevel, PushLayer,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
 type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools' | 'activity'
 
-// Back is the app's back push: 250ms on the same ease-out (BusinessScreen).
-const PANEL_EXIT = { x: '100%', transition: PUSH_BACK }
 const EASE_CSS = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -478,7 +475,6 @@ function OwnerBusinessPage() {
   // same edge shadow - the exact PageTransition / ScreenPush look. (Screen
   // overlays below already supply this themselves.)
   const subOpen = tab !== 'overview'
-  const look = useMemo(() => (typeof window === 'undefined' ? { dim: 0.22, shadow: '-10px 0 28px rgba(0,0,0,0.28)' } : pushLook()), [])
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
   const reduce = useReducedMotion()
   // Desktop: screens fade in the content area (no sliding), nothing shifts.
@@ -539,17 +535,7 @@ function OwnerBusinessPage() {
           right over a dim veil with the edge shadow - the same page push the
           rest of the app uses. Like every other detail page (Pay, Receive) and
           the Business screens, it covers the bottom nav (fixed, z-40). ── */}
-      <AnimatePresence>
-        {subOpen && (
-          <>
-            {!isDesktop && <motion.div className="fixed inset-0 z-40 pointer-events-none" aria-hidden
-              style={{ background: '#000' }} initial={{ opacity: 0 }} animate={{ opacity: look.dim }}
-              exit={{ opacity: 0, transition: PUSH_BACK }} transition={reduce ? { duration: 0 } : PAGE_TRANSITION} />}
-            <motion.div className={`${isDesktop ? 'absolute' : 'fixed'} inset-0 z-40 flex justify-center bg-bg`} style={{ boxShadow: isDesktop ? undefined : look.shadow }}
-              initial={isDesktop ? { opacity: 0, y: 4 } : { x: '100%' }}
-              animate={isDesktop ? { opacity: 1, y: 0 } : { x: subCovered ? `-${PAGE_SLIDE_X}` : 0, transition: subCovered ? PAGE_TRANSITION : PUSH_BACK }}
-              exit={isDesktop ? { opacity: 0, transition: { duration: 0.12 } } : PANEL_EXIT}
-              transition={reduce ? { duration: 0 } : isDesktop ? DESKTOP_FADE_TRANSITION : PAGE_TRANSITION}>
+      <PushLayer open={subOpen} covered={subCovered} zIndex={40}>
              <div className="relative w-full max-w-md flex flex-col h-full">
               {/* Payments and Settlements open from Overview (See all, the settle
                   bar, the menu) and come back with the arrow - no tab bar. */}
@@ -598,10 +584,7 @@ function OwnerBusinessPage() {
                 )}
               </div>
              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      </PushLayer>
 
       <PaymentDetailSheet payment={detail} explorerUrl={rawDetail ? explorerTxUrl(rawDetail.chain, rawDetail.txHash) ?? undefined : undefined}
         onClose={() => setDetail(null)} onSettle={() => { setDetail(null); setTab('settlements') }}
