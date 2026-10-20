@@ -3,10 +3,10 @@
 // payment and Receive → Request show this same screen, so a request looks and
 // works the same for a shop and a person.
 import { useEffect, useState } from 'react'
-import { CalendarClock, Share2, MessageCircle, MessageSquare, Mail } from 'lucide-react'
+import { CalendarClock, ChevronDown, Receipt, Share2, MessageCircle, MessageSquare, Mail } from 'lucide-react'
 import { useUIStore } from '@/store'
 import { drawMeshportQr } from '@/lib/qrLogo'
-import { paymentLink, watchPayment, displayOrderNumber, type MerchantIntent, type PaymentView } from '@/lib/merchantPay'
+import { paymentLink, watchPayment, displayOrderNumber, invoiceBreakdown, type InvoiceItem, type MerchantIntent, type PaymentView } from '@/lib/merchantPay'
 import { dueText } from '@/lib/businessBills'
 import { shareChannels } from '@/lib/shareLinks'
 import { SheetPerson } from '@/components/ui/ActionSheet'
@@ -84,6 +84,39 @@ function ShareRow({ url, text, subject }: { url: string; text: string; subject: 
   )
 }
 
+/** A waiting bill's items in one line ("3 items · Haircut, Beard trim… View")
+ *  that opens to the list, so the QR and share buttons stay on screen. */
+function BillItems({ items, taxPercent, note }: { items: InvoiceItem[]; taxPercent?: number; note?: string | null }) {
+  const [shown, setShown] = useState(false)
+  const b = invoiceBreakdown(items, taxPercent)
+  return (
+    <div className="w-full max-w-[340px] rounded-2xl bg-surface border border-border overflow-hidden text-left">
+      <button type="button" onClick={() => setShown(v => !v)} aria-expanded={shown} className="w-full flex items-center gap-2 px-3.5 min-h-[44px] text-left">
+        <Receipt className="size-4 text-brand-text shrink-0" />
+        <span className="text-[13px] font-semibold text-text-primary shrink-0">{items.length} item{items.length === 1 ? '' : 's'}</span>
+        <span className="flex-1 min-w-0 truncate text-[12.5px] text-text-muted">{note || items.map(i => i.name).join(', ')}</span>
+        <span className="shrink-0 inline-flex items-center gap-0.5 text-[12.5px] font-semibold text-brand-text">
+          {shown ? 'Hide' : 'View'}<ChevronDown className={`size-3.5 transition-transform ${shown ? 'rotate-180' : ''}`} />
+        </span>
+      </button>
+      {shown && (
+        <div className="px-3.5 pt-2 pb-3 flex flex-col gap-1.5 text-[13px] tabular-nums border-t border-border">
+          {items.map((i, k) => (
+            <div key={k} className="flex justify-between gap-3">
+              <span className="min-w-0 truncate text-text-secondary">{i.name} × {Number(i.qty)}</span>
+              <span className="font-medium text-text-primary">{money(i.total ?? i.qty * i.price)}</span>
+            </div>
+          ))}
+          {b.tax > 0 && <>
+            <div className="flex justify-between gap-3 text-text-muted"><span>Subtotal</span><span>{money(b.subtotal)}</span></div>
+            <div className="flex justify-between gap-3 text-text-muted"><span>Tax ({taxPercent}%)</span><span>+ {money(b.tax)}</span></div>
+          </>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** Live status of one request (polls until it's final). */
 export function useLiveRequest(code: string | null) {
   const [view, setView] = useState<PaymentView | null>(null)
@@ -106,7 +139,7 @@ export function liveStatus(v: StatusLike | null): { status: LiveStatusKind; text
   if (s === 'failed') return { status: 'failed', text: 'Payment failed' }
   return { status: 'waiting', text: 'Waiting for payment' }
 }
-export const Live = ({ view }: { view: StatusLike | null }) => <LiveStatus {...liveStatus(view)} />
+export const Live = ({ view, small }: { view: StatusLike | null; small?: boolean }) => <LiveStatus {...liveStatus(view)} small={small} />
 
 /** The saved status (before the live one loads): a pending one past its expiry is expired. */
 const savedStatus = (i: MerchantIntent) =>
@@ -156,33 +189,42 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
   // all fits on a phone without scrolling. Paid / ended keep the big amount.
   const open = !paid && !ended
   const shareText = `${from}: ${bill ? `bill ${num} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}${dueShare ? ` (${dueShare.text.toLowerCase()})` : ''}. Pay in USDC:`
-  const extras = intent.note || intent.customerUsername || sender || d
+  // A waiting bill: who it's for goes in the header, its note in the items row.
+  const billLine = open && bill && (intent.items?.length ?? 0) > 0
+  const forWho = intent.customerUsername ? `${intent.customerUsername.replace(/\.arc$/i, '')}.arc` : null
+  // Waiting, the due date goes in the card's caption.
+  const extras = (!billLine && (intent.note || intent.customerUsername)) || sender || (!open && d)
   return (
     <div className="flex flex-col min-h-0 flex-1">
       <div className="px-5 flex-shrink-0" style={{ paddingTop: isDesktop ? 20 : 4, paddingBottom: 4 }}>
-        <SheetPerson label={bill ? `Bill ${num}` : `Request ${num}`} name={name} username={username} avatar={avatar} onClose={isDesktop ? onClose : undefined} sub={sub} />
+        <SheetPerson label={`${bill ? 'Bill' : 'Request'} ${num}${billLine && forWho ? ` · for ${forWho}` : ''}`} name={name} username={username} avatar={avatar} onClose={isDesktop ? onClose : undefined} sub={sub} />
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto" data-no-drag>
         <div className={`flex flex-col items-center text-center px-5 ${open ? 'pt-0.5 pb-3 gap-2.5' : 'pt-3 pb-4 gap-4'}`}>
           {(!open || extras) && (
             <div>
               {!open && <p className="display text-4xl font-bold tabular-nums text-text-primary">{money(intent.amount)}</p>}
-              {intent.note && <p className={`text-sm text-text-secondary ${open ? '' : 'mt-1'}`}>{intent.note}</p>}
-              {intent.customerUsername && <p className="text-xs text-text-muted mt-1">For {intent.customerUsername.replace(/\.arc$/i, '')}.arc</p>}
+              {open
+                ? !billLine && (intent.note || intent.customerUsername) && <p className="text-sm text-text-secondary">{[intent.note, intent.customerUsername && `for ${intent.customerUsername.replace(/\.arc$/i, '')}.arc`].filter(Boolean).join(' · ')}</p>
+                : <>
+                  {intent.note && <p className="text-sm text-text-secondary mt-1">{intent.note}</p>}
+                  {intent.customerUsername && <p className="text-xs text-text-muted mt-1">For {intent.customerUsername.replace(/\.arc$/i, '')}.arc</p>}
+                </>}
               {sender && <ChatSentLine status={sender.status} onRetry={sender.retry} onOpen={onOpenChat} className="mt-1.5" />}
-              {d && <p className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${dueTone[d.tone]}`}><CalendarClock className="size-3.5" /> {d.text}</p>}
+              {d && !open && <p className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${dueTone[d.tone]}`}><CalendarClock className="size-3.5" /> {d.text}</p>}
             </div>
           )}
-          {bill && (intent.items?.length ?? 0) > 0 && (
+          {bill && open && (intent.items?.length ?? 0) > 0 && <BillItems items={intent.items!} taxPercent={intent.taxPercent} note={intent.note} />}
+          {bill && !open && (intent.items?.length ?? 0) > 0 && (
             <div className="w-full text-left"><DetailList rows={intent.items!.map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
           )}
-          {open && <QrCard dataUrl={qr} caption={`Scan to pay · valid ${valid ?? 'until it expires'}`}
+          {open && <QrCard dataUrl={qr} caption={`Scan to pay · ${d ? d.text[0].toLowerCase() + d.text.slice(1) : `valid ${valid ?? 'until it expires'}`}`}
             top={<div className="w-full flex gap-2">
               <QrInfoBox label={bill ? 'Bill amount' : 'Amount'} value={money(intent.amount)} mono={false} />
               <QrInfoBox label="Pay link" value={copied ? 'Copied' : 'Tap to copy'} mono={false} onCopy={() => void copy(link)} copied={copied} />
             </div>} />}
           {paid && <QrCard dataUrl={qr} paid title={name} subtitle={`${bill ? 'Bill' : 'Request'} ${num}`} />}
-          <Live view={live} />
+          <Live view={live} small={open} />
           {paid && (paidBy || tx) && (
             <div className="w-full text-left"><DetailList rows={[
               ...(paidBy ? [{ label: 'Paid by', value: `${paidBy.replace(/\.arc$/i, '')}.arc` }] : []),
@@ -202,7 +244,7 @@ export function RequestResult({ intent, view, isDesktop, name, username, avatar,
           <button type="button" onClick={onCancel}
             className="w-full rounded-2xl text-[15px] font-semibold active:scale-[0.98] transition-transform"
             style={{ height: 52, background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)', color: 'var(--text-secondary)' }}>
-            Cancel payment
+            {bill ? 'Cancel bill' : 'Cancel payment'}
           </button>
         )}
       </div>
