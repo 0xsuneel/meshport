@@ -7,7 +7,8 @@
 // read the owner's payments through staff_payments; refunds, settlements and
 // cash out stay with the owner (their key signs them).
 import { supabase } from '@/lib/supabase'
-import type { MerchantIntent, MerchantPayment, InvoiceItem } from '@/lib/merchantPay'
+import { mapIntent, type MerchantIntent, type MerchantPayment, type InvoiceItem } from '@/lib/merchantPay'
+import type { MerchantRefund } from '@/lib/merchantRefunds'
 
 export type Store = { id: string; name: string; type: string | null; address: string | null; taxId: string | null; isDefault: boolean; createdAt: string }
 export type StaffRole = 'cashier' | 'manager'
@@ -109,8 +110,24 @@ export async function staffCreateRequest(owner: string, p: { amount: number; not
     completedByMerchant: false, completedNote: null, storeId: r.store_id ?? null }
 }
 
+/** A manager's Requests: the business's requests and bills for their store
+ *  (staff_intents - managers only). Unpaid Shop QR orders left out, as for the owner. */
+export async function staffIntents(owner: string): Promise<MerchantIntent[]> {
+  const { data, error } = await supabase.rpc('staff_intents', { p_owner: owner, p_limit: 500 })
+  fail(error)
+  return ((data ?? []) as any[]).map(mapIntent).filter(i => i.via !== 'shop_qr' || i.received > 0)
+}
+
+/** Refunds on a manager's store's payments, for their statement (managers only). */
+export async function staffRefunds(owner: string): Promise<MerchantRefund[]> {
+  const { data, error } = await supabase.rpc('staff_refunds', { p_owner: owner })
+  fail(error)
+  return ((data ?? []) as any[]).map(r => ({ id: r.id, paymentId: r.payment_id ?? `rcpt_${r.receipt_id}`, amount: Number(r.amount), reason: r.reason ?? '',
+    txHash: r.tx_hash, createdAt: r.created_at, chain: r.refund_chain ?? 'Arc_Testnet', route: r.route ?? 'contract' }))
+}
+
 export async function staffPayments(owner: string): Promise<MerchantPayment[]> {
-  const { data, error } = await supabase.rpc('staff_payments', { p_owner: owner, p_limit: 200 })
+  const { data, error } = await supabase.rpc('staff_payments', { p_owner: owner, p_limit: 500 })
   fail(error)
   return (data ?? []).map((r: any) => ({ id: r.id, intentId: r.intent_id, chain: r.source_chain, txHash: r.tx_hash, from: r.from_address, amount: Number(r.amount),
     method: '', status: r.status, customerUsername: r.customer_username, createdAt: r.created_at, orderNumber: r.order_number ?? null, matchedBy: null,

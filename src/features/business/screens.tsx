@@ -16,6 +16,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { shopPayLink } from '@/lib/payLinks'
 import { qrCardFile } from '@/lib/qrCardImage'
+import { staffIntents } from '@/lib/businessTeam'
 import { Store, Clock, Printer, Download, Share2 } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName, type BusinessDoc } from '@/lib/merchant'
@@ -359,8 +360,12 @@ const filterOf = (s: RequestStatus): OrderFilter => (s === 'completed' ? 'paid' 
 /** Business → Payments → Orders: everything the business asked to be paid
  *  (Receive amounts, bills, Shop QR orders), by status, with copy link /
  *  complete / cancel. */
-export function RequestsList({ active, storeId, mainStoreId = null, storeName = 'Your business', storeNameOf, paymentsOf, refundedOf, onRefund }: {
+export function RequestsList({ active, storeId, mainStoreId = null, storeName = 'Your business', storeNameOf, paymentsOf, refundedOf, onRefund, staff }: {
   active: boolean; storeId?: string | null
+  /** A manager in staff mode: the business's requests for their store
+   *  (staff_intents). Only Copy / Share, and Cancel on their own unpaid ones -
+   *  reopen, complete, remind and refunds stay with the owner. */
+  staff?: { owner: string; me: string | null }
   /** Orders without a store belong to the main store (same as sales). */
   mainStoreId?: string | null
   /** Name in shared links and messages */
@@ -385,7 +390,7 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
   const [sharing, setSharing] = useState<MerchantIntent | null>(null)
   const { copy } = useShare()
 
-  const load = () => listMyIntents(500).then(setList).catch(() => setList([]))
+  const load = () => (staff ? staffIntents(staff.owner) : listMyIntents(500)).then(setList).catch(() => setList([]))
   useEffect(() => { if (active) { setList(null); void load() } }, [active])
 
   const inStore = (list ?? []).filter(i => !storeId || (i.storeId ?? mainStoreId) === storeId)
@@ -406,7 +411,7 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
     setBusy(i.id)
     try {
       const v = await (what === 'cancel' ? cancelPayment(i.code) : what === 'reopen' ? reopenOrder(i.code) : completeOrder(i.code))
-      void logBusiness(what === 'cancel' ? 'order_cancelled' : what === 'reopen' ? 'order_reopened' : 'order_completed', { target: i.orderNumber ?? i.code, amount: i.amount })
+      void logBusiness(what === 'cancel' ? 'order_cancelled' : what === 'reopen' ? 'order_reopened' : 'order_completed', { target: i.orderNumber ?? i.code, amount: i.amount, ...(staff ? { owner: staff.owner } : {}) })
       toast(what === 'cancel' ? `${cap(t.order)} cancelled`
         : what === 'reopen' ? (v.status === 'paid' ? `${cap(t.order)} reopened - paid in full` : v.received > 0 ? `${cap(t.order)} reopened - ${money(v.received)} counted` : `${cap(t.order)} reopened`)
         : 'Marked as completed', 'success')
@@ -481,7 +486,7 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
               const extra = extraAmt + 1e-9 >= MIN_REFUND ? refundable(i, extraAmt) : undefined
               const back = afterCancel ? refundable(i, 0) : undefined
               // Reopen: cancelled / expired, nothing refunded on it (the server checks too).
-              const canReopen = (status === 'cancelled' || status === 'expired') && i.status !== 'failed' && !pays.some(p => (refundedOf?.(p) ?? 0) > 0)
+              const canReopen = !staff && (status === 'cancelled' || status === 'expired') && i.status !== 'failed' && !pays.some(p => (refundedOf?.(p) ?? 0) > 0)
               const remindIn = canRemindAt(i.lastRemindedAt)
               const badges = [
                 ...(due ? [{ label: due.text, tone: due.tone }] : []),
@@ -502,13 +507,13 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
                   actions={[
                     { label: 'Copy link', tone: 'neutral', onClick: () => { void copy(paymentLink(i.code)); toast('Link copied', 'success') } },
                     ...(live ? [{ label: 'Share', tone: 'neutral' as const, onClick: () => setSharing(i) }] : []),
-                    ...(live && i.customerUsername ? [{ label: remindIn.ok ? 'Remind' : `Remind in ${remindIn.inHours}h`, tone: 'neutral' as const, onClick: () => remind(i), disabled: busy === i.id || !remindIn.ok }] : []),
+                    ...(live && i.customerUsername && !staff ? [{ label: remindIn.ok ? 'Remind' : `Remind in ${remindIn.inHours}h`, tone: 'neutral' as const, onClick: () => remind(i), disabled: busy === i.id || !remindIn.ok }] : []),
                     ...(onRefund && extra && !blocked ? [{ label: `Refund extra ${money(extraAmt)}`, tone: 'danger' as const, onClick: () => onRefund(extra, extraAmt) }] : []),
                     ...(onRefund && back && !blocked ? [{ label: 'Refund', tone: 'danger' as const, onClick: () => onRefund(back, leftOn(back)) }] : []),
                     ...(canReopen ? [{ label: 'Reopen', tone: 'brand' as const, onClick: () => act(i, 'reopen'), disabled: busy === i.id }] : []),
-                    ...(live ? [{ label: 'Mark completed', tone: 'brand' as const, onClick: () => act(i, 'complete'), disabled: busy === i.id }] : []),
+                    ...(live && !staff ? [{ label: 'Mark completed', tone: 'brand' as const, onClick: () => act(i, 'complete'), disabled: busy === i.id }] : []),
                     // Only an order nothing was paid on can be cancelled (the server refuses the rest).
-                    ...(status === 'open' && i.received <= 0 ? [{ label: 'Cancel', tone: 'danger' as const, onClick: () => act(i, 'cancel'), disabled: busy === i.id }] : []),
+                    ...(status === 'open' && i.received <= 0 && (!staff || (!!staff.me && i.createdByStaff === staff.me)) ? [{ label: 'Cancel', tone: 'danger' as const, onClick: () => act(i, 'cancel'), disabled: busy === i.id }] : []),
                   ]} />
               )
             })}
@@ -760,14 +765,17 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
 
 // ── Statement ────────────────────────────────────────────────────────────
 
-function StatementBody({ storeName, handle, payments, refunds, settled, waiting, loading }: {
+export function StatementBody({ storeName, handle, payments, refunds, settled, waiting, loading, staff }: {
   storeName: string; handle: string; payments: MerchantPayment[]; refunds: MerchantRefund[]
   settled: { amount: number; createdAt: string }[]; waiting: number; loading: boolean
+  /** A manager's statement: no settlement lines (settling is the owner's). */
+  staff?: boolean
 }) {
   const t = useBizTerms()
   const [range, setRange] = useState<StatementRange>('today')
   const printer = usePrint()
   const rows = statementRows({ range, payments, refunds, settled, waiting, customersLabel: t.customers })
+    .filter(r => !staff || (r.label !== 'Settled to Arc' && r.label !== 'Waiting on other chains'))
   const since = rangeStart(range).getTime()
   const inRange = payments.filter(p => Date.parse(p.createdAt) >= since)
   // A payment can have several refunds: "Refunded" when all of it went back.

@@ -250,6 +250,8 @@ export type MerchantIntent = {
   overpaid?: number
   /** Tax rate on a bill (percent). The amount is tax-inclusive. 0 = none. */
   taxPercent?: number
+  /** The staff member (auth uid) who made it, when staff did. */
+  createdByStaff?: string | null
 }
 export type MerchantPayment = {
   id: string; intentId: string; chain: string; txHash: string; from: string; amount: number
@@ -273,7 +275,7 @@ export type UnmatchedDeposit = {
 // alone: RLS also lets admins read every merchant's rows (mpi_admin, mp_admin,
 // mud_admin, mcr_select_own), so an admin's My requests / Ledger showed other
 // accounts' orders. Each filter mirrors that table's own-row policy.
-async function myAuthUid(): Promise<string | null> {
+export async function myAuthUid(): Promise<string | null> {
   const { data } = await supabase.auth.getSession()
   return data.session?.user?.id ?? null
 }
@@ -309,7 +311,7 @@ export const assignDeposit = (depositId: string, code: string) => call<PaymentVi
 export const completeOrder = (code: string, note?: string) => call<PaymentView>({ action: 'complete', code, ...(note ? { note } : {}) })
 export const dismissDeposit = (depositId: string) => call<{ ok: boolean }>({ action: 'dismiss', depositId })
 
-function mapIntent(r: any): MerchantIntent {
+export function mapIntent(r: any): MerchantIntent {
   const expired = r.status === 'pending' && r.expires_at && new Date(r.expires_at).getTime() < Date.now()
   return {
     id: r.id, code: r.code, orderNumber: r.order_number ?? null, amount: Number(r.requested_amount), received: Number(r.received_amount), note: r.note,
@@ -319,7 +321,7 @@ function mapIntent(r: any): MerchantIntent {
     completedByMerchant: !!r.completed_by_merchant, completedNote: r.completed_note ?? null, storeId: r.store_id ?? null, via: r.via ?? null,
     dueDate: r.due_date ?? null, reminderCount: Number(r.reminder_count) || 0, lastRemindedAt: r.last_reminded_at ?? null,
     overpaid: Number(r.overpaid_amount) > 0 ? Number(r.overpaid_amount) : 0,
-    taxPercent: Number(r.tax_percent) || 0,
+    taxPercent: Number(r.tax_percent) || 0, createdByStaff: r.created_by_staff ?? null,
     items: Array.isArray(r.items) ? r.items.map((i: any) => ({ name: i.name, qty: Number(i.qty), price: Number(i.price), total: Number(i.total) })) : null,
   }
 }
