@@ -329,6 +329,17 @@ function RequireUnlocked({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// A shared pay link opened by a signed-in user whose app is locked (a link
+// opens a new tab, which locks): ask for the passcode first, then show the
+// link. It used to show the pay page, hand over to the pay screen, get bounced
+// to the lock screen there, and only then come back to the review.
+function UnlockFirst({ children }: { children: React.ReactNode }) {
+  const location = useLocation()
+  const s = useAuthStore.getState()
+  if (s.isAuthenticated && s.isLocked) return <Navigate to="/auth/lock" replace state={{ from: location }} />
+  return <>{children}</>
+}
+
 function RequireNoUsername({ children }: { children: React.ReactNode }) {
   const s = useAuthStore.getState()
   if (!s.passcode) return <Navigate to="/auth/passcode" replace />
@@ -361,8 +372,8 @@ const router = createBrowserRouter([
   // ── Public payment page - no auth required ─────────────────────────────────
   // Also phone-width on desktop - this is the page a payment-receive link opens to.
   // Merchant payment request (QR / link) - public, no sign-in needed.
-  { path: '/paylink/r/:code', element: <AuthShell><Unlocked title="Pay"><MerchantPayPage /></Unlocked></AuthShell> },
-  { path: '/paylink/:username', element: <AuthShell><Unlocked title="Pay"><PayPage /></Unlocked></AuthShell> },
+  { path: '/paylink/r/:code', element: <AuthShell><UnlockFirst><Unlocked title="Pay"><MerchantPayPage /></Unlocked></UnlockFirst></AuthShell> },
+  { path: '/paylink/:username', element: <AuthShell><UnlockFirst><Unlocked title="Pay"><PayPage /></Unlocked></UnlockFirst></AuthShell> },
   // Old public link paths → /paylink/… (see RenamedPathRedirect).
   { path: '/pay/r/:code', element: <RenamedPathRedirect from="/pay" to="/paylink" /> },
   { path: '/pay/:username', element: <RenamedPathRedirect from="/pay" to="/paylink" /> },
