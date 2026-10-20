@@ -178,11 +178,7 @@ export function ReceivePage() {
   // output) and desktop (left column: QR, right column: username/address +
   // share) never duplicate this JSX.
   const qrCardSection = (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-      background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
-      padding: 16, boxShadow: 'var(--shadow-1)', width: '100%', boxSizing: 'border-box',
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, width: '100%', boxSizing: 'border-box' }}>
       {business && picked ? (
         // Which QR: the same pill + floating list as Pay's token picker.
         <div style={{ position: 'relative', zIndex: qrMenu ? 41 : undefined, minWidth: 200, maxWidth: '100%' }}>
@@ -197,11 +193,7 @@ export function ReceivePage() {
             {qrMenu && <TokenMenu ariaLabel="Choose QR" selected={picked.id} options={qrOptions} onSelect={setQrPick} onClose={() => setQrMenu(false)} />}
           </AnimatePresence>
         </div>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
-          <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>My QR</span>
-        </div>
-      )}
+      ) : null}
 
       {/* The app's one QR style (QrCard), holding this page's own canvas - the
           one Download / Share save. Captioned with whose QR it is. */}
@@ -213,33 +205,33 @@ export function ReceivePage() {
           <button onClick={() => { setQrError(false); setQrReady(false) }} className="text-brand text-xs underline">Retry</button>
         </div>
       ) : (
-        <QrCard subtitle={shopQr ? (store?.name ? `${store.name} · ${displayUsername}.arc` : `${displayUsername}.arc`) : displayUsername ? `${displayUsername}.arc` : shortenAddress(walletAddress ?? '')}>
+        <QrCard title={shopQr ? (merchant.storeName || user.displayName || `${displayUsername}.arc`) : (user.displayName || (displayUsername ? `${displayUsername}.arc` : undefined))}
+          subtitle={shopQr ? (store?.name ? `${store.name} · ${displayUsername}.arc` : `${displayUsername}.arc`) : displayUsername ? `${displayUsername}.arc` : shortenAddress(walletAddress ?? '')}
+          tag={shopQr ? 'Arc · USDC' : 'Arc network'} caption={shopQr ? 'Scan, type the amount and pay' : undefined}>
           <canvas ref={canvasRef} width={236} height={236} style={{ display: 'block', opacity: qrReady ? 1 : 0 }} />
         </QrCard>
       )}
 
-      {/* Divider + Download/Share row - same layout as Home's MyQrCard */}
-      <div style={{ width: '100%', height: 1, background: 'var(--border)', margin: '6px 0 2px' }} />
-      <div style={{ display: 'flex', width: '100%', alignItems: 'stretch' }}>
+      {/* Download / Share - under the card, like the payment apps' */}
+      <div style={{ display: 'flex', width: '100%', maxWidth: 340, gap: 10, alignItems: 'stretch' }}>
         <button
           onClick={handleDownloadQr}
           disabled={!qrReady}
           style={{
             flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'clamp(5px, 1.6vw, 8px)',
-            background: 'transparent', border: 'none', padding: '12px 6px', whiteSpace: 'nowrap',
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px 6px', whiteSpace: 'nowrap',
             color: qrReady ? 'var(--text-primary)' : 'var(--text-secondary)',
             fontSize: 'clamp(12.5px, 3.8vw, 14px)', fontWeight: 600, cursor: qrReady ? 'pointer' : 'default',
           }}>
           <Download size={17} />
           Download QR
         </button>
-        <div style={{ width: 1, background: 'var(--border)' }} />
         <button
           onClick={handleShareQr}
           disabled={!qrReady}
           style={{
             flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'clamp(5px, 1.6vw, 8px)',
-            background: 'transparent', border: 'none', padding: '12px 6px', whiteSpace: 'nowrap',
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px 6px', whiteSpace: 'nowrap',
             color: qrReady ? 'var(--text-primary)' : 'var(--text-secondary)',
             fontSize: 'clamp(12.5px, 3.8vw, 14px)', fontWeight: 600, cursor: qrReady ? 'pointer' : 'default',
           }}>

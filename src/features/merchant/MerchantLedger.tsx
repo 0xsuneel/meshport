@@ -679,7 +679,11 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
               ))}
             </div>
             {qrMode === 'wallet' && <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}><ChainPicker value={qrChain} onChange={setQrChain} /></div>}
-            <QrCard><canvas ref={canvasRef} width={220} height={220} style={{ display: 'block' }} /></QrCard>
+            <QrCard subtitle={intent ? `${orderTitle(orderKindOf(intent), orderLabel(intent))} · $${formatAmount(intent.amount)}` : undefined}
+              tag={qrMode === 'wallet' ? `${merchantQrChain(qrChain).label} · USDC` : 'Arc · USDC'}
+              caption={qrMode === 'wallet' ? `Pay on ${merchantQrChain(qrChain).label} - the amount fills in` : 'Scan to pay - the amount is fixed'}>
+              <canvas ref={canvasRef} width={232} height={232} style={{ display: 'block' }} />
+            </QrCard>
             {qrMode === 'wallet' && walletAddress && dueNow > 0
               ? <WalletPaymentDetails chainId={qrChain} to={walletAddress} amount={dueNow} />
               : <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', maxWidth: 320, lineHeight: 1.45 }}>

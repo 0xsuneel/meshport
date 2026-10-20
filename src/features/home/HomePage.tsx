@@ -102,6 +102,7 @@ function aggregateBuckets(records: ActivityRecord[], spanDays: number, granulari
 const APP_URL = 'https://meshport.xyz'
 
 function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }: { walletAddress: string | null; username: string | null; scrollContainerRef: RefObject<HTMLDivElement>; assetsCardRef: RefObject<HTMLDivElement> }) {
+  const displayName = useAuthStore(s => s.user?.displayName)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   const [qrReady, setQrReady] = useState(false)
@@ -315,13 +316,12 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
       ref={cardRef}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-        background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
-        padding: '16px', boxShadow: 'var(--shadow-1)', width: '95%', margin: '0 auto', boxSizing: 'border-box',
+        width: '95%', margin: '0 auto', boxSizing: 'border-box',
         scale, opacity, transformOrigin: 'top center',
       }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
+      {activeAmount && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
-          {activeAmount ? `Collect $${activeAmount}` : 'My QR'}
+          {`Collect $${activeAmount}`}
         </span>
         {activeAmount && (
           <button
@@ -331,13 +331,15 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
             <X size={14} style={{ color: 'var(--text-secondary)' }} />
           </button>
         )}
-      </div>
+      </div>}
       {/* The app's one QR style (QrCard), holding this card's own canvas - the
           one Download / Share save. */}
       {qrError ? (
         <span role="alert" style={{ fontSize: 12, color: 'var(--text-secondary)', padding: 8, textAlign: 'center' }}>Couldn't load QR</span>
       ) : (
-        <QrCard subtitle={activeAmount ? `Scan to pay $${activeAmount}` : username ? `${username.replace(/\.arc$/, '')}.arc` : undefined}>
+        <QrCard title={displayName || (username ? `${username.replace(/\.arc$/, '')}.arc` : undefined)}
+          subtitle={username ? `${username.replace(/\.arc$/, '')}.arc` : undefined} tag="Arc network"
+          caption={activeAmount ? `Scan to pay $${activeAmount}` : undefined}>
           <canvas ref={canvasRef} style={{ display: 'block', opacity: qrReady ? 1 : 0 }} />
         </QrCard>
       )}
@@ -356,28 +358,26 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
         <span style={{ fontSize: 13, fontWeight: 600 }}>Request payment</span>
       </button>
 
-      {/* Divider + Download/Share row - same layout as the UPI-app reference */}
-      <div style={{ width: '100%', height: 1, background: 'var(--border)', margin: '6px 0 2px' }} />
-      <div style={{ display: 'flex', width: '100%', alignItems: 'stretch' }}>
+      {/* Download / Share - under the card, like the payment apps' */}
+      <div style={{ display: 'flex', width: '100%', maxWidth: 340, gap: 10, alignItems: 'stretch' }}>
         <button
           onClick={handleDownload}
           disabled={!qrReady}
           style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            background: 'transparent', border: 'none', padding: '12px 8px',
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px 8px',
             color: qrReady ? 'var(--text-primary)' : 'var(--text-secondary)',
             fontSize: 14, fontWeight: 600, cursor: qrReady ? 'pointer' : 'default',
           }}>
           <Download size={17} />
           Download QR
         </button>
-        <div style={{ width: 1, background: 'var(--border)' }} />
         <button
           onClick={handleShare}
           disabled={!qrReady}
           style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            background: 'transparent', border: 'none', padding: '12px 8px',
+            background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14, padding: '12px 8px',
             color: qrReady ? 'var(--text-primary)' : 'var(--text-secondary)',
             fontSize: 14, fontWeight: 600, cursor: qrReady ? 'pointer' : 'default',
           }}>
