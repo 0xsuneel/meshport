@@ -508,6 +508,9 @@ function OwnerBusinessPage() {
   // The hub shows the bottom nav, so its body clears it (65px + safe area).
   // A sub-view covers the nav (like every other detail page), so its body
   // only needs the safe area.
+  // Collect payment / Shop QR: the store chip in their title row.
+  const screenStorePick = stores.length > 1 && activeStore
+    ? { stores: storePickList, value: activeStore.id, onChange: pickStore, onManage: open('team') } : undefined
   const bodyPad = { paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }
   const panelPad = { paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }
   return (
@@ -694,11 +697,11 @@ function OwnerBusinessPage() {
 
       <RequestMaker.Provider value={{ create: createPaymentRequest, storeId: qrStore?.id ?? null, canBill: true, chat: true }}>
       {level('qr', (
-        <ShopQrScreen open={stack.includes('qr')} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} />
+        <ShopQrScreen open={stack.includes('qr')} onBack={back} storeName={storeName} outlet={stores.length > 1 ? qrStore?.name : null} handle={handle} storePick={screenStorePick} />
       ))}
       {level('receive', (
         <ReceiveScreen open={stack.includes('receive')} onBack={() => { back(); reloadIntents() }} onChanged={reloadIntents} storeName={storeName}
-          shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} />
+          shopQr={{ handle, outlet: stores.length > 1 ? qrStore?.name : null }} storePick={screenStorePick} />
       ))}
       {level('customers', (
         <CustomersScreen open={stack.includes('customers')} onBack={back} payments={storeRaw.filter(p => p.method !== 'own_transfer').map(p => refundedOf(p.id) > 0 && !refundedIds.has(p.id) ? { ...p, amount: kept(p) } : p)} refundedIds={refundedIds}

@@ -11,7 +11,7 @@ import { StoreSwitcher } from '@/features/business/ui/Stores'
 
 export type PickerStore = { id: string; name: string; isDefault?: boolean; personal?: boolean }
 
-export function StorePicker({ stores, value, onChange, label = 'Request for store', hint = 'Payments go to the store you pick', onManage }: {
+export function StorePicker({ stores, value, onChange, label = 'Request for store', hint = 'Payments go to the store you pick', onManage, variant = 'row' }: {
   stores: PickerStore[]
   value: string
   onChange: (id: string) => void
@@ -20,12 +20,23 @@ export function StorePicker({ stores, value, onChange, label = 'Request for stor
   hint?: string
   /** "Manage all stores" (default: open the Business tab). */
   onManage?: () => void
+  /** 'pill': a small chip naming the store (for a screen's title row). */
+  variant?: 'row' | 'pill'
 }) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const picked = stores.find(s => s.id === value) ?? stores[0]
   return (
     <>
+      {variant === 'pill' ? (
+        <button type="button" onClick={() => setOpen(true)} aria-label={`Switch store (now ${picked.name})`}
+          className="inline-flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-full text-[13px] font-semibold text-brand-text min-w-0 max-w-[55vw] active:scale-95 transition-transform"
+          style={{ background: 'color-mix(in srgb, var(--brand) 14%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
+          <StoreIcon className="size-4 shrink-0" />
+          <span className="truncate">{picked.name}</span>
+          <ArrowLeftRight className="size-3.5 shrink-0" />
+        </button>
+      ) : (
       <div className="w-full flex items-center gap-3 rounded-2xl px-3 py-2.5 bg-surface border border-border">
         <span className="size-9 rounded-xl flex items-center justify-center bg-brand text-white shrink-0">
           {picked.personal ? <User className="size-[18px]" /> : <StoreIcon className="size-[18px]" />}
@@ -40,6 +51,7 @@ export function StorePicker({ stores, value, onChange, label = 'Request for stor
           <ArrowLeftRight className="size-4" /> Switch
         </button>
       </div>
+      )}
       {/* On top of whatever sheet this row sits in (chat Request / Bill). */}
       {createPortal(
         <Sheet open={open} onClose={() => setOpen(false)} id="store-switch">
