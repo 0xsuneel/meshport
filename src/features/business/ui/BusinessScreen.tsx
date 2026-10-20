@@ -22,6 +22,9 @@ export interface BusinessScreenProps {
    *  new view in like any other step (ScreenPush); going back to the first
    *  view slides back. */
   step?: string
+  /** The body is a flex column that fills the screen and scrolls itself
+   *  (Collect payment's forms, which pin their own buttons). */
+  fill?: boolean
 }
 
 /** Where a screen sits in the Business screen stack: `level` 0 is opened from
@@ -40,7 +43,7 @@ export const PUSH_BACK = { duration: 0.25, ease: EASE_OUT }
 const PANEL_EXIT = { x: '100%', transition: PUSH_BACK }
 const DESKTOP_EXIT = { opacity: 0, transition: { duration: 0.12, ease: EASE_OUT } }
 
-export function BusinessScreen({ open, title, onBack, children, footer, step = '' }: BusinessScreenProps) {
+export function BusinessScreen({ open, title, onBack, children, footer, step = '', fill = false }: BusinessScreenProps) {
   const look = React.useMemo(() => (typeof window === 'undefined' ? { dim: 0.22, shadow: '-10px 0 28px rgba(0,0,0,0.28)' } : pushLook()), [])
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
   const reduce = useReducedMotion()
@@ -83,7 +86,7 @@ export function BusinessScreen({ open, title, onBack, children, footer, step = '
             </header>
 
             {/* Scrollable body */}
-            <div className="flex-1 overflow-y-auto overscroll-contain">
+            <div className={fill ? 'flex-1 min-h-0 flex flex-col' : 'flex-1 overflow-y-auto overscroll-contain'}>
               {children}
             </div>
 

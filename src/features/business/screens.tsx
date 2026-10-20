@@ -308,7 +308,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   // The sheet's top: the store (like the person in a chat sheet) + the tabs.
   const head = (compact: boolean) => (
     <div>
-      <SheetPerson label="Collect payment" name={storeName} username={handle} compact={compact} onClose={onBack} sub={outlet} />
+      <SheetPerson label={isDesktop ? 'Collect payment' : 'Paid to'} name={storeName} username={handle} compact={compact} onClose={isDesktop ? onBack : undefined} sub={outlet} />
       {!compact && tabs.length > 1 && (
         <div className="flex p-1 rounded-2xl mt-3" role="tablist" aria-label="How to collect" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
           {tabs.map(x => (
@@ -339,7 +339,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
     body = (
       <div className="flex flex-col min-h-0 flex-1">
         <div className="px-5 flex-shrink-0" style={{ paddingTop: isDesktop ? 20 : 4, paddingBottom: 4 }}>
-          <SheetPerson label={bill ? `Bill ${num}` : `Request ${num}`} name={storeName} username={handle} onClose={onBack} sub={outlet} />
+          <SheetPerson label={bill ? `Bill ${num}` : `Request ${num}`} name={storeName} username={handle} onClose={isDesktop ? onBack : undefined} sub={outlet} />
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto" data-no-drag>
           <div className="flex flex-col items-center text-center px-5 pt-3 pb-4 gap-4">
@@ -418,7 +418,10 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
     )
   }
 
-  return <ActionSheet open={open} onClose={onBack} isDesktop={isDesktop} id="biz-collect" fixed>{body}</ActionSheet>
+  // Desktop: the centred dialog, like the chat's Request / Bill. Phone: a page
+  // that slides in from the right, like every other Business screen.
+  if (isDesktop) return <ActionSheet open={open} onClose={onBack} isDesktop id="biz-collect" fixed>{body}</ActionSheet>
+  return <BusinessScreen open={open} title="Collect payment" onBack={onBack} fill>{body}</BusinessScreen>
 }
 
 // ── Requests ─────────────────────────────────────────────────────────────

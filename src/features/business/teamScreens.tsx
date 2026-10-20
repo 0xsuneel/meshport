@@ -247,19 +247,22 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
   const [busy, setBusy] = useState(false)
   const load = () => listStores().then(s => { setStores(s); onChanged(s) }).catch(() => setStores([]))
   useEffect(() => { if (open) void load(); else setEdit(null) }, [open])
-  useEffect(() => { onEditing(edit ? { title: edit.id ? 'Edit store' : 'New store', back: () => setEdit(null) } : null) }, [!!edit, edit?.id])
+  // Opening / closing a form tells the screen in the same render, so its
+  // title and the form change together and the step push pictures the list
+  // (an effect a render later showed the form first, then slid it in again).
+  const changeEdit = (e: typeof edit) => { setEdit(e); onEditing(e ? { title: e.id ? 'Edit store' : 'New store', back: () => changeEdit(null) } : null) }
 
   const save = async () => {
     if (!edit) return
     setBusy(true)
-    try { await saveStore({ ...edit, isDefault: !edit.id && !(stores ?? []).length ? true : undefined }); setEdit(null); await load() }
+    try { await saveStore({ ...edit, isDefault: !edit.id && !(stores ?? []).length ? true : undefined }); changeEdit(null); await load() }
     catch (e) { toast(e instanceof Error ? e.message : 'Could not save', 'error') }
     setBusy(false)
   }
   const remove = async () => {
     if (!edit?.id) return
     setBusy(true)
-    try { await deleteStore(edit.id); setEdit(null); await load() } catch (e) { toast(e instanceof Error ? e.message : 'Could not delete', 'error') }
+    try { await deleteStore(edit.id); changeEdit(null); await load() } catch (e) { toast(e instanceof Error ? e.message : 'Could not delete', 'error') }
     setBusy(false)
   }
 
@@ -268,15 +271,15 @@ function StoresBody({ open, onEditing, onChanged, onQr, paymentsByStore, addLock
         {edit ? (
           <StoreForm name={edit.name} onName={v => setEdit({ ...edit, name: v })} type={edit.type} types={STORE_TYPES} onType={v => setEdit({ ...edit, type: v })}
             address={edit.address} onAddress={v => setEdit({ ...edit, address: v })} taxId={edit.taxId} onTaxId={v => setEdit({ ...edit, taxId: v })} busy={busy} onSave={save}
-            onDelete={edit.id ? remove : undefined} onCancel={() => setEdit(null)} />
+            onDelete={edit.id ? remove : undefined} onCancel={() => changeEdit(null)} />
         ) : stores === null ? <Skeleton className="h-40 w-full" /> : (
           <StoresView stores={stores.map(s => {
             const p = paymentsByStore.get(s.id)
             return { id: s.id, name: s.name, type: s.type ?? 'Store', address: s.address ?? undefined, taxId: s.taxId ?? undefined, isDefault: s.isDefault,
               payments: p ? `${money(p.total)} · ${p.count} payment${p.count === 1 ? '' : 's'}` : 'No payments yet' }
           })}
-            onAdd={() => setEdit({ name: '', type: defaultType, address: '', taxId: '' })}
-            onEdit={id => { const s = stores.find(x => x.id === id); if (s) setEdit({ id, name: s.name, type: s.type ?? STORE_TYPES[0], address: s.address ?? '', taxId: s.taxId ?? '' }) }}
+            onAdd={() => changeEdit({ name: '', type: defaultType, address: '', taxId: '' })}
+            onEdit={id => { const s = stores.find(x => x.id === id); if (s) changeEdit({ id, name: s.name, type: s.type ?? STORE_TYPES[0], address: s.address ?? '', taxId: s.taxId ?? '' }) }}
             onSetPrimary={async id => { try { await setDefaultStore(id); await load(); toast('Main store updated', 'success') } catch (e) { toast(e instanceof Error ? e.message : 'Could not update', 'error') } }}
             onQr={onQr} addLockedNote={addLockedNote} />
         )}
@@ -295,7 +298,7 @@ function StaffBody({ open, onEditing, stores }: { open: boolean; onEditing: (e: 
   const [error, setError] = useState<string>()
   const load = () => listStaff().then(setStaff).catch(() => setStaff([]))
   useEffect(() => { if (open) void load(); else setEdit(null) }, [open])
-  useEffect(() => { onEditing(edit ? { title: edit.id ? 'Edit staff' : 'Invite staff', back: () => setEdit(null) } : null) }, [!!edit, edit?.id])
+  const changeEdit = (e: typeof edit) => { setEdit(e); onEditing(e ? { title: e.id ? 'Edit staff' : 'Invite staff', back: () => changeEdit(null) } : null) }
   const storeName = useMemo(() => new Map(stores.map(s => [s.id, s.name])), [stores])
 
   const save = async () => {
@@ -304,7 +307,7 @@ function StaffBody({ open, onEditing, stores }: { open: boolean; onEditing: (e: 
     try {
       if (edit.id) await updateStaff(edit.id, edit.role, edit.store || null)
       else await inviteStaff(edit.username, edit.role, edit.store || null)
-      toast(edit.id ? 'Saved' : 'Invite sent', 'success'); setEdit(null); await load()
+      toast(edit.id ? 'Saved' : 'Invite sent', 'success'); changeEdit(null); await load()
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save') }
     setBusy(false)
   }
@@ -314,11 +317,11 @@ function StaffBody({ open, onEditing, stores }: { open: boolean; onEditing: (e: 
         {edit ? (
           <StaffForm username={edit.username} onUsername={v => setEdit({ ...edit, username: v })} role={edit.role} onRole={r => setEdit({ ...edit, role: r })}
             stores={[{ id: '', name: `All ${terms.stores.toLowerCase()}` }, ...stores.map(s => ({ id: s.id, name: s.name }))]} store={edit.store} onStore={v => setEdit({ ...edit, store: v })}
-            busy={busy} error={error} onSave={save} onCancel={() => setEdit(null)} />
+            busy={busy} error={error} onSave={save} onCancel={() => changeEdit(null)} />
         ) : staff === null ? <Skeleton className="h-40 w-full" /> : (
           <StaffView staff={staff.map(m => ({ id: m.id, name: `${m.username}.arc`, role: m.role, status: m.status, store: m.storeId ? storeName.get(m.storeId) : undefined }))}
-            onInvite={() => { setError(undefined); setEdit({ username: '', role: 'cashier', store: '' }) }}
-            onEdit={id => { const m = staff.find(x => x.id === id); if (m) { setError(undefined); setEdit({ id, username: m.username, role: m.role, store: m.storeId ?? '' }) } }}
+            onInvite={() => { setError(undefined); changeEdit({ username: '', role: 'cashier', store: '' }) }}
+            onEdit={id => { const m = staff.find(x => x.id === id); if (m) { setError(undefined); changeEdit({ id, username: m.username, role: m.role, store: m.storeId ?? '' }) } }}
             onRemove={async id => { try { await removeStaff(id); await load() } catch (e) { toast(e instanceof Error ? e.message : 'Could not remove', 'error') } }} />
         )}
       </div>
