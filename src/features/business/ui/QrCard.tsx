@@ -9,7 +9,7 @@
  */
 import React, { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, Copy } from 'lucide-react'
 import { drawMeshportBadge } from '@/lib/qrLogo'
 import { Skeleton } from './primitives'
 import { springs } from './types'
@@ -33,6 +33,29 @@ export interface QrCardProps {
 
 const TEAL = '#0F5C57'
 export const QR_WALLETS = 'MeshPort · MetaMask · OKX · Trust · Coinbase'
+
+/** A small box on the card over the QR ("Username · rajesh.arc"), side by
+ *  side with another (QrCard's `top`). With `onCopy` it copies on tap. Tinted
+ *  with the brand colour - the page colour looked like an empty hole on the
+ *  card in dark mode. */
+export function QrInfoBox({ label, value, onCopy, copied = false, mono = true }: {
+  label: string; value: string; onCopy?: () => void; copied?: boolean; mono?: boolean
+}) {
+  const body = (
+    <>
+      <span className="flex-1 min-w-0">
+        <span className="block text-[11px] font-semibold text-brand-text">{label}</span>
+        <span className="block text-[13px] font-semibold text-text-primary truncate" style={mono ? { fontFamily: 'ui-monospace, monospace' } : undefined}>{value}</span>
+      </span>
+      {onCopy && (copied ? <CheckCircle2 className="w-4 h-4 text-success flex-shrink-0" /> : <Copy className="w-4 h-4 text-brand-text flex-shrink-0" />)}
+    </>
+  )
+  const cls = 'flex-1 min-w-0 flex items-center gap-2 rounded-xl px-3 py-2 text-left'
+  const style = { background: 'color-mix(in srgb, var(--brand) 12%, var(--surface))', border: '1px solid color-mix(in srgb, var(--brand) 28%, transparent)' }
+  return onCopy
+    ? <button type="button" onClick={onCopy} aria-label={`Copy ${label.toLowerCase()}`} className={`${cls} active:scale-[0.98] transition-transform`} style={style}>{body}</button>
+    : <div className={cls} style={style}>{body}</div>
+}
 
 function Badge() {
   const ref = useRef<HTMLCanvasElement>(null)
