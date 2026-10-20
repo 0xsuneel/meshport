@@ -9,6 +9,7 @@ import type { ReactNode } from './types'
 import { pushLook } from '@/lib/pushLook'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ScreenPush } from '@/components/ui/ScreenPush'
+import { useBackLayer } from '@/lib/backLayers'
 import { DESKTOP_QUERY, DESKTOP_FADE_TRANSITION, EASE_OUT, PAGE_SLIDE_X, PAGE_TRANSITION } from '@/lib/motion'
 
 export interface BusinessScreenProps {
@@ -48,6 +49,8 @@ export function BusinessScreen({ open, title, onBack, children, footer, step = '
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
   const reduce = useReducedMotion()
   const { level, covered } = useScreenLevel()
+  // Phone / browser Back = the header's back arrow (a step inside first).
+  useBackLayer(open, onBack)
   // Above the Manage orders / money panel (z-40), each level above the last.
   const z = 41 + level
   // Uncovering is a back move: 250ms, like the screen sliding off on top.

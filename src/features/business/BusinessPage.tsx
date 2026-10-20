@@ -15,6 +15,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { pushLook } from '@/lib/pushLook'
 import { DESKTOP_QUERY, DESKTOP_FADE_TRANSITION, PAGE_SLIDE_X, PAGE_TRANSITION } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useBackLayer } from '@/lib/backLayers'
 import { useBizTerms } from '@/lib/businessCategories'
 import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
@@ -499,6 +500,9 @@ function OwnerBusinessPage() {
   }, [])
   // Manage orders / money shifts left too when a screen opens over it.
   const subCovered = !isDesktop && !!screen
+  // Phone / browser Back from Manage orders / money returns to the overview.
+  const closeSub = () => { setPayFilter('all'); setTab('overview') }
+  useBackLayer(subOpen, closeSub)
   // The hub shows the bottom nav, so its body clears it (65px + safe area).
   // A sub-view covers the nav (like every other detail page), so its body
   // only needs the safe area.
@@ -550,7 +554,7 @@ function OwnerBusinessPage() {
               {/* Payments and Settlements open from Overview (See all, the settle
                   bar, the menu) and come back with the arrow - no tab bar. */}
               <header className="header-row gap-3 px-5 pt-header pb-header">
-                <button type="button" aria-label="Back to overview" onClick={() => { setPayFilter('all'); setTab('overview') }} className="back-btn">
+                <button type="button" aria-label="Back to overview" onClick={closeSub} className="back-btn">
                   <ArrowLeft className="w-5 h-5 text-text-primary" />
                 </button>
                 <h1 className="header-title">{tab === 'payments' ? `Manage ${terms.orders.toLowerCase()}` : 'Manage money'}</h1>

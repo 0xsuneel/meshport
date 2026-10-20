@@ -7,6 +7,7 @@ import { NavIcon, type NavIconName } from './navIcons'
 import { Store } from 'lucide-react'
 import { useBusinessTab } from '@/lib/merchant'
 import { useAccountLock, isLockedPath } from '@/lib/accountLock'
+import { backLayerPop } from '@/lib/backLayers'
 
 // Icons (navIcons.tsx, Phosphor): outline when idle. `filled` (the phone
 // bottom bar) shows the selected tab as the solid version in white on a
@@ -142,6 +143,8 @@ export function BottomNav() {
     window.history.pushState({ meshportTab: true }, '')
 
     const handlePop = () => {
+      // Back closed a screen or sheet open on this tab (Business): stay here.
+      if (backLayerPop()) return
       if (location.pathname === '/') {
         // Already on Home - let browser handle (exit app)
         return
