@@ -3,6 +3,18 @@
 // a card. Links shared before the rename (`<app>/pay/<username>`) still parse.
 // Merchant links (`/paylink/r/<code>`) are handled by merchantPay.codeFromLink.
 
+// The links a QR / share carries - one builder, so Home, Receive and Business
+// give the same link (and so the same QR) for the same thing:
+//   personal  /paylink/<name>             a person; a business's Personal link adds ?personal=1
+//                                         (its plain link is its Shop QR)
+//   shop      /paylink/<name>?store=<id>  a business's Shop QR for one store
+export const PAY_LINK_ORIGIN = 'https://meshport.xyz'
+const clean = (u: string) => u.replace(/\.arc$/i, '')
+export const personalPayLink = (username: string, business = false) =>
+  `${PAY_LINK_ORIGIN}/paylink/${clean(username)}${business ? '?personal=1' : ''}`
+export const shopPayLink = (username: string, storeId?: string | null) =>
+  `${PAY_LINK_ORIGIN}/paylink/${clean(username)}${storeId ? `?store=${storeId}` : ''}`
+
 // token: EURC / cirBTC when the link asks for that token (?token=), else USDC.
 export type PersonalPayLink = { username: string; amount: string | null; url: string; token?: 'USDC' | 'EURC' | 'cirBTC' }
 

@@ -6,6 +6,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { listStores, type Store } from '@/lib/businessTeam'
 import { arcAddressUri } from '@/lib/merchantQr'
+import { personalPayLink, shopPayLink } from '@/lib/payLinks'
+import { shopFrom } from '@/lib/orderLabels'
 import { RequestQrPanel } from './RequestQrPanel'
 import { useAuthStore, useUIStore } from '@/store'
 import { Card } from '@/components/ui/Card'
@@ -49,7 +51,8 @@ export function ReceivePage() {
   const [qrError, setQrError] = useState(false)
 
   // One QR for everyone (merchants too - no separate MeshPort / Merchant QR tabs).
-  const isMerchant = useMerchant().isMerchant
+  const merchant = useMerchant()
+  const isMerchant = merchant.isMerchant
   const [params] = useSearchParams()
   // "Request payment" (replaces the old Collect USDC): an order-numbered
   // request whose QR / link / share carry the order.
@@ -81,8 +84,9 @@ export function ReceivePage() {
   // Payment link - the real shareable URL
   // A business's plain username link is its Shop QR, so the Personal QR says
   // personal=1 (the pay page and the scanner then make a normal payment).
+  // (Same builders as Home and the Business tab - payLinks.ts.)
   const paymentLink = displayUsername
-    ? `${APP_URL}/paylink/${displayUsername}${shopQr ? (store ? `?store=${store.id}` : '') : business ? '?personal=1' : ''}`
+    ? (shopQr ? shopPayLink(displayUsername, store?.id) : personalPayLink(displayUsername, business))
     : walletAddress
     ? `${APP_URL}/paylink/${walletAddress}`
     : APP_URL
@@ -115,10 +119,14 @@ export function ReceivePage() {
     setTimeout(() => setCopied(null), 2000)
   }
 
+  // A shop's QR is shared as the shop (and its store): "Pay Royal Salons ·
+  // Cutting Edge on MeshPort" - the same words as the Business tab's Shop QR.
+  const shopName = shopQr ? shopFrom(merchant.storeName || displayUsername, store?.name) : ''
   const handleShare = async () => {
     const shareData = {
-      title: 'Pay me on MeshPort',
-      text: displayUsername
+      title: shopQr ? `Pay ${shopName}` : 'Pay me on MeshPort',
+      text: shopQr ? `Pay ${shopName} on MeshPort`
+        : displayUsername
         ? `Send USDC, EURC or cirBTC to ${displayUsername}.arc on MeshPort ⚡`
         : 'Send me USDC, EURC or cirBTC on MeshPort',
       url: paymentLink,
@@ -149,7 +157,7 @@ export function ReceivePage() {
       canvasRef.current.toBlob(async (blob) => {
         if (!blob) { showToastMessage('Could not share QR', 'error'); return }
         const file = new File([blob], 'meshport-qr.png', { type: 'image/png' })
-        const shareText = `Pay me on MeshPort - ${paymentLink}`
+        const shareText = shopQr ? `Pay ${shopName} on MeshPort - ${paymentLink}` : `Pay me on MeshPort - ${paymentLink}`
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({ files: [file], title: 'My QR', text: shareText })
         } else if (navigator.share) {
