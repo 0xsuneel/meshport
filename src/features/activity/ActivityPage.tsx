@@ -267,10 +267,13 @@ export function deriveActivityRow(record: ActivityRecord) {
   // Order payments (bill / request with an order number) are never shown as a
   // plain receive / paid - merchant side "Payment received", customer side
   // "Order payment".
-  // A Shop QR payment is a plain payment (nobody requested it): titled like
-  // any payment ("Paid to" / "Received from"), no order number.
-  const merchantOrder = (isReceive || isSend) && metadata.merchantOrder && activityOrderKind(metadata) !== 'shop' ? String(metadata.merchantOrder) : null
-  const subtitle = merchantOrder || activityOrderKind(metadata) === 'shop' ? (isSend && metadata.merchantName ? String(metadata.merchantName) : counterpartyLabel)
+  // A Shop QR payment isn't an order anyone requested: no order number - the
+  // business sees "Payment Received", the customer "Paid to" the shop.
+  const shopPay = (isReceive || isSend) && activityOrderKind(metadata) === 'shop'
+  const merchantOrder = (isReceive || isSend) && metadata.merchantOrder && !shopPay ? String(metadata.merchantOrder) : null
+  // Which of the business's stores took it (merchant side).
+  const orderStore = isReceive && metadata.merchantStore ? String(metadata.merchantStore) : ''
+  const subtitle = merchantOrder || shopPay ? (isSend && metadata.merchantName ? String(metadata.merchantName) : `${counterpartyLabel}${orderStore ? ` · ${orderStore}` : ''}`)
                  : isSelfTransfer && (isSend || isReceive) ? 'Self'
                  : isSend     ? counterpartyLabel
                  : isReceive  ? counterpartyLabel
@@ -287,6 +290,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   const title = isClaim && metadata.auto_convert ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
               : isClaim && isMerchantClaim(record as any) ? (status === 'pending' ? 'Settling to Arc' : 'Settled to Arc')
               : merchantOrder ? paidOrderTitle(metadata, merchantOrder, isReceive, true)
+              : shopPay && isReceive ? 'Payment Received'
               : recoveredTitle ? recoveredTitle
               // A rewards claim that didn't go through (lib/rewards.ts).
               : isReceive && isFailed && metadata.receiveKind === 'reward_claim' ? 'Reward claim'
@@ -570,6 +574,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const orderWord = merchantOrderDetail ? paidOrderTitle(metadata, merchantOrderDetail, type === 'receive') : ''
   const title = isClaim && (metadata as any)?.merchant ? `Payment received · ${chainLabel(sourceChain) || 'External'}`
               : merchantOrderDetail ? orderWord
+              : type === 'receive' && activityOrderKind(metadata) === 'shop' ? 'Payment Received'
               : recoveredDetail && isClaim ? `${recoveredDetail} · ${chainLabel(sourceChain) || 'External'}`
               : recoveredDetail ? recoveredDetail
               : isSelfTransferDetail && type === 'send'    ? 'Paid to Self'
@@ -650,10 +655,12 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const move = activityMove(record)
   const moveLbl = moveLabels(isTransfer ? 'transfer' : 'bring', (record as any).counterpartyAddress, (record as any).walletAddress)
   const rows = [
-    { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Settlement from ${chain || 'other chain'}` : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
+    { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Settlement from ${chain || 'other chain'}` : merchantOrderDetail ? orderWord : activityOrderKind(metadata) === 'shop' && (type === 'receive' || type === 'send') ? 'Payment' : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
     { label: 'Chain',  value: chain },
     ...(merchantOrderDetail ? [{ label: activityOrderKind(metadata) === 'bill' ? 'Bill' : activityOrderKind(metadata) === 'merchant_request' ? 'Requested Payment' : 'Request', value: displayOrderNumber(merchantOrderDetail) }] : []),
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Merchant', value: String((metadata as any).merchantName) }] : []),
+    // The business's store that took the payment (merchant side).
+    ...(type === 'receive' && (metadata as any)?.merchantStore ? [{ label: 'Store', value: String((metadata as any).merchantStore) }] : []),
     ...(isClaim && (metadata as any)?.merchant && (record as any).walletAddress
       ? [{ label: 'Paid to', value: `${String((record as any).walletAddress).slice(0, 6)}…${String((record as any).walletAddress).slice(-6)}`, copy: String((record as any).walletAddress) }]
       : []),
