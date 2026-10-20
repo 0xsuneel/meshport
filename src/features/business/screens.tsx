@@ -291,7 +291,12 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
   // just the tabs here.
   // Phone: the title is the business - its logo and name, with the store
   // under it (tap to switch) or, with one store, its handle.
-  const heading = isDesktop ? undefined : businessHeading(storeName, avatar, shopQr?.handle ?? 'Collect payment', storePick)
+  // An order made: the title names it ("Bill #124 · Cutting Edge") in place
+  // of the store switch, and the order screen drops its own person row.
+  const heading = isDesktop ? undefined : intent
+    ? <BusinessTitle business={storeName} avatar={avatar} line={[`${intent.kind === 'invoice' ? 'Bill' : 'Request'} ${intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''}`.trim(),
+        intent.kind === 'invoice' && intent.customerUsername ? `for ${cleanUsername(intent.customerUsername)}.arc` : null, outlet].filter(Boolean).join(' · ')} />
+    : businessHeading(storeName, avatar, shopQr?.handle ?? 'Collect payment', storePick)
   const head = (compact: boolean) => (
     <div>
       {isDesktop && <SheetPerson label="Collect payment" name={storeName} username={handle} compact={compact} onClose={onBack} sub={outlet} />}
@@ -318,7 +323,7 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged, stor
     body = (
       <RequestResult intent={intent} view={view} isDesktop={isDesktop} name={storeName} username={handle} sub={outlet}
         from={shopFrom(storeName, outlet)} validLabel={validLabel}
-        sender={sender} onOpenChat={id => navigate(`/chat/${id}`)} onClose={onBack} onCancel={cancel} onNew={newPayment} />
+        sender={sender} onOpenChat={id => navigate(`/chat/${id}`)} onClose={onBack} onCancel={cancel} onNew={newPayment} noPerson={!isDesktop} />
     )
   } else if (tab === 'qr' && shopQr) {
     body = (
