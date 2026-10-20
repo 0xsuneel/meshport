@@ -28,6 +28,8 @@ function drawMark(g: CanvasRenderingContext2D, x: number, y: number, size: numbe
 }
 
 /** The MeshPort mark on a disc (`fg` lines on `bg`) - for headers beside the QR. */
+export { drawMark }
+
 export function drawMeshportBadge(canvas: HTMLCanvasElement, cssSize: number, bg = '#ffffff', fg = TEAL) {
   const dpr = Math.max(1, Math.min(4, window.devicePixelRatio || 1))
   const px = Math.round(cssSize * dpr)
@@ -49,13 +51,14 @@ const roundRect = (g: CanvasRenderingContext2D, x: number, y: number, w: number,
  * bitmap is cssSize × devicePixelRatio rounded down to whole pixels per module;
  * the canvas's CSS size is set to match, so nothing is resampled.
  */
-export async function drawMeshportQr(canvas: HTMLCanvasElement, data: string, cssSize = 236): Promise<void> {
+export async function drawMeshportQr(canvas: HTMLCanvasElement, data: string, cssSize = 236, pixelRatio?: number): Promise<void> {
   const QRCode = await import('qrcode')
   const qr = QRCode.create(data, { errorCorrectionLevel: 'H' })
   const n = qr.modules.size
   const margin = 1 // the QR frame around the canvas is light too, so 1 module of quiet zone is enough
   const total = n + margin * 2
-  const dpr = Math.max(1, Math.min(4, window.devicePixelRatio || 1))
+  // pixelRatio: an image file's own scale (1 = cssSize pixels), not the screen's.
+  const dpr = pixelRatio ?? Math.max(1, Math.min(4, window.devicePixelRatio || 1))
   const ms = Math.max(1, Math.floor((cssSize * dpr) / total))
   const px = ms * total
   canvas.width = px
