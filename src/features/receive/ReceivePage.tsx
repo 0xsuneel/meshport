@@ -3,7 +3,6 @@ import { Copy, Share2, CheckCircle, ArrowLeft, Lightbulb, DollarSign, Download, 
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { listStores, type Store } from '@/lib/businessTeam'
-import { MerchantQrPanel } from '@/features/merchant/MerchantQrPanel'
 import { arcAddressUri } from '@/lib/merchantQr'
 import { RequestQrPanel } from './RequestQrPanel'
 import { useAuthStore, useUIStore } from '@/store'
@@ -47,12 +46,9 @@ export function ReceivePage() {
   const [qrReady, setQrReady] = useState(false)
   const [qrError, setQrError] = useState(false)
 
-  // Merchants: "MeshPort QR" (Arc - works in MeshPort and any wallet) |
-  // "Merchant QR" (amount + one of the other networks, any wallet).
+  // One QR for everyone (merchants too - no separate MeshPort / Merchant QR tabs).
   const isMerchant = useMerchant().isMerchant
   const [params] = useSearchParams()
-  const [tab, setTab] = useState<'meshport' | 'merchant'>(() => params.get('tab') === 'merchant' ? 'merchant' : 'meshport')
-  const merchantTab = isMerchant && tab === 'merchant'
   // "Request payment" (replaces the old Collect USDC): an order-numbered
   // request whose QR / link / share carry the order.
   const [requesting, setRequesting] = useState(() => params.get('request') === '1' || !!params.get('customer'))
@@ -96,9 +92,9 @@ export function ReceivePage() {
     drawMeshportQr(canvasRef.current, qrData)
       .then(() => setQrReady(true))
       .catch(() => setQrError(true))
-    // Redraw when My QR comes back into view (after Request payment or the
-    // Merchant QR tab) - the canvas is a fresh, empty element then.
-  }, [qrData, requesting, merchantTab])
+    // Redraw when My QR comes back into view (after Request payment) - the
+    // canvas is a fresh, empty element then.
+  }, [qrData, requesting])
 
   const handleCopy = async (value: string, key: string) => {
     const ok = await copyToClipboard(value)
@@ -167,7 +163,7 @@ export function ReceivePage() {
       padding: 16, boxShadow: 'var(--shadow-1)', width: '100%', boxSizing: 'border-box',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
-        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>{store ? store.name : 'My QR'}</span>
+        <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>My QR</span>
       </div>
       {stores.length > 1 && (
         <div role="tablist" aria-label="Store" className="flex gap-2 overflow-x-auto no-scrollbar w-full justify-center flex-wrap">
@@ -314,27 +310,7 @@ export function ReceivePage() {
         </button>
       </div>
 
-      {isMerchant && (
-        <div className="px-4 pb-3 flex-shrink-0" style={isDesktop ? { padding: '0 24px 4px' } : undefined}>
-          <div role="tablist" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', maxWidth: isDesktop ? 420 : undefined }}>
-            {([['meshport', 'MeshPort QR'], ['merchant', 'Merchant QR']] as const).map(([id, text]) => (
-              <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
-                style={{ flex: 1, padding: '9px 6px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13.5, fontWeight: 700,
-                  background: tab === id ? 'var(--brand)' : 'transparent', color: tab === id ? '#fff' : 'var(--text-secondary)' }}>
-                {text}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {merchantTab ? (
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-4 pb-8" style={isDesktop ? { maxWidth: 460, padding: '8px 24px 24px' } : undefined}>
-            <MerchantQrPanel />
-          </div>
-        </div>
-      ) : isDesktop ? (
+      {isDesktop ? (
         // Full-bleed 2-column split (no maxWidth cap), same gap/padding
         // treatment as Swap's desktop layout. Left: QR only. Right:
         // username/address + share + tip.
