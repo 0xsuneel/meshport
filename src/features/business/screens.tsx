@@ -14,9 +14,8 @@
 // Money in uses the merchant-pay service (payment requests, live status);
 // nothing here moves funds out.
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { drawMeshportQr } from '@/lib/qrLogo'
 import { shopPayLink } from '@/lib/payLinks'
-import { Store, Clock, Printer, CalendarClock, Download, Share2 } from 'lucide-react'
+import { Store, Clock, Printer, Download, Share2 } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName, type BusinessDoc } from '@/lib/merchant'
 import { BusinessDocsField } from '@/features/merchant/BusinessDocsField'
@@ -25,8 +24,8 @@ import { useNavigate } from 'react-router-dom'
 import { Avatar } from '@/components/ui/Avatar'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import {
-  createPaymentRequest, listMyIntents, cancelPayment, reopenOrder, completeOrder, paymentLink, watchPayment, billCardMessage, paymentRequestMessage,
-  type MerchantIntent, type MerchantPayment, type PaymentView, shopFrom } from '@/lib/merchantPay'
+  createPaymentRequest, listMyIntents, cancelPayment, reopenOrder, completeOrder, paymentLink, billCardMessage, paymentRequestMessage,
+  type MerchantIntent, type MerchantPayment, shopFrom } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
 import { timeAgo, formatAmount } from '@/lib/utils'
 import { listItems, rememberItems, deleteItem, type SavedItem } from '@/lib/businessItems'
@@ -34,17 +33,17 @@ import { getShopLimits, setShopLimits } from '@/lib/shop'
 import { SearchField } from '@/components/ui/SearchField'
 import { ActionSheet, SheetPerson, SheetLabel, SheetChips } from '@/components/ui/ActionSheet'
 import { RequestAmountForm } from '@/features/merchant/RequestComposer'
+import { RequestResult, money, OPEN, VALID_FOR, dueTone, useQr, useShare, LinkShare, useLiveRequest, type ValidFor } from '@/features/merchant/RequestResult'
 import { BillComposer } from '@/features/merchant/InvoiceComposer'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { UserPicker, exactPick, pickerProblem, type PickedUser } from '@/components/ui/UserPicker'
-import { ChatSentLine } from '@/components/ui/ChatSentLine'
 import { useChatCardSender } from '@/hooks/useChatCardSender'
 import type { DbUser } from '@/lib/supabase'
 import {
-  BusinessScreen, QrCard, LiveStatus, ShareLink, Field, TextInput, ChipSelect,
+  BusinessScreen, QrCard, Field, TextInput, ChipSelect,
   RequestRow, InsightsChart, RankList, ProfileStatusCard, DetailList, PrimaryBtn, GhostBtn, Skeleton,
   QrSticker, HourChart, StatTriple, StatementView, PrintableStatement, ReceiptCard, HelpView,
-  type LiveStatusKind, type RequestStatus, type StatusCardTone, type StatementRange,
+  type RequestStatus, type StatusCardTone, type StatementRange,
 } from './ui'
 import { usePrint } from './printArea'
 import { salesByHour, hourLabel, statementRows, rangeLabel, rangeStart, exportPaymentsCsv } from './reports'
@@ -75,48 +74,9 @@ function useMakeRequest() {
   return (p: RequestInput) => m.create({ ...p, storeId: p.storeId ?? m.storeId })
 }
 
-const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const OPEN = new Set(['pending', 'payment_detected', 'processing', 'partially_paid'])
 const isExpired = (i: { expiresAt: string | null; status: string }) => !!i.expiresAt && Date.parse(i.expiresAt) < Date.now() && i.status !== 'paid'
 
 // ── Shared logic ─────────────────────────────────────────────────────────
-
-function useQr(value: string | null) {
-  const [src, setSrc] = useState<string>()
-  useEffect(() => {
-    setSrc(undefined)
-    if (!value) return
-    let live = true
-    // The same MeshPort QR (logo badge) as Home and Receive, ~464px for the
-    // counter sticker.
-    const cv = document.createElement('canvas')
-    drawMeshportQr(cv, value, Math.ceil(464 / Math.max(1, Math.min(4, window.devicePixelRatio || 1))))
-      .then(() => { if (live) setSrc(cv.toDataURL('image/png')) }).catch(() => {})
-    return () => { live = false }
-  }, [value])
-  return src
-}
-
-function useShare() {
-  const toast = useUIStore(s => s.showToastMessage)
-  const [copied, setCopied] = useState(false)
-  const copy = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1600) }
-    catch { toast('Could not copy', 'error') }
-  }
-  const share = async (text: string, url: string) => {
-    if (navigator.share) { try { await navigator.share({ text, url }) } catch { /* closed */ } return }
-    void copy(`${text} ${url}`)
-  }
-  return { copied, copy, share }
-}
-
-function LinkShare({ url, text, subject }: { url: string; text: string
-  /** With a subject, WhatsApp / SMS / Email buttons are shown too */ subject?: string }) {
-  const { copied, copy, share } = useShare()
-  return <ShareLink url={url} copied={copied} onCopy={() => copy(url)} onShare={() => share(text, url)}
-    channels={subject ? { subject, text: `${text}\n${url}` } : undefined} />
-}
 
 /** Share a payment link: copy, native share, WhatsApp, SMS, email. */
 function ShareSheet({ open, onClose, title, url, text, subject }: { open: boolean; onClose: () => void; title: string; url: string; text: string; subject: string }) {
@@ -129,31 +89,6 @@ function ShareSheet({ open, onClose, title, url, text, subject }: { open: boolea
     </Sheet>
   )
 }
-
-const dueTone = { neutral: 'text-text-muted', warning: 'text-warning', danger: 'text-danger' } as const
-
-/** Live status of one request (polls until it's final). */
-function useLiveRequest(code: string | null) {
-  const [view, setView] = useState<PaymentView | null>(null)
-  useEffect(() => {
-    setView(null)
-    if (!code) return
-    return watchPayment(code, setView, 3000)
-  }, [code])
-  return view
-}
-
-function liveStatus(v: PaymentView | null): { status: LiveStatusKind; text: string } {
-  const s = v?.status ?? 'pending'
-  if (s === 'paid') return { status: 'paid', text: `Paid ${money(v!.received)}` }
-  if (s === 'partially_paid') return { status: 'partial', text: `Received ${money(v!.received)} of ${money(v!.amount)}` }
-  if (s === 'payment_detected' || s === 'processing') return { status: 'detected', text: 'Payment found - confirming' }
-  if (s === 'expired') return { status: 'expired', text: 'This request expired' }
-  if (s === 'cancelled') return { status: 'cancelled', text: 'Cancelled' }
-  if (s === 'failed') return { status: 'failed', text: 'Payment failed' }
-  return { status: 'waiting', text: 'Waiting for payment' }
-}
-const Live = ({ view }: { view: PaymentView | null }) => <LiveStatus {...liveStatus(view)} />
 
 function Done({ icon, top, amount, note, children }: { icon: React.ReactNode; top?: string; amount: number; note?: string | null; children: React.ReactNode }) {
   return (
@@ -228,11 +163,6 @@ export function ShopQrScreen({ open, onBack, storeName, outlet, handle, payTo }:
 
 // ── Receive (counter QR + shareable link, one order) ─────────────────────
 
-const VALID_FOR = [
-  { id: '15', label: '15 min' }, { id: '60', label: '1 hour' }, { id: '1440', label: '1 day' },
-  { id: '10080', label: '7 days' }, { id: '0', label: 'No limit' },
-] as const
-type ValidFor = typeof VALID_FOR[number]['id']
 type CollectTab = 'qr' | 'charge' | 'bill'
 
 /** "@Priya.arc " → "priya" (what the customer field holds). */
@@ -277,8 +207,6 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
   }
   const [intent, setIntent] = useState<MerchantIntent | null>(null)
   const view = useLiveRequest(intent?.code ?? null)
-  const link = intent ? paymentLink(intent.code) : null
-  const qr = useQr(link)
   const paid = view?.status === 'paid'
 
   useEffect(() => { if (paid && !owner) speakPayment(view!.received) }, [paid])
@@ -354,57 +282,10 @@ export function ReceiveScreen({ open, onBack, storeName, shopQr, onChanged }: {
 
   let body: React.ReactNode
   if (intent) {
-    const bill = intent.kind === 'invoice'
-    const num = intent.orderNumber ? displayOrderNumber(intent.orderNumber) : ''
-    const d = dueText(intent.dueDate ?? null, !paid)
-    const dueShare = dueText(intent.dueDate ?? null, true)
-    // Expired or cancelled: nothing left to pay, so no QR to share or order to cancel.
-    const ended = !paid && (['expired', 'cancelled', 'failed'].includes(view?.status ?? '')
-      || (!!intent.expiresAt && !intent.dueDate && Date.parse(intent.expiresAt) < Date.now()))
     body = (
-      <div className="flex flex-col min-h-0 flex-1">
-        <div className="px-5 flex-shrink-0" style={{ paddingTop: isDesktop ? 20 : 4, paddingBottom: 4 }}>
-          <SheetPerson label={bill ? `Bill ${num}` : `Request ${num}`} name={storeName} username={handle} onClose={isDesktop ? onBack : undefined} sub={outlet} />
-        </div>
-        <div className="flex-1 min-h-0 overflow-y-auto" data-no-drag>
-          <div className="flex flex-col items-center text-center px-5 pt-3 pb-4 gap-4">
-            <div>
-              <p className="display text-4xl font-bold tabular-nums text-text-primary">{money(intent.amount)}</p>
-              {intent.note && <p className="text-sm text-text-secondary mt-1">{intent.note}</p>}
-              {intent.customerUsername && <p className="text-xs text-text-muted mt-1">For {intent.customerUsername}.arc</p>}
-              <ChatSentLine status={sender.status} onRetry={sender.retry} onOpen={id => navigate(`/chat/${id}`)} className="mt-1.5" />
-              {d && <p className={`inline-flex items-center gap-1 text-xs font-semibold mt-1 ${dueTone[d.tone]}`}><CalendarClock className="size-3.5" /> {d.text}</p>}
-            </div>
-            {bill && (intent.items?.length ?? 0) > 0 && (
-              <div className="w-full text-left"><DetailList rows={intent.items!.map(i => ({ label: `${i.name} × ${i.qty}`, value: money(i.total ?? i.qty * i.price) }))} /></div>
-            )}
-            {!ended && <QrCard dataUrl={qr} paid={paid} subtitle={paid ? undefined : `Scan to pay · valid ${intent.expiresAt && !intent.dueDate ? (bill ? '7 days' : validLabel) : 'until paid'}`} />}
-            <Live view={view} />
-            {!paid && !ended && link && (
-              <div className="w-full text-left">
-                <p className="text-xs text-text-muted mb-2">{t.customer} not here? Send the link</p>
-                {/* Names the shop and its store (branch): "Royal Salons · Cutting Edge". */}
-                <LinkShare url={link} subject={`${shopFrom(storeName, outlet)}: ${bill ? 'bill' : 'payment'} ${num} for ${money(intent.amount)}`}
-                  text={`${shopFrom(storeName, outlet)}: ${bill ? `bill ${num} for` : 'pay'} ${money(intent.amount)}${intent.note ? ` - ${intent.note}` : ''}${dueShare ? ` (${dueShare.text.toLowerCase()})` : ''}. Pay in USDC:`} />
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="px-5 flex-shrink-0" style={{ borderTop: '1px solid var(--border)', paddingTop: 10, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 18px)' }}>
-          {paid || ended ? (
-            <button type="button" onClick={newPayment}
-              className="w-full rounded-2xl text-[16px] font-bold text-white active:scale-[0.98] transition-transform" style={{ height: 52, background: 'var(--brand)' }}>
-              New payment
-            </button>
-          ) : (
-            <button type="button" onClick={cancel}
-              className="w-full rounded-2xl text-[15px] font-semibold active:scale-[0.98] transition-transform"
-              style={{ height: 52, background: 'color-mix(in srgb, var(--text-primary) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--text-primary) 10%, transparent)', color: 'var(--text-secondary)' }}>
-              Cancel payment
-            </button>
-          )}
-        </div>
-      </div>
+      <RequestResult intent={intent} view={view} isDesktop={isDesktop} name={storeName} username={handle} sub={outlet}
+        from={shopFrom(storeName, outlet)} payer={t.customer} validLabel={validLabel}
+        sender={sender} onOpenChat={id => navigate(`/chat/${id}`)} onClose={onBack} onCancel={cancel} onNew={newPayment} />
     )
   } else if (tab === 'qr' && shopQr) {
     body = (

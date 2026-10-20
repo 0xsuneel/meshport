@@ -99,7 +99,10 @@ export function MyRequestsPage() {
 
       <div style={{ padding: '0 16px', maxWidth: 560, margin: '0 auto' }}>
         {open ? (
-          <RequestQrPanel key={open.code} initialOrder={open} withCustomer={isMerchant} onClose={() => { closeOpen(); void load() }} onNewRequest={newRequest} />
+          // The same screen as a new request (and Business's): QR, live status, link.
+          <div className="flex flex-col rounded-3xl bg-surface border border-border overflow-hidden" style={{ paddingTop: 12 }}>
+            <RequestQrPanel key={open.code} initialOrder={open} onClose={() => { closeOpen(); void load() }} onNewRequest={newRequest} />
+          </div>
         ) : (
           <>
             <div role="tablist" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
