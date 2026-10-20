@@ -15,7 +15,7 @@ import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
 import { personalPayLink } from '@/lib/payLinks'
 import { drawMeshportQr } from '@/lib/qrLogo'
-import { QrCard } from '@/features/business/ui/QrCard'
+import { QrCard, QrInfoBox } from '@/features/business/ui/QrCard'
 import { qrCardFile } from '@/lib/qrCardImage'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
 import { copyToClipboard, trimTrailingZeros } from '@/lib/utils'
@@ -229,6 +229,13 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
   // Download / Share save the QR card (qrCardImage), not the bare code: the
   // same card as on screen, in its light version.
   const handle = (username || '').replace(/\.arc$/, '')
+  // The card's Username / Address boxes: tap to copy.
+  const [copiedBox, setCopiedBox] = useState<string | null>(null)
+  const copyBox = async (value: string, key: string) => {
+    const ok = await copyToClipboard(value)
+    showToastMessage(ok ? `${key === 'username' ? 'Username' : 'Address'} copied` : 'Could not copy', ok ? 'success' : 'error')
+    if (ok) { setCopiedBox(key); setTimeout(() => setCopiedBox(null), 2000) }
+  }
   const cardFile = (name: string) => qrCardFile({
     data: qrData!, title: displayName || (handle ? `${handle}.arc` : undefined), subtitle: handle ? `${handle}.arc` : undefined,
     amount: activeAmount ? `$${activeAmount}` : undefined, tag: 'USDC · EURC · cirBTC',
@@ -348,9 +355,13 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
       {qrError ? (
         <span role="alert" style={{ fontSize: 12, color: 'var(--text-secondary)', padding: 8, textAlign: 'center' }}>Couldn't load QR</span>
       ) : (
-        <QrCard title={displayName || (username ? `${username.replace(/\.arc$/, '')}.arc` : undefined)}
-          subtitle={username ? `${username.replace(/\.arc$/, '')}.arc` : undefined} tag="USDC · EURC · cirBTC"
-          caption={activeAmount ? `Scan to pay $${activeAmount}` : undefined}>
+        <QrCard tag="USDC · EURC · cirBTC" caption={activeAmount ? `Scan to pay $${activeAmount}` : undefined}
+          // Username and address side by side over the QR, tap to copy - the
+          // same as Receive's QR.
+          top={<div className="w-full flex gap-2">
+            {handle && <QrInfoBox label="Username" value={`${handle}.arc`} onCopy={() => void copyBox(`${handle}.arc`, 'username')} copied={copiedBox === 'username'} />}
+            <QrInfoBox label="Address" value={`${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`} onCopy={() => void copyBox(walletAddress, 'address')} copied={copiedBox === 'address'} />
+          </div>}>
           <canvas ref={canvasRef} style={{ display: 'block', opacity: qrReady ? 1 : 0, transition: 'opacity 0.2s ease-out' }} />
         </QrCard>
       )}
