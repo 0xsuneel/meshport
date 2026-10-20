@@ -122,6 +122,7 @@ import { sheetDrag } from '@/lib/sheetDrag'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { PopupOpen } from '@/hooks/usePopupOpen'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
+import { useBackLayer } from '@/lib/backLayers'
 
 interface SheetProps {
   open: boolean
@@ -140,6 +141,8 @@ interface SheetProps {
 // dialog, like ActionSheet and every other sheet there.
 export function Sheet({ open, onClose, children, height = 'half', id = 'biz-sheet' }: SheetProps) {
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
+  // Phone / browser Back closes it, like a tap on the dim.
+  useBackLayer(open, onClose)
   if (isDesktop) {
     return (
       <AnimatePresence>
