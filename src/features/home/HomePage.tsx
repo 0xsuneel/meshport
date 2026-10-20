@@ -13,6 +13,7 @@ import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { parseUnits } from 'viem'
 import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
+import { personalPayLink } from '@/lib/payLinks'
 import { drawMeshportQr } from '@/lib/qrLogo'
 import { useAuthStore, useWalletStore, useNotificationStore, useUIStore, useP2PTradesCountStore } from '@/store'
 import { copyToClipboard, trimTrailingZeros } from '@/lib/utils'
@@ -108,6 +109,7 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
   const opacity = useMotionValue(0)
   const { showToastMessage } = useUIStore()
   const navigate = useNavigate()
+  const businessAccount = useBusinessTab()
 
   // ── Collect USDC - request a specific amount ──────────────────────────
   // Tapping "Collect USDC" opens an inline amount field. Once an amount is
@@ -255,10 +257,14 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
         // carries the amount as a real query param the recipient's own
         // browser/app resolves, not just something printed in the caption.
         const cleanUsername = (username || '').replace(/\.arc$/, '')
-        const paymentLink = (cleanUsername
-          ? `${APP_URL}/paylink/${cleanUsername}`
-          : `${APP_URL}/paylink/${walletAddress}`
-        ) + (activeAmount ? `?amount=${encodeURIComponent(activeAmount)}` : '')
+        // No amount: the same link as Receive's My QR (a business's Personal
+        // link carries ?personal=1 - its plain link is its Shop QR).
+        const paymentLink = cleanUsername && !activeAmount
+          ? personalPayLink(cleanUsername, businessAccount)
+          : (cleanUsername
+            ? `${APP_URL}/paylink/${cleanUsername}`
+            : `${APP_URL}/paylink/${walletAddress}`
+          ) + (activeAmount ? `?amount=${encodeURIComponent(activeAmount)}` : '')
         const shareText = activeAmount
           ? `Pay me $${activeAmount} USDC on MeshPort - ${paymentLink}`
           : `Pay me on MeshPort - ${paymentLink}`

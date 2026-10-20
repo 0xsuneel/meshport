@@ -14,8 +14,9 @@
 // Money in uses the merchant-pay service (payment requests, live status);
 // nothing here moves funds out.
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import QRCode from 'qrcode'
-import { Store, Clock, Printer, CalendarClock } from 'lucide-react'
+import { drawMeshportQr } from '@/lib/qrLogo'
+import { shopPayLink } from '@/lib/payLinks'
+import { Store, Clock, Printer, CalendarClock, Download, Share2 } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName, type BusinessDoc } from '@/lib/merchant'
 import { BusinessDocsField } from '@/features/merchant/BusinessDocsField'
@@ -86,8 +87,11 @@ function useQr(value: string | null) {
     setSrc(undefined)
     if (!value) return
     let live = true
-    QRCode.toDataURL(value, { width: 464, margin: 1, color: { dark: '#0B0E11', light: '#FFFFFF' }, errorCorrectionLevel: 'M' })
-      .then(u => { if (live) setSrc(u) }).catch(() => {})
+    // The same MeshPort QR (logo badge) as Home and Receive, ~464px for the
+    // counter sticker.
+    const cv = document.createElement('canvas')
+    drawMeshportQr(cv, value, Math.ceil(464 / Math.max(1, Math.min(4, window.devicePixelRatio || 1))))
+      .then(() => { if (live) setSrc(cv.toDataURL('image/png')) }).catch(() => {})
     return () => { live = false }
   }, [value])
   return src
@@ -175,15 +179,37 @@ function ShopQrBody({ active, storeName, outlet, handle, payTo }: { active: bool
   const own = useAuthStore(s => s.username)
   const { storeId } = useContext(RequestMaker)
   const username = payTo ?? own
-  const url = `${window.location.origin}/paylink/${username ?? ''}${storeId ? `?store=${storeId}` : ''}`
+  // The same link (and QR) as Receive's QR for this store.
+  const url = shopPayLink(username ?? '', storeId)
   const qr = useQr(active && username ? url : null)
   const sticker = usePrint()
   const sub = outlet ? `${outlet} · ${handle}` : handle
+  const from = shopFrom(storeName, outlet)
+  const toast = useUIStore(s => s.showToastMessage)
+  // Download / Share QR - the same as Home's and Receive's QR card.
+  const qrFile = async () => qr ? new File([await (await fetch(qr)).blob()], `meshport-shop-qr${outlet ? `-${outlet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : ''}.png`, { type: 'image/png' }) : null
+  const downloadQr = async () => {
+    const f = await qrFile(); if (!f) return
+    const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+  }
+  const shareQr = async () => {
+    const f = await qrFile().catch(() => null); if (!f) return
+    const text = `Pay ${from} on MeshPort - ${url}`
+    try {
+      if (navigator.canShare?.({ files: [f] })) { await navigator.share({ files: [f], title: from, text }); return }
+      if (navigator.share) { await navigator.share({ title: from, text }); return }
+    } catch (e: any) { if (e?.name === 'AbortError') return }
+    try { await navigator.clipboard.writeText(text); toast('Copied to clipboard', 'success') } catch { toast('Could not share QR', 'error') }
+  }
   return (
     <div className="flex flex-col items-center text-center px-5 pt-6 pb-6 gap-5">
       <QrCard dataUrl={qr} title={storeName} subtitle={sub} />
       <p className="text-xs text-text-muted max-w-[260px]">Customers scan, type the amount and pay. USDC from Arc or any CCTP chain is accepted{outlet ? ` and counted for ${outlet}` : ''}.</p>
-      <div className="w-full"><LinkShare url={url} text={`Pay ${storeName} on MeshPort`} /></div>
+      <div className="w-full grid grid-cols-2 gap-2">
+        <GhostBtn disabled={!qr} onClick={() => void downloadQr()}><span className="inline-flex items-center gap-2"><Download className="size-4" /> Download QR</span></GhostBtn>
+        <GhostBtn disabled={!qr} onClick={() => void shareQr()}><span className="inline-flex items-center gap-2"><Share2 className="size-4" /> Share QR</span></GhostBtn>
+      </div>
+      <div className="w-full"><LinkShare url={url} text={`Pay ${from} on MeshPort`} /></div>
       <GhostBtn disabled={!qr} onClick={() => sticker.print(<QrSticker dataUrl={qr} storeName={outlet ? `${storeName} · ${outlet}` : storeName} handle={handle} />)}>
         <span className="inline-flex items-center gap-2"><Printer className="size-4" /> Print counter sticker</span>
       </GhostBtn>
