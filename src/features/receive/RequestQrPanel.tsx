@@ -106,10 +106,11 @@ export function RequestQrPanel({ initialCustomer, initialOrder, onClose, onNewRe
   return (
     <RequestAmountForm open={!intent} isDesktop={isDesktop} verb="Request" busyText="Creating…" places={2}
       ariaLabel="Amount to request in USDC" hint="They scan the QR or open the link"
-      header={compact => <div className="flex flex-col gap-3">
-        <SheetPerson label="Paid to" name={name} username={handle} avatar={user?.avatar} compact={compact} onClose={isDesktop ? onClose : undefined} />
-        {!compact && stores && stores.length > 1 && onStore && store && <StorePicker stores={stores} value={store.id} onChange={onStore} label="Request for store" />}
-      </div>}
+      // Several stores: one row - who's paid and the store, with Switch (two
+      // rows left the keypad no room on a phone).
+      header={compact => !compact && stores && stores.length > 1 && onStore && store
+        ? <StorePicker stores={stores} value={store.id} onChange={onStore} label={`Paid to ${name} · store`} />
+        : <SheetPerson label="Paid to" name={name} username={handle} avatar={user?.avatar} compact={compact} onClose={isDesktop ? onClose : undefined} />}
       options={{
         summary: <>Valid for <b className="font-semibold text-text-primary">{validLabel}</b>{who
           ? <> · from <b className="font-semibold text-text-primary">{who}.arc</b></>
