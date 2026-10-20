@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import type { Chain, SettlementHistoryItem } from './types'
-import { Skeleton, ChainLogo, Divider, FadeUp } from './primitives'
+import { Skeleton, ChainLogo, Divider } from './primitives'
 
 export interface SettlementsViewProps {
   scanning: boolean
@@ -137,7 +137,7 @@ export function SettlementsView({
   return (
     <div className="flex flex-col gap-5 pb-8">
       {/* ── Hero card ────────────────────────────────────────────────────── */}
-      <FadeUp delay={0.04} className="mx-5">
+      <div className="mx-5">
         <div className="rounded-3xl bg-card border border-border p-5">
           {/* Header */}
           <div className="flex items-start justify-between mb-4">
@@ -187,11 +187,11 @@ export function SettlementsView({
           {/* Gas note */}
           <p className="mt-2.5 text-center text-[11px] text-text-muted">{settle.note}</p>
         </div>
-      </FadeUp>
+      </div>
 
       {/* Last run status */}
       {lastRun && (
-        <FadeUp delay={0.06} className="mx-5">
+        <div className="mx-5">
           <button
             type="button"
             onClick={lastRun.onOpen}
@@ -209,11 +209,11 @@ export function SettlementsView({
             </div>
             <ChevronRight className="size-4 text-text-muted" />
           </button>
-        </FadeUp>
+        </div>
       )}
 
       {/* ── Per-chain balances ──────────────────────────────────────────── */}
-      <FadeUp delay={0.1} className="mx-5">
+      <div className="mx-5">
         <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">On each chain</p>
         <div className="rounded-2xl bg-surface border border-border px-4 py-1">
           {scanning ? (
@@ -244,10 +244,10 @@ export function SettlementsView({
             ))
           )}
         </div>
-      </FadeUp>
+      </div>
 
       {/* ── Settlement history ──────────────────────────────────────────── */}
-      <FadeUp delay={0.14} className="mx-5">
+      <div className="mx-5">
         <p className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">Settlement history</p>
         <div className="rounded-2xl bg-surface border border-border px-4 py-1">
           {history.length === 0 ? (
@@ -265,7 +265,7 @@ export function SettlementsView({
             ))
           )}
         </div>
-      </FadeUp>
+      </div>
     </div>
   )
 }

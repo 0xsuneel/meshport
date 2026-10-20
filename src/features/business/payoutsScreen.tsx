@@ -74,7 +74,7 @@ export function PayoutsScreen({ open, onBack }: { open: boolean; onBack: () => v
 
   if (draft) {
     return (
-      <BusinessScreen open={open} title={draft.id ? 'Edit payout' : 'New payout'} onBack={() => setDraft(null)}
+      <BusinessScreen open={open} title={draft.id ? 'Edit payout' : 'New payout'} onBack={() => setDraft(null)} step="draft"
         footer={<div className="flex gap-2">
           <div className="flex-1"><GhostBtn disabled={busy || !canSave} onClick={() => save(false)}>Save</GhostBtn></div>
           <div className="flex-1"><PrimaryBtn disabled={busy || !canSave} onClick={() => save(true)}>{busy ? 'Saving…' : total > 0 ? `Pay ${money(total)}` : 'Pay now'}</PrimaryBtn></div>

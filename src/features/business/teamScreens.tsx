@@ -12,7 +12,7 @@ import { listStores, saveStore, deleteStore, setDefaultStore, listStaff, inviteS
 import { BUSINESS_CATEGORIES, toCategory, useBizTerms } from '@/lib/businessCategories'
 import { useMerchant } from '@/lib/merchant'
 import {
-  BusinessScreen, CashOutHero, CashOutAmount, BuyerOfferList, PayoutAccountPicker, PayoutAccountForm, CashOutTradeView, CashOutHistory,
+  BusinessScreen, ScreenLevel, useScreenLevel, CashOutHero, CashOutAmount, BuyerOfferList, PayoutAccountPicker, PayoutAccountForm, CashOutTradeView, CashOutHistory,
   StoresView, StoreForm, StaffView, StaffForm, PasscodeSheet, PrimaryBtn, Skeleton,
   type PayoutMethod, type TradeStage, type CashOutHistoryStatus,
 } from './ui'
@@ -107,9 +107,13 @@ export function CashOutScreen({ open, onBack }: { open: boolean; onBack: () => v
     })
   }
 
+  // A cash out pushes over the form (which shifts left beneath it), and back
+  // uncovers it - like any screen opened from another.
+  const { level, covered } = useScreenLevel()
   return (
     <>
-      <BusinessScreen open={open && !tradeId} title="Cash out to bank" onBack={onBack}
+      <ScreenLevel.Provider value={{ level, covered: covered || !!tradeId }}>
+      <BusinessScreen open={open} title="Cash out to bank" onBack={onBack}
         footer={adding ? undefined : <PrimaryBtn disabled={busy || !buyer || !chosenAccount || !value || !!err} onClick={confirm}>
           {busy ? 'Starting…' : value && buyer ? `Sell ${money(value)} for ${inr(value * buyer.offer.pricePerUsdc)}` : 'Enter an amount'}</PrimaryBtn>}>
         <div className="flex flex-col gap-5 px-5 pt-5 pb-6">
@@ -146,7 +150,10 @@ export function CashOutScreen({ open, onBack }: { open: boolean; onBack: () => v
             when: t.createdAt, status: historyStatus(t) }))} onOpen={setTradeId} />
         </div>
       </BusinessScreen>
-      <CashOutTradeScreen tradeId={open ? tradeId : null} accounts={accounts} onBack={() => { setTradeId(null); load() }} gate={gate} />
+      </ScreenLevel.Provider>
+      <ScreenLevel.Provider value={{ level: level + 1, covered }}>
+        <CashOutTradeScreen tradeId={open ? tradeId : null} accounts={accounts} onBack={() => { setTradeId(null); load() }} gate={gate} />
+      </ScreenLevel.Provider>
       {gate.sheet}
     </>
   )
@@ -331,7 +338,7 @@ export function TeamScreen({ open, onBack, stores, onChanged, onQr, paymentsBySt
   const [editing, setEditing] = useState<Editing>(null)
   useEffect(() => { if (!open) { setView('stores'); setEditing(null) } }, [open])
   return (
-    <BusinessScreen open={open} title={editing?.title ?? `${terms.stores} & staff`} onBack={editing?.back ?? onBack}>
+    <BusinessScreen open={open} title={editing?.title ?? `${terms.stores} & staff`} onBack={editing?.back ?? onBack} step={editing?.title ?? ''}>
       {!editing && (
         <div className="px-5 pt-4">
           <div className="flex p-1 rounded-2xl bg-surface border border-border" role="tablist" aria-label="Stores or staff">

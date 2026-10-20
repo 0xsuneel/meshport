@@ -114,34 +114,14 @@ export function Divider({ className = '' }: { className?: string }) {
   return <div className={`h-px bg-border/60 ${className}`} />
 }
 
-// ─── Fade-up entrance ────────────────────────────────────────────────────────
-
-export function FadeUp({
-  children,
-  delay = 0,
-  className = '',
-}: {
-  children: React.ReactNode
-  delay?: number
-  className?: string
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: EASE_OUT, delay }}
-      className={className}
-    >
-      {children}
-    </motion.div>
-  )
-}
-
 // ─── Sheet backdrop + container ─────────────────────────────────────────────
 
 import { AnimatePresence } from 'framer-motion'
-import { EASE_OUT, SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
+import { DESKTOP_QUERY, SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { sheetDrag } from '@/lib/sheetDrag'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { PopupOpen } from '@/hooks/usePopupOpen'
+import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 
 interface SheetProps {
   open: boolean
@@ -156,9 +136,24 @@ interface SheetProps {
 // One bottom sheet for the whole business UI - the same motion, backdrop,
 // corner radius, handle and drag-to-close as the app's ActionSheet, so a
 // business sheet opens and lands exactly like every other sheet in the app
-// (shared tween, not the old spring bounce).
+// (shared tween, not the old spring bounce). On desktop it's the app's centred
+// dialog, like ActionSheet and every other sheet there.
 export function Sheet({ open, onClose, children, height = 'half', id = 'biz-sheet' }: SheetProps) {
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
+  if (isDesktop) {
+    return (
+      <AnimatePresence>
+        {open && (
+          <DesktopDialogFrame key={id} onClose={onClose} maxWidth={440}>
+            <div className="flex flex-col" style={{ maxHeight: 'min(86dvh, 760px)', minHeight: height === 'full' ? 'min(80dvh, 720px)' : undefined }}>{children}</div>
+          </DesktopDialogFrame>
+        )}
+      </AnimatePresence>
+    )
+  }
   return (
+    <>
+    {open && <PopupOpen />}
     <AnimatePresence>
       {open && [
         <motion.div key={id + '-dim'} transition={SHEET_BACKDROP.transition}
@@ -176,6 +171,7 @@ export function Sheet({ open, onClose, children, height = 'half', id = 'biz-shee
         </motion.div>,
       ]}
     </AnimatePresence>
+    </>
   )
 }
 
