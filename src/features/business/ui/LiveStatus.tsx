@@ -16,8 +16,9 @@ export type LiveStatusKind =
 export interface LiveStatusProps {
   status: LiveStatusKind
   text: string
-  /** Slimmer, for a screen that's short on room. */
-  small?: boolean
+  /** No pill - just the icon and text, inside another line (a QR card's
+   *  caption on a screen that's short on room). */
+  inline?: boolean
 }
 
 const CONFIG: Record<
@@ -33,10 +34,17 @@ const CONFIG: Record<
   failed:    { Icon: XCircle,       color: 'text-danger',        bg: 'bg-danger/10' },
 }
 
-export function LiveStatus({ status, text, small = false }: LiveStatusProps) {
+export function LiveStatus({ status, text, inline = false }: LiveStatusProps) {
   const { Icon, color, bg, spin } = CONFIG[status]
+  if (inline) {
+    return (
+      <span className={`inline-flex items-center gap-1.5 ${status === 'waiting' ? 'text-text-primary' : color}`}>
+        <Icon className={`size-3.5 shrink-0 ${spin ? 'animate-spin' : ''}`} />{text}
+      </span>
+    )
+  }
   return (
-    <div className={`inline-flex items-center gap-2 rounded-2xl px-3.5 ${small ? 'py-1.5' : 'py-2.5'} ${bg}`}>
+    <div className={`inline-flex items-center gap-2 rounded-2xl px-3.5 py-2.5 ${bg}`}>
       <Icon className={`size-4 shrink-0 ${color} ${spin ? 'animate-spin' : ''}`} />
       <span className={`text-sm font-medium ${color}`}>{text}</span>
     </div>
