@@ -218,7 +218,7 @@ export function ReceivePage() {
         </div>
       ) : (
         <QrCard title={card.title} subtitle={card.subtitle} tag={card.tag} caption={card.caption}>
-          <canvas ref={canvasRef} width={236} height={236} style={{ display: 'block', opacity: qrReady ? 1 : 0 }} />
+          <canvas ref={canvasRef} width={236} height={236} style={{ display: 'block', opacity: qrReady ? 1 : 0, transition: 'opacity 0.2s ease-out' }} />
         </QrCard>
       )}
 

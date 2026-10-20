@@ -74,19 +74,15 @@ export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with M
                   <p className="text-sm font-semibold text-success">Payment received</p>
                 </motion.div>
               ) : children ? (
-                <motion.div key="own" className="absolute inset-0 flex items-center justify-center" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
+                // Plain elements, no framer fade: a re-render mid-fade (the
+                // app's polling) made framer drop the QR to opacity 0 for a
+                // frame as the fade finished - a blink. The screen's canvas
+                // fades itself in (CSS), the image with qr-fade-in.
+                <div key="own" className="absolute inset-0 flex items-center justify-center">
                   {children}
-                </motion.div>
+                </div>
               ) : dataUrl ? (
-                <motion.img
-                  key="qr"
-                  src={dataUrl}
-                  alt="Payment QR code"
-                  className="w-full h-full object-contain"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.2 }}
-                />
+                <img key="qr" src={dataUrl} alt="Payment QR code" className="w-full h-full object-contain qr-fade-in" />
               ) : (
                 /* Skeleton while loading */
                 <motion.div key="skel" className="absolute inset-0 p-3 flex flex-col gap-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
