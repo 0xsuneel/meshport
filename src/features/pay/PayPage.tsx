@@ -11,6 +11,10 @@ import { WalletPayPanel } from './WalletPayPanel'
 import { TokenLogo } from '@/components/ui/TokenLogo'
 import { ShopPayPage } from './ShopPayPage'
 import { getShopInfo, type ShopInfo } from '@/lib/shop'
+import { AnimatePresence } from 'framer-motion'
+import { TokenMenu } from '@/components/ui/TokenMenu'
+import { MERCHANT_QR_CHAINS, MERCHANT_QR_EXTERNAL, merchantQrChain } from '@/lib/merchantQr'
+import { ARC_PAY_CHAIN, type PayChain } from '@/lib/merchantPay'
 
 const APP_URL = 'https://meshport.xyz'
 
@@ -78,6 +82,19 @@ export function PayPage() {
   // A business's Personal QR (?personal=1): a normal payment to the account.
   const personal = searchParams.get('personal') === '1'
   const [shop, setShop] = useState<ShopInfo | null | undefined>(token === 'USDC' && !personal ? undefined : null)
+  // A business's Personal QR opened in a wallet app: the payer picks the
+  // network (like Stripe's checkout) - Arc, or any network MeshPort watches for
+  // business payments. Those wait under the business's Settlements until it
+  // settles them to Arc.
+  const [netId, setNetId] = useState('Arc_Testnet')
+  const [netMenu, setNetMenu] = useState(false)
+  const net = merchantQrChain(netId)
+  const payChain: PayChain = net.native ? ARC_PAY_CHAIN
+    : { id: net.id, label: net.label, chainId: net.chainId, usdc: net.usdc ?? '', route: 'ub' }
+  const netOptions = [MERCHANT_QR_CHAINS[0], ...MERCHANT_QR_EXTERNAL].map(c => ({
+    id: c.id, label: c.label,
+    icon: <img src={c.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />,
+  }))
 
   useEffect(() => {
     if (!clean) { setShop(null); setNotFound(true); setLoading(false); return }
@@ -188,8 +205,33 @@ export function PayPage() {
         {/* Scanned with a wallet app (opened in its browser) or no MeshPort
             account: pay from the wallet - Arc added if needed. */}
         {/* (USDC only - the wallet-app send is a USDC transfer.) */}
+        {!isAuthenticated && recipient.wallet_address && token === 'USDC' && personal && (
+          // Which network to pay on - the same pill + list as Pay's token picker.
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold" style={{ color: 'var(--text-secondary)' }}>Pay on network</p>
+            <div style={{ position: 'relative', zIndex: netMenu ? 41 : undefined }}>
+              <button type="button" onClick={e => { e.stopPropagation(); setNetMenu(v => !v) }} aria-expanded={netMenu} aria-label={`Network: ${net.label}`}
+                className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
+                style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
+                <img src={net.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} />
+                <span className="flex-1 min-w-0 truncate text-left text-sm font-bold text-text-primary">{net.label}</span>
+                <svg className="w-2.5 h-2.5 flex-shrink-0" style={{ color: 'var(--brand-text)', transform: netMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
+              </button>
+              <AnimatePresence>
+                {netMenu && (
+                  <TokenMenu ariaLabel="Choose network" maxHeight={320} selected={netId} options={netOptions} onSelect={setNetId} onClose={() => setNetMenu(false)} />
+                )}
+              </AnimatePresence>
+            </div>
+            {/* Every provider's #1 warning: the right token on the right network. */}
+            <p className="text-[11.5px] leading-snug" style={{ color: 'var(--text-muted)' }}>
+              Send only <b style={{ color: 'var(--text-primary)' }}>USDC on {net.label}</b> - other tokens or networks won't reach {displayName}.
+              {!net.native && ` It reaches them once they move it to Arc.`}
+            </p>
+          </div>
+        )}
         {!isAuthenticated && recipient.wallet_address && token === 'USDC' && (
-          <WalletPayPanel to={recipient.wallet_address} amount={requestedAmount ? Number(requestedAmount) : null} />
+          <WalletPayPanel key={personal ? netId : 'arc'} to={recipient.wallet_address} amount={requestedAmount ? Number(requestedAmount) : null} chain={personal ? payChain : undefined} />
         )}
 
         {/* Pay button - Option C */}
