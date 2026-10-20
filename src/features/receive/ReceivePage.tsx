@@ -42,10 +42,13 @@ function CopyRow({ label, value, onCopy, copied }: CopyRowProps) {
 
 export function ReceivePage() {
   const isDesktop  = useMediaQuery('(min-width: 980px)')
-  // Short phones: a smaller QR so the card and its buttons fit on one screen.
+  // The QR scales to the screen, like payment apps' receive screens: it takes
+  // whatever height is left once the header, card and buttons are laid out
+  // (150-260px, and never wider than the card), so My QR fits on one screen
+  // on any phone or browser size - re-fitted whenever that size changes.
   const shortScreen = useMediaQuery('(max-height: 700px)')
-  const tinyScreen = useMediaQuery('(max-height: 620px)')
-  const qrSize = tinyScreen ? 176 : shortScreen ? 196 : 232
+  const fitRef = useRef<HTMLDivElement>(null)
+  const [qrSize, setQrSize] = useState(232)
   const navigate   = useNavigate()
   const user = useAuthStore(s => s.user)
   const username = useAuthStore(s => s.username)
@@ -102,15 +105,57 @@ export function ReceivePage() {
   // QR keeps its pay page link (amount page, payment recorded for the store).
   const qrData = (!shopQr || !displayUsername) && walletAddress ? arcAddressUri(walletAddress) : paymentLink
 
+  // Fit the QR to the space left (see qrSize).
+  useEffect(() => {
+    const box = fitRef.current
+    const column = box?.firstElementChild as HTMLElement | null
+    if (!box || !column || isDesktop) return
+    let raf = 0
+    const fit = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        const spare = box.clientHeight - column.offsetHeight
+        // Page padding, card padding and the QR's white tile.
+        const byWidth = Math.min(box.clientWidth, 372) - 32 - 32 - 20
+        setQrSize(s => {
+          const next = Math.round(Math.max(150, Math.min(260, byWidth, s + spare)))
+          return Math.abs(next - s) >= 2 ? next : s
+        })
+      })
+    }
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(box); ro.observe(column)
+    return () => { ro.disconnect(); cancelAnimationFrame(raf) }
+  }, [isDesktop, requesting])
+
   // Generate QR
+  const drawnFor = useRef('')
+  const drawSeq = useRef(0)
   useEffect(() => {
     if (!qrData || !canvasRef.current) return
-    setQrReady(false)
+    // A new QR fades in; the same QR re-drawn at a new size just swaps.
+    if (drawnFor.current !== qrData) setQrReady(false)
+    drawnFor.current = qrData
     setQrError(false)
 
-    drawMeshportQr(canvasRef.current, qrData, qrSize)
-      .then(() => setQrReady(true))
-      .catch(() => setQrError(true))
+    // Drawn off screen, then copied in - only if it's still the latest draw:
+    // while the size settles an older, slower draw could otherwise land last
+    // and leave the QR at the wrong size (cut off, or small in its tile).
+    const id = ++drawSeq.current
+    const off = document.createElement('canvas')
+    drawMeshportQr(off, qrData, qrSize)
+      .then(() => {
+        const cv = canvasRef.current
+        if (id !== drawSeq.current || !cv) return
+        cv.width = off.width; cv.height = off.height
+        // Fill the card's QR tile exactly (the drawing rounds down to whole
+        // pixels per module, which left a gap on some sizes).
+        cv.style.width = `${qrSize}px`; cv.style.height = `${qrSize}px`
+        cv.getContext('2d')?.drawImage(off, 0, 0)
+        setQrReady(true)
+      })
+      .catch(() => { if (id === drawSeq.current) setQrError(true) })
     // Redraw when My QR comes back into view (after Request payment) - the
     // canvas is a fresh, empty element then.
   }, [qrData, requesting, qrSize])
@@ -353,7 +398,7 @@ export function ReceivePage() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto">
+        <div ref={fitRef} className="flex-1 overflow-y-auto">
           <div className="px-4 pb-6">
             {qrCardSection}
           </div>
