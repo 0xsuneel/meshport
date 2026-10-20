@@ -347,7 +347,9 @@ export function ReceivePage() {
         // keypad and button at the bottom); a centred card on desktop.
         <div className="flex-1 min-h-0 flex flex-col" style={isDesktop ? { padding: '12px 24px 20px', alignItems: 'center' } : undefined}>
           <div className="flex-1 min-h-0 flex flex-col w-full" style={isDesktop ? { maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 24, boxShadow: 'var(--shadow-1)', overflow: 'hidden' } : undefined}>
-            <RequestQrPanel initialCustomer={params.get('customer') ?? undefined} />
+            {/* A business picks the store here too (the same pick as My QR's). */}
+            <RequestQrPanel initialCustomer={params.get('customer') ?? undefined}
+              stores={business ? stores : undefined} storeId={store?.id ?? null} onStore={setQrPick} />
           </div>
         </div>
       ) : isDesktop ? (

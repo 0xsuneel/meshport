@@ -5,6 +5,9 @@
 // order (unique #N): its QR and link open it in MeshPort (amount and number
 // fixed) or in a wallet app's browser on Arc.
 import { useState } from 'react'
+import { AnimatePresence } from 'framer-motion'
+import { Store as StoreIcon } from 'lucide-react'
+import { TokenMenu } from '@/components/ui/TokenMenu'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
@@ -35,7 +38,28 @@ export function ExpiryChips({ value, onChange }: { value: number; onChange: (m: 
 /** "@Priya.arc " → "priya". */
 const cleanUsername = (v: string) => v.trim().replace(/^@/, '').replace(/\.arc$/i, '').toLowerCase()
 
-export function RequestQrPanel({ initialCustomer, initialOrder, onClose, onNewRequest }: {
+/** Which store a business's request is for: the same pill + list as My QR's picker. */
+function StorePicker({ stores, value, onChange }: { stores: { id: string; name: string }[]; value: string; onChange: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const icon = <span className="inline-flex items-center justify-center size-[22px] rounded-full bg-brand/15 text-brand-text"><StoreIcon className="size-3.5" /></span>
+  const picked = stores.find(s => s.id === value) ?? stores[0]
+  return (
+    <div style={{ position: 'relative', zIndex: open ? 41 : undefined, alignSelf: 'flex-start', minWidth: 180, maxWidth: '100%' }}>
+      <button type="button" onClick={e => { e.stopPropagation(); setOpen(v => !v) }} aria-expanded={open} aria-label={`Store: ${picked.name}`}
+        className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
+        style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
+        {icon}
+        <span className="flex-1 min-w-0 truncate text-left text-sm font-bold text-text-primary">{picked.name}</span>
+        <svg className="w-2.5 h-2.5 flex-shrink-0" style={{ color: 'var(--brand-text)', transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
+      </button>
+      <AnimatePresence>
+        {open && <TokenMenu ariaLabel="Choose store" selected={picked.id} options={stores.map(s => ({ id: s.id, label: s.name, icon }))} onSelect={onChange} onClose={() => setOpen(false)} />}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+export function RequestQrPanel({ initialCustomer, initialOrder, onClose, onNewRequest, stores, storeId, onStore }: {
   /** A username to request from (?customer=). */
   initialCustomer?: string
   /** Open straight on an existing request (Receive → My requests). */
@@ -44,6 +68,10 @@ export function RequestQrPanel({ initialCustomer, initialOrder, onClose, onNewRe
   onClose?: () => void
   /** "New request" goes here instead of clearing to the form (My requests). */
   onNewRequest?: () => void
+  /** A business's stores (main first): pick which one the request is for. */
+  stores?: { id: string; name: string }[]
+  storeId?: string | null
+  onStore?: (id: string) => void
 }) {
   const navigate = useNavigate()
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -59,6 +87,7 @@ export function RequestQrPanel({ initialCustomer, initialOrder, onClose, onNewRe
   const sender = useChatCardSender()
 
   const name = view?.merchantName || user?.displayName || (handle ? `${handle}.arc` : 'You')
+  const store = stores?.find(s => s.id === storeId) ?? stores?.[0] ?? null
   const validLabel = VALID_FOR.find(v => v.id === expiry)?.label ?? '1 hour'
   const who = picked ? cleanUsername(picked.username) : cleanUsername(customerQuery)
 
@@ -73,7 +102,7 @@ export function RequestQrPanel({ initialCustomer, initialOrder, onClose, onNewRe
   }
   const create = async (amount: number, note: string) => {
     const person = resolveCustomer()
-    const it = await createPaymentRequest({ amount, note: note || undefined, customer: person ? cleanUsername(person.username) : undefined, expiresInMinutes: Number(expiry) || null })
+    const it = await createPaymentRequest({ amount, note: note || undefined, storeId: store?.id ?? null, customer: person ? cleanUsername(person.username) : undefined, expiresInMinutes: Number(expiry) || null })
     if (person) void sender.send({ id: person.id, name: person.display_name || `${cleanUsername(person.username)}.arc` }, paymentRequestMessage(it, formatAmount(it.amount)))
     else sender.reset()
     setIntent(it)
@@ -92,6 +121,7 @@ export function RequestQrPanel({ initialCustomer, initialOrder, onClose, onNewRe
   if (intent) {
     return (
       <RequestResult intent={intent} view={view} isDesktop={isDesktop} name={name} username={handle} avatar={user?.avatar}
+        sub={view?.storeName && view.storeName !== view.merchantName ? view.storeName : null}
         from={view ? shopFrom(view.merchantName, view.storeName) : name} payer="They're" validLabel={intent === initialOrder ? undefined : validLabel}
         sender={sender} onOpenChat={id => navigate(`/chat/${id}`)} onClose={onClose} onCancel={() => void cancel()} onNew={newRequest} newLabel="New request" />
     )
@@ -99,11 +129,14 @@ export function RequestQrPanel({ initialCustomer, initialOrder, onClose, onNewRe
   return (
     <RequestAmountForm open={!intent} isDesktop={isDesktop} verb="Request" busyText="Creating…" places={2}
       ariaLabel="Amount to request in USDC" hint="They scan the QR or open the link"
-      header={compact => <SheetPerson label="Paid to" name={name} username={handle} avatar={user?.avatar} compact={compact} onClose={isDesktop ? onClose : undefined} />}
+      header={compact => <div className="flex flex-col gap-3">
+        <SheetPerson label="Paid to" name={name} username={handle} avatar={user?.avatar} compact={compact} onClose={isDesktop ? onClose : undefined} />
+        {!compact && stores && stores.length > 1 && onStore && store && <StorePicker stores={stores} value={store.id} onChange={onStore} />}
+      </div>}
       options={{
         summary: <>Valid for <b className="font-semibold text-text-primary">{validLabel}</b>{who
           ? <> · from <b className="font-semibold text-text-primary">{who}.arc</b></>
-          : <> · anyone</>}</>,
+          : <> · anyone</>}{store && stores && stores.length > 1 ? <> · {store.name}</> : null}</>,
         panel: <>
           <div><SheetLabel>Valid for</SheetLabel><SheetChips<ValidFor> label="Valid for" options={VALID_FOR} value={expiry} onChange={setExpiry} /></div>
           <UserPicker label="Request from (optional)" hint="A MeshPort user - the request goes into your chat with them." query={customerQuery} onQuery={setCustomerQuery}
