@@ -87,12 +87,12 @@ export function ReceivePage() {
     ? `${APP_URL}/paylink/${walletAddress}`
     : APP_URL
 
-  // My QR. A personal account's is just its address on Arc
-  // (ethereum:<address>@<Arc chain id>): a wallet that knows Arc fills in the
-  // address and network, one that doesn't still reads the address, and
-  // MeshPort's scanner finds the account by its wallet. A business's QRs
-  // (Personal / shops) keep their pay page links (network picker, shop flow).
-  const qrData = (!business || !displayUsername) && walletAddress ? arcAddressUri(walletAddress) : paymentLink
+  // My QR - a personal account's, and a business's Personal QR - is just the
+  // address on Arc (ethereum:<address>@<Arc chain id>): a wallet that knows
+  // Arc fills in the address and network, one that doesn't still reads the
+  // address, and MeshPort's scanner finds the account by its wallet. A shop's
+  // QR keeps its pay page link (amount page, payment recorded for the store).
+  const qrData = (!shopQr || !displayUsername) && walletAddress ? arcAddressUri(walletAddress) : paymentLink
 
   // Generate QR
   useEffect(() => {

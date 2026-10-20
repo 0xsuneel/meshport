@@ -108,7 +108,6 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
   const opacity = useMotionValue(0)
   const { showToastMessage } = useUIStore()
   const navigate = useNavigate()
-  const businessAccount = useBusinessTab()
 
   // ── Collect USDC - request a specific amount ──────────────────────────
   // Tapping "Collect USDC" opens an inline amount field. Once an amount is
@@ -149,15 +148,15 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
   // Without a username (no pay page) it stays the Arc wallet QR.
   const qrData = (() => {
     if (!walletAddress) return walletAddress
-    // A personal account's own QR (no amount): just the address on Arc
-    // (ethereum:<address>@<Arc chain id>). A wallet that knows Arc opens a send
-    // with the address and network filled in; one that doesn't still reads the
-    // address. MeshPort's scanner finds the account by its wallet address.
-    // Business accounts and the Collect (amount) QR keep the pay page link.
-    if (!activeAmount && !businessAccount) return arcAddressUri(walletAddress)
+    // My QR (no amount) - a personal account's, and a business's own (its
+    // Personal QR): just the address on Arc (ethereum:<address>@<Arc chain
+    // id>). A wallet that knows Arc opens a send with the address and network
+    // filled in; one that doesn't still reads the address. MeshPort's scanner
+    // finds the account by its wallet address. The Collect (amount) QR keeps
+    // the pay page link.
+    if (!activeAmount) return arcAddressUri(walletAddress)
     const u = (username || '').replace(/\.arc$/, '')
     if (u) return `${APP_URL}/paylink/${u}${activeAmount ? `?amount=${encodeURIComponent(activeAmount)}` : ''}`
-    if (!activeAmount) return arcAddressUri(walletAddress)
     try {
       const wei = parseUnits(activeAmount, 18)
       return `ethereum:${walletAddress}@${ARC.chainId}?value=${wei.toString()}`
