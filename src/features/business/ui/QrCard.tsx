@@ -27,12 +27,6 @@ export interface QrCardProps {
   paid?: boolean
   /** The QR itself (a canvas) instead of `dataUrl`. */
   children?: React.ReactNode
-  /** Under the name (e.g. Receive's "Switch" chip). */
-  extra?: React.ReactNode
-  /** The QR's size in px (default 232; smaller on short phones). */
-  size?: number
-  /** Short phones: tighter spacing, `extra` beside the subtitle, no wallets line. */
-  compact?: boolean
 }
 
 const TEAL = '#0F5C57'
@@ -44,35 +38,27 @@ function Badge() {
   return <canvas ref={ref} width={22} height={22} aria-hidden style={{ width: 22, height: 22, flexShrink: 0 }} />
 }
 
-export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with MeshPort or any wallet', tag = 'USDC · any network', paid = false, children, extra, size = 232, compact = false }: QrCardProps) {
+export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with MeshPort or any wallet', tag = 'USDC · any network', paid = false, children }: QrCardProps) {
   return (
     <div className="w-full max-w-[340px] mx-auto rounded-3xl overflow-hidden bg-surface border border-border" style={{ boxShadow: 'var(--shadow-1)' }}>
       {/* Header */}
-      <div className={`flex items-center gap-2 px-4 ${compact ? "py-2.5" : "py-3"} text-white`} style={{ background: TEAL }}>
+      <div className="flex items-center gap-2 px-4 py-3 text-white" style={{ background: TEAL }}>
         <Badge />
         <span className="text-[15px] font-extrabold">MeshPort</span>
         <span className="ml-auto text-[11.5px] font-semibold opacity-85">{tag}</span>
       </div>
 
-      <div className={`flex flex-col items-center px-4 ${compact ? "gap-2 pt-2.5 pb-3" : "gap-2.5 pt-3.5 pb-4"}`}>
+      <div className="flex flex-col items-center gap-2.5 px-4 pt-3.5 pb-4">
         {(title || subtitle) && (
           <div className="text-center min-w-0 max-w-full">
             {title && <p className="text-[17px] font-extrabold text-text-primary leading-snug truncate">{title}</p>}
-            {compact && extra
-              ? <div className="mt-1 flex items-center justify-center gap-2 min-w-0">
-                  {subtitle && <p className="text-[12.5px] text-text-secondary truncate min-w-0">{subtitle}</p>}
-                  <span className="shrink-0">{extra}</span>
-                </div>
-              : <>
-                  {subtitle && <p className="text-[12.5px] text-text-secondary mt-0.5 truncate">{subtitle}</p>}
-                  {extra && <div className="mt-1.5 flex justify-center">{extra}</div>}
-                </>}
+            {subtitle && <p className="text-[12.5px] text-text-secondary mt-0.5 truncate">{subtitle}</p>}
           </div>
         )}
 
         {/* The QR: black on a white tile in either theme */}
         <div className="bg-white rounded-[18px] p-2.5 flex">
-          <div className="relative rounded-xl overflow-hidden flex items-center justify-center" style={{ width: size, height: size }}>
+          <div className="relative w-[232px] h-[232px] rounded-xl overflow-hidden flex items-center justify-center">
             <AnimatePresence mode="wait">
               {paid ? (
                 <motion.div
@@ -112,7 +98,7 @@ export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with M
         </div>
 
         {!paid && caption && <p className="text-[12.5px] font-semibold text-text-primary text-center">{caption}</p>}
-        {!paid && !compact && <p className="text-[11px] text-text-muted text-center">{QR_WALLETS}</p>}
+        {!paid && <p className="text-[11px] text-text-muted text-center">{QR_WALLETS}</p>}
       </div>
     </div>
   )
