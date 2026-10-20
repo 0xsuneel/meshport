@@ -16,6 +16,7 @@ import { shortenAddress, copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { drawMeshportQr } from '@/lib/qrLogo'
 import { QrCard } from '@/features/business/ui/QrCard'
+import { qrCardFile } from '@/lib/qrCardImage'
 
 const APP_URL = 'https://meshport.xyz'
 
@@ -141,34 +142,45 @@ export function ReceivePage() {
   }
 
   // ── Download / Share QR - same feature as Home's MyQrCard ─────────────
-  const handleDownloadQr = () => {
-    if (!canvasRef.current) return
+  // The QR card - on screen (QrCard) and as the image Download / Share save
+  // (qrCardImage, its light version).
+  const card = {
+    title: shopQr ? (merchant.storeName || user.displayName || `${displayUsername}.arc`) : (user.displayName || (displayUsername ? `${displayUsername}.arc` : undefined)),
+    subtitle: shopQr ? (store?.name ? `${store.name} · ${displayUsername}.arc` : `${displayUsername}.arc`) : displayUsername ? `${displayUsername}.arc` : shortenAddress(walletAddress ?? ''),
+    tag: shopQr ? 'USDC · any network' : 'USDC · EURC · cirBTC',
+    caption: shopQr ? 'Scan, type the amount and pay' : undefined,
+  }
+  const cardFile = (name: string) => qrCardFile({ data: qrData, ...card }, name)
+
+  const handleDownloadQr = async () => {
+    if (!qrData) return
     try {
       const link = document.createElement('a')
       link.download = `meshport-qr-${walletAddress?.slice(0, 8)}.png`
-      link.href = canvasRef.current.toDataURL('image/png')
+      const file = await cardFile(link.download)
+      if (!file) throw new Error('no image')
+      link.href = URL.createObjectURL(file)
       link.click()
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000)
     } catch {
       showToastMessage('Could not download QR', 'error')
     }
   }
 
   const handleShareQr = async () => {
-    if (!canvasRef.current || !qrData || !walletAddress) return
+    if (!qrData || !walletAddress) return
     try {
-      canvasRef.current.toBlob(async (blob) => {
-        if (!blob) { showToastMessage('Could not share QR', 'error'); return }
-        const file = new File([blob], 'meshport-qr.png', { type: 'image/png' })
-        const shareText = shopQr ? `Pay ${shopName} on MeshPort - ${paymentLink}` : `Pay me on MeshPort - ${paymentLink}`
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: 'My QR', text: shareText })
-        } else if (navigator.share) {
-          await navigator.share({ title: 'My QR', text: shareText })
-        } else {
-          await navigator.clipboard.writeText(shareText)
-          showToastMessage('Copied to clipboard', 'success')
-        }
-      }, 'image/png')
+      const file = await cardFile('meshport-qr.png')
+      if (!file) { showToastMessage('Could not share QR', 'error'); return }
+      const shareText = shopQr ? `Pay ${shopName} on MeshPort - ${paymentLink}` : `Pay me on MeshPort - ${paymentLink}`
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'My QR', text: shareText })
+      } else if (navigator.share) {
+        await navigator.share({ title: 'My QR', text: shareText })
+      } else {
+        await navigator.clipboard.writeText(shareText)
+        showToastMessage('Copied to clipboard', 'success')
+      }
     } catch (err: any) {
       if (err?.name !== 'AbortError') showToastMessage('Could not share QR', 'error')
     }
@@ -205,9 +217,7 @@ export function ReceivePage() {
           <button onClick={() => { setQrError(false); setQrReady(false) }} className="text-brand text-xs underline">Retry</button>
         </div>
       ) : (
-        <QrCard title={shopQr ? (merchant.storeName || user.displayName || `${displayUsername}.arc`) : (user.displayName || (displayUsername ? `${displayUsername}.arc` : undefined))}
-          subtitle={shopQr ? (store?.name ? `${store.name} · ${displayUsername}.arc` : `${displayUsername}.arc`) : displayUsername ? `${displayUsername}.arc` : shortenAddress(walletAddress ?? '')}
-          tag={shopQr ? undefined : 'USDC · EURC · cirBTC'} caption={shopQr ? 'Scan, type the amount and pay' : undefined}>
+        <QrCard title={card.title} subtitle={card.subtitle} tag={card.tag} caption={card.caption}>
           <canvas ref={canvasRef} width={236} height={236} style={{ display: 'block', opacity: qrReady ? 1 : 0 }} />
         </QrCard>
       )}

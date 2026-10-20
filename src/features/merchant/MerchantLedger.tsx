@@ -37,6 +37,7 @@ import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplo
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { drawMeshportQr } from '@/lib/qrLogo'
 import { QrCard } from '@/features/business/ui/QrCard'
+import { qrCardFile } from '@/lib/qrCardImage'
 
 /** Chat text for a request / bill - the chat renders it as a live card. */
 const chatMessageFor = (i: MerchantIntent): string => chatCardMessage(i, formatAmount(i.amount))
@@ -532,27 +533,18 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
   const copy = (text: string, what: string) =>
     copyToClipboard(text).then(ok => showToastMessage(ok ? `${what} copied` : 'Could not copy', ok ? 'success' : 'error'))
 
-  // Shareable image: QR + amount + order number + link, so the QR always
-  // travels with the link.
+  // Shareable image: the QR card (as on screen, light) with the amount and
+  // order number; the shared text carries the link.
   const qrImage = async (): Promise<File | null> => {
-    const qr = canvasRef.current
-    if (!qr || !intent) return null
-    const W = 600, H = 780
-    const c = document.createElement('canvas'); c.width = W; c.height = H
-    const g = c.getContext('2d'); if (!g) return null
-    g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H)
-    g.fillStyle = '#111111'; g.textAlign = 'center'
-    g.font = '700 26px system-ui, sans-serif'; g.fillText('Payment request', W / 2, 60)
-    g.font = '800 46px system-ui, sans-serif'; g.fillText(`$${formatAmount(intent.amount)} USDC`, W / 2, 122)
-    g.font = '600 24px system-ui, sans-serif'; g.fillStyle = '#444444'; g.fillText(`${orderTitle(orderKindOf(intent), orderLabel(intent))}`, W / 2, 162)
-    g.drawImage(qr, (W - 420) / 2, 190, 420, 420)
-    g.font = '500 18px system-ui, sans-serif'; g.fillStyle = '#555555'
-    g.fillText(qrMode === 'wallet' ? `Scan with any wallet · ${merchantQrChain(qrChain).label} · amount fills in` : 'Scan with MeshPort or any wallet · USDC, any network', W / 2, 650)
-    g.font = '500 17px ui-monospace, monospace'; g.fillStyle = '#111111'
-    g.fillText(qrMode === 'wallet' ? (walletAddress ?? '') : (link.length > 52 ? link.slice(0, 52) + '…' : link), W / 2, 690)
-
-    const blob: Blob | null = await new Promise(r => c.toBlob(b => r(b), 'image/png'))
-    return blob ? new File([blob], `payment-${orderDisplay(intent)}-${merchantQrChain(shownChain).label.toLowerCase()}.png`, { type: 'image/png' }) : null
+    if (!intent) return null
+    const chain = merchantQrChain(qrChain).label
+    return qrCardFile({
+      data: qrValue,
+      subtitle: orderTitle(orderKindOf(intent), orderLabel(intent)),
+      amount: `$${formatAmount(qrMode === 'wallet' ? dueNow : intent.amount)} USDC`,
+      tag: qrMode === 'wallet' ? `${chain} · USDC` : 'USDC · any network',
+      caption: qrMode === 'wallet' ? `Pay on ${chain} - the amount fills in` : 'Scan to pay - the amount is fixed',
+    }, `payment-${orderDisplay(intent)}-${merchantQrChain(shownChain).label.toLowerCase()}.png`)
   }
 
   const share = async () => {

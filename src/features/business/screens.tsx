@@ -15,6 +15,7 @@
 // nothing here moves funds out.
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { shopPayLink } from '@/lib/payLinks'
+import { qrCardFile } from '@/lib/qrCardImage'
 import { Store, Clock, Printer, Download, Share2 } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMerchant, useBusinessTab, applyForMerchant, setBusinessName, type BusinessDoc } from '@/lib/merchant'
@@ -122,7 +123,9 @@ function ShopQrBody({ active, storeName, outlet, handle, payTo }: { active: bool
   const from = shopFrom(storeName, outlet)
   const toast = useUIStore(s => s.showToastMessage)
   // Download / Share QR - the same as Home's and Receive's QR card.
-  const qrFile = async () => qr ? new File([await (await fetch(qr)).blob()], `meshport-shop-qr${outlet ? `-${outlet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : ''}.png`, { type: 'image/png' }) : null
+  // Saves the QR card (the same card as on screen, light), not the bare code.
+  const qrFile = async () => qr ? qrCardFile({ data: url, title: storeName, subtitle: sub, tag: 'USDC · any network', caption: 'Scan, type the amount and pay' },
+    `meshport-shop-qr${outlet ? `-${outlet.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : ''}.png`) : null
   const downloadQr = async () => {
     const f = await qrFile(); if (!f) return
     const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000)
