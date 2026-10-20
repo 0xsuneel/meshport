@@ -1452,7 +1452,8 @@ export function PaySendPage() {
               <p className="text-[13px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Amount</p>
               {merchantPayCode && (
                 <p className="text-[12px]" style={{ color: 'var(--text-secondary)', marginTop: -6 }}>
-                  {merchantOrderNumber ? `${orderTitle(merchantOrderKind, merchantOrderNumber)} · ` : ''}Amount is fixed by the request
+                  {merchantOrderKind === 'shop' ? 'Amount entered for this shop'
+                    : <>{merchantOrderNumber ? `${orderTitle(merchantOrderKind, merchantOrderNumber)} · ` : ''}Amount is fixed by the request</>}
                 </p>
               )}
 

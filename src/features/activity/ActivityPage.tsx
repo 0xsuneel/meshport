@@ -267,8 +267,10 @@ export function deriveActivityRow(record: ActivityRecord) {
   // Order payments (bill / request with an order number) are never shown as a
   // plain receive / paid - merchant side "Payment received", customer side
   // "Order payment".
-  const merchantOrder = (isReceive || isSend) && metadata.merchantOrder ? String(metadata.merchantOrder) : null
-  const subtitle = merchantOrder ? (isSend && metadata.merchantName ? String(metadata.merchantName) : counterpartyLabel)
+  // A Shop QR payment is a plain payment (nobody requested it): titled like
+  // any payment ("Paid to" / "Received from"), no order number.
+  const merchantOrder = (isReceive || isSend) && metadata.merchantOrder && activityOrderKind(metadata) !== 'shop' ? String(metadata.merchantOrder) : null
+  const subtitle = merchantOrder || activityOrderKind(metadata) === 'shop' ? (isSend && metadata.merchantName ? String(metadata.merchantName) : counterpartyLabel)
                  : isSelfTransfer && (isSend || isReceive) ? 'Self'
                  : isSend     ? counterpartyLabel
                  : isReceive  ? counterpartyLabel
@@ -564,7 +566,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     : isSelfTransferDetail ? 'Self'
     : transferCpName || (transferCp ? `${transferCp.slice(0, 6)}…${transferCp.slice(-4)}` : '')
   const recoveredDetail = recoveredViaLabel(record)
-  const merchantOrderDetail = (type === 'receive' || type === 'send') && (metadata as any)?.merchantOrder ? String((metadata as any).merchantOrder) : null
+  const merchantOrderDetail = (type === 'receive' || type === 'send') && (metadata as any)?.merchantOrder && activityOrderKind(metadata) !== 'shop' ? String((metadata as any).merchantOrder) : null
   const orderWord = merchantOrderDetail ? paidOrderTitle(metadata, merchantOrderDetail, type === 'receive') : ''
   const title = isClaim && (metadata as any)?.merchant ? `Payment received · ${chainLabel(sourceChain) || 'External'}`
               : merchantOrderDetail ? orderWord
@@ -650,7 +652,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const rows = [
     { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Settlement from ${chain || 'other chain'}` : merchantOrderDetail ? orderWord : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
     { label: 'Chain',  value: chain },
-    ...(merchantOrderDetail ? [{ label: activityOrderKind(metadata) === 'bill' ? 'Bill' : activityOrderKind(metadata) === 'merchant_request' ? 'Requested Payment' : activityOrderKind(metadata) === 'shop' ? 'Payment' : 'Request', value: displayOrderNumber(merchantOrderDetail) }] : []),
+    ...(merchantOrderDetail ? [{ label: activityOrderKind(metadata) === 'bill' ? 'Bill' : activityOrderKind(metadata) === 'merchant_request' ? 'Requested Payment' : 'Request', value: displayOrderNumber(merchantOrderDetail) }] : []),
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Merchant', value: String((metadata as any).merchantName) }] : []),
     ...(isClaim && (metadata as any)?.merchant && (record as any).walletAddress
       ? [{ label: 'Paid to', value: `${String((record as any).walletAddress).slice(0, 6)}…${String((record as any).walletAddress).slice(-6)}`, copy: String((record as any).walletAddress) }]
