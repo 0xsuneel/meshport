@@ -1371,7 +1371,7 @@ export async function fetchMyTrades(userId: string): Promise<P2PTrade[]> {
 // React.StrictMode (see main.tsx) - so any guard living in component state or a
 // ref is reset at exactly the moment it is needed. These two live as long as the
 // JS context does; the localStorage latch outlives even that.
-const _backfillInFlight = new Map<string, Promise<void>>()
+const _backfillInFlight = new Map<string, Promise<boolean>>()
 
 // ── The localStorage latch is an OPTIMISATION, not the correctness mechanism ──
 //
@@ -1447,12 +1447,13 @@ function markBackfillDone(wallet: string): void {
  * serve as historical ground truth. Refund amounts are derived from the offer
  * and trade rows instead.
  */
-export async function backfillP2PActivity(userId: string, walletAddress: string): Promise<void> {
+/** Resolves true when it wrote any row (the caller reloads the list only then). */
+export async function backfillP2PActivity(userId: string, walletAddress: string): Promise<boolean> {
   const wallet = (walletAddress || '').toLowerCase()
-  if (!userId || !wallet) return
+  if (!userId || !wallet) return false
 
   // GUARD 1 - a completed backfill never runs again on this device.
-  if (backfillAlreadyDone(wallet)) return
+  if (backfillAlreadyDone(wallet)) return false
 
   // GUARD 2 - concurrent callers share one run instead of racing it. Returning
   // the SAME promise means StrictMode's second invocation awaits the first
@@ -1465,10 +1466,11 @@ export async function backfillP2PActivity(userId: string, walletAddress: string)
   return run
 }
 
-async function runP2PBackfill(userId: string, wallet: string): Promise<void> {
+async function runP2PBackfill(userId: string, wallet: string): Promise<boolean> {
+  let wrote = false
   try {
     const [trades, offers] = await Promise.all([fetchMyTrades(userId), fetchMyOffers(userId)])
-    if (trades.length === 0 && offers.length === 0) { markBackfillDone(wallet); return }
+    if (trades.length === 0 && offers.length === 0) { markBackfillDone(wallet); return false }
 
     const existingRes = await fetch(
       `${SUPA_URL}/rest/v1/activity?wallet_address=eq.${encodeURIComponent(wallet)}&activity_type=in.(p2p_sell_order,p2p_refund,p2p_purchase)&select=activity_type,metadata`,
@@ -1479,16 +1481,16 @@ async function runP2PBackfill(userId: string, wallet: string): Promise<void> {
     // Bail without latching, so a genuine transient failure retries next visit.
     if (!existingRes.ok) {
       console.warn('[p2pService] P2P backfill skipped - could not read existing activity:', existingRes.status)
-      return
+      return wrote
     }
     let existingRows: { activity_type: string; metadata: any }[]
     try {
       existingRows = await existingRes.json()
     } catch {
       console.warn('[p2pService] P2P backfill skipped - existing activity response was unparseable')
-      return
+      return wrote
     }
-    if (!Array.isArray(existingRows)) return
+    if (!Array.isArray(existingRows)) return wrote
 
     // A row we cannot key contributes nothing - previously such a row produced
     // the key "<type>:" and could mark an unrelated event as covered.
@@ -1515,6 +1517,7 @@ async function runP2PBackfill(userId: string, wallet: string): Promise<void> {
     let everyWriteSucceeded = true
     const emit = async (params: Parameters<typeof saveActivity>[0]): Promise<void> => {
       const ok = await saveP2PActivity(params)
+      if (ok) wrote = true
       if (!ok) {
         everyWriteSucceeded = false
         console.warn('[p2pService] P2P backfill write failed, will retry next visit:', params.activityType)
@@ -1570,6 +1573,7 @@ async function runP2PBackfill(userId: string, wallet: string): Promise<void> {
   } catch (e: any) {
     console.warn('[p2pService] backfillP2PActivity failed:', e?.message)
   }
+  return wrote
 }
 
 /**

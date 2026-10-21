@@ -60,25 +60,32 @@ const ONCHAIN_POLL_MS = 60_000
 // the first page arrived). The first page of each view is kept - in memory
 // for every filter, and on this device for the unfiltered list - shown at
 // once, then refreshed from the server in the background. Cleared on logout.
+// Kept in step with what's on screen (live inserts included) and shown only
+// while it's recent: an older copy showed last time's list, then jumped as
+// the newer rows came in - a short skeleton reads better than that.
 export const ACTIVITY_CACHE_PREFIX = 'meshport_activity_cache_'
-const memCache = new Map<string, ActivityRecord[]>()
+const CACHE_FRESH_MS = 2 * 60_000
+type CacheEntry = { at: number; list: ActivityRecord[] }
+const memCache = new Map<string, CacheEntry>()
 const cacheKey = (wallet: string, filter?: string, search?: string) => `${wallet.toLowerCase()}|${filter ?? 'all'}|${search ?? ''}`
 function readCache(wallet: string, filter?: string, search?: string): ActivityRecord[] | null {
   const key = cacheKey(wallet, filter, search)
-  const hit = memCache.get(key)
-  if (hit) return hit
-  if (filter || search) return null
-  try {
-    const raw = localStorage.getItem(ACTIVITY_CACHE_PREFIX + wallet.toLowerCase())
-    const list = raw ? JSON.parse(raw) : null
-    if (Array.isArray(list)) { memCache.set(key, list); return list }
-  } catch { /* storage blocked / bad JSON */ }
-  return null
+  let hit = memCache.get(key) ?? null
+  if (!hit && !filter && !search) {
+    try {
+      const raw = localStorage.getItem(ACTIVITY_CACHE_PREFIX + wallet.toLowerCase())
+      const v = raw ? JSON.parse(raw) : null
+      // (An older build saved a bare list with no time - treated as stale.)
+      if (v && Array.isArray(v.list)) { hit = { at: Number(v.at) || 0, list: v.list }; memCache.set(key, hit) }
+    } catch { /* storage blocked / bad JSON */ }
+  }
+  return hit && Date.now() - hit.at < CACHE_FRESH_MS ? hit.list : null
 }
 function writeCache(wallet: string, filter: string | undefined, search: string | undefined, list: ActivityRecord[]) {
-  memCache.set(cacheKey(wallet, filter, search), list)
+  const entry = { at: Date.now(), list: list.slice(0, PAGE_SIZE) }
+  memCache.set(cacheKey(wallet, filter, search), entry)
   if (filter || search) return
-  try { localStorage.setItem(ACTIVITY_CACHE_PREFIX + wallet.toLowerCase(), JSON.stringify(list.slice(0, PAGE_SIZE))) } catch { /* quota */ }
+  try { localStorage.setItem(ACTIVITY_CACHE_PREFIX + wallet.toLowerCase(), JSON.stringify(entry)) } catch { /* quota */ }
 }
 /** Logout: forget every cached list. */
 export function clearActivityCache() { memCache.clear() }
@@ -216,17 +223,19 @@ export interface UseActivityResult {
   refresh:     () => void
 }
 
-export function useActivity(walletAddress: string | null): UseActivityResult {
-  const [records,     setRecords]     = useState<ActivityRecord[]>(() => (walletAddress && readCache(walletAddress)) || [])
+/** `initialFilter`: the tab the page opens on (Activity → P2P from a link),
+ *  so it loads that list straight away instead of All first. */
+export function useActivity(walletAddress: string | null, initialFilter?: ActivityType): UseActivityResult {
+  const [records,     setRecords]     = useState<ActivityRecord[]>(() => (walletAddress && readCache(walletAddress, initialFilter)) || [])
   // Current records for event handlers (state updaters may run later).
   const recordsRef = useRef<ActivityRecord[]>([])
   recordsRef.current = records
-  const [loading,     setLoading]     = useState(() => !(walletAddress && readCache(walletAddress)))
+  const [loading,     setLoading]     = useState(() => !(walletAddress && readCache(walletAddress, initialFilter)))
   const [loadingMore, setLoadingMore] = useState(false)
   const [error,       setError]       = useState('')
   const [hasMore,     setHasMore]     = useState(true)
   const [total,       setTotal]       = useState(0)
-  const [filter,      setFilter]      = useState<ActivityType | undefined>()
+  const [filter,      setFilter]      = useState<ActivityType | undefined>(initialFilter)
   const [search,      setSearch]      = useState('')
   // FIX: was a raw numeric offset, which silently drifts whenever a row is
   // inserted (a new transaction lands) while the user is actively
@@ -339,6 +348,13 @@ export function useActivity(walletAddress: string | null): UseActivityResult {
 
   // Reset and reload when filter/search/wallet changes
   useEffect(() => { load(true) }, [walletAddress, filter, search])
+
+  // The saved first page follows what's on screen (live inserts, updates,
+  // just-arrived deposits), so the next visit opens on the same list.
+  useEffect(() => {
+    if (!walletAddress || loading) return
+    writeCache(walletAddress, filter, search || undefined, records)
+  }, [records, loading, walletAddress, filter, search])
 
   // ── Realtime subscription ──────────────────────────────────────────────────
   useEffect(() => {
