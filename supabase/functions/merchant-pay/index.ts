@@ -586,7 +586,7 @@ const hex = (n: number) => '0x' + n.toString(16)
 // Watch loop - how wallet backends (MetaMask, OKX) see incoming money: not a
 // webhook per transfer, a server that keeps asking each chain for transfers
 // to its own users' addresses only. One cron call a minute keeps watching for
-// ~55s: the busy chains every 4s, the rest every 5th pass (~20s). A payment
+// ~55s: Arc and the busy chains every 4s, the rest every 5th pass (~20s). A payment
 // is recorded - receipt, pop-up, voice, push - seconds after its block,
 // instead of up to 15s later, with a quarter of the function calls.
 // (Circle's event monitors push every USDC transfer on a contract - ~490k
@@ -596,7 +596,10 @@ const WATCH_LOOP_MS = 57_000
 const WATCH_HANDOVER_MS = 20_000
 const WATCH_PASS_MS = 4_000
 const WATCH_ALL_EVERY = 5
-const FAST_CHAINS = new Set(['Ethereum_Sepolia', 'Base_Sepolia', 'Arbitrum_Sepolia', 'Optimism_Sepolia', 'Polygon_Sepolia', 'Avalanche_Fuji', 'Unichain_Sepolia'])
+// Arc too: an order paid there from an outside wallet (no pay page, so no
+// instant 'submit') is matched by this watch; Arc's scan only covers the
+// wallets with open orders, so it is cheap.
+const FAST_CHAINS = new Set(['Arc_Testnet', 'Ethereum_Sepolia', 'Base_Sepolia', 'Arbitrum_Sepolia', 'Optimism_Sepolia', 'Polygon_Sepolia', 'Avalanche_Fuji', 'Unichain_Sepolia'])
 
 /** `pick`: only these chains this pass (default: all). */
 async function watchDeposits(pick?: (chainId: string) => boolean) {
