@@ -9,11 +9,15 @@ import { personalPayLink, shopPayLink } from '@/lib/payLinks'
 import { shopFrom } from '@/lib/orderLabels'
 import { RequestQrPanel } from './RequestQrPanel'
 import { useAuthStore, useUIStore } from '@/store'
-import { shortenAddress, copyToClipboard } from '@/lib/utils'
+import { shortenAddress, copyToClipboard, formatAmount } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { drawMeshportQr } from '@/lib/qrLogo'
 import { QrCard, QrInfoBox } from '@/features/business/ui/QrCard'
 import { qrCardFile } from '@/lib/qrCardImage'
+import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton } from '@/components/ui/DesktopHistoryPanel'
+import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
+import { listMyIntents, subscribeMerchantPayments, orderLabel, orderKindOf, orderTitle, type MerchantIntent } from '@/lib/merchantPay'
+import { requestBucket, requestStatus, statusLine } from './MyRequestsPage'
 
 const APP_URL = 'https://meshport.xyz'
 
@@ -54,6 +58,17 @@ export function ReceivePage() {
     { id: 'personal', name: 'Personal', personal: true },
     ...(stores.length ? stores.map(st => ({ id: st.id, name: st.name, isDefault: st.isDefault })) : [{ id: 'shop', name: merchant.storeName || 'Shop QR', isDefault: true }]),
   ] : []
+  // Desktop: My requests in the right-hand panel (like Pay / Swap's history),
+  // live on payments to them, and refreshed when a new one is made.
+  const [requests, setRequests] = useState<MerchantIntent[] | null>(null)
+  useEffect(() => {
+    if (!isDesktop) return
+    const load = () => { listMyIntents(30).then(setRequests).catch(() => setRequests(prev => prev ?? [])) }
+    load()
+    const unsub = walletAddress ? subscribeMerchantPayments(walletAddress, load) : () => {}
+    const iv = setInterval(load, 30_000)
+    return () => { unsub(); clearInterval(iv) }
+  }, [isDesktop, walletAddress, tab])
   if (!user) return null
 
   const displayUsername = (username || (user?.username || '')).replace(/\.arc$/, '')
@@ -247,11 +262,11 @@ export function ReceivePage() {
     </button>
   )
 
-  return (
+  const flow = (
     <div className={`flex flex-col h-full bg-bg overflow-hidden ${isDesktop ? '' : 'lg:max-w-[720px]'}`}>
 
       {/* Header */}
-      <div className="header-row sticky top-0 z-20 backdrop-blur-md bg-bg/95 flex-shrink-0 gap-3 px-5 pt-header pb-header">
+      <div className={`header-row sticky top-0 z-20 backdrop-blur-md bg-bg/95 flex-shrink-0 gap-3 ${isDesktop ? 'px-4 pt-0 pb-3' : 'px-5 pt-header pb-header'}`}>
         {!isDesktop && (
           <button onClick={() => navigate('/')} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
@@ -260,16 +275,17 @@ export function ReceivePage() {
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 className="text-xl font-bold text-text-primary">Receive</h1>
         </div>
-        {/* Requests you made and whether they're paid (Receive → My requests). */}
-        <button onClick={() => navigate('/receive/requests')}
+        {/* Requests you made and whether they're paid (Receive → My requests).
+            Desktop: the right-hand panel. */}
+        {!isDesktop && <button onClick={() => navigate('/receive/requests')}
           style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 999, cursor: 'pointer',
             border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-primary)', fontSize: 13, fontWeight: 700 }}>
           <ListChecks size={15} /> My requests
-        </button>
+        </button>}
       </div>
 
       {/* My QR | Request - the same switch as Business → Collect payment. */}
-      <div className="px-4 pb-3 flex-shrink-0" style={isDesktop ? { padding: '0 24px 4px', maxWidth: 520 } : undefined}>
+      <div className="px-4 pb-3 flex-shrink-0" style={isDesktop ? { padding: '0 16px 4px' } : undefined}>
         <div className="flex p-1 rounded-2xl" role="tablist" aria-label="How to receive" style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}>
           {([['qr', 'My QR'], ['request', 'Request']] as const).map(([id, label]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
@@ -284,7 +300,7 @@ export function ReceivePage() {
       {requesting ? (
         // The request fills the page like Business's Collect payment (its own
         // keypad and button at the bottom); a centred card on desktop.
-        <div className="flex-1 min-h-0 flex flex-col" style={isDesktop ? { padding: '12px 24px 20px', alignItems: 'center' } : undefined}>
+        <div className="flex-1 min-h-0 flex flex-col" style={isDesktop ? { padding: '16px 16px 4px', alignItems: 'center' } : undefined}>
           <div className="flex-1 min-h-0 flex flex-col w-full" style={isDesktop ? { maxWidth: 460, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 24, boxShadow: 'var(--shadow-1)', overflow: 'hidden' } : undefined}>
             {/* A business picks the store here too (the same pick as My QR's). */}
             <RequestQrPanel initialCustomer={params.get('customer') ?? undefined}
@@ -292,16 +308,12 @@ export function ReceivePage() {
           </div>
         </div>
       ) : isDesktop ? (
-        // Full-bleed 2-column split (no maxWidth cap), same gap/padding
-        // treatment as Swap's desktop layout. Left: the QR card. Right:
-        // the store's link / Share Payment Link.
-        <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
-          <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        // The QR card with Share Payment Link right under it, centred in
+        // the flow column (it used to float alone in a second column).
+        <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: '16px 16px 24px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
             {qrCardSection}
-          </div>
-          <div style={{ flex: '1 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {copyFieldsSection}
-            {shareButtonSection}
+            {shareButtonSection && <div style={{ width: '100%', maxWidth: 340 }}>{shareButtonSection}</div>}
           </div>
         </div>
       ) : (
@@ -313,6 +325,36 @@ export function ReceivePage() {
           </div>
         </div>
       )}
+    </div>
+  )
+
+  if (!isDesktop) return flow
+
+  // ── Desktop: flow (left) + My requests (right) - the same 65/35 split as
+  // Pay, Swap and P2P.
+  return (
+    <div style={{ display: 'flex', height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box', background: 'var(--bg)' }}>
+      <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0 }}>{flow}</div>
+      <div style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0 }}>
+        <DesktopHistoryPanel title="My requests" onViewAll={() => navigate('/receive/requests')}>
+          {requests === null ? <DesktopHistorySkeleton />
+            : requests.length === 0 ? <DesktopHistoryEmpty label="Payment requests you make show up here" />
+            : requests.map(i => {
+              const bucket = requestBucket(i)
+              const st = requestStatus(i)
+              const line = statusLine(i)
+              return (
+                <HistoryRow key={i.id} inPanel onClick={() => navigate(`/receive/requests?open=${i.id}`)}
+                  icon={<HistoryIcon tone={bucket === 'paid' ? 'in' : bucket === 'closed' ? 'muted' : st === 'partially_paid' ? 'out' : 'pending'} icon="receive" />}
+                  title={orderTitle(orderKindOf(i), orderLabel(i), { short: true })}
+                  meta={<span style={{ color: line.color }}>{line.text}</span>}
+                  right={<div style={{ fontSize: 14, fontWeight: 700, color: bucket === 'paid' ? 'var(--success)' : bucket === 'closed' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
+                    {bucket === 'paid' ? '+' : ''}${formatAmount(bucket === 'paid' ? (i.received || i.amount) : i.amount)}
+                  </div>} />
+              )
+            })}
+        </DesktopHistoryPanel>
+      </div>
     </div>
   )
 }
