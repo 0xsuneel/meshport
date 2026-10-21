@@ -26,7 +26,7 @@ import { chainLogoSrc } from '@/lib/chainLogos'
 import { listMyPayments, listMyIntents, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, subscribeChainReceipts, createPaymentRequest, displayOrderNumber, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
 import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
 import { StorePicker } from '@/features/merchant/StorePicker'
-import { useVoiceAlerts, setVoiceAlerts, speakPayment, VOICE_LANGS, type VoiceLang } from '@/lib/voiceAlerts'
+import { useVoiceAlerts, setVoiceAlerts, speakPayment } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockKey } from './settlement'
 import { listMyRefunds, subscribeMyRefunds, refundPayment, chainUsdcBalance, canRefundOnChain, checkRefundableSender, type SenderCheck, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
 import { groupRefunds, refundedSum, remainingAfter, isFullyRefunded, canRefundMore, netPayments, MIN_REFUND } from '@/lib/refundTotals'
@@ -664,9 +664,8 @@ function OwnerBusinessPage() {
           : `Move ${money(pin?.kind === 'settle' && pin.retry ? settle.run.filter(r => pin.retry!.includes(r.id)).reduce((s, r) => s + r.balance, 0) : settle.total)} to your Arc balance`}
         error={pinError} onComplete={code => { void onPin(code) }} onClose={() => setPin(null)} />
 
-      <VoiceSheet open={voiceOpen} enabled={voice.enabled} lang={voice.lang}
-        langs={VOICE_LANGS.map(l => ({ id: l.id, label: l.label }))}
-        onToggle={() => setVoiceAlerts({ enabled: !voice.enabled })} onLang={id => setVoiceAlerts({ lang: id as VoiceLang })}
+      <VoiceSheet open={voiceOpen} enabled={voice.enabled}
+        onToggle={() => setVoiceAlerts({ enabled: !voice.enabled })}
         onTest={() => speakPayment(24, { test: true })} onClose={() => setVoiceOpen(false)} />
 
       {level('tools', (

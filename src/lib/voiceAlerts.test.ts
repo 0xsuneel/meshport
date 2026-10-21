@@ -1,4 +1,5 @@
-// Voice alerts: language fallback, queueing, and the silent-browser chime path.
+// Voice alerts: which recorded phrases say an amount, and the device-speech
+// fallback when the clips can't play.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 type Spoken = { text: string; lang: string; voice: unknown; volume: number }
@@ -14,6 +15,7 @@ function fakeBrowser(voiceLangs: string[], opts: { speech?: boolean } = {}) {
     paused: false, resume: vi.fn(), cancel, getVoices: () => voices, addEventListener: vi.fn(),
     speak: (u: Utterance) => { spoken.push({ text: u.text, lang: u.lang, voice: u.voice, volume: u.volume }) },
   }
+  // No AudioContext: the clips can't play, so the device speaks instead.
   const win: any = { addEventListener: vi.fn() }
   if (opts.speech !== false) win.speechSynthesis = synth
   vi.stubGlobal('window', win)
@@ -29,36 +31,52 @@ async function load() {
   return import('./voiceAlerts')
 }
 
-describe('speakPayment', () => {
-  beforeEach(() => { vi.useFakeTimers() })
-  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
-
-  it('speaks in the chosen language with a matching voice', async () => {
-    const b = fakeBrowser(['en-US', 'hi-IN'])
-    const v = await load()
-    v.setVoiceAlerts({ lang: 'hi' })
-    v.speakPayment(24)
-    vi.advanceTimersByTime(500)
-    expect(b.spoken).toEqual([expect.objectContaining({ text: 'MeshPort पर 24 डॉलर प्राप्त हुए', lang: 'hi-IN' })])
+describe('phrasesFor', () => {
+  it('joins whole phrases for each part of the amount', async () => {
+    const { phrasesFor } = await load()
+    expect(phrasesFor(7)).toEqual(['r7', 't0'])
+    expect(phrasesFor(24.5)).toEqual(['r24', 't50'])
+    expect(phrasesFor(312.05)).toEqual(['r312', 't5'])
+    expect(phrasesFor(1250)).toEqual(['rk1', 'd250', 't0'])
+    expect(phrasesFor(1000)).toEqual(['rk1', 'd0', 't0'])
+    expect(phrasesFor(99_999.99)).toEqual(['rk99', 'd999', 't99'])
+    expect(phrasesFor(0.5)).toEqual(['rc50'])
   })
 
-  it('falls back to English when the device has no voice for the language', async () => {
-    const b = fakeBrowser(['en-GB'])
+  it('rounds to cents', async () => {
+    const { phrasesFor } = await load()
+    expect(phrasesFor(24.499)).toEqual(['r24', 't50'])
+    expect(phrasesFor(0.999)).toEqual(['r1', 't0'])
+  })
+
+  it('leaves amounts the clips do not cover to device speech', async () => {
+    const { phrasesFor } = await load()
+    expect(phrasesFor(100_000)).toBeNull()
+    expect(phrasesFor(0)).toBeNull()
+    expect(phrasesFor(Number.NaN)).toBeNull()
+  })
+})
+
+describe('speakPayment', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
+  beforeEach(() => { vi.useRealTimers() })
+  const flush = () => new Promise(r => setTimeout(r, 0))
+
+  it('falls back to an English device voice, preferring British', async () => {
+    const b = fakeBrowser(['en-US', 'en-GB', 'hi-IN'])
     const v = await load()
-    v.setVoiceAlerts({ lang: 'kn' })
     v.speakPayment(5.5)
-    vi.advanceTimersByTime(500)
-    expect(b.spoken).toEqual([expect.objectContaining({ text: 'Received 5.50 dollars on MeshPort', lang: 'en-GB' })])
+    await flush()
+    expect(b.spoken).toEqual([expect.objectContaining({ text: 'Received 5.50 dollars on Mesport', lang: 'en-GB' })])
   })
 
   it('queues two payments instead of cutting the first off', async () => {
     const b = fakeBrowser(['en-IN'])
     const v = await load()
-    v.setVoiceAlerts({ lang: 'en' })
     v.speakPayment(1)
     v.speakPayment(2)
-    vi.advanceTimersByTime(500)
-    expect(b.spoken.map(s => s.text)).toEqual(['Received 1 dollars on MeshPort', 'Received 2 dollars on MeshPort'])
+    await flush()
+    expect(b.spoken.map(s => s.text)).toEqual(['Received 1 dollar on Mesport', 'Received 2 dollars on Mesport'])
     expect(b.cancel).not.toHaveBeenCalled()
   })
 

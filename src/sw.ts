@@ -64,6 +64,17 @@ registerRoute(({ url }) => url.origin === 'https://fonts.gstatic.com',
     ],
   }))
 
+// Voice-alert phrases (public/voice/): fetched the first time an amount needs
+// them, then played from the device so the next alert starts at once.
+registerRoute(({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/voice/'),
+  new CacheFirst({
+    cacheName: 'mp-voice',
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [200] }),
+      new ExpirationPlugin({ maxEntries: 600, maxAgeSeconds: 365 * 24 * 3600, purgeOnQuotaError: true }),
+    ],
+  }))
+
 // Pictures (profile photos, token and chain logos from other sites): shown
 // from the device once seen, refreshed in the background.
 registerRoute(({ request, url }) => request.destination === 'image' && url.origin !== self.location.origin,

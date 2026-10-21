@@ -1,25 +1,17 @@
 /**
  * VoiceSheet — configure voice payment alerts.
- * Toggle on/off, pick language, test the voice, close.
+ * Toggle on/off, test the voice, close. English only.
  */
 import React from 'react'
-import { X, Mic, Volume2, ChevronDown } from 'lucide-react'
+import { X, Mic, Volume2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Sheet, PrimaryBtn, Divider } from './primitives'
 import { springs } from './types'
 
-export interface LangOption {
-  id: string
-  label: string
-}
-
 export interface VoiceSheetProps {
   open: boolean
   enabled: boolean
-  lang: string              // current lang id
-  langs: LangOption[]       // available language options
   onToggle: () => void
-  onLang: (id: string) => void
   onTest: () => void
   onClose: () => void
 }
@@ -27,10 +19,7 @@ export interface VoiceSheetProps {
 export function VoiceSheet({
   open,
   enabled,
-  lang,
-  langs,
   onToggle,
-  onLang,
   onTest,
   onClose,
 }: VoiceSheetProps) {
@@ -91,32 +80,6 @@ export function VoiceSheet({
               transition={springs.snappy}
             />
           </button>
-        </div>
-
-        <Divider />
-
-        {/* Language selector */}
-        <div className="flex items-center justify-between py-3">
-          <div>
-            <p className={`text-sm font-medium ${enabled ? 'text-text-primary' : 'text-text-muted'}`}>
-              Language
-            </p>
-            <p className="text-xs text-text-muted mt-0.5">Voice announcement language</p>
-          </div>
-          <div className="relative">
-            <select
-              aria-label="Voice language"
-              disabled={!enabled}
-              value={lang}
-              onChange={(e) => onLang(e.target.value)}
-              className="appearance-none pl-3 pr-8 py-2 rounded-xl bg-surface border border-border text-sm font-medium text-text-primary disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:border-brand-text cursor-pointer"
-            >
-              {langs.map((l) => (
-                <option key={l.id} value={l.id}>{l.label}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-text-muted pointer-events-none" />
-          </div>
         </div>
 
         <Divider className="mb-5" />
