@@ -586,20 +586,22 @@ const hex = (n: number) => '0x' + n.toString(16)
 // Watch loop - how wallet backends (MetaMask, OKX) see incoming money: not a
 // webhook per transfer, a server that keeps asking each chain for transfers
 // to its own users' addresses only. One cron call a minute keeps watching for
-// ~55s: Arc and the busy chains every 4s, the rest every 5th pass (~20s). A payment
-// is recorded - receipt, pop-up, voice, push - seconds after its block,
-// instead of up to 15s later, with a quarter of the function calls.
+// ~55s, every chain every 4s. A payment is recorded - receipt, pop-up,
+// voice, push - seconds after its block, with a quarter of the function
+// calls of the old 15s schedule.
 // (Circle's event monitors push every USDC transfer on a contract - ~490k
 // calls a day on Arc alone - which is why chain-transfer-webhook moved off
 // them; the same holds on these testnets.)
 const WATCH_LOOP_MS = 57_000
 const WATCH_HANDOVER_MS = 20_000
 const WATCH_PASS_MS = 4_000
-const WATCH_ALL_EVERY = 5
-// Arc too: an order paid there from an outside wallet (no pay page, so no
-// instant 'submit') is matched by this watch; Arc's scan only covers the
-// wallets with open orders, so it is cheap.
-const FAST_CHAINS = new Set(['Arc_Testnet', 'Ethereum_Sepolia', 'Base_Sepolia', 'Arbitrum_Sepolia', 'Optimism_Sepolia', 'Polygon_Sepolia', 'Avalanche_Fuji', 'Unichain_Sepolia'])
+// Two loops side by side, so the testnets with slow endpoints (Morph, XDC,
+// Injective… a read there can take 2-4s) never hold back the busy chains: a
+// pass waits for every chain in it. Arc is in the busy group: an order paid
+// there from an outside wallet (no pay page, so no instant 'submit') is
+// matched here, and Arc's scan only covers wallets with open orders.
+const BUSY_CHAINS = new Set(['Arc_Testnet', 'Ethereum_Sepolia', 'Base_Sepolia', 'Arbitrum_Sepolia', 'Optimism_Sepolia', 'Polygon_Sepolia', 'Avalanche_Fuji', 'Unichain_Sepolia'])
+const WATCH_GROUPS: Array<(chainId: string) => boolean> = [id => BUSY_CHAINS.has(id), id => !BUSY_CHAINS.has(id)]
 
 /** `pick`: only these chains this pass (default: all). */
 async function watchDeposits(pick?: (chainId: string) => boolean) {
@@ -892,7 +894,7 @@ async function watchDeposits(pick?: (chainId: string) => boolean) {
     if (error) console.error('[merchant-pay/watch] cursor save failed:', error.message)
   }
   const totalMs = Date.now() - runStart
-  if (totalMs > WATCH_PASS_MS) {
+  if (totalMs > 2 * WATCH_PASS_MS) {
     const slow = chainMs.sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c, ms]) => `${c}=${ms}ms`).join(' ')
     console.info(`[merchant-pay/watch] run ${totalMs}ms (reads done at ${readMs}ms) slowest: ${slow}`)
   }
@@ -924,14 +926,17 @@ Deno.serve(async (req: Request) => {
       if (!got) { console.warn('[merchant-pay/watch] previous loop still running - skipped'); return }
       try {
         const end = callStart + WATCH_LOOP_MS
-        for (let pass = 0; ; pass++) {
-          const t0 = Date.now()
-          try { await watchDeposits(pass % WATCH_ALL_EVERY === 0 ? undefined : id => FAST_CHAINS.has(id)) }
-          catch (e) { console.error('[merchant-pay/watch]', e instanceof Error ? e.message : e) }
-          const wait = Math.max(0, WATCH_PASS_MS - (Date.now() - t0))
-          if (Date.now() + wait >= end) break
-          if (wait) await new Promise(r => setTimeout(r, wait))
-        }
+        // Each group writes only its own chains' cursors.
+        await Promise.all(WATCH_GROUPS.map(async inGroup => {
+          for (;;) {
+            const t0 = Date.now()
+            try { await watchDeposits(inGroup) }
+            catch (e) { console.error('[merchant-pay/watch]', e instanceof Error ? e.message : e) }
+            const wait = Math.max(0, WATCH_PASS_MS - (Date.now() - t0))
+            if (Date.now() + wait >= end) break
+            if (wait) await new Promise(r => setTimeout(r, wait))
+          }
+        }))
       } finally {
         await db.rpc('merchant_watch_lock_release').then(() => {}, () => {})
       }
