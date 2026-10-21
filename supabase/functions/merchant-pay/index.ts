@@ -578,6 +578,7 @@ const chainFailed = (chainId: string) => {
 const hex = (n: number) => '0x' + n.toString(16)
 
 async function watchDeposits() {
+  const runStart = Date.now()
   // Open orders, plus orders that expired or were cancelled within the last
   // day: a payment for one of those is still recorded against it (late).
   const { data: open } = await db.from('merchant_payment_intents').select('*')
@@ -610,51 +611,61 @@ async function watchDeposits() {
   const cursorOf = new Map((cursors ?? []).map((c: any) => [c.chain, Number(c.last_block)]))
 
   let scanned = 0, matched = 0, review = 0
+  // Every chain's new cursor, written in one upsert at the end instead of one
+  // round trip per chain.
+  const cursorRows: Array<{ chain: string; last_block: number; updated_at: string }> = []
+  const moveCursor = (chain: string, last_block: number) => cursorRows.push({ chain, last_block, updated_at: new Date().toISOString() })
   // Read every chain at the same time (the slow part is the RPC round
   // trips), then handle the payments one chain after another.
   type Fetched = { fromBlock: number; toBlock: number; logs: any[] | null } | { error: unknown } | null
+  const chainMs: Array<[string, number]> = []
   const fetched = new Map<string, Fetched>(await Promise.all(Object.entries(PAY_CHAINS).map(async ([chainId, chain]): Promise<[string, Fetched]> => {
     if ((chainBackoff.get(chainId)?.until ?? 0) > Date.now()) return [chainId, null]
-    const isArc = chainId === 'Arc_Testnet'
-    // Arc: open orders only (plain Arc receives are handled by the app).
-    const wallets = isArc ? orderWallets : [...new Set([...orderWallets, ...merchantWallets])]
-    // One RPC endpoint per chain per run for the head, the logs and the
-    // check below, so the logs come from a node that has reached toBlock
-    // (two load-balanced endpoints can be at different heights, and a
-    // lagging one would let the cursor skip blocks it hadn't indexed).
-    let lastErr: unknown = null
-    for (const url of chain.rpcs.filter(u => u && !u.endsWith('/'))) {
-      try {
-        const head = parseInt(await rpc([url], 'eth_blockNumber', [], WATCH_RPC_TIMEOUT_MS), 16)
-        if (!Number.isFinite(head)) throw new Error('bad eth_blockNumber')
-        // Only blocks deep enough to be safe from reorgs (Arc: final at once).
-        const latest = head - confirmationsFor(chainId)
-        const fromBlock = (cursorOf.get(chainId) ?? (latest - START_LOOKBACK)) + 1
-        const toBlock = Math.min(latest, fromBlock + (SCAN_RANGE[chainId] ?? DEFAULT_RANGE) - 1)
-        if (fromBlock > toBlock) return [chainId, null]
-        if (wallets.length === 0) return [chainId, { fromBlock, toBlock, logs: null }]
-        // The node that answered must have the last block it was asked about -
-        // asked alongside the logs instead of after them.
-        const hasBlock = async (n: number) => {
-          const end = await rpc([url], 'eth_getBlockByNumber', [hex(n), false], WATCH_RPC_TIMEOUT_MS)
-          if (!end?.hash) throw new Error(`node behind block ${n}`)
+    const t0 = Date.now()
+    try { return await readChain() } finally { chainMs.push([chainId, Date.now() - t0]) }
+    async function readChain(): Promise<[string, Fetched]> {
+      const isArc = chainId === 'Arc_Testnet'
+      // Arc: open orders only (plain Arc receives are handled by the app).
+      const wallets = isArc ? orderWallets : [...new Set([...orderWallets, ...merchantWallets])]
+      // One RPC endpoint per chain per run for the head, the logs and the
+      // check below, so the logs come from a node that has reached toBlock
+      // (two load-balanced endpoints can be at different heights, and a
+      // lagging one would let the cursor skip blocks it hadn't indexed).
+      let lastErr: unknown = null
+      for (const url of chain.rpcs.filter(u => u && !u.endsWith('/'))) {
+        try {
+          const head = parseInt(await rpc([url], 'eth_blockNumber', [], WATCH_RPC_TIMEOUT_MS), 16)
+          if (!Number.isFinite(head)) throw new Error('bad eth_blockNumber')
+          // Only blocks deep enough to be safe from reorgs (Arc: final at once).
+          const latest = head - confirmationsFor(chainId)
+          const fromBlock = (cursorOf.get(chainId) ?? (latest - START_LOOKBACK)) + 1
+          const toBlock = Math.min(latest, fromBlock + (SCAN_RANGE[chainId] ?? DEFAULT_RANGE) - 1)
+          if (fromBlock > toBlock) return [chainId, null]
+          if (wallets.length === 0) return [chainId, { fromBlock, toBlock, logs: null }]
+          // The node that answered must have the last block it was asked about -
+          // asked alongside the logs instead of after them.
+          const hasBlock = async (n: number) => {
+            const end = await rpc([url], 'eth_getBlockByNumber', [hex(n), false], WATCH_RPC_TIMEOUT_MS)
+            if (!end?.hash) throw new Error(`node behind block ${n}`)
+          }
+          const [read] = await Promise.all([
+            scanLogs([url], {
+              address: isArc ? ARC_NATIVE_EMITTER : chain.usdc,
+              topics: [TRANSFER_TOPIC, null, wallets.map(pad)],
+            }, fromBlock, toBlock, latest, WATCH_RPC_TIMEOUT_MS),
+            hasBlock(toBlock),
+          ])
+          // A pruned-history skip can read past toBlock: check that end too.
+          if (read.toBlock > toBlock) await hasBlock(read.toBlock)
+          return [chainId, read]
+        } catch (e) {
+          lastErr = e
         }
-        const [read] = await Promise.all([
-          scanLogs([url], {
-            address: isArc ? ARC_NATIVE_EMITTER : chain.usdc,
-            topics: [TRANSFER_TOPIC, null, wallets.map(pad)],
-          }, fromBlock, toBlock, latest, WATCH_RPC_TIMEOUT_MS),
-          hasBlock(toBlock),
-        ])
-        // A pruned-history skip can read past toBlock: check that end too.
-        if (read.toBlock > toBlock) await hasBlock(read.toBlock)
-        return [chainId, read]
-      } catch (e) {
-        lastErr = e
       }
+      return [chainId, { error: lastErr ?? new Error('no RPC answered') }]
     }
-    return [chainId, { error: lastErr ?? new Error('no RPC answered') }]
   })))
+  const readMs = Date.now() - runStart
 
   for (const [chainId, chain] of Object.entries(PAY_CHAINS)) {
     try {
@@ -665,7 +676,7 @@ async function watchDeposits() {
       const { toBlock } = f
       const isArc = chainId === 'Arc_Testnet'
       if (f.logs === null) {
-        await db.from('merchant_deposit_cursors').upsert({ chain: chainId, last_block: toBlock, updated_at: new Date().toISOString() })
+        moveCursor(chainId, toBlock)
         continue
       }
       const logs = f.logs
@@ -829,10 +840,19 @@ async function watchDeposits() {
         }
       }
       // A held mint's block is read again next run (every write above is idempotent).
-      await db.from('merchant_deposit_cursors').upsert({ chain: chainId, last_block: holdBlock != null ? holdBlock - 1 : toBlock, updated_at: new Date().toISOString() })
+      moveCursor(chainId, holdBlock != null ? holdBlock - 1 : toBlock)
     } catch (e) {
       console.error('[merchant-pay/watch]', chainId, e instanceof Error ? e.message : e)
     }
+  }
+  if (cursorRows.length) {
+    const { error } = await db.from('merchant_deposit_cursors').upsert(cursorRows)
+    if (error) console.error('[merchant-pay/watch] cursor save failed:', error.message)
+  }
+  const totalMs = Date.now() - runStart
+  if (totalMs > 2000) {
+    const slow = chainMs.sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c, ms]) => `${c}=${ms}ms`).join(' ')
+    console.info(`[merchant-pay/watch] run ${totalMs}ms (reads done at ${readMs}ms) slowest: ${slow}`)
   }
   return { scanned, matched, review }
 }
