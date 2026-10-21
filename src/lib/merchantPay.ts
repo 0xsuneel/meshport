@@ -472,6 +472,20 @@ export function subscribeMerchantPayments(merchantWallet: string, onChange: () =
   return () => { supabase.removeChannel(ch) }
 }
 
+/**
+ * Live feed of USDC landing on the merchant's wallet on ANOTHER chain
+ * (merchant_chain_receipts). Its own channel on purpose: if the table is not in
+ * the realtime publication yet, only this feed fails - the order/payment feed
+ * above keeps working, and callers still poll as a fallback.
+ */
+export function subscribeChainReceipts(merchantWallet: string, onChange: () => void): () => void {
+  const w = merchantWallet.toLowerCase()
+  const ch = supabase.channel(`merchant-rcpt-${w}-${Math.random().toString(36).slice(2, 10)}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_chain_receipts', filter: `merchant_wallet=eq.${w}` }, onChange)
+    .subscribe()
+  return () => { supabase.removeChannel(ch) }
+}
+
 /** Live updates for one request (pay page / chat card). Polls - customers may not be signed in. */
 export function watchPayment(code: string, onUpdate: (v: PaymentView) => void, everyMs = 5000): () => void {
   let stop = false
