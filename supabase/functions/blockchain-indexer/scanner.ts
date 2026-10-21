@@ -296,6 +296,8 @@ export async function scanRange(
   chain: {
     id: string
     rpcs: string[]
+    /** null = the chain's gas coin is not an asset we track: skip the native block scan. */
+    nativeAsset?: string | null
     nativeTransferLogContract?: string | null
     tokens: Array<{ symbol: string; contract: string; decimals: number }>
   },
@@ -344,8 +346,17 @@ export async function scanRange(
   // unbounded Promise.all over the whole range.
   const NATIVE_BLOCK_CONCURRENCY = 8
 
+  // Only chains whose gas coin IS a tracked asset (Arc) need this. On the
+  // external chains USDC is an ERC-20 the log scan below sees; fetching every
+  // full block there was pure waste - and it was the bug: on fast chains
+  // (Arbitrum ~4 blocks/s) the pass ran out of time, the cursor froze, and
+  // every chain after it in the list was never scanned, so no deposit event
+  // (and no instant balance update) ever fired for them. It also misread
+  // plain ETH sends as USDC deposits.
+  const scanNative = chain.nativeAsset !== null
+
   const blockNumbers: number[] = []
-  for (let b = fromBlock; b <= toBlock; b++) blockNumbers.push(b)
+  if (scanNative) for (let b = fromBlock; b <= toBlock; b++) blockNumbers.push(b)
 
   let firstFailedBlock: number | null = null
 
@@ -533,6 +544,8 @@ export async function scanRange(
       // it. Emitting it here would look like an indexer_only find.
       if (isMintTransfer(decoded)) continue
       if (isSelfTransfer(decoded)) continue // self-transfer
+      // No native scan to vouch for blocks: confirm by the event's own block.
+      if (!scanNative && !confirmableBlocks.includes(decoded.blockNumber)) confirmableBlocks.push(decoded.blockNumber)
       events.push({
         chain_id: chain.id,
         block_number: decoded.blockNumber,

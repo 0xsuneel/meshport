@@ -595,14 +595,20 @@ Deno.serve(async (req: Request) => {
   }
 
   const started = Date.now()
-  // Chains are processed sequentially: one slow/failing chain must not starve
-  // the others of the invocation's CPU budget, and sequential keeps RPC
-  // concurrency predictable. With one chain enabled this is moot; it becomes
-  // the throttle that matters when more are turned on.
-  const reports: Array<Record<string, unknown>> = []
-  for (const chain of chains) {
-    reports.push(await indexChain(supabase, chain, knownWallets))
-  }
+  // Chains run a few at a time. They used to run one after another, so one
+  // slow chain used up the invocation's time and every chain after it in the
+  // list was never scanned - deposits there got no event and balances only
+  // caught up on the next client poll. Each chain talks to its own RPCs, so
+  // running them side by side does not stack load on any one endpoint.
+  const CHAIN_CONCURRENCY = 6
+  const reports: Array<Record<string, unknown>> = new Array(chains.length)
+  let nextChain = 0
+  await Promise.all(Array.from({ length: Math.min(CHAIN_CONCURRENCY, chains.length) }, async () => {
+    while (nextChain < chains.length) {
+      const k = nextChain++
+      reports[k] = await indexChain(supabase, chains[k], knownWallets)
+    }
+  }))
 
   return json({
     ok: true,
