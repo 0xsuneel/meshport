@@ -263,19 +263,20 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
   }
   // Independent checks - run together instead of back to back (each is a
   // round trip to the database).
-  const [isCaller, member] = await Promise.all([callerIs(req, senderId), isParticipant(conversationId, senderId)])
+  // Blocked by the other person (chat privacy): no messages. A payment card is
+  // still recorded - the money already moved on-chain - but sends no alert.
+  // A read, so it's asked alongside the two checks rather than after them.
+  const blockedCheck = type === 'text'
+    ? supaFetch('/rpc/chat_blocked_in', 'POST', { conv: conversationId, sender: senderId })
+        .then(r => r.ok && r.data === true).catch(() => false)
+    : Promise.resolve(false)
+  const [isCaller, member, blocked] = await Promise.all([callerIs(req, senderId), isParticipant(conversationId, senderId), blockedCheck])
   if (!isCaller) return res.status(403).json(NOT_LINKED)
   if (!member.ok) return res.status(403).json({ error: 'Not in this conversation' })
   if (!['text', 'payment_sent'].includes(type)) return res.status(400).json({ error: 'Bad message type' })
   if (typeof content !== 'string' || content.length > 20000) return res.status(400).json({ error: 'Bad content' })
   if (!PAY_TOKENS[tokenSymbol]) return res.status(400).json({ error: 'Bad token' })
-  // Blocked by the other person (chat privacy): no messages. A payment card is
-  // still recorded - the money already moved on-chain - but sends no alert.
-  if (type === 'text') {
-    const blocked = await supaFetch('/rpc/chat_blocked_in', 'POST', { conv: conversationId, sender: senderId })
-      .then(r => r.ok && r.data === true).catch(() => false)
-    if (blocked) return res.status(403).json({ error: 'blocked', message: 'This person has blocked you.' })
-  }
+  if (blocked) return res.status(403).json({ error: 'blocked', message: 'This person has blocked you.' })
 
   // Payment cards need a real on-chain payment between the two participants.
   // Wallets always come from the database - never from the request body.
@@ -338,13 +339,9 @@ async function handleSendMessage(req: VercelRequest, res: VercelResponse) {
 
   // ── 3. If payment_sent: insert payment_received for the recipient ──────────
   if (type === 'payment_sent' && paymentAmount) {
-    // Look up the conversation to find the recipient's user ID
-    const convRes = await supaFetch(
-      `/conversations?id=eq.${conversationId}&select=participant_a,participant_b`,
-      'GET'
-    )
-    if (convRes.ok && Array.isArray(convRes.data) && convRes.data[0]) {
-      const conv = convRes.data[0]
+    // The recipient: the conversation was already read by isParticipant above.
+    if (member.conv) {
+      const conv = member.conv
       const recipientId = conv.participant_a === senderId ? conv.participant_b : conv.participant_a
 
       // Resolve wallets if not passed

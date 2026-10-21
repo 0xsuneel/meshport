@@ -1203,7 +1203,8 @@ export async function createTrade(p: {
       await escrowProvider.refund(trade).catch(() => {})
       return { trade: null, error: `Could not register this trade on-chain: ${lockResult.message}` }
     }
-    await sendTradeMessage(trade.id, 'system', `Trade started - ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC. Payment window: ${formatTradeWindow(tradeWindowMinutes)}.`, true)
+    // Chat line, not a gate on the trade: sent in the background.
+    void sendTradeMessage(trade.id, 'system', `Trade started - ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC. Payment window: ${formatTradeWindow(tradeWindowMinutes)}.`, true)
     // This is a buy-offer trade: the offer's original creator is the buyer
     // (buyerId), and the user who just accepted it (sellerId) is the seller
     // for this trade - they're the one who acted, so the notification has
@@ -1292,7 +1293,7 @@ export async function confirmSellTradeOnChain(trade: P2PTrade): Promise<{ succes
   // back in createTrade() - derive the window from it here rather than the
   // fallback constant, so this message matches whatever was actually picked.
   const windowMinutes = Math.round((new Date(trade.expiresAt).getTime() - new Date(trade.createdAt).getTime()) / 60000)
-  await sendTradeMessage(trade.id, 'system', `Trade confirmed on-chain - ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC. Payment window: ${formatTradeWindow(windowMinutes)}.`, true)
+  void sendTradeMessage(trade.id, 'system', `Trade confirmed on-chain - ${currencySymbol(trade.currency)}${trade.amountFiat} for ${trade.amountUsdc} USDC. Payment window: ${formatTradeWindow(windowMinutes)}.`, true)
   // notifyP2P removed here (2026-09-21) - duplicated p2p_notify_trade_event's
   // seller_confirmed case, which fires on this exact status transition
   // (awaiting_seller_confirmation -> waiting_for_buyer) and notifies
@@ -1792,7 +1793,7 @@ export async function cancelTrade(trade: P2PTrade, reason: string, actorId: stri
       })
     }
   }
-  await sendTradeMessage(trade.id, 'system', `Trade cancelled - ${reason}`, true)
+  void sendTradeMessage(trade.id, 'system', `Trade cancelled - ${reason}`, true)
   return { success: true, message: 'Trade cancelled.' }
 }
 
@@ -1825,7 +1826,7 @@ export async function openDispute(trade: P2PTrade, actorId: string, reason: stri
   // lock still holds for every normal path; an admin can freeze on-chain
   // separately from the admin console if this attempt didn't land.
   await freezeTradeOnChainBestEffort(trade.id)
-  await sendTradeMessage(trade.id, 'system', `Dispute opened: ${reason}`, true)
+  void sendTradeMessage(trade.id, 'system', `Dispute opened: ${reason}`, true)
   // notifyP2P removed here (2026-09-21) - duplicated p2p_notify_trade_event's
   // dispute_opened case, which fires on this exact dispute_status
   // transition and notifies BOTH parties (this one-sided otherPartyId
@@ -2168,7 +2169,7 @@ export async function markPaymentSent(trade: P2PTrade): Promise<{ success: boole
   if (!claimed) {
     return { success: false, message: 'Payment has already been marked for this trade.' }
   }
-  await sendTradeMessage(trade.id, 'system', result.message, true)
+  void sendTradeMessage(trade.id, 'system', result.message, true)
   // notifyP2P removed here (2026-09-21) - duplicated p2p_notify_trade_event's
   // payment_marked_completed case, which fires on this exact status
   // transition (waiting_for_buyer -> payment_sent) and notifies
