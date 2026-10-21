@@ -80,21 +80,20 @@ const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
 
 // Blocks a payment must be under the chain head before it's credited (reorg
 // safety). Arc has deterministic finality: a block is final when produced.
-// Sized to seconds, not minutes: the receipt, the "Payment received"
-// notification and its phone push all wait on this, and Ethereum Sepolia's
-// old 12 blocks (12s each) held every business payment back ~2.5 minutes.
-// Testnet reorgs deeper than these are not seen in practice; Polygon keeps
-// a larger margin (it does reorg).
+// The receipt, the "Payment received" pop-up, the voice alert and the phone
+// push all wait on this, so it is sized like a UPI sound box - announced as
+// soon as the payment is in a block: rollups (one sequencer, no reorgs in
+// practice) and instant-finality chains at 0, Ethereum Sepolia one block on
+// top (~12s), Polygon - which does reorg a few blocks - a small margin.
 export const CONFIRMATIONS: Record<string, number> = {
   Arc_Testnet: 0,
-  Ethereum_Sepolia: 3, // ~36s
-  Base_Sepolia: 5, Optimism_Sepolia: 5, Unichain_Sepolia: 5, World_Chain_Sepolia: 5, Ink_Testnet: 5, Linea_Sepolia: 5, // ~10s
-  Arbitrum_Sepolia: 20, // ~0.25 s blocks: ~5s
-  Polygon_Sepolia: 32, // ~64s
-  Avalanche_Fuji: 3, Sonic_Testnet: 3, Sei_Testnet: 3, Injective_Testnet: 3, // fast-finality chains
-  XDC_Apothem: 5, HyperEVM_Testnet: 5,
+  Ethereum_Sepolia: 1, // ~12s
+  Base_Sepolia: 0, Optimism_Sepolia: 0, Unichain_Sepolia: 0, World_Chain_Sepolia: 0, Ink_Testnet: 0, Linea_Sepolia: 0, Arbitrum_Sepolia: 0,
+  Polygon_Sepolia: 6, // ~12s
+  Avalanche_Fuji: 0, Sonic_Testnet: 0, Sei_Testnet: 0, Injective_Testnet: 0, // instant finality
+  XDC_Apothem: 1, HyperEVM_Testnet: 1,
 }
-export const DEFAULT_CONFIRMATIONS = 5
+export const DEFAULT_CONFIRMATIONS = 1
 export const confirmationsFor = (chainId: string) => CONFIRMATIONS[chainId] ?? DEFAULT_CONFIRMATIONS
 
 function serviceKey(): string {
@@ -582,7 +581,8 @@ const chainFailed = (chainId: string) => {
 }
 const hex = (n: number) => '0x' + n.toString(16)
 
-async function watchDeposits() {
+/** `only`: one chain (a merchant's app saw money land there - see 'nudge'). */
+async function watchDeposits(only?: string) {
   const runStart = Date.now()
   // Open orders, plus orders that expired or were cancelled within the last
   // day: a payment for one of those is still recorded against it (late).
@@ -624,7 +624,8 @@ async function watchDeposits() {
   // trips), then handle the payments one chain after another.
   type Fetched = { fromBlock: number; toBlock: number; logs: any[] | null } | { error: unknown } | null
   const chainMs: Array<[string, number]> = []
-  const fetched = new Map<string, Fetched>(await Promise.all(Object.entries(PAY_CHAINS).map(async ([chainId, chain]): Promise<[string, Fetched]> => {
+  const chainsToRead = Object.entries(PAY_CHAINS).filter(([id]) => !only || id === only)
+  const fetched = new Map<string, Fetched>(await Promise.all(chainsToRead.map(async ([chainId, chain]): Promise<[string, Fetched]> => {
     if ((chainBackoff.get(chainId)?.until ?? 0) > Date.now()) return [chainId, null]
     const t0 = Date.now()
     try { return await readChain() } finally { chainMs.push([chainId, Date.now() - t0]) }
@@ -672,7 +673,7 @@ async function watchDeposits() {
   })))
   const readMs = Date.now() - runStart
 
-  for (const [chainId, chain] of Object.entries(PAY_CHAINS)) {
+  for (const [chainId, chain] of chainsToRead) {
     try {
       const f = fetched.get(chainId)
       if (!f) continue
@@ -893,6 +894,33 @@ Deno.serve(async (req: Request) => {
     if (gotLock !== true) return jsonFor(req, { skipped: 'busy' })
     try { return jsonFor(req, await watchDeposits()) }
     catch (e) { console.error('[merchant-pay/watch]', e instanceof Error ? e.message : e); return jsonFor(req, { error: 'watch failed' }, 500) }
+    finally { await db.rpc('merchant_watch_lock_release').then(() => {}, () => {}) }
+  }
+
+  // A business's app saw its USDC balance on another chain go up: read that
+  // chain now instead of on the next 15s watch tick, so the receipt - and its
+  // pop-up, voice alert and push - follow the balance within seconds (a UPI
+  // sound box, not a statement). Same scan as the cron (nothing is trusted
+  // from the client but the chain name); a run already going is waited for.
+  if (action === 'nudge') {
+    const chainId = String(b.chain ?? '')
+    if (!PAY_CHAINS[chainId] || chainId === 'Arc_Testnet') return jsonFor(req, { error: 'Unknown chain' }, 400)
+    const who = await caller(req)
+    if (!who?.wallet) return jsonFor(req, { error: 'Unauthorized' }, 401)
+    const [{ data: app }, { data: biz }] = await Promise.all([
+      db.from('merchant_applications').select('id').ilike('wallet_address', who.wallet).eq('status', 'approved').limit(1),
+      db.from('users').select('id').eq('account_type', 'business').ilike('wallet_address', who.wallet).limit(1),
+    ])
+    if (!app?.length && !biz?.length) return jsonFor(req, { error: 'Forbidden' }, 403)
+    let got = false
+    for (let i = 0; i < 12 && !got; i++) {
+      const { data } = await db.rpc('merchant_watch_lock_acquire', { p_seconds: 30 })
+      got = data === true
+      if (!got) await new Promise(r => setTimeout(r, 500))
+    }
+    if (!got) return jsonFor(req, { skipped: 'busy' })
+    try { return jsonFor(req, await watchDeposits(chainId)) }
+    catch (e) { console.error('[merchant-pay/nudge]', e instanceof Error ? e.message : e); return jsonFor(req, { error: 'nudge failed' }, 500) }
     finally { await db.rpc('merchant_watch_lock_release').then(() => {}, () => {}) }
   }
 
