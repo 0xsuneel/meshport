@@ -1312,6 +1312,17 @@ export function P2PTradePage() {
     const unsubTrade = subscribeToTradeUpdates(tradeId, setTrade)
     return () => { unsubMsg(); unsubTrade() }
   }, [tradeId])
+  // Backup for the live update: while the trade is still moving, read it
+  // again every few seconds (screen on), so the other side's step (paid,
+  // released) shows even if the realtime connection dropped.
+  const tradeStatus = trade?.status
+  useEffect(() => {
+    if (!tradeId || !tradeStatus || ['completed', 'cancelled', 'expired', 'resolved_buyer', 'resolved_seller'].includes(tradeStatus)) return
+    const iv = setInterval(() => {
+      if (document.visibilityState === 'visible') fetchTrade(tradeId).then(t => { if (t) setTrade(t) }).catch(() => {})
+    }, 4000)
+    return () => clearInterval(iv)
+  }, [tradeId, tradeStatus])
 
   // Fraud protection: auto-cancel this trade if its 15-minute window has
   // already passed - same check-on-read shape as the Hub's offer-expiry
@@ -1478,6 +1489,8 @@ export function P2PTradePage() {
     ])
     setProcessingPayment(false)
     setActing(false)
+    // Show the next step at once - don't wait for the live update.
+    if (result.success) fetchTrade(trade.id).then(t => { if (t) setTrade(t) }).catch(() => {})
     if (result.success) showGlassPop('Payment Marked', result.message, { kind: 'success' })
     else showToastMessage(result.message, 'error')
   }
@@ -1493,7 +1506,7 @@ export function P2PTradePage() {
   const doRelease = async () => {
     setActing(true)
     const result = await runFlip('Releasing USDC to buyer…', () => releaseTrade(trade), { successTitle: 'Trade Completed', errorTitle: 'Release Failed' })
-    if (result.success) setShowRating(true)
+    if (result.success) { fetchTrade(trade.id).then(t => { if (t) setTrade(t) }).catch(() => {}); setShowRating(true) }
     setActing(false)
   }
 

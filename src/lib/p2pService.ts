@@ -2250,7 +2250,10 @@ export async function releaseTrade(trade: P2PTrade): Promise<{ success: boolean;
     // reliably.
     // Bookkeeping runs side by side (it used to be four round trips in a row
     // before "released" showed). Only unlock -> retire depend on each other.
-    await Promise.allSettled([
+    // Not awaited: the trade is already completed, so the seller's
+    // "Releasing USDC…" card closes now instead of waiting on these writes
+    // (they finish in the background, each idempotent).
+    void Promise.allSettled([
       (async () => { await unlockOffer(trade.offerId, trade.id, trade.amountUsdc); await retireOfferIfDepleted(trade.offerId) })(),
       sendTradeMessage(trade.id, 'system', `USDC released${result.txHash ? ` - tx ${result.txHash.slice(0, 10)}...` : ''}. Trade complete.`, true),
       saveP2PActivity({
