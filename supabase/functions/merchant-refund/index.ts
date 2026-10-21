@@ -59,7 +59,7 @@ const ARC_RPCS = [
 
 // Public RPCs to look at the payer on the chain they paid from (same set as merchant-pay).
 const CHAIN_RPCS: Record<string, string[]> = {
-  Ethereum_Sepolia: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://rpc.sepolia.org'],
+  Ethereum_Sepolia: ['https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.drpc.org'],
   Base_Sepolia: ['https://base-sepolia-rpc.publicnode.com', 'https://sepolia.base.org'],
   Arbitrum_Sepolia: ['https://arbitrum-sepolia-rpc.publicnode.com', 'https://sepolia-rollup.arbitrum.io/rpc'],
   Optimism_Sepolia: ['https://optimism-sepolia-rpc.publicnode.com', 'https://sepolia.optimism.io'],
