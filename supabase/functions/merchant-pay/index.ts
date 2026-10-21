@@ -8,7 +8,9 @@
 //                                                   confirmed against the order number + amount
 //   POST { action: 'verify', code, chain, txHash }  same, called by the merchant (paste a tx)
 //   POST { action: 'cancel', code }                 merchant only, while nothing is paid
-//   POST { action: 'watch' }                        cron (service role): direct deposits → orders
+//   POST { action: 'watch' }                        cron, once a minute (service role): watches for
+//                                                   ~55s - direct deposits → orders, receipts
+//   POST { action: 'nudge', chain }                 business app: scan one chain now
 //   POST { action: 'assign', depositId, code }      merchant picks the order for a deposit
 //   POST { action: 'dismiss', depositId }           merchant: not an order payment
 //   POST { action: 'complete', code, note? }        merchant marks an order completed (settled another way)
@@ -581,8 +583,22 @@ const chainFailed = (chainId: string) => {
 }
 const hex = (n: number) => '0x' + n.toString(16)
 
-/** `only`: one chain (a merchant's app saw money land there - see 'nudge'). */
-async function watchDeposits(only?: string) {
+// Watch loop - how wallet backends (MetaMask, OKX) see incoming money: not a
+// webhook per transfer, a server that keeps asking each chain for transfers
+// to its own users' addresses only. One cron call a minute keeps watching for
+// ~55s: the busy chains every 4s, the rest every 5th pass (~20s). A payment
+// is recorded - receipt, pop-up, voice, push - seconds after its block,
+// instead of up to 15s later, with a quarter of the function calls.
+// (Circle's event monitors push every USDC transfer on a contract - ~490k
+// calls a day on Arc alone - which is why chain-transfer-webhook moved off
+// them; the same holds on these testnets.)
+const WATCH_LOOP_MS = 55_000
+const WATCH_PASS_MS = 4_000
+const WATCH_ALL_EVERY = 5
+const FAST_CHAINS = new Set(['Ethereum_Sepolia', 'Base_Sepolia', 'Arbitrum_Sepolia', 'Optimism_Sepolia', 'Polygon_Sepolia', 'Avalanche_Fuji', 'Unichain_Sepolia'])
+
+/** `pick`: only these chains this pass (default: all). */
+async function watchDeposits(pick?: (chainId: string) => boolean) {
   const runStart = Date.now()
   // Open orders, plus orders that expired or were cancelled within the last
   // day: a payment for one of those is still recorded against it (late).
@@ -624,7 +640,7 @@ async function watchDeposits(only?: string) {
   // trips), then handle the payments one chain after another.
   type Fetched = { fromBlock: number; toBlock: number; logs: any[] | null } | { error: unknown } | null
   const chainMs: Array<[string, number]> = []
-  const chainsToRead = Object.entries(PAY_CHAINS).filter(([id]) => !only || id === only)
+  const chainsToRead = Object.entries(PAY_CHAINS).filter(([id]) => !pick || pick(id))
   const fetched = new Map<string, Fetched>(await Promise.all(chainsToRead.map(async ([chainId, chain]): Promise<[string, Fetched]> => {
     if ((chainBackoff.get(chainId)?.until ?? 0) > Date.now()) return [chainId, null]
     const t0 = Date.now()
@@ -872,7 +888,7 @@ async function watchDeposits(only?: string) {
     if (error) console.error('[merchant-pay/watch] cursor save failed:', error.message)
   }
   const totalMs = Date.now() - runStart
-  if (totalMs > 2000) {
+  if (totalMs > WATCH_PASS_MS) {
     const slow = chainMs.sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c, ms]) => `${c}=${ms}ms`).join(' ')
     console.info(`[merchant-pay/watch] run ${totalMs}ms (reads done at ${readMs}ms) slowest: ${slow}`)
   }
@@ -890,18 +906,30 @@ Deno.serve(async (req: Request) => {
 
   if (action === 'watch') {
     if (!isServiceCaller(req)) return jsonFor(req, { error: 'Forbidden' }, 403)
-    const { data: gotLock } = await db.rpc('merchant_watch_lock_acquire', { p_seconds: 60 })
+    // Held for the whole loop (+ margin): the next minute's call starts once it ends.
+    const { data: gotLock } = await db.rpc('merchant_watch_lock_acquire', { p_seconds: 70 })
     if (gotLock !== true) return jsonFor(req, { skipped: 'busy' })
-    try { return jsonFor(req, await watchDeposits()) }
-    catch (e) { console.error('[merchant-pay/watch]', e instanceof Error ? e.message : e); return jsonFor(req, { error: 'watch failed' }, 500) }
-    finally { await db.rpc('merchant_watch_lock_release').then(() => {}, () => {}) }
+    const loop = (async () => {
+      const end = Date.now() + WATCH_LOOP_MS
+      for (let pass = 0; ; pass++) {
+        const t0 = Date.now()
+        try { await watchDeposits(pass % WATCH_ALL_EVERY === 0 ? undefined : id => FAST_CHAINS.has(id)) }
+        catch (e) { console.error('[merchant-pay/watch]', e instanceof Error ? e.message : e) }
+        const wait = Math.max(0, WATCH_PASS_MS - (Date.now() - t0))
+        if (Date.now() + wait >= end) break
+        if (wait) await new Promise(r => setTimeout(r, wait))
+      }
+    })().finally(() => db.rpc('merchant_watch_lock_release').then(() => {}, () => {}))
+    // In the background - the cron caller hangs up after a few seconds.
+    // @ts-ignore - EdgeRuntime is available in the Supabase Edge Functions runtime
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) { EdgeRuntime.waitUntil(loop); return jsonFor(req, { started: true }) }
+    await loop
+    return jsonFor(req, { done: true })
   }
 
-  // A business's app saw its USDC balance on another chain go up: read that
-  // chain now instead of on the next 15s watch tick, so the receipt - and its
-  // pop-up, voice alert and push - follow the balance within seconds (a UPI
-  // sound box, not a statement). Same scan as the cron (nothing is trusted
-  // from the client but the chain name); a run already going is waited for.
+  // Scan one chain now (a business's app saw money land there). Usually the
+  // watch loop is already running and records it within seconds - then this
+  // just answers busy.
   if (action === 'nudge') {
     const chainId = String(b.chain ?? '')
     if (!PAY_CHAINS[chainId] || chainId === 'Arc_Testnet') return jsonFor(req, { error: 'Unknown chain' }, 400)
@@ -912,14 +940,9 @@ Deno.serve(async (req: Request) => {
       db.from('users').select('id').eq('account_type', 'business').ilike('wallet_address', who.wallet).limit(1),
     ])
     if (!app?.length && !biz?.length) return jsonFor(req, { error: 'Forbidden' }, 403)
-    let got = false
-    for (let i = 0; i < 12 && !got; i++) {
-      const { data } = await db.rpc('merchant_watch_lock_acquire', { p_seconds: 30 })
-      got = data === true
-      if (!got) await new Promise(r => setTimeout(r, 500))
-    }
-    if (!got) return jsonFor(req, { skipped: 'busy' })
-    try { return jsonFor(req, await watchDeposits(chainId)) }
+    const { data: got } = await db.rpc('merchant_watch_lock_acquire', { p_seconds: 30 })
+    if (got !== true) return jsonFor(req, { skipped: 'busy' })
+    try { return jsonFor(req, await watchDeposits(id => id === chainId)) }
     catch (e) { console.error('[merchant-pay/nudge]', e instanceof Error ? e.message : e); return jsonFor(req, { error: 'nudge failed' }, 500) }
     finally { await db.rpc('merchant_watch_lock_release').then(() => {}, () => {}) }
   }
