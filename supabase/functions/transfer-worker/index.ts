@@ -227,6 +227,12 @@ const SUPABASE_SERVICE_KEY = getServiceRoleKey()
 const SWEEP_DURATION_MS    = 50_000
 const SWEEP_INTERVAL_MS    = 8_000
 const STALE_LOCK_MS        = 6_000
+// After a sweep, fresh pending transfers (burned in the last 30 min) are
+// re-checked every FOLLOW_INTERVAL_MS for FOLLOW_MS - under the 2-minute cron.
+// Not faster: a check that misses also scans the destination chain's logs.
+const FOLLOW_MS            = 100_000
+const FOLLOW_INTERVAL_MS   = 15_000
+const FOLLOW_FRESH_MS      = 30 * 60 * 1000
 const TRANSFER_TIMEOUT_MS  = 6 * 60 * 60 * 1000 // was 60min - confirmed live via Circle's own API that testnet attestation alone can take 4+ hours (checked directly: messages[].status stayed "pending_confirmations" that long for a real transfer). Safe to extend now that completion is authoritative (Circle's forwardState), not dependent on a scan finding the right block in time.
 
 type Transfer = {
@@ -605,6 +611,25 @@ Deno.serve(async (req: Request) => {
   }
 
   const totalProcessed = await processPass(supabase)
+  // The mint usually lands a minute or so after the burn, so a fresh transfer
+  // was left showing "pending" until the next 2-minute sweep. Keep following
+  // fresh ones from this run instead (in the background - the cron caller
+  // hangs up after a few seconds). Older stuck transfers wait for the sweep.
+  if (totalProcessed > 0) {
+    const followUntil = Date.now() + FOLLOW_MS
+    const follow = (async () => {
+      while (Date.now() + FOLLOW_INTERVAL_MS < followUntil) {
+        await new Promise(r => setTimeout(r, FOLLOW_INTERVAL_MS))
+        const { data } = await supabase.from('activity').select('id')
+          .eq('activity_type', 'bridge').eq('status', 'pending')
+          .gte('created_at', new Date(Date.now() - FOLLOW_FRESH_MS).toISOString()).limit(20)
+        if (!data?.length) return
+        await Promise.all(data.map((r: any) => processPass(supabase, r.id).catch(() => 0)))
+      }
+    })().catch(e => console.error('[transfer-worker] follow failed:', serializeError(e)))
+    // @ts-ignore - EdgeRuntime is available in the Supabase Edge Functions runtime
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(follow)
+  }
   const arrivedFilled = await fillArrivedAmounts(supabase).catch(e => { console.error('[transfer-worker] arrived fill threw:', serializeError(e)); return 0 })
   return json({ success: true, mode, totalProcessed, arrivedFilled, idleExit: totalProcessed === 0 })
 })
