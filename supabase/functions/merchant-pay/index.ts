@@ -32,6 +32,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2'
 import { handleOptionsFor, jsonFor } from '../_shared/cors.ts'
 import { isCronOrLegacyServiceCaller } from '../_shared/cronAuth.ts'
+import { isKnownInternalContract } from '../_shared/knownInternalContracts.ts'
 
 const DRPC_KEY = Deno.env.get('DRPC_KEY') ?? ''
 const ARC_RPCS = [
@@ -521,6 +522,12 @@ const OWN_TRANSFER_WINDOW_MS = 6 * 3600_000
 const OWN_TRANSFER_HOLD_MS = 5 * 60_000
 // Circle Gateway wallet + minter (same on every EVM testnet).
 const GATEWAY_CONTRACTS = new Set(['0x0077777d7eba4688bdef3e311b846f25870a19b9', '0x0022222abe238cc2c7bb1f21003f0a260052475b'])
+// The P2P escrow (its release pays the buyer): the secrets the chain webhook
+// reads, plus the address seen releasing trade c28765d3 (tx 0xf28e429a…, 21 Oct)
+// in case they aren't set for this function.
+const P2P_ESCROWS = [Deno.env.get('P2P_ESCROW_CONTRACT') ?? '', ...(Deno.env.get('P2P_ESCROW_CONTRACTS_LEGACY') ?? '').split(','),
+  '0x5f88b9edc2d6805ea7a6975aeb151ceebb334022']
+  .map(s => s.trim().toLowerCase()).filter(Boolean)
 
 // Key-migration cutover: this used to decode the bearer token's JWT payload
 // and trust its `role` claim without verifying the signature - only safe
@@ -646,6 +653,9 @@ async function watchDeposits() {
         const from = ('0x' + String(log.topics?.[1]).slice(-40)).toLowerCase()
         if (from === to) continue // self-sends
         if (GATEWAY_CONTRACTS.has(from)) continue // the merchant's own Ledger withdrawals
+        // MeshPort's own contracts - a P2P escrow release, a swap's output, a
+        // BulkPay payout - are never a customer paying an order.
+        if (isKnownInternalContract(from, P2P_ESCROWS)) continue
         // A mint (from 0x0) on another chain is USDC arriving through CCTP:
         // usually the merchant's own Transfer Funds from Arc, otherwise
         // someone paying through a bridge. Recorded (own transfers with the
@@ -662,6 +672,10 @@ async function watchDeposits() {
         const { data: known } = await db.from('merchant_payments').select('id').eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', to).maybeSingle()
         const { data: queued } = await db.from('merchant_unmatched_deposits').select('id').eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', to).maybeSingle()
         const matchOrder = async () => {
+        // A P2P trade's release (the buyer's USDC from escrow) is not an order
+        // payment, even when it's exactly what an open order is due.
+        const { data: p2p } = await db.from('p2p_trades').select('id').ilike('tx_hash', tx).limit(1)
+        if (p2p?.length) return
 
         if (!blockTime.has(log.blockNumber)) {
           const b = await rpc(chain.rpcs, 'eth_getBlockByNumber', [log.blockNumber, false]).catch(() => null)
