@@ -22,8 +22,9 @@
 import { supabase } from '@/lib/supabase'
 import { mapChainEventRow, latencyStats, type ShadowEvent } from './shadowEventMap'
 import { createSyncCoordinator } from './SyncCoordinator'
-import { refreshScope, readExternalChainBalance, EXTERNAL_BALANCE_EVENT } from './BlockchainManager'
+import { refreshScope, notifyExternalBalanceChanged } from './BlockchainManager'
 import type { ChainId } from './types'
+import { externalChainKey, EXTERNAL_CHAINS } from './chains'
 
 /** Arc chain id literal - duplicated here to keep the import surface small. */
 const ARC_CHAIN = 'arc'
@@ -151,7 +152,12 @@ class ShadowEventBus {
   }
 
   private ingest(row: Record<string, unknown>, now = Date.now()): void {
-    const e = mapChainEventRow(row, now)
+    const mapped = mapChainEventRow(row, now)
+    // The indexer's chain ids ('ethereum-sepolia') are not the keys the
+    // balance cache and every page use ('Ethereum_Sepolia'): an external
+    // deposit event used to read a chain that doesn't exist (always 0) and
+    // patch a key no screen shows, so the real balance never moved.
+    const e = { ...mapped, chainId: externalChainKey(mapped.chainId) }
 
     this.observed.push(e)
     if (this.observed.length > MAX_RETAINED) this.observed.shift()
@@ -220,20 +226,12 @@ class ShadowEventBus {
       if (
         e.walletAddress &&
         e.chainId &&
-        e.chainId !== ARC_CHAIN
+        e.chainId !== ARC_CHAIN &&
+        EXTERNAL_CHAINS[e.chainId]
       ) {
-        const chainId = e.chainId as ChainId
-        const wallet  = e.walletAddress
-        const fireEvent = (balance: number) => {
-          if (typeof window === 'undefined') return
-          try {
-            window.dispatchEvent(new CustomEvent(EXTERNAL_BALANCE_EVENT, { detail: { chainId, balance } }))
-          } catch { /* */ }
-        }
-        readExternalChainBalance(chainId, wallet).then(fireEvent).catch(() => {})
-        setTimeout(() => {
-          readExternalChainBalance(chainId, wallet).then(fireEvent).catch(() => {})
-        }, 4_000)
+        // Re-read until the chain shows the credit (a public RPC can answer
+        // from a block before it), then tell every page showing it.
+        notifyExternalBalanceChanged(e.chainId, e.walletAddress)
       }
     }
 

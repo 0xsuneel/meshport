@@ -23,7 +23,7 @@ import { moveBreakdown, moveLabels, formatFee, formatMoveAmount, type MoveBreakd
 import { subscribeToWalletClaims, type Claim as ServerClaim } from '@/lib/claimService'
 import { useSettingsStore } from '@/store/settingsStore'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
-import { readExternalBalances, readExternalChainBalance, refreshScope, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
+import { readExternalBalances, readExternalChainBalance, refreshScope, EXTERNAL_BALANCE_EVENT, EXTERNAL_LIVE_POLL_MS } from '@/blockchain/BlockchainManager'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { motion } from 'framer-motion'
@@ -555,7 +555,14 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
     }
     window.addEventListener(EXTERNAL_BALANCE_EVENT, onExternal)
     fullScan()
-    const iv = setInterval(fullScan, 5 * 60_000)
+    // While this screen is open, look again every 30s (fresh, past the 90s
+    // scan cache): a deposit from another wallet or app has no event of its
+    // own until the indexer sees it, and 5 minutes read as "not updating".
+    const iv = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      refreshScope({ kind: 'external', wallet: walletAddress })
+      fullScan()
+    }, EXTERNAL_LIVE_POLL_MS)
 
     let channel: any
     import('@/lib/supabase').then(({ supabase }) => {

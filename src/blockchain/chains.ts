@@ -380,6 +380,19 @@ export const EXTERNAL_CHAINS: Record<string, ExternalChainConfig> = {
   },
 }
 
+// The indexer (supabase/functions/blockchain-indexer/chains.ts) names chains
+// in kebab case ('ethereum-sepolia'); every page and cache here uses the
+// EXTERNAL_CHAINS keys above ('Ethereum_Sepolia'). Same chain, same spelling
+// apart from case and '-' vs '_', except Polygon (the indexer says 'amoy').
+const INDEXER_ALIASES: Record<string, string> = { 'polygon-amoy': 'Polygon_Sepolia' }
+const EXTERNAL_KEY_BY_LOWER = new Map(Object.keys(EXTERNAL_CHAINS).map(k => [k.toLowerCase(), k]))
+
+/** The EXTERNAL_CHAINS key for an indexer chain id; anything else (e.g. 'arc') unchanged. */
+export function externalChainKey(id: string): string {
+  if (!id || EXTERNAL_CHAINS[id]) return id
+  return INDEXER_ALIASES[id] ?? EXTERNAL_KEY_BY_LOWER.get(id.toLowerCase().replace(/-/g, '_')) ?? id
+}
+
 // ─── External chains - Circle SDK provider registry ─────────────────────────
 // Keyed by the Circle SDK's `chain.name` (NOT our internal chain ids above) -
 // several entries appear twice because the SDK's actual runtime value doesn't

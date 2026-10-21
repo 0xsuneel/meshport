@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { useAuthStore } from '@/store'
 import { useSettingsStore } from '@/store/settingsStore'
-import { readExternalBalances, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
+import { readExternalBalances, readExternalChainBalance, notifyExternalBalanceChanged, refreshScope, EXTERNAL_BALANCE_EVENT, EXTERNAL_LIVE_POLL_MS } from '@/blockchain/BlockchainManager'
 import { isGaslessBridgeAvailable } from '@/lib/gaslessBridge'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { subscribeToClaim, subscribeToWalletClaims, type Claim, type ClaimStatus } from '@/lib/claimService'
@@ -66,7 +66,14 @@ function useChainFunds() {
       const fresh = claims.filter(c => c.status !== 'completed' || Date.now() - Date.parse(c.updatedAt) < 120_000)
       for (const id of new Set(fresh.map(c => c.sourceChain))) readExternalChainBalance(id as never, wallet).then(b => put(id, b)).catch(() => {})
     })
-    const every = setInterval(() => setTick(t => t + 1), 5 * 60_000)
+    // While open, look again every 30s - fresh, past the scan cache.
+    const every = setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      refreshScope({ kind: 'external', wallet })
+      readExternalBalances(wallet, flags, flagsLoaded)
+        .then(r => { if (live) setBalances(Object.fromEntries(r.chains.map(c => [c.chainId, c.balance]))) })
+        .catch(() => {})
+    }, EXTERNAL_LIVE_POLL_MS)
     return () => { live = false; window.removeEventListener(EXTERNAL_BALANCE_EVENT, onBalance); stop(); clearInterval(every) }
   }, [wallet, flags, flagsLoaded, tick])
 

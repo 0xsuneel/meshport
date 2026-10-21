@@ -153,6 +153,13 @@ export async function readExternalChainBalance(chain: ChainId, wallet: string): 
   return balance
 }
 
+/**
+ * How often a screen whose job is external balances (Hub, Bring, Business
+ * settlement) re-reads them while it is open and visible. Home keeps its
+ * slower scan - chain events and receipts refresh it.
+ */
+export const EXTERNAL_LIVE_POLL_MS = 30_000
+
 /** Event every page showing external balances listens to: { chainId, balance }. */
 export const EXTERNAL_BALANCE_EVENT = 'meshport:external-balance'
 

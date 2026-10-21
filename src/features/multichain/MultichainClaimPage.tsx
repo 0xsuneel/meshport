@@ -65,7 +65,7 @@ const claimMove = (c: ServerClaim) => c.status === 'completed'
 import { relayedProviderFor } from '@/lib/relayedProvider'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFilters'
-import { readExternalBalances, refreshScope, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
+import { readExternalBalances, refreshScope, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT, EXTERNAL_LIVE_POLL_MS } from '@/blockchain/BlockchainManager'
 import { fetchCctpProgress, useCctpProgress } from '@/lib/cctpTracker'
 import { ARC_RPCS } from '@/lib/arc'
 import { UB_CLAIM_CHAINS, runUbClaim, ubBringTime, ubClaimEta, estimateUbClaimFee } from '@/lib/ubClaim'
@@ -1095,6 +1095,15 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     }
     if (!quiet) setStep('select')
   }, [getKey, trackClaimIdFromHub, settingsMap, settingsLoaded])
+
+  // While the chain list is showing, look again every 30s (quiet, fresh):
+  // a deposit from another wallet or app has no event of its own until the
+  // indexer sees it, so this page used to wait for a manual refresh.
+  useEffect(() => {
+    if (step !== 'select') return
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') void scan(true, true) }, EXTERNAL_LIVE_POLL_MS)
+    return () => clearInterval(iv)
+  }, [step, scan])
 
   const handleManualRefresh = useCallback(() => {
     if (Date.now() < refreshCooldownUntil) return
