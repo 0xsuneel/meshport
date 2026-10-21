@@ -23,7 +23,7 @@ import { useAuthStore, useWalletStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLogoSrc } from '@/lib/chainLogos'
-import { listMyPayments, listMyIntents, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, createPaymentRequest, displayOrderNumber, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
+import { listMyPayments, listMyIntents, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, subscribeChainReceipts, createPaymentRequest, displayOrderNumber, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
 import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
 import { StorePicker } from '@/features/merchant/StorePicker'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment, VOICE_LANGS, type VoiceLang } from '@/lib/voiceAlerts'
@@ -38,7 +38,7 @@ import { ToolsScreen, type ToolId } from './toolsScreen'
 import { StaffModePage } from './staffMode'
 import { ActivityScreen } from './activityScreen'
 import { logBusiness } from '@/lib/businessActivity'
-import { readArcBalanceOrThrow } from '@/blockchain/BlockchainManager'
+import { readArcBalanceOrThrow, notifyExternalBalanceChanged } from '@/blockchain/BlockchainManager'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useUIStore } from '@/store'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
@@ -55,7 +55,8 @@ const EASE_CSS = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.method === 'own_transfer' ? 'Your transfer'
-  : p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
+  : p.customerUsername ? `${p.customerUsername}.arc`
+  : /^0x0{40}$/i.test(p.from) ? 'A bridge' : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
 const inWords = (ms: number) => {
   const m = Math.max(1, Math.round(ms / 60_000))
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`
@@ -105,25 +106,39 @@ function OwnerBusinessPage() {
   const [raw, setRaw] = useState<MerchantPayment[]>([])
   const [loaded, setLoaded] = useState(false)
   // What the business was paid: order payments (requests, bills, Shop QR -
-  // on Arc or another chain) and the owner's own transfers between chains
-  // ('own_transfer', shown but never counted). USDC sent straight to the
-  // wallet with no order - to the username, the Personal QR or the address -
+  // on Arc or another chain), every USDC receipt on another chain (even with
+  // no order: sent straight to the address, a bridge, ...; 'direct', counted),
+  // and the owner's own transfers between chains ('own_transfer', shown but
+  // never counted). USDC sent straight to the wallet ON ARC with no order
   // isn't a sale: it stays a plain receive in Activity. (A direct transfer of
   // exactly an open order's amount is matched to that order by the watcher.)
+  const seenReceipts = useRef<Set<string> | null>(null)
   const load = useCallback(async () => {
-    const [orders, receipts] = await Promise.all([listMyPayments(500), listChainReceipts(300).catch(() => [])])
+    const [orders, rcpts] = await Promise.all([listMyPayments(500), listChainReceipts(300).catch(() => null)])
+    const receipts = rcpts ?? []
+    // USDC just landed on another chain: re-read that chain's balance at once
+    // (the "to settle" figure and Settle all), like Home does for Arc.
+    if (rcpts) {
+      const key = (r: { chain: string; txHash: string }) => `${r.chain}:${r.txHash.toLowerCase()}`
+      if (seenReceipts.current && walletAddress) {
+        for (const r of rcpts) if (!seenReceipts.current.has(key(r)) && Date.now() - Date.parse(r.createdAt) < 10 * 60_000) notifyExternalBalanceChanged(r.chain, walletAddress)
+      }
+      seenReceipts.current = new Set(rcpts.map(key))
+    }
     const known = new Set(orders.map(p => `${p.chain}:${p.txHash.toLowerCase()}`))
     const extra: MerchantPayment[] = receipts
-      .filter(r => !known.has(`${r.chain}:${r.txHash.toLowerCase()}`) && (!!r.orderNumber || isOwnReceipt(r, walletAddress)))
+      .filter(r => !known.has(`${r.chain}:${r.txHash.toLowerCase()}`))
       .map(r => ({ id: `rcpt_${r.id}`, intentId: '', chain: r.chain, txHash: r.txHash, from: r.from ?? '0x0000000000000000000000000000000000000000',
-        amount: r.amount, method: isOwnReceipt(r, walletAddress) ? 'own_transfer' : 'chain_receipt',
+        amount: r.amount, method: isOwnReceipt(r, walletAddress) ? 'own_transfer' : r.orderNumber ? 'chain_receipt' : 'direct',
         status: r.status === 'converted' ? 'collected' : 'in_ledger', customerUsername: null,
         createdAt: r.createdAt, orderNumber: r.orderNumber, matchedBy: null, screenFlag: r.screenFlag ?? null }))
     setRaw([...orders, ...extra].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))); setLoaded(true)
   }, [walletAddress])
   useEffect(() => { void load() }, [load])
   useEffect(() => (walletAddress ? subscribeMerchantPayments(walletAddress, () => { void load() }) : undefined), [walletAddress, load])
-  // Payments on other chains have no live feed - refresh while the tab is open.
+  // Other-chain receipts: live too (falls back to the 30 s refresh below).
+  useEffect(() => (walletAddress ? subscribeChainReceipts(walletAddress, () => { void load() }) : undefined), [walletAddress, load])
+  // Safety net if the live feeds drop - refresh while the tab is open.
   useEffect(() => {
     const t = setInterval(() => { if (document.visibilityState === 'visible') void load() }, 30_000)
     return () => clearInterval(t)
