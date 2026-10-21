@@ -1165,7 +1165,6 @@ export function ClaimUsernamePage() {
   // plus a store name customers see.
   const signupKind = getSignupKind() ?? 'personal'
   const isBusiness = signupKind === 'business'
-  const [onchainStep, setOnchainStep] = useState<string | null>(null)
   const [status, setStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
   const [statusMsg, setStatusMsg] = useState('')
   const [loading, setLoading] = useState(false)
@@ -1305,25 +1304,19 @@ export function ClaimUsernamePage() {
       }
     }
 
-    // Register the name on Arc (signed by this wallet, gas paid by MeshPort).
-    // Never blocks sign-up: a failure is retried by the server.
-    setOnchainStep('Registering ' + handle + '.arc on Arc…')
-    const onchain = await Promise.race([
-      registerNameOnchain({ walletAddress, name: handle, kind: signupKind, displayName: '' })
-        .catch(() => ({ status: 'failed' as const })),
-      new Promise<{ status: 'pending' }>(r => setTimeout(() => r({ status: 'pending' }), 35_000)),
-    ])
-    setOnchainStep(null)
+    // Register the name on Arc (signed by this wallet, gas paid by MeshPort)
+    // in the background. Sign-up used to wait here for the on-chain receipt -
+    // up to 35s on the claim screen before the app opened. A failure is
+    // retried by the server (name-register sync) and from Home.
+    void registerNameOnchain({ walletAddress, name: handle, kind: signupKind, displayName: '' })
+      .then(r => { if (r.status === 'registered') showToastMessage(`${handle}.arc is registered on Arc 🎉`, 'success') })
+      .catch(() => {})
     clearAuthIntent()
     void refreshMerchant()
 
     setUsername(handle)
     setLoading(false)
-    showToastMessage(
-      onchain.status === 'registered'
-        ? `${handle}.arc is yours, registered on Arc 🎉`
-        : `${handle}.arc claimed! It’s being registered on Arc`,
-      'success')
+    showToastMessage(`${handle}.arc is yours!`, 'success')
     // replace: true removes /auth/claim-username from history - back button skips it
     navigate(getAndClearReturnTo() || '/', { replace: true })
   }
@@ -1380,11 +1373,6 @@ export function ClaimUsernamePage() {
           <div className="text-xs text-text-muted space-y-1 px-1">
             <p>• 3–20 characters</p><p>• Letters a-z, numbers 0-9, underscore _</p><p>• Cannot be changed later · registered on Arc, free</p>
           </div>
-          {onchainStep && (
-            <p className="text-sm text-text-secondary text-center flex items-center justify-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" /> {onchainStep}
-            </p>
-          )}
           <Button fullWidth loading={loading} disabled={status !== 'available' || !walletAddress} onClick={handleClaim}>
             {loading ? 'Saving...' : status === 'available' ? `Claim ${handle}.arc` : isBusiness ? 'Claim business username' : 'Claim Username'}
           </Button>

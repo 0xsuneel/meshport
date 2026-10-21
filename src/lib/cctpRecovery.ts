@@ -200,7 +200,8 @@ export async function selfMintTransfer(id: string, privateKey: string): Promise<
     rpcUrls: { default: { http: [cfg.rpcs[0]] } },
   } as const
   const account = privateKeyToAccount(privateKey as Hex)
-  const publicClient = createPublicClient({ chain, transport: http(cfg.rpcs[0]) })
+  // 1s, not viem's 4s default: the receipt wait below notices the block sooner.
+  const publicClient = createPublicClient({ chain, transport: http(cfg.rpcs[0]), pollingInterval: 1000 })
 
   const gas = await publicClient.getBalance({ address: account.address })
   if (gas === 0n) throw new Error(`You need a little gas on ${d.destinationChain.replace(/_/g, ' ')} to finish this mint.`)

@@ -13,6 +13,8 @@ const corsHeaders = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  // Browser caches the CORS preflight for a day (one round trip fewer per swap).
+  'Access-Control-Max-Age': '86400',
 }
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
@@ -149,6 +151,9 @@ Deno.serve(async (req: Request) => {
   try { body = await req.json() } catch { /* ignore, validated below */ }
   const b = body as Record<string, unknown>
 
+  // Warm-up ping (warmSwapIntent): wakes the isolate, no auth or DB.
+  if (b.action === 'ping') return json({ success: true, pong: true })
+
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
   // Started alongside the wallet lookup so it adds no wait (checked below).
   const canSpendCheck = callerCanSpend(req, supabase)
@@ -201,6 +206,17 @@ Deno.serve(async (req: Request) => {
   try {
     const result = await createSwapIntent(repo, nonceFetcher, req_)
     if (result.outcome === 'invalid_request') return json({ success: false, error: result.reason }, 400)
+    if (result.outcome === 'created') {
+      // Keep the status update alive past the response (see pay-intent/index.ts).
+      const { backgroundTransition, ...rest } = result
+      backgroundTransition.catch(() => { /* transitionIntentToSubmitted logs its own failures */ })
+      // @ts-ignore - EdgeRuntime is available in the Supabase Edge Functions runtime
+      if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(backgroundTransition)
+      }
+      return json({ success: true, ...rest })
+    }
     return json({ success: true, ...result })
   } catch (e) {
     console.error('[swap-intent] failed:', e instanceof Error ? e.message : e)

@@ -166,6 +166,10 @@ export function getClient(chain: ChainId): ArcPublicClient {
   const client = createPublicClient({
     chain: viemChainFor(chain, rpcs),
     transport: fallback(rpcs.map(u => instrumentedHttp(u, chain)), { rank: false }),
+    // Receipt waits (Bring, gasless bridge) re-check this often. viem's 4s
+    // default added up to 4s after a transaction had already landed; Arc
+    // confirms in under a second, other chains in 1-12s.
+    pollingInterval: isArc(chain) ? 250 : 1000,
   })
 
   viemClients.set(chain, client)

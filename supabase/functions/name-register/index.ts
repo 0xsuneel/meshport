@@ -71,7 +71,9 @@ const arc = defineChain({
   nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
   rpcUrls: { default: { http: [RPC] } },
 })
-const pub = createPublicClient({ chain: arc, transport: http(RPC) })
+// Arc confirms in under a second; viem's default 4s receipt polling made every
+// registration wait ~4s+ for nothing.
+const pub = createPublicClient({ chain: arc, transport: http(RPC), pollingInterval: 500 })
 
 // Public addresses (Arc testnet). The env vars override them for a redeploy.
 const DEFAULT_CONTRACT = '0xba87d216d550e71cef4b0066db8cf66622c9af4b' // MeshPortNames, deployed with Arc Studio

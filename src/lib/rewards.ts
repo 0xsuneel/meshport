@@ -383,8 +383,11 @@ export async function claimPointsAsUSDC(params: {
     account,
     transport: arcTransport(),
   })
+  // 250ms: Arc confirms in under a second; viem's 4s default polling made
+  // every claim wait ~4s for its receipt.
   const publicClient = createPublicClient({
     transport: arcTransport({ retryCount: 3, timeout: 30000 }),
+    pollingInterval: 250,
   })
 
   const ARC_CHAIN_INLINE = {

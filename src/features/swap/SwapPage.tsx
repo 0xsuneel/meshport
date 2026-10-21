@@ -557,7 +557,7 @@ export function SwapPage() {
   useEffect(() => {
     import('@/lib/swapService').then(({ warmSwapSdk }) => warmSwapSdk())
     import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
-   
+    import('@/lib/swapIntentService').then(m => { void m.warmSwapIntent() }).catch(() => {})
   }, [])
 
   // ─── Success screen - same full-screen flash → hero-card takeover
