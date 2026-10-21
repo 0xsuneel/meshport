@@ -13,7 +13,7 @@
 
 import {
   createPublicClient, createWalletClient, encodeFunctionData, encodeAbiParameters, keccak256, toHex,
-  parseGwei, custom, type Hash,
+  custom, type Hash,
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { arcTransport } from './arc'
@@ -559,12 +559,45 @@ async function sendContractTx(privateKey: string, functionName: string, args: re
   throw lastErr ?? new Error(`${functionName}: failed after ${MAX_ATTEMPTS} attempts`)
 }
 
+/**
+ * Signs a contract call here; it is sent to every Arc node and confirmed by
+ * the server in ONE request (relaySend - the same path Pay and BulkPay use).
+ * The wallet client's sendTransaction plus viem's receipt wait cost the phone
+ * ~5-7 sequential round trips on top of the send itself.
+ *
+ * CRITICAL FIX (kept): a sent transaction is not a successful one - every
+ * caller (registerTrade, release, deposit, withdrawRemaining, freeze/unfreeze,
+ * investigate, adminResolve, every role-management action, auto-accept) needs
+ * the real receipt, so a revert or a transaction that never confirms reaches
+ * the caller's existing rollback path (delete trade, unlock offer, refund)
+ * instead of a phantom "success" with no matching on-chain state. Arc
+ * finalizes in ~780ms, so the wait costs almost nothing when it succeeds.
+ */
+async function sendAndConfirm(
+  account: ReturnType<typeof privateKeyToAccount>, functionName: string,
+  tx: { data: `0x${string}`; value: bigint; gas: bigint; nonce: number },
+): Promise<Hash> {
+  const { relaySend, waitForConfirmation } = await import('./arcService')
+  const sent = await relaySend(account, { to: CONTRACT_ADDRESS as `0x${string}`, ...tx }, () => {})
+  const hash = sent.txHash
+  // Same 30s total wait as before for a transaction still being mined.
+  const state = sent.state === 'pending' ? (await waitForConfirmation(hash, 25_000)).state : sent.state
+  if (state === 'failed') {
+    throw new Error(`${functionName}: transaction ${hash} was mined but reverted on-chain (status: reverted)`)
+  }
+  if (state === 'pending') {
+    // Worded like viem's receipt-wait error it replaces: deliberately NOT a
+    // "transient" error (see isTransientRpcError), so sendContractTx never
+    // re-sends with a fresh nonce while this one may still land.
+    throw new Error(`${functionName}: timed out while waiting for transaction ${hash} to be confirmed.`)
+  }
+  return hash
+}
+
 async function sendContractTxOnce(privateKey: string, functionName: string, args: readonly unknown[], value: bigint): Promise<Hash> {
   if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
   const account = privateKeyToAccount(privateKey as `0x${string}`)
-  // Fast receipt polling - see the matching comment in the function above.
-  const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 250 })
-  const walletClient = createWalletClient({ account, transport: arcTransport() })
+  const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }) })
 
   const data = encodeFunctionData({ abi: ESCROW_ABI, functionName: functionName as any, args: args as any })
   // PERF FIX: nonce and gas estimate are independent RPC calls - neither
@@ -578,45 +611,7 @@ async function sendContractTxOnce(privateKey: string, functionName: string, args
     publicClient.estimateGas({ account: account.address, to: CONTRACT_ADDRESS, data, value }),
   ])
 
-  // Cast: see the identical comment in arcService.ts/rewards.ts - viem's
-  // sendTransaction overload resolution spuriously demands an EIP-4844
-  // `kzg` field here too. Runtime behavior is unaffected.
-  const hash = await walletClient.sendTransaction({
-    to: CONTRACT_ADDRESS,
-    data,
-    value,
-    gas: (gasEstimate * 130n) / 100n, // contract calls need more margin than a plain value transfer
-    maxFeePerGas: parseGwei('25'),
-    maxPriorityFeePerGas: parseGwei('1'),
-    chain: ARC_CHAIN_INLINE,
-    nonce,
-  } as unknown as Parameters<typeof walletClient.sendTransaction>[0])
-
-  // CRITICAL FIX: sendTransaction() only confirms the RPC node ACCEPTED the
-  // transaction for broadcast - it says nothing about whether the
-  // transaction actually got mined, or whether it succeeded or reverted
-  // once it did. Every caller of sendContractTx (registerTrade, release,
-  // deposit, withdrawRemaining, freeze/unfreeze, investigate, adminResolve,
-  // every role-management action) was treating "got a hash back" as "this
-  // definitely happened" - but a transaction can be accepted into the
-  // mempool and then genuinely revert on execution (or never get mined at
-  // all) with the caller none the wiser, since sendTransaction's promise
-  // had already resolved before either of those things could happen.
-  // Confirmed as the actual root cause of trades that appeared to register
-  // successfully (a hash came back, the trade was created) but the
-  // contract's own getTrade() later showed they were never actually
-  // Active - the on-chain call had silently reverted or never confirmed,
-  // and nothing downstream ever found out. Arc finalizes deterministically
-  // in ~780ms (see Circle's own docs), so waiting here for a real receipt
-  // costs almost nothing in the success case, and turns every silent
-  // failure into the caller's existing rollback path (delete trade, unlock
-  // offer, refund) instead of a phantom "success" with no matching
-  // on-chain state.
-  const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 30000 })
-  if (receipt.status !== 'success') {
-    throw new Error(`${functionName}: transaction ${hash} was mined but reverted on-chain (status: ${receipt.status})`)
-  }
-  return hash
+  return sendAndConfirm(account, functionName, { data, value, gas: (gasEstimate * 130n) / 100n, nonce })
 }
 
 /** Seller deposits USDC for their offer. Real on-chain transaction - the deposit IS the value sent with this call. */
@@ -1592,20 +1587,13 @@ export function getAutoAcceptOperator(): Promise<string | null> {
 async function sendAutoAcceptTx(privateKey: string, functionName: 'depositWithAutoAccept' | 'setAutoAccept', args: readonly unknown[], value = 0n): Promise<Hash> {
   if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
   const account = privateKeyToAccount(privateKey as `0x${string}`)
-  const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 250 })
-  const walletClient = createWalletClient({ account, transport: arcTransport() })
+  const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }) })
   const data = encodeFunctionData({ abi: AUTO_ACCEPT_ABI, functionName, args: args as any })
   const [nonce, gasEstimate] = await Promise.all([
     publicClient.getTransactionCount({ address: account.address, blockTag: 'pending' }),
     publicClient.estimateGas({ account: account.address, to: CONTRACT_ADDRESS, data, value }),
   ])
-  const hash = await walletClient.sendTransaction({
-    to: CONTRACT_ADDRESS, data, value, gas: (gasEstimate * 130n) / 100n,
-    maxFeePerGas: parseGwei('25'), maxPriorityFeePerGas: parseGwei('1'), chain: ARC_CHAIN_INLINE, nonce,
-  } as unknown as Parameters<typeof walletClient.sendTransaction>[0])
-  const receipt = await publicClient.waitForTransactionReceipt({ hash, timeout: 30000 })
-  if (receipt.status !== 'success') throw new Error(`${functionName}: transaction ${hash} was mined but reverted on-chain`)
-  return hash
+  return sendAndConfirm(account, functionName, { data, value, gas: (gasEstimate * 130n) / 100n, nonce })
 }
 
 /** Sell ad on V3: deposit and turn on auto-accept for the ad's per-trade limits, one transaction. */

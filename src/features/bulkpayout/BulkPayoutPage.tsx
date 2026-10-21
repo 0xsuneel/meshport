@@ -92,6 +92,26 @@ interface TxResult {
   status: 'success' | 'failed'; error?: string
 }
 
+/** One Multicall3 aggregate3Value call paying every recipient (pure). */
+function buildBatch(resolved: Recipient[]) {
+  const calls = resolved.map(r => ({
+    target: r.walletAddress as `0x${string}`,
+    allowFailure: false,
+    value: BigInt(Math.round(r.amount * 1_000_000)) * (10n ** 12n),
+    callData: '0x' as `0x${string}`,
+  }))
+  const totalValue = calls.reduce((sum, c) => sum + c.value, 0n)
+  const data = encodeFunctionData({ abi: MULTICALL3_ABI, functionName: 'aggregate3Value', args: [calls] })
+  return { totalValue, data }
+}
+
+/** Gas for the batch; a per-recipient estimate if the node can't say. Never throws. */
+function estimateBatchGas(from: `0x${string}`, batch: { totalValue: bigint; data: `0x${string}` }, count: number): Promise<bigint> {
+  const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }) })
+  return publicClient.estimateGas({ account: from, to: MULTICALL3_ADDRESS, data: batch.data, value: batch.totalValue })
+    .catch(() => 80_000n + BigInt(count) * 40_000n)
+}
+
 function parseCSV(text: string): Array<{ input: string; amount: number }> {
   const lines = text.trim().split('\n').filter(Boolean)
   if (lines.length < 2) return []
@@ -387,7 +407,21 @@ export function BulkPayoutPage() {
     // or only takes payments from their contacts, can't be paid here either -
     // same rule and wording as Pay. Nothing is sent while any is refused.
     setProcessing(true)
+    // The batch itself and the two chain reads it needs (balance, gas) don't
+    // depend on the checks below - started now so they're done by the time
+    // the checks are.
+    const batch = buildBatch(resolved)
+    const fromAddr = useAuthStore.getState().walletAddress
+    const early = fromAddr && isValidAddress(fromAddr) ? {
+      from: fromAddr.toLowerCase(),
+      balance: arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [fromAddr, 'latest'] }),
+      gas: estimateBatchGas(fromAddr as `0x${string}`, batch, resolved.length),
+    } : null
+    early?.balance.catch(() => {})
     const { reachCheck, BLOCKED_YOU, STRANGER_PAY_BLOCKED } = await import('@/lib/privacy')
+    const { blockedAmong, BLOCKED_TEXT } = await import('@/lib/usdcBlocklist')
+    // USDC refuses blocklisted addresses: the whole batch would fail on-chain.
+    const blockedLookup = blockedAmong(resolved.map(r => r.walletAddress).filter(Boolean)).catch(() => new Set<string>())
     const refused = new Map<string, string>()
     await Promise.all(resolved.map(async r => {
       const userId = r.arcUserId || (r.walletAddress ? (await getUserByWalletAddress(r.walletAddress).catch(() => null))?.id : null)
@@ -397,9 +431,7 @@ export function BulkPayoutPage() {
       const name = `${String(r.username || '').replace(/\.arc$/, '')}.arc`
       refused.set(r.id, reach.blocked ? BLOCKED_YOU(name) : STRANGER_PAY_BLOCKED(name))
     }))
-    // USDC refuses blocklisted addresses: the whole batch would fail on-chain.
-    const { blockedAmong, BLOCKED_TEXT } = await import('@/lib/usdcBlocklist')
-    const blocked = await blockedAmong(resolved.map(r => r.walletAddress).filter(Boolean)).catch(() => new Set<string>())
+    const blocked = await blockedLookup
     for (const r of resolved) if (blocked.has(r.walletAddress.toLowerCase())) refused.set(r.id, BLOCKED_TEXT)
     if (refused.size) {
       setProcessing(false)
@@ -444,14 +476,14 @@ export function BulkPayoutPage() {
     setProcessingStatus('Connecting to Arc Testnet...')
     try {
       const account = privateKeyToAccount(activePrivateKey as `0x${string}`)
-      // Used for gas estimation; signing is local and sending goes through
-      // the server (relaySend below).
-      const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 250 })
+      // Started early (see executePayout's top) for this same wallet.
+      const sameWallet = early?.from === account.address.toLowerCase()
 
       setProcessingStatus('Checking balance...')
       // Arc docs: use eth_getBalance (18-decimal native USDC wei), not ERC-20 balanceOf
       // Both share same underlying balance. eth_getBalance is the Arc-recommended method.
-      const balJson = await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [account.address, 'latest'] })
+      const balJson = (sameWallet ? await early!.balance.catch(() => null) : null)
+        ?? await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [account.address, 'latest'] })
       const rawBal = balJson.result && balJson.result !== '0x' ? balJson.result : '0x0'
       // Arc native balance: 18 decimals. Divide by 1e18 to get human-readable USDC.
       const balanceUsdc = Number(BigInt(rawBal)) / 1e18
@@ -475,30 +507,7 @@ export function BulkPayoutPage() {
       const totalAmountAtomic = (BigInt(Math.round(totalAmount * 1_000_000)) * (10n ** 12n)).toString()
       const { createBulkPayIntent, markBulkPayAttemptSubmitted } = await import('@/lib/bulkPayIntentService')
 
-      // PERF FIX: building the multicall calldata is pure/synchronous and
-      // does not depend on the intent result (the intent's nonce is only
-      // consumed later, at broadcast time) - moved up so gas estimation
-      // below can be issued concurrently with intent creation instead of
-      // waiting for it first. Same independent-calls fix already proven in
-      // arcService.ts's sendUSDC (balance/intent/gas via Promise.all).
-      setProcessingStatus(`Building multicall for ${resolved.length} recipients...`)
-      const calls = resolved.map(r => {
-        const amount6dec  = BigInt(Math.round(r.amount * 1_000_000))
-        const amount18dec = amount6dec * (10n ** 12n)
-        return {
-          target: r.walletAddress as `0x${string}`,
-          allowFailure: false,
-          value: amount18dec,
-          callData: '0x' as `0x${string}`,
-        }
-      })
-      const totalValue = calls.reduce((sum, c) => sum + c.value, 0n)
-      const data = encodeFunctionData({
-        abi: MULTICALL3_ABI,
-        functionName: 'aggregate3Value',
-        args: [calls],
-      })
-
+      const { totalValue, data } = batch
       const [intentResult, gasEst] = await Promise.all([
         createBulkPayIntent({
           walletAddress: account.address,
@@ -512,12 +521,7 @@ export function BulkPayoutPage() {
           recipientCount: resolved.length,
           purpose: purpose || 'Payroll',
         }),
-        publicClient.estimateGas({
-          account: account.address,
-          to: MULTICALL3_ADDRESS,
-          data,
-          value: totalValue,
-        }).catch(() => 80_000n + BigInt(resolved.length) * 40_000n),
+        sameWallet ? early!.gas : estimateBatchGas(account.address, batch, resolved.length),
       ])
       if (!intentResult.success || !intentResult.attemptId || typeof intentResult.nonce !== 'number') {
         const why = noteBatchFailed(classifyPreBroadcastFailure(new Error(intentResult.error ?? "Couldn't prepare the bulk payout")))
