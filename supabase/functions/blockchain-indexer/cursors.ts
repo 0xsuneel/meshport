@@ -118,13 +118,20 @@ export async function insertEvents(
 ): Promise<void> {
   if (events.length === 0) return
   const { error } = await supabase.from('chain_events').insert(events)
-  if (error) {
-    // A 23505 (duplicate key) here is NOT an error - it means a previous pass
-    // already published this event, which is the idempotency contract working.
-    // Log at debug level; only log a warning for genuine insert failures.
-    if (error.code !== '23505') {
-      console.error(`[blockchain-indexer] event insert failed (${events.length} events):`, error.message)
-    }
+  if (!error) return
+  if (error.code !== '23505') {
+    console.error(`[blockchain-indexer] event insert failed (${events.length} events):`, error.message)
+    return
+  }
+  // A 23505 (duplicate key) means a previous pass already published one of
+  // these - every pass re-scans the block it stopped at. But Postgres rejects
+  // the WHOLE batch for one duplicate, so the new events beside it were lost
+  // (a business payment on Ethereum Sepolia was dropped exactly this way).
+  // Insert one by one; a duplicate then skips only itself.
+  if (events.length === 1) return
+  for (const ev of events) {
+    const { error: e } = await supabase.from('chain_events').insert(ev)
+    if (e && e.code !== '23505') console.error('[blockchain-indexer] event insert failed:', e.message)
   }
 }
 
