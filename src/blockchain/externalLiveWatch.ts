@@ -25,9 +25,6 @@ const RESUME_FOLLOW_UPS_MS = [15_000, 40_000]
 export function startExternalLiveWatch(
   wallet: string,
   getSettings: () => { settings: SettingsMap; loaded: boolean },
-  /** Business accounts look more often: a payment's balance change is what
-   *  starts its "Payment received" (see PaymentReceivedWatcher). */
-  pollMs: number = EXTERNAL_LIVE_POLL_MS,
 ): () => void {
   let stopped = false
   let inFlight = false
@@ -67,7 +64,7 @@ export function startExternalLiveWatch(
   }
 
   void scan() // seed the baseline
-  const every = setInterval(() => { void scan() }, pollMs)
+  const every = setInterval(() => { void scan() }, EXTERNAL_LIVE_POLL_MS)
   document.addEventListener('visibilitychange', onVisibility)
   window.addEventListener('pageshow', onVisibility)
 

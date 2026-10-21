@@ -84,12 +84,6 @@ async function call<T>(body: Record<string, unknown>): Promise<T> {
   return data as T
 }
 
-/** Money landed on another chain: have merchant-pay read that chain now (not
- *  on its next 15s tick), so the receipt, pop-up, voice and push follow the
- *  balance within seconds. Best effort - the cron still covers it. */
-export const nudgeChainWatch = (chain: string) =>
-  call<{ scanned?: number; skipped?: string }>({ action: 'nudge', chain }).catch(() => null)
-
 /** Open order for this wallet with exactly this amount due (wallet QR scanned in MeshPort). */
 export const findOpenOrder = (wallet: string, amount: number) =>
   call<{ order: { code: string; orderNumber: string | null } | null }>({ action: 'find', wallet, amount }).then(r => r.order, () => null)
