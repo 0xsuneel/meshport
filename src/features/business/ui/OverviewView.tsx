@@ -94,6 +94,8 @@ export interface OverviewViewProps {
   onPayment: (p: Payment) => void
   /** Opens the period picker from the card's chip (no chip when omitted) */
   onPeriod?: () => void
+  /** Desktop: recent payments sit in the right-hand panel instead. */
+  hideRecent?: boolean
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -114,6 +116,7 @@ export function OverviewView({
   onSeeAllPayments,
   onPayment,
   onPeriod,
+  hideRecent = false,
 }: OverviewViewProps) {
   const hasSettle = toSettle.chainCount > 0
   const chains = toSettle.chains ?? []
@@ -223,7 +226,7 @@ export function OverviewView({
       </div>
 
       {/* ── Recent payments ─────────────────────────────────────────────── */}
-      <div className="mx-5">
+      {!hideRecent && <div className="mx-5">
         {/* Heading outside the card, like Home's "Assets". */}
         <div className="flex items-center justify-between mb-3">
           <p className="text-base font-bold text-text-primary">Recent payments</p>
@@ -257,7 +260,7 @@ export function OverviewView({
             <>{recent.slice(0, 4).map(p => <PaymentRow key={p.id} payment={p} onClick={onPayment} />)}</>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   )
 }

@@ -41,9 +41,10 @@ import { logBusiness } from '@/lib/businessActivity'
 import { readArcBalanceOrThrow, notifyExternalBalanceChanged } from '@/blockchain/BlockchainManager'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useUIStore } from '@/store'
+import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton } from '@/components/ui/DesktopHistoryPanel'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
-  BusinessHeader, SetupBanner, HubView, LockedHubView, PaymentsView, PaymentDetailSheet,
+  BusinessHeader, SetupBanner, HubView, LockedHubView, PaymentsView, PaymentDetailSheet, PaymentRow,
   SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
   DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, ScreenLevel, PushLayer,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
@@ -527,15 +528,20 @@ function OwnerBusinessPage() {
   // Collect payment / Shop QR: the store chip in their title row.
   const screenStorePick = stores.length > 1 && activeStore
     ? { stores: storePickList, value: activeStore.id, onChange: pickStore, onManage: open('team') } : undefined
-  const bodyPad = { paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }
+  const bodyPad = { paddingBottom: isDesktop ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }
   const panelPad = { paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }
+  const seeAllPayments = () => { setPayFilter('all'); setPayView('payments'); setTab('payments') }
+  // Desktop: the same 65/35 layout as P2P, Swap and Multichain - the hub and
+  // every Business page in the main column, Verified payments on the right.
+  // One tree for both, so resizing across the breakpoint keeps all state.
   return (
-    <div className="relative flex flex-col h-full min-h-0 bg-bg overflow-hidden">
+    <div className={isDesktop ? 'flex h-full min-h-0 bg-bg gap-7 px-6 pt-5 pb-3.5 box-border' : 'relative flex flex-col h-full min-h-0 bg-bg overflow-hidden'}>
+    <div className={isDesktop ? 'relative flex-[65_1_0%] min-w-0 min-h-0 flex flex-col overflow-hidden' : 'contents'}>
       {/* ── Overview hub: always mounted; parallaxes left under a sub-view ── */}
       <div className="flex-1 min-h-0 flex flex-col" style={hubShift}>
         {/* The business, then (several stores) the one store everything below
             is for, with Switch - never every store mixed together. */}
-        <BusinessHeader storeName={storeName} handle={handle}
+        <BusinessHeader desktop={isDesktop} storeName={storeName} handle={handle}
           status={headerStatus} voiceOn={voice.enabled}
           onVoice={() => setVoiceOpen(true)} onMenu={open(locked ? 'profile' : 'tools')}
           avatarName={storeName} avatarUrl={userAvatar ?? undefined} />
@@ -556,7 +562,7 @@ function OwnerBusinessPage() {
               orders={{ badge: !pending ? 'Loading…' : pending.count ? `${pending.count} open` : `No open ${terms.orders.toLowerCase()}`, tone: pending?.count ? 'warning' : 'neutral', onClick: openOrders }}
               money={{ badge: settle.total > 0 ? `${money(settle.total)} to settle` : scanning ? 'Checking chains…' : 'All on Arc', tone: settle.total > 0 ? 'brand' : 'neutral', onClick: () => setTab('settlements') }}
               tools={{ badge: stores.length ? `${stores.length} store${stores.length === 1 ? '' : 's'}` : isMerchant ? 'Add a store' : 'Profile & help', onClick: open('tools') }}
-              recent={payments.slice(0, 4)} onSeeAll={() => { setPayFilter('all'); setPayView('payments'); setTab('payments') }} onPayment={setDetail} />
+              recent={payments.slice(0, 4)} onSeeAll={seeAllPayments} onPayment={setDetail} hideRecent={isDesktop} />
           )}
         </div>
       </div>
@@ -566,10 +572,10 @@ function OwnerBusinessPage() {
           rest of the app uses. Like every other detail page (Pay, Receive) and
           the Business screens, it covers the bottom nav (fixed, z-40). ── */}
       <PushLayer open={subOpen} covered={subCovered} zIndex={40}>
-             <div className="relative w-full max-w-md flex flex-col h-full">
+             <div className={`relative w-full flex flex-col h-full ${isDesktop ? '' : 'max-w-md'}`}>
               {/* Payments and Settlements open from Overview (See all, the settle
                   bar, the menu) and come back with the arrow - no tab bar. */}
-              <header className="header-row gap-3 px-5 pt-header pb-header">
+              <header className={`header-row gap-3 px-5 ${isDesktop ? 'pt-0' : 'pt-header'} pb-header`}>
                 <button type="button" aria-label="Back to overview" onClick={closeSub} className="back-btn">
                   <ArrowLeft className="w-5 h-5 text-text-primary" />
                 </button>
@@ -756,6 +762,16 @@ function OwnerBusinessPage() {
         <TeamScreen open={stack.includes('team')} onBack={back} canAddStores={isMerchant} stores={stores} onChanged={setStores} paymentsByStore={paymentsByStore}
           onQr={id => { pickStore(id); child('qr') }} />
       ))}
+    </div>
+      {isDesktop && (
+        <div className="flex-[35_1_0%] min-w-0 min-h-0">
+          <DesktopHistoryPanel title="Verified payments" onViewAll={locked ? undefined : seeAllPayments}>
+            {!loaded ? <DesktopHistorySkeleton />
+              : payments.length === 0 ? <DesktopHistoryEmpty label={locked ? 'Payments show up here once MeshPort approves your business' : 'No payments yet - open Collect payment to show your QR'} />
+              : <div className="divide-y divide-border">{payments.slice(0, 30).map(p => <PaymentRow key={p.id} payment={p} onClick={setDetail} />)}</div>}
+          </DesktopHistoryPanel>
+        </div>
+      )}
     </div>
   )
 }

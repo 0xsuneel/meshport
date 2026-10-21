@@ -34,6 +34,8 @@ export interface HubViewProps {
   recent: Payment[]
   onSeeAll: () => void
   onPayment: (p: Payment) => void
+  /** Desktop: the verified payments list sits in the right-hand panel instead. */
+  hideRecent?: boolean
   /** Words for the business's category (Orders / Invoices, Customers / Clients) */
   terms?: BizTerms
 }
@@ -60,7 +62,7 @@ function Tile({ icon: Icon, title, sub, tile }: { icon: React.ElementType; title
 
 export function HubView({
   loading, banner, periodLabel, onPeriod, sales, pending, available, availableLabel = 'Available', onPending, onAvailable,
-  collect, orders, money, tools, recent, onSeeAll, onPayment, terms = bizTerms(null),
+  collect, orders, money, tools, recent, onSeeAll, onPayment, hideRecent = false, terms = bizTerms(null),
 }: HubViewProps) {
   return (
     <div className="flex flex-col gap-2.5 pb-6">
@@ -109,7 +111,7 @@ export function HubView({
       </div>
 
       {/* Latest verified payments */}
-      <div className="mx-5">
+      {!hideRecent && <div className="mx-5">
         <div className="rounded-2xl bg-card border border-border overflow-hidden">
           <div className="flex items-center justify-between px-3.5 pt-2.5 pb-1">
             <p className="text-[15px] font-semibold text-text-primary">Verified payments</p>
@@ -137,7 +139,7 @@ export function HubView({
             <div className="divide-y divide-border">{recent.slice(0, 4).map(p => <PaymentRow key={p.id} payment={p} onClick={onPayment} />)}</div>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   )
 }

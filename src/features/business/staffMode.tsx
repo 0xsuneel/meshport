@@ -14,8 +14,11 @@ import { displayOrderNumber, myAuthUid, type MerchantPayment } from '@/lib/merch
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, StatementBody } from './screens'
 import { setDueDate } from '@/lib/businessBills'
 import { logBusiness } from '@/lib/businessActivity'
-import { StaffBanner, StaffModeHeader, PaymentsView, OverviewView, Skeleton, BusinessScreen, type Payment } from './ui'
+import { StaffBanner, StaffModeHeader, PaymentsView, OverviewView, PaymentRow, Skeleton, BusinessScreen, type Payment } from './ui'
 import { chainLabel } from './settlement'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DESKTOP_QUERY } from '@/lib/motion'
+import { DesktopHistoryPanel, DesktopHistoryEmpty } from '@/components/ui/DesktopHistoryPanel'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
@@ -29,6 +32,7 @@ export function StaffModePage() {
   const [me, setMe] = useState<string | null>(null)
   useEffect(() => { void myAuthUid().then(setMe) }, [])
   const [refunds, setRefunds] = useState<MerchantRefund[]>([])
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
 
   const load = () => myMemberships().then(setList).catch(() => setList([]))
   useEffect(() => { void load() }, [])
@@ -49,7 +53,7 @@ export function StaffModePage() {
   if (!list) return <div className="p-5"><Skeleton className="h-40 w-full" /></div>
 
   if (!active) return (
-    <div className="flex flex-col gap-4 h-full overflow-y-auto bg-bg px-5" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 20px)', paddingBottom: 120 }}>
+    <div className={`flex flex-col gap-4 h-full overflow-y-auto bg-bg ${isDesktop ? 'px-10' : 'px-5'}`} style={{ paddingTop: isDesktop ? 20 : 'calc(env(safe-area-inset-top, 0px) + 20px)', paddingBottom: isDesktop ? 24 : 120 }}>
       <h1 className="text-xl font-bold text-text-primary">Business</h1>
       {list.length === 0 && <p className="text-sm text-text-secondary">Business is for business accounts. If a shop added you as staff, their invite shows here.</p>}
       {list.map(m => (
@@ -76,13 +80,16 @@ export function StaffModePage() {
       <ChevronRight className="size-4 text-text-muted shrink-0" />
     </button>
   )
+  // Desktop: the owner's Business layout - this column, today's payments on
+  // the right; its screens open inside the column (PushLayer is absolute).
   return (
-    <div className="flex flex-col h-full min-h-0 bg-bg">
-      <div style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
+    <div className={isDesktop ? 'flex h-full min-h-0 bg-bg gap-7 px-6 pt-5 pb-3.5 box-border' : 'contents'}>
+    <div className={isDesktop ? 'relative flex-[65_1_0%] min-w-0 min-h-0 flex flex-col overflow-hidden' : 'flex flex-col h-full min-h-0 bg-bg'}>
+      <div style={{ paddingTop: isDesktop ? 0 : 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
         <StaffModeHeader store={active.storeName ? `${active.ownerName} · ${active.storeName}` : active.ownerName} role={active.role} onExit={() => setActiveId(null)} />
       </div>
-      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
-        <OverviewView loading={false} periodLabel="Today"
+      <div className="flex-1 overflow-y-auto" style={{ paddingBottom: isDesktop ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}>
+        <OverviewView loading={false} periodLabel="Today" hideRecent={isDesktop}
           collection={{ total: money(total), count: today.length, average: money(today.length ? total / today.length : 0), customers: new Set(today.map(who)).size }}
           toSettle={{ total: '—', chainCount: 0, hidden: true }} refunded={{ total: '—', count: 0 }} recent={payments.slice(0, 4)}
           onShowQr={() => setScreen('qr')} onReceive={() => setScreen('receive')}
@@ -122,10 +129,17 @@ export function StaffModePage() {
         <ShopQrScreen open={screen === 'qr'} onBack={back} storeName={active.ownerName} outlet={active.storeName} handle={`${active.ownerUsername}.arc`} payTo={active.ownerUsername} />
         <ReceiveScreen open={screen === 'receive'} onBack={back} storeName={active.ownerName} />
       </RequestMaker.Provider>
-      {screen === 'payments' && (
-        <div className="fixed inset-0 z-40 bg-bg overflow-y-auto" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
-          <button type="button" onClick={back} className="mx-4 mb-2 min-h-[44px] text-sm font-semibold text-brand-text">‹ Back</button>
-          <PaymentsView loading={false} payments={payments} onPayment={() => {}} />
+      {/* Same page push and header as every other Business screen. */}
+      <BusinessScreen open={screen === 'payments'} title="Payments" onBack={back}>
+        <PaymentsView loading={false} payments={payments} onPayment={() => {}} />
+      </BusinessScreen>
+    </div>
+      {isDesktop && (
+        <div className="flex-[35_1_0%] min-w-0 min-h-0">
+          <DesktopHistoryPanel title="Recent payments" onViewAll={payments.length ? () => setScreen('payments') : undefined}>
+            {payments.length === 0 ? <DesktopHistoryEmpty label="No payments yet - show your QR at the counter to get paid" />
+              : <div className="divide-y divide-border">{payments.slice(0, 30).map(p => <PaymentRow key={p.id} payment={p} onClick={() => {}} />)}</div>}
+          </DesktopHistoryPanel>
         </div>
       )}
     </div>
