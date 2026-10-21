@@ -100,6 +100,43 @@ export function AppLayout() {
     return () => { (ric ? (window as any).cancelIdleCallback : window.clearTimeout)(id) }
   }, [])
 
+  // The first tap on each feature used to wait for that page's code to load
+  // (and on a fresh install, to download), and the first payment for the
+  // payment servers to wake from cold. While the app is idle, load the main
+  // pages one at a time and wake the servers, so first use is as fast as the
+  // second. Skipped on a slow connection or Data Saver.
+  useEffect(() => {
+    if (!walletAddress || isSlowNetwork() || (navigator as any).connection?.saveData) return
+    const pages = [
+      () => import('@/features/paysend/PaySendPage'),
+      () => import('@/features/receive/ReceivePage'),
+      () => import('@/features/activity/ActivityPage'),
+      () => import('@/features/chat/ChatPage'),
+      () => import('@/features/multichain/MultichainPage'),
+      () => import('@/features/swap/SwapPage'),
+      () => import('@/features/business/BusinessPage'),
+      () => import('@/features/profile/ProfilePage'),
+      () => import('@/features/activity/TransactionDetail'),
+    ]
+    const ric = (window as any).requestIdleCallback as ((cb: () => void, o?: { timeout: number }) => number) | undefined
+    let cancelled = false, handle: number | undefined
+    const next = (i: number) => {
+      if (cancelled || i >= pages.length) return
+      handle = ric ? ric(() => { pages[i]().catch(() => {}).finally(() => next(i + 1)) }, { timeout: 3000 })
+                   : window.setTimeout(() => { pages[i]().catch(() => {}).finally(() => next(i + 1)) }, 300)
+    }
+    const start = window.setTimeout(() => {
+      import('@/lib/arcService').then(m => m.warmArcRpc()).catch(() => {})
+      import('@/lib/payIntentService').then(m => { void m.warmPayIntent() }).catch(() => {})
+      next(0)
+    }, 1500)
+    return () => {
+      cancelled = true
+      window.clearTimeout(start)
+      if (handle !== undefined) (ric ? (window as any).cancelIdleCallback : window.clearTimeout)(handle)
+    }
+  }, [walletAddress])
+
   const bindKey = useAuthStore(s => s.privateKey)
   useEffect(() => {
     if (!userId || !bindKey) return
