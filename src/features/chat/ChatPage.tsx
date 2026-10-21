@@ -1131,9 +1131,11 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
           </div>
         ) : (
         <div className="header-row justify-between" style={{ marginBottom: 12 }}>
+          {/* The brand ring around it, like Home's profile picture. */}
           <button onClick={() => navigate('/chat/privacy')} aria-label="Chat privacy" className="rounded-full flex-shrink-0"
-            style={{ padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}>
-            <Avatar name={user?.displayName || user?.username || 'Me'} src={user?.avatar ?? undefined} size="sm" className="!w-9 !h-9" />
+            style={{ padding: 2, border: 'none', background: 'var(--brand)', cursor: 'pointer', display: 'flex' }}>
+            <Avatar name={user?.displayName || user?.username || 'Me'} src={user?.avatar ?? undefined} size="sm" className="!w-9 !h-9"
+              style={{ border: '2px solid var(--bg)', boxSizing: 'border-box' }} />
           </button>
           <h1 className="text-xl font-bold text-text-primary" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>Chats</h1>
           <motion.button whileTap={{ scale: 0.9 }} aria-label={searchOpen ? 'Close search' : 'Search chats'}
