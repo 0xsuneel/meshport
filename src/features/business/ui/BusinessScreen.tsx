@@ -8,6 +8,8 @@ import type { ReactNode } from './types'
 import { ScreenPush } from '@/components/ui/ScreenPush'
 import { useBackLayer } from '@/lib/backLayers'
 import { PushLayer } from './PushLayer'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DESKTOP_QUERY } from '@/lib/motion'
 
 export interface BusinessScreenProps {
   open: boolean
@@ -45,6 +47,9 @@ export const useScreenLevel = () => React.useContext(ScreenLevel)
 
 export function BusinessScreen({ open, title, onBack, children, footer, step = '', fill = false, action, heading }: BusinessScreenProps) {
   const { level, covered } = useScreenLevel()
+  // Desktop: fills Business's main column like the other desktop pages'
+  // flows (the phone width left a narrow strip floating mid-page).
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
   // Phone / browser Back = the header's back arrow (a step inside first).
   useBackLayer(open, onBack)
   return (
@@ -52,9 +57,9 @@ export function BusinessScreen({ open, title, onBack, children, footer, step = '
     <PushLayer open={open} covered={covered} zIndex={41 + level}>
       {/* Its own views (a customer, a store being edited) are pushed like
           Pay's steps: in from the right, back to the first view from the left. */}
-      <ScreenPush screenKey={step || '·'} back={!step} style={{ width: '100%', maxWidth: 448 }}>
+      <ScreenPush screenKey={step || '·'} back={!step} style={{ width: '100%', maxWidth: isDesktop ? undefined : 448 }}>
         {/* Header — the app's standard page header (Profile, Receive…) */}
-        <header className="shrink-0 header-row gap-3 px-5 pt-header pb-header bg-bg sticky top-0 z-10">
+        <header className={`shrink-0 header-row gap-3 px-5 ${isDesktop ? 'pt-0' : 'pt-header'} pb-header bg-bg sticky top-0 z-10`}>
           <button type="button" aria-label="Go back" onClick={onBack} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
           </button>
