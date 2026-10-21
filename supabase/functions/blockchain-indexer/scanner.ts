@@ -539,10 +539,16 @@ export async function scanRange(
       if (!decoded) continue
       const { wallet, from } = decoded
       if (!wallet || !knownWallets.has(wallet)) continue
-      // A zero-address sender is a MINT, which is a CCTP claim arriving -
-      // claim-recovery-scan owns that, and the legacy deposit scan skips
-      // it. Emitting it here would look like an indexer_only find.
-      if (isMintTransfer(decoded)) continue
+      // A zero-address sender is a MINT. On Arc that is a CCTP claim
+      // arriving - claim-recovery-scan owns it, and the legacy deposit scan
+      // skips it (emitting would look like an indexer_only find). On an
+      // external chain a mint IS how USDC arrives from another chain (a
+      // transfer or business payment sent from Arc, Gateway, CCTP): skipping
+      // it meant the app was never told and that chain's balance sat stale.
+      // Flagged so consumers can tell; activity-consumer skips zero-address
+      // senders itself and the deposit consumer reads Arc only.
+      const mint = isMintTransfer(decoded)
+      if (mint && scanNative) continue
       if (isSelfTransfer(decoded)) continue // self-transfer
       // No native scan to vouch for blocks: confirm by the event's own block.
       if (!scanNative && !confirmableBlocks.includes(decoded.blockNumber)) confirmableBlocks.push(decoded.blockNumber)
@@ -553,7 +559,7 @@ export async function scanRange(
         event_type: 'transfer_detected',
         wallet_address: wallet,
         assets: [token.symbol],
-        metadata: { to: wallet, from, amount: decoded.amount },
+        metadata: { to: wallet, from, amount: decoded.amount, ...(mint ? { mint: true } : {}) },
         status: 'pending',
         // Same reasoning as the native-transfer-log branch above - this is
         // the field that makes multi-recipient transactions (BulkPay/

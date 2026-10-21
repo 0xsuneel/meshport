@@ -11,6 +11,8 @@ import { listMyPayments, listChainReceipts, isOwnReceipt, subscribeMerchantPayme
 import { speakPayment } from '@/lib/voiceAlerts'
 import { PaymentReceivedOverlay } from './ui'
 import { chainLabel } from './settlement'
+import { notifyExternalBalanceChanged } from '@/blockchain/BlockchainManager'
+import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
@@ -19,9 +21,11 @@ export function PaymentReceivedWatcher() {
   const wallet = useAuthStore(s => s.walletAddress)
   const [shown, setShown] = useState<MerchantPayment | null>(null)
   const seen = useRef<Set<string> | null>(null)
+  const seenReceipts = useRef<Set<string> | null>(null)
 
   useEffect(() => {
     seen.current = null
+    seenReceipts.current = null
     if (!business || !wallet) return
     let live = true
     // One check at a time: a live update landing while the first load is
@@ -34,7 +38,17 @@ export function PaymentReceivedWatcher() {
       // wallet on Arc without an order isn't a sale. Your own transfers
       // between chains don't count either.
       const [orders, receipts] = await Promise.all([listMyPayments(50).catch(() => null), listChainReceipts(50).catch(() => [])])
-      if (!live || !orders) return
+      if (!live) return
+      // USDC that just landed on another chain (own transfers included):
+      // re-read that chain's balance now, so Business / Hub / Home show it at
+      // once instead of on their next full scan minutes later.
+      if (seenReceipts.current) {
+        for (const chain of new Set(receipts.filter(r => !seenReceipts.current!.has(r.id) && EXTERNAL_CHAINS[r.chain]).map(r => r.chain))) {
+          notifyExternalBalanceChanged(chain, wallet)
+        }
+      }
+      seenReceipts.current = new Set(receipts.map(r => r.id))
+      if (!orders) return
       const known = new Set(orders.map(p => `${p.chain}:${p.txHash.toLowerCase()}`))
       const extra: MerchantPayment[] = receipts
         .filter(r => !known.has(`${r.chain}:${r.txHash.toLowerCase()}`) && !isOwnReceipt(r, wallet))

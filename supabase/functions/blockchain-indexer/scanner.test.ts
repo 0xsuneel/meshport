@@ -308,3 +308,33 @@ Deno.test('scanRange: nativeAsset null (external chain) never fetches blocks, st
   assertEquals(outcome.events[0].event_type, 'transfer_detected')
   assertEquals(outcome.confirmableBlocks, [150])
 })
+
+Deno.test('scanRange: a mint (zero-address sender) on an external chain is emitted and flagged - USDC arriving from another chain', async () => {
+  const tokenContract = '0xTokenContract'
+  const chain = { id: 'ethereum-sepolia', rpcs: [RPC_URL], nativeAsset: null, nativeTransferLogContract: null, tokens: [{ symbol: 'USDC', contract: tokenContract, decimals: 6 }] }
+  const fetchImpl = fakeRpc({
+    [RPC_URL]: (method) => {
+      if (method === 'eth_getLogs') {
+        return [{
+          address: tokenContract,
+          topics: [TRANSFER_TOPIC0, '0x' + '0'.repeat(64), pad32(WALLET1)],
+          data: '0x' + (9_996_150).toString(16),
+          transactionHash: '0xminttx',
+          blockNumber: '0x96',
+          blockHash: '0xblockhash150',
+          logIndex: '0x1',
+          transactionIndex: '0x0',
+        }]
+      }
+      if (method === 'eth_getBlockByNumber') return { hash: '0xtip' }
+      throw new Error(`unexpected method ${method}`)
+    },
+  })
+
+  const outcome = await scanRange(chain, 100, 200, new Set([WALLET1]), { fetchImpl, ...noSleep })
+
+  assertEquals(outcome.events.length, 1)
+  assertEquals(outcome.events[0].event_type, 'transfer_detected')
+  assertEquals((outcome.events[0].metadata as Record<string, unknown>).mint, true)
+  assertEquals(outcome.confirmableBlocks, [150])
+})
