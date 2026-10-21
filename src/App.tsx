@@ -130,6 +130,17 @@ const AdminStuckFundsPage      = lazyRetry(() => import('./features/admin/StuckF
 import { syncBroadcastNotifications } from './lib/broadcastSync'
 import { LoadingDots } from './components/ui/LoadingDots'
 
+// A signed-in app open always goes lock screen → Home. Their code used to load
+// one after the other, each only once the router reached it (a redirect, then
+// a download, then the next). Start both now, alongside the app's own startup.
+try {
+  const p = window.location.pathname
+  if (localStorage.getItem('meshport-auth-v4') && !p.startsWith('/paylink') && !p.startsWith(ADMIN_PATH)) {
+    import('./features/auth/PasscodeSetup').catch(() => {})
+    import('./features/home/HomePage').catch(() => {})
+  }
+} catch { /* private mode / no storage */ }
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000 * 60 * 5, retry: 1 } },
 })
@@ -507,7 +518,9 @@ const router = createBrowserRouter([
 // It also waits for the page to actually draw something: the first route is
 // often just a redirect (e.g. "/" → the lock screen), which renders nothing
 // while the next page's code is still loading.
-const MIN_OPEN_SPLASH_MS = 1200
+// Was 1200ms: with the logo's glide after it, Face ID / fingerprint only came
+// up ~1.8s after tapping the app icon.
+const MIN_OPEN_SPLASH_MS = 450
 function SplashRemover() {
   useEffect(() => {
     const splash = document.getElementById('splash')
@@ -527,6 +540,9 @@ function SplashRemover() {
       const wait = shownUntil - performance.now()
       if (wait > 0) { timer = setTimeout(hide, wait); return }
       hidden = true
+      // The lock screen is on screen now: let the fingerprint / Face ID
+      // prompt open while the logo glides, not after it has finished.
+      markSplashDone()
       document.getElementById('mp-splash-theme')?.remove() // back to the app's own status bar colour
       try { sessionStorage.setItem('mp_opened', '1') } catch { /* private mode */ }
       // App open onto the lock screen: the opening logo glides into the lock

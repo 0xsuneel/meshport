@@ -64,12 +64,20 @@ export default defineConfig({
     target: 'esnext',
     rollupOptions: {
       output: {
-        manualChunks: {
-          'viem':         ['viem', 'viem/accounts'],
-          'ethers':       ['ethers'],
-          'circle-sdk':   ['@circle-fin/app-kit', '@circle-fin/adapter-ethers-v6'],
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'motion':       ['framer-motion'],
+        // The Node polyfills (Buffer, process) get their own small chunk. With
+        // the plain list form Rollup put Buffer inside the circle-sdk chunk,
+        // and since the app's entry needs Buffer, every app open downloaded
+        // and parsed the whole Circle SDK + ethers (~1.4 MB) before the first
+        // screen - even though only Multichain/Swap use them.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (/node_modules\/(buffer|base64-js|ieee754|process|vite-plugin-node-polyfills)\//.test(id)) return 'polyfills'
+          if (/node_modules\/viem\//.test(id)) return 'viem'
+          if (/node_modules\/ethers\//.test(id)) return 'ethers'
+          if (/node_modules\/@circle-fin\/(app-kit|adapter-ethers-v6)\//.test(id)) return 'circle-sdk'
+          if (/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(id)) return 'react-vendor'
+          if (/node_modules\/framer-motion\//.test(id)) return 'motion'
+          return undefined
         },
       },
     },
