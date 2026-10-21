@@ -19,7 +19,6 @@ import { useBizTerms } from '@/lib/businessCategories'
 import { getUserByUsername, getOrCreateConversation } from '@/lib/supabase'
 import { ArrowLeft } from 'lucide-react'
 import { copyToClipboard } from '@/lib/utils'
-import { fetchActivity } from '@/lib/ActivityService'
 import { useAuthStore, useWalletStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
@@ -105,29 +104,22 @@ function OwnerBusinessPage() {
   // payment come from PaymentReceivedWatcher, on every screen) ──────────
   const [raw, setRaw] = useState<MerchantPayment[]>([])
   const [loaded, setLoaded] = useState(false)
-  // Every USDC that reached the business: order payments; USDC on other
-  // chains (merchant_chain_receipts, own transfers marked 'own_transfer');
-  // and direct receives on Arc from anyone - people, contracts, exchanges
-  // (the wallet's Activity 'receive' rows) that aren't order payments.
+  // What the business was paid: order payments (requests, bills, Shop QR -
+  // on Arc or another chain) and the owner's own transfers between chains
+  // ('own_transfer', shown but never counted). USDC sent straight to the
+  // wallet with no order - to the username, the Personal QR or the address -
+  // isn't a sale: it stays a plain receive in Activity. (A direct transfer of
+  // exactly an open order's amount is matched to that order by the watcher.)
   const load = useCallback(async () => {
-    const [orders, receipts, activity] = await Promise.all([
-      listMyPayments(500), listChainReceipts(300).catch(() => []),
-      walletAddress ? fetchActivity(walletAddress, { limit: 300 }).catch(() => []) : Promise.resolve([]),
-    ])
+    const [orders, receipts] = await Promise.all([listMyPayments(500), listChainReceipts(300).catch(() => [])])
     const known = new Set(orders.map(p => `${p.chain}:${p.txHash.toLowerCase()}`))
     const extra: MerchantPayment[] = receipts
-      .filter(r => !known.has(`${r.chain}:${r.txHash.toLowerCase()}`))
+      .filter(r => !known.has(`${r.chain}:${r.txHash.toLowerCase()}`) && (!!r.orderNumber || isOwnReceipt(r, walletAddress)))
       .map(r => ({ id: `rcpt_${r.id}`, intentId: '', chain: r.chain, txHash: r.txHash, from: r.from ?? '0x0000000000000000000000000000000000000000',
         amount: r.amount, method: isOwnReceipt(r, walletAddress) ? 'own_transfer' : 'chain_receipt',
         status: r.status === 'converted' ? 'collected' : 'in_ledger', customerUsername: null,
         createdAt: r.createdAt, orderNumber: r.orderNumber, matchedBy: null, screenFlag: r.screenFlag ?? null }))
-    const direct: MerchantPayment[] = activity
-      .filter(a => a.activityType === 'receive' && a.status === 'completed' && (a.tokenSymbol || 'USDC').toUpperCase() === 'USDC'
-        && a.txHash && !known.has(`Arc_Testnet:${a.txHash.toLowerCase()}`))
-      .map(a => ({ id: `act_${a.id}`, intentId: '', chain: 'Arc_Testnet', txHash: a.txHash!, from: a.counterpartyAddress ?? '0x0000000000000000000000000000000000000000',
-        amount: a.amount, method: 'direct', status: 'confirmed', createdAt: a.createdAt, orderNumber: null, matchedBy: null,
-        customerUsername: String((a.metadata as any)?.fromUsername ?? '').replace(/\.arc$/i, '') || null }))
-    setRaw([...orders, ...extra, ...direct].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))); setLoaded(true)
+    setRaw([...orders, ...extra].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))); setLoaded(true)
   }, [walletAddress])
   useEffect(() => { void load() }, [load])
   useEffect(() => (walletAddress ? subscribeMerchantPayments(walletAddress, () => { void load() }) : undefined), [walletAddress, load])

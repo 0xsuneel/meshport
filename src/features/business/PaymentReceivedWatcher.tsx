@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/store'
 import { useBusinessTab } from '@/lib/merchant'
-import { listMyPayments, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, displayOrderNumber, type MerchantPayment } from '@/lib/merchantPay'
+import { listMyPayments, subscribeMerchantPayments, displayOrderNumber, type MerchantPayment } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
 import { PaymentReceivedOverlay } from './ui'
 import { chainLabel } from './settlement'
@@ -28,13 +28,10 @@ export function PaymentReceivedWatcher() {
     let running: Promise<void> = Promise.resolve()
     const check = () => { running = running.then(load, load); return running }
     const load = async () => {
-      const [paid, receipts] = await Promise.all([listMyPayments(50).catch(() => null), listChainReceipts(30).catch(() => [])])
-      if (!live || !paid) return
-      // Order payments are already in `paid`; own transfers aren't payments.
-      const list: MerchantPayment[] = [...paid, ...receipts.filter(r => !r.orderNumber && !isOwnReceipt(r, wallet)).map(r => ({
-        id: `rcpt_${r.id}`, intentId: '', chain: r.chain, txHash: r.txHash, from: r.from ?? '', amount: r.amount,
-        status: 'confirmed', customerUsername: null, orderNumber: null, createdAt: r.createdAt,
-      }) as unknown as MerchantPayment)]
+      // Order payments only (requests, bills, Shop QR, on any chain): USDC
+      // sent straight to the wallet without an order isn't a sale.
+      const list = await listMyPayments(50).catch(() => null)
+      if (!live || !list) return
       if (seen.current) {
         const fresh = list.filter(p => !seen.current!.has(p.id) && Date.now() - Date.parse(p.createdAt) < 10 * 60_000)
         if (fresh.length) { setShown(fresh[0]); fresh.forEach(p => speakPayment(p.amount)) }
@@ -43,7 +40,7 @@ export function PaymentReceivedWatcher() {
     }
     void check()
     const stop = subscribeMerchantPayments(wallet, () => { void check() })
-    // Other-chain receipts have no live feed - look every 20 s.
+    // A fallback if the live feed drops - look every 20 s.
     const t = setInterval(() => { if (document.visibilityState === 'visible') void check() }, 20_000)
     return () => { live = false; stop(); clearInterval(t) }
   }, [business, wallet])
