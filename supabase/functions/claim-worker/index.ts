@@ -20,7 +20,7 @@ function json(body: unknown, status = 200): Response {
 const DRPC_KEY = Deno.env.get('DRPC_KEY') ?? ''
 const CONFIGURED_ARC_RPC_URL = (Deno.env.get('ARC_RPC_URL') ?? '').trim()
 const CHAIN_RPCS: Record<string, string[]> = {
-  Ethereum_Sepolia:    [`https://lb.drpc.live/sepolia/${DRPC_KEY}`, 'https://ethereum-sepolia-rpc.publicnode.com', 'https://rpc.sepolia.org'],
+  Ethereum_Sepolia:    [`https://lb.drpc.live/sepolia/${DRPC_KEY}`, 'https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.drpc.org'],
   Base_Sepolia:        [`https://lb.drpc.live/base-sepolia/${DRPC_KEY}`, 'https://base-sepolia-rpc.publicnode.com', 'https://sepolia.base.org'],
   Arbitrum_Sepolia:    [`https://lb.drpc.live/arbitrum-sepolia/${DRPC_KEY}`, 'https://arbitrum-sepolia-rpc.publicnode.com', 'https://sepolia-rollup.arbitrum.io/rpc'],
   Optimism_Sepolia:    [`https://lb.drpc.live/optimism-sepolia/${DRPC_KEY}`, 'https://optimism-sepolia-rpc.publicnode.com', 'https://sepolia.optimism.io'],

@@ -55,7 +55,7 @@ const d = (net: string) => (DRPC_KEY ? [`https://lb.drpc.live/${net}/${DRPC_KEY}
 type ChainDef = { label: string; chainId: number; usdc: string; rpcs: string[]; route: 'direct' | 'ub' }
 export const PAY_CHAINS: Record<string, ChainDef> = {
   Arc_Testnet:      { label: 'Arc',       chainId: 5042002,  usdc: '0x3600000000000000000000000000000000000000', rpcs: ARC_RPCS, route: 'direct' },
-  Ethereum_Sepolia: { label: 'Ethereum',  chainId: 11155111, usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', rpcs: [...d('sepolia'), 'https://ethereum-sepolia-rpc.publicnode.com', 'https://rpc.sepolia.org'], route: 'ub' },
+  Ethereum_Sepolia: { label: 'Ethereum',  chainId: 11155111, usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', rpcs: [...d('sepolia'), 'https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.drpc.org'], route: 'ub' },
   Base_Sepolia:     { label: 'Base',      chainId: 84532,    usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', rpcs: [...d('base-sepolia'), 'https://base-sepolia-rpc.publicnode.com', 'https://sepolia.base.org'], route: 'ub' },
   Arbitrum_Sepolia: { label: 'Arbitrum',  chainId: 421614,   usdc: '0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d', rpcs: [...d('arbitrum-sepolia'), 'https://arbitrum-sepolia-rpc.publicnode.com', 'https://sepolia-rollup.arbitrum.io/rpc'], route: 'ub' },
   Optimism_Sepolia: { label: 'Optimism',  chainId: 11155420, usdc: '0x5fd84259d66Cd46123540766Be93DFE6D43130D7', rpcs: [...d('optimism-sepolia'), 'https://optimism-sepolia-rpc.publicnode.com', 'https://sepolia.optimism.io'], route: 'ub' },

@@ -221,7 +221,7 @@ export interface ExternalChainConfig {
 export const EXTERNAL_CHAINS: Record<string, ExternalChainConfig> = {
   Ethereum_Sepolia: {
     chainId:  11155111,
-    rpcs:     ['https://ethereum-sepolia-rpc.publicnode.com', 'https://rpc.sepolia.org'],
+    rpcs:     ['https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.drpc.org'],
     usdc:     '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
     decimals: 6,
   },
@@ -410,7 +410,7 @@ export function externalChainKey(id: string): string {
 // instead. Reconciling it is a deliberate follow-up decision, not a
 // side effect of moving files around.
 export const SDK_CHAIN_RPCS: Record<string, string[]> = {
-  'Ethereum Sepolia':    ['https://ethereum-sepolia-rpc.publicnode.com','https://rpc.sepolia.org'].filter(Boolean) as string[],
+  'Ethereum Sepolia':    ['https://ethereum-sepolia-rpc.publicnode.com','https://sepolia.drpc.org'].filter(Boolean) as string[],
   'Base Sepolia':        ['https://base-sepolia-rpc.publicnode.com','https://sepolia.base.org'].filter(Boolean) as string[],
   'Arbitrum Sepolia':    ['https://arbitrum-sepolia-rpc.publicnode.com','https://sepolia-rollup.arbitrum.io/rpc','https://arbitrum-sepolia.drpc.org'].filter(Boolean) as string[],
   'OP Sepolia':          ['https://optimism-sepolia-rpc.publicnode.com','https://sepolia.optimism.io'].filter(Boolean) as string[],

@@ -105,7 +105,7 @@ export const INDEXED_CHAINS: IndexedChain[] = [
   // USDC addresses match src/blockchain/chains.ts EXTERNAL_CHAINS exactly.
   {
     id: 'ethereum-sepolia', name: 'Ethereum Sepolia',
-    rpcs: [alchemy('eth-sepolia'), 'https://ethereum-sepolia-rpc.publicnode.com', 'https://rpc.sepolia.org'].filter(Boolean),
+    rpcs: [alchemy('eth-sepolia'), 'https://ethereum-sepolia-rpc.publicnode.com', 'https://sepolia.drpc.org'].filter(Boolean),
     confirmationDepth: 12, maxBlocksPerPass: 2000, logChunkSize: 500,
     enabled: true, nativeAsset: null, nativeTransferLogContract: null,
     tokens: [{ symbol: 'USDC', contract: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', decimals: 6 }],
