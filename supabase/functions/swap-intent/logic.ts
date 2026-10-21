@@ -99,7 +99,9 @@ export interface NonceFetcher {
 }
 
 export type CreateIntentOutcome =
-  | { outcome: 'created'; intentId: string; attemptId: string; nonce: number }
+  // backgroundTransition: the already-started intent status update, kept
+  // alive past the response by index.ts (same as pay-intent/logic.ts).
+  | { outcome: 'created'; intentId: string; attemptId: string; nonce: number; backgroundTransition: Promise<void> }
   | { outcome: 'idempotent_replay'; intentId: string; attemptId: string | null }
   | { outcome: 'invalid_request'; reason: string }
 
@@ -153,6 +155,11 @@ export async function createSwapIntent(
     return { outcome: 'idempotent_replay', intentId: existing.id, attemptId: existing.attemptId }
   }
 
+  // The first nonce lookup (chain state) runs alongside insertIntent (a DB
+  // write) instead of after it - one round trip fewer, as in pay-intent.
+  const firstNoncePromise = nonceFetcher.getPendingNonce(req.chainId, wallet)
+  firstNoncePromise.catch(() => {}) // unused on the replay branch
+
   const insertResult: { outcome: 'inserted'; id: string } | { outcome: 'conflict' } = resumable && existing
     ? { outcome: 'inserted', id: existing.id }
     : await repo.insertIntent({
@@ -198,7 +205,7 @@ export async function createSwapIntent(
   // rather than trusting the RPC's answer again.
   let floorNonce = -1
   for (let i = 0; i < MAX_NONCE_RESERVATION_ATTEMPTS; i++) {
-    const rpcNonce = await nonceFetcher.getPendingNonce(req.chainId, wallet)
+    const rpcNonce = i === 0 ? await firstNoncePromise : await nonceFetcher.getPendingNonce(req.chainId, wallet)
     const nonce = Math.max(rpcNonce, floorNonce + 1)
     const attemptResult = await repo.insertAttempt({
       intent_id: intentId,
@@ -208,8 +215,9 @@ export async function createSwapIntent(
       status: 'CREATED',
     })
     if (attemptResult.outcome === 'inserted') {
-      await repo.transitionIntentToSubmitted(intentId)
-      return { outcome: 'created', intentId, attemptId: attemptResult.id, nonce }
+      // Bookkeeping only (AUTHORIZING -> SUBMITTED): not awaited, so the
+      // swap can be signed without waiting for it.
+      return { outcome: 'created', intentId, attemptId: attemptResult.id, nonce, backgroundTransition: repo.transitionIntentToSubmitted(intentId) }
     }
     // BUG FIX: see reclaimStaleAttempt's own doc comment on IntentRepository
     // above for the full reasoning.

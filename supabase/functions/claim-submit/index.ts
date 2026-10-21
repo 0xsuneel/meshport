@@ -80,6 +80,17 @@ Deno.serve(async (req: Request) => {
   // Started alongside the wallet lookup so it adds no wait (checked below).
   const canSpendCheck = callerCanSpend(req, supabase)
   canSpendCheck.catch(() => {})
+  // Read-only lookups the claim needs, started now instead of one after
+  // another once the checks below pass (they used to add ~3 round trips,
+  // the Arc balance read waiting on every Arc node). Nothing is written
+  // until the checks succeed.
+  const jwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
+  const userIdLookup: Promise<string | null> = jwt
+    ? supabase.auth.getUser(jwt).then(({ data }) => data?.user?.id ?? null, () => null)
+    : Promise.resolve(null)
+  const balanceLookup: Promise<number | null> = getArcNativeBalance(walletAddress).catch(() => null)
+  // Promise.resolve: a query builder only runs once something awaits it.
+  const existingLookup = Promise.resolve(supabase.from('claims').select('id, status').eq('tx_hash', txHash).maybeSingle())
 
   // Claims can only be filed for the caller's own wallet.
   const myWallet = await callerWallet(req, supabase)
@@ -91,30 +102,12 @@ Deno.serve(async (req: Request) => {
   if (canSpend === false) return json({ success: false, error: ACCOUNT_LOCKED_ERROR }, 403)
   if (canSpend === null) return json({ success: false, error: 'Could not check your account - please try again' }, 503)
 
-  // Best-effort: try to identify the calling user from their JWT (anonymous
-  // wallet sessions still carry a valid auth.users id). Not required.
-  let userId: string | null = null
-  try {
-    const authHeader = req.headers.get('Authorization') ?? ''
-    const jwt = authHeader.replace(/^Bearer\s+/i, '')
-    if (jwt) {
-      const { data } = await supabase.auth.getUser(jwt)
-      userId = data?.user?.id ?? null
-    }
-  } catch { /* non-fatal */ }
-
-  // Snapshot the Arc balance now so the worker can later detect arrival by
-  // comparing against this baseline (read-only RPC call, no signing).
-  let arcBalanceBefore: number | null = null
-  try {
-    arcBalanceBefore = await getArcNativeBalance(walletAddress)
-  } catch { /* worker will re-derive if this fails */ }
-
-  const { data: existing, error: existingErr } = await supabase
-    .from('claims')
-    .select('id, status')
-    .eq('tx_hash', txHash)
-    .maybeSingle()
+  // Best-effort: the calling user from their JWT (anonymous wallet sessions
+  // still carry a valid auth.users id), and the Arc balance now so the worker
+  // can later detect arrival against this baseline (null: the worker
+  // re-derives it). Both started above.
+  const [userId, arcBalanceBefore, { data: existing, error: existingErr }] =
+    await Promise.all([userIdLookup, balanceLookup, existingLookup])
 
   if (existingErr) {
     // Don't silently proceed as if no duplicate exists - that's how a

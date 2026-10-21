@@ -19,6 +19,7 @@ describe('session passcode verification', () => {
 
   it('a second check of the same passcode is instant', async () => {
     const hash = await hashPasscode('123456')
+    forgetVerifiedPasscodes() // as after a lock: the first check is the full one
     let t = performance.now()
     expect(await verifyPasscode('123456', hash)).toBe(true)
     const full = performance.now() - t
@@ -30,11 +31,18 @@ describe('session passcode verification', () => {
 
   it('never remembers a wrong passcode, and is tied to the stored hash', async () => {
     const hash = await hashPasscode('123456')
+    const other = await hashPasscode('123456') // same passcode, new hash (e.g. after a change)
+    forgetVerifiedPasscodes()
     expect(await verifyPasscode('000000', hash)).toBe(false)
     expect(await isPasscodeVerifiedThisSession('000000', hash)).toBe(false)
     await verifyPasscode('123456', hash)
-    const other = await hashPasscode('123456') // same passcode, new hash (e.g. after a change)
     expect(await isPasscodeVerifiedThisSession('123456', other)).toBe(false)
+  })
+
+  it('a passcode just set counts as verified for its own new hash', async () => {
+    const hash = await hashPasscode('123456')
+    expect(await isPasscodeVerifiedThisSession('123456', hash)).toBe(true)
+    expect(await isPasscodeVerifiedThisSession('000000', hash)).toBe(false)
   })
 
   it('lock / sign-out forgets everything', async () => {

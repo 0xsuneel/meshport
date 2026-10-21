@@ -62,7 +62,11 @@ export async function hashPasscode(passcode: string): Promise<string> {
     key,
     enc.encode(VERIFY_PLAINTEXT)
   )
-  return `v3:${toBase64(salt)}:${toBase64(new Uint8Array(ciphertext))}`
+  const hash = `v3:${toBase64(salt)}:${toBase64(new Uint8Array(ciphertext))}`
+  // Made from this very passcode: the first payment approval after setting it
+  // needn't stretch it another 600,000 times (memory only, as after unlock).
+  await markPasscodeVerified(passcode, hash)
+  return hash
 }
 
 // ─── Brute-force lockout for the app-lock passcode ───────────────────────────
