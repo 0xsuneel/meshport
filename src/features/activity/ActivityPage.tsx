@@ -865,6 +865,20 @@ export function recordMovesToken(r: ActivityRecord, token: string): boolean {
   return (r.tokenSymbol || 'USDC').toUpperCase() === t
 }
 
+/** The server query for a tab. A tab preselected from the URL (?filter=…)
+ *  is passed to useActivity as its first filter. */
+function filterForTab(tab: ActivityTab): ActivityType | undefined {
+  // For bridge/p2p tabs: pass a special value; useActivity/fetchActivity will handle it
+  if (tab === 'all') return undefined
+  if (tab === 'bridge') return 'bridge' as ActivityType  // handled in fetchActivity
+  if (tab === 'p2p') return 'p2p' as ActivityType        // handled in fetchActivity
+  // 'merchant' isn't an activity_type - fetch everything and narrow client-side (displayed below).
+  if (tab === 'merchant') return undefined
+  // Rewards claimed to USDC are receives; narrowed client-side below.
+  if (tab === 'rewards') return 'receive'
+  return tab as ActivityType
+}
+
 export function ActivityPage() {
   const navigateAll = useNavigate()
   const location = useLocation()
@@ -916,7 +930,7 @@ export function ActivityPage() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const tokenFilter = new URLSearchParams(location.search).get('token')
 
-  const { records, loading, loadingMore, error, hasMore, setFilter, setSearch, loadMore, refresh } = useActivity(walletAddress)
+  const { records, loading, loadingMore, error, hasMore, setFilter, setSearch, loadMore, refresh } = useActivity(walletAddress, filterForTab(activeTab))
 
   // Debounce the search box → useActivity's `search` state, which re-queries
   // Supabase (see fetchActivity's search clause) rather than only filtering
@@ -933,27 +947,15 @@ export function ActivityPage() {
   // safe to call every time this page mounts (self-deduplicating).
   useEffect(() => {
     if (!userId || !walletAddress) return
-    backfillP2PActivity(userId, walletAddress).then(() => refresh())
+    // Reload only when it added rows - reloading every visit swapped the
+    // list a second time (and dropped any pages already scrolled in).
+    backfillP2PActivity(userId, walletAddress).then(wrote => { if (wrote) refresh() })
   }, [userId, walletAddress])
 
   const handleTabChange = useCallback((tab: ActivityTab) => {
     setActiveTab(tab)
-    // For bridge/p2p tabs: pass a special value; useActivity/fetchActivity will handle it
-    if (tab === 'all') setFilter(undefined)
-    else if (tab === 'bridge') setFilter('bridge' as ActivityType)  // handled below in fetchActivity
-    else if (tab === 'p2p') setFilter('p2p' as ActivityType)        // handled below in fetchActivity
-    // 'merchant' isn't an activity_type - fetch everything and narrow client-side (displayed below).
-    else if (tab === 'merchant') setFilter(undefined)
-    // Rewards claimed to USDC are receives; narrowed client-side below.
-    else if (tab === 'rewards') setFilter('receive')
-    else setFilter(tab as ActivityType)
+    setFilter(filterForTab(tab))
   }, [setFilter])
-
-  // A tab preselected from the URL (?filter=bridge…) must also filter the server query.
-  useEffect(() => {
-    if (activeTab !== 'all') handleTabChange(activeTab)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     const el = bottomRef.current
