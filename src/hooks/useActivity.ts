@@ -60,11 +60,11 @@ const ONCHAIN_POLL_MS = 60_000
 // the first page arrived). The first page of each view is kept - in memory
 // for every filter, and on this device for the unfiltered list - shown at
 // once, then refreshed from the server in the background. Cleared on logout.
-// Kept in step with what's on screen (live inserts included) and shown only
-// while it's recent: an older copy showed last time's list, then jumped as
-// the newer rows came in - a short skeleton reads better than that.
+// Kept in step with what's on screen (live inserts included). A copy up to a
+// day old is shown at once on reopen - newer rows then slide in on top - since
+// a skeleton on every reopen made history feel slow; older than that, skeleton.
 export const ACTIVITY_CACHE_PREFIX = 'meshport_activity_cache_'
-const CACHE_FRESH_MS = 2 * 60_000
+const CACHE_FRESH_MS = 24 * 60 * 60_000
 type CacheEntry = { at: number; list: ActivityRecord[] }
 const memCache = new Map<string, CacheEntry>()
 const cacheKey = (wallet: string, filter?: string, search?: string) => `${wallet.toLowerCase()}|${filter ?? 'all'}|${search ?? ''}`
