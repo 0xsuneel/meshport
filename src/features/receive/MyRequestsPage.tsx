@@ -4,7 +4,7 @@
 // to reopen it: a waiting one shows its QR / Share / Cancel again, a paid one
 // shows who paid, how much, when and the transaction.
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Plus } from 'lucide-react'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
@@ -38,7 +38,7 @@ function when(iso: string | null | undefined): string {
   return `${date}, ${time}`
 }
 
-function statusLine(i: MerchantIntent): { text: string; color: string } {
+export function statusLine(i: MerchantIntent): { text: string; color: string } {
   const st = requestStatus(i)
   const who = i.customerUsername ? `${i.customerUsername.replace(/\.arc$/i, '')}.arc` : null
   if (st === 'paid') {
@@ -78,6 +78,16 @@ export function MyRequestsPage() {
     const iv = setInterval(() => { void load() }, 30_000)
     return () => { unsub(); clearInterval(iv) }
   }, [walletAddress, load])
+
+  // ?open=<id>: opened from Receive's desktop "My requests" panel.
+  const [params, setParams] = useSearchParams()
+  const openId = params.get('open')
+  useEffect(() => {
+    if (!openId || !items) return
+    const hit = items.find(i => i.id === openId)
+    if (hit) setOpen(hit)
+    setParams(p => { p.delete('open'); return p }, { replace: true })
+  }, [openId, items, setParams])
 
   const counts = { waiting: 0, paid: 0, closed: 0 }
   for (const i of items ?? []) counts[requestBucket(i)] += 1
