@@ -272,3 +272,39 @@ Deno.test('getHead: throws only when EVERY endpoint fails', async () => {
   const fetchImpl = (async () => { throw new Error('down') }) as unknown as typeof fetch
   await assertRejects(() => getHead(['https://a.test', 'https://b.test'], { fetchImpl, ...noSleep }), 'expected getHead to throw when all endpoints fail')
 })
+
+Deno.test('scanRange: nativeAsset null (external chain) never fetches blocks, still emits ERC-20 transfers and confirms their block', async () => {
+  const tokenContract = '0xTokenContract'
+  const chain = { id: 'arbitrum-sepolia', rpcs: [RPC_URL], nativeAsset: null, nativeTransferLogContract: null, tokens: [{ symbol: 'USDC', contract: tokenContract, decimals: 6 }] }
+  const knownWallets = new Set([WALLET1])
+  const methods: string[] = []
+
+  const fetchImpl = fakeRpc({
+    [RPC_URL]: (method) => {
+      methods.push(method)
+      if (method === 'eth_getLogs') {
+        return [{
+          address: tokenContract,
+          topics: [TRANSFER_TOPIC0, pad32(SENDER), pad32(WALLET1)],
+          data: '0x' + (2_000_000).toString(16),
+          transactionHash: '0xexternaltx',
+          blockNumber: '0x96',
+          blockHash: '0xblockhash150',
+          logIndex: '0x0',
+          transactionIndex: '0x0',
+        }]
+      }
+      // Only the tip-hash lookup may read a block - and only the header.
+      if (method === 'eth_getBlockByNumber') return { hash: '0xtip' }
+      throw new Error(`unexpected method ${method}`)
+    },
+  })
+
+  const outcome = await scanRange(chain, 100, 200, knownWallets, { fetchImpl, ...noSleep })
+
+  assertEquals(methods.filter(m => m === 'eth_getBlockByNumber').length, 1, 'only the single tip-hash read, no per-block scan')
+  assertEquals(outcome.safeUpTo, 200)
+  assertEquals(outcome.events.length, 1)
+  assertEquals(outcome.events[0].event_type, 'transfer_detected')
+  assertEquals(outcome.confirmableBlocks, [150])
+})
