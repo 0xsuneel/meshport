@@ -80,16 +80,21 @@ const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a
 
 // Blocks a payment must be under the chain head before it's credited (reorg
 // safety). Arc has deterministic finality: a block is final when produced.
+// Sized to seconds, not minutes: the receipt, the "Payment received"
+// notification and its phone push all wait on this, and Ethereum Sepolia's
+// old 12 blocks (12s each) held every business payment back ~2.5 minutes.
+// Testnet reorgs deeper than these are not seen in practice; Polygon keeps
+// a larger margin (it does reorg).
 export const CONFIRMATIONS: Record<string, number> = {
   Arc_Testnet: 0,
-  Ethereum_Sepolia: 12,
-  Base_Sepolia: 10, Optimism_Sepolia: 10, Unichain_Sepolia: 10, World_Chain_Sepolia: 10, Ink_Testnet: 10, Linea_Sepolia: 10,
-  Arbitrum_Sepolia: 20, // ~0.25 s blocks
-  Polygon_Sepolia: 64,
+  Ethereum_Sepolia: 3, // ~36s
+  Base_Sepolia: 5, Optimism_Sepolia: 5, Unichain_Sepolia: 5, World_Chain_Sepolia: 5, Ink_Testnet: 5, Linea_Sepolia: 5, // ~10s
+  Arbitrum_Sepolia: 20, // ~0.25 s blocks: ~5s
+  Polygon_Sepolia: 32, // ~64s
   Avalanche_Fuji: 3, Sonic_Testnet: 3, Sei_Testnet: 3, Injective_Testnet: 3, // fast-finality chains
   XDC_Apothem: 5, HyperEVM_Testnet: 5,
 }
-export const DEFAULT_CONFIRMATIONS = 10
+export const DEFAULT_CONFIRMATIONS = 5
 export const confirmationsFor = (chainId: string) => CONFIRMATIONS[chainId] ?? DEFAULT_CONFIRMATIONS
 
 function serviceKey(): string {
@@ -799,18 +804,32 @@ async function watchDeposits() {
         // notified twice). Moved to Arc by the merchant's Claim All.
         if (!isArc && merchantWallets.has(to)) {
           const { data: paid } = await db.from('merchant_payments').select('order_number').eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', to).maybeSingle()
-          // Own transfer: the merchant sent USDC from Arc to this chain lately.
+          // Who sent a mint: the MeshPort transfer it is the arrival of. Its
+          // row is the sender's (the merchant's own transfer, or a customer
+          // paying through Multichain Transfer). This used to look only at the
+          // merchant's own rows and then fall back to "any own transfer to
+          // this chain in the last 6h" - so a customer's payment counted as
+          // the merchant's own USDC: wrong wording, and no "Payment received".
           let sender = from
           if (minted) {
-            // Exactly this mint as the arrival of one of the merchant's own transfers…
-            const { data: exact } = await db.from('activity').select('id')
-              .eq('activity_type', 'bridge').eq('destination_tx_hash', tx).ilike('wallet_address', to).limit(1)
-            // …or a recent own transfer to this chain (older rows without the arrival hash).
-            const { data: own } = exact?.length ? { data: exact } : await db.from('activity').select('id')
-              .eq('wallet_address', to).eq('activity_type', 'bridge')
-              .in('destination_chain', [chainId, chainId === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : chainId])
-              .gte('created_at', new Date(Date.now() - OWN_TRANSFER_WINDOW_MS).toISOString()).limit(1)
-            if (!own?.length) {
+            const chains = [chainId, chainId === 'Polygon_Sepolia' ? 'Polygon_Amoy_Testnet' : chainId]
+            // 1) The transfer whose arrival this exact mint is (any wallet).
+            const { data: exact } = await db.from('activity').select('wallet_address')
+              .eq('activity_type', 'bridge').ilike('destination_tx_hash', tx).limit(1)
+            let by: string | null = exact?.[0]?.wallet_address ? String(exact[0].wallet_address).toLowerCase() : null
+            if (!by) {
+              // 2) Its arrival isn't written yet: an open transfer to this chain,
+              //    from the merchant or naming the merchant, sending this amount
+              //    plus Circle's fee (under 1 USDC).
+              const { data: open } = await db.from('activity').select('wallet_address, amount, created_at')
+                .eq('activity_type', 'bridge').in('destination_chain', chains).is('destination_tx_hash', null)
+                .or(`wallet_address.ilike.${to},counterparty_address.ilike.${to}`)
+                .gte('amount', amount).lte('amount', amount + 1)
+                .gte('created_at', new Date(Date.now() - OWN_TRANSFER_WINDOW_MS).toISOString())
+                .order('created_at', { ascending: false }).limit(1)
+              by = open?.[0]?.wallet_address ? String(open[0].wallet_address).toLowerCase() : null
+            }
+            if (!by) {
               // Held only with a known block time - an unreadable one must never stall the cursor.
               const b = await rpc(chain.rpcs, 'eth_getBlockByNumber', [log.blockNumber, false]).catch(() => null)
               const minedAt = b?.timestamp ? parseInt(b.timestamp, 16) * 1000 : NaN
@@ -820,7 +839,9 @@ async function watchDeposits() {
                 continue
               }
             }
-            sender = own?.length ? to : ZERO
+            // The merchant's own transfer keeps the merchant as sender; a
+            // customer's names them; a bridge from outside MeshPort stays 0x0.
+            sender = by ?? ZERO
           }
           const { data: already } = await db.from('merchant_chain_receipts').select('id')
             .eq('source_chain', chainId).eq('tx_hash', tx).eq('merchant_wallet', to).maybeSingle()
