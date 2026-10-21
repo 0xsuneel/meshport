@@ -350,8 +350,10 @@ async function verifySwapLanded(walletAddress: string, tokenOutSymbol: string): 
 // (action='recordCompletion') that takes a txHash + amounts, never a
 // private key - the SERVICE_ROLE key it needs stays server-only, same as
 // before, just no longer bundled into the same request as the signing.
-// Awaited (not fire-and-forget) by callers so the same "close the race with
-// deposit-scan-all's independent sweep" property is preserved.
+// Not awaited by callers: the write starts the moment the swap confirms
+// either way (that is what closes the race with deposit-scan-all's sweep);
+// holding the success screen until the server answered only added a round
+// trip. It never throws.
 async function recordCompletion(params: {
   walletAddress: string; txHash: string; amountIn: number; amountOut: number
   tokenIn: string; tokenOut: string; intentId?: string | null; attemptId?: string | null
@@ -411,7 +413,8 @@ async function settleSwapTx(): Promise<{ kind: 'not-sent' | 'unknown' } | { kind
       const r = j?.result
       if (r) return { kind: r.status === '0x1' ? 'confirmed' : 'reverted', hash, receipt: r }
     } catch { /* keep trying until the deadline */ }
-    await new Promise(res => setTimeout(res, 1500))
+    // Arc blocks are ~0.5s: a 1.5s gap kept a confirmed swap waiting.
+    await new Promise(res => setTimeout(res, 300))
   }
   return { kind: 'unknown' }
 }
@@ -460,7 +463,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
     config:   { slippageBps: slip },
   }
 
-  const finish = (txHash: string, amountOut: number) => recordCompletion({
+  const finish = (txHash: string, amountOut: number) => void recordCompletion({
     walletAddress: params.walletAddress, txHash, amountIn: parsedAmt, amountOut,
     tokenIn: params.tokenIn, tokenOut: params.tokenOut,
     intentId: params.intentId, attemptId: params.attemptId,
@@ -471,7 +474,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
     // amountOut from the confirmed swap's own Transfer log to this wallet (the
     // service's status poll is skipped - see routeSwapServiceThroughServer).
     const amountOut = result?.amountOut || amountOutFromReceipt(_swapReceipt, params.tokenOut, params.walletAddress) || ''
-    if (result?.txHash) await finish(result.txHash, parseFloat(amountOut || '0') || 0)
+    if (result?.txHash) finish(result.txHash, parseFloat(amountOut || '0') || 0)
     return { txHash: result?.txHash || '', amountOut, explorerUrl: result?.explorerUrl || '' }
   } catch (e1: any) {
     const { raw: raw1, userMessage: msg1, isLiquidity, isUncertain } = extractError(e1, sdkMods)
@@ -484,7 +487,7 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
     if (settled.kind === 'confirmed') {
       const amountOut = amountOutFromReceipt(settled.receipt, params.tokenOut, params.walletAddress)
       console.warn('[Swap] kit.swap threw but the swap confirmed on Arc:', settled.hash)
-      await finish(settled.hash, parseFloat(amountOut || '0') || 0)
+      finish(settled.hash, parseFloat(amountOut || '0') || 0)
       return { txHash: settled.hash, amountOut, explorerUrl: `${ARC_EXPLORER}/tx/${settled.hash}` }
     }
     if (settled.kind === 'reverted') {
@@ -499,12 +502,12 @@ async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amo
     const possibleHash = extractPossibleTxHash(e1)
     if (possibleHash) {
       console.warn('[Swap] swap threw but a txHash was present - recording activity defensively:', possibleHash)
-      await finish(possibleHash, 0)
+      finish(possibleHash, 0)
     } else if (isUncertain) {
       const landed = await verifySwapLanded(params.walletAddress, params.tokenOut)
       if (landed) {
         console.warn('[Swap] verified swap landed on-chain despite the throw:', landed)
-        await finish(landed.txHash, landed.amount)
+        finish(landed.txHash, landed.amount)
         return { txHash: landed.txHash, amountOut: String(landed.amount), explorerUrl: `${ARC_EXPLORER}/tx/${landed.txHash}` }
       }
     }
