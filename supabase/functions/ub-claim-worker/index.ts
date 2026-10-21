@@ -216,8 +216,13 @@ async function processSubmitted(row: any) {
 }
 
 // Short inline follow-up after a transfer is submitted (see the end of the run).
-const FOLLOW_MS = 25_000
+const FOLLOW_MS = 40_000
 const FOLLOW_POLL_MS = 2_500
+// Claims waiting on their deposit, created in the last 45 min, are checked
+// every 12s for the first 30s of a run.
+const WAIT_FOLLOW_POLL_MS = 12_000
+const WAIT_FOLLOW_MS = 30_000
+const WAIT_FOLLOW_FRESH_MS = 45 * 60 * 1000
 
 Deno.serve(async (req: Request) => {
   if (!isCronOrLegacyServiceCaller(req)) return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 })
@@ -239,19 +244,46 @@ Deno.serve(async (req: Request) => {
 
   // The forwarder mint on Arc takes seconds: follow the transfers this run
   // just submitted (or that are still minting) for a short while, instead of
-  // leaving them for the next cron tick a minute later.
+  // leaving them for the next cron tick a minute later. Fresh claims still
+  // waiting on their deposit are re-checked too, so a deposit that turns final
+  // just after this tick is sent on within seconds rather than up to a minute
+  // later. Runs in the background (the cron caller hangs up after a few
+  // seconds) and ends well before the next tick, so two runs never submit
+  // the same claim at once.
   const minting = (rows ?? []).filter(r => (results[r.id] === 'submitted' || results[r.id] === 'pending') && r.transfer_id)
-  if (minting.length) {
-    const until = Date.now() + FOLLOW_MS
-    await Promise.all(minting.map(async (row) => {
-      while (Date.now() < until) {
-        await new Promise(r => setTimeout(r, FOLLOW_POLL_MS))
-        try {
-          const out = await processSubmitted(row)
-          if (out !== 'pending') { results[row.id] = out; return }
-        } catch { /* next cron tick retries */ }
+  const fresh = Date.now() - WAIT_FOLLOW_FRESH_MS
+  const waiting = (rows ?? []).filter(r => results[r.id] === 'waiting' && new Date(r.created_at).getTime() > fresh)
+  if (minting.length || waiting.length) {
+    const follow = (async () => {
+      const until = Date.now() + FOLLOW_MS
+      const waitUntil = Date.now() + WAIT_FOLLOW_MS
+      const followMint = async (row: any) => {
+        while (Date.now() < until) {
+          await new Promise(r => setTimeout(r, FOLLOW_POLL_MS))
+          try {
+            if ((await processSubmitted(row)) !== 'pending') return
+          } catch { /* next cron tick retries */ }
+        }
       }
-    }))
+      await Promise.all([
+        ...minting.map(followMint),
+        ...waiting.map(async (row) => {
+          // Last check starts by +24s, so even with slow Gateway answers it
+          // is done before the next tick picks the same claim up.
+          while (Date.now() + WAIT_FOLLOW_POLL_MS < waitUntil) {
+            await new Promise(r => setTimeout(r, WAIT_FOLLOW_POLL_MS))
+            try {
+              const out = await processWaiting(row)
+              if (out === 'submitted') return followMint(row)
+              if (out !== 'waiting') return
+            } catch { return /* next cron tick retries */ }
+          }
+        }),
+      ])
+    })().catch(e => console.error('[ub-claim-worker] follow failed:', e instanceof Error ? e.message : e))
+    // @ts-ignore - EdgeRuntime is available in the Supabase Edge Functions runtime
+    if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) EdgeRuntime.waitUntil(follow)
+    else await follow
   }
   return new Response(JSON.stringify({ processed: rows?.length ?? 0, results }), { headers: { 'Content-Type': 'application/json' } })
 })

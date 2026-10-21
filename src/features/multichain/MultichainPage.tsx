@@ -602,6 +602,8 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
       try {
         // Transfers-out still come from the `activity` table - multichain
         // sends don't have a server-tracked state machine of their own.
+        // Merchant receipts load alongside (they used to wait for the transfers).
+        const receiptsPromise = loadChainReceiptItems()
         const bridges = await fetchActivity(walletAddress, { activityType: 'bridge', limit: 200, includePendingBridge: true })
 
         // Claims: `serverClaims` (the `claims` table, kept live via
@@ -762,7 +764,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
             destinationTxHash: item.metadata?.completed_tx_hash || undefined,
           }))
 
-        const receiptItems = await loadChainReceiptItems()
+        const receiptItems = await receiptsPromise
         if (!current()) return
         setDbActivity(markOwnClaims([...claimItems, ...ubClaimItems, ...bridgeItems, ...failedBringItems, ...recoveryItems, ...receiptItems]).sort((a, b) => b.timestamp - a.timestamp))
       } catch {

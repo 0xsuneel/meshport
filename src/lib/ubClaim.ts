@@ -90,9 +90,11 @@ export const UB_MIN_SWEEP = 0.5
 export const UB_DUST_CLAIM_MIN = Number.POSITIVE_INFINITY
 
 const CONFIRM_TIMEOUT_MS = 30 * 60 * 1000
-// The source chain's finality takes minutes - checked every 10s. Once the
-// server is sending it to Arc (seconds away) the screen checks every 2s.
+// The source chain's finality takes minutes - checked every 10s (Gateway's
+// balance API, device path). The server-claim row is one cheap read, so the
+// screen follows it every 5s, and every 2s once it is being sent to Arc.
 const POLL_MS = 10_000
+const POLL_SERVER_MS = 5_000
 const POLL_MINTING_MS = 2_000
 type Stage = 'approving' | 'attesting' | 'minting' | 'done' | 'error'
 type StepFn = (stage: Stage, msg: string, pct: number, extra?: {
@@ -640,7 +642,7 @@ async function followServerClaim(id: string, chainLabel: string, depositTx: stri
   const started = Date.now()
   let shownMinting = false
   while (Date.now() - started < CONFIRM_TIMEOUT_MS) {
-    await new Promise(r => setTimeout(r, shownMinting ? POLL_MINTING_MS : POLL_MS))
+    await new Promise(r => setTimeout(r, shownMinting ? POLL_MINTING_MS : POLL_SERVER_MS))
     const { data } = await supabase.from('ub_claim_intents').select('status, send_amount, mint_tx, last_error').eq('id', id).maybeSingle()
     const row: any = data
     if (!row) continue
