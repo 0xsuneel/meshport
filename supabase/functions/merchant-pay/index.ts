@@ -109,7 +109,7 @@ const db = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey())
 
 const errText = (e: unknown) => e instanceof Error ? e.message : typeof e === 'object' ? JSON.stringify(e) : String(e)
 
-async function rpc(urls: string[], method: string, params: unknown[]): Promise<any> {
+async function rpc(urls: string[], method: string, params: unknown[], timeoutMs = 8000): Promise<any> {
   // Every endpoint's refusal is kept, not just the last one: a node's
   // "pruned history" answer followed by a dead fallback's timeout must still
   // read as pruned history to scanLogs.
@@ -120,7 +120,7 @@ async function rpc(urls: string[], method: string, params: unknown[]): Promise<a
       const r = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(timeoutMs),
       })
       const j = await r.json()
       if (j.error) { errors.push(errText(j.error)); continue }
@@ -492,8 +492,8 @@ const PRUNED_JUMP = 1000
  * blocks; and a block-range limit → retry with a 100-block window.
  * Returns the range actually read, so the cursor moves on from there.
  */
-async function scanLogs(rpcs: string[], filter: Record<string, unknown>, from: number, to: number, latest: number): Promise<{ fromBlock: number; toBlock: number; logs: any[] }> {
-  const query = async (f: number, t: number) => (await rpc(rpcs, 'eth_getLogs', [{ ...filter, fromBlock: hex(f), toBlock: hex(t) }])) ?? []
+async function scanLogs(rpcs: string[], filter: Record<string, unknown>, from: number, to: number, latest: number, timeoutMs?: number): Promise<{ fromBlock: number; toBlock: number; logs: any[] }> {
+  const query = async (f: number, t: number) => (await rpc(rpcs, 'eth_getLogs', [{ ...filter, fromBlock: hex(f), toBlock: hex(t) }], timeoutMs)) ?? []
   try {
     return { fromBlock: from, toBlock: to, logs: await query(from, to) }
   } catch (e) {
@@ -560,6 +560,21 @@ async function txMemoIds(rpcs: string[], tx: string): Promise<string[]> {
 const LATE_WINDOW_MS = 86400_000
 
 const pad = (a: string) => '0x' + a.replace(/^0x/, '').toLowerCase().padStart(64, '0')
+
+// The watch runs every 15 seconds and every chain is read at once, so a run
+// lasts as long as its slowest chain. A few public testnet RPCs hang or
+// answer garbage for long stretches; with an 8s timeout per endpoint they
+// kept every run at 3-30s. Background reads get a short timeout, and a chain
+// that failed is left out for a while (doubling, up to 5 min) - its cursor
+// doesn't move, so nothing is missed: it catches up once its RPC answers.
+const WATCH_RPC_TIMEOUT_MS = 3500
+const BACKOFF_BASE_MS = 15_000
+const BACKOFF_MAX_MS = 5 * 60_000
+const chainBackoff = new Map<string, { fails: number; until: number }>()
+const chainFailed = (chainId: string) => {
+  const fails = (chainBackoff.get(chainId)?.fails ?? 0) + 1
+  chainBackoff.set(chainId, { fails, until: Date.now() + Math.min(BACKOFF_BASE_MS * 2 ** (fails - 1), BACKOFF_MAX_MS) })
+}
 const hex = (n: number) => '0x' + n.toString(16)
 
 async function watchDeposits() {
@@ -576,9 +591,10 @@ async function watchDeposits() {
   // payment there (order or not) is recorded and notified ("Payment received
   // on Base"). It stays on that chain until the merchant's auto-convert.
   // Business accounts too (approved or not): their Business tab shows these.
-  const [{ data: apps }, { data: biz }] = await Promise.all([
+  const [{ data: apps }, { data: biz }, { data: cursors }] = await Promise.all([
     db.from('merchant_applications').select('wallet_address').eq('status', 'approved'),
     db.from('users').select('wallet_address').eq('account_type', 'business').not('wallet_address', 'is', null),
+    db.from('merchant_deposit_cursors').select('chain, last_block'),
   ])
   const merchantWallets = new Set([...(apps ?? []), ...(biz ?? [])].map((a: any) => String(a.wallet_address ?? '').toLowerCase()).filter(Boolean))
   if (intents.length === 0 && merchantWallets.size === 0) return { scanned: 0, matched: 0, review: 0 }
@@ -591,7 +607,6 @@ async function watchDeposits() {
     for (const u of us ?? []) if (u.wallet_address) custWallet.set(String(u.id), String(u.wallet_address).toLowerCase())
   }
   const orderWallets = [...new Set(intents.map((i: any) => String(i.merchant_wallet).toLowerCase()))]
-  const { data: cursors } = await db.from('merchant_deposit_cursors').select('chain, last_block')
   const cursorOf = new Map((cursors ?? []).map((c: any) => [c.chain, Number(c.last_block)]))
 
   let scanned = 0, matched = 0, review = 0
@@ -599,6 +614,7 @@ async function watchDeposits() {
   // trips), then handle the payments one chain after another.
   type Fetched = { fromBlock: number; toBlock: number; logs: any[] | null } | { error: unknown } | null
   const fetched = new Map<string, Fetched>(await Promise.all(Object.entries(PAY_CHAINS).map(async ([chainId, chain]): Promise<[string, Fetched]> => {
+    if ((chainBackoff.get(chainId)?.until ?? 0) > Date.now()) return [chainId, null]
     const isArc = chainId === 'Arc_Testnet'
     // Arc: open orders only (plain Arc receives are handled by the app).
     const wallets = isArc ? orderWallets : [...new Set([...orderWallets, ...merchantWallets])]
@@ -609,7 +625,7 @@ async function watchDeposits() {
     let lastErr: unknown = null
     for (const url of chain.rpcs.filter(u => u && !u.endsWith('/'))) {
       try {
-        const head = parseInt(await rpc([url], 'eth_blockNumber', []), 16)
+        const head = parseInt(await rpc([url], 'eth_blockNumber', [], WATCH_RPC_TIMEOUT_MS), 16)
         if (!Number.isFinite(head)) throw new Error('bad eth_blockNumber')
         // Only blocks deep enough to be safe from reorgs (Arc: final at once).
         const latest = head - confirmationsFor(chainId)
@@ -617,13 +633,21 @@ async function watchDeposits() {
         const toBlock = Math.min(latest, fromBlock + (SCAN_RANGE[chainId] ?? DEFAULT_RANGE) - 1)
         if (fromBlock > toBlock) return [chainId, null]
         if (wallets.length === 0) return [chainId, { fromBlock, toBlock, logs: null }]
-        const read = await scanLogs([url], {
-          address: isArc ? ARC_NATIVE_EMITTER : chain.usdc,
-          topics: [TRANSFER_TOPIC, null, wallets.map(pad)],
-        }, fromBlock, toBlock, latest)
-        // The node that answered must have the last block it was asked about.
-        const end = await rpc([url], 'eth_getBlockByNumber', [hex(read.toBlock), false])
-        if (!end?.hash) throw new Error(`node behind block ${read.toBlock}`)
+        // The node that answered must have the last block it was asked about -
+        // asked alongside the logs instead of after them.
+        const hasBlock = async (n: number) => {
+          const end = await rpc([url], 'eth_getBlockByNumber', [hex(n), false], WATCH_RPC_TIMEOUT_MS)
+          if (!end?.hash) throw new Error(`node behind block ${n}`)
+        }
+        const [read] = await Promise.all([
+          scanLogs([url], {
+            address: isArc ? ARC_NATIVE_EMITTER : chain.usdc,
+            topics: [TRANSFER_TOPIC, null, wallets.map(pad)],
+          }, fromBlock, toBlock, latest, WATCH_RPC_TIMEOUT_MS),
+          hasBlock(toBlock),
+        ])
+        // A pruned-history skip can read past toBlock: check that end too.
+        if (read.toBlock > toBlock) await hasBlock(read.toBlock)
         return [chainId, read]
       } catch (e) {
         lastErr = e
@@ -636,7 +660,8 @@ async function watchDeposits() {
     try {
       const f = fetched.get(chainId)
       if (!f) continue
-      if ('error' in f) throw f.error
+      if ('error' in f) { chainFailed(chainId); throw f.error }
+      chainBackoff.delete(chainId)
       const { toBlock } = f
       const isArc = chainId === 'Arc_Testnet'
       if (f.logs === null) {
