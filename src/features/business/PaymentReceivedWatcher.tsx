@@ -71,7 +71,11 @@ export function PaymentReceivedWatcher() {
     const stop = () => { stopOrders(); stopReceipts() }
     // A fallback if the live feed drops - look every 20 s.
     const t = setInterval(() => { if (document.visibilityState === 'visible') void check() }, 20_000)
-    return () => { live = false; stop(); clearInterval(t) }
+    // Back in the app: look at once - the live feed was asleep with the phone,
+    // and a payment that landed meanwhile would otherwise wait for the tick.
+    const onVisible = () => { if (document.visibilityState === 'visible') void check() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { live = false; stop(); clearInterval(t); document.removeEventListener('visibilitychange', onVisible) }
   }, [business, wallet])
 
   useEffect(() => {
