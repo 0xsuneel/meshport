@@ -25,6 +25,11 @@ import { notifyClaimArrived } from '@/lib/bridgeTracker'
 import { notifyPaymentReceived, notifyPaymentReceivedFromAddress } from '@/lib/notifications'
 import { shadowEventBus, syncCoordinator } from '@/blockchain/shadowEventBus'
 import { startExternalLiveWatch } from '@/blockchain/externalLiveWatch'
+import { useBusinessTab } from '@/lib/merchant'
+
+// A business's payments on other chains are announced off their balance
+// change (see PaymentReceivedWatcher), so its balances are read more often.
+const BUSINESS_LIVE_POLL_MS = 10_000
 import { useSettingsStore } from '@/store/settingsStore'
 import { arcDepositWatcher } from '@/lib/arcDepositWatcher'
 import { startP2PNotifications } from '@/lib/p2pNotifications'
@@ -84,6 +89,7 @@ export function AppLayout() {
   const navVisible = showNav && !keyboardOpen
   const navHidden = useUIStore(s => s.navHidden)
   const walletAddress = useAuthStore(s => s.walletAddress)
+  const businessTab = useBusinessTab()
   const userId = useAuthStore(s => s.user?.id)
   // The phone shell sits exactly on the visible area (top + height) - see
   // the hook's own comment and the shell below.
@@ -190,8 +196,8 @@ export function AppLayout() {
     return startExternalLiveWatch(walletAddress, () => {
       const { settings, loaded } = useSettingsStore.getState()
       return { settings, loaded }
-    })
-  }, [walletAddress])
+    }, businessTab ? BUSINESS_LIVE_POLL_MS : undefined)
+  }, [walletAddress, businessTab])
 
   // ── Real-time external deposit watcher (Arc eth_subscribe(logs)) ──────────
   // Session-wide, one WebSocket for every route - NOT scoped to the Activity
