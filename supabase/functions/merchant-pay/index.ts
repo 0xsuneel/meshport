@@ -592,7 +592,8 @@ const hex = (n: number) => '0x' + n.toString(16)
 // (Circle's event monitors push every USDC transfer on a contract - ~490k
 // calls a day on Arc alone - which is why chain-transfer-webhook moved off
 // them; the same holds on these testnets.)
-const WATCH_LOOP_MS = 55_000
+const WATCH_LOOP_MS = 57_000
+const WATCH_HANDOVER_MS = 20_000
 const WATCH_PASS_MS = 4_000
 const WATCH_ALL_EVERY = 5
 const FAST_CHAINS = new Set(['Ethereum_Sepolia', 'Base_Sepolia', 'Arbitrum_Sepolia', 'Optimism_Sepolia', 'Polygon_Sepolia', 'Avalanche_Fuji', 'Unichain_Sepolia'])
@@ -906,20 +907,32 @@ Deno.serve(async (req: Request) => {
 
   if (action === 'watch') {
     if (!isServiceCaller(req)) return jsonFor(req, { error: 'Forbidden' }, 403)
-    // Held for the whole loop (+ margin): the next minute's call starts once it ends.
-    const { data: gotLock } = await db.rpc('merchant_watch_lock_acquire', { p_seconds: 70 })
-    if (gotLock !== true) return jsonFor(req, { skipped: 'busy' })
+    // Runs until ~57s after this call; the next minute's call waits (up to
+    // 20s) for this one's last pass, so the loops hand over without a gap or
+    // an overlap - and a slow last pass never makes a minute skip.
+    const callStart = Date.now()
     const loop = (async () => {
-      const end = Date.now() + WATCH_LOOP_MS
-      for (let pass = 0; ; pass++) {
-        const t0 = Date.now()
-        try { await watchDeposits(pass % WATCH_ALL_EVERY === 0 ? undefined : id => FAST_CHAINS.has(id)) }
-        catch (e) { console.error('[merchant-pay/watch]', e instanceof Error ? e.message : e) }
-        const wait = Math.max(0, WATCH_PASS_MS - (Date.now() - t0))
-        if (Date.now() + wait >= end) break
-        if (wait) await new Promise(r => setTimeout(r, wait))
+      let got = false
+      while (!got && Date.now() - callStart < WATCH_HANDOVER_MS) {
+        const { data } = await db.rpc('merchant_watch_lock_acquire', { p_seconds: 70 })
+        got = data === true
+        if (!got) await new Promise(r => setTimeout(r, 1_000))
       }
-    })().finally(() => db.rpc('merchant_watch_lock_release').then(() => {}, () => {}))
+      if (!got) { console.warn('[merchant-pay/watch] previous loop still running - skipped'); return }
+      try {
+        const end = callStart + WATCH_LOOP_MS
+        for (let pass = 0; ; pass++) {
+          const t0 = Date.now()
+          try { await watchDeposits(pass % WATCH_ALL_EVERY === 0 ? undefined : id => FAST_CHAINS.has(id)) }
+          catch (e) { console.error('[merchant-pay/watch]', e instanceof Error ? e.message : e) }
+          const wait = Math.max(0, WATCH_PASS_MS - (Date.now() - t0))
+          if (Date.now() + wait >= end) break
+          if (wait) await new Promise(r => setTimeout(r, wait))
+        }
+      } finally {
+        await db.rpc('merchant_watch_lock_release').then(() => {}, () => {})
+      }
+    })()
     // In the background - the cron caller hangs up after a few seconds.
     // @ts-ignore - EdgeRuntime is available in the Supabase Edge Functions runtime
     if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime.waitUntil) { EdgeRuntime.waitUntil(loop); return jsonFor(req, { started: true }) }
