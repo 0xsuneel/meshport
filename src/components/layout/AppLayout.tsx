@@ -24,6 +24,8 @@ import { getWalletSecurityStatus, knownSecured } from '@/lib/socialWallet'
 import { notifyClaimArrived } from '@/lib/bridgeTracker'
 import { notifyPaymentReceived, notifyPaymentReceivedFromAddress } from '@/lib/notifications'
 import { shadowEventBus, syncCoordinator } from '@/blockchain/shadowEventBus'
+import { startExternalLiveWatch } from '@/blockchain/externalLiveWatch'
+import { useSettingsStore } from '@/store/settingsStore'
 import { arcDepositWatcher } from '@/lib/arcDepositWatcher'
 import { startP2PNotifications } from '@/lib/p2pNotifications'
 
@@ -177,6 +179,18 @@ export function AppLayout() {
     if (!walletAddress) return
     shadowEventBus.start(walletAddress)
     return () => shadowEventBus.stop()
+  }, [walletAddress])
+
+  // USDC landing on another chain: re-read on return to the app (the chain
+  // event is missed while the phone has it suspended - e.g. while sending from
+  // another wallet) and every 30s while visible; changed chains are announced
+  // to every screen. See blockchain/externalLiveWatch.ts.
+  useEffect(() => {
+    if (!walletAddress) return
+    return startExternalLiveWatch(walletAddress, () => {
+      const { settings, loaded } = useSettingsStore.getState()
+      return { settings, loaded }
+    })
   }, [walletAddress])
 
   // ── Real-time external deposit watcher (Arc eth_subscribe(logs)) ──────────
