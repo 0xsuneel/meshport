@@ -40,6 +40,11 @@ export const supabase = createClient(
 // This gives a valid JWT so all Supabase inserts work with RLS using(true).
 let _anonSignInDone = false
 let _anonSignInPromise: Promise<void> | null = null
+// "account:session" already confirmed linked (see syncAuthUidToProfile). Every
+// chat send / linked call used to re-ask the server (one database round trip)
+// first; the link only changes with the session. `force` re-checks it (after
+// the server refused a call as unlinked).
+let _linkedKey: string | null = null
 
 // Neither supabase.auth.getSession() nor .signInAnonymously() below had any
 // timeout - a slow/unresponsive auth endpoint could leave this await
@@ -57,6 +62,7 @@ const ANON_SESSION_TIMEOUT_MS = 6000
  *  reload skipped creating the new session. */
 export function resetAnonSession(): void {
   _anonSignInDone = false
+  _linkedKey = null
 }
 
 // Any sign-out (Log out, the auth screens' local sign-outs, admin) ends the
@@ -111,8 +117,9 @@ export async function ensureAnonSession(): Promise<void> {
 // only signs when it isn't. Fires `meshport:session-bound` when it changed
 // something, so screens that loaded before the link can reload.
 let _bindInflight: Promise<boolean> | null = null
-export function syncAuthUidToProfile(userId: string, privateKey?: string | null): Promise<boolean> {
+export function syncAuthUidToProfile(userId: string, privateKey?: string | null, force = false): Promise<boolean> {
   if (!userId || !privateKey) return Promise.resolve(false)
+  if (force) _linkedKey = null
   if (_bindInflight) return _bindInflight
   _bindInflight = (async () => {
     try {
@@ -120,10 +127,12 @@ export function syncAuthUidToProfile(userId: string, privateKey?: string | null)
       const { data: { session } } = await supabase.auth.getSession()
       const sessionId = session?.user?.id
       if (!sessionId) return false
+      const linkKey = `${userId}:${sessionId}`
+      if (_linkedKey === linkKey) return true
       // Already linked? Asked server-side - users.auth_uid isn't something
       // the app reads for an account.
       const { data: owns, error: ownsErr } = await supabase.rpc('session_owns_user', { p_user_id: userId })
-      if (!ownsErr && owns === true) return true
+      if (!ownsErr && owns === true) { _linkedKey = linkKey; return true }
 
       const { privateKeyToAccount } = await import('viem/accounts')
       const key = (privateKey.startsWith('0x') ? privateKey : '0x' + privateKey) as `0x${string}`
@@ -131,6 +140,7 @@ export function syncAuthUidToProfile(userId: string, privateKey?: string | null)
       const signature = await privateKeyToAccount(key).signMessage({ message })
       const { data, error } = await supabase.functions.invoke('bind-session', { body: { userId, message, signature } })
       if (error || !data?.ok) return false
+      _linkedKey = linkKey
       if (data.changed) {
         invalidateConversationsCache()
         try { window.dispatchEvent(new CustomEvent('meshport:session-bound')) } catch { /* no window */ }
@@ -170,7 +180,7 @@ export async function invokeLinked(name: string, body: Record<string, unknown>) 
   try {
     const { useAuthStore } = await import('@/store')
     const st = useAuthStore.getState()
-    if (!(st.user?.id && st.privateKey && await syncAuthUidToProfile(st.user.id, st.privateKey))) return first
+    if (!(st.user?.id && st.privateKey && await syncAuthUidToProfile(st.user.id, st.privateKey, true))) return first
   } catch { return first }
   return supabase.functions.invoke(name, { body })
 }

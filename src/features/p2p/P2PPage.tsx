@@ -941,8 +941,17 @@ export function P2POfferDetailPage() {
   const user = useAuthStore(s => s.user)
   const storedPasscode = useAuthStore(s => s.passcode)
   const { showToastMessage } = useUIStore()
-  const [offer, setOffer] = useState<P2POffer | null>(null)
-  const [remainingAmt, setRemainingAmt] = useState<number | null>(null)
+  // Opened from the marketplace: that list already has this offer - show it
+  // at once while the fresh copy loads (createTrade re-checks what's left).
+  const listed = (() => {
+    for (const c of hubCache.values()) {
+      const o = c.offers.find(x => x.id === offerId)
+      if (o) return { offer: o, remaining: c.remaining.get(o.id) ?? null }
+    }
+    return null
+  })()
+  const [offer, setOffer] = useState<P2POffer | null>(() => listed?.offer ?? null)
+  const [remainingAmt, setRemainingAmt] = useState<number | null>(() => listed?.remaining ?? null)
   const [rating, setRating] = useState<{ avg: number; count: number } | null>(null)
   const [reputation, setReputation] = useState<UserReputation | null>(null)
   // USDC amount (the source of truth for the trade) and what was typed, in
@@ -973,19 +982,21 @@ export function P2POfferDetailPage() {
       const found = await fetchOfferById(offerId)
       setOffer(found)
       if (found) {
-        const [ratingResult, reputationResult, consumedMap] = await Promise.all([
+        // Everything else the page needs, asked for together (the price and
+        // payment options used to wait for the rating/reputation round trip).
+        fetchMerchantStats([found.userId]).then(m => setStats(m.get(found.userId))).catch(() => {})
+        const [ratingResult, reputationResult, consumedMap, rates, opts] = await Promise.all([
           fetchUserRating(found.userId),
           getUserReputation(found.userId),
           fetchOfferConsumedAmounts([found.id]),
+          found.priceType === 'floating' ? fetchFxRates([found.currency]).catch(() => ({})) : Promise.resolve({}),
+          found.offerType === 'sell' ? fetchOfferPaymentOptions(found.id).catch(() => null) : Promise.resolve(null),
         ])
         setRating(ratingResult)
         setReputation(reputationResult)
         setRemainingAmt(offerRemainingAmount(found, consumedMap.get(found.id) ?? 0))
-        fetchMerchantStats([found.userId]).then(m => setStats(m.get(found.userId))).catch(() => {})
-        const rates = found.priceType === 'floating' ? await fetchFxRates([found.currency]).catch(() => ({})) : {}
         setLivePrice(offerLivePrice(found, rates))
-        if (found.offerType === 'sell') {
-          const opts = await fetchOfferPaymentOptions(found.id)
+        if (opts) {
           setPayOptions(opts)
           if (opts.length === 1) setPayMethodId(opts[0].id)
         }

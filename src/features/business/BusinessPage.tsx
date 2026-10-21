@@ -62,6 +62,11 @@ const inWords = (ms: number) => {
   return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`
 }
 
+// What the Business tab last showed, per wallet: reopening the tab shows it at
+// once and refreshes quietly, instead of a loading skeleton every visit while
+// payments, orders, stores and refunds load again.
+const bizCache = new Map<string, { raw: MerchantPayment[]; intents: MerchantIntent[] | null; stores: Store[]; refunds: MerchantRefund[] }>()
+
 /** Business accounts get their Business tab; staff of a business get staff mode. */
 export function BusinessPage() {
   const business = useBusinessTab()
@@ -103,8 +108,9 @@ function OwnerBusinessPage() {
 
   // ── Payments and refunds (live; the pop-up and voice alert for a new
   // payment come from PaymentReceivedWatcher, on every screen) ──────────
-  const [raw, setRaw] = useState<MerchantPayment[]>([])
-  const [loaded, setLoaded] = useState(false)
+  const cached = walletAddress ? bizCache.get(walletAddress) : undefined
+  const [raw, setRaw] = useState<MerchantPayment[]>(() => cached?.raw ?? [])
+  const [loaded, setLoaded] = useState(() => !!cached)
   // What the business was paid: order payments (requests, bills, Shop QR -
   // on Arc or another chain), every USDC receipt on another chain (even with
   // no order: sent straight to the address, a bridge, ...; 'direct', counted),
@@ -143,7 +149,7 @@ function OwnerBusinessPage() {
     const t = setInterval(() => { if (document.visibilityState === 'visible') void load() }, 30_000)
     return () => clearInterval(t)
   }, [load])
-  const [refunds, setRefunds] = useState<MerchantRefund[]>([])
+  const [refunds, setRefunds] = useState<MerchantRefund[]>(() => cached?.refunds ?? [])
   const loadRefunds = useCallback(() => listMyRefunds().then(setRefunds).catch(() => {}), [])
   useEffect(() => { void loadRefunds(); return subscribeMyRefunds(() => { void loadRefunds() }) }, [loadRefunds])
   // A payment can be refunded several times (never more than it in total):
@@ -160,9 +166,12 @@ function OwnerBusinessPage() {
 
   // ── Stores (which store this device works as - always one; mixing every
   // store's numbers together confused owners) ─────────────────────────────
-  const [stores, setStores] = useState<Store[]>([])
+  const [stores, setStores] = useState<Store[]>(() => cached?.stores ?? [])
   const [storeId, setStoreId] = useState<string | null>(activeStoreId)
-  const [intents, setIntents] = useState<MerchantIntent[] | null>(null)
+  const [intents, setIntents] = useState<MerchantIntent[] | null>(() => cached?.intents ?? null)
+  useEffect(() => {
+    if (walletAddress && loaded) bizCache.set(walletAddress, { raw, intents, stores, refunds })
+  }, [walletAddress, loaded, raw, intents, stores, refunds])
   const intentStore = useMemo(() => new Map((intents ?? []).map(i => [i.id, i.storeId ?? null] as const)), [intents])
   // Other-chain receipts carry the order number, not the order id.
   const orderStore = useMemo(() => new Map((intents ?? []).filter(i => i.orderNumber).map(i => [i.orderNumber!, i.storeId ?? null] as const)), [intents])

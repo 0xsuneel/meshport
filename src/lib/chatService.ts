@@ -352,6 +352,11 @@ export async function ensureConversation(myId: string, otherId: string): Promise
 }
 
 // ── Persist message - 3 paths ─────────────────────────────────────────────────
+// Conversations whose last message the server just set while saving the
+// message (api/chat send): the follow-up touchConversation for that same
+// content was a second round trip doing the same write.
+const _serverTouched = new Map<string, string>()
+
 export async function persistMessage(p: SendParams): Promise<ChatMessage | null> {
   // PATH 1: Vercel /api/send-message with service role key
   try {
@@ -378,6 +383,8 @@ export async function persistMessage(p: SendParams): Promise<ChatMessage | null>
     try { json = JSON.parse(responseText) } catch { json = {} }
 
     if (r.ok && json?.data?.id) {
+      // The server already set this conversation's last message with the save.
+      _serverTouched.set(p.conversationId, p.content)
       return json.data as ChatMessage
     }
   } catch (e: any) {
@@ -430,6 +437,7 @@ export async function touchConversation(
   senderId?: string,
   messageType?: string,
 ) {
+  if (_serverTouched.get(conversationId) === lastMsg) { _serverTouched.delete(conversationId); return }
   // PATH 1: privileged server endpoint (service-role key, bypasses RLS -
   // same reliable pattern as persistMessage's /api/send-message call).
   try {
