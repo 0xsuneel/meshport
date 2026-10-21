@@ -747,10 +747,9 @@ export interface FetchOptions {
 // Someone I blocked who pays me from outside MeshPort (their wallet imported
 // into OKX / MetaMask): show the payment by address only, not their username.
 // Unblock and their name shows again. Payments from before the block keep it.
-async function hideBlockedSenders(records: ActivityRecord[]): Promise<ActivityRecord[]> {
-  const uid = useAuthStore.getState().user?.id
-  if (!uid || !records.some(r => r.activityType === 'receive')) return records
-  const blocked = await blockedWalletMap(uid).catch(() => null)
+async function hideBlockedSenders(records: ActivityRecord[], blockedLookup: Promise<Map<string, number> | null>): Promise<ActivityRecord[]> {
+  if (!records.some(r => r.activityType === 'receive')) return records
+  const blocked = await blockedLookup
   if (!blocked?.size) return records
   return records.map(r => {
     if (r.activityType !== 'receive' || !r.counterpartyAddress) return r
@@ -766,8 +765,16 @@ export async function fetchActivity(
   walletAddress: string,
   opts: FetchOptions = {},
 ): Promise<ActivityRecord[]> {
-  return hideBlockedSenders(await fetchActivityRaw(walletAddress, opts))
+  // Who I blocked is looked up alongside the page (cached for a minute), not
+  // after it - it was a third round trip in a row before history showed.
+  const uid = useAuthStore.getState().user?.id
+  const blockedLookup = uid ? blockedWalletMap(uid).catch(() => null) : Promise.resolve(null)
+  return hideBlockedSenders(await fetchActivityRaw(walletAddress, opts), blockedLookup)
 }
+
+// Counterparty wallet → MeshPort user (null = not a MeshPort user), kept for
+// the session so each page load doesn't look the same addresses up again.
+const counterpartyNames = new Map<string, { username: string; display_name: string } | null>()
 
 async function fetchActivityRaw(
   walletAddress: string,
@@ -992,35 +999,40 @@ async function fetchActivityRaw(
 
     if (needsLookup.length > 0) {
       try {
+        // Only ask about addresses not seen before (hits and misses are both
+        // remembered), so a repeat load skips this second round trip.
         const addrs = [...new Set(needsLookup.map(r => r.counterpartyAddress!.toLowerCase()))]
-        const orFilter = addrs.map(a => `wallet_address.ilike.${a}`).join(',')
-        // Use the session JWT as bearer - not the anon key - so this read is
-        // scoped to the signed-in session. The anon key as a bearer is only
-        // safe for truly unauthenticated reads and should never be reused for
-        // authenticated write paths or user-data lookups.
-        const { authHeaders } = await import('./chatService')
-        const res2 = await fetch(
-          `${SUPA_URL}/rest/v1/users?or=(${orFilter})&select=wallet_address,username,display_name`,
-          { headers: { ...(await authHeaders()), 'Accept': 'application/json' } }
-        )
-        if (res2.ok) {
-          const users = await res2.json() as any[]
-          const userMap = new Map<string, { username: string; display_name: string }>()
-          for (const u of users) userMap.set((u.wallet_address || '').toLowerCase(), u)
-          // Enrich records with resolved username
-          return pass3.map(r => {
-            if ((r.activityType !== 'send' && r.activityType !== 'receive') || !r.counterpartyAddress) return r
-            const meta = (r as any).metadata || {}
-            if (meta.toUsername || meta.fromUsername) return r
-            const u = userMap.get(r.counterpartyAddress.toLowerCase())
-            if (!u) return r
-            const username = u.username?.endsWith('.arc') ? u.username : (u.username ? u.username + '.arc' : '')
-            const enrichedMeta = r.activityType === 'send'
-              ? { ...meta, toUsername: username }
-              : { ...meta, fromUsername: username }
-            return { ...r, metadata: enrichedMeta } as ActivityRecord
-          })
+          .filter(a => !counterpartyNames.has(a))
+        if (addrs.length > 0) {
+          const orFilter = addrs.map(a => `wallet_address.ilike.${a}`).join(',')
+          // Use the session JWT as bearer - not the anon key - so this read is
+          // scoped to the signed-in session. The anon key as a bearer is only
+          // safe for truly unauthenticated reads and should never be reused for
+          // authenticated write paths or user-data lookups.
+          const { authHeaders } = await import('./chatService')
+          const res2 = await fetch(
+            `${SUPA_URL}/rest/v1/users?or=(${orFilter})&select=wallet_address,username,display_name`,
+            { headers: { ...(await authHeaders()), 'Accept': 'application/json' } }
+          )
+          if (res2.ok) {
+            const users = await res2.json() as any[]
+            for (const a of addrs) counterpartyNames.set(a, null)
+            for (const u of users) counterpartyNames.set((u.wallet_address || '').toLowerCase(), u)
+          }
         }
+        // Enrich records with resolved username
+        return pass3.map(r => {
+          if ((r.activityType !== 'send' && r.activityType !== 'receive') || !r.counterpartyAddress) return r
+          const meta = (r as any).metadata || {}
+          if (meta.toUsername || meta.fromUsername) return r
+          const u = counterpartyNames.get(r.counterpartyAddress.toLowerCase())
+          if (!u) return r
+          const username = u.username?.endsWith('.arc') ? u.username : (u.username ? u.username + '.arc' : '')
+          const enrichedMeta = r.activityType === 'send'
+            ? { ...meta, toUsername: username }
+            : { ...meta, fromUsername: username }
+          return { ...r, metadata: enrichedMeta } as ActivityRecord
+        })
       } catch {}
     }
 
