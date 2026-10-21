@@ -1,38 +1,33 @@
 // src/lib/voiceAlerts.ts
 //
-// Merchant voice alerts: the phone says "Received 24 dollars on MeshPort"
-// for every merchant payment, like a shop soundbox but with no device.
-// Uses the browser's own speech (no network). Settings are per device.
+// Merchant voice alerts: the phone plays the MeshPort chime, then says
+// "Received 24 dollars and 50 cents, on Mesport" for every merchant payment,
+// like a shop soundbox. English only. Settings are per device.
+//
+// The voice is our own recording (public/voice/emma/, Kokoro TTS, Apache 2.0):
+// each alert joins two or three whole phrases ("Received twenty four dollars"
+// + "and fifty cents, on Mesport."), so it sounds the same on every phone and
+// flows like a person talking. Only the phrases a payment needs are fetched,
+// while the chime plays; the service worker keeps them after the first time.
+// Amounts the clips don't cover ($100,000+), or a phone where they can't
+// load, fall back to the device's own speech.
 //
 // Works across browsers by:
 //  - unlocking sound on the first tap anywhere: iOS Safari and Chrome on
-//    Android drop speech and audio that no tap started, and a payment never
-//    comes from a tap. After one tap on the page, later alerts play.
-//  - a short chime (Web Audio) before every alert, so browsers with no speech
-//    (in-app browsers, many Firefox setups) still sound; plus a vibration.
-//  - picking an installed voice for the language, and saying it in English
-//    when the device has none (otherwise most browsers stay silent).
-//  - queueing alerts instead of cancel() + speak(), which Chrome and Safari
-//    can drop, and which said only the last of two payments arriving together.
+//    Android drop audio that no tap started, and a payment never comes from a
+//    tap. After one tap on the page, later alerts play.
+//  - a vibration with every alert, for phones on silent.
+//  - queueing alerts one after another, so two payments arriving together
+//    are both said in full.
 
 import { useSyncExternalStore } from 'react'
 
-export const VOICE_LANGS = [
-  { id: 'en', label: 'English', bcp47: 'en-IN', say: (a: string) => `Received ${a} dollars on MeshPort` },
-  { id: 'hi', label: 'हिन्दी',   bcp47: 'hi-IN', say: (a: string) => `MeshPort पर ${a} डॉलर प्राप्त हुए` },
-  { id: 'kn', label: 'ಕನ್ನಡ',   bcp47: 'kn-IN', say: (a: string) => `MeshPort ನಲ್ಲಿ ${a} ಡಾಲರ್ ಸ್ವೀಕರಿಸಲಾಗಿದೆ` },
-  { id: 'ta', label: 'தமிழ்',   bcp47: 'ta-IN', say: (a: string) => `MeshPort இல் ${a} டாலர் பெறப்பட்டது` },
-  { id: 'te', label: 'తెలుగు',  bcp47: 'te-IN', say: (a: string) => `MeshPort లో ${a} డాలర్లు అందాయి` },
-  { id: 'mr', label: 'मराठी',   bcp47: 'mr-IN', say: (a: string) => `MeshPort वर ${a} डॉलर मिळाले` },
-] as const
-export type VoiceLang = typeof VOICE_LANGS[number]['id']
-
-type Settings = { enabled: boolean; lang: VoiceLang }
+type Settings = { enabled: boolean }
 const KEY = 'meshport_voice_alerts'
-const DEFAULTS: Settings = { enabled: true, lang: 'en' }
+const DEFAULTS: Settings = { enabled: true }
 
 function read(): Settings {
-  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') } } catch { return DEFAULTS }
+  try { return { enabled: JSON.parse(localStorage.getItem(KEY) || '{}').enabled ?? DEFAULTS.enabled } } catch { return DEFAULTS }
 }
 let settings = read()
 const listeners = new Set<() => void>()
@@ -48,6 +43,33 @@ export function useVoiceAlerts(): Settings {
 }
 
 export const voiceSupported = () => typeof window !== 'undefined' && 'speechSynthesis' in window
+
+// ── Phrases ─────────────────────────────────────────────────────────────────
+const VOICE_DIR = '/voice/emma/'
+
+/**
+ * The recorded phrases that say an amount, in order, or null when the clips
+ * don't cover it. Clip names: r<n> "Received n dollars", rk<k> "Received k
+ * thousand", d<n> "n dollars" (d0 "dollars"), t<c> "and c cents, on Mesport."
+ * (t0 "on Mesport."), rc<c> "Received c cents, on Mesport.".
+ */
+export function phrasesFor(amount: number): string[] | null {
+  const cents = Math.round(amount * 100)
+  if (!Number.isFinite(cents) || cents <= 0) return null
+  const dollars = Math.floor(cents / 100)
+  const c = cents % 100
+  if (dollars === 0) return [`rc${c}`]
+  if (dollars >= 100_000) return null
+  const k = Math.floor(dollars / 1000)
+  const head = k ? [`rk${k}`, `d${dollars % 1000}`] : [`r${dollars}`]
+  return [...head, `t${c}`]
+}
+
+/** What the device's own speech says when the clips can't play. */
+export function spokenText(amount: number) {
+  const amt = amount.toFixed(2).replace(/\.00$/, '')
+  return `Received ${amt} ${amt === '1' ? 'dollar' : 'dollars'} on Mesport`
+}
 
 // ── Sound unlock ────────────────────────────────────────────────────────────
 let audio: AudioContext | null = null
@@ -66,6 +88,8 @@ function unlock() {
   if (ctx && ctx.state !== 'running') void ctx.resume().catch(() => {})
   if (unlocked) return
   unlocked = true
+  // Ready the chime and the most common ending before the first payment.
+  if (settings.enabled) { void clip('chime'); void clip('t0') }
   if (voiceSupported()) {
     try {
       // A silent utterance started by this tap lets later ones play.
@@ -84,29 +108,60 @@ if (typeof window !== 'undefined') {
   })
 }
 
-/** Two rising tones, ~0.35 s - plays even where there's no speech. */
-function chime() {
+// ── Clips ───────────────────────────────────────────────────────────────────
+const clips = new Map<string, Promise<AudioBuffer | null>>()
+function clip(name: string): Promise<AudioBuffer | null> {
   const ctx = audioContext()
-  if (!ctx) return
-  if (ctx.state === 'suspended') void ctx.resume().catch(() => {})
-  try {
-    const t = ctx.currentTime + 0.02
-    for (const [freq, at] of [[880, 0], [1320, 0.14]] as const) {
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.type = 'sine'
-      osc.frequency.value = freq
-      gain.gain.setValueAtTime(0.0001, t + at)
-      gain.gain.exponentialRampToValueAtTime(0.35, t + at + 0.02)
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.2)
-      osc.connect(gain).connect(ctx.destination)
-      osc.start(t + at)
-      osc.stop(t + at + 0.22)
-    }
-  } catch { /* audio unavailable */ }
+  if (!ctx) return Promise.resolve(null)
+  let p = clips.get(name)
+  if (!p) {
+    p = fetch(`${VOICE_DIR}${name}.mp3`)
+      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.arrayBuffer() })
+      // Callback form: older Safari has no promise-returning decodeAudioData.
+      .then(b => new Promise<AudioBuffer>((res, rej) => ctx.decodeAudioData(b, res, rej)))
+      .catch(() => { clips.delete(name); return null })
+    clips.set(name, p)
+  }
+  return p
 }
 
-// ── Voices ──────────────────────────────────────────────────────────────────
+const CLIP_WAIT_MS = 3000
+const GAP_S = { inner: 0.05, beforeTail: 0.1 }
+// When the last queued alert ends (AudioContext time), so the next one waits.
+let queueEnd = 0
+let queue: Promise<unknown> = Promise.resolve()
+
+function play(ctx: AudioContext, buf: AudioBuffer, at: number) {
+  const src = ctx.createBufferSource()
+  src.buffer = buf
+  src.connect(ctx.destination)
+  src.start(at)
+  return at + buf.duration
+}
+
+/** Chime + phrases through Web Audio. False when they couldn't play. */
+async function playClips(names: string[]): Promise<boolean> {
+  const ctx = audioContext()
+  if (!ctx) return false
+  if (ctx.state === 'suspended') void ctx.resume().catch(() => {})
+  const timeout = new Promise<null>(r => setTimeout(() => r(null), CLIP_WAIT_MS))
+  const chime = await Promise.race([clip('chime'), timeout])
+  const speech = Promise.race([Promise.all(names.map(clip)), timeout])
+  let t = Math.max(ctx.currentTime + 0.02, queueEnd)
+  if (chime) t = play(ctx, chime, t) + 0.08
+  const bufs = await speech
+  if (!bufs || bufs.some(b => !b)) { queueEnd = t; return false }
+  // A slow fetch: start after the chime has finished, never over it.
+  t = Math.max(t, ctx.currentTime + 0.02)
+  bufs.forEach((b, i) => {
+    t = play(ctx, b!, t)
+    if (i < bufs.length - 1) t += i === bufs.length - 2 ? GAP_S.beforeTail : GAP_S.inner
+  })
+  queueEnd = t
+  return true
+}
+
+// ── Device speech (fallback) ────────────────────────────────────────────────
 // getVoices() is empty until the browser has loaded them (Chrome: async).
 let voices: SpeechSynthesisVoice[] = []
 function loadVoices() { try { voices = window.speechSynthesis.getVoices() } catch { voices = [] } }
@@ -114,24 +169,22 @@ if (voiceSupported()) {
   loadVoices()
   try { window.speechSynthesis.addEventListener('voiceschanged', loadVoices) } catch { /* old Safari */ }
 }
-function voiceFor(bcp47: string): SpeechSynthesisVoice | null {
+/** A British English voice like ours, else any English one. */
+function englishVoice(): SpeechSynthesisVoice | null {
   if (!voices.length) loadVoices()
-  const want = bcp47.toLowerCase().replace('_', '-')
-  const base = want.split('-')[0]
   const norm = (v: SpeechSynthesisVoice) => v.lang.toLowerCase().replace('_', '-')
-  return voices.find(v => norm(v) === want)
-    ?? voices.find(v => norm(v).split('-')[0] === base)
-    ?? null
+  return voices.find(v => norm(v) === 'en-gb') ?? voices.find(v => norm(v).startsWith('en')) ?? null
 }
 
 // Utterances are kept until they finish: Chrome can garbage-collect a
 // pending one and never say it.
 const speaking = new Set<SpeechSynthesisUtterance>()
 
-function say(text: string, bcp47: string, voice: SpeechSynthesisVoice | null) {
+function say(text: string) {
   const s = window.speechSynthesis
+  const voice = englishVoice()
   const u = new SpeechSynthesisUtterance(text)
-  u.lang = voice?.lang ?? bcp47
+  u.lang = voice?.lang ?? 'en-GB'
   if (voice) u.voice = voice
   u.rate = 1
   u.volume = 1
@@ -141,6 +194,7 @@ function say(text: string, bcp47: string, voice: SpeechSynthesisVoice | null) {
   speaking.add(u)
   // Chrome sometimes leaves the queue paused (after a tab switch).
   if (s.paused) s.resume()
+  // Queued, not cancel() + speak(): that drops the first of two payments.
   s.speak(u)
 }
 
@@ -148,17 +202,11 @@ function say(text: string, bcp47: string, voice: SpeechSynthesisVoice | null) {
 export function speakPayment(amount: number, opts: { test?: boolean } = {}) {
   if (typeof window === 'undefined' || (!settings.enabled && !opts.test)) return
   if (opts.test) unlock()
-  chime()
   try { navigator.vibrate?.([120, 60, 120]) } catch { /* no vibration */ }
-  if (!voiceSupported()) return
-  const amt = amount.toFixed(2).replace(/\.00$/, '')
-  const lang = VOICE_LANGS.find(l => l.id === settings.lang) ?? VOICE_LANGS[0]
-  const voice = voiceFor(lang.bcp47)
-  // No voice for this language on the device (voices known): say it in English.
-  const fallback = !voice && voices.length > 0 && lang.id !== 'en'
-  const use = fallback ? VOICE_LANGS[0] : lang
-  // After the chime.
-  setTimeout(() => {
-    try { say(use.say(amt), use.bcp47, fallback ? voiceFor(use.bcp47) : voice) } catch { /* speech unavailable */ }
-  }, 400)
+  const names = phrasesFor(amount)
+  // One alert is scheduled at a time, so two payments together never overlap.
+  queue = queue.then(() => names ? playClips(names) : false).then(ok => {
+    if (ok || !voiceSupported()) return
+    try { say(spokenText(amount)) } catch { /* speech unavailable */ }
+  }, () => {})
 }
