@@ -47,14 +47,15 @@ export const GASLESS_CHAINS: Record<string, { chainId: number; usdc: Hex }> = Ob
 
 // Hard limits the app enforces whatever the server quotes.
 // The share limits alone would refuse every normal quote on a small amount
-// (a $1 bring: MeshPort's relayer gas can be up to 0.10, Circle's cap ~0.03 is 3%), so
-// small fixed allowances let those through - still far below anything a bad
-// quote could take.
+// (a $1 bring: MeshPort's relayer gas can be up to 0.10, and Circle's
+// forwarding fee to Arc is ~0.11-0.13 on every chain - quoted ~0.15 with the
+// server's 20% margin), so small fixed allowances let those through - still
+// far below anything a bad quote could take.
 const MAX_FEE_SHARE = 0.05        // MeshPort fee ≤ 5% of the amount…
 const MAX_FEE_SMALL = 100_000n    // …or up to 0.10 USDC (the relayer's own cap)…
 const MAX_FEE_ABS = 2_000_000n    // …and never over 2 USDC
 const MAX_CCTP_SHARE = 0.02       // CCTP maxFee ≤ 2% of the amount…
-const MAX_CCTP_SMALL = 60_000n    // …or up to 0.06 USDC
+const MAX_CCTP_SMALL = 250_000n   // …or up to 0.25 USDC
 const AUTH_WINDOW_SEC = 60 * 60   // signature valid for 1 hour
 
 function configuredRouters(): Record<string, Hex> {
