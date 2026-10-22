@@ -210,7 +210,8 @@ export function AmountChip({ value, onChange, ariaLabel, disabled = false, inval
       {sign}
       <input type="text" inputMode="decimal" value={value} placeholder="0" disabled={disabled} aria-label={ariaLabel} aria-invalid={invalid || undefined}
         onChange={e => onChange(e.target.value)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-        style={{ ...digits, width: '100%', minWidth: 0, textAlign: 'right', background: 'transparent', border: 'none', outline: 'none', padding: 0,
+        // Sized to the digits so the "$" sits right before them, as on a phone.
+        style={{ ...digits, width: `${Math.max(1, (value || '0').length) + 0.4}ch`, maxWidth: '100%', minWidth: 0, flex: '0 1 auto', textAlign: 'right', background: 'transparent', border: 'none', outline: 'none', padding: 0,
           color: 'var(--text-primary)', caretColor: 'var(--brand-text)' }} />
     </label>
   )
