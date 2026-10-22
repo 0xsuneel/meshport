@@ -45,11 +45,11 @@ describe('gaslessBridge', () => {
 
   it('checkQuote lets normal fees through on a $1 bring, still refuses high ones', () => {
     const one = 1_000_000n // 1 USDC
-    // MeshPort's relayer gas + Circle's usual ~0.03 cap
-    expect(checkQuote({ fee: '50000', maxFee: '30000', usdcName: 'USDC', usdcVersion: '2' }, one)).toEqual({ fee: 50000n, maxFee: 30000n })
-    expect(checkQuote({ fee: '100000', maxFee: '60000', usdcName: 'USDC', usdcVersion: '2' }, one)).toEqual({ fee: 100000n, maxFee: 60000n })
+    // MeshPort's relayer gas + Circle's forwarding fee to Arc (~0.125, quoted with a 20% margin)
+    expect(checkQuote({ fee: '50000', maxFee: '150307', usdcName: 'USDC', usdcVersion: '2' }, one)).toEqual({ fee: 50000n, maxFee: 150307n })
+    expect(checkQuote({ fee: '100000', maxFee: '250000', usdcName: 'USDC', usdcVersion: '2' }, one)).toEqual({ fee: 100000n, maxFee: 250000n })
     expect(() => checkQuote({ fee: '100001', maxFee: '0', usdcName: '', usdcVersion: '' }, one)).toThrow(/Network fee/)
-    expect(() => checkQuote({ fee: '0', maxFee: '60001', usdcName: '', usdcVersion: '' }, one)).toThrow(/Bridge fee/)
+    expect(() => checkQuote({ fee: '0', maxFee: '250001', usdcName: '', usdcVersion: '' }, one)).toThrow(/Bridge fee/)
   })
 
   it('stays off until a router is configured, and ignores bad entries', () => {
