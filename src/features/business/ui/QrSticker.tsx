@@ -34,7 +34,7 @@ export function QrSticker({ dataUrl, storeName, handle }: QrStickerProps) {
       {/* QR */}
       <div className="flex justify-center px-8 pt-7 pb-5">
         {dataUrl ? (
-          <img
+          <img decoding="async"
             src={dataUrl}
             alt="Payment QR code"
             width={200}

@@ -33,7 +33,7 @@ export function Avatar({ name, src, size = 'md', className, showRing, style }: A
 
   if (stableSrc) {
     return (
-      <img
+      <img decoding="async"
         src={stableSrc}
         alt={name}
         style={style}

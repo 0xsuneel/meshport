@@ -97,7 +97,7 @@ export function MyRequestsPage() {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 90 }}>
-      <div className="header-row sticky top-0 z-20 backdrop-blur-md bg-bg/95 gap-3 px-5 pt-header pb-header">
+      <div className="header-row sticky top-0 z-20 bg-bg gap-3 px-5 pt-header pb-header">
         <button onClick={() => (open ? closeOpen() : navigate('/receive'))} className="back-btn" aria-label="Back">
           <ArrowLeft className="w-5 h-5 text-text-primary" />
         </button>

@@ -110,7 +110,7 @@ export function AssetPage() {
     <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 90 }}>
       <div style={{
         position: 'sticky', top: 0, zIndex: 20,
-        background: 'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter: 'blur(20px)',
+        background: 'var(--bg)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))',
         paddingBottom: 18, paddingLeft: 20, paddingRight: 20,
         minHeight: 44, boxSizing: 'border-box',
@@ -192,7 +192,7 @@ function TokenLogo({ token }: { token: AssetToken }) {
     <div style={{ width: 56, height: 56, borderRadius: '50%', overflow: 'hidden', background: info.fallbackColor,
       display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 24, fontWeight: 800 }}>
       {imgOk
-        ? <img src={info.logo} alt={token} style={{ width: 56, height: 56, objectFit: 'cover' }} onError={() => setImgOk(false)} />
+        ? <img decoding="async" src={info.logo} alt={token} style={{ width: 56, height: 56, objectFit: 'cover' }} onError={() => setImgOk(false)} />
         : info.fallbackChar}
     </div>
   )

@@ -13,22 +13,13 @@
 import React from 'react'
 import { useReducedMotion } from 'framer-motion'
 import { pushLook } from '@/lib/pushLook'
+import { move } from '@/lib/pushMove'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY, PUSH_PARALLAX, PUSH_OPEN_MS, PUSH_BACK_MS, PUSH_EASE_CSS, DESKTOP_FADE_KEYFRAMES, DESKTOP_FADE_MS } from '@/lib/motion'
 
 const OPEN_MS = PUSH_OPEN_MS
 const BACK_MS = PUSH_BACK_MS
 const EASE = PUSH_EASE_CSS
-
-/** Animates one property of `el` from where it is now to `to` (and leaves it
- *  there). Interrupting a running move starts from the current spot. */
-function move(el: HTMLElement, prop: 'transform' | 'opacity', to: string, ms: number, from?: string): Animation | null {
-  const now = from ?? getComputedStyle(el)[prop]
-  el.getAnimations().forEach(a => a.cancel())
-  el.style[prop] = to
-  if (ms <= 0 || now === to) return null
-  return el.animate([{ [prop]: now }, { [prop]: to }], { duration: ms, easing: EASE })
-}
 
 export function PushLayer({ open, covered = false, zIndex, children }: {
   open: boolean

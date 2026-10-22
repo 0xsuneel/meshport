@@ -68,7 +68,7 @@ export function ChatImage({ url, iv, convKey, radius, square, upload, failed, on
   return (
     <div style={{ position: 'relative', width: w, height: h, borderRadius: radius, overflow: 'hidden', background: 'color-mix(in srgb, var(--text-primary) 10%, transparent)', cursor: src && onTap ? 'pointer' : 'default' }}
       onClick={() => { if (src && onTap && !upload) onTap(src) }}>
-      {src && <img src={src} alt="Photo" draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />}
+      {src && <img decoding="async" src={src} alt="Photo" draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />}
       {!src && !error && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {progress > 0 ? <ProgressRing progress={progress} /> : <Loader2 className="w-6 h-6 animate-spin" style={{ color: 'rgba(255,255,255,0.8)' }} />}
@@ -112,7 +112,7 @@ export function QuoteThumb({ url, iv, convKey, size = 46 }: { url: string; iv: s
   }, [url, iv, convKey])
   return (
     <div style={{ width: size, height: size, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: 'rgba(127,127,127,0.25)' }}>
-      {src && <img src={src} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+      {src && <img decoding="async" src={src} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
     </div>
   )
 }
@@ -252,14 +252,14 @@ export function MediaPreview({ items, recipient, onChange, onAddMore, onClose, o
         </button>
       </div>
       <div className="flex-1 min-h-0 flex items-center justify-center">
-        <img src={cur.url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+        <img decoding="async" src={cur.url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
       </div>
       <div className="flex gap-2 px-3 py-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
         {items.map((it, i) => (
           <button key={it.id} type="button" onClick={() => setIdx(i)} aria-label={`Photo ${i + 1}`}
             style={{ width: 52, height: 52, flexShrink: 0, borderRadius: 8, padding: 0, overflow: 'hidden', cursor: 'pointer', border: 'none',
               outline: i === idx ? '2.5px solid var(--link)' : 'none', outlineOffset: 1 }}>
-            <img src={it.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img decoding="async" src={it.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </button>
         ))}
         <button type="button" onClick={onAddMore} aria-label="Add more photos"
@@ -462,7 +462,7 @@ export function ChatImageViewer({ items, startId, convKey, onClose, onReply, onF
             return (
               <div key={it.id} style={{ position: 'absolute', top: 0, bottom: 0, left: `${(i - idx) * 100}%`, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                 {s2 ? (
-                  <img src={s2} alt="Photo" draggable={false}
+                  <img decoding="async" src={s2} alt="Photo" draggable={false}
                     style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain',
                       transform: isCur ? `translate(${zoom.x}px, ${zoom.y + drag.y}px) scale(${zoom.s})` : undefined,
                       transition: isCur && (g.current.mode === 'none' || g.current.mode === 'decide') ? 'transform 0.2s ease' : 'none' }} />

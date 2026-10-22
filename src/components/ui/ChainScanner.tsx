@@ -40,7 +40,7 @@ export function ChainScanner({ logos, title = 'Scanning chains…', subtitle, co
           style={{ position: 'absolute', top: '50%', left: 0, marginTop: -size / 2, display: 'flex', gap, alignItems: 'center', width: 'max-content',
             animation: reduce ? undefined : `mpScanStrip ${duration}s linear infinite` }}>
           {loop.map((l, i) => (
-            <img key={i} src={l.src} alt={i < logos.length ? l.alt : ''} width={size} height={size}
+            <img decoding="async" key={i} src={l.src} alt={i < logos.length ? l.alt : ''} width={size} height={size}
               onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }}
               style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, display: 'block', objectFit: 'cover',
                 background: 'var(--surface)', boxShadow: '0 0 0 1px var(--border)' }} />

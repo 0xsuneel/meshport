@@ -20,7 +20,7 @@ function Avatar({ person, size, color }: { person: RecentPerson; size: number; c
         .replace(/\.arc$/, '')).charAt(0).toUpperCase()
   if (person.avatar_url && ok) {
     return (
-      <img src={person.avatar_url} alt={initial} onError={() => setOk(false)}
+      <img decoding="async" src={person.avatar_url} alt={initial} onError={() => setOk(false)}
         style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover',
           border: '1px solid var(--border)', flexShrink: 0 }}/>
     )
@@ -193,7 +193,7 @@ export function RecentPaidPage() {
       {/* Header */}
       <div style={{
         position: 'sticky', top: 0, zIndex: 20,
-        background: 'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter: 'blur(20px)',
+        background: 'var(--bg)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))',
         paddingBottom: 18, paddingLeft: 20, paddingRight: 20,
         minHeight: 44, boxSizing: 'border-box',

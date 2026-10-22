@@ -13,7 +13,7 @@ export function ChainScanSpinner({ chain, size = 18 }: { chain: string | null; s
       <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.25)',
         borderTopColor: '#fff', animation: 'chainScanSpin 0.8s linear infinite' }} />
       {chain && (
-        <img key={chain} src={chainLogoSrc(chain)} alt="" width={logo} height={logo}
+        <img decoding="async" key={chain} src={chainLogoSrc(chain)} alt="" width={logo} height={logo}
           style={{ position: 'absolute', top: inset, left: inset, borderRadius: '50%', display: 'block' }}
           onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
       )}

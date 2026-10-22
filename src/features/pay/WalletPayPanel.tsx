@@ -142,7 +142,7 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
           {wallets.slice(0, 3).map(w => (
             <button key={w.id} onClick={() => pay(w)} disabled={step !== 'idle' || !valid}
               style={{ ...btn, opacity: step !== 'idle' || !valid ? 0.6 : 1 }}>
-              {w.icon ? <img src={w.icon} alt="" width={20} height={20} style={{ borderRadius: 5 }} /> : <Wallet size={18} />}
+              {w.icon ? <img decoding="async" src={w.icon} alt="" width={20} height={20} style={{ borderRadius: 5 }} /> : <Wallet size={18} />}
               {step === 'working' ? 'Confirm in your wallet…'
                 : step === 'confirming' ? 'Confirming payment…'
                 : `Pay${valid ? ` $${formatAmount(value)}` : ''} with ${wallets.length > 1 ? w.name : 'this wallet'}`}

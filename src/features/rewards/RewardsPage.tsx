@@ -605,7 +605,7 @@ export function RewardsPage() {
   )
 
   const header = (
-    <div className="header-row sticky top-0 z-20 backdrop-blur-md bg-bg/95 flex-shrink-0 gap-3 px-5 pt-header pb-header">
+    <div className="header-row sticky top-0 z-20 bg-bg flex-shrink-0 gap-3 px-5 pt-header pb-header">
       <h1 className="text-xl font-bold text-text-primary">Rewards</h1>
       <button ref={howBtnRef} onClick={() => setShowEarnInfo(o => !o)} aria-expanded={showEarnInfo}
         className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold"

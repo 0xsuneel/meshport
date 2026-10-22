@@ -71,7 +71,7 @@ export function MerchantPayPage() {
   const netOptions = [MERCHANT_QR_CHAINS[0], ...MERCHANT_QR_EXTERNAL]
     .filter(c => c.native || view?.chains?.some(v => v.id === c.id))
     .map(c => ({ id: c.id, label: c.label,
-      icon: <img src={c.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} /> }))
+      icon: <img decoding="async" src={c.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} /> }))
   const pickedChain = wantChain || netId
   const payChain = (pickedChain && view?.chains?.find(c => c.id === pickedChain)) || ARC_PAY_CHAIN
   const onArc = payChain.id === ARC_PAY_CHAIN.id
@@ -191,7 +191,7 @@ export function MerchantPayPage() {
                   <button type="button" onClick={e => { e.stopPropagation(); setNetMenu(v => !v) }} aria-expanded={netMenu} aria-label={`Network: ${net.label}`}
                     className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
                     style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-                    <img src={net.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} />
+                    <img decoding="async" src={net.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} />
                     <span className="flex-1 min-w-0 truncate text-left text-sm font-bold text-text-primary">{net.label}</span>
                     <svg className="w-2.5 h-2.5 flex-shrink-0" style={{ color: 'var(--brand-text)', transform: netMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
                   </button>
@@ -210,7 +210,7 @@ export function MerchantPayPage() {
             {/* MeshPort pays on Arc only. */}
             {!walletPaid && !chainOnly && onArc && <button onClick={payWithMeshPort} disabled={isAuthenticated && arcBalance < remaining}
               className="w-full bg-surface border border-border rounded-3xl p-4 flex items-center gap-3 text-left disabled:opacity-60">
-              <img src={logo('Arc_Testnet')} alt="" className="w-10 h-10 rounded-full" />
+              <img decoding="async" src={logo('Arc_Testnet')} alt="" className="w-10 h-10 rounded-full" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-text-primary">Pay with MeshPort</p>
                 <p className="text-xs text-text-secondary">

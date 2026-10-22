@@ -267,7 +267,7 @@ export function ReceivePage() {
     <div className={`flex flex-col h-full bg-bg overflow-hidden ${isDesktop ? '' : 'lg:max-w-[720px]'}`}>
 
       {/* Header */}
-      <div className={`header-row sticky top-0 z-20 backdrop-blur-md bg-bg/95 flex-shrink-0 gap-3 ${isDesktop ? 'px-4 pt-0 pb-3' : 'px-5 pt-header pb-header'}`}>
+      <div className={`header-row sticky top-0 z-20 bg-bg flex-shrink-0 gap-3 ${isDesktop ? 'px-4 pt-0 pb-3' : 'px-5 pt-header pb-header'}`}>
         {!isDesktop && (
           <button onClick={() => navigate('/')} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />

@@ -228,7 +228,7 @@ function RecoveryQrCreator({ onBack, onDone }: { onBack: () => void; onDone: () 
           </>
         ) : (
           <>
-            <img src={imageUrl} alt="MeshPort Recovery QR" className="w-full max-w-[300px] mx-auto rounded-2xl border border-border bg-white" />
+            <img decoding="async" src={imageUrl} alt="MeshPort Recovery QR" className="w-full max-w-[300px] mx-auto rounded-2xl border border-border bg-white" />
             <a href={imageUrl} download={`meshport-recovery-${(username || 'wallet')}.png`}
               className="w-full py-3.5 rounded-2xl font-semibold text-text-primary bg-surface border border-border flex items-center justify-center gap-2">
               <Download className="w-4 h-4" /> Save QR Image

@@ -268,7 +268,7 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
       <div style={{ flex: 1, minWidth: 0, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <span style={label}>Available To Transfer</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 22 }}>
-          <img src="/logos/chains/arc.svg" alt="Arc" style={logo(false)} />
+          <img decoding="async" src="/logos/chains/arc.svg" alt="Arc" style={logo(false)} />
           <button onClick={onToggleHidden} aria-label={balanceHidden ? 'Show balances' : 'Hide balances'}
             style={{ width: 22, height: 22, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', border: 'none', padding: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
@@ -300,7 +300,7 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
         <span style={label}>{bringLabel}</span>
         <div style={{ display: 'flex', alignItems: 'center', height: 22 }}>
           {shown.map((c, i) => (
-            <img key={c.id} src={chainLogoSrc(c.id)} alt={c.label} title={c.label}
+            <img decoding="async" key={c.id} src={chainLogoSrc(c.id)} alt={c.label} title={c.label}
               onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }}
               style={logo(i > 0)} />
           ))}
@@ -1066,8 +1066,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
   const page = (
     <div data-flow-scroller className={isDesktop ? undefined : 'lg:max-w-[900px]'} style={{ flex: 1, overflowY: flowFocus === 'processing' ? 'hidden' : 'auto', overscrollBehavior: flowFocus === 'processing' ? 'none' : undefined, background: 'var(--bg)', paddingBottom: isDesktop ? 90 : 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
       {/* Header */}
-      {!ledgerMode && <div data-scroll-header style={{ position: flowFocused ? 'relative' : 'sticky', top: 0, zIndex: 20, background: 'color-mix(in srgb, var(--bg) 95%, transparent)',
-        backdropFilter: 'blur(20px)',
+      {!ledgerMode && <div data-scroll-header style={{ position: flowFocused ? 'relative' : 'sticky', top: 0, zIndex: 20, background: 'var(--bg)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))', paddingBottom: 18,
         paddingLeft: 20, paddingRight: 20, minHeight: 44, boxSizing: 'border-box',
         display: 'flex', alignItems: 'center', gap: 12 }}>

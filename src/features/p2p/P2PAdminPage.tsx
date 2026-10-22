@@ -674,7 +674,7 @@ export function P2PAdminPage() {
                       <span style={{ color: COLORS.muted, fontSize: 10 }}>{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>
                     {imageUrl ? (
-                      <img
+                      <img decoding="async"
                         src={imageUrl}
                         alt="payment proof"
                         onClick={() => openExternal(imageUrl)}

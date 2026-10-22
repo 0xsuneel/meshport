@@ -55,7 +55,7 @@ function Face({ c, i, size = AVATAR }: { c: RecentContact; i: number; size?: num
   const [ok, setOk] = useState(true)
   const base = { width: size, height: size, borderRadius: '50%', border: '2px solid var(--surface)', boxSizing: 'border-box' as const }
   if (c.avatar_url && ok) {
-    return <img src={c.avatar_url} alt="" draggable={false} onError={() => setOk(false)} style={{ ...base, objectFit: 'cover', display: 'block' }} />
+    return <img decoding="async" src={c.avatar_url} alt="" draggable={false} onError={() => setOk(false)} style={{ ...base, objectFit: 'cover', display: 'block' }} />
   }
   return (
     <div style={{ ...base, background: RECENT_AVATAR_COLORS[i % RECENT_AVATAR_COLORS.length], display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -287,7 +287,7 @@ function NewsBox({ navigate }: { navigate: NavigateFunction }) {
               <div style={{ position: 'relative', height: NEWS_PIC_H, borderRadius: 10, overflow: 'hidden', background: NEWS_SOURCE_TINT[it.source] }}>
                 {it.image_url && !broken[it.id] ? (
                   <>
-                    <img src={it.image_url} alt="" draggable={false} loading={k === 0 ? 'eager' : 'lazy'}
+                    <img decoding="async" src={it.image_url} alt="" draggable={false} loading={k === 0 ? 'eager' : 'lazy'}
                       onError={() => setBroken(b => ({ ...b, [it.id]: true }))}
                       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover',
                         transform: on || reduce ? 'scale(1)' : 'scale(1.08)', transition: reduce ? 'none' : 'transform 5.5s cubic-bezier(.2,.6,.3,1)' }} />

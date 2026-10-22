@@ -1139,7 +1139,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
                 {current.payments.map(p => (
                   <button key={p.id} type="button" onClick={() => onPayment(p)}
                     className="w-full flex items-center gap-3 px-4 py-3 text-left active:bg-border/20">
-                    <img src={chainLogoSrc(p.chain)} alt="" className="size-8 rounded-full shrink-0" />
+                    <img decoding="async" src={chainLogoSrc(p.chain)} alt="" className="size-8 rounded-full shrink-0" />
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm font-medium text-text-primary truncate">{p.orderNumber ? displayOrderNumber(p.orderNumber) : chainLabel(p.chain)}</span>
                       <span className="block text-xs text-text-muted">{chainLabel(p.chain)} · {new Date(p.createdAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
