@@ -563,7 +563,10 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; 
       { label: 'Multichain Hub', path: '/multichain', icon: <ActionIcon name="hub" size={27} /> },
       { label: 'P2P',            path: '/p2p',        icon: <ActionIcon name="p2p" size={27} /> },
       ...(isMerchant ? [] : [{ label: 'Rewards', path: '/rewards', icon: <ActionIcon name="rewards" size={27} /> }]),
-      { label: 'Insights',       path: '/insights',   icon: <ActionIcon name="insights" size={27} /> },
+      // A business sees its own sales and customers (Business → Reports).
+      isMerchant
+        ? { label: 'Business Insights', path: '/business?screen=reports', icon: <ActionIcon name="insights" size={27} /> }
+        : { label: 'Insights',          path: '/insights',                icon: <ActionIcon name="insights" size={27} /> },
       ...(staffOf && !locked ? [{ label: 'Staff mode', path: '/business', icon: <ActionIcon name="clock" size={27} /> }] : []),
     ] },
   ]
@@ -734,8 +737,16 @@ const DEFAULT_QUICK_ACTION_IDS = ['pay', 'receive', 'swap', 'bulk-pay', 'multich
 const LEGACY_QUICK_ACTION_IDS: Record<string, string> = { 'multichain-transfer': 'multichain-hub', 'multichain-claim': 'multichain-hub' }
 const MAX_QUICK_ACTIONS = 8
 
-function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: { navigate: (p: string) => void; actionIds: string[]; onCustomize: () => void; hasOngoingP2P?: boolean }) {
+/** A Quick Action's label: the Hub's name for it, and for a business the
+ *  Insights tile says what it opens (/insights is Ledger Insights there). */
+function useQuickActionLabel(): (a: { id: string; label: string }) => string {
   const hub = useHubLabel()
+  const { isMerchant } = useMerchant()
+  return a => a.id === 'insights' && isMerchant ? 'Ledger Insights' : hub(a.label)
+}
+
+function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: { navigate: (p: string) => void; actionIds: string[]; onCustomize: () => void; hasOngoingP2P?: boolean }) {
+  const qaLabel = useQuickActionLabel()
   const tiles = actionIds.map(id => QUICK_ACTION_POOL.find(a => a.id === id)).filter((a): a is typeof QUICK_ACTION_POOL[number] => !!a)
   const { locked } = useAccountLock()
   return (
@@ -766,7 +777,7 @@ function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: {
                 }} />
               )}
             </div>
-            <span style={{ fontSize: 9.5, color: 'var(--text-secondary)', fontWeight: 500, textAlign: 'center', lineHeight: 1.15 }}>{hub(t.label)}</span>
+            <span style={{ fontSize: 9.5, color: 'var(--text-secondary)', fontWeight: 500, textAlign: 'center', lineHeight: 1.15 }}>{qaLabel(t)}</span>
           </div>
         ))}
       </div>
@@ -789,7 +800,7 @@ function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: {
 function CustomizeQuickActionsSheet({ selectedIds, onToggle, onClose, warning }: {
   selectedIds: string[]; onToggle: (id: string) => void; onClose: () => void; warning: boolean;
 }) {
-  const hub = useHubLabel()
+  const qaLabel = useQuickActionLabel()
   const content = (
     <>
       <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Customize Quick Actions</div>
@@ -821,9 +832,9 @@ function CustomizeQuickActionsSheet({ selectedIds, onToggle, onClose, warning }:
                 {a.icon}
               </div>
               <span style={{
-                fontSize: hub(a.label).length > 10 ? 10.5 : 12, color: 'var(--text-primary)', fontWeight: 400, textAlign: 'center',
+                fontSize: qaLabel(a).length > 10 ? 10.5 : 12, color: 'var(--text-primary)', fontWeight: 400, textAlign: 'center',
                 lineHeight: 1.25, width: '100%', wordBreak: 'break-word',
-              }}>{hub(a.label)}</span>
+              }}>{qaLabel(a)}</span>
               <span aria-hidden="true" style={{
                 position: 'absolute', top: 10, right: 12, width: 20, height: 20, borderRadius: '50%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -848,6 +859,135 @@ function CustomizeQuickActionsSheet({ selectedIds, onToggle, onClose, warning }:
     <DesktopDialogFrame onClose={onClose} maxWidth={420}>
       <div style={{ padding: '24px 20px 28px' }}>{content}</div>
     </DesktopDialogFrame>
+  )
+}
+
+// ── Business Insights - desktop Home for an approved business ───────────────
+// Sales and customers instead of personal payments: the same sales the
+// Business tab counts (lib/businessSales), over the last 7 / 30 / 365 days
+// against the window before.
+const BIZ_PERIOD_DAYS = { week: 7, month: 30, year: 365 } as const
+const bizMoney = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const hourText = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`
+
+function BusinessInsightsColumn({ walletAddress, period, setPeriod, navigate }: {
+  walletAddress: string | null
+  period: 'week' | 'month' | 'year'
+  setPeriod: (p: 'week' | 'month' | 'year') => void
+  navigate: (p: string) => void
+}) {
+  const [sales, setSales] = useState<import('@/lib/merchantPay').MerchantPayment[] | null>(null)
+  useEffect(() => {
+    let live = true
+    const load = () => import('@/lib/businessSales').then(m => m.loadBusinessSales(walletAddress)).then(l => { if (live) setSales(l) }).catch(() => { if (live) setSales(s => s ?? []) })
+    void load()
+    const t = setInterval(() => { if (document.visibilityState === 'visible') void load() }, 60_000)
+    return () => { live = false; clearInterval(t) }
+  }, [walletAddress])
+  const [mod, setMod] = useState<typeof import('@/lib/businessSales') | null>(null)
+  useEffect(() => { import('@/lib/businessSales').then(setMod).catch(() => {}) }, [])
+
+  const days = BIZ_PERIOD_DAYS[period]
+  const view = useMemo(() => {
+    if (!mod || !sales) return null
+    const to = Date.now(), from = to - days * 86_400_000
+    const n = period === 'year' ? 12 : days
+    const len = (to - from) / n
+    return {
+      sum: mod.summarizeSales(sales, from, to),
+      series: mod.salesSeries(sales, from, to, n),
+      countSeries: mod.salesSeries(sales.map(p => ({ ...p, amount: 1 })), from, to, n),
+      customerSeries: Array.from({ length: n }, (_, i) => new Set(sales.filter(p => { const t = Date.parse(p.createdAt); return t >= from + i * len && t < from + (i + 1) * len }).map(mod.salesCustomer)).size),
+    }
+  }, [mod, sales, days, period])
+  const periodWord = period === 'week' ? 'last 7 days' : period === 'month' ? 'last 30 days' : 'last 12 months'
+  const card = { background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)', boxShadow: 'var(--shadow-1)' } as const
+  const small = { fontSize: 9.5, color: 'var(--text-secondary)' } as const
+  const sum = view?.sum
+
+  return (
+    <>
+      <div style={{ ...card, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Business Insights</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 1 }}>Your sales and customers</div>
+          </div>
+          <div style={{ display: 'flex', gap: 3, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', borderRadius: 9, padding: 3, flexShrink: 0 }}>
+            {(['week', 'month', 'year'] as const).map(p => (
+              <button key={p} onClick={() => setPeriod(p)} style={{
+                padding: '4px 7px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 9.5, fontWeight: 600, whiteSpace: 'nowrap',
+                background: period === p ? 'var(--brand)' : 'transparent', color: period === p ? '#fff' : 'var(--text-secondary)',
+              }}>{p === 'week' ? '7 days' : p === 'month' ? '30 days' : '12 months'}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Sales · {periodWord}</div>
+          <div style={{ fontSize: 27, fontWeight: 700, color: 'var(--text-primary)', marginTop: 1 }}>{sum ? bizMoney(sum.total) : '…'}</div>
+        </div>
+        <Sparkline values={view?.series ?? []} color="var(--brand-text)" height={34} fill />
+        <div style={{ display: 'flex', borderTop: '1px solid var(--border)', paddingTop: 8 }}>
+          <div style={{ flex: 1 }}>
+            <div style={small}>Average sale</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginTop: 1 }}>{sum ? bizMoney(sum.average) : '-'}</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={small}>Largest sale</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginTop: 1 }}>{sum ? bizMoney(sum.largest) : '-'}</div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={small}>Busiest hour</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)', marginTop: 1 }}>{sum?.peakHour != null ? hourText(sum.peakHour) : '-'}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+        <InsightStatCard label="Sales" value={sum ? bizMoney(sum.total) : '-'} changePct={sum?.totalChange ?? null} sparkValues={view?.series ?? []} />
+        <InsightStatCard label="Payments" value={sum ? String(sum.count) : '-'} changePct={sum?.countChange ?? null} sparkValues={view?.countSeries ?? []} />
+        <InsightStatCard label="Customers" value={sum ? String(sum.customers) : '-'} changePct={sum?.customersChange ?? null} sparkValues={view?.customerSeries ?? []} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div style={{ ...card, borderRadius: 14, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Top customers</div>
+          {!sum || sum.topCustomers.length === 0 ? (
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>{sum ? 'No sales in this period' : 'Loading…'}</p>
+          ) : sum.topCustomers.map((c, i) => (
+            <div key={c.name} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5 }}>
+              <span style={{ color: 'var(--text-secondary)', width: 10 }}>{i + 1}</span>
+              <span style={{ flex: 1, minWidth: 0, color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+              <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{bizMoney(c.total)}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ ...card, borderRadius: 14, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Sales by chain</div>
+          {!sum || sum.chains.length === 0 ? (
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>{sum ? 'No sales in this period' : 'Loading…'}</p>
+          ) : sum.chains.slice(0, 4).map(c => (
+            <div key={c.chain}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginBottom: 2 }}>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{c.chain === 'Arc_Testnet' ? 'Arc' : c.chain.replace(/_(Sepolia|Testnet|Fuji|Amoy_Testnet|Apothem)$/, '').replace(/_/g, ' ')}</span>
+                <span style={{ color: 'var(--text-secondary)' }}>{Math.round(c.share * 100)}%</span>
+              </div>
+              <div style={{ height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                <div style={{ width: `${Math.round(c.share * 100)}%`, height: '100%', background: 'var(--brand)', borderRadius: 2 }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button onClick={() => navigate('/business?screen=reports')} style={{
+        ...card, borderRadius: 14, padding: '11px 14px', cursor: 'pointer', textAlign: 'left',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 600, color: 'var(--brand-text)',
+      }}>
+        <span>Full report · by day, hour and store</span>
+        <span aria-hidden>→</span>
+      </button>
+    </>
   )
 }
 
@@ -4030,6 +4170,9 @@ export function HomePage() {
              the selected period vs. the prior equal-length period) - none
              of it is fabricated. */}
         <div className="hidden lg:flex lg:col-start-1 lg:row-start-2 xl:col-start-2 xl:row-start-1 lg:min-w-0" style={{ flexDirection: 'column', gap: 10 }}>
+          {isMerchant ? (
+            isDesktop && <BusinessInsightsColumn walletAddress={walletAddress} period={insightsPeriod} setPeriod={setInsightsPeriod} navigate={navigate} />
+          ) : (<>
           <div style={{
             display: 'flex', flexDirection: 'column', gap: 8,
             background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)',
@@ -4047,7 +4190,7 @@ export function HomePage() {
                     fontSize: 9.5, fontWeight: 600, whiteSpace: 'nowrap',
                     background: insightsPeriod === p ? 'var(--brand)' : 'transparent',
                     color: insightsPeriod === p ? '#fff' : 'var(--text-secondary)',
-                  }}>{p === 'week' ? 'This Week' : p === 'month' ? 'This Month' : 'This Year'}</button>
+                  }}>{p === 'week' ? '7 days' : p === 'month' ? '30 days' : '12 months'}</button>
                 ))}
               </div>
             </div>
@@ -4099,7 +4242,7 @@ export function HomePage() {
             buckets={activityBuckets.map(b => ({ label: b.label, count: b.count }))}
             granularity={activityGranularity} setGranularity={setActivityGranularity}
             totalCount={insightsData.current.length}
-            periodLabel={insightsPeriod === 'week' ? 'this week' : insightsPeriod === 'month' ? 'this month' : 'this year'}
+            periodLabel={insightsPeriod === 'week' ? 'in the last 7 days' : insightsPeriod === 'month' ? 'in the last 30 days' : 'in the last 12 months'}
           />
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -4110,6 +4253,7 @@ export function HomePage() {
               receivedChangePct={insightsData.receivedChangePct}
             />
           </div>
+          </>)}
         </div>
       </div>
       </div>
