@@ -9,7 +9,7 @@ export type TradeLive = { status: string; buyerId: string; sellerId: string; usd
 /** A trade's step right now, for its Home card: the title, the line under
  *  it and the card's look (`type` picks the icon and colour). null once the
  *  trade is over (the card hides) or for a state with nothing to do. */
-export function tradeStepCard(t: TradeLive, me: string):
+export function tradeStepCard(t: TradeLive, me: string, latest?: string):
   { title: string; body: string; type: string } | null {
   const seller = t.sellerId === me
   const usdc = `${t.usdc.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDC`
@@ -22,6 +22,8 @@ export function tradeStepCard(t: TradeLive, me: string):
       return seller ? { title: 'Order confirmed', body: `Waiting for the buyer to pay${fiat ? ` ${fiat}` : ''}`, type: 'seller_confirmed' }
         : { title: 'Pay now', body: `Send ${fiat || 'the payment'} to get ${usdc}`, type: 'seller_confirmed' }
     case 'payment_sent':
+      // The seller's release was put back (nothing moved): say so.
+      if (seller && latest === 'release_failed') return { title: "Release didn't go through", body: `No USDC moved - release ${usdc} again`, type: 'payment_marked_completed' }
       return seller ? { title: 'Buyer marked paid', body: `Check your bank${fiat ? ` for ${fiat}` : ''} and release ${usdc}`, type: 'payment_marked_completed' }
         : { title: 'Payment marked', body: `Waiting for the seller to release ${usdc}`, type: 'payment_marked_completed' }
     default:

@@ -1083,6 +1083,7 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
     sell_order_placed: { icon: <Tag className="w-4 h-4" />, bg: 'bg-brand/20 text-brand-text', dot: 'bg-brand' },
     payment_marked_completed: { icon: <CheckCircle className="w-4 h-4" />, bg: 'bg-warning/20 text-warning', dot: 'bg-warning' },
     funds_released: { icon: <Wallet className="w-4 h-4" />, bg: 'bg-success/20 text-success', dot: 'bg-success' },
+    release_failed: { icon: <RefreshCw className="w-4 h-4" />, bg: 'bg-warning/20 text-warning', dot: 'bg-warning' },
     trade_cancelled: { icon: <Ban className="w-4 h-4" />, bg: 'bg-danger/20 text-danger', dot: 'bg-danger' },
     trade_expired: { icon: <ClockIcon className="w-4 h-4" />, bg: 'bg-text-secondary/20 text-text-secondary', dot: 'bg-text-secondary' },
     dispute_opened: { icon: <Scale className="w-4 h-4" />, bg: 'bg-danger/20 text-danger', dot: 'bg-danger' },

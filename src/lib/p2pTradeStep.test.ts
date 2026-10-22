@@ -18,3 +18,10 @@ describe('tradeStepCard', () => {
     for (const s of ['released', 'completed', 'cancelled', 'expired']) expect(tradeStepCard(t(s), 'buyer')).toBeNull()
   })
 })
+
+describe('tradeStepCard after a release that did not go through', () => {
+  it('asks the seller to release again', () => {
+    expect(tradeStepCard({ status: 'payment_sent', buyerId: 'b', sellerId: 's', usdc: 10, fiat: 950, currency: 'INR' }, 's', 'release_failed'))
+      .toMatchObject({ title: "Release didn't go through", body: 'No USDC moved - release 10 USDC again' })
+  })
+})
