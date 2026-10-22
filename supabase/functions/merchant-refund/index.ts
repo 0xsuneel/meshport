@@ -49,6 +49,13 @@ const jsonFor = (req: Request, body: unknown, status = 200) =>
 const REFUNDS_CONTRACT = (Deno.env.get('MESHPORT_REFUNDS_CONTRACT') || '0x53e5c71290dc5147089b7b40679f3d6a164c8c2b').toLowerCase()
 
 const DRPC_KEY = Deno.env.get('DRPC_KEY') ?? ''
+// The customer's push ("Refund from …"), sent through the app's /api/push.
+const APP_BASE_URL = (() => {
+  const raw = (Deno.env.get('APP_BASE_URL') || '').trim()
+  const m = /https?:\/\/[^\s/'"]+/i.exec(raw)
+  return m ? m[0] : 'https://meshport.xyz'
+})()
+const PUSH_INTERNAL_SECRET = (Deno.env.get('PUSH_INTERNAL_SECRET') || '').trim()
 const ARC_RPCS = [
   ...((Deno.env.get('ARC_RPC_URL') ?? '').trim() ? [(Deno.env.get('ARC_RPC_URL') ?? '').trim()] : []),
   ...(DRPC_KEY ? [`https://lb.drpc.live/arc-testnet/${DRPC_KEY}`] : []),
@@ -349,6 +356,49 @@ Deno.serve(async (req: Request) => {
     // merchant_refunds_cap: over the payment, or a blocked sender.
     if (/more than this payment|blocked address/i.test(error.message)) return jsonFor(req, { error: error.message }, 422)
     return jsonFor(req, { error: error.message }, 500)
+  }
+
+  // The customer's side, for a refund that lands on Arc: their Activity row
+  // for this transfer says it's a refund from this business (the Arc watcher
+  // records it as a plain receive from the refunds contract - or hasn't yet,
+  // then it's written here and the watcher leaves it alone), and one push
+  // names the business instead of "Received from 0x53e5…".
+  if (refundChain === 'Arc_Testnet') {
+    const refundMeta = {
+      receiveKind: 'merchant_refund', note: 'Refund', merchantName: target.merchantName ?? null,
+      merchantOrder: target.orderNumber ?? null, refundReason: found.reason ? found.reason.slice(0, 140) : null, refundId: row.id, pushed: true,
+    }
+    const recvHash = `recv_${txHash.toLowerCase()}`
+    const wallet = customerWallet.toLowerCase()
+    try {
+      const { data: existing } = await db.from('activity').select('id, metadata').eq('tx_hash', recvHash).eq('wallet_address', wallet).maybeSingle()
+      if (existing) {
+        await db.from('activity').update({ metadata: { ...(existing.metadata ?? {}), ...refundMeta, note: 'Refund' } }).eq('id', existing.id)
+      } else {
+        await db.from('activity').upsert({
+          wallet_address: wallet, user_id: target.customerUserId ?? undefined, tx_hash: recvHash, activity_type: 'receive', status: 'completed',
+          amount: found.amount, usd_value: found.amount, token_symbol: 'USDC', counterparty_address: REFUNDS_CONTRACT,
+          explorer_url: `https://testnet.arcscan.app/tx/${txHash}`, metadata: { ...refundMeta, source: 'merchant-refund' },
+        }, { onConflict: 'tx_hash,wallet_address', ignoreDuplicates: true })
+      }
+    } catch (e) { console.warn('[merchant-refund] customer activity not updated:', e instanceof Error ? e.message : e) }
+    if (target.customerUserId && PUSH_INTERNAL_SECRET) {
+      try {
+        await fetch(`${APP_BASE_URL}/api/push?action=send-internal`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${PUSH_INTERNAL_SECRET}` },
+          body: JSON.stringify({
+            userId: target.customerUserId,
+            title: `Refund from ${target.merchantName || 'a business'}`,
+            body: `+${usd(found.amount)} USDC${target.orderNumber ? ` for ${orderDisplay(target.orderNumber)}` : ''}${found.reason ? ` · ${found.reason}` : ''}`,
+            url: '/activity',
+            // Same tag as the receive push: replaces it if that went first.
+            tag: `payment-${txHash.toLowerCase()}`,
+          }),
+          signal: AbortSignal.timeout(8000),
+        })
+      } catch (e) { console.warn('[merchant-refund] push failed (non-fatal):', e instanceof Error ? e.message : e) }
+    }
   }
 
   if (target.customerUserId) {

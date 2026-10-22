@@ -133,6 +133,9 @@ export function notifyPaymentReceived({ amount, fromUsername, id, tokenSymbol, c
   })))
 }
 
+/** MeshPortRefunds on Arc (lib/merchantRefunds.ts REFUNDS_CONTRACT). */
+const REFUNDS_CONTRACT_ADDR = '0x53e5c71290dc5147089b7b40679f3d6a164c8c2b'
+
 export function notifyPaymentReceivedFromAddress({ amount, fromAddress, id, tokenSymbol, createdAt }: { amount: number; fromAddress: string; id?: string; tokenSymbol?: string; createdAt?: string }) {
   // Used only when the sender couldn't be resolved to a known MeshPort
   // username (see fireIfReceived in HomePage.tsx, which checks the
@@ -140,6 +143,10 @@ export function notifyPaymentReceivedFromAddress({ amount, fromAddress, id, toke
   // instead when a username is found). This is the genuine fallback case -
   // a real external sender (exchange withdrawal, another wallet) where an
   // address really is the only identifying information available.
+  // A business's refund (from the MeshPortRefunds contract): its own
+  // "Refund from <business>" notification arrives from the server, so no
+  // second "Received from 0x53e5…" for the same money.
+  if (fromAddress.toLowerCase() === REFUNDS_CONTRACT_ADDR) return
   const short = fromAddress.startsWith('0x') && fromAddress.length > 12 ? fromAddress.slice(0, 6) + '...' + fromAddress.slice(-6) : fromAddress
   const symbol = (tokenSymbol || 'USDC').toUpperCase()
   // Same cirBTC 8-decimal fix as notifyPaymentReceived above.
