@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/store'
 import { useBusinessTab } from '@/lib/merchant'
-import { listMyPayments, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, subscribeChainReceipts, displayOrderNumber, type MerchantPayment } from '@/lib/merchantPay'
+import { listMyPayments, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, subscribeChainReceipts, displayOrderNumber, orderTitle, type MerchantPayment } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
 import { PaymentReceivedOverlay } from './ui'
 import { chainLabel } from './settlement'
@@ -84,10 +84,20 @@ export function PaymentReceivedWatcher() {
     return () => clearTimeout(t)
   }, [shown])
 
+  // The last payment shown stays drawn while the popup animates away -
+  // clearing it with the popup still on screen blanked it mid-close (flicker).
+  const lastShown = useRef<MerchantPayment | null>(null)
+  if (shown) lastShown.current = shown
+  const p = shown ?? lastShown.current
+
   if (!business) return null
+  // Which order it paid: "Bill #138" / "Request #138". A Shop QR payment had
+  // no order the customer saw - no number.
+  const order = !p?.orderNumber || p.orderKind === 'shop' ? undefined
+    : p.orderKind ? orderTitle(p.orderKind, p.orderNumber, { short: true }) : displayOrderNumber(p.orderNumber)
   return (
-    <PaymentReceivedOverlay open={!!shown} amount={shown ? money(shown.amount) : ''}
-      from={shown ? (shown.customerUsername ? `${shown.customerUsername}.arc` : (/^0x0{40}$/i.test(shown.from) ? 'a bridge' : `${shown.from.slice(0, 6)}…${shown.from.slice(-4)}`)) : ''}
-      chainLabel={shown ? chainLabel(shown.chain) : ''} order={shown?.orderNumber ? displayOrderNumber(shown.orderNumber) : undefined} onDone={() => setShown(null)} />
+    <PaymentReceivedOverlay open={!!shown} amount={p ? money(p.amount) : ''}
+      from={p ? (p.customerUsername ? `${p.customerUsername}.arc` : (/^0x0{40}$/i.test(p.from) ? 'a bridge' : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`)) : ''}
+      chainLabel={p ? chainLabel(p.chain) : ''} order={order} onDone={() => setShown(null)} />
   )
 }
