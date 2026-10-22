@@ -2154,7 +2154,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               <MoveProgress
                 kind="bring" route={route} fromLabel={chainProgress.length > 1 ? `${chainProgress.length} chains` : srcLabel} toLabel="Arc"
                 amount={displayTotal || trackClaimRow?.amount || 0}
-                steps={steps} current={current} failed={failed} safe={safe}
+                steps={steps} current={current} failed={failed} safe={safe} timeSteps
                 loading={!cp0 && !trackClaimRow}
                 txs={isUbRoute ? [srcLink, undefined, undefined, mintLink] : [undefined, srcLink, undefined, mintLink]}
                 holdText="Please wait – don't close this screen until the bring is submitted."
