@@ -105,6 +105,9 @@ export const SHEET_PANEL = {
 } as const
 /** The dim behind every bottom sheet (Tailwind bg-black/70). */
 export const SHEET_DIM = 'rgba(0,0,0,0.7)'
+/** A light dim that keeps the page readable behind it: the amount keypad
+ *  sheet and the desktop chat Pay drawer. */
+export const LIGHT_DIM = 'rgba(0,0,0,0.16)'
 /** The dim behind every centred popup (PopupDim). */
 export const POPUP_DIM = 'rgba(6,10,14,0.62)'
 export const SHEET_BACKDROP = {

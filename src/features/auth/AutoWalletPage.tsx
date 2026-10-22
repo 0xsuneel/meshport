@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import { ScreenPush } from '@/components/ui/ScreenPush'
+import { EASE_OUT } from '@/lib/motion'
 import { CheckCircle, AlertTriangle } from 'lucide-react'
 import { useAuthStore, useWalletStore } from '@/store'
 import { generateWallet } from '@/lib/arc'
@@ -77,9 +79,13 @@ export function AutoWalletPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-bg items-center justify-center px-6">
+    <div className="flex flex-col h-full bg-bg px-6">
+      {/* The page itself arrives with the route's push; creating → ready (or
+          the error) pushes in like any step, with no fades of its own. */}
+      <ScreenPush screenKey={error ? 'error' : step}>
+      <div className="flex-1 flex flex-col items-center justify-center">
       {error ? (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center space-y-4 max-w-sm">
+        <div className="text-center space-y-4 max-w-sm">
           <div className="w-16 h-16 bg-danger/15 rounded-full flex items-center justify-center mx-auto">
             <AlertTriangle className="w-7 h-7 text-danger" />
           </div>
@@ -103,9 +109,9 @@ export function AutoWalletPage() {
               </button>
             )}
           </div>
-        </motion.div>
+        </div>
       ) : step === 'creating' ? (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center space-y-6">
+        <div className="text-center space-y-6">
           <div className="w-20 h-20 bg-brand/15 rounded-full flex items-center justify-center mx-auto">
             <div className="w-10 h-10 border-2 border-brand border-t-transparent rounded-full animate-spin" />
           </div>
@@ -113,10 +119,10 @@ export function AutoWalletPage() {
             <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">Setting up your wallet</h2>
             <p className="text-text-secondary mt-1 text-[14px] leading-[1.5]">Creating your secure Arc wallet...</p>
           </div>
-        </motion.div>
+        </div>
       ) : (
-        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center space-y-4">
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1], delay: 0.1 }}
+        <div className="text-center space-y-4">
+          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ duration: 0.22, ease: EASE_OUT, delay: 0.1 }}
             className="w-20 h-20 bg-success/15 rounded-full flex items-center justify-center mx-auto">
             <CheckCircle className="w-12 h-12 text-success" />
           </motion.div>
@@ -124,8 +130,10 @@ export function AutoWalletPage() {
             <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">Wallet Ready!</h2>
             {address && <p className="text-xs font-mono text-text-secondary mt-1 break-all px-4">{address}</p>}
           </div>
-        </motion.div>
+        </div>
       )}
+      </div>
+      </ScreenPush>
     </div>
   )
 }

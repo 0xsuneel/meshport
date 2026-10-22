@@ -34,7 +34,7 @@ import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { HubPush } from '@/components/multichain/HubPage'
 import { MeshLoader } from '@/components/ui/MeshLoader'
-import { MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION, type NavDirection } from '@/lib/motion'
+import { EASE_OUT, MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION, type NavDirection } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
@@ -1632,9 +1632,12 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   // Hub Bring page: which screen is showing, for the slide-in between them.
-  // The result (success or failure) stays on the screen it came from.
-  const lastPushKey = useRef('form')
-  const pushKey = step === 'loading' || step === 'select' ? 'form'
+  // Chain list → amount → processing each push; loading swaps in place to
+  // whatever it was loading, and the result (success or failure) stays on
+  // the screen it came from.
+  const lastPushKey = useRef(selected ? 'amount' : 'select')
+  const pushKey = step === 'loading' ? lastPushKey.current
+    : step === 'select' ? (selectedChain ? 'amount' : 'select')
     : step === 'confirm' && confirmPhase !== 'done' ? 'proc'
     : lastPushKey.current
   lastPushKey.current = pushKey
@@ -1654,7 +1657,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       // Inside the Hub: clip only sideways (the step slide-ins) - never
       // vertically, so the amount form can glide up over the Hub's balance
       // card and tabs when the keypad opens, like Transfer.
-      ...(isDesktop ? { overflow: 'visible' } : embedded ? { overflowX: 'clip', overflowY: 'visible' } : { overflow: 'hidden' }) }}>
+      // position: relative - the step leaving a cross-fade is popped out of
+      // the layout (StepSwap) and positioned against this.
+      position: 'relative', overflowX: 'clip', overflowY: 'visible' }}>
 
       {/* LOADING STATE - chains scroll horizontally through a fixed scan
           line, like a barcode scanner, using real chain logos rather than
@@ -1667,13 +1672,13 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           instead of instantly cutting from one screen to the other - that
           instant, un-animated unmount/mount swap was the "flicker" when the
           scan ended. */}
-      <PushIf on={pushScreens} screenKey={pushKey}>
-      <AnimatePresence initial={false} mode="wait">
+      <PushIf on={pushScreens} screenKey={pushKey} back={direction === 'back'}>
+      <StepSwap push={pushScreens}>
       {step === 'loading' && (
         <motion.div
           key="loading"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          transition={{ duration: 0.25, ease: 'easeInOut' }}
+          transition={MOBILE_TAB_FADE_TRANSITION}
           {...(pushScreens ? INSTANT_STEP : {})}
           style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: SPACING.lg }}
         >
@@ -1706,20 +1711,18 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
       {step === 'select' && !selectedChain && (
         <motion.div
           key="select"
-          // Same page feel: a quick fade, never a slide from the side.
+          // In place: a quick fade (in the Hub, the push slides it in).
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          transition={{ duration: 0.18, ease: 'easeOut' }}
+          transition={MOBILE_TAB_FADE_TRANSITION}
           {...(pushScreens ? INSTANT_STEP : {})}
           style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
         >
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `${SPACING.sm}px ${SPACING.md}px`, background: COLORS.bg, borderBottom: `1px solid ${COLORS.border}`, flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.sm }}>
-              {!isDesktop && (
-                <button onClick={() => navigate('/multichain')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: COLORS.text, display: 'flex', alignItems: 'center' }}>
-                  <ArrowLeft className="w-5 h-5"/>
-                </button>
-              )}
+              <button onClick={() => navigate('/multichain')} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: COLORS.text, display: 'flex', alignItems: 'center' }}>
+                <ArrowLeft className="w-5 h-5"/>
+              </button>
               <span style={{ fontSize: 18, fontWeight: 700, color: COLORS.text }}>Claim Funds</span>
             </div>
             <button
@@ -1857,18 +1860,16 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         <motion.div
           key="amount-step"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          transition={{ duration: 0.18, ease: 'easeOut' }}
+          transition={MOBILE_TAB_FADE_TRANSITION}
           onClick={() => { if (keypadOpen) setKeypadOpen(false) }}
           {...(pushScreens ? INSTANT_STEP : {})}
           style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
         >
           {/* Header - hidden inside the Hub (the form has its own Back) */}
           {!embedded && <div style={{ display: 'flex', alignItems: 'center', gap: SPACING.md, padding: `${SPACING.sm}px ${SPACING.md}px`, background: COLORS.bg, borderBottom: `1px solid ${COLORS.border}`, flexShrink: 0 }}>
-            {!isDesktop && (
-              <button onClick={e => { e.stopPropagation(); leaveAmountStep() }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: COLORS.text, display: 'flex', alignItems: 'center' }}>
-                <ArrowLeft className="w-5 h-5"/>
-              </button>
-            )}
+            <button onClick={e => { e.stopPropagation(); leaveAmountStep() }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: COLORS.text, display: 'flex', alignItems: 'center' }}>
+              <ArrowLeft className="w-5 h-5"/>
+            </button>
             <ChainLogo chainId={selectedChain.chainId} size={28}/>
             <span style={{ fontSize: 16, fontWeight: 700, color: COLORS.text }}>{getMeta(selectedChain.chainId).label}</span>
           </div>}
@@ -2049,13 +2050,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                     background: COLORS.primary, cursor: bringEnabled ? 'pointer' : 'not-allowed', opacity: bringEnabled ? 1 : 0.45 }}>
                   {claimAmt > 0 ? `Bring ${formatAmount(claimAmt)} USDC` : 'Bring'}
                 </button>
-                {/* Desktop's header has no back arrow - keep a quiet way back there. */}
-                {isDesktop && (
-                  <button onClick={e => { e.stopPropagation(); leaveAmountStep() }}
-                    style={{ height: 40, border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: COLORS.muted }}>
-                    Back
-                  </button>
-                )}
               </div>
             </motion.div>
           </div>
@@ -2086,95 +2080,16 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             </div>
           )}
 
-          {/* Passcode Sheet / Dialog - opens on this same page, no navigation */}
-          <AnimatePresence>
-            {showPasscodeSheet && (() => {
-              const passContent = (
-                <>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 4 }}>
-                    <p style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, margin: 0 }}>Enter Passcode</p>
-                    <button
-                      onClick={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
-                      aria-label="Dismiss"
-                      style={{
-                        background: 'none', border: 'none', cursor: 'pointer', padding: 4,
-                        color: COLORS.muted, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}
-                    >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="6 9 12 15 18 9"/>
-                      </svg>
-                    </button>
-                  </div>
-                  <div style={{ textAlign: 'center', marginBottom: 28 }}>
-                    <p style={{ fontSize: 12, color: COLORS.muted, margin: '6px 0 0' }}>
-                      {passError
-                        ? <span role="alert" style={{ color: COLORS.error }}>{passError}</span>
-                        : `Confirm claim of $${formatAmount(selectedTotal)} USDC`}
-                    </p>
-                  </div>
-                  <div style={{ width: '100%' }}>
-                    <PinKeypad
-                      value={passEntry}
-                      onChange={v => { setPassEntry(v); setPassError('') }}
-                      length={6}
-                      error={!!passError}
-                      shake={!!passError}
-                      onComplete={(_, viaBiometric) => { setPaidViaBiometric(!!viaBiometric); handlePasscodeConfirm() }}
-                    />
-                  </div>
-                </>
-              )
-
-              if (desktopInput) {
-                return (
-                  <DesktopTransactionAuthDialog
-                    onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
-                    title="Authorize Claim"
-                    placement={embedded ? 'panel' : 'center'}
-                    amountLabel={`$${formatAmount(selectedTotal)} USDC`}
-                    subLabel={`From ${selectedChain ? getMeta(selectedChain.chainId).label : 'Multichain'}`}
-                  >
-                    {passError && <p role="alert" style={{ fontSize: 12, color: COLORS.error, textAlign: 'center', marginBottom: 16 }}>Incorrect passcode. Try again.</p>}
-                    <PinKeypad
-                      value={passEntry}
-                      onChange={v => { setPassEntry(v); setPassError('') }}
-                      length={6}
-                      error={!!passError}
-                      shake={!!passError}
-                      onComplete={(_, viaBiometric) => { setPaidViaBiometric(!!viaBiometric); handlePasscodeConfirm() }}
-                    />
-                  </DesktopTransactionAuthDialog>
-                )
-              }
-              return (
-                <>
-                  <motion.div
-                    key="pass-backdrop"
-                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                    transition={SHEET_BACKDROP.transition}
-                    onClick={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
-                    style={{ position: 'fixed', top: 0, bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', zIndex: 60, background: 'rgba(0,0,0,0.55)' }}
-                  />
-                  <motion.div {...sheetDrag('mc-pass', () => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') })}
-                    key="pass-sheet"
-                    initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}
-                    transition={SHEET_SPRING}
-                    style={{
-                      position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 70,
-                      maxWidth: 430, margin: '0 auto',
-                      background: COLORS.surface, borderRadius: '24px 24px 0 0',
-                      borderTop: `1px solid ${COLORS.border}`, padding: `${SPACING.md}px ${SPACING.xl}px ${SPACING.xl * 1.5}px`,
-                      display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    }}
-                  >
-                    <div style={{ width: 36, height: 4, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)', margin: '4px 0 18px' }} />
-                    {passContent}
-                  </motion.div>
-                </>
-              )
-            })()}
-          </AnimatePresence>
+          {/* Passcode - the app's passcode step (PinSheet), on this same page,
+              no navigation: phone = bottom sheet, desktop = the authorize
+              dialog in the right-hand panel. */}
+          <PinSheet open={showPasscodeSheet} id="mc-pass" backClose={false}
+            onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
+            title={desktopInput ? 'Authorize Claim' : 'Enter Passcode'}
+            subtitle={desktopInput ? `From ${selectedChain ? getMeta(selectedChain.chainId).label : 'Multichain'}` : `Confirm claim of $${formatAmount(selectedTotal)} USDC`}
+            amountLabel={`$${formatAmount(selectedTotal)} USDC`} placement="panel"
+            value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }} error={passError || undefined}
+            onComplete={(_, viaBiometric) => { setPaidViaBiometric(!!viaBiometric); handlePasscodeConfirm() }} />
         </motion.div>
       )}
 
@@ -2183,7 +2098,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         <motion.div
           key="confirm-step"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          transition={{ duration: 0.25, ease: 'easeInOut' }}
+          transition={MOBILE_TAB_FADE_TRANSITION}
           {...(pushScreens ? INSTANT_STEP : {})}
           style={{ display: 'flex', flexDirection: 'column', height: '100%' }}
         >
@@ -2237,8 +2152,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             <motion.div
               key="claiming-step"
               // Leaving for the receipt (under the flash): go at once, no fade.
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: confirmPhase === 'done' ? 0 : 0.25 } }}
-              transition={{ duration: 0.25 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: confirmPhase === 'done' ? { duration: 0 } : MOBILE_TAB_FADE_TRANSITION }}
+              transition={MOBILE_TAB_FADE_TRANSITION}
               {...(pushScreens ? INSTANT_STEP : {})}
               style={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto', padding: '0 12px 12px' }}
             >
@@ -2373,13 +2288,13 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         <motion.div
           key="failed-step"
           exit={{ opacity: 0 }}
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+          initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION}
           {...(pushScreens ? INSTANT_STEP : {})}
           style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: `0 ${SPACING.xl}px` }}
         >
           <motion.div
             initial={{ scale: 0.5 }} animate={{ scale: 1 }}
-            transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }}
+            transition={{ duration: 0.32, ease: EASE_OUT }}
             style={{ width: 80, height: 80, borderRadius: '50%', background: 'color-mix(in srgb, var(--danger) 12%, transparent)', border: '2px solid color-mix(in srgb, var(--danger) 35%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.lg }}
           >
             <XCircle className="w-10 h-10" style={{ color: COLORS.error }}/>
@@ -2396,7 +2311,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           </div>
         </motion.div>
       )}
-      </AnimatePresence>
+      </StepSwap>
       </PushIf>
 
       <style>{`
@@ -2422,89 +2337,5 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     </div>
   )
 
-  if (!isDesktop) return flow
-
-  // ── Desktop: flow (left) + Claimed History (right), independently scrollable ──
-  // Fills the full available content width (no maxWidth cap) at a fixed
-  // 65/35 grow split, same treatment as Swap/Multichain Transfer. Bottom
-  // padding trimmed so both columns reach down close to the viewport's
-  // bottom edge.
-  return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
-      <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto' }} ref={desktopColumnRef}>{flow}</div>
-      <div style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0 }}>
-        <DesktopHistoryPanel title="Recent History" onViewAll={() => navigate('/multichain', { state: { tab: 'activity' } })}>
-          {!claimHistoryLoaded ? (
-            <DesktopHistorySkeleton />
-          ) : claimHistory.length === 0 ? (
-            <DesktopHistoryEmpty label="Funds you claim from other chains will show up here" />
-          ) : (
-            claimHistory.map(c => {
-              const failed = c.status === 'failed'
-              const pending = !failed && c.status !== 'completed'
-              const chainLabel = (c.sourceChain || 'Unknown chain').replace(/_/g, ' ')
-              const statusColor = failed ? 'var(--danger)' : pending ? 'var(--warning)' : 'var(--success)'
-              return (
-                <HistoryRow key={c.id} inPanel flash={c.id === claimFlash.flashId}
-                  onClick={() => { claimFlash.opened(); setClaimHistDetail(c) }}
-                  icon={<HistoryIcon tone={failed ? 'failed' : pending ? 'pending' : 'in'} icon="receive" />}
-                  title={`From ${chainLabel}`}
-                  meta={<><span style={{ color: statusColor, fontWeight: 600 }}>{failed ? 'Failed' : pending ? 'In progress' : 'Completed'}</span> · {timeAgo(c.completedAt || c.createdAt)}</>}
-                  right={<div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: failed ? 'var(--danger)' : 'var(--success)', textDecoration: failed ? 'line-through' : undefined }}>
-                      +{formatAmount(c.arrivedAmount ?? c.amount)} USDC
-                    </div>
-                  </div>} />
-              )
-            })
-          )}
-        </DesktopHistoryPanel>
-      </div>
-      <AnimatePresence>
-        {claimHistDetail && (() => {
-          const c = claimHistDetail
-          const failed = c.status === 'failed'
-          const pending = !failed && c.status !== 'completed'
-          const chainLabel = (c.sourceChain || 'Unknown chain').replace(/_/g, ' ')
-          const statusColor = failed ? 'var(--danger)' : pending ? 'var(--warning)' : 'var(--success)'
-          const burnHref = explorerTxUrl(c.sourceChain, c.txHash)
-          // Mint link only from the real Arc mint hash - never c.txHash, which
-          // is the source-chain burn hash (an Arc-explorer link to it 404s).
-          const mintHref = arcExplorerTxUrl(c.destinationTxHash)
-          return (
-            <DesktopHistoryDetail
-              onClose={() => { claimFlash.closed(c.id); setClaimHistDetail(null) }}
-              title="Claim Details"
-              icon={<svg width="20" height="20" viewBox="0 0 14 14" fill="none"><path d="M12 2L2 12M2 12H8M2 12V6" stroke={statusColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-              iconColor={statusColor}
-              amountLabel={`+${formatAmount(c.arrivedAmount ?? c.amount)} USDC`}
-              amountColor={statusColor}
-              rows={[
-                { label: 'From', value: chainLabel },
-                ...(() => {
-                  const move = claimMove(c)
-                  return move ? [
-                    { label: 'You claimed', value: `${formatMoveAmount(move.sent)} USDC` },
-                    { label: 'You received', value: `${formatMoveAmount(move.received)} USDC` },
-                    { label: 'Fees paid', value: formatFee(move.fees) },
-                    ...(move.meshportFee > 0 ? [
-                      { label: 'MeshPort fee', value: formatFee(move.meshportFee) },
-                      { label: 'Circle fee', value: formatFee(move.networkFee) },
-                    ] : []),
-                  ] : []
-                })(),
-                { label: 'Time', value: failed ? '-' : timeAgo(c.completedAt || c.createdAt) },
-                { label: 'Status', value: failed ? 'Failed' : pending ? 'In progress' : 'Completed' },
-                ...(c.txHash ? [{ label: 'Tx Hash', value: `${c.txHash.slice(0, 8)}…${c.txHash.slice(-6)}` }] : []),
-              ]}
-              explorerLinks={[
-                ...(burnHref ? [{ label: `View Burn on ${chainLabel}`, href: burnHref }] : []),
-                ...(mintHref ? [{ label: 'View Mint on Arc', href: mintHref }] : []),
-              ]}
-            />
-          )
-        })()}
-      </AnimatePresence>
-    </div>
-  )
+  return flow
 }
