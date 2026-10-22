@@ -7,6 +7,7 @@
 import React from 'react'
 import { ShieldCheck, Loader2, Send, AlertTriangle, Plus, Landmark, UserRound, Check, ChevronRight, X, Clock } from 'lucide-react'
 import { Skeleton } from './primitives'
+import { AmountField, type QuickAmount } from '@/components/ui/AmountField'
 
 // ─── CashOutAmountCard ────────────────────────────────────────────────────────
 
@@ -14,34 +15,27 @@ export interface CashOutAmountCardProps {
   value: string
   onChange: (v: string) => void
   available: string           // "$2,310.40"
-  quick: Array<{ label: string; value: string }>
+  /** Quick amounts under the field ($100 / $500 / $1,000), greyed out above what can go. */
+  quick: QuickAmount[]
+  onMax?: () => void
   fiat: string                // "₹41,700" or ''
   rate?: string               // "₹83.40 / $"
   error?: string
+  /** Phone: tapping the field opens the AmountKeypad sheet (`editing` while it's up). */
+  onTap?: () => void
+  editing?: boolean
 }
 
-export function CashOutAmountCard({ value, onChange, available, quick, fiat, rate, error }: CashOutAmountCardProps) {
+/** The amount box is the app's one AmountField (Pay, Swap, Bulk Pay…); the
+ *  bank side (what arrives in rupees, at what rate) sits under it. */
+export function CashOutAmountCard({ value, onChange, available, quick, onMax, fiat, rate, error, onTap, editing }: CashOutAmountCardProps) {
   return (
     <div className="rounded-3xl bg-card border border-border p-5 flex flex-col gap-4">
-      <p className="text-xs text-text-muted">Available {available}</p>
-      <label className="flex items-baseline gap-1.5">
-        <span className="text-2xl font-semibold text-text-secondary">$</span>
-        <input
-          inputMode="decimal"
-          aria-label="Amount in dollars"
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder="0"
-          className="flex-1 min-w-0 bg-transparent text-[40px] leading-none font-bold tabular-nums text-text-primary placeholder:text-text-muted focus:outline-none"
-        />
-      </label>
-      <div className="grid grid-cols-4 gap-2">
-        {quick.map(q => (
-          <button key={q.label} type="button" onClick={() => onChange(q.value)}
-            className={`h-9 rounded-xl border text-xs font-semibold transition-colors ${value && value === q.value ? 'border-brand bg-brand/10 text-brand-text' : 'border-border text-text-secondary active:bg-border/30'}`}>
-            {q.label}
-          </button>
-        ))}
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-text-muted">Available {available}</p>
+        <AmountField value={value} onChange={onChange} ariaLabel="Amount in dollars" autoFocus={false}
+          token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }} quick={quick} onMax={onMax}
+          invalid={!!error} onTap={onTap} editing={editing} />
       </div>
       <div className="flex items-center justify-between gap-3 pt-3.5 border-t border-dashed border-border">
         {error ? (

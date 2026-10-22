@@ -13,7 +13,9 @@ import {
   paymentMethodSummary, fetchCounterpartyProfiles, inr, type BuyerOffer, type P2PTrade, type P2PPaymentMethod, type P2PMessage,
 } from '@/lib/businessCashOut'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
-import { sanitizeAmountInput } from '@/components/ui/AmountKeypad'
+import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DESKTOP_QUERY } from '@/lib/motion'
 import {
   BusinessScreen, ScreenLevel, useScreenLevel, Sheet, PrimaryBtn, GhostBtn, Skeleton,
   CashOutAmountCard, CashOutPickRow, BuyerList, PayoutAccountList, PayoutAccountForm, CashOutTracker, CashOutChat, CashOutHistoryList,
@@ -81,7 +83,12 @@ export function CashOutScreen({ open, onBack }: { open: boolean; onBack: () => v
     : buyer && value > buyerMax(buyer) ? `${buyerName(buyer)} takes up to ${short(buyerMax(buyer))}` : undefined
   const chosenAccount = accounts?.find(a => a.id === account)
   const maxOut = Math.floor(Math.min(arc, Math.max(0, ...(buyers ?? []).map(buyerMax))) * 100) / 100
-  const quick = [100, 500, 1000].map(n => ({ label: short(n), value: String(n) })).concat([{ label: 'Max', value: String(maxOut) }])
+  const setAmt = (v: string) => setAmount(sanitizeAmountInput(v, 2).slice(0, 10))
+  const quick = [100, 500, 1000].map(n => ({ label: short(n), onClick: () => setAmt(String(n)), disabled: n > maxOut + 1e-9 }))
+  // Phone: the amount is entered on the app's AmountKeypad sheet.
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
+  const [padOpen, setPadOpen] = useState(false)
+  useEffect(() => { if (!open) setPadOpen(false) }, [open])
   const active = trades.filter(t => ['escrow', 'waiting_payment', 'payment_sent', 'disputed'].includes(stageOf(t)))
 
   const saveAccount = async () => {
@@ -161,8 +168,9 @@ export function CashOutScreen({ open, onBack }: { open: boolean; onBack: () => v
               </button>
             ))}
             {/* Dollars and cents (Max is floored to cents too). */}
-            <CashOutAmountCard value={amount} onChange={v => { setAmount(sanitizeAmountInput(v, 2).slice(0, 10)) }}
-              available={money(arc)} quick={quick} error={err}
+            <CashOutAmountCard value={amount} onChange={setAmt}
+              available={money(arc)} quick={quick} onMax={maxOut > 0 ? () => setAmt(String(maxOut)) : undefined} error={err}
+              onTap={isDesktop ? undefined : () => { (document.activeElement as HTMLElement | null)?.blur?.(); setPadOpen(true) }} editing={padOpen}
               fiat={value && rate ? inr(Math.round(value * rate * 100) / 100) : ''} rate={rate ? rateText(rate) : undefined} />
             <div className="rounded-2xl bg-card border border-border divide-y divide-border overflow-hidden">
               <CashOutPickRow icon="buyer" loading={buyers === null} onClick={() => buyers?.length && setSheet('buyer')}
@@ -183,6 +191,12 @@ export function CashOutScreen({ open, onBack }: { open: boolean; onBack: () => v
       <ScreenLevel.Provider value={{ level: level + 1, covered }}>
         <CashOutTradeScreen tradeId={open ? tradeId : null} accounts={accounts ?? []} buyerNames={names} onBack={() => { setTradeId(null); load() }} gate={gate} />
       </ScreenLevel.Provider>
+
+      {/* Phone: the app's amount keypad for the Cash out amount. */}
+      {!isDesktop && (
+        <AmountKeypad open={open && padOpen && !tradeId} value={amount} onChange={setAmt} balance={maxOut} token="USDC"
+          decimals={2} showMax={false} error={err} onClose={() => setPadOpen(false)} />
+      )}
 
       <Sheet open={sheet === 'buyer'} onClose={() => setSheet(null)} id="cashout-buyer">
         <div className="flex flex-col pb-5 min-h-0">
