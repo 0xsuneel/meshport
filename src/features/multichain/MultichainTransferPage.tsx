@@ -3203,9 +3203,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       style={procPage ? (isDesktopMq ? { ...HUB_PANEL_BOX, zIndex: 45 } : { position: 'fixed', inset: 0, zIndex: 45, maxWidth: 430, margin: '0 auto', background: 'transparent' }) : undefined}>
       <div ref={procPageRef} className="flex-1 overflow-y-auto px-3 pb-3" style={{
         // Hub on a phone: the processing page slides in from the right over
-        // Review (which stays underneath until it has arrived - see its
-        // HubPage's `leaveUnder`).
-        ...(procPage ? { position: 'relative', zIndex: 41, background: 'var(--bg)', paddingTop: 'env(safe-area-inset-top, 0px)', boxShadow: isDesktopMq ? undefined : pushLook().shadow } : {}),
+        // Review and the passcode sheet (which both stay underneath until it
+        // has arrived - their `leaveUnder`), so it sits above the sheet: the
+        // sheet's dim used to fade out on top of it, greying the page.
+        ...(procPage ? { position: 'relative', zIndex: 60, background: 'var(--bg)', paddingTop: 'env(safe-area-inset-top, 0px)', boxShadow: isDesktopMq ? undefined : pushLook().shadow } : {}),
         // Success: this column stops scrolling and hands its full height to
         // the receipt, which scrolls its own details above a pinned
         // View in Hub / Done bar (see SuccessReceipt's `actions`).
@@ -3762,7 +3763,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         subtitle={desktopInput ? `To ${chain.name}` : `Authorise $${formatAmount(numAmount)} USDC to ${chain.name}`}
         amountLabel={`$${formatAmount(numAmount)} USDC`} placement="panel"
         value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }} error={passError || undefined}
-        onComplete={(_, viaBiometric) => { if (!loading) { setPaidViaBiometric(!!viaBiometric); handleConfirm() } }} />
+        onComplete={(_, viaBiometric) => { if (!loading) { setPaidViaBiometric(!!viaBiometric); handleConfirm() } }}
+        // Right passcode → the processing page comes in over the sheet.
+        leaveUnder={procPage} />
 
     </div>
   )
