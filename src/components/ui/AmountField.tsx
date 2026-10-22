@@ -160,3 +160,58 @@ export function AmountField({
 export function quickAmounts(values: number[], symbol: string, set: (v: string) => void, max?: number): QuickAmount[] {
   return values.map(v => ({ label: `${symbol}${v}`, onClick: () => set(String(v)), disabled: max != null && v > max + 1e-9 }))
 }
+
+/**
+ * The small amount box for one row of a list (Pay staff: each person's
+ * amount) - the AmountField look at row size: a soft filled box, the "$"
+ * before the digits and a brand ring while it's being filled in.
+ *   • Desktop: typed straight in.
+ *   • Mobile (`onTap` given): tapping opens the page's AmountKeypad sheet,
+ *     `editing` while that sheet is up for this row.
+ */
+export function AmountChip({ value, onChange, ariaLabel, disabled = false, invalid = false, onTap, editing = false, symbol = '$', width = 92 }: {
+  value: string
+  onChange: (raw: string) => void
+  ariaLabel: string
+  disabled?: boolean
+  invalid?: boolean
+  onTap?: () => void
+  editing?: boolean
+  symbol?: string
+  width?: number
+}) {
+  const [focused, setFocused] = useState(false)
+  const ring = invalid ? 'var(--danger)' : 'var(--brand)'
+  const active = !disabled && ((onTap ? editing : focused) || invalid)
+  const digits = { fontSize: 15, fontWeight: 700, fontVariantNumeric: 'tabular-nums' as const, lineHeight: 1.2 }
+  const box: React.CSSProperties = {
+    display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2, width, height: 38, padding: '0 10px', boxSizing: 'border-box',
+    borderRadius: 12, flexShrink: 0, opacity: disabled ? 0.5 : 1,
+    background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)',
+    border: `1.5px solid ${active ? ring : 'transparent'}`,
+    boxShadow: active ? `0 0 0 3px color-mix(in srgb, ${ring} 18%, transparent)` : 'none',
+    transition: 'border-color 0.15s, box-shadow 0.15s',
+  }
+  const sign = <span aria-hidden="true" style={{ ...digits, color: 'var(--text-secondary)' }}>{symbol}</span>
+  if (onTap) {
+    return (
+      <button type="button" aria-label={ariaLabel} disabled={disabled} onClick={e => { e.stopPropagation(); onTap() }}
+        style={{ ...box, cursor: disabled ? 'not-allowed' : 'pointer' }}>
+        {sign}
+        <span style={{ ...digits, whiteSpace: 'nowrap', overflow: 'hidden', color: value ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+          {value || '0'}
+          {editing && <span aria-hidden="true" className="mp-amount-caret" />}
+        </span>
+      </button>
+    )
+  }
+  return (
+    <label style={{ ...box, cursor: disabled ? 'not-allowed' : 'text' }}>
+      {sign}
+      <input type="text" inputMode="decimal" value={value} placeholder="0" disabled={disabled} aria-label={ariaLabel} aria-invalid={invalid || undefined}
+        onChange={e => onChange(e.target.value)} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        style={{ ...digits, width: '100%', minWidth: 0, textAlign: 'right', background: 'transparent', border: 'none', outline: 'none', padding: 0,
+          color: 'var(--text-primary)', caretColor: 'var(--brand-text)' }} />
+    </label>
+  )
+}
