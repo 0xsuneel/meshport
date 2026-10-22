@@ -294,17 +294,15 @@ Deno.serve(async (req: Request) => {
     })
   }
 
-  const graceCutoffIso = new Date(Date.now() - STUCK_RELEASE_GRACE_MS).toISOString()
-
   // The stuck signature. A completed release always writes released_at, so this
   // cannot match a healthy trade. Bounded by the activation cutoff in SQL too,
-  // so historical rows are not even fetched.
+  // so historical rows are not even fetched. The grace window runs from the
+  // claim, not from created_at, so it is applied below once claim times are in.
   const { data: stuck, error } = await supabase
     .from('p2p_trades')
     .select('id, offer_id, offer_type, amount_usdc, buyer_wallet, seller_wallet, tx_hash, status, released_at, completed_at, created_at')
     .eq('status', 'released')
     .is('released_at', null)
-    .lt('created_at', graceCutoffIso)
     .gt('created_at', new Date(cutoffMs).toISOString())
     .limit(50)
 
@@ -319,6 +317,17 @@ Deno.serve(async (req: Request) => {
     })
   }
 
+  // When each release was claimed: the latest 'release_claimed' audit row
+  // (written by the p2p_log_trade_audit trigger on payment_sent -> released).
+  const claimedAt = new Map<string, string>()
+  const { data: claims } = await supabase
+    .from('p2p_trade_audit_log')
+    .select('trade_id, occurred_at')
+    .eq('action', 'release_claimed')
+    .in('trade_id', stuck.map(t => t.id))
+    .order('occurred_at', { ascending: true })
+  for (const c of claims ?? []) claimedAt.set(String(c.trade_id), String(c.occurred_at))
+
   const outcomes: Array<Record<string, unknown>> = []
   const nowMs = Date.now()
 
@@ -327,7 +336,7 @@ Deno.serve(async (req: Request) => {
     // bounded the query - the skip list lives here, and a single shared gate
     // means the two paths cannot diverge on what is in scope.
     const gate = isEligibleForReconcile({
-      tradeId: t.id, createdAtIso: String(t.created_at),
+      tradeId: t.id, createdAtIso: String(t.created_at), claimedAtIso: claimedAt.get(t.id) ?? null,
       cutoffMs, graceMs: STUCK_RELEASE_GRACE_MS, nowMs, skipTradeIds: SKIP_TRADE_IDS,
     })
     if (!gate.eligible) {
