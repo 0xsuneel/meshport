@@ -156,6 +156,18 @@ export async function getArcGatewayOnChainBalance(walletAddress: string): Promis
   }
 }
 
+/**
+ * A recovery shows in Activity when its money landed, not when the transfer
+ * that got stuck was first tried (that can be days earlier, far down the
+ * list). The first try is kept as metadata.started_at for the detail sheet.
+ */
+function landedNow(createdAt: string | null | undefined, metadata: Record<string, any> | null | undefined) {
+  return {
+    created_at: new Date().toISOString(),
+    metadata: { started_at: metadata?.started_at ?? createdAt ?? null },
+  }
+}
+
 async function getKitAndAdapter(privateKey: string, chain: string = ARC_CHAIN_KEY) {
   const { AppKit, createEthersAdapterFromPrivateKey } = await loadSdk()
   const kit = new AppKit({ disableErrorReporting: true } as any)
@@ -269,7 +281,7 @@ async function runUbCompletion(params: { walletAddress: string; privateKey: stri
     const nowIso = new Date().toISOString()
     const { data: pending, error } = await supabase
       .from('activity')
-      .select('id, tx_hash, amount, metadata')
+      .select('id, tx_hash, amount, metadata, created_at')
       .eq('wallet_address', walletAddress.toLowerCase())
       .eq('activity_type', 'withdraw')
       .eq('status', 'pending')
@@ -287,7 +299,8 @@ async function runUbCompletion(params: { walletAddress: string; privateKey: stri
         amount,
         usd_value: amount,
         ...(hash ? { explorer_url: chain === ARC_CHAIN_KEY ? `${ARC_EXPLORER}/tx/${hash}` : null } : {}),
-        metadata: { ...row.metadata, ...(hash ? { completed_tx_hash: hash } : {}), completed_at: new Date().toISOString(), ...extra },
+        ...landedNow(row.created_at, row.metadata),
+        metadata: { ...row.metadata, ...landedNow(row.created_at, row.metadata).metadata, ...(hash ? { completed_tx_hash: hash } : {}), completed_at: new Date().toISOString(), ...extra },
       }).eq('id', row.id)
       if (upErr) console.error('[ubFundRecovery] could not mark withdrawal completed:', upErr.message)
       out.completed += 1
@@ -498,14 +511,15 @@ export async function resolveUbStuckTransfer(p: {
   })
 
   const { supabase } = await import('@/lib/supabase')
+  const landed = landedNow(item.createdAt, item.metadata)
   const metadata = {
-    ...item.metadata, ub_stuck_transfer: false, recovered_via: 'ub', resolution: mode,
+    ...item.metadata, ...landed.metadata, ub_stuck_transfer: false, recovered_via: 'ub', resolution: mode,
     completed_tx_hash: out.txHash ?? null, completed_at: new Date().toISOString(),
   }
   if (mode === 'refund') {
     // Shows as "Recovered via UB" (withdraw + ub_recovery) in Activity and the Hub.
     await supabase.from('activity').update({
-      status: 'completed', amount: out.received, usd_value: out.received, destination_chain: ARC_CHAIN_KEY,
+      status: 'completed', amount: out.received, usd_value: out.received, destination_chain: ARC_CHAIN_KEY, created_at: landed.created_at,
       // The Arc mint - where the deposit scanners look, so it isn't also
       // recorded as a separate "Received from 0x0000…".
       ...(out.txHash && /^0x[0-9a-fA-F]{64}$/.test(out.txHash) ? { destination_tx_hash: out.txHash.toLowerCase() } : {}),
@@ -515,7 +529,7 @@ export async function resolveUbStuckTransfer(p: {
   } else {
     // Becomes the transfer it was meant to be: "Transfer to <chain> · Recovered via UB".
     await supabase.from('activity').update({
-      activity_type: 'bridge', status: 'completed', amount: out.received, usd_value: out.received,
+      activity_type: 'bridge', status: 'completed', amount: out.received, usd_value: out.received, created_at: landed.created_at,
       destination_chain: APP_CHAIN[item.destinationChain] ?? item.destinationChain,
       counterparty_address: item.destinationAddress.toLowerCase(),
       metadata,

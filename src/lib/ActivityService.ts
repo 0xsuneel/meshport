@@ -882,7 +882,9 @@ async function fetchActivityRaw(
   // row's status leaves 'pending', it's a completed part of the wallet's
   // history and shows up in the main list exactly like anything else -
   // no special-casing needed there, this only ever filters the pending state.
-  const pendingClause = 'or(activity_type.not.in.(bridge,claim,withdraw),status.neq.pending)'
+  // Except recoveries: a transfer waiting in Recover, or a 7-day withdrawal
+  // under way, is money that has left the wallet - it stays in the history.
+  const pendingClause = 'or(activity_type.not.in.(bridge,claim,withdraw),status.neq.pending,metadata->>ub_stuck_transfer.eq.true,metadata->>ub_recovery.eq.true)'
   if (searchOrClause) {
     // Both conditions must hold at once, and PostgREST only allows one
     // top-level `or=` per query - nest both OR-groups under a single `and=`
