@@ -770,9 +770,33 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
             destinationTxHash: item.metadata?.completed_tx_hash || undefined,
           }))
 
+        // A Unified Balance transfer whose destination mint never happened
+        // (lib/ubFundRecovery.ts recordUbStuckTransfer): the money left the
+        // wallet and waits in Recover for the user to send it on or refund
+        // it - a "Needs recovery" transfer that opens Recover.
+        const stuckItems: ActivityItem[] = bridges
+          .filter((item: any) => item.activityType === 'withdraw' && item.metadata?.ub_stuck_transfer && item.status === 'pending')
+          .map((item: any) => {
+            const dest = item.metadata?.destination_chain || item.destinationChain || ''
+            return {
+              id:         item.id ?? item.txHash,
+              type:       'transfer',
+              route:      'ub',
+              status:     'failed',
+              needsRecovery: true,
+              amount:     item.amount ?? 0,
+              chain:      dest,
+              chainLabel: item.metadata?.destination_label || CHAIN_LABELS[dest] || String(dest || 'Chain').replace(/_(Sepolia|Testnet|Fuji)$/, '').replace(/_/g, ' '),
+              timestamp:  new Date(item.createdAt).getTime(),
+              sourceTxHash: item.metadata?.deposit_tx || undefined,
+              destinationAddress: item.metadata?.destination_address || item.counterpartyAddress || undefined,
+              error:      'Waiting in Recover - send it on or return it to your wallet',
+            }
+          })
+
         const receiptItems = await receiptsPromise
         if (!current()) return
-        setDbActivity(markOwnClaims([...claimItems, ...ubClaimItems, ...bridgeItems, ...failedBringItems, ...recoveryItems, ...receiptItems]).sort((a, b) => b.timestamp - a.timestamp))
+        setDbActivity(markOwnClaims([...claimItems, ...ubClaimItems, ...bridgeItems, ...failedBringItems, ...recoveryItems, ...stuckItems, ...receiptItems]).sort((a, b) => b.timestamp - a.timestamp))
       } catch {
         // Even if the rest fails, a merchant still sees payments on other chains.
         const receipts = await loadChainReceiptItems()

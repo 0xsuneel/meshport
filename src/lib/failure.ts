@@ -115,6 +115,9 @@ export function classifyPreBroadcastFailure(err: unknown): Failure {
 
 /** A failed Transfer / Bring Funds row whose money already moved: finish it in Recover. */
 export function needsRecovery(r: { activityType?: string; status?: string; metadata?: any }): boolean {
+  // A Unified Balance transfer whose destination mint never happened waits
+  // in Recover (pending) for the user to send it on or return it.
+  if (r.activityType === 'withdraw' && r.status === 'pending' && r.metadata?.ub_stuck_transfer) return true
   return r.status === 'failed' && (r.activityType === 'bridge' || r.activityType === 'claim') && !r.metadata?.nothing_moved
 }
 
