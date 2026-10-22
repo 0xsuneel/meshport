@@ -180,7 +180,7 @@ function BarChart({ data, labels, highlightIdx, tooltip }:
           position: 'absolute', left: 0, top: 0, bottom: 20, width: 20,
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
         }}>
-          {[max, Math.round(max * 0.67), Math.round(max * 0.33), 0].map((v, i) => (
+          {(max >= 3 ? [max, Math.round(max * 0.67), Math.round(max * 0.33), 0] : [max, '', '', 0]).map((v, i) => (
             <span key={i} style={{ fontSize: 9, color: 'var(--text-muted)', textAlign: 'right', lineHeight: 1 }}>{v}</span>
           ))}
         </div>
@@ -318,7 +318,7 @@ export function InsightsPage() {
       if (fromName && !fromName.startsWith('0x'))  contactCounts[fromName] = (contactCounts[fromName] || 0) + 1
     })
     const mostActiveContact = Object.entries(contactCounts)
-      .sort((a, b) => b[1] - a[1])[0]?.[0] || user?.username || '-'
+      .sort((a, b) => b[1] - a[1])[0]?.[0] || null
 
     // Multichain usage - bridge=sent, deposit=sent to UB, claim=received
     const mcTxs = curr.filter(t => ['bridge','deposit','claim'].includes((t as any).activityType))
@@ -412,11 +412,7 @@ export function InsightsPage() {
       activeContacts, contactPct,
       mostActiveContact,
       topChains: displayChains,
-      chainUsage: chainUsage.length > 0 ? chainUsage : [
-        { chain: 'Arbitrum', count: 0, pct: 0 },
-        { chain: 'Base',     count: 0, pct: 0 },
-        { chain: 'Ethereum', count: 0, pct: 0 },
-      ],
+      chainUsage,
       totalMcTxs,
       swapVol, swapCount,
       avgPayment, largestPayment, mostActiveHourLabel, txFreq,
@@ -486,29 +482,27 @@ export function InsightsPage() {
   }, [stats, actTab])
 
   // ── Hero chart values (daily totals for smooth curve) ────────────────────
+  // The hero line covers the selected period: days for This Week / This
+  // Month, months for This Year.
   const heroValues = useMemo(() => {
     const now = new Date()
-    const days = 20
+    const at = (tx: any) => new Date(tx.createdAt || tx.timestamp)
+    if (period === 'year') {
+      return Array.from({ length: now.getMonth() + 1 }, (_, m) => stats.curr
+        .filter(tx => { const d = at(tx); return d.getFullYear() === now.getFullYear() && d.getMonth() === m })
+        .reduce((s, tx) => s + tx.amount, 0))
+    }
+    const days = period === 'week' ? 7 : now.getDate()
     const vals: number[] = []
     for (let i = days - 1; i >= 0; i--) {
       const d = new Date(now.getTime() - i * 86400000)
-      const dayTotal = stats.curr
-        .filter(tx => {
-          const td = new Date(tx.createdAt || tx.timestamp)
-          return td.getDate() === d.getDate()
-            && td.getMonth() === d.getMonth()
-            && td.getFullYear() === d.getFullYear()
-        })
-        .reduce((s, tx) => s + tx.amount, 0)
-      vals.push(dayTotal)
+      vals.push(stats.curr
+        .filter(tx => { const td = at(tx); return td.getDate() === d.getDate() && td.getMonth() === d.getMonth() && td.getFullYear() === d.getFullYear() })
+        .reduce((s, tx) => s + tx.amount, 0))
     }
-    // If no data, generate a gentle rising curve so the chart looks right
-    if (vals.every(v => v === 0)) {
-      return [0, 0.1, 0.2, 0.15, 0.25, 0.3, 0.28, 0.35, 0.4, 0.38,
-              0.45, 0.5, 0.55, 0.52, 0.6, 0.7, 0.75, 0.8, 0.9, 1.0].map(v => v * 100)
-    }
-    return vals
-  }, [stats])
+    // No payments: a flat line at zero (never a made-up trend).
+    return vals.length >= 2 ? vals : [0, ...vals]
+  }, [stats, period])
 
   // ── Sparkline per-day values for stat cards ───────────────────────────────
   const sparklines = useMemo(() => {
@@ -625,6 +619,9 @@ export function InsightsPage() {
               {/* Most Active Contact */}
               <div style={{ paddingRight: 8, minWidth: 0 }}>
                 <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 5 }}>Most Active Contact</div>
+                {!stats.mostActiveContact ? (
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 4 }}>-</div>
+                ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2, minWidth: 0 }}>
                   <div style={{
                     width: 26, height: 26, borderRadius: '50%', flexShrink: 0,
@@ -639,6 +636,7 @@ export function InsightsPage() {
                     {stats.mostActiveContact.replace(/\.arc$/, '')}.arc
                   </span>
                 </div>
+                )}
               </div>
 
               {/* Swap Volume */}
@@ -798,6 +796,9 @@ export function InsightsPage() {
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>Multichain Usage</span>
           </div>
 
+          {stats.chainUsage.length === 0 && (
+            <p style={{ fontSize: 11.5, color: 'var(--text-secondary)', margin: '2px 0 4px' }}>No multichain moves in this period</p>
+          )}
           {stats.chainUsage.map(({ chain, count, pct }, i) => (
             <div key={chain} style={{ marginBottom: i < stats.chainUsage.length - 1 ? 9 : 4 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>

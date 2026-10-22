@@ -23,12 +23,13 @@ import { useAuthStore, useWalletStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLogoSrc } from '@/lib/chainLogos'
-import { listMyPayments, listMyIntents, listChainReceipts, isOwnReceipt, subscribeMerchantPayments, subscribeChainReceipts, createPaymentRequest, displayOrderNumber, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
+import { listMyPayments, listMyIntents, listChainReceipts, subscribeMerchantPayments, subscribeChainReceipts, createPaymentRequest, displayOrderNumber, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
 import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
 import { StorePicker } from '@/features/merchant/StorePicker'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment } from '@/lib/voiceAlerts'
 import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockKey } from './settlement'
 import { listMyRefunds, subscribeMyRefunds, refundPayment, chainUsdcBalance, canRefundOnChain, checkRefundableSender, type SenderCheck, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
+import { mergeSales } from '@/lib/businessSales'
 import { groupRefunds, refundedSum, remainingAfter, isFullyRefunded, canRefundMore, netPayments, MIN_REFUND } from '@/lib/refundTotals'
 import { makePeriod, inPeriod, inPrevious, periodTrend, savedPeriod, savePeriod, type PeriodId } from './period'
 import { useAutoSettle } from './autoSettle'
@@ -132,14 +133,7 @@ function OwnerBusinessPage() {
       }
       seenReceipts.current = new Set(rcpts.map(key))
     }
-    const known = new Set(orders.map(p => `${p.chain}:${p.txHash.toLowerCase()}`))
-    const extra: MerchantPayment[] = receipts
-      .filter(r => !known.has(`${r.chain}:${r.txHash.toLowerCase()}`))
-      .map(r => ({ id: `rcpt_${r.id}`, intentId: '', chain: r.chain, txHash: r.txHash, from: r.from ?? '0x0000000000000000000000000000000000000000',
-        amount: r.amount, method: isOwnReceipt(r, walletAddress) ? 'own_transfer' : r.orderNumber ? 'chain_receipt' : 'direct',
-        status: r.status === 'converted' ? 'collected' : 'in_ledger', customerUsername: null,
-        createdAt: r.createdAt, orderNumber: r.orderNumber, matchedBy: null, screenFlag: r.screenFlag ?? null }))
-    setRaw([...orders, ...extra].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))); setLoaded(true)
+    setRaw(mergeSales(orders, receipts, walletAddress)); setLoaded(true)
   }, [walletAddress])
   useEffect(() => { void load() }, [load])
   useEffect(() => (walletAddress ? subscribeMerchantPayments(walletAddress, () => { void load() }) : undefined), [walletAddress, load])
@@ -275,7 +269,9 @@ function OwnerBusinessPage() {
   // Open screens, bottom to top: a screen opened from another one (Business
   // tools → Stores & staff, Stores → a store's QR, a payment → its receipt)
   // pushes over it, and back uncovers the one beneath - like pages.
-  const [stack, setStack] = useState<ScreenId[]>(() => query.get('apply') ? ['profile'] : [])
+  // ?screen=reports (More → Business Insights) opens Reports on Insights.
+  const linkedScreen = useRef<ScreenId | null>(query.get('screen') === 'reports' ? 'reports' : null)
+  const [stack, setStack] = useState<ScreenId[]>(() => query.get('apply') ? ['profile'] : linkedScreen.current ? [linkedScreen.current] : [])
   const screen = stack.length ? stack[stack.length - 1] : null
   // Back from Cash out or Payouts: USDC may have moved (escrow, staff pay).
   const prevScreen = useRef(screen)
@@ -295,7 +291,17 @@ function OwnerBusinessPage() {
   }, [locked, tab, stack])
   const open = (id: ScreenId) => () => setStack([id])
   const close = () => setStack([])
-  const back = () => setStack(s => s.slice(0, -1))
+  const back = () => {
+    // Opened from Home's More → Business Insights: Back returns Home (like
+    // Back on any tab), not to the Business overview it never showed.
+    if (linkedScreen.current && stack.length === 1 && stack[0] === linkedScreen.current) {
+      linkedScreen.current = null
+      setStack([])
+      navigate('/', { replace: true })
+      return
+    }
+    setStack(s => s.slice(0, -1))
+  }
   /** Opened from the screen on top: pushes over it, back returns to it. */
   const child = (id: ScreenId) => setStack(s => [...s.filter(x => x !== id), id])
   /** Where a screen sits in the stack (BusinessScreen reads it). */
