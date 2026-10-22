@@ -92,7 +92,7 @@ export function PaySendPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const locationState = (location.state || {}) as { returnTo?: string; conversationId?: string }
+  const locationState = (location.state || {}) as { returnTo?: string; conversationId?: string; merchantView?: import('@/lib/merchantPay').PaymentView }
   const user = useAuthStore(s => s.user)
   const senderStoredAddress = useAuthStore(s => s.walletAddress)
   const privateKey = useAuthStore(s => s.privateKey)
@@ -123,7 +123,10 @@ export function PaySendPage() {
     const toParam = searchParams.get('to')
     return toParam ? resolveCompound(toParam) : null
   })[0]
-  const [screen, setScreen] = useState<Screen>(() => initialRecipient ? 'amount' : 'search')
+  // ?review=1 (a Shop QR amount typed on the shop page): open on Review.
+  const [screen, setScreen] = useState<Screen>(() => initialRecipient
+    ? (searchParams.get('review') === '1' && searchParams.get('merchantPay') && searchParams.get('amount') ? 'review' : 'amount')
+    : 'search')
   const [direction, setDirection] = useState<'forward' | 'back'>('forward')
   const goForward = (s: Screen) => { setDirection('forward'); setScreen(s) }
   const goBack2   = (s: Screen) => { setDirection('back');    setScreen(s) }
@@ -209,7 +212,10 @@ export function PaySendPage() {
   const orderMemo = (t: string) => merchantPayCode && t === 'USDC'
     ? { code: merchantPayCode, label: displayOrderNumber(merchantOrderNumber || merchantPayCode.slice(0, 6).toUpperCase()) }
     : null
-  const [merchantOrderKind, setMerchantOrderKind] = useState<OrderKind>('request')
+  // The order handed over by the shop page (in-app navigation state - a link
+  // can't set it), so its kind and checks don't wait on a second fetch.
+  const handedView = merchantPayCode && locationState.merchantView?.code === merchantPayCode ? locationState.merchantView : null
+  const [merchantOrderKind, setMerchantOrderKind] = useState<OrderKind>(() => handedView ? orderKindOf(handedView) : 'request')
   // The order's requester (for the chat card when the recipient came from a
   // link or QR without a username).
   const [merchantUsername, setMerchantUsername] = useState<string | null>(null)
@@ -222,7 +228,7 @@ export function PaySendPage() {
     let cancelled = false
     import('@/lib/merchantPay').then(async ({ getPayment, orderDue, isOrderPayable }) => {
       try {
-        const v = await getPayment(merchantPayCode)
+        const v = handedView ?? await getPayment(merchantPayCode)
         if (cancelled) return
         const wrongRecipient = !!recipientRef.current?.walletAddress && recipientRef.current.walletAddress.toLowerCase() !== v.merchantWallet?.toLowerCase()
         if (!isOrderPayable(v) || wrongRecipient) { navigate(`/paylink/r/${merchantPayCode}?stay=1`, { replace: true }); return }
@@ -797,6 +803,26 @@ export function PaySendPage() {
     }
     return idempotencyKeyRef.current.key
   }
+
+  // Opened straight on Review (Shop QR): the Review button's checks and
+  // warm-up didn't run. An amount the balance can't cover goes back to the
+  // amount step, which says why; otherwise warm up the send once the order
+  // is confirmed (same preflight the Review button starts).
+  const directReviewWarmed = useRef(false)
+  useEffect(() => {
+    if (screen !== 'review' || !merchantPayCode || isProcessing || isDone || directReviewWarmed.current) return
+    if (amountInvalid) { goBack2('amount'); return }
+    const fromAddr = senderStoredAddress || user?.walletAddress
+    if (!recipient || recipient.verified === false || !fromAddr || !(numAmount > 0)) return
+    directReviewWarmed.current = true
+    import('@/lib/arcService').then(({ preparePayment }) => preparePayment({
+      token: 'USDC', from: fromAddr, to: recipient.walletAddress, amount: numAmount,
+      idempotencyKey: getIdempotencyKey(),
+      recipientUsername: recipient.isUsername ? recipient.display : undefined,
+      memo: orderMemo('USDC'),
+    })).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, merchantPayCode, amountInvalid, recipient?.verified, recipient?.walletAddress, numAmount])
 
   const openPasscodeSheet = () => { setPin(''); setPinError(false); setTxError(''); setShowPasscodeSheet(true) }
 
