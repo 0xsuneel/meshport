@@ -203,7 +203,7 @@ function HistoryDetail({ r, onClose }: { r: SwapRecord; onClose: () => void }) {
       ]}
       detailRows={[
         { label: 'Rate', value: `1 ${r.tokenIn} ≈ ${rate} ${r.tokenOut}` },
-        { label: 'Network', value: 'Arc Testnet' },
+        { label: 'Network', value: 'Arc' },
       ]}
       fullHash={r.txHash || undefined}
       links={r.txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: r.txHash, href: `${ARC_EXPLORER}/tx/${r.txHash}` }] : undefined}
@@ -327,7 +327,7 @@ function SwapChecklist({ step, error, txHash, progress }: { step: string; error:
     },
     {
       label: 'Arc confirmation',
-      msg: confirmOk ? 'Tokens received in wallet' : 'Arc Testnet · ~1s blocks',
+      msg: confirmOk ? 'Tokens received in wallet' : 'Arc · ~1s blocks',
       done: confirmOk, active: submitOk && !confirmOk,
     },
   ]
@@ -1515,7 +1515,7 @@ export function SwapPage() {
             <path d="M8 5v4M8 11v.5" stroke="var(--warning)" strokeWidth="1.4" strokeLinecap="round"/>
           </svg>
           <p className="text-[11px] leading-snug" style={{ color: 'var(--warning)' }}>
-            Arc Testnet swap liquidity can be unstable. If you get "No route available", try a smaller amount or wait a few minutes.
+            Arc swap liquidity can be unstable. If you get "No route available", try a smaller amount or wait a few minutes.
           </p>
         </div>
         )}
@@ -1618,7 +1618,7 @@ export function SwapPage() {
                   ? <span className="font-extrabold" style={{ fontSize: amountFontSize(estimate.estimatedOutput.amount, 40), lineHeight: 1, letterSpacing: '-1px', color: 'var(--brand-text)' }}>
                       {trimTrailingZeros(parseFloat(estimate.estimatedOutput.amount).toFixed(swapTokenDecimals(tokenOut.id)))}
                     </span>
-                  : <span className="font-extrabold" style={{ fontSize: 40, lineHeight: 1, color: 'var(--text-muted)' }}>0</span>
+                  : <span className="font-extrabold" style={{ fontSize: 40, lineHeight: 1, letterSpacing: '-1px', color: 'var(--text-muted)' }}>0.00</span>
                 }
               </div>
               <div className="flex-shrink-0" style={{ position: 'relative', zIndex: pickerFor === 'out' ? 41 : undefined }}>
@@ -1681,7 +1681,7 @@ export function SwapPage() {
             <p className="text-sm font-semibold text-danger" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{error}</p>
             {(error.toLowerCase().includes('route') || error.toLowerCase().includes('liquidity') || error.toLowerCase().includes('testnet')) && (
               <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                Arc Testnet pool liquidity is shared and can run low. Try a smaller amount, wait a minute, or check back later.
+                Arc pool liquidity is shared and can run low. Try a smaller amount, wait a minute, or check back later.
               </p>
             )}
           </div>
@@ -1766,7 +1766,7 @@ export function SwapPage() {
                   {[
                     ['Rate', `1 ${tokenIn.id} = ${estimate ? trimTrailingZeros((parseFloat(estimate.estimatedOutput.amount)/parseFloat(amountIn)).toFixed(tokenOut.id === 'cirBTC' ? 8 : 4)) : '-'} ${tokenOut.id}`],
                     ['Network fee', `~$${formatAmount(totalFees)}`],
-                    ['Network', 'Arc Testnet'],
+                    ['Network', 'Arc'],
                   ].map(([l, v], i, rows) => (
                     <div key={l} className="flex justify-between items-center" style={{ padding: '12px 0', borderBottom: i < rows.length - 1 ? '1px solid var(--border)' : 'none' }}>
                       <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{l}</span>
@@ -1865,7 +1865,7 @@ export function SwapPage() {
               detailRows={[
                 ...(inNum > 0 && outNum > 0 ? [{ label: 'Rate', value: `1 ${tokenIn.id} = ${trimTrailingZeros((outNum / inNum).toFixed(4))} ${tokenOut.id}` }] : []),
                 { label: 'Total Fees', value: `~$${formatAmount(totalFees)}` },
-                { label: 'Network', value: 'Arc Testnet' },
+                { label: 'Network', value: 'Arc' },
               ]}
               fullHash={txHash || undefined}
               links={txHash ? [{ title: 'View on ArcScan', explorer: 'ArcScan', hash: txHash, href: `${ARC_EXPLORER}/tx/${txHash}` }] : undefined}
@@ -1897,7 +1897,7 @@ export function SwapPage() {
                 { label: 'From',    value: `${trimTrailingZeros(parseFloat(amountIn).toFixed(swapTokenDecimals(tokenIn.id)))} ${tokenIn.id}` },
                 { label: 'To',      value: tokenOut.id },
                 { label: 'Reason',  value: isUncertainFailure ? 'Could not confirm result'
-                    : error?.includes('route') || error?.includes('liquidity') ? 'No liquidity on Arc Testnet' : 'Transaction failed', color: 'var(--danger)' },
+                    : error?.includes('route') || error?.includes('liquidity') ? 'No liquidity on Arc' : 'Transaction failed', color: 'var(--danger)' },
                 ...(isUncertainFailure
                   ? [{ label: 'Before retrying', value: 'Check your balance or Activity first', color: 'var(--warning)' }]
                   : error?.toLowerCase().includes('route') || error?.toLowerCase().includes('liquidity')

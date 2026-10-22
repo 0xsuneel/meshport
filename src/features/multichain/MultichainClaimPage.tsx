@@ -1906,7 +1906,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   <img decoding="async" src="/logos/chains/arc.svg" alt="" width={28} height={28} style={{ borderRadius: '50%', flexShrink: 0 }}/>
                   <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
                     <span style={{ fontSize: 11, color: COLORS.muted }}>To</span>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Arc Testnet</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Arc</span>
                     <span style={{ fontSize: 11.5, color: COLORS.muted, whiteSpace: 'nowrap' }}>Your wallet</span>
                   </span>
                 </div>

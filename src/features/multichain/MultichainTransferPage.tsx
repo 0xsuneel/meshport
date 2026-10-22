@@ -235,9 +235,9 @@ interface FeeEstimate {
 // at once - /api/arc-rpc then answers 502 "Arc RPC upstream unavailable" -
 // and ethers wraps that in a long dump nobody can read on a phone.
 function friendlyTransferError(msg: string): string {
-  if (/no runners/i.test(msg)) return 'Connection to Arc Testnet dropped. Please try again.'
+  if (/no runners/i.test(msg)) return 'Connection to Arc dropped. Please try again.'
   if (/upstream unavailable|server response 50[234]|SERVER_ERROR|ECONNRESET|timeout|429|rate.?limit/i.test(msg)) {
-    return "Arc Testnet's network is busy or not responding right now. Please try again in a minute."
+    return "Arc's network is busy or not responding right now. Please try again in a minute."
   }
   return msg
 }
@@ -2899,7 +2899,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const meshportMints = chain.ub ? gatewaySelfMintsTo(chain.sdk) : !transferForwarder
   const STEP_INFO_HINT: Record<string, string> = {
     approve:     'Waiting on your wallet to confirm the approval.',
-    burn:        'Waiting on Arc Testnet to confirm the burn.',
+    burn:        'Waiting on Arc to confirm the burn.',
     attestation: "Circle's attestation service is signing off on the burn. This step normally takes 20-90 seconds - nothing to worry about yet.",
     mint:        meshportMints
       ? "MeshPort's relayer is submitting the mint on the destination chain. This is normal and usually resolves within a minute or two."
@@ -2911,7 +2911,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }
   const STEP_TIMEOUT_HINT: Record<string, string> = {
     approve:     'Wallet may be slow to sign. Check your RPC connection.',
-    burn:        'Arc Testnet RPC may be congested. Check ArcScan for activity.',
+    burn:        'Arc RPC may be congested. Check ArcScan for activity.',
     attestation: "This is past Circle's normal 20-90s attestation window. Your funds are safe on Arc - still waiting on Circle's network.",
     mint:        meshportMints
       ? "The destination mint is taking longer than usual. Your funds are not lost - MeshPort's relayer is still waiting for it to confirm."
@@ -2949,14 +2949,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       </div>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 19, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>Cross-Chain Transfer</div>
-        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Send USDC from Arc Testnet to any chain</div>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>Send USDC from Arc to any chain</div>
       </div>
     </div>
   )
   const formBalance = (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '14px 16px', borderRadius: 16,
       background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', border: '1px solid var(--border)' }}>
-      <span style={{ minWidth: 0, fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Arc Testnet Balance</span>
+      <span style={{ minWidth: 0, fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Arc Balance</span>
       {/* Amount + unit never split across lines on narrow phones. */}
       <span style={{ flexShrink: 0, whiteSpace: 'nowrap', fontSize: 17, fontWeight: 800, color: 'var(--text-primary)', fontVariantNumeric: 'tabular-nums' }}>{formatAmount(balance)} USDC</span>
     </div>
@@ -2970,7 +2970,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         <img decoding="async" src="/logos/chains/arc.svg" alt="" width={28} height={28} style={{ borderRadius: '50%', flexShrink: 0 }}/>
         <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
           <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>From</span>
-          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Arc Testnet</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Arc</span>
           <span style={{ fontSize: 11.5, color: 'var(--text-secondary)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatAmount(balance)} USDC</span>
         </span>
       </div>
