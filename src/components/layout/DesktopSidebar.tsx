@@ -84,7 +84,7 @@ export function DesktopSidebar() {
           borderBottom: '1px solid var(--border)',
         }}
       >
-        <img src="/favicon.svg" alt="MeshPort" style={{
+        <img decoding="async" src="/favicon.svg" alt="MeshPort" style={{
           width: 34, height: 34, borderRadius: 10, flexShrink: 0,
           boxShadow: 'var(--shadow-1)', objectFit: 'cover',
         }} />

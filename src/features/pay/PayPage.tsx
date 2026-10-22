@@ -94,7 +94,7 @@ export function PayPage() {
     : { id: net.id, label: net.label, chainId: net.chainId, usdc: net.usdc ?? '', route: 'ub' }
   const netOptions = [MERCHANT_QR_CHAINS[0], ...MERCHANT_QR_EXTERNAL].map(c => ({
     id: c.id, label: c.label,
-    icon: <img src={c.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />,
+    icon: <img decoding="async" src={c.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />,
   }))
 
   useEffect(() => {
@@ -167,7 +167,7 @@ export function PayPage() {
           </button>
         )}
         <div className="flex items-center gap-2">
-          <img src="/favicon.svg" alt="MeshPort" className="w-6 h-6 rounded-lg" />
+          <img decoding="async" src="/favicon.svg" alt="MeshPort" className="w-6 h-6 rounded-lg" />
           <span className="text-text-primary font-bold text-sm">MeshPort</span>
         </div>
         <button onClick={handleCopy}
@@ -214,7 +214,7 @@ export function PayPage() {
               <button type="button" onClick={e => { e.stopPropagation(); setNetMenu(v => !v) }} aria-expanded={netMenu} aria-label={`Network: ${net.label}`}
                 className="w-full flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-full active:opacity-70"
                 style={{ background: 'color-mix(in srgb, var(--brand) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 35%, transparent)' }}>
-                <img src={net.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} />
+                <img decoding="async" src={net.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} />
                 <span className="flex-1 min-w-0 truncate text-left text-sm font-bold text-text-primary">{net.label}</span>
                 <svg className="w-2.5 h-2.5 flex-shrink-0" style={{ color: 'var(--brand-text)', transform: netMenu ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M6 9l6 6 6-6" /></svg>
               </button>

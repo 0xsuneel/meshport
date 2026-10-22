@@ -163,7 +163,7 @@ function ChainLogo({ chainId, size = 36 }: { chainId: string; size?: number }) {
   }
   if (m.logo && ok) {
     return (
-      <img src={m.logo} alt={m.label} width={size} height={size}
+      <img decoding="async" src={m.logo} alt={m.label} width={size} height={size}
         style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover',
           display: 'block', flexShrink: 0, background: 'var(--surface)', ...ringStyle }}
         onError={() => setOk(false)} />
@@ -1740,7 +1740,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           <div style={{ flex: 1, overflowY: 'auto', padding: `${SPACING.md}px ${SPACING.md}px ${SPACING.xl}px`, minHeight: 0 }}>
             {/* Available Total Card */}
             <motion.div
-              initial={{ opacity: 0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity: 1, y: 0 }} transition={MOBILE_TAB_FADE_TRANSITION}
+              initial={pushScreens ? false : { opacity: 0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity: 1, y: 0 }} transition={MOBILE_TAB_FADE_TRANSITION}
               style={{
                 background: COLORS.surface,
                 borderRadius: 18,
@@ -1764,7 +1764,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   return (
                     <motion.div
                       key={c.chainId}
-                      initial={{ opacity: 0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity: isSelectable ? 1 : 0.5, y: 0 }}
+                      initial={pushScreens ? false : { opacity: 0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity: isSelectable ? 1 : 0.5, y: 0 }}
                       transition={MOBILE_TAB_FADE_TRANSITION}
                       whileTap={isSelectable ? { scale: 0.98 } : {}}
                       whileHover={isSelectable ? { borderColor: COLORS.primary, y: -2 } : {}}
@@ -1809,7 +1809,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                   return (
                     <motion.div
                       key={c.chainId}
-                      initial={{ opacity: 0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity: 0.45, y: 0 }}
+                      initial={pushScreens ? false : { opacity: 0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity: 0.45, y: 0 }}
                       transition={MOBILE_TAB_FADE_TRANSITION}
                       style={{
                         background: COLORS.surface,
@@ -1837,7 +1837,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               </div>
             ) : (
               <motion.div
-                initial={{ opacity: 0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity: 1, y: 0 }} transition={MOBILE_TAB_FADE_TRANSITION}
+                initial={pushScreens ? false : { opacity: 0, y: MOBILE_TAB_FADE_Y }} animate={{ opacity: 1, y: 0 }} transition={MOBILE_TAB_FADE_TRANSITION}
                 style={{ textAlign: 'center', padding: `${SPACING.xl * 2}px ${SPACING.md}px`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}
               >
                 <div style={{ opacity: 0.5, marginBottom: 12 }}><ActionIcon name="hub" size={48} color={COLORS.muted} /></div>
@@ -1903,7 +1903,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px', borderRadius: 16, minWidth: 0,
                   background: 'color-mix(in srgb, var(--brand) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-                  <img src="/logos/chains/arc.svg" alt="" width={28} height={28} style={{ borderRadius: '50%', flexShrink: 0 }}/>
+                  <img decoding="async" src="/logos/chains/arc.svg" alt="" width={28} height={28} style={{ borderRadius: '50%', flexShrink: 0 }}/>
                   <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
                     <span style={{ fontSize: 11, color: COLORS.muted }}>To</span>
                     <span style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Arc Testnet</span>

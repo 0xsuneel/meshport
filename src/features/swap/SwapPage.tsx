@@ -120,7 +120,7 @@ function swapTokenSymbolChar(id: string): string {
 function TLogo({ t, size=32 }: { t: Token; size?: number }) {
   const [ok, setOk] = useState(true)
   const s = { width:size, height:size, borderRadius:'50%', objectFit:'cover' as const, flexShrink:0 as const }
-  if (ok) return <img src={t.logo} alt={t.id} style={s} onError={() => setOk(false)}/>
+  if (ok) return <img decoding="async" src={t.logo} alt={t.id} style={s} onError={() => setOk(false)}/>
   return (
     <div style={{ ...s, background:`${t.color}22`, border:`1.5px solid ${t.color}55`,
       display:'flex', alignItems:'center', justifyContent:'center' }}>

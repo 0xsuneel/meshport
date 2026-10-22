@@ -65,7 +65,7 @@ function ChainRow({ chain, step, first, onTrack }: { chain: ClaimAllChain; step?
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', cursor: canTrack ? 'pointer' : 'default',
         borderTop: first ? 'none' : '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
       {logoOk
-        ? <img src={chainLogoSrc(chain.chainId)} alt="" width={34} height={34} onError={() => setLogoOk(false)} style={{ borderRadius: '50%', flexShrink: 0 }} />
+        ? <img decoding="async" src={chainLogoSrc(chain.chainId)} alt="" width={34} height={34} onError={() => setLogoOk(false)} style={{ borderRadius: '50%', flexShrink: 0 }} />
         : <span style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, background: 'color-mix(in srgb, var(--text-primary) 8%, transparent)' }} />}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{chain.label}</div>

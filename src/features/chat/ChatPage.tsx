@@ -1004,7 +1004,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   if (newChat) {
     return (
       <div className="flex-1 overflow-y-auto bg-bg" style={{ paddingBottom: 90 }}>
-        <div className="sticky top-0 z-20 bg-bg/95 backdrop-blur-md px-5 pt-header pb-3">
+        <div className="sticky top-0 z-20 bg-bg px-5 pt-header pb-3">
           <div className="header-row" style={{ gap: 12 }}>
             <button onClick={() => navigate(-1)} className="back-btn" aria-label="Back">
               <ArrowLeft className="w-5 h-5 text-text-primary" />
@@ -1092,7 +1092,7 @@ export function ChatListPage({ newChat = false }: { newChat?: boolean } = {}) {
   return (
     <div className="flex-1 min-h-0 relative flex flex-col bg-bg">
     <div ref={chatListScrollRef} className="flex-1 overflow-y-auto bg-bg">
-      <div className="sticky top-0 z-20 bg-bg/95 backdrop-blur-md px-4 pt-header pb-3"
+      <div className="sticky top-0 z-20 bg-bg px-4 pt-header pb-3"
         style={{ borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
         {/* Selecting (hold a chat): back · count · actions */}
         {selecting ? (
@@ -1357,7 +1357,7 @@ const UnreadDivider = memo(function UnreadDivider({ count }: { count: number }) 
 })
 
 // ─── Decrypted image bubble ──────────────────────────────────────────────────
-// A plaintext [IMAGE](url) can just be an <img src>. An encrypted one
+// A plaintext [IMAGE](url) can just be an <img decoding="async" src>. An encrypted one
 // [IMAGE-E:iv](url) points at ciphertext bytes at that URL - this fetches
 // them, decrypts with the conversation key, and renders an object URL
 // instead. Its own small component (not inlined in MessageBubble) so the
@@ -1432,7 +1432,7 @@ function EncryptedImage({ url, ivBase64, convKey, isLastInGroup, isMine, onTap }
     )
   }
   return (
-    <img
+    <img decoding="async"
       src={objectUrl} alt="attachment" onClick={() => onTap(objectUrl)}
       style={{
         display: 'block', width: '100%', minWidth: 140, maxWidth: 260, maxHeight: 320,
@@ -5175,7 +5175,7 @@ export function ChatConversationPage() {
               {pendingFiles.map(pf => (
                 <div key={pf.id} className="relative flex-shrink-0">
                   {pf.isImage && pf.previewUrl ? (
-                    <img src={pf.previewUrl} alt={pf.file.name}
+                    <img decoding="async" src={pf.previewUrl} alt={pf.file.name}
                       className="w-16 h-16 rounded-xl object-cover border border-border" />
                   ) : (
                     <div className="w-16 h-16 rounded-xl bg-surface border border-border flex flex-col items-center justify-center px-1">

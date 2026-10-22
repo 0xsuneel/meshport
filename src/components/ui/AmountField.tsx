@@ -131,7 +131,7 @@ export function AmountField({
         {token && !tokenPicker && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, padding: token.logo && logoOk ? '5px 12px 5px 5px' : '6px 12px',
             borderRadius: 999, background: 'var(--surface)', border: '1px solid var(--border)', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-            {token.logo && logoOk && <img src={token.logo} alt="" width={22} height={22} onError={() => setLogoOk(false)} style={{ borderRadius: '50%', display: 'block' }} />}
+            {token.logo && logoOk && <img decoding="async" src={token.logo} alt="" width={22} height={22} onError={() => setLogoOk(false)} style={{ borderRadius: '50%', display: 'block' }} />}
             {token.label}
           </span>
         )}

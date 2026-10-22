@@ -50,7 +50,7 @@ export function DesktopDashboardMockup() {
           {/* Header row */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <img src="/favicon.svg" alt="" style={{ width: 28, height: 28, borderRadius: 8 }} />
+              <img decoding="async" src="/favicon.svg" alt="" style={{ width: 28, height: 28, borderRadius: 8 }} />
               <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>MeshPort</span>
             </div>
             <div style={{
@@ -167,7 +167,7 @@ export function MobileDashboardMockup() {
       }}>
         <div style={{ padding: '18px 14px 14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <img src="/favicon.svg" alt="" style={{ width: 22, height: 22, borderRadius: 6 }} />
+            <img decoding="async" src="/favicon.svg" alt="" style={{ width: 22, height: 22, borderRadius: 6 }} />
             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)' }}>MeshPort</span>
           </div>
           <p style={{ fontSize: 10.5, color: 'var(--text-secondary)', marginBottom: 2 }}>Total Balance</p>

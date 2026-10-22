@@ -29,7 +29,7 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="header-row sticky top-0 z-20 bg-bg/95 backdrop-blur-md justify-between px-5 pt-header pb-header">
+      <div className="header-row sticky top-0 z-20 bg-bg justify-between px-5 pt-header pb-header">
         <div className="flex items-center gap-3">
           {(!isDesktop || isPublic) && (
             <button onClick={() => (isPublic ? navigate('/') : navigate(-1))} className="back-btn" aria-label="Back">
@@ -111,7 +111,7 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
         {zoom && (
           <DesktopDialogFrame key="zoom" onClose={() => setZoom(null)} bare maxWidth={520}>
             <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
-              <img src={`/guide/${zoom.image}.jpg`} alt={`${zoom.title} screen`}
+              <img decoding="async" src={`/guide/${zoom.image}.jpg`} alt={`${zoom.title} screen`}
                 className="max-w-full rounded-3xl shadow-2xl" style={{ display: 'block', maxHeight: 'calc(100dvh - 32px)' }} />
               <button onClick={() => setZoom(null)} aria-label="Close"
                 className="absolute top-3 right-3 w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.42)' }}>

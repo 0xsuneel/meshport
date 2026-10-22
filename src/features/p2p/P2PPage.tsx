@@ -1785,7 +1785,7 @@ export function P2PTradePage() {
           </div>
         ) : m.content.startsWith('[IMAGE](') ? (
           <div key={m.id} style={{ alignSelf: m.senderId === user.id ? 'flex-end' : 'flex-start', maxWidth: '75%' }}>
-            <img
+            <img decoding="async"
               src={safeStorageUrl(m.content.match(/^\[IMAGE\]\((.+)\)$/)?.[1])}
               alt="payment proof"
               onClick={() => openExternal(safeStorageUrl(m.content.match(/^\[IMAGE\]\((.+)\)$/)?.[1]))}
@@ -1809,7 +1809,7 @@ export function P2PTradePage() {
       {/* Staged payment-proof preview */}
       {proofFile && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: `1px solid ${COLORS.border}` }}>
-          <img src={proofFile.previewUrl} alt="proof preview" style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover' }} />
+          <img decoding="async" src={proofFile.previewUrl} alt="proof preview" style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover' }} />
           <div style={{ flex: 1, fontSize: 12.5, color: COLORS.muted }}>{uploadingProof ? 'Uploading payment proof…' : 'Payment proof ready to send'}</div>
           <button onClick={clearProofFile} disabled={uploadingProof} style={{ width: 26, height: 26, borderRadius: '50%', background: COLORS.surface, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <XIcon size={14} color={COLORS.muted} />

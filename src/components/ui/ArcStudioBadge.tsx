@@ -16,7 +16,7 @@ export function ArcStudioBadge({ width = 112, className }: { width?: number; cla
       className={className}
       style={{ display: 'inline-flex', flexShrink: 0, lineHeight: 0 }}
     >
-      <img
+      <img decoding="async"
         src="/arc-studio-badge.png"
         alt="Built with Arc Studio"
         width={width}

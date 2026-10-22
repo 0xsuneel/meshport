@@ -26,7 +26,7 @@ function RouteLogo({ name }: { name: string }) {
   const [ok, setOk] = useState(true)
   const src = chainLogoByName(name)
   return src && ok
-    ? <img src={src} alt="" aria-hidden width={30} height={30} onError={() => setOk(false)} style={{ flexShrink: 0, display: 'block' }} />
+    ? <img decoding="async" src={src} alt="" aria-hidden width={30} height={30} onError={() => setOk(false)} style={{ flexShrink: 0, display: 'block' }} />
     : <span aria-hidden style={{ width: 30, height: 30, flexShrink: 0 }} />
 }
 

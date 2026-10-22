@@ -266,7 +266,7 @@ export function LedgerInsightsPage() {
                 <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No payments {PERIOD_LABEL[period].toLowerCase()} yet.</div>
               ) : s.chains.map(c => (
                 <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                  <img src={chainLogo(c.id)} alt="" width={26} height={26} style={{ borderRadius: '50%', flexShrink: 0 }}
+                  <img decoding="async" src={chainLogo(c.id)} alt="" width={26} height={26} style={{ borderRadius: '50%', flexShrink: 0 }}
                     onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13.5, marginBottom: 5 }}>
@@ -359,7 +359,7 @@ export function LedgerInsightsPage() {
                 <div style={{ ...label, marginBottom: 6 }}>Latest payments</div>
                 {s.recent.map((p, i) => (
                   <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}>
-                    <img src={chainLogo(p.chain)} alt="" width={22} height={22} style={{ borderRadius: '50%', flexShrink: 0 }}
+                    <img decoding="async" src={chainLogo(p.chain)} alt="" width={22} height={22} style={{ borderRadius: '50%', flexShrink: 0 }}
                       onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />
                     <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{customersOf([p])[0]?.name}</span> · {chainName(p.chain)}{p.orderNumber ? ` · ${displayOrderNumber(p.orderNumber)}` : ''} · {timeAgo(p.createdAt)}

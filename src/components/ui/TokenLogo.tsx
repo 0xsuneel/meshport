@@ -19,7 +19,7 @@ export function TokenLogo({ token, size = 22 }: { token: string; size?: number }
   const t = (token in TOKEN_LOGO_SRC ? token : 'USDC') as TokenLogoSymbol
   const [ok, setOk] = useState(true)
   const box = { width: size, height: size, borderRadius: '50%', flexShrink: 0 } as const
-  if (ok) return <img src={TOKEN_LOGO_SRC[t]} alt={t} width={size} height={size} draggable={false} onError={() => setOk(false)} style={{ ...box, display: 'block', objectFit: 'cover' }} />
+  if (ok) return <img decoding="async" src={TOKEN_LOGO_SRC[t]} alt={t} width={size} height={size} draggable={false} onError={() => setOk(false)} style={{ ...box, display: 'block', objectFit: 'cover' }} />
   return (
     <span style={{ ...box, background: FALLBACK[t].bg, color: '#fff', fontWeight: 700, fontSize: Math.round(size * 0.45),
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{FALLBACK[t].ch}</span>

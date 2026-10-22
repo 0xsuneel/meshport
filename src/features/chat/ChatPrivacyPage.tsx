@@ -67,7 +67,7 @@ export function ChatPrivacyPage() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-bg" style={{ paddingBottom: 40 }}>
-      <div className="sticky top-0 z-20 bg-bg/95 backdrop-blur-md px-5 pt-header pb-3">
+      <div className="sticky top-0 z-20 bg-bg px-5 pt-header pb-3">
         <div className="header-row" style={{ gap: 12 }}>
           <button onClick={() => navigate(-1)} className="back-btn" aria-label="Back">
             <ArrowLeft className="w-5 h-5 text-text-primary" />

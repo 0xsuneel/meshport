@@ -39,7 +39,7 @@ export function ChainLogo({ src, label, size = 24, className = '' }: ChainLogoPr
     )
   }
   return (
-    <img
+    <img decoding="async"
       src={src}
       alt={label}
       className={`rounded-full object-cover ${className}`}

@@ -112,7 +112,7 @@ export function QrCard({ dataUrl, title, subtitle, caption = 'Scan to pay with M
                   {children}
                 </div>
               ) : dataUrl ? (
-                <img key="qr" src={dataUrl} alt="Payment QR code" className="w-full h-full object-contain qr-fade-in" />
+                <img decoding="async" key="qr" src={dataUrl} alt="Payment QR code" className="w-full h-full object-contain qr-fade-in" />
               ) : (
                 /* Skeleton while loading */
                 <motion.div key="skel" className="absolute inset-0 p-3 flex flex-col gap-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>

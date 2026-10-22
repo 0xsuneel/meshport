@@ -92,7 +92,7 @@ export function BusinessHeader({
       >
         <span className="shrink-0 rounded-full p-[2px] bg-brand" style={{ width: 47, height: 47 }}>
           {avatarUrl
-            ? <img src={avatarUrl.split('?')[0]} alt="" className="w-full h-full rounded-full object-cover" style={{ border: '2px solid var(--bg)' }} />
+            ? <img decoding="async" src={avatarUrl.split('?')[0]} alt="" className="w-full h-full rounded-full object-cover" style={{ border: '2px solid var(--bg)' }} />
             : <span className="flex items-center justify-center w-full h-full rounded-full bg-brand text-white text-[17px] font-bold" style={{ border: '2px solid var(--bg)' }}>
                 {initials.slice(0, 1)}
               </span>}

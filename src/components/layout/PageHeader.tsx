@@ -19,7 +19,7 @@ export function PageHeader({ title, showBack = true, showNotifications = false, 
   const { unreadCount, badgeLabel } = useNotificationStore()
 
   return (
-    <div className="header-row sticky top-0 z-20 bg-bg/95 backdrop-blur-md justify-between px-5 pt-header pb-header">
+    <div className="header-row sticky top-0 z-20 bg-bg justify-between px-5 pt-header pb-header">
       <div className="flex items-center gap-2">
         {showBack && !isDesktop && (
           <button

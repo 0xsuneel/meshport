@@ -111,7 +111,7 @@ export function SecurityPage() {
 
   return (
     <div className="flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto">
-      <div className="header-row sticky top-0 z-20 bg-bg/95 backdrop-blur-md gap-3 px-5 pt-header pb-header">
+      <div className="header-row sticky top-0 z-20 bg-bg gap-3 px-5 pt-header pb-header">
         {!isDesktop && (
           <button onClick={() => navigate(-1)} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
@@ -268,7 +268,7 @@ export function AppearancePage() {
 
   return (
     <div className="flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto">
-      <div className="header-row sticky top-0 z-20 bg-bg/95 backdrop-blur-md gap-3 px-5 pt-header pb-header">
+      <div className="header-row sticky top-0 z-20 bg-bg gap-3 px-5 pt-header pb-header">
         {!isDesktop && (
           <button onClick={() => navigate(-1)} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
@@ -382,7 +382,7 @@ export function ChangePasscodePage() {
 
   return (
     <div className="flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto">
-      <div className="header-row sticky top-0 z-20 bg-bg/95 backdrop-blur-md gap-3 px-5 pt-header pb-header">
+      <div className="header-row sticky top-0 z-20 bg-bg gap-3 px-5 pt-header pb-header">
         {!isDesktop && (
           <button onClick={() => navigate(-1)} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
@@ -529,7 +529,7 @@ function BackupPrivateKeyOnlyPage() {
 
   return (
     <div className="flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto">
-      <div className="header-row sticky top-0 z-20 bg-bg/95 backdrop-blur-md gap-3 px-5 pt-header pb-header">
+      <div className="header-row sticky top-0 z-20 bg-bg gap-3 px-5 pt-header pb-header">
         {!isDesktop && (
           <button onClick={() => navigate(-1)} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
@@ -702,7 +702,7 @@ function BackupRecoveryPhrasePage() {
 
   return (
     <div className="flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto">
-      <div className="header-row sticky top-0 z-20 bg-bg/95 backdrop-blur-md gap-3 px-5 pt-header pb-header">
+      <div className="header-row sticky top-0 z-20 bg-bg gap-3 px-5 pt-header pb-header">
         {!isDesktop && (
           <button onClick={() => navigate(-1)} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
@@ -995,7 +995,7 @@ export function EditProfilePage() {
 
   return (
     <div className={isDesktop ? "flex-1 overflow-y-auto pb-6" : "flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto"}>
-      <div className="header-row sticky top-0 z-20 bg-bg/95 backdrop-blur-md gap-3 px-5 pt-header pb-header">
+      <div className="header-row sticky top-0 z-20 bg-bg gap-3 px-5 pt-header pb-header">
         {!isDesktop && (
           <button onClick={() => navigate(-1)} className="back-btn">
             <ArrowLeft className="w-5 h-5 text-text-primary" />
@@ -1127,7 +1127,7 @@ export function NotificationsPage({ embedded, onClose }: { embedded?: boolean; o
       {/* Header */}
       <div className={embedded
         ? 'flex items-center justify-between px-5 pt-5 pb-4 border-b border-border'
-        : 'header-row sticky top-0 z-20 bg-bg/95 backdrop-blur-md justify-between px-5 pt-header pb-header'}>
+        : 'header-row sticky top-0 z-20 bg-bg justify-between px-5 pt-header pb-header'}>
         <div className="flex items-center gap-3">
           {!embedded && !isDesktop && (
             <button onClick={() => navigate(-1)} className="back-btn">

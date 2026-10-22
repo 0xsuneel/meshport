@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { DESKTOP_QUERY } from '@/lib/motion'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
@@ -915,7 +917,7 @@ export function ActivityPage() {
   // kept on screen, so you can see which one you were looking at. Cleared
   // while a detail is open, so the same row flashes again next time.
   const [flashId, setFlashId] = useState<string | null>(null)
-  const openDetail = (item: ActivityRecord) => { setFlashId(null); setSelected(item) }
+  const openDetail = useCallback((item: ActivityRecord) => { setFlashId(null); setSelected(item) }, [])
   const closeDetail = () => { setFlashId(selected?.id ?? null); setSelected(null) }
   useEffect(() => {
     if (flashId) listScrollRef.current?.querySelector(`[data-activity-id="${CSS.escape(flashId)}"]`)?.scrollIntoView({ block: 'nearest' })
@@ -935,6 +937,7 @@ export function ActivityPage() {
   const [searchInput, setSearchInput] = useState('')
   // Search box tucks away while scrolling down the list, back on scroll up.
   const listScrollRef = useRef<HTMLDivElement>(null)
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
   const [searchFocused, setSearchFocused] = useState(false)
   const searchHidden = useHideOnScroll(listScrollRef, searchFocused || !!searchInput)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -977,38 +980,99 @@ export function ActivityPage() {
     return () => obs.disconnect()
   }, [hasMore, loadingMore, loading, loadMore, error, records.length])
 
-  const displayed = (tokenFilter
-    ? records.filter(r => recordMovesToken(r, tokenFilter))
-    : records
-  ).filter(r => {
-    if (r.activityType === 'deposit') return false
-    const md: any = (r as any).metadata ?? {}
-    // A merchant's Ledger → Arc transfer shows here only once it has landed
-    // ("Ledger payment received"); while it runs it's in the Merchant Hub.
-    if (md.auto_convert && r.status !== 'completed') return false
-    if (activeTab === 'merchant') return !!(md.merchant || md.auto_convert || md.merchantOrder || md.merchantPayment) && r.activityType !== 'send'
-    if (activeTab === 'all')     return true
-    if (activeTab === 'send')    return r.activityType === 'send'
-    if (activeTab === 'receive') return r.activityType === 'receive'
-    if (activeTab === 'swap')    return r.activityType === 'swap'
-    if (activeTab === 'bulk')    return r.activityType === 'bulk'
-    if (activeTab === 'bridge')  return r.activityType === 'claim' || r.activityType === 'bridge' || r.activityType === 'withdraw'
-    if (activeTab === 'p2p')     return r.activityType === 'p2p_sell_order' || r.activityType === 'p2p_refund' || r.activityType === 'p2p_purchase'
-    if (activeTab === 'rewards') return isRewardClaim(r)
-    return true
-  })
-
   const showEarned = activeTab === 'rewards' && rewardsTab === 'earned'
-  const deduped = dedupeAndSortActivityRecords(displayed)
-  const sorted = deduped
-  const groups = groupByDate(sorted)
+  // Filtered, de-duplicated and grouped once per change of the records or
+  // filter - not on every render (the search box hiding on scroll re-renders
+  // this page mid-scroll).
+  const groups = useMemo(() => {
+    const displayed = (tokenFilter
+      ? records.filter(r => recordMovesToken(r, tokenFilter))
+      : records
+    ).filter(r => {
+      if (r.activityType === 'deposit') return false
+      const md: any = (r as any).metadata ?? {}
+      // A merchant's Ledger → Arc transfer shows here only once it has landed
+      // ("Ledger payment received"); while it runs it's in the Merchant Hub.
+      if (md.auto_convert && r.status !== 'completed') return false
+      if (activeTab === 'merchant') return !!(md.merchant || md.auto_convert || md.merchantOrder || md.merchantPayment) && r.activityType !== 'send'
+      if (activeTab === 'all')     return true
+      if (activeTab === 'send')    return r.activityType === 'send'
+      if (activeTab === 'receive') return r.activityType === 'receive'
+      if (activeTab === 'swap')    return r.activityType === 'swap'
+      if (activeTab === 'bulk')    return r.activityType === 'bulk'
+      if (activeTab === 'bridge')  return r.activityType === 'claim' || r.activityType === 'bridge' || r.activityType === 'withdraw'
+      if (activeTab === 'p2p')     return r.activityType === 'p2p_sell_order' || r.activityType === 'p2p_refund' || r.activityType === 'p2p_purchase'
+      if (activeTab === 'rewards') return isRewardClaim(r)
+      return true
+    })
+
+    const deduped = dedupeAndSortActivityRecords(displayed)
+    const sorted = deduped
+    const groups = groupByDate(sorted)
+    return groups
+  }, [records, tokenFilter, activeTab])
+  const listView = useMemo(() => isDesktop ? (<>
+    {!showEarned && !loading && (
+            <div className="px-4 lg:max-w-[1100px] lg:mx-auto">
+              {groups.map(group => (
+                <div key={group.label} className="mb-6">
+                  <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 px-1">{group.label}</p>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--shadow-1)' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)' }}>
+                        {['Type', 'Details', 'Chain', 'Status', 'Time', 'Amount'].map((h, i) => (
+                          <th key={h} style={{ textAlign: i === 5 ? 'right' : 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.items.map(item => {
+                        const row = deriveActivityRow(item)
+                        return (
+                          <tr key={item.id} data-activity-id={item.id} onClick={() => openDetail(item)} className={`desktop-table-row${item.id === flashId ? ' mp-last-opened' : ''}`}
+                            style={{ cursor: 'pointer', borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)', background: 'var(--dt-hover-bg, transparent)', transition: 'background-color 150ms ease' }}>
+                            <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{row.title}</td>
+                            <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)', fontFamily: row.counterpartyLabel && !row.isSwap ? 'monospace' : undefined }}>{row.subtitle || '-'}</td>
+                            <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{row.chain || '-'}</td>
+                            <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: row.statusColor }}>{row.statusLabel}</td>
+                            <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)' }}>{timeAgo(row.createdAt)}</td>
+                            <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: row.isSwap ? 'var(--success)' : row.amountColor, textAlign: 'right' }}>
+                              {row.isSwap
+                                ? `+${formatAmt(row.metadata.amountOut ?? 0, row.metadata.tokenOut)} ${row.metadata.tokenOut || '?'}`
+                                : `${row.amountPrefix}${formatAmt(row.amount, row.tokenSymbol)} ${row.tokenSymbol || 'USDC'}`}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          )}</>
+  ) : (
+    <div>
+            {!showEarned && !loading && groups.map(group => (
+              <div key={group.label} className="px-4 mb-4">
+                <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 mt-4 px-1">{group.label}</p>
+                <div>
+                  {group.items.map((item, i, arr) => (
+                    <ActivityRow key={item.id} record={item}
+                      isFirst={i === 0} isLast={i === arr.length - 1}
+                      onSelect={() => openDetail(item)} flash={item.id === flashId} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+  ), [isDesktop, groups, flashId, showEarned, loading, openDetail])
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-bg">
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* Header */}
-      <div className="sticky top-0 z-20 backdrop-blur-md" style={{ background: 'color-mix(in srgb, var(--bg) 95%, transparent)' }}>
+      <div className="sticky top-0 z-20" style={{ background: 'var(--bg)' }}>
         <div className="header-row px-5 pt-header pb-header justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <h1 className="text-xl font-bold text-text-primary">Activity</h1>
@@ -1098,69 +1162,18 @@ export function ActivityPage() {
           </div>
         )}
 
-        {!showEarned && !loading && !error && deduped.length === 0 && (
+        {!showEarned && !loading && !error && groups.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 gap-2">
             <p className="text-text-secondary font-semibold">No activity yet</p>
             <p className="text-sm text-text-muted text-center px-8">Your transactions will appear here.</p>
           </div>
         )}
 
-        {/* Mobile: grouped cards. Desktop: a proper table below, driven by
-            the exact same `groups` data and onSelect handler - no
-            duplicated fetching/filtering, just a different markup shape. */}
-        <div className="lg:hidden">
-          {!showEarned && !loading && groups.map(group => (
-            <div key={group.label} className="px-4 mb-4">
-              <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 mt-4 px-1">{group.label}</p>
-              <div>
-                {group.items.map((item, i, arr) => (
-                  <ActivityRow key={item.id} record={item}
-                    isFirst={i === 0} isLast={i === arr.length - 1}
-                    onSelect={() => openDetail(item)} flash={item.id === flashId} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {!showEarned && !loading && (
-          <div className="hidden lg:block px-4 lg:max-w-[1100px] lg:mx-auto">
-            {groups.map(group => (
-              <div key={group.label} className="mb-6">
-                <p className="text-xs font-bold text-text-secondary uppercase tracking-wider mb-2 px-1">{group.label}</p>
-                <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--shadow-1)' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border)', background: 'color-mix(in srgb, var(--text-primary) 3%, transparent)' }}>
-                      {['Type', 'Details', 'Chain', 'Status', 'Time', 'Amount'].map((h, i) => (
-                        <th key={h} style={{ textAlign: i === 5 ? 'right' : 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.items.map(item => {
-                      const row = deriveActivityRow(item)
-                      return (
-                        <tr key={item.id} data-activity-id={item.id} onClick={() => openDetail(item)} className={`desktop-table-row${item.id === flashId ? ' mp-last-opened' : ''}`}
-                          style={{ cursor: 'pointer', borderTop: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)', background: 'var(--dt-hover-bg, transparent)', transition: 'background-color 150ms ease' }}>
-                          <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{row.title}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)', fontFamily: row.counterpartyLabel && !row.isSwap ? 'monospace' : undefined }}>{row.subtitle || '-'}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>{row.chain || '-'}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, color: row.statusColor }}>{row.statusLabel}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)' }}>{timeAgo(row.createdAt)}</td>
-                          <td style={{ padding: '12px 16px', fontSize: 13, fontWeight: 700, color: row.isSwap ? 'var(--success)' : row.amountColor, textAlign: 'right' }}>
-                            {row.isSwap
-                              ? `+${formatAmt(row.metadata.amountOut ?? 0, row.metadata.tokenOut)} ${row.metadata.tokenOut || '?'}`
-                              : `${row.amountPrefix}${formatAmt(row.amount, row.tokenSymbol)} ${row.tokenSymbol || 'USDC'}`}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Phone: grouped rows. Desktop: a table, from the same `groups` and
+            onSelect. Only the one on screen is rendered (both used to be,
+            one hidden by CSS - every row twice on a phone), and it's built
+            once per change of the list, so a re-render mid-scroll is cheap. */}
+        {listView}
 
         <div ref={bottomRef} className="py-2 flex justify-center">
           {loadingMore && <Loader2 className="w-5 h-5 text-text-muted animate-spin" />}

@@ -218,7 +218,7 @@ function ChainLogo({ name, size = 22 }: { name: string; size?: number }) {
   const [ok, setOk] = React.useState(true)
   if (cfg?.logo && ok) {
     return (
-      <img src={cfg.logo} alt={name} width={size} height={size}
+      <img decoding="async" src={cfg.logo} alt={name} width={size} height={size}
         style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
         onError={() => setOk(false)} />
     )

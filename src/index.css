@@ -324,8 +324,7 @@
 }
 .page-header {
   position: sticky; top: 0; z-index: 20;
-  background: color-mix(in srgb, var(--bg) 95%, transparent);
-  backdrop-filter: blur(20px);
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   padding: 14px 20px;
   display: flex; align-items: center; gap: 12px;

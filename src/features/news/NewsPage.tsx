@@ -40,7 +40,7 @@ export function NewsCover({ item, style, children, variant = 'stack' }: { item: 
   return (
     <div style={{ position: 'relative', overflow: 'hidden', background: NEWS_SOURCE_TINT[item.source], ...style }}>
       {item.image_url && ok
-        ? <img src={item.image_url} alt="" loading="lazy" onError={() => setOk(false)}
+        ? <img decoding="async" src={item.image_url} alt="" loading="lazy" onError={() => setOk(false)}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         : <NewsArt item={item} variant={variant} />}
       {children}
@@ -141,7 +141,7 @@ export function NewsPage() {
     <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)', paddingBottom: 90 }}>
       <div style={{
         position: 'sticky', top: 0, zIndex: 20,
-        background: 'color-mix(in srgb, var(--bg) 95%, transparent)', backdropFilter: 'blur(20px)',
+        background: 'var(--bg)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))', paddingLeft: isDesktop ? 28 : 20, paddingRight: isDesktop ? 28 : 20, paddingBottom: 10,
       }}>
         <div style={isDesktop ? { maxWidth: 1240 - 56, margin: '0 auto' } : undefined}>

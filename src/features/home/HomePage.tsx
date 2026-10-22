@@ -10,7 +10,7 @@ import { flushSync, createPortal } from 'react-dom'
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
 import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
 import { useMotionValue, animate, motion, AnimatePresence } from 'framer-motion'
-import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
+import { MOBILE_TAB_FADE_TRANSITION, EASE_OUT } from '@/lib/motion'
 import { parseUnits } from 'viem'
 import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
@@ -98,19 +98,18 @@ function aggregateBuckets(records: ActivityRecord[], spanDays: number, granulari
 }
 
 // ── My QR - Home screen card, below Assets ──────────────────────────────────
+const QR_REVEAL = { duration: 0.45, ease: EASE_OUT }
 // Same qrcode lib + encoding choice as ReceivePage.tsx: encodes the raw
 // wallet address (not the pay link) so external wallets that scan it treat
 // it as "send to this address" rather than opening a browser link.
 const APP_URL = 'https://meshport.xyz'
 
-function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }: { walletAddress: string | null; username: string | null; scrollContainerRef: RefObject<HTMLDivElement>; assetsCardRef: RefObject<HTMLDivElement> }) {
+function MyQrCard({ walletAddress, username, scrollContainerRef }: { walletAddress: string | null; username: string | null; scrollContainerRef: RefObject<HTMLDivElement> }) {
   const displayName = useAuthStore(s => s.user?.displayName)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   const [qrReady, setQrReady] = useState(false)
   const [qrError, setQrError] = useState(false)
-  const scale = useMotionValue(0.4)
-  const opacity = useMotionValue(0)
   const { showToastMessage } = useUIStore()
   const navigate = useNavigate()
   const businessAccount = useBusinessTab()
@@ -182,41 +181,22 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
     return () => clearTimeout(timer)
   }, [activeAmount])
 
-  // Continuous scroll-linked reveal based on how much of the QR card's
-  // NATURAL (full, unscaled) height already fits in the visible gap below
-  // the Assets card - not on closeness to the bottom of the page. This
-  // means if there's already empty space below Assets at rest (before any
-  // scrolling), a proportional peek of the card shows immediately, then
-  // grows smoothly to full size as more of that space opens up while
-  // scrolling. `card.offsetHeight` is used for the natural height because
-  // offsetHeight is a layout measurement unaffected by the CSS `scale`
-  // transform we apply below - reading it doesn't create a feedback loop
-  // with our own animation. `assetsCard`'s position is likewise untouched
-  // by our card's transform, since transforms never affect sibling layout.
+  // Reveal: the card eases in once (fade + a small rise and grow) the first
+  // time it scrolls into view, then stays. It used to be resized on every
+  // scroll event from layout reads on the main thread and switched its
+  // opacity straight from 0 to 1 - on phones the scroll stuttered and the
+  // card popped in and out.
+  const [revealed, setRevealed] = useState(false)
   useEffect(() => {
-    const container = scrollContainerRef.current
-    const assetsCard = assetsCardRef.current
     const card = cardRef.current
-    if (!container || !assetsCard || !card) return
-
-    const updateProgress = () => {
-      const containerRect = container.getBoundingClientRect()
-      const assetsRect = assetsCard.getBoundingClientRect()
-      const naturalHeight = card.offsetHeight || 1
-      const visibleAmount = Math.min(naturalHeight, Math.max(0, containerRect.bottom - assetsRect.bottom))
-      const progress = visibleAmount / naturalHeight
-      scale.set(0.4 + progress * 0.6)
-      opacity.set(progress > 0 ? 1 : 0)
-    }
-
-    updateProgress()
-    container.addEventListener('scroll', updateProgress, { passive: true })
-    window.addEventListener('resize', updateProgress)
-    return () => {
-      container.removeEventListener('scroll', updateProgress)
-      window.removeEventListener('resize', updateProgress)
-    }
-  }, [scrollContainerRef, assetsCardRef, scale, opacity, qrReady])
+    if (!card || revealed) return
+    if (typeof IntersectionObserver === 'undefined') { setRevealed(true); return }
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) { setRevealed(true); io.disconnect() }
+    }, { root: scrollContainerRef.current, threshold: 0.15 })
+    io.observe(card)
+    return () => io.disconnect()
+  }, [scrollContainerRef, revealed])
 
   useEffect(() => {
     if (!qrData || !canvasRef.current) return
@@ -333,10 +313,12 @@ function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }
   return (
     <motion.div
       ref={cardRef}
+      initial={false}
+      animate={revealed ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 16, scale: 0.96 }}
+      transition={QR_REVEAL}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-        width: '95%', margin: '0 auto', boxSizing: 'border-box',
-        scale, opacity, transformOrigin: 'top center',
+        width: '95%', margin: '0 auto', boxSizing: 'border-box', transformOrigin: 'top center',
       }}>
       {activeAmount && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -619,7 +601,7 @@ function AssetRow({ icon, fallbackColor, fallbackChar, name, sub, cryptoAmount, 
       <div style={{ width: iconSize, height: iconSize, borderRadius: '50%', flexShrink: 0,
         background: fallbackColor, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         {imgOk
-          ? <img src={icon} alt={name} style={{ width: iconSize, height: iconSize, objectFit: 'cover' }} onError={() => setImgOk(false)}/>
+          ? <img decoding="async" src={icon} alt={name} style={{ width: iconSize, height: iconSize, objectFit: 'cover' }} onError={() => setImgOk(false)}/>
           : <span style={{ color: '#fff', fontWeight: 700, fontSize: showChange ? 13 : 16 }}>{fallbackChar}</span>}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -2450,21 +2432,8 @@ export function HomePage() {
   const [selectedActivity, setSelectedActivity] = useState<ActivityRecord | null>(null)
   const recentFlash = useReturnFlash()
   // Home's real scroll container (below) is its own overflowY:'auto' div,
-  // not the window - MyQrCard's scroll-linked reveal needs this ref to
-  // measure element positions against the actual scrolling element.
+  // not the window - MyQrCard watches its card scroll into view inside it.
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  // Assets card ref - the QR reveal is driven off THIS crossing a
-  // reference point (rather than the QR card's own position), so it
-  // starts unfolding as soon as Assets begins scrolling past its resting
-  // spot, well before the QR card itself is anywhere near the viewport.
-  const assetsCardRef = useRef<HTMLDivElement>(null)
-  // The profile header is `position: sticky` INSIDE the scroll container,
-  // so the container's own top edge sits at the header's TOP, not its
-  // visible bottom - using the container's top as the crossing point
-  // meant Assets had to scroll fully underneath the entire header height
-  // before the QR reveal even started, leaving too little scroll room
-  // afterward to ever finish. This ref lets us use the header's actual
-  // rendered bottom edge (stable on-screen since it's sticky) instead.
   const stickyHeaderRef = useRef<HTMLDivElement>(null)
 
   // CHANGE 1: More sheet state
@@ -3557,11 +3526,9 @@ export function HomePage() {
       {(!isDesktop || searchOpen) && (
       <div ref={stickyHeaderRef} style={{
         position: 'sticky', top: 0, zIndex: 20,
-        // Near-solid: phones show no backdrop blur (index.css), so a see-through
-        // header would let the content scrolling under it show sharply.
-        background: 'color-mix(in srgb, var(--bg) 94%, transparent)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
+        // Solid, no backdrop blur: a blur under a sticky header is redrawn on
+        // every frame of a scroll.
+        background: 'var(--bg)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--home-header-gap, 14px))',
         paddingBottom: 4, paddingLeft: 20, paddingRight: 20,
         boxSizing: 'border-box',
@@ -3893,7 +3860,7 @@ export function HomePage() {
         {!accountLock.locked && <RecentNewsRow navigate={navigate} />}
 
         {/* ── ASSETS - all 3 tokens ────────────────────────────────────────── */}
-        <div ref={assetsCardRef}>
+        <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isDesktop ? 6 : 12 }}>
             <span style={{ fontSize: 16, fontWeight: 700 }}>Assets</span>
             {!accountLock.locked && <button onClick={handleFaucet}
@@ -3958,7 +3925,7 @@ export function HomePage() {
         {isDesktop && <BiometricFooterRow isDesktop />}
 
         {/* ── MY QR - below Assets card. Mobile only. ─────────────────────── */}
-        {!isDesktop && !accountLock.locked && <MyQrCard walletAddress={walletAddress} username={username} scrollContainerRef={scrollContainerRef} assetsCardRef={assetsCardRef} />}
+        {!isDesktop && !accountLock.locked && <MyQrCard walletAddress={walletAddress} username={username} scrollContainerRef={scrollContainerRef} />}
         {/* ── Biometric row - mobile: right below the QR card. ─────────────── */}
         {!isDesktop && <BiometricFooterRow isDesktop={false} />}
         </div>

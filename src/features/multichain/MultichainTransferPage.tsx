@@ -380,7 +380,7 @@ function ChainLogoImg({ id, size = 32 }: { id: string; size?: number }) {
     )
   }
   return (
-    <img
+    <img decoding="async"
       src={url}
       alt={id}
       width={size}
@@ -792,6 +792,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // Leaving the Transfer Funds page (back to the Hub) closes its keypad -
   // it was left open on the Hub screen.
   useEffect(() => { if (sheetMode && formSheet === 0) setShowAmountPad(false) }, [sheetMode, formSheet])
+  // The transfer SDK is big: load it while the form is being filled in (when
+  // the phone is idle), so Review doesn't parse it on its way in.
+  useEffect(() => {
+    if (formSheet !== 1) return
+    const ric = (window as any).requestIdleCallback as ((cb: () => void, o?: { timeout: number }) => number) | undefined
+    const id = ric ? ric(() => { void loadSdkModules() }, { timeout: 3000 }) : window.setTimeout(() => { void loadSdkModules() }, 1200)
+    return () => { const cic = (window as any).cancelIdleCallback; if (ric && cic) cic(id); else clearTimeout(id) }
+  }, [formSheet])
   const [selectedChain, setSelectedChain] = useState<ChainId>('eth')
   // Editing the address, amount or chain while the inline review is showing
   // hides it again - the fees shown must always match what's in the fields.
@@ -1489,11 +1497,15 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     // Fees already on screen for this exact transfer (Back, then Continue
     // again): keep them and refresh quietly - no placeholder flash.
     const fresh = feeEstimateKey === feeRequestKey && !feeEstimate.approx && !feeEstimate.error
-    fetchFeeEstimate(fresh).then(r => { if (!r) setFeeEstimate(f => ({ ...f, loading: false })) })
+    // Starts once Review has slid in: the fee work (key restore, SDK, RPC)
+    // on its first frames made the page stutter on its way in.
+    const start = setTimeout(() => {
+      fetchFeeEstimate(fresh).then(r => { if (!r) setFeeEstimate(f => ({ ...f, loading: false })) })
+    }, PUSH_OPEN_MS + 40)
     const interval = setInterval(() => {
       fetchFeeEstimate(true)
     }, 20000)
-    return () => clearInterval(interval)
+    return () => { clearTimeout(start); clearInterval(interval) }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, address, amount, selectedChain, selectedSpeed])
 
@@ -2946,7 +2958,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 28px minmax(0, 1fr)', alignItems: 'center', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px', borderRadius: 16, minWidth: 0,
         background: 'color-mix(in srgb, var(--brand) 8%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
-        <img src="/logos/chains/arc.svg" alt="" width={28} height={28} style={{ borderRadius: '50%', flexShrink: 0 }}/>
+        <img decoding="async" src="/logos/chains/arc.svg" alt="" width={28} height={28} style={{ borderRadius: '50%', flexShrink: 0 }}/>
         <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
           <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>From</span>
           <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Arc Testnet</span>
