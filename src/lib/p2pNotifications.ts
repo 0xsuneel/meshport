@@ -95,6 +95,9 @@ async function markManyReadOnServer(ids: string[]): Promise<void> {
  * Returns an unsubscribe function - call on logout / userId change, same
  * contract as subscribeWithRetry's other call sites in this codebase.
  */
+/** Notifications the business's "Payment received" popup already shows. */
+const POPUP_COVERED = new Set(['merchant_payment_received', 'merchant_chain_payment'])
+
 export function startP2PNotifications(userId: string): () => void {
   let cancelled = false
 
@@ -143,6 +146,9 @@ export function startP2PNotifications(userId: string): () => void {
         const alreadyKnown = useNotificationStore.getState().isKnown(row.id)
         useNotificationStore.getState().addNotification(rowToAppNotification(row))
         if (alreadyKnown) return
+        // A business's payment arrivals already get the full-screen "Payment
+        // received" popup (PaymentReceivedWatcher) - no second toast on top.
+        if (POPUP_COVERED.has(row.type)) return
         // Foreground toast - the OS-level push (dispatched server-side, see
         // the migration's push trigger) is what covers the app being
         // closed/backgrounded; this covers "app is open right now".
