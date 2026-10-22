@@ -2458,6 +2458,15 @@ export function P2PMyTradesPage() {
     })
     return () => { if (debounceTimer) clearTimeout(debounceTimer); unsubscribe() }
   }, [user?.id])
+  // Backup for the live feed (as on a trade's own page): while any trade is
+  // still moving, re-read the list every few seconds with the screen on, so
+  // the other side's step shows even if the realtime connection dropped.
+  const anyMoving = trades.some(t => !['completed', 'released', 'cancelled', 'expired', 'resolved_buyer', 'resolved_seller'].includes(t.status))
+  useEffect(() => {
+    if (!user?.id || !anyMoving) return
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') fetchMyTrades(user.id!).then(setTrades).catch(() => {}) }, 6000)
+    return () => clearInterval(iv)
+  }, [user?.id, anyMoving])
 
   return (
     <div className="lg:max-w-[900px]" style={{ background: COLORS.bg, minHeight: '100%', height: '100%', overflowY: 'auto', paddingBottom: 40 }}>

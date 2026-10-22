@@ -11,6 +11,7 @@ import { useNavigate, useSearchParams, type NavigateFunction } from 'react-route
 import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
 import { useMotionValue, animate, motion, AnimatePresence } from 'framer-motion'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
+import { tradeStepCard, type TradeLive } from '@/lib/p2pTradeStep'
 import { parseUnits } from 'viem'
 import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
@@ -2329,41 +2330,62 @@ export function HomePage() {
   // live via Realtime, so this also self-corrects if the trade completes
   // in another tab/device while this one sits open) and hiding a card the
   // moment its trade goes terminal, independent of the notification feed.
-  const [tradeStatusById, setTradeStatusById] = useState<Record<string, string>>({})
+  // Each referenced trade's live state (status + who's who + amounts), so a
+  // card follows the trade step by step and disappears once it's done.
+  const [tradeLiveById, setTradeLiveById] = useState<Record<string, TradeLive>>({})
+  const tradeStatusById = useMemo(() => Object.fromEntries(Object.entries(tradeLiveById).map(([id, t]) => [id, t.status])), [tradeLiveById])
   const p2pNotificationTradeIds = useMemo(
     () => [...new Set(notifications.filter(n => P2P_NOTIFICATION_TYPES.has(n.type as string) && n.tradeId).map(n => n.tradeId as string))],
     [notifications]
   )
+  const toLive = (t: any): TradeLive => ({ status: t.status, buyerId: t.buyer_id, sellerId: t.seller_id,
+    usdc: Number(t.amount_usdc) || 0, fiat: Number(t.amount_fiat) || 0, currency: t.currency || '' })
+  const loadTradeLive = useCallback(async (ids: string[]) => {
+    if (!ids.length) return
+    const { supabase } = await import('@/lib/supabase')
+    const { data } = await supabase.from('p2p_trades').select('id, status, buyer_id, seller_id, amount_usdc, amount_fiat, currency').in('id', ids)
+    if (data) setTradeLiveById(prev => ({ ...prev, ...Object.fromEntries(data.map(t => [t.id, toLive(t)])) }))
+  }, [])
   useEffect(() => {
-    if (p2pNotificationTradeIds.length === 0) return
-    let cancelled = false
-    import('@/lib/supabase').then(async ({ supabase }) => {
-      const { data } = await supabase.from('p2p_trades').select('id, status').in('id', p2pNotificationTradeIds)
-      if (!cancelled && data) {
-        setTradeStatusById(prev => ({ ...prev, ...Object.fromEntries(data.map(t => [t.id, t.status])) }))
-      }
-    })
-    return () => { cancelled = true }
-    // Deliberately keyed on the ids themselves (via the memo above), not on
-    // `notifications` directly - refetching every time any unrelated
-    // notification changes would be wasteful; this only needs to run again
-    // when the SET of trades being tracked actually changes.
-  }, [p2pNotificationTradeIds.join(',')])
+    void loadTradeLive(p2pNotificationTradeIds)
+    // Keyed on the ids themselves (via the memo above): this only needs to
+    // run again when the SET of trades being tracked changes.
+  }, [p2pNotificationTradeIds.join(','), loadTradeLive])
+  // Live: every update to one of this user's trades. A unique channel per
+  // mount, removed on unmount even if it was still being created - a fixed
+  // name left over from the last visit made supabase-js refuse the new
+  // listener ("cannot add postgres_changes callbacks … after subscribe()"),
+  // so Home stopped hearing trades finish.
   useEffect(() => {
     if (!user?.id) return
-    let channel: any
+    let stopped = false
+    let channel: any = null
+    let client: any = null
     import('@/lib/supabase').then(({ supabase }) => {
+      if (stopped) return
+      client = supabase
       channel = supabase
-        .channel('p2p-trade-status-' + user.id.slice(0, 8))
+        .channel(`p2p-trade-status-${user.id.slice(0, 8)}-${Math.random().toString(36).slice(2, 8)}`)
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'p2p_trades' }, (payload: any) => {
           const row = payload.new
           if (row?.buyer_id !== user.id && row?.seller_id !== user.id) return
-          setTradeStatusById(prev => (prev[row.id] === row.status ? prev : { ...prev, [row.id]: row.status }))
+          setTradeLiveById(prev => ({ ...prev, [row.id]: toLive(row) }))
         })
         .subscribe()
     })
-    return () => { channel?.unsubscribe() }
+    return () => { stopped = true; if (channel) client?.removeChannel(channel) }
   }, [user?.id])
+  // Backup for the live feed: while a card is up for a trade still moving,
+  // re-read those trades every few seconds (screen on).
+  const openTradeIds = useMemo(() => p2pNotificationTradeIds.filter(id => {
+    const st = tradeStatusById[id]
+    return !st || !P2P_TERMINAL_STATUSES.has(st)
+  }), [p2pNotificationTradeIds, tradeStatusById, P2P_TERMINAL_STATUSES])
+  useEffect(() => {
+    if (!openTradeIds.length) return
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') void loadTradeLive(openTradeIds) }, 8000)
+    return () => clearInterval(iv)
+  }, [openTradeIds.join(','), loadTradeLive])
 
   const allP2PPopups = useMemo(() => {
     const latestPerTrade = new Map<string, typeof notifications[number]>()
@@ -2378,8 +2400,15 @@ export function HomePage() {
       }
     }
     const tracked = [...latestPerTrade.values()].filter(n => !n.isRead && HOME_POPUP_TYPES.has(n.type as string))
+      // The card says where the trade is NOW (the notification only says
+      // where it was when it was sent).
+      .map(n => {
+        const live = n.tradeId ? tradeLiveById[n.tradeId] : undefined
+        const step = live && user?.id ? tradeStepCard(live, user.id) : null
+        return step ? { ...n, ...step } : n
+      })
     return [...tracked, ...untracked].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-  }, [notifications, tradeStatusById, P2P_TERMINAL_STATUSES])
+  }, [notifications, tradeStatusById, tradeLiveById, user?.id, P2P_TERMINAL_STATUSES])
   // Ticker cycles through allP2PPopups directly and shows one at a time -
   // showAllOrders opens the full scrollable list on demand (the "View all"
   // link inside OrderTicker), since the ticker alone can't show more than
@@ -2760,9 +2789,14 @@ export function HomePage() {
   useEffect(() => {
     if (!walletAddress || !user?.id) return
     let channel: any
+    let stoppedRecv = false
+    let recvClient: any = null
     import('@/lib/supabase').then(({ supabase }) => {
+      if (stoppedRecv) return
+      recvClient = supabase
+      // Unique per mount (see the trade-status channel above).
       channel = supabase
-        .channel('recv-' + user.id.slice(0, 8) + '-' + walletAddress.slice(2, 10).toLowerCase())
+        .channel('recv-' + user.id.slice(0, 8) + '-' + walletAddress.slice(2, 10).toLowerCase() + '-' + Math.random().toString(36).slice(2, 8))
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload: any) => {
           const msg = payload.new
           if (msg.type !== 'payment_sent') return
@@ -2837,7 +2871,7 @@ export function HomePage() {
           } catch {}
         }).subscribe()
     })
-    return () => { channel?.unsubscribe() }
+    return () => { stoppedRecv = true; if (channel) recvClient?.removeChannel(channel) }
   }, [walletAddress, user?.id])
 
   // ── Catch-up: incoming payments received while we weren't listening ───────

@@ -620,7 +620,13 @@ export function AppLayout() {
     })
     refresh()
     const unsubscribe = subscribeToMyTrades(userId, refresh)
-    return () => { cancelled = true; unsubscribe() }
+    // Backup for the live feed: while a trade is still open, re-count every
+    // so often (screen on), so the ongoing-trade dot clears after it's done
+    // even if the realtime connection dropped.
+    const iv = setInterval(() => {
+      if (document.visibilityState === 'visible' && useP2PTradesCountStore.getState().ongoingCount > 0) refresh()
+    }, 15_000)
+    return () => { cancelled = true; unsubscribe(); clearInterval(iv) }
   }, [userId, setOngoingP2PCount])
 
   // ── Notify for claims that completed but were never told to the user ────
