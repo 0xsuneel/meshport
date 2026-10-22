@@ -55,5 +55,7 @@ describe('helpers', () => {
     expect(needsRecovery({ activityType: 'claim', status: 'failed', metadata: { nothing_moved: true } })).toBe(false)
     expect(needsRecovery({ activityType: 'send', status: 'failed', metadata: {} })).toBe(false)
     expect(needsRecovery({ activityType: 'bridge', status: 'pending', metadata: {} })).toBe(false)
+    expect(needsRecovery({ activityType: 'withdraw', status: 'pending', metadata: { ub_stuck_transfer: true } })).toBe(true)
+    expect(needsRecovery({ activityType: 'withdraw', status: 'completed', metadata: { ub_stuck_transfer: false } })).toBe(false)
   })
 })

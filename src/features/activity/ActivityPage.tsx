@@ -217,7 +217,7 @@ export function deriveActivityRow(record: ActivityRecord) {
   const reason     = isFailed ? (failureReason(record) ?? (isSwap ? SWAP_FAILED_FALLBACK : null)) : null
 
   const statusColor = isPending || isRecovery ? 'var(--warning)' : isFailed ? 'var(--danger)' : 'var(--success)'
-  const statusLabel = isPending ? 'Processing…' : isRecovery ? 'Needs recovery' : isFailed ? 'Failed' : 'Completed'
+  const statusLabel = isRecovery ? 'Needs recovery' : isPending ? 'Processing…' : isFailed ? 'Failed' : 'Completed'
 
   const chain = isClaim
     ? chainLabel(sourceChain)
