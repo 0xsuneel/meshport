@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { useStepDirection, stepMotion } from '@/hooks/useStepDirection'
-import { useNavigate, useLocation } from 'react-router-dom'
-import type { BulkPayPrefill } from '@/lib/businessPayouts'
+import { useNavigate } from 'react-router-dom'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import {
   ArrowLeft, Plus, Trash2, Upload, CheckCircle, XCircle,
@@ -13,23 +12,20 @@ import { ScreenPush } from '@/components/ui/ScreenPush'
 import { PopupOpen } from '@/hooks/usePopupOpen'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
-import {createPublicClient, encodeFunctionData} from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
 import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
-import { notifyRewardBulk } from '@/lib/notifications'
 import { AmountKeypad } from '@/components/ui/AmountKeypad'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
-import { formatAmount, shortenAddress, midShortenAddress, trimTrailingZeros } from '@/lib/utils'
-import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
+import { formatAmount, midShortenAddress, trimTrailingZeros } from '@/lib/utils'
+import { getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
+import { prepareBatch, findUnpayable, sendBatch, resolvePayee, batchFee } from '@/lib/batchPay'
 import { hasAnyActivityForTx } from '@/lib/ActivityService'
-import { searchUsersDb, resolveUsernameDb, getUserByWalletAddress, type DbUser } from '@/lib/supabase'
+import { searchUsersDb, getUserByWalletAddress, type DbUser } from '@/lib/supabase'
 import { isValidAddress } from '@/lib/arcService'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
-import { arcTransport, arcRpcJson } from '@/lib/arc'
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { sheetDrag } from '@/lib/sheetDrag'
@@ -37,46 +33,9 @@ import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen'
 
 import { ARC_EXPLORER } from '@/lib/chainExplorers'
-import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 const USDC_DECIMALS   = 6
 
-// ── Multicall3 (canonical deterministic deployment, same address on every EVM chain) ──
-// https://github.com/mds1/multicall - deployed via CREATE2 at this address on 100+ chains.
-const MULTICALL3_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11' as const
-
-// Only the piece of the Multicall3 ABI we actually call: aggregate3Value.
-// Call3Value.value lets each leg forward native value, and the whole batch is
-// submitted (and mined) as ONE transaction - one txHash covers every recipient.
-const MULTICALL3_ABI = [
-  {
-    type: 'function',
-    name: 'aggregate3Value',
-    stateMutability: 'payable',
-    inputs: [
-      {
-        name: 'calls',
-        type: 'tuple[]',
-        components: [
-          { name: 'target', type: 'address' },
-          { name: 'allowFailure', type: 'bool' },
-          { name: 'value', type: 'uint256' },
-          { name: 'callData', type: 'bytes' },
-        ],
-      },
-    ],
-    outputs: [
-      {
-        name: 'returnData',
-        type: 'tuple[]',
-        components: [
-          { name: 'success', type: 'bool' },
-          { name: 'returnData', type: 'bytes' },
-        ],
-      },
-    ],
-  },
-] as const
 
 type Step = 'setup' | 'review' | 'processing' | 'results'
 type RecipientStatus = 'pending' | 'resolved' | 'unresolved'
@@ -90,26 +49,6 @@ interface Recipient {
 interface TxResult {
   recipient: Recipient; txHash: string | null
   status: 'success' | 'failed'; error?: string
-}
-
-/** One Multicall3 aggregate3Value call paying every recipient (pure). */
-function buildBatch(resolved: Recipient[]) {
-  const calls = resolved.map(r => ({
-    target: r.walletAddress as `0x${string}`,
-    allowFailure: false,
-    value: BigInt(Math.round(r.amount * 1_000_000)) * (10n ** 12n),
-    callData: '0x' as `0x${string}`,
-  }))
-  const totalValue = calls.reduce((sum, c) => sum + c.value, 0n)
-  const data = encodeFunctionData({ abi: MULTICALL3_ABI, functionName: 'aggregate3Value', args: [calls] })
-  return { totalValue, data }
-}
-
-/** Gas for the batch; a per-recipient estimate if the node can't say. Never throws. */
-function estimateBatchGas(from: `0x${string}`, batch: { totalValue: bigint; data: `0x${string}` }, count: number): Promise<bigint> {
-  const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }) })
-  return publicClient.estimateGas({ account: from, to: MULTICALL3_ADDRESS, data: batch.data, value: batch.totalValue })
-    .catch(() => 80_000n + BigInt(count) * 40_000n)
 }
 
 function parseCSV(text: string): Array<{ input: string; amount: number }> {
@@ -150,7 +89,6 @@ function downloadCSVTemplate() {
 export function BulkPayoutPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
-  const privateKey = useAuthStore(s => s.privateKey)
   const senderAddress = useAuthStore(s => s.walletAddress)
   const user = useAuthStore(s => s.user)
   const storedPasscode = useAuthStore(s => s.passcode)
@@ -195,22 +133,6 @@ export function BulkPayoutPage() {
   const [processing, setProcessing] = useState(false)
   const [processingStatus, setProcessingStatus] = useState('')
   const [purpose, setPurpose] = useState('')
-  // Opened from Business → Payouts: start with that list (then marked paid).
-  const location = useLocation()
-  const payoutIdRef = useRef<string | null>(null)
-  useEffect(() => {
-    const prefill = (location.state as { bulkPay?: BulkPayPrefill } | null)?.bulkPay
-    if (!prefill?.recipients?.length) return
-    payoutIdRef.current = prefill.payoutId
-    setPurpose(prefill.purpose.slice(0, 120))
-    setRecipients(prefill.recipients.map((p, i) => ({
-      id: `payout_${i}_${Date.now()}`, input: p.input,
-      walletAddress: isValidAddress(p.input) ? p.input : '',
-      displayName: p.input, username: p.input, amount: p.amount, status: 'pending' as RecipientStatus,
-    })))
-    navigate(location.pathname, { replace: true, state: null })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
   const [entryMode, setEntryMode] = useState<'manual' | 'csv'>('manual')
 
   // ─── Resume an in-flight bulk payout after a refresh ────────────────────
@@ -282,13 +204,13 @@ export function BulkPayoutPage() {
   const hasDuplicates  = new Set(knownWallets).size < knownWallets.length
   // One Multicall3 transaction pays everyone, so this is a flat single-tx gas
   // estimate rather than resolvedCount separate transaction fees.
-  const estimatedFee   = resolvedCount > 0 ? 0.002 + resolvedCount * 0.0002 : 0
+  const estimatedFee   = batchFee(resolvedCount)
   // More than the USDC balance (payout + network fee, both paid in USDC):
   // warn on the summary and review, and keep Review Payout / Pay dimmed.
   const bulkNeeded = totalAmount + estimatedFee
   // What's left for the next recipient: balance minus everyone already added
   // and the network fee with one more recipient (Max on the amount box).
-  const remainingForNext = Math.max(0, (Number(balance) || 0) - totalAmount - (0.002 + (recipients.length + 1) * 0.0002))
+  const remainingForNext = Math.max(0, (Number(balance) || 0) - totalAmount - batchFee(recipients.length + 1))
   const bulkInsufficient = recipients.length > 0 && totalAmount > 0 && bulkNeeded > (Number(balance) || 0) + 1e-9
   const insufficientNote = bulkInsufficient && (
     <div role="alert" className="rounded-2xl p-3.5" style={{ background: 'color-mix(in srgb, var(--danger) 6%, transparent)', border: '1px solid color-mix(in srgb, var(--danger) 20%, transparent)' }}>
@@ -380,17 +302,9 @@ export function BulkPayoutPage() {
     setResolving(true)
     const updated = await Promise.all(recipients.map(async r => {
       if (r.status === 'resolved') return r
-      if (isValidAddress(r.input)) {
-        const profile = await getUserByWalletAddress(r.input).catch(() => null)
-        return { ...r, walletAddress: r.input, displayName: profile?.display_name || shortenAddress(r.input), username: profile?.username || shortenAddress(r.input), status: 'resolved' as RecipientStatus, arcUserId: profile?.id, avatarUrl: profile?.avatar_url }
-      }
-      const cleanName = r.input.replace(/^@/, '').replace(/\.arc$/, '')
-      const addr = await resolveUsernameDb(cleanName).catch(() => null)
-      if (addr) {
-        const profile = await getUserByWalletAddress(addr).catch(() => null)
-        return { ...r, walletAddress: addr, displayName: profile?.display_name || cleanName, username: profile?.username || cleanName, status: 'resolved' as RecipientStatus, arcUserId: profile?.id, avatarUrl: profile?.avatar_url }
-      }
-      return { ...r, status: 'unresolved' as RecipientStatus, error: `"${r.input}" not found` }
+      const payee = await resolvePayee(r.input)
+      return payee ? { ...r, ...payee, status: 'resolved' as RecipientStatus }
+        : { ...r, status: 'unresolved' as RecipientStatus, error: `"${r.input}" not found` }
     }))
     setRecipients(updated)
     setResolving(false)
@@ -402,357 +316,26 @@ export function BulkPayoutPage() {
   const executePayout = async () => {
     const resolved = recipients.filter(r => r.status === 'resolved')
     if (!resolved.length) return
-    // Chat privacy, checked for every MeshPort user in the list (typed by
-    // username or by wallet) before anything is sent: someone who blocked me,
-    // or only takes payments from their contacts, can't be paid here either -
-    // same rule and wording as Pay. Nothing is sent while any is refused.
+    // Privacy and USDC blocklist checks for everyone before anything is sent
+    // (lib/batchPay); nothing is sent while any is refused. The batch and its
+    // chain reads start now, alongside the checks.
     setProcessing(true)
-    // The batch itself and the two chain reads it needs (balance, gas) don't
-    // depend on the checks below - started now so they're done by the time
-    // the checks are.
-    const batch = buildBatch(resolved)
-    const fromAddr = useAuthStore.getState().walletAddress
-    const early = fromAddr && isValidAddress(fromAddr) ? {
-      from: fromAddr.toLowerCase(),
-      balance: arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [fromAddr, 'latest'] }),
-      gas: estimateBatchGas(fromAddr as `0x${string}`, batch, resolved.length),
-    } : null
-    early?.balance.catch(() => {})
-    const { reachCheck, BLOCKED_YOU, STRANGER_PAY_BLOCKED } = await import('@/lib/privacy')
-    const { blockedAmong, BLOCKED_TEXT } = await import('@/lib/usdcBlocklist')
-    // USDC refuses blocklisted addresses: the whole batch would fail on-chain.
-    const blockedLookup = blockedAmong(resolved.map(r => r.walletAddress).filter(Boolean)).catch(() => new Set<string>())
-    const refused = new Map<string, string>()
-    await Promise.all(resolved.map(async r => {
-      const userId = r.arcUserId || (r.walletAddress ? (await getUserByWalletAddress(r.walletAddress).catch(() => null))?.id : null)
-      if (!userId) return
-      const reach = await reachCheck(userId)
-      if (reach.canPay) return
-      const name = `${String(r.username || '').replace(/\.arc$/, '')}.arc`
-      refused.set(r.id, reach.blocked ? BLOCKED_YOU(name) : STRANGER_PAY_BLOCKED(name))
-    }))
-    const blocked = await blockedLookup
-    for (const r of resolved) if (blocked.has(r.walletAddress.toLowerCase())) refused.set(r.id, BLOCKED_TEXT)
+    const prepared = prepareBatch(resolved)
+    const refused = await findUnpayable(resolved)
     if (refused.size) {
       setProcessing(false)
       setRecipients(prev => prev.map(r => refused.has(r.id) ? { ...r, status: 'unresolved' as RecipientStatus, error: refused.get(r.id) } : r))
       showToastMessage(refused.size === 1 ? "1 person can't be paid - remove them to continue" : `${refused.size} people can't be paid - remove them to continue`, 'error')
       return
     }
-    setProcessing(true); setStep('processing')
-    const txResults: TxResult[] = []
-    // One BulkPay operation = one idempotency key, generated once per
-    // executePayout invocation (i.e. once per button click) - a genuinely
-    // new click gets a fresh key; nothing in this function regenerates it
-    // mid-flight. Server-enforced via transaction_intents_wallet_idem_key
-    // UNIQUE(wallet_address, idempotency_key) - see
-    // docs/BULKPAY_TRANSACTION_INTENT_MIGRATION_AUDIT.md Question B.
-    const idempotencyKey = crypto.randomUUID()
-
-    setProcessingStatus('Restoring wallet signer...')
-    let activePrivateKey = privateKey
-    if (!activePrivateKey) {
-      const { restorePrivateKey } = await import('@/lib/restoreWallet')
-      await restorePrivateKey()
-      activePrivateKey = useAuthStore.getState().privateKey
-    }
-    if (!activePrivateKey) {
-      useAuthStore.getState().lock(); return
-    }
-
-    // A definite batch failure goes to Activity as one failed Bulk Payment
-    // row with its exact reason (lib/failure.ts); "may still complete" never does.
-    const batchTotal = resolved.reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
-    const { classifyFailure, classifyPreBroadcastFailure, recordFailure } = await import('@/lib/failure')
-    type BulkFailure = ReturnType<typeof classifyFailure>
-    const noteBatchFailed = (failure: BulkFailure, txHash?: string | null) => {
-      void recordFailure({
-        feature: 'bulk_pay', walletAddress: useAuthStore.getState().walletAddress, amount: batchTotal, token: 'USDC',
-        txHash: txHash ?? undefined, failure, metadata: { recipientCount: resolved.length, purpose: purpose || 'Payroll' },
-      })
-      return failure.message
-    }
-
-    setProcessingStatus('Connecting to Arc Testnet...')
-    try {
-      const account = privateKeyToAccount(activePrivateKey as `0x${string}`)
-      // Started early (see executePayout's top) for this same wallet.
-      const sameWallet = early?.from === account.address.toLowerCase()
-
-      setProcessingStatus('Checking balance...')
-      // Arc docs: use eth_getBalance (18-decimal native USDC wei), not ERC-20 balanceOf
-      // Both share same underlying balance. eth_getBalance is the Arc-recommended method.
-      const balJson = (sameWallet ? await early!.balance.catch(() => null) : null)
-        ?? await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getBalance', params: [account.address, 'latest'] })
-      const rawBal = balJson.result && balJson.result !== '0x' ? balJson.result : '0x0'
-      // Arc native balance: 18 decimals. Divide by 1e18 to get human-readable USDC.
-      const balanceUsdc = Number(BigInt(rawBal)) / 1e18
-      if (balanceUsdc < totalAmount) {
-        const why = noteBatchFailed({ code: 'insufficient_funds', definite: true,
-          message: `Not enough balance: you have ${trimTrailingZeros(balanceUsdc.toFixed(4))} USDC, this payout needs ${trimTrailingZeros(totalAmount.toFixed(4))} USDC - nothing was sent.` })
-        resolved.forEach(r => txResults.push({ recipient: r, txHash: null, status: 'failed', error: why }))
-      setResults(txResults); setProcessing(false); setStep('results'); clearResumableOperation('bulkpay'); return
-      }
-
-      // ── One BulkPay operation = one transaction_intent + one
-      // transaction_attempt, created server-side BEFORE any broadcast
-      // (docs/BULKPAY_TRANSACTION_INTENT_MIGRATION_AUDIT.md /
-      // docs/BULKPAY_BROADCAST_RESPONSE_LOSS_AUDIT.md). The nonce this
-      // returns is the ONLY nonce used below - this function no longer
-      // computes its own authoritative nonce via
-      // publicClient.getTransactionCount at all; a client-computed nonce
-      // is exactly the value a lost broadcast response leaves nothing to
-      // reconcile against.
-      setProcessingStatus('Preparing...')
-      const totalAmountAtomic = (BigInt(Math.round(totalAmount * 1_000_000)) * (10n ** 12n)).toString()
-      const { createBulkPayIntent, markBulkPayAttemptSubmitted } = await import('@/lib/bulkPayIntentService')
-
-      const { totalValue, data } = batch
-      const [intentResult, gasEst] = await Promise.all([
-        createBulkPayIntent({
-          walletAddress: account.address,
-          idempotencyKey,
-          chainId: 'arc',
-          amountAtomic: totalAmountAtomic,
-          decimals: 18,
-          isNative: true,
-          tokenAddress: null,
-          tokenSymbol: 'USDC',
-          recipientCount: resolved.length,
-          purpose: purpose || 'Payroll',
-        }),
-        sameWallet ? early!.gas : estimateBatchGas(account.address, batch, resolved.length),
-      ])
-      if (!intentResult.success || !intentResult.attemptId || typeof intentResult.nonce !== 'number') {
-        const why = noteBatchFailed(classifyPreBroadcastFailure(new Error(intentResult.error ?? "Couldn't prepare the bulk payout")))
-        resolved.forEach(r => txResults.push({ recipient: r, txHash: null, status: 'failed', error: why }))
-        setResults(txResults); setProcessing(false); setStep('results'); clearResumableOperation('bulkpay'); return
-      }
-      const attemptId = intentResult.attemptId
-      const serverNonce = intentResult.nonce
-
-      // ── Send ALL payouts in ONE Multicall3 transaction ─────────────────────────
-      // Arc's USDC is the chain's native currency (see sendUSDC in arcService.ts -
-      // sends move funds via call value, not an ERC-20 transfer() call).
-      // aggregate3Value lets the caller attach native value to the outer tx and have
-      // Multicall3 forward a slice of it to each `target` as `target.call{value: v}("")`.
-      // Recipients here are plain wallet addresses expecting a plain value transfer
-      // (no calldata to execute), so it doesn't matter that msg.sender inside that
-      // call is the Multicall3 contract - Multicall3 holds the value for the
-      // duration of the call because we funded it via msg.value on this same tx.
-      // allowFailure is set to false for every leg, so the batch is atomic: either
-      // every recipient is paid in this one transaction, or none are and the whole
-      // tx reverts (no funds move, no dangling partial state).
-      let bulkTxHash: `0x${string}` | null = null
-      try {
-        // calls/totalValue/data/gasEst were computed above, concurrently
-        // with createBulkPayIntent - see the PERF FIX comment there.
-        // Server-issued nonce (above) - NEVER a client-computed
-        // publicClient.getTransactionCount call. See
-        // docs/BULKPAY_BROADCAST_RESPONSE_LOSS_AUDIT.md for why an
-        // authoritative, server-independently-recorded nonce is what makes
-        // Case 2 (lost broadcast response) recoverable at all.
-        const nonce = serverNonce
-
-        setProcessingStatus('Sending the transaction...')
-        // Cast: viem's sendTransaction overload resolution (in the installed
-        // viem/typescript combination) spuriously demands an EIP-4844 `kzg`
-        // field for this plain EIP-1559 transaction. Runtime behavior is
-        // unaffected - this is purely a type-level viem overload issue.
-        // Signed here, sent to every Arc node and confirmed by the server in
-        // ONE request (relaySend in arcService.ts) - the phone no longer
-        // does chainId + send + receipt polling itself. As soon as the batch
-        // is out: bulkTxHash is set, the screen is made resumable, and the
-        // real tx_hash is persisted server-side (fire-and-forget,
-        // markBulkPayAttemptSubmitted never throws) - all BEFORE the
-        // receipt is known, exactly as before (docs/BULKPAY_BROADCAST_RESPONSE_LOSS_AUDIT.md).
-        const { relaySend, waitForConfirmation } = await import('@/lib/arcService')
-        const onSent = (txHash: `0x${string}`) => {
-          if (bulkTxHash) return
-          bulkTxHash = txHash
-          saveResumableOperation('bulkpay', txHash, {
-            totalAmount, recipientCount: resolved.length, walletAddress: account.address,
-          })
-          void markBulkPayAttemptSubmitted(attemptId, txHash).catch(() => { /* best-effort */ })
-          setProcessingStatus('Confirming on Arc...')
-        }
-        const sent = await relaySend(account, { to: MULTICALL3_ADDRESS as `0x${string}`, data, value: totalValue, gas: (gasEst * 130n) / 100n, nonce }, onSent)
-        // A batch the network may still be mining gets the old full wait
-        // before it's reported (never "failed" while it can still land).
-        const conf = sent.state === 'pending' ? await waitForConfirmation(sent.txHash, 45_000) : sent
-        if (!bulkTxHash && conf.state !== 'pending') onSent(sent.txHash)
-        if (conf.state === 'failed') throw new Error('Multicall3 transaction reverted')
-        if (conf.state === 'pending') throw new Error('Not confirmed yet - it may still complete. Check Activity before retrying.')
-
-        // ONE tx, ONE hash - every recipient references the same bulkTxHash.
-        resolved.forEach(r => txResults.push({ recipient: r, txHash: bulkTxHash, status: 'success' }))
-      } catch (e: any) {
-        // Reverted → definite (real hash kept); "Not confirmed yet" → uncertain, not recorded.
-        const failure = classifyFailure(e)
-        const errMsg = failure.definite ? noteBatchFailed(failure, failure.code === 'reverted' ? bulkTxHash : null) : failure.message
-        // bulkTxHash may now be non-null here (a real broadcast whose
-        // receipt wait failed) - surfaced to txResults exactly as before,
-        // now correctly carrying the real hash instead of null whenever a
-        // broadcast genuinely happened. The 'failed' label in this
-        // client-only TxResult type is retained (not changed to a new
-        // 'unknown' status) deliberately: the full CONFIRMING/UNKNOWN
-        // state distinction belongs to the server-side state machine
-        // (server/transactionStateMachine, already supports it), not this
-        // component's own, narrower UI-result type - introducing a new
-        // client-side status value without the corresponding UI/reconciler
-        // work to act on it would be a partial, unsafe change. See
-        // docs/BULKPAY_TRANSACTION_INTENT_IMPLEMENTATION.md's "remaining
-        // known gaps" for what full integration still requires.
-        resolved.forEach(r => txResults.push({ recipient: r, txHash: bulkTxHash, status: 'failed', error: errMsg }))
-      }
-
-      // PERF FIX: fire-and-forget - rewards points are a nice-to-have on top
-      // of an already-confirmed batch; awaiting this server round trip
-      // before showing results only added latency with no correctness
-      // benefit. Internal try/catch still swallows all errors, so this can
-      // never produce an unhandled rejection.
-      // Award points once for the whole batch, keyed off the first successful send
-      (async () => {
-        try {
-          const firstSuccessTx = txResults.find(t => t.status === 'success')?.txHash
-          if (firstSuccessTx) {
-            const { awardTransactionPoints } = await import('@/lib/rewards')
-            const { user: u, walletAddress: wa } = useAuthStore.getState()
-            const pointUserId = u?.id && !u.id.startsWith('usr_') ? u.id : wa ? `wallet_${wa.toLowerCase().slice(2, 18)}` : null
-            if (pointUserId && wa) {
-              const r = await awardTransactionPoints({ userId: pointUserId, walletAddress: wa, txHash: firstSuccessTx, actionType: 'bulkpay' })
-              if (r.pointsAwarded > 0) notifyRewardBulk(r.pointsAwarded)
-            }
-          }
-        } catch {}
-      })()
-
-      // PERF FIX: fire-and-forget - same reasoning as above. The results
-      // screen already knows which sends succeeded from txResults itself;
-      // refreshing the on-chain balance display is a background nicety, not
-      // a precondition for showing results.
-      // Shared after-transaction refresh: retried while the chain still shows
-      // the old value; a failed read keeps the shown balance.
-      refreshBalancesAfterTx(account.address)
-    } catch (err: any) {
-      console.error('[BulkPayout] Unexpected error:', err?.shortMessage || err?.message)
-      // Only reached before the batch was sent (the send has its own catch above).
-      const errMsg = txResults.length ? classifyFailure(err).message : noteBatchFailed(classifyPreBroadcastFailure(err))
-      resolved.forEach(r => {
-        if (!txResults.find(t => t.recipient.id === r.id)) {
-          txResults.push({ recipient: r, txHash: null, status: 'failed', error: errMsg })
-        }
-      })
-    }
-    // Save bulk_payment metadata to Supabase - ALL recipients share the SAME
-    // Multicall3 transaction hash (bulkTxHash), since they were paid atomically
-    // in one on-chain transaction rather than one tx each.
-    try {
-      const successTxs = txResults.filter((t: any) => t.status === 'success')
-      if (successTxs.length > 0) {
-        const totalSent = successTxs.reduce((sum: number, t: any) => sum + t.recipient.amount, 0)
-        // Every entry in successTxs carries the identical hash - pull it once.
-        const bulkTxHash = successTxs[0].txHash || ''
-
-        // PERF FIX: fire-and-forget - this is a best-effort analytics/
-        // metadata row and its failure was already swallowed (console.warn
-        // only, no effect on correctness); awaiting it before showing
-        // results only added latency with no benefit. Internal try/catch
-        // still swallows all errors, so this can never produce an unhandled
-        // rejection. Leading `;` guards against ASI folding this into the
-        // previous statement's `|| ''` expression.
-        // Save bulk_payment metadata to Supabase (recipient count, purpose, single txHash)
-        ;(async () => {
-          try {
-            const { walletAddress: bwa, user: buser } = useAuthStore.getState()
-            const { supabase } = await import('@/lib/supabase')
-            const { error: bulkErr } = await supabase.from('bulk_payments').insert({
-              // Only send user_id if it's a real Supabase UUID (not wallet-derived 'usr_' IDs)
-              user_id: (buser?.id && !buser.id.startsWith('usr_')) ? buser.id : null,
-              wallet_address:  (bwa ?? '').toLowerCase(),
-              total_amount:    totalSent,
-              recipient_count: successTxs.length,
-              purpose:         purpose || 'Payroll',
-              tx_hash:         bulkTxHash,
-              status:          'completed',
-            })
-            if (bulkErr) console.error('[BulkPayout] Supabase insert error:', bulkErr.code, bulkErr.message)
-          } catch (e) { console.warn('[BulkPayout] Supabase bulk_payments save failed:', e) }
-        })()
-
-        // Save ONE aggregate activity record for the whole bulk payout
-        try {
-          const { walletAddress: bwa2, user: buser2 } = useAuthStore.getState()
-          if (bwa2 && bulkTxHash) {
-            const { Activity } = await import('@/lib/ActivityService')
-            Activity.bulk({
-              walletAddress:  bwa2,
-              userId:         buser2?.id,
-              // Store the raw on-chain hash - do NOT prefix it (e.g. `bulk_0x…`).
-              // The prefix was being saved as the actual tx_hash, so both the
-              // displayed hash and the explorer link (built from this same
-              // value) ended up wrong / broken. Activity.bulk() itself now adds
-              // its own bulk_/bulkrecv_ prefix internally, AFTER computing the
-              // explorer URL from this clean value - see its own comment.
-              txHash:         bulkTxHash,
-              amount:         totalSent,
-              recipientCount: successTxs.length,
-              purpose:        purpose || undefined,
-              recipients:     successTxs.map(t => {
-                // NOTE (2026-09-02): previously labeled yourself "You" here
-                // when you were one of your own batch's recipients. Per
-                // product decision, the SENT-side breakdown should read
-                // like an ordinary batch payment - no self-callout - since
-                // it's a summary of who got paid, not a self-transfer in
-                // the send/receive sense. The self indication now shows
-                // only on the RECEIVE side (see bulkSubtitle's `from Self`
-                // in ActivityPage.tsx's deriveActivityRow, driven by that
-                // row's own counterpartyAddress === walletAddress check on
-                // the bulkrecv_ leg - untouched by this change).
-                return {
-                  label: t.recipient.username
-                    ? (t.recipient.username.endsWith('.arc') ? t.recipient.username : t.recipient.username + '.arc')
-                    : t.recipient.walletAddress,
-                  amount: t.recipient.amount || 0,
-                  // Same bulkTxHash for every recipient - Alice, Bob, and Carol all
-                  // point at the one Multicall3 transaction.
-                  txHash: bulkTxHash,
-                }
-              }),
-            }).catch(() => {})
-
-            // Write a receiver-side record to EACH paid recipient's own history too -
-            // shows the amount THEY were allocated (not the payer's total), who paid
-            // them, and the purpose text - not just a summary on the payer's side.
-            // All of these also reference the same bulkTxHash.
-            //
-            // Including yourself, if you're one of the recipients - previously
-            // silently dropped by a key collision with the sent-summary row
-            // above (both used the exact same unprefixed tx_hash on the same
-            // wallet); Activity.bulk()/bulkReceived() now use distinct
-            // bulk_/bulkrecv_ prefixes specifically so both legs coexist, the
-            // same way Pay's send_/recv_ already does for a self-payment.
-            const payerLabel = buser2?.username
-              ? (buser2.username.endsWith('.arc') ? buser2.username : buser2.username + '.arc')
-              : (buser2?.displayName || bwa2)
-            successTxs.forEach((t: any) => {
-              if (!t.recipient.walletAddress) return
-              Activity.bulkReceived({
-                walletAddress: t.recipient.walletAddress,
-                userId:        t.recipient.arcUserId,
-                txHash:        bulkTxHash,
-                amount:        t.recipient.amount,
-                fromAddress:   bwa2,
-                fromUsername:  payerLabel,
-                purpose:       purpose || undefined,
-              }).catch(() => {})
-            })
-          }
-        } catch {}
-      }
-    } catch (e) { console.warn('[BulkPayout] activity record failed:', e) }
-
-    setResults(txResults); setProcessing(false); setStep('results'); clearResumableOperation('bulkpay')
+    setStep('processing')
+    // ONE Multicall3 transaction pays everyone - all or nothing.
+    const outcome = await sendBatch(resolved, { purpose: purpose || 'Payroll', resumeKey: 'bulkpay', onStatus: setProcessingStatus, prepared })
+    if (outcome.state === 'locked') return
+    const txResults: TxResult[] = resolved.map(r => outcome.state === 'paid'
+      ? { recipient: r, txHash: outcome.txHash, status: 'success' }
+      : { recipient: r, txHash: outcome.txHash, status: 'failed', error: outcome.error })
+    setResults(txResults); setProcessing(false); setStep('results')
   }
 
   const successCount = results.filter(r => r.status === 'success').length
@@ -780,11 +363,6 @@ export function BulkPayoutPage() {
   // retry with Review Payout.
   useEffect(() => {
     if (step !== 'results') return
-    if (payoutIdRef.current && results.some(r => r.status === 'success')) {
-      const id = payoutIdRef.current
-      payoutIdRef.current = null
-      void import('@/lib/businessPayouts').then(m => m.markPayoutPaid(id)).catch(() => {})
-    }
     const failed = results.filter(r => r.status === 'failed').map(r => ({ ...r.recipient, error: undefined }))
     const keepPurpose = purpose
     clearEntry()

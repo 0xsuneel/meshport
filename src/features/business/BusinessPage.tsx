@@ -32,7 +32,8 @@ import { listMyRefunds, subscribeMyRefunds, refundPayment, chainUsdcBalance, can
 import { groupRefunds, refundedSum, remainingAfter, isFullyRefunded, canRefundMore, netPayments, MIN_REFUND } from '@/lib/refundTotals'
 import { makePeriod, inPeriod, inPrevious, periodTrend, savedPeriod, savePeriod, type PeriodId } from './period'
 import { useAutoSettle } from './autoSettle'
-import { CashOutScreen, TeamScreen } from './teamScreens'
+import { TeamScreen } from './teamScreens'
+import { CashOutScreen } from './cashOutScreen'
 import { PayoutsScreen } from './payoutsScreen'
 import { ToolsScreen, type ToolId } from './toolsScreen'
 import { StaffModePage } from './staffMode'
@@ -679,8 +680,8 @@ function OwnerBusinessPage() {
               { id: 'activity', label: 'Activity log', hint: `Who billed, refunded, settled · you and staff` },
             ] },
             { title: 'Money', rows: [
-              { id: 'payouts', label: 'Payouts', hint: 'Pay staff and suppliers · once or on a repeat' },
-              { id: 'cashout', label: 'Cash out to bank', hint: 'Sell USDC for INR to UPI or bank' },
+              { id: 'payouts', label: 'Pay staff', hint: 'Salary and suppliers · everyone in one payment' },
+              { id: 'cashout', label: 'Cash out', hint: 'Dollars to your UPI or bank in rupees' },
             ] },
             { title: 'Settings', rows: [
               { id: 'profile', label: 'Business profile', hint: `${headerStatus === 'verified' ? 'Verified' : 'Complete your application'} · name, logo, payment limits` },

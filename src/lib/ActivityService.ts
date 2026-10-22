@@ -632,6 +632,8 @@ export const Activity = {
     walletAddress: string; userId?: string; txHash: string
     amount: number; recipientCount: number; purpose?: string
     recipients?: { label: string; amount: number; txHash?: string; isSelf?: boolean }[]
+    /** 'payroll': Business → Pay staff (Activity reads "Paid staff"). */
+    kind?: 'payroll'
   }) => saveActivity({
     walletAddress: p.walletAddress,
     userId:        p.userId,
@@ -650,7 +652,7 @@ export const Activity = {
     activityType:  'bulk',
     amount:        p.amount,
     explorerUrl:   explorerUrl(p.txHash),
-    metadata:      { direction: 'sent', recipientCount: p.recipientCount, purpose: p.purpose, recipients: p.recipients },
+    metadata:      { direction: 'sent', recipientCount: p.recipientCount, purpose: p.purpose, recipients: p.recipients, ...(p.kind ? { kind: p.kind } : {}) },
   }),
 
   // Receiver-side record - written to a RECIPIENT's own wallet_address when they're
@@ -681,6 +683,8 @@ export const Activity = {
   bulkReceived: async (p: {
     walletAddress: string; userId?: string; txHash: string
     amount: number; fromAddress: string; fromUsername?: string; purpose?: string
+    /** Pay staff: paid by a business - its name, shown instead of the username. */
+    kind?: 'payroll'; fromName?: string
   }): Promise<boolean> => {
     if (await hasAnyActivityForTx(p.walletAddress, p.txHash)) {
       console.log('[ActivityService] bulkReceived skipped - activity already exists for this tx/wallet under another type:', p.txHash, p.walletAddress)
@@ -694,7 +698,7 @@ export const Activity = {
       amount:              p.amount,
       counterpartyAddress: p.fromAddress?.toLowerCase(),
       explorerUrl:         explorerUrl(p.txHash),
-      metadata:            { direction: 'received', purpose: p.purpose, fromUsername: p.fromUsername },
+      metadata:            { direction: 'received', purpose: p.purpose, fromUsername: p.fromUsername, ...(p.kind ? { kind: p.kind } : {}), ...(p.fromName ? { fromName: p.fromName } : {}) },
     })
   },
 }

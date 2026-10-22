@@ -1,6 +1,6 @@
-// Business → Payouts: saved lists of people to pay (staff, suppliers), once
-// or on a repeat. Sent through Bulk Pay on this device; a due payout only
-// reminds the owner (business_payout_reminders).
+// Business → Pay staff: saved pay groups (staff, suppliers), once or on a
+// repeat. Paid in one Arc payment on this device (lib/batchPay); a due group
+// only reminds the owner (business_payout_reminders).
 import { supabase } from '@/lib/supabase'
 
 export type PayoutRepeat = 'none' | 'weekly' | 'monthly'
@@ -46,5 +46,3 @@ export async function markPayoutPaid(id: string): Promise<void> {
   void logBusiness('payout_paid', { target: data?.name ?? null, amount: data ? payoutTotal({ recipients: Array.isArray(data.recipients) ? data.recipients : [] }) : null })
 }
 
-/** What Bulk Pay reads from the route state to start filled in. */
-export type BulkPayPrefill = { payoutId: string; purpose: string; recipients: Array<{ input: string; amount: number }> }

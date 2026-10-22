@@ -10,7 +10,7 @@ import {
   fetchOffers, fetchOfferConsumedAmounts, offerRemainingAmount, createTrade, fetchMyTrades, fetchTrade,
   releaseTrade, cancelTrade, canCancelTrade, openDispute, fetchMyPaymentMethods, savePaymentMethod,
   fetchTradeMessages, sendTradeMessage, subscribeToTradeMessages, subscribeToTradeUpdates, fetchUserRating,
-  paymentMethodSummary, type P2POffer, type P2PTrade, type P2PPaymentMethod, type P2PMessage,
+  paymentMethodSummary, fetchCounterpartyProfiles, type P2POffer, type P2PTrade, type P2PPaymentMethod, type P2PMessage,
 } from '@/lib/p2pService'
 
 export const CASH_OUT_CURRENCY = 'INR'
@@ -53,7 +53,7 @@ export async function listCashOuts(userId: string): Promise<P2PTrade[]> {
 
 export {
   fetchTrade, releaseTrade, cancelTrade, canCancelTrade, openDispute, fetchMyPaymentMethods, savePaymentMethod,
-  fetchTradeMessages, sendTradeMessage, subscribeToTradeMessages, subscribeToTradeUpdates, paymentMethodSummary,
+  fetchTradeMessages, sendTradeMessage, subscribeToTradeMessages, subscribeToTradeUpdates, paymentMethodSummary, fetchCounterpartyProfiles,
 }
 export type { P2PTrade, P2PPaymentMethod, P2PMessage }
 

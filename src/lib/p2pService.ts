@@ -1161,7 +1161,8 @@ export async function createTrade(p: {
     await saveP2PActivity({
       walletAddress: sellerWallet, userId: sellerId, txHash: depositResult.txHash,
       activityType: 'p2p_sell_order', amount: p.amountUsdc, status: 'completed',
-      metadata: { tradeId: trade.id, offerId: p.offer.id, kind: 'trade_accepted' },
+      // Selling into a buy ad: USDC out, rupees to the seller's bank - a cash out.
+      metadata: { tradeId: trade.id, offerId: p.offer.id, kind: 'trade_accepted', cashOut: true },
     })
   }
 
@@ -1789,7 +1790,7 @@ export async function cancelTrade(trade: P2PTrade, reason: string, actorId: stri
       await saveP2PActivity({
         walletAddress: trade.sellerWallet, userId: trade.sellerId, txHash: refundResult.txHash,
         activityType: 'p2p_refund', amount: trade.amountUsdc, status: 'completed',
-        metadata: { tradeId: trade.id, kind: 'trade_cancelled' },
+        metadata: { tradeId: trade.id, kind: 'trade_cancelled', ...(trade.offerType === 'buy' ? { cashOut: true } : {}) },
       })
     }
   }
@@ -1972,7 +1973,7 @@ export async function autoCancelExpiredTrades(userId: string): Promise<void> {
       await saveP2PActivity({
         walletAddress: t.sellerWallet, userId: t.sellerId, txHash: refundResult.txHash,
         activityType: 'p2p_refund', amount: t.amountUsdc, status: 'completed',
-        metadata: { tradeId: t.id, kind: 'trade_expired' },
+        metadata: { tradeId: t.id, kind: 'trade_expired', cashOut: true },
       })
     }
     await sendTradeMessage(t.id, 'system', 'Trade expired - payment window closed.', true)
