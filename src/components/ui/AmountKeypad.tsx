@@ -13,7 +13,7 @@
  */
 import { useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { SHEET_PANEL, SHEET_BACKDROP, DESKTOP_FADE_Y, DESKTOP_FADE_TRANSITION, DESKTOP_QUERY } from '@/lib/motion'
+import { SHEET_PANEL, SHEET_BACKDROP, LIGHT_DIM, DESKTOP_FADE_Y, DESKTOP_FADE_TRANSITION, DESKTOP_QUERY } from '@/lib/motion'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { useBackLayer } from '@/lib/backLayers'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -398,7 +398,7 @@ export function AmountKeypad({
               position: 'fixed', top: 0, bottom: 0, left: 0, right: 0,
               maxWidth: 448, margin: '0 auto',
               zIndex: 40,
-              background: 'rgba(0,0,0,0.18)',
+              background: LIGHT_DIM,
             }}
           />,
 

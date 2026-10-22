@@ -454,7 +454,7 @@ export function PasscodeLockPage() {
             {/* Same space as dots + status line + number pad, so "Use
                 passcode" swaps in place without the logo moving. */}
             <BiometricFirst Icon={BiometricIcon} label={label} trying={biometricTrying || autoPending} onTry={tryBiometric}
-              onUsePasscode={() => { setAutoPending(false); setMode("pin") }} height={short ? 290 : 336} />
+              onUsePasscode={() => { setAutoPending(false); setMode("pin") }} height={short ? 294 : 344} />
             <button onClick={handleSignOut} className="mt-6 text-text-muted text-sm hover:text-text-secondary transition-colors">
               Sign out
             </button>

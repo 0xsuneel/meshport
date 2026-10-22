@@ -7,7 +7,7 @@ import { ActionIcon } from '@/components/ui/ActionIcon'
 import { TokenLogo } from '@/components/ui/TokenLogo'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { PopupOpen } from '@/hooks/usePopupOpen'
-import { SHEET_BACKDROP, SHEET_DIM, DIALOG_CARD, SNACKBAR_MOTION, DIALOG_BACKDROP, MENU_MOTION, PAGE_TRANSITION, PUSH_BACK_MS, DESKTOP_FADE_TRANSITION } from '@/lib/motion'
+import { SHEET_BACKDROP, SHEET_DIM, LIGHT_DIM, DIALOG_CARD, SNACKBAR_MOTION, DIALOG_BACKDROP, MENU_MOTION, PAGE_TRANSITION, PUSH_BACK_MS, DESKTOP_FADE_TRANSITION } from '@/lib/motion'
 import { _plainByContent, plainTextOf, messagePreview, parseMedia, isDecryptFailure, splitCaption } from './chatMessageText'
 import { ARC_EXPLORER, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { ChatForwardSheet, chatPushMotion } from './ChatForwardSheet'
@@ -81,7 +81,7 @@ const DRAWER_LEAVE_FADE = {
   leave: (next: string) => next === 'closed' ? DIALOG_BACKDROP.exit : { opacity: 0, transition: { duration: 0 } },
 }
 /** The light, non-blocking dim behind the desktop pay drawer. */
-const DRAWER_DIM = 'rgba(0,0,0,0.15)'
+const DRAWER_DIM = LIGHT_DIM
 
 function hiddenKey(addr: string | null) {
   return addr ? `meshport_hidden_chats_${addr.toLowerCase()}` : 'meshport_hidden_chats_anon'
@@ -5596,7 +5596,7 @@ export function ChatConversationPage() {
       {/* Phone: the app's bottom sheet, in the chat. Fits its content (capped,
           then scrolls with Cancel/Pay pinned) - a fixed 70vh left a blank
           band under the buttons on iPhone. Back is left to the page. */}
-      <ActionSheet open={!isDesktop && payStep === 'form'} onClose={closePayForm} isDesktop={false} id="chat-pay" backClose={false}>
+      <ActionSheet open={!isDesktop && payStep === 'form'} onClose={closePayForm} isDesktop={false} id="chat-pay">
         <div className="min-h-0 overflow-y-auto" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           {renderPayForm()}
         </div>
@@ -5613,7 +5613,6 @@ export function ChatConversationPage() {
         onClose={isDesktop ? () => { setPayStep('form'); setPayPassEntry('') } : () => { setPayStep('closed'); setPayPassEntry('') }}
         id="chat-pay-pin"
         inPanel
-        backClose={false}
         title="Authorize Payment"
         subtitle={isDesktop ? `To ${recipientClean}.arc` : 'Enter passcode to confirm'}
         value={payPassEntry}
