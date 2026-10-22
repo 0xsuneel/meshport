@@ -4,6 +4,7 @@
 // today only). Managers also get the store's Requests (staff_intents) and a
 // Statement (with staff_refunds). No balances, refunds, settlements or cash
 // out - those stay with the owner. Pending invites are accepted here.
+import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { useEffect, useMemo, useState } from 'react'
 import { useUIStore } from '@/store'
 import { chainLogoSrc } from '@/lib/chainLogos'
@@ -83,11 +84,13 @@ export function StaffModePage() {
       <ChevronRight className="size-4 text-text-muted shrink-0" />
     </button>
   )
-  // Desktop: the owner's Business layout - this column, today's payments on
-  // the right; its screens open inside the column (PushLayer is absolute).
+  // Desktop: the owner's Business layout (the shared DesktopTwoColumn) - this
+  // column, today's payments on the right; its screens open inside the column
+  // (a stage: PushLayer is absolute).
   return (
-    <div className={isDesktop ? 'flex h-full min-h-0 bg-bg gap-7 px-6 pt-5 pb-3.5 box-border' : 'contents'}>
-    <div className={isDesktop ? 'relative flex-[65_1_0%] min-w-0 min-h-0 flex flex-col overflow-hidden' : 'flex flex-col h-full min-h-0 bg-bg'}>
+    <DesktopTwoColumn isDesktop={isDesktop} stage className="bg-bg"
+      phoneMainClassName="flex flex-col h-full min-h-0 bg-bg"
+      main={<>
       <div className="flex-1 min-h-0 flex flex-col" style={homeShift}>
       <div style={{ paddingTop: isDesktop ? 0 : 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
         <StaffModeHeader store={active.storeName ? `${active.ownerName} · ${active.storeName}` : active.ownerName} role={active.role} onExit={() => setActiveId(null)} />
@@ -138,15 +141,12 @@ export function StaffModePage() {
       <BusinessScreen open={screen === 'payments'} title="Payments" onBack={back}>
         <PaymentsView loading={false} payments={payments} onPayment={() => {}} />
       </BusinessScreen>
-    </div>
-      {isDesktop && (
-        <div className="flex-[35_1_0%] min-w-0 min-h-0">
-          <DesktopHistoryPanel title="Recent payments" onViewAll={payments.length ? () => setScreen('payments') : undefined}>
-            {payments.length === 0 ? <DesktopHistoryEmpty label="No payments yet - show your QR at the counter to get paid" />
-              : <div className="divide-y divide-border">{payments.slice(0, 30).map(p => <PaymentRow key={p.id} payment={p} onClick={() => {}} />)}</div>}
-          </DesktopHistoryPanel>
-        </div>
-      )}
-    </div>
+      </>}
+      side={
+        <DesktopHistoryPanel title="Recent payments" onViewAll={payments.length ? () => setScreen('payments') : undefined}>
+          {payments.length === 0 ? <DesktopHistoryEmpty label="No payments yet - show your QR at the counter to get paid" />
+            : <div className="divide-y divide-border">{payments.slice(0, 30).map(p => <PaymentRow key={p.id} payment={p} onClick={() => {}} />)}</div>}
+        </DesktopHistoryPanel>
+      } />
   )
 }

@@ -1,3 +1,4 @@
+import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { useState, useRef, useEffect } from 'react'
 import { useStepDirection } from '@/hooks/useStepDirection'
 import { useNavigate } from 'react-router-dom'
@@ -935,7 +936,9 @@ export function BulkPayoutPage() {
         // bottom-padding spacing treatment as Swap's 2-column layout.
         // Results keeps its exact existing content/design, just moved
         // in-flow into this column instead of the page-wide fixed bar.
-        <div style={{ display: 'flex', flex: 1, minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
+        // The shared desktop layout (DesktopTwoColumn), filling the space
+        // under the page header.
+        <div style={{ flex: 1, minHeight: 0 }}>
           {/* BUG FIX (2026-09-03): this column used to be overflowY: 'auto'
               itself, WHILE the recipient list inside addRecipientsSection
               also had its own overflow-y-auto + maxHeight: 40vh - two
@@ -954,16 +957,19 @@ export function BulkPayoutPage() {
               anywhere here closes them and goes back to entry (Purpose
               panel), ready for the next payout - no need to press New Bulk
               Payment first. Failed recipients stay listed for a retry. */}
-          <div aria-busy={recipientsHeld || undefined} title={recipientsHeld ? 'Payout in progress' : undefined}
-            onPointerDownCapture={() => { if (step === 'results') { setStep('setup'); setResults([]) } }}
-            style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', cursor: recipientsHeld ? 'not-allowed' : undefined }}>
-            <div ref={recipientsColRef} style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 16,
-              opacity: recipientsHeld ? 0.55 : 1, transition: 'opacity 0.2s ease' }}>
-              {addRecipientsSection}
-            </div>
-          </div>
-
-          <div ref={stepColumnRef} data-leave-guard={step === 'processing' ? '' : undefined} style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', borderRadius: 20 }}>
+          <DesktopTwoColumn stage
+            mainProps={{ 'aria-busy': recipientsHeld || undefined, title: recipientsHeld ? 'Payout in progress' : undefined,
+              onPointerDownCapture: () => { if (step === 'results') { setStep('setup'); setResults([]) } },
+              style: { cursor: recipientsHeld ? 'not-allowed' : undefined } }}
+            main={
+              <div ref={recipientsColRef} style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 16,
+                opacity: recipientsHeld ? 0.55 : 1, transition: 'opacity 0.2s ease' }}>
+                {addRecipientsSection}
+              </div>
+            }
+            sideRef={stepColumnRef}
+            sideProps={{ 'data-leave-guard': step === 'processing' ? '' : undefined, style: { borderRadius: 20 } }}
+            side={<>
             {/* Steps fade in place (ScreenPush's desktop fade, same as Pay / Swap). */}
             <ScreenPush screenKey={step} back={stepDir === 'back'}>
               {step === 'setup' && (
@@ -991,7 +997,7 @@ export function BulkPayoutPage() {
                 </div>
               )}
             </ScreenPush>
-          </div>
+            </>} />
         </div>
       ) : (
       <>

@@ -9,6 +9,7 @@
 //                claims, MeshPort pays the gas), live progress and history
 //
 // The UI kit in ./ui was designed with Arc Studio.
+import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { DESKTOP_QUERY } from '@/lib/motion'
@@ -518,12 +519,14 @@ function OwnerBusinessPage() {
   const bodyPad = { paddingBottom: isDesktop ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }
   const panelPad = { paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }
   const seeAllPayments = () => { setPayFilter('all'); setPayView('payments'); setTab('payments') }
-  // Desktop: the same 65/35 layout as P2P, Swap and Multichain - the hub and
-  // every Business page in the main column, Verified payments on the right.
-  // One tree for both, so resizing across the breakpoint keeps all state.
+  // Desktop: the shared 65/35 layout (DesktopTwoColumn) like P2P, Swap and
+  // Multichain - the hub and every Business page in the main column (a stage
+  // its screens push over), Verified payments on the right. One tree for
+  // both, so resizing across the breakpoint keeps all state.
   return (
-    <div className={isDesktop ? 'flex h-full min-h-0 bg-bg gap-7 px-6 pt-5 pb-3.5 box-border' : 'relative flex flex-col h-full min-h-0 bg-bg overflow-hidden'}>
-    <div className={isDesktop ? 'relative flex-[65_1_0%] min-w-0 min-h-0 flex flex-col overflow-hidden' : 'contents'}>
+    <DesktopTwoColumn isDesktop={isDesktop} stage className="bg-bg"
+      phoneClassName="relative flex flex-col h-full min-h-0 bg-bg overflow-hidden"
+      main={<>
       {/* ── Overview hub: always mounted; parallaxes left under a sub-view ── */}
       <div className="flex-1 min-h-0 flex flex-col" style={hubShift}>
         {/* The business, then (several stores) the one store everything below
@@ -749,16 +752,13 @@ function OwnerBusinessPage() {
         <TeamScreen open={stack.includes('team')} onBack={back} canAddStores={isMerchant} stores={stores} onChanged={setStores} paymentsByStore={paymentsByStore}
           onQr={id => { pickStore(id); child('qr') }} />
       ))}
-    </div>
-      {isDesktop && (
-        <div className="flex-[35_1_0%] min-w-0 min-h-0">
-          <DesktopHistoryPanel title="Verified payments" onViewAll={locked ? undefined : seeAllPayments}>
-            {!loaded ? <DesktopHistorySkeleton />
-              : payments.length === 0 ? <DesktopHistoryEmpty label={locked ? 'Payments show up here once MeshPort approves your business' : 'No payments yet - open Collect payment to show your QR'} />
-              : <div className="divide-y divide-border">{payments.slice(0, 30).map(p => <PaymentRow key={p.id} payment={p} onClick={setDetail} />)}</div>}
-          </DesktopHistoryPanel>
-        </div>
-      )}
-    </div>
+      </>}
+      side={
+        <DesktopHistoryPanel title="Verified payments" onViewAll={locked ? undefined : seeAllPayments}>
+          {!loaded ? <DesktopHistorySkeleton />
+            : payments.length === 0 ? <DesktopHistoryEmpty label={locked ? 'Payments show up here once MeshPort approves your business' : 'No payments yet - open Collect payment to show your QR'} />
+            : <div className="divide-y divide-border">{payments.slice(0, 30).map(p => <PaymentRow key={p.id} payment={p} onClick={setDetail} />)}</div>}
+        </DesktopHistoryPanel>
+      } />
   )
 }
