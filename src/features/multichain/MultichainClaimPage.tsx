@@ -13,6 +13,7 @@
  * MeshPort V2: Inspired by PayPal/Revolut/Cash App
  * "Sending money to friends" not "Managing blockchain infrastructure"
  */
+import { backLayerPop } from '@/lib/backLayers'
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from 'react'
 import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
 import { createPortal } from 'react-dom'
@@ -446,7 +447,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     if (embedded) return
     if (confirmPhase !== 'tracking') return
     window.history.pushState({ trackProgress: true }, '')
-    const onPopState = () => { navigate('/multichain', { replace: true }) }
+    const onPopState = () => { if (backLayerPop()) return; navigate('/multichain', { replace: true }) }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
   }, [confirmPhase, navigate, embedded])
@@ -2107,7 +2108,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 onChange={v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') }}
                 balance={selectedChain.claimable}
                 token="USDC"
-                quickAmounts={[10, 25, 50, 100]}
                 doneLabel="Done"
                 doneEnabled={true}
                 error={claimOver ? 'Insufficient balance' : claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT ? `Minimum $${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}` : ''}

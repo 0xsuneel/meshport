@@ -1055,7 +1055,6 @@ export function BulkPayoutPage() {
         onChange={v => setRowAmount(v)}
         balance={remainingForNext}
         token="USDC"
-        quickAmounts={[10, 20, 50, 100]}
         // The amount box above already has its own Max, like Transfer.
         showMax={false}
         onClose={() => setShowBulkAmountPad(false)}

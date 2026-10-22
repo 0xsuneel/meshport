@@ -1,52 +1,71 @@
-// An action sheet: the chat's Request / Bill sheets and the Business tab's
-// Collect payment (Charge / Bill) - one look everywhere.
+// THE bottom sheet - every sheet in the app (chat Request / Bill, Business
+// sheets, P2P, the passcode sheet) is this one, so they all open, close,
+// drag and dim the same way.
 // Phone: slides up from the bottom. In a chat it sits in the conversation,
 // which itself shrinks to the space above the keyboard (`absolute`); on a
 // page it's `fixed` to the app shell, which also follows the visible area -
 // either way the sheet sits on top of the keyboard, never behind it.
-// Desktop: a centred dialog. Same look as the chat's Pay sheet.
-import { type ReactNode } from 'react'
+// Phone / browser Back closes it, like a tap on the dim.
+// Desktop: a centred dialog (DesktopDialogFrame).
+import { type ReactNode, useId } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { PopupOpen } from '@/hooks/usePopupOpen'
-import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { SHEET_PANEL, SHEET_BACKDROP, SHEET_DIM, DESKTOP_QUERY } from '@/lib/motion'
 import { sheetDrag } from '@/lib/sheetDrag'
+import { useBackLayer } from '@/lib/backLayers'
 
-export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, children }: {
+export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, height = 'auto', backClose = true, desktopMaxWidth = 440, zIndex, children }: {
   open: boolean
   onClose: () => void
-  isDesktop: boolean
-  /** Unique per sheet (drag-to-close bookkeeping). */
-  id: string
+  /** Defaults to the screen width (≥980px = desktop). */
+  isDesktop?: boolean
+  /** Unique per sheet (drag-to-close bookkeeping); generated when left out. */
+  id?: string
   /** Over the whole app (a page) instead of inside the chat panel. */
   fixed?: boolean
+  /** 'full': a tall sheet (progress, chat) instead of fitting its content. */
+  height?: 'auto' | 'full'
+  /** Phone / browser Back closes it (default). Off where the page already
+   *  handles Back for it. */
+  backClose?: boolean
+  desktopMaxWidth?: number
+  /** Stacking order of the panel (the dim sits one below); default 50. */
+  zIndex?: number
   children: ReactNode
 }) {
-  if (isDesktop) {
+  const autoId = useId()
+  const sid = id ?? `sheet${autoId}`
+  const wide = useMediaQuery(DESKTOP_QUERY)
+  const desktop = isDesktop ?? wide
+  useBackLayer(open && backClose && !desktop, onClose)
+  if (desktop) {
     return (
       <AnimatePresence>
         {open && (
-          <DesktopDialogFrame key={id} onClose={onClose} maxWidth={440}>
-            <div className="flex flex-col" style={{ maxHeight: 'min(86dvh, 760px)' }}>{children}</div>
+          <DesktopDialogFrame key={sid} onClose={onClose} maxWidth={desktopMaxWidth} backClose={backClose}>
+            <div className="flex flex-col" style={{ maxHeight: 'min(86dvh, 760px)', minHeight: height === 'full' ? 'min(80dvh, 720px)' : undefined }}>{children}</div>
           </DesktopDialogFrame>
         )}
       </AnimatePresence>
     )
   }
   const pos = fixed ? 'fixed' : 'absolute'
+  const z = zIndex ?? 50
   return (
     <>
       {open && <PopupOpen />}
       <AnimatePresence>
         {open && [
-          <motion.div key={id + '-dim'} transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className={`${pos} inset-0 bg-black/70 ${fixed ? 'z-50' : 'z-40'}`} onClick={onClose} />,
-          <motion.div key={id} {...sheetDrag(id, onClose)} initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT} transition={SHEET_SPRING}
+          <motion.div key={sid + '-dim'} {...SHEET_BACKDROP}
+            className={`${pos} inset-0`} style={{ background: SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40 }} onClick={onClose} />,
+          <motion.div key={sid} {...sheetDrag(sid, onClose)} {...SHEET_PANEL}
             role="dialog" aria-modal="true"
-            className={`${pos} bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-3xl flex flex-col${fixed ? ' mx-auto max-w-md' : ''}`}
-            style={{ maxHeight: 'calc(100% - 40px)' }}>
+            className={`${pos} bottom-0 left-0 right-0 bg-surface border-t border-border rounded-t-3xl flex flex-col${fixed ? ' mx-auto max-w-md' : ''}${height === 'full' ? ' h-[92dvh]' : ''}`}
+            style={{ maxHeight: 'calc(100% - 40px)', zIndex: z }}>
             <div data-sheet-handle className="flex justify-center pt-2.5 pb-1 flex-shrink-0">
               <div style={{ width: 38, height: 5, borderRadius: 3, background: 'var(--border)' }} />
             </div>

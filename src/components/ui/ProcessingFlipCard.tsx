@@ -11,6 +11,8 @@
 
 import { useCallback, useState } from 'react'
 import { PopupOpen } from '@/hooks/usePopupOpen'
+import { PopupDim } from './PopupDim'
+import { POPUP_CARD } from '@/lib/motion'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -90,16 +92,18 @@ export function ProcessingFlipCard({ open, phase, processingLabel, title, messag
     <AnimatePresence onExitComplete={onExited}>
       {open && (
         <motion.div
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          // Only the dim fades (PopupDim); the card pops in on POPUP_CARD -
+          // fading both together left the card see-through for a few frames.
+          exit={{ opacity: 0, transition: { duration: 0.16 } }}
           onClick={phase !== 'processing' ? onDismiss : undefined}
           style={{
             position: 'fixed', inset: 0, zIndex: 300,
-            background: 'rgba(6,10,14,0.62)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
           }}
         >
           <PopupOpen />
-          <div style={{ perspective: 1200 }} onClick={e => e.stopPropagation()}>
+          <PopupDim />
+          <motion.div {...POPUP_CARD} style={{ perspective: 1200, position: 'relative' }} onClick={e => e.stopPropagation()}>
             <motion.div
               animate={{ rotateY: phase === 'processing' ? 0 : 180 }}
               transition={{ duration: 0.55, ease: 'easeInOut' }}
@@ -149,7 +153,7 @@ export function ProcessingFlipCard({ open, phase, processingLabel, title, messag
                 </button>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         </motion.div>
       )}
     </AnimatePresence>

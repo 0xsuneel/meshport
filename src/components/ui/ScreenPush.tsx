@@ -1,3 +1,4 @@
+import { PUSH_OPEN_MS, PUSH_BACK_MS, PUSH_EASE_CSS, PUSH_PARALLAX, DESKTOP_FADE_KEYFRAMES, DESKTOP_FADE_MS } from '@/lib/motion'
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 import { pushLook } from '@/lib/pushLook'
 import { useReducedMotion } from 'framer-motion'
@@ -16,10 +17,10 @@ import { DESKTOP_QUERY } from '@/lib/motion'
 // screens are never seen through each other and nothing ever flashes empty.
 // The children are never remounted; only what they render changes, so the
 // caller's own enter/exit animations for these screens should be instant.
-const OPEN_MS = 300
-const BACK_MS = 250
-const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
-const PARALLAX = '-28%'
+const OPEN_MS = PUSH_OPEN_MS
+const BACK_MS = PUSH_BACK_MS
+const EASE = PUSH_EASE_CSS
+const PARALLAX = PUSH_PARALLAX
 
 /** A frozen, non-interactive copy of what's on screen right now - without
  *  fixed-position overlays (sheets, dims) that happen to be inside it. The
@@ -108,7 +109,7 @@ export function ScreenPush({ screenKey, back = false, style, children }: {
     snap.current = null
     const host = hostRef.current, live = liveRef.current
     if (isDesktop && !reduce && live) {
-      live.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 150, easing: EASE })
+      live.animate(DESKTOP_FADE_KEYFRAMES, { duration: DESKTOP_FADE_MS, easing: EASE })
       return
     }
     if (!s || s.key !== screenKey || !host || !live) return

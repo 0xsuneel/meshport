@@ -1,3 +1,4 @@
+import { backLayerPop } from '@/lib/backLayers'
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { isAccountLockedNow, ACCOUNT_LOCKED_MESSAGE } from '@/lib/accountLockRule'
@@ -628,6 +629,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     let poppedByBack = false
     window.history.pushState({ ...(window.history.state ?? {}), mpTransferStep: true }, '')
     const onPop = () => {
+      // Back closed a sheet / keypad on top (lib/backLayers): not ours.
+      if (backLayerPop()) return
       if (stepRef.current === 'confirm') {
         setStep('review'); setPassEntry(''); setPassError('')
         window.history.pushState({ ...(window.history.state ?? {}), mpTransferStep: true }, '')
@@ -666,6 +669,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     let poppedByBack = false
     window.history.pushState({ ...(window.history.state ?? {}), mpTransferSheet: true }, '')
     const onPop = () => {
+      // Back closed a sheet / keypad on top (lib/backLayers): not ours.
+      if (backLayerPop()) return
       if (skipSheetPop.current) { skipSheetPop.current = false; return }
       if (stepRef.current !== 'form') return
       poppedByBack = true
@@ -3166,7 +3171,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       onChange={v => setAmount(v)}
       balance={balance}
       token="USDC"
-      quickAmounts={[10, 20, 50, 100]}
       // Same reserve as the inline Max button below - this sheet
       // has its own separate Max button and was filling in the
       // full balance too. No live fee estimate is fetched here

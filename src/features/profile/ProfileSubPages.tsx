@@ -1,3 +1,4 @@
+import { PinSheet } from '@/components/ui/PinSheet'
 import React, { useState, useRef, useEffect, startTransition } from 'react'
 
 // Kept byte-identical to buildProfileUpdateMessage in api/profile.ts - if
@@ -162,37 +163,12 @@ export function SecurityPage() {
         </button>
       </div>
 
-      {confirmSheet && (() => {
-        const closeConfirm = () => !registering && setConfirmSheet(false)
-        const confirmContent = (
-          <>
-            <h3 className="text-lg font-bold text-text-primary text-center mb-1">Confirm Passcode</h3>
-            <p className="text-sm text-text-secondary text-center mb-5">Enter your passcode to set up {label}</p>
-            <PinKeypad
-              value={confirmPass}
-              onChange={v => { setConfirmPass(v); setConfirmError('') }}
-              length={6}
-              error={!!confirmError}
-              biometricAvailable={false}
-              onComplete={handleConfirmAndRegister}
-            />
-            {confirmError && <p role="alert" className="text-xs text-danger text-center mt-3">{confirmError}</p>}
-            {registering && <p className="text-xs text-text-secondary text-center mt-3">Verifying…</p>}
-          </>
-        )
-        return isDesktop ? (
-          <DesktopDialogFrame onClose={closeConfirm} maxWidth={400}>
-            <div className="p-6">{confirmContent}</div>
-          </DesktopDialogFrame>
-        ) : (
-          <div className="fixed inset-0 z-50 flex items-end mp-fade-in" style={{ background: 'rgba(0,0,0,0.5)' }} onClick={closeConfirm}>
-            <div className="w-full bg-surface rounded-t-3xl p-6 pb-8 mp-sheet-up" onClick={e => e.stopPropagation()}>
-              <div className="w-9 h-1 rounded-full bg-[rgb(var(--text-primary-rgb)/0.15)] mx-auto mb-5" />
-              {confirmContent}
-            </div>
-          </div>
-        )
-      })()}
+      <PinSheet open={confirmSheet} onClose={() => !registering && setConfirmSheet(false)} id="biometric-confirm"
+        title="Confirm Passcode" subtitle={`Enter your passcode to set up ${label}`}
+        value={confirmPass} onChange={v => { setConfirmPass(v); setConfirmError('') }}
+        onComplete={handleConfirmAndRegister} error={confirmError || undefined}
+        biometricAvailable={false} autoBiometric={false} locked={registering}
+        footer={registering ? <p className="text-xs text-text-secondary text-center mt-3">Verifying…</p> : undefined} />
     </div>
   )
 }

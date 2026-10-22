@@ -1,3 +1,4 @@
+import { backLayerPop } from '@/lib/backLayers'
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, useId, memo, Fragment, type ReactNode } from 'react'
 import { SendIcon } from '@/components/ui/SendIcon'
 import { reachCheck, chatCountChanged, STRANGER_PAY_BLOCKED, BLOCKED_YOU, cachedPrivacy, fetchMyPrivacy, fetchMyRequestIds, fetchBlocked, blockUser, unblockUser, type ChatPrivacy } from '@/lib/privacy'
@@ -3973,7 +3974,7 @@ export function ChatConversationPage() {
   }
   useEffect(() => {
     if (!showHistory) return
-    const onPop = () => { if (!(window.history.state as any)?.mpChatHistory) setShowHistory(false) }
+    const onPop = () => { if (backLayerPop()) return; if (!(window.history.state as any)?.mpChatHistory) setShowHistory(false) }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [showHistory])
@@ -4004,7 +4005,7 @@ export function ChatConversationPage() {
   useEffect(() => {
     if (!showProfile) return
     // Opened from the list there's no entry of its own: Back leaves the page.
-    const onPop = () => { if (!infoFromList.current && !(window.history.state as any)?.mpChatInfo && !(window.history.state as any)?.mpChatHistory) setShowProfile(false) }
+    const onPop = () => { if (backLayerPop()) return; if (!infoFromList.current && !(window.history.state as any)?.mpChatInfo && !(window.history.state as any)?.mpChatHistory) setShowProfile(false) }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [showProfile])

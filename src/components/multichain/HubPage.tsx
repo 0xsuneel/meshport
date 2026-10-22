@@ -3,7 +3,7 @@ import { ArrowLeft } from 'lucide-react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DESKTOP_QUERY } from '@/lib/motion'
+import { DESKTOP_QUERY, EASE_OUT, PUSH_OPEN_MS, PUSH_BACK_MS, PUSH_PARALLAX, PUSH_DIM } from '@/lib/motion'
 
 // Multichain Hub (phone) - the Transfer and Bring screens open as full pages
 // that slide in from the right with the same timing, curve, parallax and dim
@@ -18,11 +18,11 @@ export const HUB_PANEL_BOX = {
   position: 'fixed', top: 0, right: 0, bottom: 0, width: HUB_PANEL_WIDTH,
   background: 'var(--bg)', borderLeft: '1px solid var(--border)', boxShadow: '-16px 0 40px -12px rgba(0,0,0,0.35)',
 } as const
-const EASE = [0.32, 0.72, 0, 1] as const
-const OPEN_S = 0.3
-const BACK_S = 0.25
-const PARALLAX = '-28%'
-const DIM = 0.22
+const EASE = EASE_OUT
+const OPEN_S = PUSH_OPEN_MS / 1000
+const BACK_S = PUSH_BACK_MS / 1000
+const PARALLAX = PUSH_PARALLAX
+const DIM = PUSH_DIM
 
 function Panel({ behind, level, header, footer, children }: {
   behind: boolean; level: 0 | 1; header?: ReactNode; footer?: ReactNode; children: ReactNode

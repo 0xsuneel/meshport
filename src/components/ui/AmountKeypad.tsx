@@ -1,6 +1,8 @@
 /**
- * AmountKeypad - mobile: half-sheet numeric keypad that slides up from
- * bottom, subtle backdrop blur so background stays visible.
+ * AmountKeypad - THE amount keypad, everywhere money is typed.
+ * Mobile: half-sheet numeric keypad that slides up from the bottom on the
+ * app's sheet motion (drag down, tap the light dim or Back to close).
+ * `variant="inline"`: the same keys right in the page (chat Pay, Request).
  * Desktop: NOT a popup at all - renders as a plain in-flow card (no
  * backdrop, no fixed positioning) right where the caller places it, since
  * a physical keyboard + a live input is how real desktop apps (Binance,
@@ -11,7 +13,9 @@
  */
 import { useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { SHEET_SPRING, SHEET_BACKDROP } from '@/lib/motion'
+import { SHEET_PANEL, SHEET_BACKDROP, DESKTOP_FADE_Y, DESKTOP_FADE_TRANSITION, DESKTOP_QUERY } from '@/lib/motion'
+import { sheetDrag } from '@/lib/sheetDrag'
+import { useBackLayer } from '@/lib/backLayers'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { opensKeyboard } from '@/hooks/useKeyboardOpen'
@@ -27,7 +31,7 @@ import { amountFontSize } from '@/lib/amountFontSize'
 // through this component at all -- silently showing/entering "0.00" for
 // any real cirBTC balance. Callers now pass the right cap for their token
 // (see the `decimals` prop below).
-function sanitizeAmountInput(raw: string, decimals: number): string {
+export function sanitizeAmountInput(raw: string, decimals: number): string {
   let cleaned = raw.replace(/[^\d.]/g, '')
   const firstDot = cleaned.indexOf('.')
   if (firstDot !== -1) cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '')
@@ -36,12 +40,17 @@ function sanitizeAmountInput(raw: string, decimals: number): string {
   return cleaned
 }
 
+/** How many decimals an amount in this token can be typed with (on-chain
+ *  precision): USDC/EURC 6, cirBTC 8. */
+export function tokenDecimals(token = 'USDC'): number {
+  return String(token).toUpperCase() === 'CIRBTC' ? 8 : 6
+}
+
 interface AmountKeypadProps {
   value: string
   onChange: (val: string) => void
   balance?: number
   token?: string
-  quickAmounts?: number[]
   onDone?: () => void
   /** Label for the primary action button. Defaults to 'Done' - pages that
    * use this keypad as their only amount-entry step (no separate Continue
@@ -72,6 +81,19 @@ interface AmountKeypadProps {
   open: boolean
   onClose?: () => void
   error?: string
+  /** Decimal places that can be typed (default: the token's, tokenDecimals). */
+  decimals?: number
+  /** Keys that would take the amount above this are ignored. */
+  maxValue?: number
+  /** Whole numbers only (points): the "." key is blank. */
+  allowDecimal?: boolean
+  /** Most digits before the decimal point. */
+  maxDigits?: number
+  /** 'inline': the keys right in the page (always shown, no sheet). */
+  variant?: 'sheet' | 'inline'
+  /** Phone / browser Back closes the sheet. Off by default: the amount is a
+   *  step of a page that already handles Back itself (Pay, Transfer, …). */
+  backClose?: boolean
 }
 
 const KEYS = ['1','2','3','4','5','6','7','8','9','.','0','del']
@@ -81,7 +103,6 @@ export function AmountKeypad({
   onChange,
   balance = 0,
   token = 'USDC',
-  quickAmounts = [10, 20, 50, 100],
   onDone,
   doneLabel = 'Done',
   showMax = true,
@@ -90,10 +111,16 @@ export function AmountKeypad({
   open,
   onClose,
   error,
+  decimals,
+  maxValue,
+  allowDecimal = true,
+  maxDigits,
+  variant = 'sheet',
+  backClose = false,
 }: AmountKeypadProps) {
   // Desktop users type on a physical keyboard - the tap-grid below is a
   // mobile-only affordance. Same value/onChange contract either way.
-  const isDesktop = useMediaQuery('(min-width: 980px)')
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
   // Short phones (iPhone SE, small Androids with the browser bars showing):
   // smaller keys so the sheet leaves room for the amount above it.
   const short = useMediaQuery('(max-height: 700px)')
@@ -125,18 +152,23 @@ export function AmountKeypad({
   // just 8 for everyone, same as cirBTC always had.
   // USDC/EURC have 6 decimals on-chain - an 8-decimal amount can't even be
   // sent - so they cap at 6; cirBTC keeps its full 8.
-  const decimalCap = String(token).toUpperCase() === 'CIRBTC' ? 8 : 6
+  const decimalCap = allowDecimal ? (decimals ?? tokenDecimals(token)) : 0
+  const sheetOpen = open && variant === 'sheet' && !isDesktop
+  // Phone / browser Back closes the keypad sheet where asked (backClose).
+  useBackLayer(sheetOpen && backClose && !!onClose, () => onClose?.())
 
   const handleKey = (key: string) => {
     if (key === 'del') { onChange(value.slice(0, -1)); return }
     if (key === '.') {
-      if (value.includes('.')) return
+      if (!decimalCap || value.includes('.')) return
       onChange((value || '0') + '.')
       return
     }
     if (value.includes('.') && value.split('.')[1].length >= decimalCap) return
-    if (value === '0') onChange(key)
-    else onChange(value + key)
+    const next = value === '0' ? key : value + key
+    if (maxDigits && next.split('.')[0].length > maxDigits) return
+    if (maxValue !== undefined && parseFloat(next) > maxValue) return
+    onChange(next)
   }
 
   // ── Hold-to-repeat delete ─────────────────────────────────────────────
@@ -256,6 +288,51 @@ export function AmountKeypad({
     )
   })()
 
+  const keyGrid = (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: short ? 8 : 10, maxWidth: 320, margin: short ? '0 auto 10px' : '0 auto 14px' }}>
+      {KEYS.map((key, i) => key === '.' && !decimalCap ? <span key={i} aria-hidden /> : (
+        <button
+          key={i}
+          type="button"
+          aria-label={key === 'del' ? 'Delete' : key === '.' ? 'Decimal point' : key}
+          onClick={() => handleKey(key)}
+          style={{
+            height: short ? 46 : 56, borderRadius: 14, width: '100%',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', fontSize: key === '.' ? 28 : 24, fontWeight: 600, color: key === 'del' ? 'var(--text-secondary)' : 'var(--text-primary)',
+          }}
+          // Same key press as the PIN keypad (.mp-key in index.css).
+          className="mp-key"
+          onMouseDown={() => { if (key === 'del') startDeleteHold() }}
+          onMouseUp={() => { if (key === 'del') stopDeleteHold() }}
+          onMouseLeave={() => { if (key === 'del') stopDeleteHold() }}
+          onTouchStart={() => { if (key === 'del') startDeleteHold() }}
+          onTouchEnd={() => { if (key === 'del') stopDeleteHold() }}
+          onTouchCancel={() => { if (key === 'del') stopDeleteHold() }}
+        >
+          {key === 'del'
+            ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z"/>
+                <line x1="18" y1="9" x2="12" y2="15"/>
+                <line x1="12" y1="9" x2="18" y2="15"/>
+              </svg>
+            : key}
+        </button>
+      ))}
+    </div>
+  )
+
+  if (variant === 'inline') {
+    return (
+      <div data-amount-keypad-inline="">
+        {errorMaxRow}
+        {keyGrid}
+        {doneButton}
+      </div>
+    )
+  }
+
   if (isDesktop) {
     // No popup at all - a plain in-flow card, right where the caller
     // places it on the page. Fades/lifts in on mount instead of the
@@ -265,10 +342,10 @@ export function AmountKeypad({
         {open && (
           <motion.div
             key="amount-card"
-            initial={{ opacity: 0, y: 8 }}
+            initial={{ opacity: 0, y: DESKTOP_FADE_Y }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+            exit={{ opacity: 0 }}
+            transition={DESKTOP_FADE_TRANSITION}
             style={{
               background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18,
               boxShadow: 'var(--shadow-1)', padding: '20px 22px',
@@ -309,85 +386,50 @@ export function AmountKeypad({
   return createPortal(
     <AnimatePresence>
       {open && (
-        <>
-          {/* Subtle backdrop - just enough separation to feel like a sheet,
-              without washing out the amount display above it */}
+        [
+          /* Subtle backdrop - just enough separation to feel like a sheet,
+              without washing out the amount display above it (the one
+              sheet with a light dim: the amount must stay readable). */
           <motion.div
             key="backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={SHEET_BACKDROP.transition}
+            {...SHEET_BACKDROP}
             onClick={onClose}
             style={{
               position: 'fixed', top: 0, bottom: 0, left: 0, right: 0,
-              maxWidth: 430, margin: '0 auto',
+              maxWidth: 448, margin: '0 auto',
               zIndex: 40,
               background: 'rgba(0,0,0,0.18)',
             }}
-          />
+          />,
 
-          {/* Half sheet */}
+          /* Half sheet */
           <motion.div
             key="sheet"
             data-amount-keypad-sheet=""
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={SHEET_SPRING}
+            {...(onClose ? sheetDrag('amount-keypad', onClose) : {})}
+            {...SHEET_PANEL}
             style={{
               position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 50,
-              maxWidth: 430, margin: '0 auto',
+              maxWidth: 448, margin: '0 auto',
               background: 'var(--surface)',
-              borderRadius: '28px 28px 0 0',
+              borderRadius: '24px 24px 0 0',
               borderTop: '1px solid var(--border)',
               boxShadow: 'var(--shadow-3)',
               padding: short ? '8px 20px calc(env(safe-area-inset-bottom, 0px) + 16px)' : '10px 24px 32px',
             }}
           >
-            {/* Handle */}
-            <div style={{ width: 36, height: 4, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)', margin: short ? '2px auto 10px' : '4px auto 14px' }} />
+            {/* Handle (the same grabber as every sheet) */}
+            <div data-sheet-handle style={{ display: 'flex', justifyContent: 'center', padding: short ? '0 0 8px' : '2px 0 12px' }}>
+              <div style={{ width: 38, height: 5, borderRadius: 3, background: 'var(--border)' }} />
+            </div>
 
             {errorMaxRow}
 
-            {/* Keypad - wide rounded-rectangle keys that fill their full grid
-                cell (no dead space around a small circle), matching the
-                Paytm-style reference. Every key is a real, full-size tap
-                target instead of a 60px circle floating inside a wider cell. */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: short ? 8 : 10, maxWidth: 320, margin: short ? '0 auto 10px' : '0 auto 14px' }}>
-              {KEYS.map((key, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleKey(key)}
-                  style={{
-                    height: short ? 46 : 56, borderRadius: 14, width: '100%',
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', fontSize: key === '.' ? 28 : 24, fontWeight: 600, color: key === 'del' ? 'var(--text-secondary)' : 'var(--text-primary)',
-                  }}
-                  // Same key press as the PIN keypad (.mp-key in index.css).
-                  className="mp-key"
-                  onMouseDown={() => { if (key === 'del') startDeleteHold() }}
-                  onMouseUp={() => { if (key === 'del') stopDeleteHold() }}
-                  onMouseLeave={() => { if (key === 'del') stopDeleteHold() }}
-                  onTouchStart={() => { if (key === 'del') startDeleteHold() }}
-                  onTouchEnd={() => { if (key === 'del') stopDeleteHold() }}
-                  onTouchCancel={() => { if (key === 'del') stopDeleteHold() }}
-                >
-                  {key === 'del'
-                    ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z"/>
-                        <line x1="18" y1="9" x2="12" y2="15"/>
-                        <line x1="12" y1="9" x2="18" y2="15"/>
-                      </svg>
-                    : key}
-                </button>
-              ))}
-            </div>
+            {keyGrid}
 
             {doneButton}
-          </motion.div>
-        </>
+          </motion.div>,
+        ]
       )}
     </AnimatePresence>,
     document.body,

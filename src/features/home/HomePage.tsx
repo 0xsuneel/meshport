@@ -1,3 +1,4 @@
+import { PinSheet } from '@/components/ui/PinSheet'
 import { useBusinessTab, useHubLabel, useMerchant } from '@/lib/merchant'
 import { fetchBtcPriceUsd } from '@/lib/btcPrice'
 import { loadAssetSlot, saveAssetSlot } from '@/lib/assetSlot'
@@ -47,7 +48,6 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { ActionIcon } from '@/components/ui/ActionIcon'
 import { NavIcon } from '@/components/layout/navIcons'
-import { PinKeypad } from '@/components/ui/PinKeypad'
 import { biometricLabel } from '@/lib/biometric'
 
 function copyText(text: string) { try { navigator.clipboard.writeText(text) } catch {} }
@@ -491,36 +491,12 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
         </button>
       )}
 
-      {confirmSheet && (() => {
-        const confirmContent = (
-          <>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'center', margin: '0 0 4px' }}>Confirm Passcode</h3>
-            <p style={{ fontSize: 14, color: 'var(--text-secondary)', textAlign: 'center', margin: '0 0 20px' }}>Enter your passcode to set up {label}</p>
-            <PinKeypad
-              value={confirmPass}
-              onChange={v => { setConfirmPass(v); setConfirmError('') }}
-              length={6}
-              error={!!confirmError}
-              biometricAvailable={false}
-              onComplete={handleConfirmAndRegister}
-            />
-            {confirmError && <p role="alert" style={{ fontSize: 12, color: 'var(--danger)', textAlign: 'center', marginTop: 12 }}>{confirmError}</p>}
-            {registering && <p style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', marginTop: 12 }}>Verifying…</p>}
-          </>
-        )
-        return isDesktop ? (
-          <DesktopDialogFrame onClose={closeConfirm} maxWidth={400}>
-            <div style={{ padding: 24 }}>{confirmContent}</div>
-          </DesktopDialogFrame>
-        ) : (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'flex-end', background: 'rgba(0,0,0,0.5)', animation: 'mpFadeIn 0.22s cubic-bezier(0.32, 0.72, 0, 1)' }} onClick={closeConfirm}>
-            <div style={{ width: '100%', background: 'var(--surface)', borderRadius: '24px 24px 0 0', padding: '24px 24px 32px', animation: 'mpSheetUp 0.42s cubic-bezier(0.32, 0.72, 0, 1)' }} onClick={e => e.stopPropagation()}>
-              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border)', margin: '0 auto 20px' }} />
-              {confirmContent}
-            </div>
-          </div>
-        )
-      })()}
+      <PinSheet open={confirmSheet} onClose={closeConfirm} id="biometric-confirm"
+        title="Confirm Passcode" subtitle={`Enter your passcode to set up ${label}`}
+        value={confirmPass} onChange={v => { setConfirmPass(v); setConfirmError('') }}
+        onComplete={handleConfirmAndRegister} error={confirmError || undefined}
+        biometricAvailable={false} autoBiometric={false} locked={registering}
+        footer={registering ? <p className="text-xs text-text-secondary text-center mt-3">Verifying…</p> : undefined} />
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { backLayerPop } from '@/lib/backLayers'
 import { displayOrderNumber } from '@/lib/orderLabels'
 import { orderKindOf, orderTitle, paymentOrderTag, type OrderKind } from '@/lib/merchantPay'
 import { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
@@ -765,6 +766,8 @@ export function PaySendPage() {
   }, [inPageDepth, isProcessing, isDone])
   useEffect(() => {
     const onPop = () => {
+      // Back closed a sheet / keypad on top (lib/backLayers): not ours.
+      if (backLayerPop()) return
       if (ignoreNextPopRef.current) { ignoreNextPopRef.current = false; return }
       if (pushedStepsRef.current === 0) return
       pushedStepsRef.current -= 1
@@ -1547,7 +1550,6 @@ export function PaySendPage() {
                   onChange={v => { if (merchantPayCode) return; setAmount(v); setAmountError('') }}
                   balance={activeBalance}
                   token={token}
-                  quickAmounts={QUICK_AMOUNTS}
                   // feeReserve/maxSpendable are computed once above from the
                   // fee cached at page-open - Max, this keypad's own Done
                   // button, and the footer's Preview button all validate
