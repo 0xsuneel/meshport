@@ -27,7 +27,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import {
   createPaymentRequest, listMyIntents, cancelPayment, reopenOrder, completeOrder, paymentLink, billCardMessage, paymentRequestMessage,
-  type MerchantIntent, type MerchantPayment, shopFrom } from '@/lib/merchantPay'
+  type MerchantIntent, type MerchantPayment, shopFrom, isAskedOrder } from '@/lib/merchantPay'
 import { speakPayment } from '@/lib/voiceAlerts'
 import { timeAgo, formatAmount } from '@/lib/utils'
 import { listItems, rememberItems, deleteItem, type SavedItem } from '@/lib/businessItems'
@@ -426,7 +426,7 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
   const load = () => (staff ? staffIntents(staff.owner) : listMyIntents(500)).then(setList).catch(() => setList([]))
   useEffect(() => { if (active) { setList(null); void load() } }, [active])
 
-  const inStore = (list ?? []).filter(i => !storeId || (i.storeId ?? mainStoreId) === storeId)
+  const inStore = (list ?? []).filter(i => isAskedOrder(i) && (!storeId || (i.storeId ?? mainStoreId) === storeId))
   const counts = useMemo(() => {
     const c: Record<OrderFilter, number> = { open: 0, part: 0, paid: 0, cancelled: 0, expired: 0, all: inStore.length }
     for (const i of inStore) c[filterOf(requestStatus(i))]++

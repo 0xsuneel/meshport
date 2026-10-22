@@ -10,7 +10,7 @@ import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { useAuthStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
-import { listMyIntents, subscribeMerchantPayments, orderLabel, orderKindOf, orderTitle, expiryText, STATUS_LABEL, type MerchantIntent } from '@/lib/merchantPay'
+import { listMyIntents, isAskedOrder, subscribeMerchantPayments, orderLabel, orderKindOf, orderTitle, expiryText, STATUS_LABEL, type MerchantIntent } from '@/lib/merchantPay'
 import { RequestQrPanel } from './RequestQrPanel'
 import { useMerchant } from '@/lib/merchant'
 
@@ -67,7 +67,7 @@ export function MyRequestsPage() {
   const load = useCallback(async () => {
     try {
       // Requests and (merchants) bills - every order you sent.
-      setItems(await listMyIntents(200))
+      setItems((await listMyIntents(200)).filter(isAskedOrder))
     } catch { setItems(prev => prev ?? []) }
   }, [])
 
