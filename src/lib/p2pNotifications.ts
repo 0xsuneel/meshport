@@ -148,6 +148,16 @@ export function startP2PNotifications(userId: string): () => void {
         // closed/backgrounded; this covers "app is open right now".
         useUIStore.getState().showToastMessage(`${row.title}: ${row.message}`, 'info')
       },
+    ).on(
+      'postgres_changes',
+      { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${userId}` },
+      // Read elsewhere - another device, or the server once the trade is
+      // over (p2p_notify_trade_event clears a finished trade's step cards):
+      // drop it here too, so Home's order card goes away without a reload.
+      (payload: any) => {
+        const row = payload.new as NotificationRow
+        if (row?.read) useNotificationStore.getState().markRead(row.id)
+      },
     ),
   )
 
