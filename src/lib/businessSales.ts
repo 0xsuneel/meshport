@@ -6,7 +6,8 @@
 // receipt on another chain with no matching order, refunds taken off, and
 // the owner's own transfers between chains left out (never a sale).
 
-import { listMyPayments, listChainReceipts, isOwnReceipt, type MerchantPayment, type ChainReceipt } from './merchantPay'
+import { listMyPayments, listChainReceipts, listMyIntents, isOwnReceipt, type MerchantPayment, type ChainReceipt, type MerchantIntent } from './merchantPay'
+import type { Store } from './businessTeam'
 import { listMyRefunds } from './merchantRefunds'
 import { groupRefunds, refundedSum, netPayments } from './refundTotals'
 
@@ -33,6 +34,29 @@ export async function loadBusinessSales(walletAddress: string | null | undefined
   return netPayments(mergeSales(orders, receipts, walletAddress).filter(p => p.method !== 'own_transfer'), id => refundedSum(byPayment.get(id)))
 }
 
+/**
+ * Which store each sale belongs to, as the Business tab decides it: its
+ * order's store; a receipt carries the order number instead; anything with
+ * neither (taken before stores, plain transfers) is the main store's.
+ */
+export function storeOfSale(intents: MerchantIntent[], stores: Store[]): (p: MerchantPayment) => string | null {
+  const byIntent = new Map(intents.map(i => [i.id, i.storeId ?? null] as const))
+  const byOrder = new Map(intents.filter(i => i.orderNumber).map(i => [i.orderNumber!, i.storeId ?? null] as const))
+  const main = stores.find(s => s.isDefault)?.id ?? stores[0]?.id ?? null
+  return p => (p.intentId ? byIntent.get(p.intentId) : p.orderNumber ? byOrder.get(p.orderNumber) : null) ?? main
+}
+
+/** Sales plus the stores and each sale's store - the full report's data. */
+export async function loadBusinessReport(walletAddress: string | null | undefined): Promise<{ sales: MerchantPayment[]; stores: Store[]; storeOf: (p: MerchantPayment) => string | null }> {
+  const { listStores } = await import('./businessTeam')
+  const [sales, intents, stores] = await Promise.all([
+    loadBusinessSales(walletAddress),
+    listMyIntents(500).catch(() => [] as MerchantIntent[]),
+    listStores().catch(() => [] as Store[]),
+  ])
+  return { sales, stores, storeOf: storeOfSale(intents, stores) }
+}
+
 /** Who paid, as the Business tab names them. */
 export const salesCustomer = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc`
   : /^0x0{40}$/i.test(p.from) ? 'Bridge payment' : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
@@ -49,6 +73,8 @@ export interface SalesSummary {
   customersChange: number | null
   /** Busiest hour of day (0-23), null with no sales. */
   peakHour: number | null
+  /** Sales per hour of day (0-23). */
+  hours: number[]
   topCustomers: { name: string; total: number; count: number }[]
   chains: { chain: string; total: number; share: number }[]
 }
@@ -79,7 +105,8 @@ export function summarizeSales(sales: MerchantPayment[], from: number, to: numbe
     countChange: change(list.length, prev.length),
     customersChange: change(buyers(list), buyers(prev)),
     peakHour: total > 0 ? peak : null,
-    topCustomers: group(salesCustomer).slice(0, 3).map(([name, v]) => ({ name, ...v })),
+    hours,
+    topCustomers: group(salesCustomer).slice(0, 5).map(([name, v]) => ({ name, ...v })),
     chains: group(p => p.chain).map(([chain, v]) => ({ chain, total: v.total, share: total ? v.total / total : 0 })),
   }
 }
