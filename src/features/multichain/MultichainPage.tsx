@@ -27,12 +27,13 @@ import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplo
 import { readExternalBalances, readExternalChainBalance, refreshScope, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useSharedKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { ChainScanner } from '@/components/ui/ChainScanner'
 import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpinner'
 import { DesktopHistoryPanel } from '@/components/ui/DesktopHistoryPanel'
+import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { HubPage, HubPageBack } from '@/components/multichain/HubPage'
 import { TrackedMove, type TrackedMoveInfo } from '@/components/multichain/TrackedMove'
 import { fetchCctpProgress } from '@/lib/cctpTracker'
@@ -881,9 +882,6 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
 
   // Hub Activity list (status chips + rows). Mobile: the Activity tab.
   // Desktop: always visible in the right column, like Swap/Pay history.
-  // Desktop: a Track Progress view opens in the right-hand panel (HubPage)
-  // like the Transfer / Bring steps; on a phone it stays in place.
-  const inTrackPanel = (node: React.ReactNode) => <HubPage open>{node}</HubPage>
   const renderActivity = (inPanel: boolean) => (
         <div style={inPanel ? { padding: 12 } : undefined}>
 
@@ -1143,15 +1141,17 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
         {/* A running move tapped in Activity opens the same progress page the
             flow itself shows, as a page of its own: on a phone it slides in
             full screen over the Hub (Back returns to Activity), on desktop
-            it opens in the right-hand panel. */}
-        {trackCctp && inTrackPanel((
-          <div style={{ padding: '0 12px 12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+            it opens in the right-hand panel. Always rendered (HubPage owns
+            its AnimatePresence), so closing animates too - the page leaving
+            keeps showing what it showed. */}
+        <HubPage open={!!trackCctp}>
+          {trackCctp && <div style={{ padding: '0 12px 12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
             <TrackedMove key={trackCctp.id} info={trackedInfo(trackCctp, arrived[trackCctp.id])} backIcon={isDesktop ? 'close' : 'back'}
               onClose={() => { setTrackCctp(null); if (!isDesktop) setHubTab('activity') }}
               onViewHub={() => { setTrackCctp(null); setHubTab('activity') }}
               onArrived={mint => markArrived(trackCctp.id, mint)} />
-          </div>
-        ))}
+          </div>}
+        </HubPage>
 
         {hubTab === 'transfer' && (!trackCctp || isDesktop) && (
           <div style={{ margin: '0 -12px', minHeight: flowFocused ? '100dvh' : undefined }}>
@@ -1161,21 +1161,21 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
           </div>
         )}
 
-        {!trackCctp && trackUb && inTrackPanel((
-          <div style={{ padding: '0 12px 12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+        <HubPage open={!trackCctp && !!trackUb}>
+          {trackUb && <div style={{ padding: '0 12px 12px', minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
             <TrackedMove key={trackUb.id} info={trackedInfo(trackUb)} backIcon={isDesktop ? 'close' : 'back'}
               onClose={() => { setTrackUb(null); if (!isDesktop) setHubTab('activity') }}
               onViewHub={() => { setTrackUb(null); setHubTab('activity') }} />
-          </div>
-        ))}
+          </div>}
+        </HubPage>
 
-        {!trackCctp && !trackUb && trackClaim && inTrackPanel((
-          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <HubPage open={!trackCctp && !trackUb && !!trackClaim}>
+          {trackClaim && <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <Suspense fallback={<InlineSpinner />}>
               <ClaimSheetBody key={`track-${trackClaim}`} embedded trackClaimId={trackClaim} onClose={closeTracking} merchantMode={isMerchant} />
             </Suspense>
-          </div>
-        ))}
+          </div>}
+        </HubPage>
 
         {/* The chosen chain's Bring flow opens as its own page over the chain
             list (phone: slides in full-screen; desktop: a panel on the right)
@@ -1315,9 +1315,10 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
 
         {hubTab === 'activity' && !isDesktop && renderActivity(false)}
       </div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
-      {/* ── Detail Sheet / Dialog ── */}
+      {/* ── Receipt popup (ReceiptPopup animates out inside AnimatePresence) ── */}
+      <AnimatePresence>
       {selectedItem && (() => {
         // Tapping a Hub history card reopens the same receipt a live
         // transfer/claim ends on (see ReceiptPopup). Incoming claims and
@@ -1390,13 +1391,14 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
           />
         )
       })()}
+      </AnimatePresence>
     </div>
   )
 
   if (!isDesktop || ledgerMode) return page
 
   // ── Desktop: Hub (left) + Multichain Activity (right), each scrolling on
-  // its own - same 65/35 layout as Swap and Pay.
+  // its own - the shared 65/35 layout (DesktopTwoColumn), as Swap and Pay.
   // While a move is processing (Transfer / Bring in the right-hand panel,
   // Recover, Claim All…), the Hub column's own controls don't respond: tabs,
   // Faucet, chain rows, hero toggles. Only the running flow's panel (its
@@ -1415,15 +1417,18 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
     e.stopPropagation()
   }
   return (
-    <div style={{ display: 'flex', flex: 1, height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box', background: 'var(--bg)' }}>
-      <div className={hubBusy ? 'mp-hub-busy' : undefined} aria-busy={hubBusy || undefined}
-        onClickCapture={holdWhileBusy} onPointerDownCapture={holdWhileBusy} onKeyDownCapture={holdWhileBusy}
-        style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{page}</div>
-      <div style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0 }}>
-        <DesktopHistoryPanel title={isMerchant ? 'Merchant Activity' : 'Multichain Activity'} onViewAll={() => navigate('/activity?filter=bridge')}>
-          {renderActivity(true)}
-        </DesktopHistoryPanel>
-      </div>
+    <div style={{ flex: 1, height: '100%', minHeight: 0, background: 'var(--bg)' }}>
+      <DesktopTwoColumn
+        main={
+          <div className={hubBusy ? 'mp-hub-busy' : undefined} aria-busy={hubBusy || undefined}
+            onClickCapture={holdWhileBusy} onPointerDownCapture={holdWhileBusy} onKeyDownCapture={holdWhileBusy}
+            style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>{page}</div>
+        }
+        side={
+          <DesktopHistoryPanel title={isMerchant ? 'Merchant Activity' : 'Multichain Activity'} onViewAll={() => navigate('/activity?filter=bridge')}>
+            {renderActivity(true)}
+          </DesktopHistoryPanel>
+        } />
     </div>
   )
 }
