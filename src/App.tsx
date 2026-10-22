@@ -1,5 +1,6 @@
 import { useState, useEffect, Suspense } from 'react'
 import { createBrowserRouter, RouterProvider, Navigate, useLocation } from 'react-router-dom'
+import { useBusinessTab } from './lib/merchant'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useAuthStore } from './store'
 import { markSplashDone } from './lib/splash'
@@ -100,6 +101,12 @@ function LegacyMultichainRedirect({ tab }: { tab: 'transfer' | 'bring' }) {
 // /pay/r/<code> → /paylink/r/<code>). Old links - already shared, sitting in
 // chat history or printed as QR codes - land on the new path, keeping their
 // ?to= / ?amount= query and any navigation state.
+// Rewards (daily tasks, points) is for personal accounts only - a business
+// account that lands here (an old link, a saved shortcut) goes to Business.
+function PersonalOnly({ children }: { children: React.ReactNode }) {
+  return useBusinessTab() ? <Navigate to="/business" replace /> : <>{children}</>
+}
+
 function RenamedPathRedirect({ from, to }: { from: string; to: string }) {
   const location = useLocation()
   const rest = location.pathname.slice(from.length)
@@ -474,7 +481,7 @@ const router = createBrowserRouter([
       { path: 'pay-send',                   element: <RenamedPathRedirect from="/pay-send" to="/pay" /> },
       { path: 'receive',                    element: <Unlocked title="Receive"><FeatureGate feature="receive_enabled"><ReceivePage /></FeatureGate></Unlocked> },
       { path: 'receive/requests',           element: <Unlocked title="Requests"><FeatureGate feature="receive_enabled"><MyRequestsPage /></FeatureGate></Unlocked> },
-      { path: 'rewards',                    element: <Unlocked title="Rewards"><FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate></Unlocked> },
+      { path: 'rewards',                    element: <Unlocked title="Rewards"><PersonalOnly><FeatureGate feature="rewards_enabled"><RewardsPage /></FeatureGate></PersonalOnly></Unlocked> },
       { path: 'business',                   element: <BusinessPage /> },
       { path: 'recent-paid',                element: <Unlocked title="Recent"><RecentPaidPage /></Unlocked> },
       { path: 'asset/:token',               element: <Unlocked title="Asset"><AssetPage /></Unlocked> },
