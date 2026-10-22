@@ -17,7 +17,7 @@ import { dueText } from '@/lib/businessBills'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
-  watchPayment, getPayment, orderLabel, orderKindOf, orderTitle, displayOrderNumber, expiryText, STATUS_LABEL, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type PaymentView,
+  watchPayment, getPayment, withLocalPayment, orderLabel, orderKindOf, orderTitle, displayOrderNumber, expiryText, STATUS_LABEL, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type PaymentView,
 } from '@/lib/merchantPay'
 
 const CHAIN_LABEL: Record<string, string> = {
@@ -83,7 +83,9 @@ export function prefetchPaymentView(code: string): Promise<void> {
 
 export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMine: boolean; text?: string }) {
   const [live, setLive] = useState<PaymentView | null>(() => cachedView(code))
-  const setV = (v: PaymentView) => { rememberView(code, v); setLive(v) }
+  // A payment made in this app counts at once (withLocalPayment); the
+  // server's own reading is what gets remembered.
+  const setV = (v: PaymentView) => { rememberView(code, v); setLive(withLocalPayment(v)) }
   const [open, setOpen] = useState(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => watchPayment(code, setV, 8000), [code])
@@ -92,7 +94,10 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
   // Refresh at once when this chat just paid the bill.
   useEffect(() => {
     const onUpdated = (e: Event) => {
-      if ((e as CustomEvent<string>).detail === code) getPayment(code).then(setV).catch(() => {})
+      const d = (e as CustomEvent<string | PaymentView | undefined>).detail
+      if (d && typeof d === 'object') { if (d.code === code) setV(d); return }
+      if (d === code) setLive(cur => cur ? withLocalPayment(cur) : cur)
+      if (d === code || d == null) getPayment(code).then(setV).catch(() => {})
     }
     window.addEventListener(BILL_UPDATED_EVENT, onUpdated)
     return () => window.removeEventListener(BILL_UPDATED_EVENT, onUpdated)

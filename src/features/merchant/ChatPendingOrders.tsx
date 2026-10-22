@@ -8,10 +8,10 @@
 // off on their own.
 import { useCallback, useEffect, useState } from 'react'
 import { ChevronDown, ChevronUp, Receipt } from 'lucide-react'
-import { useUIStore } from '@/store'
+import { useAuthStore, useUIStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
 import {
-  listChatPendingOrders, getPayment, orderLabel, orderKindOf, orderTitle, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type ChatPendingOrder,
+  listChatPendingOrders, getPayment, paidLocally, subscribeMerchantPayments, orderLabel, orderKindOf, orderTitle, BILL_PAY_EVENT, BILL_UPDATED_EVENT, type ChatPendingOrder,
 } from '@/lib/merchantPay'
 
 // Last known open orders per chat partner. The strip sits above the
@@ -58,18 +58,35 @@ export function ChatPendingOrders({ otherUserId, refreshKey }: { otherUserId: st
   useEffect(() => { setOrders((otherUserId && _pendingCache.get(otherUserId)) || []) }, [otherUserId])
 
   useEffect(() => { void load() }, [load, refreshKey])
+  // Re-read after a payment: at once, then again as the server confirms it.
+  const [, bump] = useState(0)
   useEffect(() => {
     const t = setInterval(() => { void load() }, 30_000)
-    const onUpdated = () => { void load(); setTimeout(() => { void load() }, 4000) }
+    const onUpdated = () => { bump(n => n + 1); void load(); setTimeout(() => { void load() }, 2500); setTimeout(() => { void load() }, 6000) }
     window.addEventListener(BILL_UPDATED_EVENT, onUpdated)
     return () => { clearInterval(t); window.removeEventListener(BILL_UPDATED_EVENT, onUpdated) }
   }, [load])
+  // The business's side: its orders change live (a customer's payment is
+  // confirmed) - refresh this strip and the chat's cards right away instead
+  // of waiting for the next check. Nothing arrives for a personal account.
+  const myWallet = useAuthStore(s => s.walletAddress)
+  useEffect(() => {
+    if (!myWallet || !otherUserId) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const stop = subscribeMerchantPayments(myWallet, () => {
+      if (timer) return
+      timer = setTimeout(() => { timer = null; window.dispatchEvent(new CustomEvent(BILL_UPDATED_EVENT)) }, 300)
+    })
+    return () => { if (timer) clearTimeout(timer); stop() }
+  }, [myWallet, otherUserId])
 
-  if (orders.length === 0) return null
+  // An order this app just paid leaves the strip at once (see notePaidLocally).
+  const shownOrders = orders.filter(o => !paidLocally(o.code) && o.received + 1e-6 < o.amount)
+  if (shownOrders.length === 0) return null
 
   const due = (o: ChatPendingOrder) => Math.max(0, Math.round((o.amount - o.received) * 1e6) / 1e6)
-  const totalDue = orders.reduce((s, o) => s + due(o), 0)
-  const iAmMerchant = orders.every(o => o.iAmMerchant)
+  const totalDue = shownOrders.reduce((s, o) => s + due(o), 0)
+  const iAmMerchant = shownOrders.every(o => o.iAmMerchant)
   const label = (o: ChatPendingOrder) => orderLabel({ code: o.code, orderNumber: o.orderNumber })
 
   const scrollTo = (o: ChatPendingOrder) => {
@@ -99,7 +116,7 @@ export function ChatPendingOrders({ otherUserId, refreshKey }: { otherUserId: st
           style={{ padding: '9px 12px', background: 'transparent', border: 'none', cursor: 'pointer' }}>
           <Receipt size={16} color="var(--warning)" style={{ flexShrink: 0 }} />
           <span className="flex-1 min-w-0 truncate" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-            {orders.length} pending {orders.length === 1 ? (orders[0].kind === 'invoice' ? 'bill' : 'request') : 'bills'}
+            {shownOrders.length} pending {shownOrders.length === 1 ? (shownOrders[0].kind === 'invoice' ? 'bill' : 'request') : 'bills'}
             <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
               {' · '}${formatAmount(totalDue)} USDC {iAmMerchant ? 'to receive' : 'due'}
             </span>
@@ -108,7 +125,7 @@ export function ChatPendingOrders({ otherUserId, refreshKey }: { otherUserId: st
         </button>
         {open && (
           <div style={{ borderTop: '1px solid var(--border)', maxHeight: 220, overflowY: 'auto' }}>
-            {orders.map(o => (
+            {shownOrders.map(o => (
               <div key={o.code} className="flex items-center gap-2" style={{ padding: '9px 12px', borderBottom: '1px solid color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
                 <button onClick={() => { if (!scrollTo(o) && !o.iAmMerchant) void pay(o) }} className="flex-1 min-w-0 text-left"
                   style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}>
