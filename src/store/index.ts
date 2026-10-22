@@ -424,7 +424,7 @@ export type NotificationType =
   // so they arrive for BOTH parties to a trade, on any device, even if the
   // recipient's tab wasn't open when the event happened.
   | 'buy_order_placed' | 'sell_order_placed' | 'payment_marked_completed' | 'funds_released'
-  | 'trade_cancelled' | 'trade_expired' | 'dispute_opened' | 'dispute_resolved' | 'refund_completed'
+  | 'trade_cancelled' | 'trade_expired' | 'dispute_opened' | 'dispute_resolved' | 'refund_completed' | 'release_failed'
 
 export interface AppNotification {
   id: string

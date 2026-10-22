@@ -1232,7 +1232,7 @@ function ActivityChartCard({ buckets, granularity, setGranularity, totalCount, p
 // is purely informational and already covered by the bell/toast (see
 // lib/p2pNotifications.ts) - showing those here too would turn Home into a
 // wall of banners for things the user doesn't need to act on right now.
-const HOME_POPUP_TYPES = new Set(['buy_order_placed', 'sell_order_placed', 'seller_confirmed', 'payment_marked_completed', 'trade_expiring_soon', 'grace_period_ending'])
+const HOME_POPUP_TYPES = new Set(['buy_order_placed', 'sell_order_placed', 'seller_confirmed', 'payment_marked_completed', 'trade_expiring_soon', 'grace_period_ending', 'release_failed'])
 // Every P2P notification type that can exist for a trade - used only to
 // find each trade's single latest event (see homePopups below); which of
 // those latest events actually renders a card is still governed by
@@ -1240,7 +1240,7 @@ const HOME_POPUP_TYPES = new Set(['buy_order_placed', 'sell_order_placed', 'sell
 const P2P_NOTIFICATION_TYPES = new Set([
   'buy_order_placed', 'sell_order_placed', 'seller_confirmed', 'payment_marked_completed', 'funds_released',
   'trade_cancelled', 'trade_expired', 'dispute_opened', 'dispute_resolved', 'refund_completed',
-  'trade_expiring_soon', 'grace_period_ending',
+  'trade_expiring_soon', 'grace_period_ending', 'release_failed',
 ])
 
 // ── Order ticker - single auto-rotating line, one order at a time ──────────
@@ -2404,7 +2404,7 @@ export function HomePage() {
       // where it was when it was sent).
       .map(n => {
         const live = n.tradeId ? tradeLiveById[n.tradeId] : undefined
-        const step = live && user?.id ? tradeStepCard(live, user.id) : null
+        const step = live && user?.id ? tradeStepCard(live, user.id, n.type as string) : null
         return step ? { ...n, ...step } : n
       })
     return [...tracked, ...untracked].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())

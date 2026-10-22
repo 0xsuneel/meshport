@@ -29,7 +29,7 @@ const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
 export type P2PNotificationType =
   | 'buy_order_placed' | 'sell_order_placed' | 'seller_confirmed' | 'payment_marked_completed' | 'funds_released'
   | 'trade_cancelled' | 'trade_expired' | 'dispute_opened' | 'dispute_resolved' | 'refund_completed'
-  | 'trade_expiring_soon' | 'grace_period_ending'
+  | 'trade_expiring_soon' | 'grace_period_ending' | 'release_failed'
 
 interface NotificationRow {
   id: string
@@ -167,5 +167,5 @@ export async function markAllP2PNotificationsReadOnServer(userId: string): Promi
 export const P2P_TYPES: Set<string> = new Set<P2PNotificationType>([
   'buy_order_placed', 'sell_order_placed', 'seller_confirmed', 'payment_marked_completed', 'funds_released',
   'trade_cancelled', 'trade_expired', 'dispute_opened', 'dispute_resolved', 'refund_completed',
-  'trade_expiring_soon', 'grace_period_ending',
+  'trade_expiring_soon', 'grace_period_ending', 'release_failed',
 ])
