@@ -19,7 +19,10 @@ import {
   listPayouts, savePayout, deletePayout, payoutTotal, markPayoutPaid,
   type BusinessPayout, type PayoutRecipient, type PayoutRepeat,
 } from '@/lib/businessPayouts'
-import { sanitizeAmountInput } from '@/components/ui/AmountKeypad'
+import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
+import { AmountChip } from '@/components/ui/AmountField'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DESKTOP_QUERY } from '@/lib/motion'
 import { BusinessScreen, ScreenLevel, useScreenLevel, PrimaryBtn, GhostBtn, Skeleton, Field, TextInput, ChipSelect } from './ui'
 import { usePasscodeGate } from './passcodeGate'
 import { unlockKey } from './settlement'
@@ -63,6 +66,16 @@ type Draft = { id?: string; name: string; repeat: PayoutRepeat; nextDue: string;
 const emptyDraft = (once = false): Draft => ({ name: once ? 'One-time payment' : '', repeat: once ? 'none' : 'monthly', nextDue: today(), rows: [] })
 // Pay is in dollars and cents: 2 decimals, like the totals.
 const amountInput = (v: string) => sanitizeAmountInput(v, 2).slice(0, 9)
+/** Keypad on a pre-filled amount: the first key typed starts a new amount
+ *  (480, then 5 → 5, not 4805); backspace still edits what's there. */
+const firstKeyReplaces = (fresh: { current: boolean }, before: string, next: string) => {
+  if (!fresh.current) return next
+  fresh.current = false
+  return next.length > before.length && next.startsWith(before) ? next.slice(before.length) : next
+}
+/** Phone: keep the row being edited in view above the keypad sheet. */
+const revealRow = (label: string) => requestAnimationFrame(() =>
+  document.querySelector(`[aria-label="${CSS.escape(label)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
 
 export function PayoutsScreen({ open, onBack }: { open: boolean; onBack: () => void }) {
   const toast = useUIStore(s => s.showToastMessage)
@@ -237,6 +250,11 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
   const [rows, setRows] = useState<RunRow[]>(initial.rows)
   const [phase, setPhase] = useState<Phase>({ kind: 'review' })
   useLeaveGuard(phase.kind === 'sending', 'Staff payment')
+  // Phone: a person's amount is entered on the app's AmountKeypad sheet.
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
+  const [padKey, setPadKey] = useState<string | null>(null)
+  const padRow = rows.find(r => r.key === padKey)
+  const padFresh = useRef(false)
 
   // Who each saved person is now (name, photo, wallet).
   useEffect(() => {
@@ -371,12 +389,9 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
                     {r.state === 'checking' ? 'Checking…' : r.state === 'missing' ? 'Account not found' : r.state === 'refused' ? r.why : [handle(r), r.label].filter(Boolean).join(' · ')}
                   </span>
                 </span>
-                <span className="shrink-0 flex items-center gap-0.5 rounded-xl border border-border bg-bg px-2 h-9">
-                  <span className="text-xs text-text-muted">$</span>
-                  <input inputMode="decimal" aria-label={`Amount for ${name(r)}`} value={r.amount} disabled={!r.on}
-                    onChange={e => setRow(r.key, { amount: amountInput(e.target.value) })}
-                    className="w-[64px] bg-transparent text-right text-[14px] font-semibold tabular-nums text-text-primary focus:outline-none disabled:text-text-muted" />
-                </span>
+                <AmountChip value={r.amount} ariaLabel={`Amount for ${name(r)}`} disabled={!r.on}
+                  onChange={v => setRow(r.key, { amount: amountInput(v) })}
+                  onTap={isDesktop ? undefined : () => { padFresh.current = true; setPadKey(r.key); revealRow(`Amount for ${name(r)}`) }} editing={padKey === r.key} />
               </div>
             ))}
           </div>
@@ -398,6 +413,10 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
       <BusinessScreen open={open} title={screen.title} onBack={screen.back} step={screen.step} footer={screen.footer} action={screen.action}>
         {screen.body}
       </BusinessScreen>
+      {!isDesktop && (
+        <AmountKeypad open={open && phase.kind === 'review' && !!padRow?.on} value={padRow?.amount ?? ''} token="USDC" decimals={2} showMax={false}
+          balance={balance} onChange={v => { if (padRow) setRow(padRow.key, { amount: amountInput(firstKeyReplaces(padFresh, padRow.amount, v)) }) }} onClose={() => setPadKey(null)} />
+      )}
       {gate.sheet}
     </>
   )
@@ -415,6 +434,11 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
   const [q, setQ] = useState('')
   const [found, setFound] = useState<DbUser[]>([])
   const [searching, setSearching] = useState(false)
+  // Phone: a person's amount is entered on the app's AmountKeypad sheet.
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
+  const [padIdx, setPadIdx] = useState<number | null>(null)
+  const padRow = padIdx != null ? draft.rows[padIdx] : undefined
+  const padFresh = useRef(false)
 
   // Saved people show their name and photo, not just what was typed.
   useEffect(() => {
@@ -465,6 +489,7 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
   const results = useMemo(() => found.filter(u => !has(u.username)).slice(0, 5), [found, draft.rows])
 
   return (
+    <>
     <BusinessScreen open={open} title={draft.id ? 'Edit pay group' : draft.repeat === 'none' && !draft.id ? 'Pay once' : 'New pay group'} onBack={() => onDone(null, false)} step="draft"
       footer={<div className="flex gap-2">
         <div className="flex-1"><GhostBtn disabled={busy || !canSave} onClick={() => save(false)}>Save</GhostBtn></div>
@@ -520,11 +545,9 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
                     <input value={r.label} onChange={e => setRow(i, { label: e.target.value.slice(0, 30) })} placeholder="Role (optional)" aria-label={`Role for ${r.name}`}
                       className="w-full bg-transparent text-xs text-text-secondary placeholder:text-text-muted focus:outline-none" />
                   </span>
-                  <span className="shrink-0 flex items-center gap-0.5 rounded-xl border border-border bg-bg px-2 h-9">
-                    <span className="text-xs text-text-muted">$</span>
-                    <input inputMode="decimal" value={r.amount} placeholder="0" aria-label={`Amount for ${r.name}`} onChange={e => setRow(i, { amount: amountInput(e.target.value) })}
-                      className="w-[60px] bg-transparent text-right text-[14px] font-semibold tabular-nums text-text-primary focus:outline-none" />
-                  </span>
+                  <AmountChip value={r.amount} ariaLabel={`Amount for ${r.name}`} onChange={v => setRow(i, { amount: amountInput(v) })}
+                    onTap={isDesktop ? undefined : () => { (document.activeElement as HTMLElement | null)?.blur?.(); padFresh.current = true; setPadIdx(i); revealRow(`Amount for ${r.name}`) }}
+                    editing={padIdx === i} />
                   <button type="button" aria-label={`Remove ${r.name}`} onClick={() => setDraft({ ...draft, rows: draft.rows.filter((_, j) => j !== i) })}
                     className="shrink-0 size-9 inline-flex items-center justify-center rounded-xl text-text-muted active:bg-border/30">
                     <Trash2 className="size-4" />
@@ -540,5 +563,10 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
         )}
       </div>
     </BusinessScreen>
+    {!isDesktop && (
+      <AmountKeypad open={open && !!padRow} value={padRow?.amount ?? ''} token="USDC" decimals={2} showMax={false}
+        onChange={v => { if (padIdx != null && padRow) setRow(padIdx, { amount: amountInput(firstKeyReplaces(padFresh, padRow.amount, v)) }) }} onClose={() => setPadIdx(null)} />
+    )}
+    </>
   )
 }
