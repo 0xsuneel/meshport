@@ -9,6 +9,7 @@
 //                claims, MeshPort pays the gas), live progress and history
 //
 // The UI kit in ./ui was designed with Arc Studio.
+import { useLatched } from '@/hooks/useLatched'
 import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -198,6 +199,7 @@ function OwnerBusinessPage() {
   // ── Date filter (Overview, Payments, Settlements) ─────────────────────
   const [periodSel, setPeriodSel] = useState(savedPeriod)
   const [rangeSheet, setRangeSheet] = useState<{ from: string; to: string } | null>(null)
+  const rangeShown = useLatched(rangeSheet)
   const choosePeriod = (v: { id: PeriodId; from: string; to: string }) => { setPeriodSel(v); savePeriod(v) }
   const period = useMemo(() => makePeriod(periodSel.id, periodSel), [periodSel])
   const periodRaw = useMemo(() => storeRaw.filter(p => inPeriod(p.createdAt, period)), [storeRaw, period])
@@ -262,6 +264,7 @@ function OwnerBusinessPage() {
   const [progressOpen, setProgressOpen] = useState(false)
   const [historyId, setHistoryId] = useState<string | null>(() => query.get('claim'))
   const [pin, setPin] = useState<{ kind: 'settle'; retry?: string[] } | { kind: 'one'; chainId: string } | { kind: 'refund' } | null>(null)
+  const pinShown = useLatched(pin)
   const [pinError, setPinError] = useState<string | undefined>()
   const [pinValue, setPinValue] = useState('')
   const askPin = (p: NonNullable<typeof pin>) => { setPinError(undefined); setPinValue(''); setPin(p) }
@@ -375,6 +378,10 @@ function OwnerBusinessPage() {
   const [refundAmount, setRefundAmount] = useState('')
   // What can still go back on the payment being refunded.
   const refundLeft = refundFor ? kept(refundFor) : 0
+  // What the refund / passcode / date sheets show while they slide away -
+  // reading the live values they went blank or changed title as they closed.
+  const refundShown = useLatched(refundFor)
+  const refundShownLeft = refundShown ? kept(refundShown) : 0
   const confirmRefund = () => {
     if (settle.needsPasscode) { askPin({ kind: 'refund' }); return }
     void runRefund()
@@ -631,33 +638,33 @@ function OwnerBusinessPage() {
           txUrl: explorerTxUrl(r.route === 'chain' ? r.chain : 'Arc_Testnet', r.txHash) ?? undefined }))}
         refundTotals={rawDetail && detailRefunds.length ? { refunded: money(refundedOf(rawDetail.id)), left: money(kept(rawDetail)) } : undefined} />
 
-      <RefundSheet open={!!refundFor} amount={refundFor ? money(refundLeft) : ''} customer={refundFor ? who(refundFor) : ''}
-        already={refundFor && refundedOf(refundFor.id) > 0 ? `${money(refundedOf(refundFor.id))} of ${money(refundFor.amount)} already refunded` : undefined}
+      <RefundSheet open={!!refundFor} amount={refundShown ? money(refundShownLeft) : ''} customer={refundShown ? who(refundShown) : ''}
+        already={refundShown && refundedOf(refundShown.id) > 0 ? `${money(refundedOf(refundShown.id))} of ${money(refundShown.amount)} already refunded` : undefined}
         reasons={REFUND_REASONS} reason={refundReason} onReason={setRefundReason} note={refundNote} onNote={setRefundNote}
-        value={refundAmount} onValue={setRefundAmount} max={refundFor ? refundLeft : undefined}
+        value={refundAmount} onValue={setRefundAmount} max={refundShown ? refundShownLeft : undefined}
         busy={refundBusy} error={refundError} onConfirm={confirmRefund} onClose={() => { if (!refundBusy) setRefundFor(null) }}
-        destinations={refundFor && refundFor.chain !== 'Arc_Testnet' ? [
-          { id: 'chain', label: `From ${chainLabel(refundFor.chain)}`,
-            hint: chainLeft === null ? `Checking your ${chainLabel(refundFor.chain)} balance…` : chainLeft >= (Number(refundAmount) || refundLeft)
+        destinations={refundShown && refundShown.chain !== 'Arc_Testnet' ? [
+          { id: 'chain', label: `From ${chainLabel(refundShown.chain)}`,
+            hint: chainLeft === null ? `Checking your ${chainLabel(refundShown.chain)} balance…` : chainLeft >= (Number(refundAmount) || refundShownLeft)
               ? `Your ${money(chainLeft)} there · back to their wallet` : `Only ${money(chainLeft)} left there (settled)` },
-          ...(canRefundOnChain(refundFor.chain) ? [{ id: 'origin', label: 'From Arc',
-            hint: `Your Arc balance · arrives on ${chainLabel(refundFor.chain)}` }] : []),
+          ...(canRefundOnChain(refundShown.chain) ? [{ id: 'origin', label: 'From Arc',
+            hint: `Your Arc balance · arrives on ${chainLabel(refundShown.chain)}` }] : []),
         ] : undefined}
         destination={refundDest}
-        onDestination={id => { if (id === 'chain' && refundFor && chainLeft !== null && chainLeft < (Number(refundAmount) || refundLeft)) return; setRefundDest(id as RefundRoute) }}
+        onDestination={id => { if (id === 'chain' && refundShown && chainLeft !== null && chainLeft < (Number(refundAmount) || refundShownLeft)) return; setRefundDest(id as RefundRoute) }}
         blocked={refundBlocked}
-        note2={refundFor && refundDest === 'chain' ? `Sent from your USDC on ${chainLabel(refundFor.chain)} - MeshPort pays the gas.`
-          : refundFor && refundDest === 'origin' ? `Sent from Arc to their wallet on ${chainLabel(refundFor.chain)} by CCTP - Circle's small fee is added on top.` : undefined} />
+        note2={refundShown && refundDest === 'chain' ? `Sent from your USDC on ${chainLabel(refundShown.chain)} - MeshPort pays the gas.`
+          : refundShown && refundDest === 'origin' ? `Sent from Arc to their wallet on ${chainLabel(refundShown.chain)} by CCTP - Circle's small fee is added on top.` : undefined} />
 
       <SettleProgressSheet open={progressOpen || !!historyClaim} running={progressOpen && settle.running} rows={progressRows}
         onClose={() => { setProgressOpen(false); setHistoryId(null) }}
         onRetryFailed={() => { if (failedIds.length) beginSettle(failedIds) }}
         onTrack={id => { const c = settle.run.find(r => r.id === id)?.claimId; if (c) { setProgressOpen(false); setHistoryId(c) } }} />
 
-      <PinSheet open={!!pin} title={pin?.kind === 'refund' ? 'Confirm refund' : 'Confirm settle'}
-        subtitle={pin?.kind === 'refund' ? `Send ${money(Number(refundAmount) || 0)} back to ${refundFor ? who(refundFor) : 'the customer'}`
-          : pin?.kind === 'one' ? `Move ${money((chains ?? []).find(c => c.id === pin.chainId)?.balance ?? 0)} from ${chainLabel(pin.chainId)} to Arc`
-          : `Move ${money(pin?.kind === 'settle' && pin.retry ? settle.run.filter(r => pin.retry!.includes(r.id)).reduce((s, r) => s + r.balance, 0) : settle.total)} to your Arc balance`}
+      <PinSheet open={!!pin} title={pinShown?.kind === 'refund' ? 'Confirm refund' : 'Confirm settle'}
+        subtitle={pinShown?.kind === 'refund' ? `Send ${money(Number(refundAmount) || 0)} back to ${refundShown ? who(refundShown) : 'the customer'}`
+          : pinShown?.kind === 'one' ? `Move ${money((chains ?? []).find(c => c.id === pinShown.chainId)?.balance ?? 0)} from ${chainLabel(pinShown.chainId)} to Arc`
+          : `Move ${money(pinShown?.kind === 'settle' && pinShown.retry ? settle.run.filter(r => pinShown.retry!.includes(r.id)).reduce((s, r) => s + r.balance, 0) : settle.total)} to your Arc balance`}
         value={pinValue} onChange={v => { setPinValue(v); setPinError(undefined) }}
         error={pinError} onComplete={code => { void onPin(code) }} onClose={() => setPin(null)} />
 
@@ -688,7 +695,7 @@ function OwnerBusinessPage() {
       ))}
 
 
-      <DateRangeSheet open={!!rangeSheet} from={rangeSheet?.from ?? ''} to={rangeSheet?.to ?? ''}
+      <DateRangeSheet open={!!rangeSheet} from={rangeShown?.from ?? ''} to={rangeShown?.to ?? ''}
         onFrom={v => setRangeSheet(r => r && { ...r, from: v })} onTo={v => setRangeSheet(r => r && { ...r, to: v })}
         presets={[{ id: '30', label: 'Last 30 days' }, { id: 'lastmonth', label: 'Last month' }, { id: 'year', label: 'This year' }]}
         onPreset={id => {

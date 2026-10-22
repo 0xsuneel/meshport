@@ -2,6 +2,7 @@
  * PaymentDetailSheet — bottom sheet with payment detail, timeline, and actions.
  * Supports received, to_settle, and refunded statuses.
  */
+import { useLatched } from '@/hooks/useLatched'
 import React from 'react'
 import { ExternalLink, ArrowDownToLine, RotateCcw, FileText, MessageCircle, Copy, ShieldAlert } from 'lucide-react'
 import type { Payment } from './types'
@@ -72,8 +73,10 @@ function RoundAction({ label, onClick, href, tone = 'brand', children }: {
 }
 
 export function PaymentDetailSheet({
-  payment, explorerUrl, onClose, onSettle, onRefund, onReceipt, refundNote, refunds = [], refundTotals, customer, onChat, store, wallet, onCopyWallet,
+  payment: paymentNow, explorerUrl, onClose, onSettle, onRefund, onReceipt, refundNote, refunds = [], refundTotals, customer, onChat, store, wallet, onCopyWallet,
 }: PaymentDetailSheetProps) {
+  // Still drawn while the sheet slides away (it went empty as it closed).
+  const payment = useLatched(paymentNow)
   const isRefunded = payment?.status === 'refunded'
   // Paid through a bridge: there's no paying wallet on that chain.
   const bridge = !!payment && /^0x0{4}…0{4}$/i.test(payment.from)
@@ -86,7 +89,7 @@ export function PaymentDetailSheet({
   ] : []
 
   return (
-    <Sheet open={!!payment} onClose={onClose}>
+    <Sheet open={!!paymentNow} onClose={onClose}>
       {payment && (
         <div className="flex flex-col gap-5 px-5 pb-6 pt-2 overflow-y-auto max-h-[88dvh]">
 

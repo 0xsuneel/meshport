@@ -12,7 +12,7 @@
 // flickers.
 import { motion } from 'framer-motion'
 import { createPortal } from 'react-dom'
-import { POPUP_CARD } from '@/lib/motion'
+import { POPUP_CARD, stableLayer } from '@/lib/motion'
 import { PopupDim } from './PopupDim'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 import { useBackLayer } from '@/lib/backLayers'
@@ -61,6 +61,7 @@ export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex =
         animate={POPUP_CARD.animate}
         exit={POPUP_CARD.exit}
         transition={POPUP_CARD.transition}
+        transformTemplate={stableLayer}
         // Its own compositor layer, so the grow animation never re-rasterizes the list inside.
         style={{ position: 'relative', width: '100%', maxWidth, maxHeight: '100%', overflowY: 'auto', overscrollBehavior: 'contain', willChange: 'transform, opacity', backfaceVisibility: 'hidden' }}
       >

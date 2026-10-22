@@ -6,6 +6,7 @@
 // My ads. USDC moves through the escrow contract on Arc; the fiat payment
 // happens between the two people, outside the app.
 
+import { useLatched } from '@/hooks/useLatched'
 import { SendIcon } from '@/components/ui/SendIcon'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { safeStorageUrl, openExternal } from '@/lib/safeUrl'
@@ -1222,6 +1223,8 @@ export function P2PTradePage() {
   // p2pProviders.ts) - both are on-chain-moving actions, so both are
   // gated the same way as offer create/cancel above.
   const [pendingAction, setPendingAction] = useState<'release' | 'cancel' | 'confirm' | null>(null)
+  // Its passcode sheet keeps its title while it slides away.
+  const actionShown = useLatched(pendingAction)
   const [passEntry, setPassEntry] = useState('')
   const [passError, setPassError] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -1895,10 +1898,10 @@ export function P2PTradePage() {
       </AnimatePresence>
 
       <PinSheet open={!!pendingAction} id="p2p-pass"
-        title={storedPasscode ? 'Enter Passcode' : (pendingAction === 'release' ? 'Confirm Release' : pendingAction === 'confirm' ? 'Confirm Trade' : 'Confirm Cancel')}
-        subtitle={pendingAction === 'release'
+        title={storedPasscode ? 'Enter Passcode' : (actionShown === 'release' ? 'Confirm Release' : actionShown === 'confirm' ? 'Confirm Trade' : 'Confirm Cancel')}
+        subtitle={actionShown === 'release'
           ? <>Release {trade.amountUsdc} USDC from escrow to the buyer</>
-          : pendingAction === 'confirm'
+          : actionShown === 'confirm'
           ? <>Register this trade on-chain so the buyer can pay</>
           : !isBuyer
           ? <>Only cancel if you have <strong>not</strong> received payment. If the buyer has already paid, cancelling takes their money — open a dispute instead. Escrowed USDC returns to you.</>
@@ -1906,7 +1909,7 @@ export function P2PTradePage() {
         value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }}
         error={passError || undefined}
         onComplete={() => { void handlePasscodeConfirm() }}
-        fallbackConfirm={storedPasscode ? undefined : { label: pendingAction === 'release' ? 'Confirm Release' : pendingAction === 'confirm' ? 'Confirm Trade' : 'Confirm Cancel', onConfirm: () => { void handlePasscodeConfirm() } }}
+        fallbackConfirm={storedPasscode ? undefined : { label: actionShown === 'release' ? 'Confirm Release' : actionShown === 'confirm' ? 'Confirm Trade' : 'Confirm Cancel', onConfirm: () => { void handlePasscodeConfirm() } }}
         onClose={() => { setPendingAction(null); setPassEntry(''); setPassError('') }}
       />
       <ProcessingFlipCard {...flipState} onDismiss={dismissFlip} />
@@ -1927,6 +1930,10 @@ export function P2PMyOffersPage() {
   const [loading, setLoading] = useState(() => !myOffersCache.has(user?.id ?? ''))
   const [cancelling, setCancelling] = useState(false)
   const [offerToCancel, setOfferToCancel] = useState<P2POffer | null>(null)
+  // The offer the cancel sheet shows - kept while it slides away. (Reading
+  // offerToCancel.offerType here crashed My Ads whenever nothing was being
+  // cancelled.)
+  const cancelShown = useLatched(offerToCancel)
   const [passEntry, setPassEntry] = useState('')
   const [passError, setPassError] = useState('')
 
@@ -2392,7 +2399,7 @@ export function P2PMyOffersPage() {
 
       <PinSheet open={!!offerToCancel} id="p2p-pass"
         title={storedPasscode ? 'Enter Passcode' : 'Confirm Cancel'}
-        subtitle={offerToCancel.offerType === 'sell'
+        subtitle={cancelShown?.offerType === 'sell'
           ? <>Cancel offer and return escrowed USDC to your wallet</>
           : <>Cancel this buy offer</>}
         value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }}
