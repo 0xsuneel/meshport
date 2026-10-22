@@ -10,7 +10,7 @@ import { flushSync, createPortal } from 'react-dom'
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
 import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
 import { useMotionValue, animate, motion, AnimatePresence } from 'framer-motion'
-import { MOBILE_TAB_FADE_TRANSITION, EASE_OUT } from '@/lib/motion'
+import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { parseUnits } from 'viem'
 import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
@@ -98,15 +98,16 @@ function aggregateBuckets(records: ActivityRecord[], spanDays: number, granulari
 }
 
 // ── My QR - Home screen card, below Assets ──────────────────────────────────
-const QR_REVEAL = { duration: 0.45, ease: EASE_OUT }
 // Same qrcode lib + encoding choice as ReceivePage.tsx: encodes the raw
 // wallet address (not the pay link) so external wallets that scan it treat
 // it as "send to this address" rather than opening a browser link.
 const APP_URL = 'https://meshport.xyz'
 
-function MyQrCard({ walletAddress, username, scrollContainerRef }: { walletAddress: string | null; username: string | null; scrollContainerRef: RefObject<HTMLDivElement> }) {
+function MyQrCard({ walletAddress, username, scrollContainerRef, assetsCardRef }: { walletAddress: string | null; username: string | null; scrollContainerRef: RefObject<HTMLDivElement>; assetsCardRef: RefObject<HTMLDivElement> }) {
   const displayName = useAuthStore(s => s.user?.displayName)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const ghostRef = useRef<HTMLCanvasElement>(null)
+  const scanLineRef = useRef<HTMLDivElement>(null)
   const cardRef = useRef<HTMLDivElement>(null)
   const [qrReady, setQrReady] = useState(false)
   const [qrError, setQrError] = useState(false)
@@ -181,29 +182,71 @@ function MyQrCard({ walletAddress, username, scrollContainerRef }: { walletAddre
     return () => clearTimeout(timer)
   }, [activeAmount])
 
-  // Reveal: the card eases in once (fade + a small rise and grow) the first
-  // time it scrolls into view, then stays. It used to be resized on every
-  // scroll event from layout reads on the main thread and switched its
-  // opacity straight from 0 to 1 - on phones the scroll stuttered and the
-  // card popped in and out.
-  const [revealed, setRevealed] = useState(false)
+  // Reveal, scrubbed by the scroll: the card grows from 40% to full size from
+  // its top edge as the space under Assets opens up (how much of its natural
+  // height fits there), and shrinks back as you scroll up. Meanwhile a teal
+  // line scans down the code: above it the code is printed, below it a faint
+  // teal copy waits. Positions are measured once (and again when anything
+  // resizes), so a scroll only does arithmetic and a few style writes, once
+  // per frame - no layout reads while scrolling.
   useEffect(() => {
-    const card = cardRef.current
-    if (!card || revealed) return
-    if (typeof IntersectionObserver === 'undefined') { setRevealed(true); return }
-    const io = new IntersectionObserver(entries => {
-      if (entries.some(e => e.isIntersecting)) { setRevealed(true); io.disconnect() }
-    }, { root: scrollContainerRef.current, threshold: 0.15 })
-    io.observe(card)
-    return () => io.disconnect()
-  }, [scrollContainerRef, revealed])
+    const container = scrollContainerRef.current, assets = assetsCardRef.current, card = cardRef.current
+    if (!container || !assets || !card) return
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    let assetsBottom = 0, cardH = 1, viewH = 0, frame = 0
+    const measure = () => {
+      const c = container.getBoundingClientRect()
+      assetsBottom = assets.getBoundingClientRect().bottom - c.top + container.scrollTop
+      cardH = card.offsetHeight || 1
+      viewH = c.height
+    }
+    const apply = () => {
+      frame = 0
+      const p = still ? 1 : Math.min(1, Math.max(0, (container.scrollTop + viewH - assetsBottom) / cardH))
+      card.style.transform = `scale(${(0.4 + 0.6 * p).toFixed(4)})`
+      card.style.opacity = Math.min(1, p * 6).toFixed(3)
+      // The scan runs from just above the code (-7%) to just below it (107%).
+      const f = Math.min(1, Math.max(0, (p - 0.08) / 0.92)) * 1.14 - 0.07
+      const at = Math.min(1, Math.max(0, f))
+      if (canvasRef.current) canvasRef.current.style.clipPath = `inset(0 0 ${((1 - at) * 100).toFixed(2)}% 0)`
+      if (ghostRef.current) ghostRef.current.style.clipPath = `inset(${(at * 100).toFixed(2)}% 0 0 0)`
+      const line = scanLineRef.current
+      if (line) {
+        line.style.top = `${(f * 100).toFixed(2)}%`
+        line.style.opacity = (p <= 0 || f >= 1.06 ? 0 : Math.min(1, (1.06 - f) / 0.1)).toFixed(3)
+      }
+    }
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(apply) }
+    const ro = new ResizeObserver(() => { measure(); apply() })
+    ro.observe(container); ro.observe(assets); ro.observe(card)
+    if (container.firstElementChild) ro.observe(container.firstElementChild)
+    measure(); apply()
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => { container.removeEventListener('scroll', onScroll); ro.disconnect(); if (frame) cancelAnimationFrame(frame) }
+  }, [scrollContainerRef, assetsCardRef, qrReady])
 
   useEffect(() => {
     if (!qrData || !canvasRef.current) return
     setQrReady(false)
     setQrError(false)
-    drawMeshportQr(canvasRef.current, qrData, 232)
-      .then(() => setQrReady(true))
+    const canvas = canvasRef.current
+    drawMeshportQr(canvas, qrData, 232)
+      .then(() => {
+        // The scan's "not printed yet" copy: the same code in faint teal on
+        // a clear background.
+        const ghost = ghostRef.current, src = canvas.getContext('2d')
+        if (ghost && src) {
+          ghost.width = canvas.width; ghost.height = canvas.height
+          ghost.style.width = canvas.style.width; ghost.style.height = canvas.style.height
+          const img = src.getImageData(0, 0, canvas.width, canvas.height), d = img.data
+          for (let i = 0; i < d.length; i += 4) {
+            const dark = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11 < 160
+            d[i] = 83; d[i + 1] = 198; d[i + 2] = 188; d[i + 3] = dark ? 80 : 0
+          }
+          ghost.getContext('2d')?.putImageData(img, 0, 0)
+        }
+        setQrReady(true)
+      })
       .catch(() => setQrError(true))
   }, [qrData])
 
@@ -311,14 +354,12 @@ function MyQrCard({ walletAddress, username, scrollContainerRef }: { walletAddre
   if (!walletAddress) return null
 
   return (
-    <motion.div
+    <div
       ref={cardRef}
-      initial={false}
-      animate={revealed ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 16, scale: 0.96 }}
-      transition={QR_REVEAL}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
         width: '95%', margin: '0 auto', boxSizing: 'border-box', transformOrigin: 'top center',
+        willChange: 'transform, opacity',
       }}>
       {activeAmount && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%' }}>
         <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -345,7 +386,15 @@ function MyQrCard({ walletAddress, username, scrollContainerRef }: { walletAddre
             {handle && <QrInfoBox label="Username" value={`${handle}.arc`} onCopy={() => void copyBox(`${handle}.arc`, 'username')} copied={copiedBox === 'username'} />}
             <QrInfoBox label="Address" value={`${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`} onCopy={() => void copyBox(walletAddress, 'address')} copied={copiedBox === 'address'} />
           </div>}>
-          <canvas ref={canvasRef} style={{ display: 'block', opacity: qrReady ? 1 : 0, transition: 'opacity 0.2s ease-out' }} />
+          <div style={{ position: 'relative', lineHeight: 0, opacity: qrReady ? 1 : 0, transition: 'opacity 0.2s ease-out' }}>
+            <canvas ref={canvasRef} style={{ display: 'block' }} />
+            <canvas ref={ghostRef} aria-hidden style={{ position: 'absolute', left: 0, top: 0, display: 'block', pointerEvents: 'none' }} />
+            {/* The scan line: a soft teal trail above a bright edge. */}
+            <div ref={scanLineRef} aria-hidden style={{ position: 'absolute', left: '-6%', right: '-6%', height: 22, transform: 'translateY(-100%)', pointerEvents: 'none', opacity: 0,
+              background: 'linear-gradient(to bottom, rgb(var(--brand-text-rgb) / 0), rgb(var(--brand-text-rgb) / 0.35))' }}>
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: -1, height: 2.2, borderRadius: 2, background: 'var(--brand-text)', boxShadow: '0 0 10px 1px rgb(var(--brand-text-rgb) / 0.9)' }} />
+            </div>
+          </div>
         </QrCard>
       )}
 
@@ -370,7 +419,7 @@ function MyQrCard({ walletAddress, username, scrollContainerRef }: { walletAddre
           </button>
         ))}
       </div>
-    </motion.div>
+    </div>
   )
 }
 
@@ -2432,8 +2481,10 @@ export function HomePage() {
   const [selectedActivity, setSelectedActivity] = useState<ActivityRecord | null>(null)
   const recentFlash = useReturnFlash()
   // Home's real scroll container (below) is its own overflowY:'auto' div,
-  // not the window - MyQrCard watches its card scroll into view inside it.
+  // not the window - MyQrCard's scroll-linked reveal measures against it.
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  // The Assets card: the QR grows into the space that opens up under it.
+  const assetsCardRef = useRef<HTMLDivElement>(null)
   const stickyHeaderRef = useRef<HTMLDivElement>(null)
 
   // CHANGE 1: More sheet state
@@ -3860,7 +3911,7 @@ export function HomePage() {
         {!accountLock.locked && <RecentNewsRow navigate={navigate} />}
 
         {/* ── ASSETS - all 3 tokens ────────────────────────────────────────── */}
-        <div>
+        <div ref={assetsCardRef}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: isDesktop ? 6 : 12 }}>
             <span style={{ fontSize: 16, fontWeight: 700 }}>Assets</span>
             {!accountLock.locked && <button onClick={handleFaucet}
@@ -3925,7 +3976,7 @@ export function HomePage() {
         {isDesktop && <BiometricFooterRow isDesktop />}
 
         {/* ── MY QR - below Assets card. Mobile only. ─────────────────────── */}
-        {!isDesktop && !accountLock.locked && <MyQrCard walletAddress={walletAddress} username={username} scrollContainerRef={scrollContainerRef} />}
+        {!isDesktop && !accountLock.locked && <MyQrCard walletAddress={walletAddress} username={username} scrollContainerRef={scrollContainerRef} assetsCardRef={assetsCardRef} />}
         {/* ── Biometric row - mobile: right below the QR card. ─────────────── */}
         {!isDesktop && <BiometricFooterRow isDesktop={false} />}
         </div>
