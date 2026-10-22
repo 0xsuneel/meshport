@@ -174,7 +174,7 @@ export {
   displayOrderNumber, shortOrderNumber, orderKindOf, orderTitle, PAYMENT_ORDER_TAG, paymentOrderTag, parsePaymentOrderTag,
   paidTitleFromTag, orderCardPreview, shopFrom, type OrderKind,
 } from './orderLabels'
-import { displayOrderNumber } from './orderLabels'
+import { displayOrderNumber, orderKindOf, type OrderKind } from './orderLabels'
 export const orderDisplay = (v: { code: string; orderNumber?: string | null }) => displayOrderNumber(orderLabel(v))
 
 /**
@@ -286,6 +286,8 @@ export type MerchantPayment = {
   late?: boolean
   /** Sender failed screening: 'usdc_blocklisted' (USDC's blocklist), 'sanctions', 'frozen' or 'high_risk' (Circle Compliance). */
   screenFlag?: string | null
+  /** What its order was (bill, request, Shop QR), when known. */
+  orderKind?: OrderKind | null
 }
 
 /** A direct deposit that matched more than one open order - the merchant picks. */
@@ -440,7 +442,7 @@ export async function listMyPayments(limit = 500): Promise<MerchantPayment[]> {
   const uid = await myAuthUid()
   if (!uid) return []
   // Payments on my own orders (mp_select_own), via the intent_id foreign key.
-  const { data } = await supabase.from('merchant_payments').select('*, merchant_payment_intents!inner(merchant_auth_uid)')
+  const { data } = await supabase.from('merchant_payments').select('*, merchant_payment_intents!inner(merchant_auth_uid, kind, via, personal)')
     .eq('merchant_payment_intents.merchant_auth_uid', uid).order('created_at', { ascending: false }).limit(limit)
   return (data ?? []).map(mapPayment)
 }
@@ -451,6 +453,7 @@ function mapPayment(r: any): MerchantPayment {
     method: r.method, status: r.status, customerUsername: r.customer_username, createdAt: r.created_at,
     orderNumber: r.order_number ?? null, matchedBy: r.matched_by ?? null,
     late: r.late === true, screenFlag: r.screen_flag ?? null,
+    orderKind: r.merchant_payment_intents ? orderKindOf(r.merchant_payment_intents) : null,
   }
 }
 
