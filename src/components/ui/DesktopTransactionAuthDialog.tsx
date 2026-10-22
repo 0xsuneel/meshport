@@ -22,7 +22,7 @@ import { useBackLayer } from '@/lib/backLayers'
 import { HUB_PANEL_WIDTH } from '@/components/multichain/HubPage'
 
 export function DesktopTransactionAuthDialog({
-  onClose, title, amountLabel, subLabel, accent = 'var(--brand)', maxWidth = 420, placement = 'center', panelWidth = HUB_PANEL_WIDTH, anchor, instantExit = false, backClose = true, children,
+  onClose, title, amountLabel, subLabel, accent = 'var(--brand)', maxWidth = 420, placement = 'center', panelWidth = HUB_PANEL_WIDTH, anchor, instantExit = false, backClose = true, zIndex = 100, children,
 }: {
   onClose: () => void
   title: string
@@ -47,6 +47,8 @@ export function DesktopTransactionAuthDialog({
   instantExit?: boolean
   /** Phone / browser Back closes it (default). */
   backClose?: boolean
+  /** Stacking order (default 100); raise it over a popup that stays open. */
+  zIndex?: number
   children: ReactNode
 }) {
   usePopupOpen()
@@ -65,7 +67,7 @@ export function DesktopTransactionAuthDialog({
       // A portal still delivers events to its React ancestors: stop them so
       // a click here can't also trigger the page's own handlers.
       onClick={e => { e.stopPropagation(); onClose() }}
-      style={{ position: 'fixed', inset: 0, zIndex: 100 }}
+      style={{ position: 'fixed', inset: 0, zIndex }}
     >
       {/* A plain dim, no backdrop blur - see usePopupOpen. Only the dim fades (PopupDim). */}
       <PopupDim background="rgba(0,0,0,0.6)" />

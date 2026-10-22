@@ -7,7 +7,7 @@ import { ActionIcon } from '@/components/ui/ActionIcon'
 import { TokenLogo } from '@/components/ui/TokenLogo'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { PopupOpen } from '@/hooks/usePopupOpen'
-import { SHEET_BACKDROP, SHEET_DIM, DIALOG_CARD, SNACKBAR_MOTION, DIALOG_BACKDROP, MENU_MOTION, PAGE_TRANSITION, PUSH_BACK_MS } from '@/lib/motion'
+import { SHEET_BACKDROP, SHEET_DIM, DIALOG_CARD, SNACKBAR_MOTION, DIALOG_BACKDROP, MENU_MOTION, PAGE_TRANSITION, PUSH_BACK_MS, DESKTOP_FADE_TRANSITION } from '@/lib/motion'
 import { _plainByContent, plainTextOf, messagePreview, parseMedia, isDecryptFailure, splitCaption } from './chatMessageText'
 import { ARC_EXPLORER, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { ChatForwardSheet, chatPushMotion } from './ChatForwardSheet'
@@ -21,7 +21,7 @@ import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { SearchField } from '@/components/ui/SearchField'
 import { readPeople, writePeople } from '@/lib/peopleCache'
-import { Search, ArrowLeft, CheckCheck, Paperclip, Image, FileText, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, Trash2, Archive, ArchiveRestore, MessageCirclePlus, ArrowDownToLine, Users, UserPlus, Globe, Clock, Receipt } from 'lucide-react'
+import { Search, ArrowLeft, CheckCheck, Paperclip, Image, FileText, File, X, ArrowUpRight, ArrowDownLeft, CheckCircle, Loader2, Trash2, Archive, ArchiveRestore, MessageCirclePlus, Users, UserPlus, Globe, Clock, Receipt } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { Avatar } from '@/components/ui/Avatar'
@@ -1734,7 +1734,9 @@ const MessageBubble = memo(function MessageBubble({
       <div ref={swipeRef}>
       {isPayment ? (
         <div className={`flex ${isMine ? 'justify-end' : 'justify-start'} my-1.5`}>
-          {receiptOpen && <ChatPaymentReceipt msg={msg} sent={isMine} peer={`${recipientClean}.arc`} onClose={() => setReceiptOpen(false)} />}
+          <AnimatePresence>
+            {receiptOpen && <ChatPaymentReceipt key="receipt" msg={msg} sent={isMine} peer={`${recipientClean}.arc`} onClose={() => setReceiptOpen(false)} />}
+          </AnimatePresence>
           {/* Colour-band payment card: the amount on a bold band (teal = paid
               out, green = money in), details on a strip below. Same footprint
               as before; the explorer link lives in the receipt this opens. */}
@@ -5244,7 +5246,7 @@ export function ChatConversationPage() {
             <div aria-hidden onClick={() => setShowAttach(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
             <motion.div key="plus-menu" role="menu" aria-label="Pay, request or attach"
               initial={{ opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.97 }}
-              transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
+              transition={MENU_MOTION.transition}
               style={{ position: 'absolute', left: 12, bottom: 'calc(100% + 6px)', zIndex: 41, width: 230, transformOrigin: 'bottom left',
                 padding: 6, borderRadius: 20, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 14px 32px rgba(0,0,0,0.38)' }}>
               {[
@@ -5439,7 +5441,8 @@ export function ChatConversationPage() {
           )
           return (
             <motion.div key="chat-info" role="dialog" aria-label="Contact info"
-              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ duration: 0.24, ease: [0.32, 0.72, 0, 1] }}
+              // A page push on phones; the desktop fade in the side panel.
+              {...chatPushMotion(isDesktop)}
               className="bg-bg"
               // Desktop: a panel on the right of the conversation (like
               // WhatsApp), the chat list and messages stay in view.
@@ -5456,10 +5459,12 @@ export function ChatConversationPage() {
         })()}
       </AnimatePresence>
 
-      {historyReceipt && (
-        <ChatPaymentReceipt msg={historyReceipt} sent={historyReceipt.sender_id === user?.id}
-          peer={`${recipientClean}.arc`} onClose={() => setHistoryReceipt(null)} />
-      )}
+      <AnimatePresence>
+        {historyReceipt && (
+          <ChatPaymentReceipt key="history-receipt" msg={historyReceipt} sent={historyReceipt.sender_id === user?.id}
+            peer={`${recipientClean}.arc`} onClose={() => setHistoryReceipt(null)} />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showHistory && (() => {
@@ -5514,7 +5519,7 @@ export function ChatConversationPage() {
           )
           return (
             <motion.div key="chat-history" role="dialog" aria-label="Transaction History"
-              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ duration: 0.24, ease: [0.32, 0.72, 0, 1] }}
+              {...chatPushMotion(isDesktop)}
               className="bg-bg"
               style={isDesktop ? { ...CHAT_SIDE_PANEL, zIndex: 61 } : { position: 'fixed', inset: 0, zIndex: 61, display: 'flex', flexDirection: 'column' }}>
               {historyHeader}
@@ -5527,19 +5532,18 @@ export function ChatConversationPage() {
       </AnimatePresence>
 
       {/* In-Chat Payment Modal - STEP 1: Amount entry form */}
-      {/* Chat pay (phone): ONE dim behind both pay sheets, so it doesn't fade
-          out and back in between them, and no backdrop blur (Android
-          re-blurs it every frame of a fade - the flicker). While paying,
-          the chat's own header blur is off too. */}
+      {/* Chat pay (phone): the amount and passcode steps are the app's bottom
+          sheets (each with its own dim); processing and the receipt get the
+          sheet dim behind their centred card - no backdrop blur (Android
+          re-blurs it every frame of a fade - the flicker). While paying, the
+          chat's own header blur is off too. */}
       {payStep !== 'closed' && <PopupOpen />}
       <AnimatePresence>
-        {!isDesktop && payStep !== 'closed' && (
-          <motion.div key="chat-pay-dim" transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/70 z-40"
+        {!isDesktop && (payStep === 'processing' || payStep === 'success') && (
+          <motion.div key="chat-pay-dim" {...SHEET_BACKDROP}
+            className="absolute inset-0 z-40" style={{ background: SHEET_DIM }}
             onClick={() => {
-              if (payStep === 'form') { setPayStep('closed'); setPayPassEntry(''); setShowAmountPad(false) }
-              else if (payStep === 'confirm') { setPayStep('closed'); setPayPassEntry('') }
-              else if (payStep === 'success') { setPayStep('closed'); setMessagesReady(true); setTimeout(() => scrollToBottom(false), 50) }
+              if (payStep === 'success') { setPayStep('closed'); setMessagesReady(true); setTimeout(() => scrollToBottom(false), 50) }
             }} />
         )}
       </AnimatePresence>
@@ -5598,44 +5602,55 @@ export function ChatConversationPage() {
         </div>
       </ActionSheet>
 
-      {/* In-Chat Payment Modal - STEP 2: Review + PIN confirm (separate full-height
-          sheet so the PIN keypad always has room and is never pushed off-screen) */}
+      {/* In-Chat Payment Modal - STEP 2: the passcode step (PinSheet). Phone:
+          the app's passcode sheet in the chat, with the Review card on top.
+          Desktop: the authorize dialog in the pay drawer's column (its own
+          amount + recipient summary stands in for the Review card), over the
+          amount drawer, which stays up underneath. Back is left to the page. */}
+      <PinSheet
+        open={payStep === 'confirm'}
+        // Phone: closes the pay flow; desktop: back to the amount drawer.
+        onClose={isDesktop ? () => { setPayStep('form'); setPayPassEntry('') } : () => { setPayStep('closed'); setPayPassEntry('') }}
+        id="chat-pay-pin"
+        inPanel
+        backClose={false}
+        title="Authorize Payment"
+        subtitle={isDesktop ? `To ${recipientClean}.arc` : 'Enter passcode to confirm'}
+        value={payPassEntry}
+        onChange={v => setPayPassEntry(v)}
+        error={payError || undefined}
+        onComplete={(_, viaBiometric) => { setPayViaBiometric(!!viaBiometric); executeChatPayment() }}
+        header={isDesktop ? undefined : (
+          <div className="mb-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold text-text-primary">Review Payment</h2>
+              <button onClick={() => setPayStep('form')} aria-label="Back to amount" className="p-2 rounded-full hover:bg-[rgb(var(--text-primary-rgb)/0.10)] text-text-secondary"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="bg-surface rounded-2xl border border-border mt-2">
+              <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Recipient</span><span className="text-sm font-semibold text-link">{recipientClean}.arc</span></div>
+              {billPay && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">{billPay.kind === 'bill' ? 'Bill' : billPay.kind === 'merchant_request' ? 'Requested Payment' : billPay.kind === 'shop' ? 'Payment' : 'Request'}</span><span className="text-sm font-semibold text-text-primary">{displayOrderNumber(billPay.number)}</span></div>}
+              <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Amount</span><span className="text-sm font-bold text-text-primary">{formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} {payToken}</span></div>
+              <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Network Fee</span><span className="text-sm font-semibold text-success">{payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free'}</span></div>
+              {payNote && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Note</span><span className="text-sm text-text-primary truncate max-w-[60%]">{payNote}</span></div>}
+            </div>
+          </div>
+        )}
+        amountLabel={`${formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} ${payToken}`}
+        // In the pay drawer's column on the right, like the amount step.
+        placement="panel" panelWidth={CHAT_PAY_DRAWER_WIDTH}
+        // Over the amount drawer: no half-faded card over its content.
+        instantExit
+      />
+
+      {/* STEP 3: processing + the receipt. */}
       <AnimatePresence custom={payStep}>
-        {(payStep === 'confirm' || payStep === 'processing' || payStep === 'success') && (
+        {(payStep === 'processing' || payStep === 'success') && (
           (() => {
             const closeStep2 = () => {
-              if (payStep === 'confirm') { setPayStep('closed'); setPayPassEntry('') }
-              else if (payStep === 'success') { setPayStep('closed'); setMessagesReady(true); setTimeout(() => scrollToBottom(false), 50) }
+              if (payStep === 'success') { setPayStep('closed'); setMessagesReady(true); setTimeout(() => scrollToBottom(false), 50) }
             }
             const step2Content = (
               <>
-              {payStep === 'confirm' && (
-                <div className="px-5 pt-3 flex-1 flex flex-col" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 12px) + 20px)' }}>
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-bold text-text-primary">Review Payment</h2>
-                    <button onClick={() => setPayStep('form')} className="p-2 rounded-full hover:bg-[rgb(var(--text-primary-rgb)/0.10)] text-text-secondary"><X className="w-5 h-5" /></button>
-                  </div>
-                  <div className="bg-surface rounded-2xl border border-border mt-2">
-                    <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Recipient</span><span className="text-sm font-semibold text-link">{recipientClean}.arc</span></div>
-                    {billPay && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">{billPay.kind === 'bill' ? 'Bill' : billPay.kind === 'merchant_request' ? 'Requested Payment' : billPay.kind === 'shop' ? 'Payment' : 'Request'}</span><span className="text-sm font-semibold text-text-primary">{displayOrderNumber(billPay.number)}</span></div>}
-                    <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Amount</span><span className="text-sm font-bold text-text-primary">{formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} {payToken}</span></div>
-                    <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Network Fee</span><span className="text-sm font-semibold text-success">{payEstimatedFee > 0 ? `~${formatAmount(payEstimatedFee, 4)} USDC` : 'Free'}</span></div>
-                    {payNote && <div className="flex items-center justify-between px-4 py-2"><span className="text-sm text-text-secondary">Note</span><span className="text-sm text-text-primary truncate max-w-[60%]">{payNote}</span></div>}
-                  </div>
-                  <div className="space-y-1 mt-auto pt-2">
-                    <p className="text-xs font-medium text-text-secondary text-center">Enter passcode to confirm</p>
-                    <PinKeypad
-                      value={payPassEntry}
-                      onChange={v => setPayPassEntry(v)}
-                      length={6}
-                      error={!!payError}
-                      onComplete={(_, viaBiometric) => { setPayViaBiometric(!!viaBiometric); executeChatPayment() }}
-                    />
-                    {payError && <p role="alert" className="text-xs text-danger text-center">{payError}</p>}
-                  </div>
-                </div>
-              )}
-
               {/* Also stays up under the success flash, so the flash never
                   grows over an empty card. */}
               {(payStep === 'processing' || (payStep === 'success' && paySuccessPhase === 'flash')) && (
@@ -5697,34 +5712,6 @@ export function ChatConversationPage() {
               </>
             )
 
-            // Desktop's PIN moment gets DesktopTransactionAuthDialog (its own
-            // amount + recipient summary replaces the "Review Payment" card
-            // step2Content shows on mobile), centred in the pay drawer's
-            // column; processing / success show step2Content in the drawer.
-            if (isDesktop && payStep === 'confirm') {
-              return (
-                <DesktopTransactionAuthDialog
-                  // Back to the amount drawer underneath (still open).
-                  onClose={() => { setPayStep('form'); setPayPassEntry('') }}
-                  title="Authorize Payment"
-                  // In the pay drawer's column on the right, like the amount step.
-                  placement="panel" panelWidth={CHAT_PAY_DRAWER_WIDTH}
-                  // Over the amount drawer: no half-faded card over its content.
-                  instantExit
-                  amountLabel={`${formatAmount(parseFloat(payAmount) || 0, chatPayTokenDecimals(payToken))} ${payToken}`}
-                  subLabel={`To ${recipientClean}.arc`}
-                >
-                  {payError && <p role="alert" className="text-xs text-danger text-center mb-4">{payError}</p>}
-                  <PinKeypad
-                    value={payPassEntry}
-                    onChange={v => setPayPassEntry(v)}
-                    length={6}
-                    error={!!payError}
-                    onComplete={(_, viaBiometric) => { setPayViaBiometric(!!viaBiometric); executeChatPayment() }}
-                  />
-                </DesktopTransactionAuthDialog>
-              )
-            }
             return isDesktop ? [
               // Desktop: processing and the receipt stay in the pay drawer on
               // the right (where the amount was entered), not a popup in the
@@ -5733,13 +5720,15 @@ export function ChatConversationPage() {
               // there at once. Fading them in while the dialog's dark dim
               // faded out left a moment with no dim at all - the whole window
               // flashed brighter than either step, then dimmed again.
-              <motion.div key="pay-run-dim" initial={prevPayStep === 'confirm' ? false : { opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              <motion.div key="pay-run-dim" initial={prevPayStep === 'confirm' ? false : DIALOG_BACKDROP.initial} animate={DIALOG_BACKDROP.animate} exit={DIALOG_BACKDROP.exit}
+                transition={DIALOG_BACKDROP.transition}
                 onClick={closeStep2}
-                style={{ position: 'fixed', inset: 0, zIndex: 140, background: 'rgba(0,0,0,0.15)' }} />,
+                style={{ position: 'fixed', inset: 0, zIndex: 140, background: DRAWER_DIM }} />,
               <motion.div key="pay-run-drawer" data-leave-guard={payStep === 'processing' ? '' : undefined} initial={prevPayStep === 'confirm' ? false : { opacity: 0 }} animate={{ opacity: 1, x: 0 }}
                 // Closing (Back to Chat) slides it away like the amount drawer;
                 // fading it showed the chat through the half-faded receipt.
-                exit={{ x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
+                exit={DRAWER_EXIT}
+                transition={DESKTOP_FADE_TRANSITION}
                 onClick={e => e.stopPropagation()}
                 style={{
                   position: 'fixed', top: 0, right: 0, bottom: 0, zIndex: 141, width: CHAT_PAY_DRAWER_WIDTH,
@@ -5752,23 +5741,13 @@ export function ChatConversationPage() {
                   ...(payStep === 'success' && paySuccessPhase === 'collapsed' ? { padding: 16, justifyContent: 'center' } : {}) }}>{step2Content}</div>
               </motion.div>,
             ] : [
-                // Keyed siblings (not a fragment) so AnimatePresence tracks the
-                // backdrop, the PIN sheet and the centred card separately. As
-                // one fragment, swapping sheet -> card mid-flow left the exit
-                // unfinished and the invisible backdrop stayed over the chat,
-                // blocking every tap after "Back to Chat".
-                payStep === 'confirm' ? (
-                  <motion.div key="chat-pay-sheet" {...sheetDrag('chat-pay-2', closeStep2)} initial={prevPayStep === 'form' ? false : { y: '100%' }} animate={{ y: 0 }}
-                    custom={payStep} variants={PAY_SHEET_LEAVE} exit="leave"
-                    transition={SHEET_SPRING}
-                    className="absolute bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-3xl h-[70vh] overflow-y-auto flex flex-col">
-                    {step2Content}
-                  </motion.div>
-                ) : (
-                  // Processing + success open as a card centred in the chat
-                  // (not a bottom sheet). On success the receipt card itself
-                  // is the popup, so the wrapper drops its own surface/border.
-                  <div key="chat-pay-center" className="absolute inset-0 z-50 flex items-center justify-center px-4 pointer-events-none">
+                // Keyed (its dim is a separate keyed sibling above), so
+                // AnimatePresence tracks the card on its own and no invisible
+                // backdrop is ever left over the chat after "Back to Chat".
+                // Processing + success open as a card centred in the chat
+                // (not a bottom sheet). On success the receipt card itself
+                // is the popup, so the wrapper drops its own surface/border.
+                <div key="chat-pay-center" className="absolute inset-0 z-50 flex items-center justify-center px-4 pointer-events-none">
                     <motion.div initial={DIALOG_CARD.initial} animate={DIALOG_CARD.animate} exit={DIALOG_CARD.exit} transition={DIALOG_CARD.transition}
                       data-leave-guard={payStep === 'processing' ? '' : undefined}
                       className="relative w-full flex flex-col overflow-hidden pointer-events-auto"
@@ -5783,8 +5762,7 @@ export function ChatConversationPage() {
                       }}>
                       {step2Content}
                     </motion.div>
-                  </div>
-                ),
+                  </div>,
               ]
           })()
         )}
@@ -5820,97 +5798,22 @@ export function ChatConversationPage() {
               onForward={m => setForwardMsgs([{ ...m, isMine: m.sender_id === user?.id }])} />
           )
         })()}
+        {/* A photo without its message: the same viewer, with just that photo. */}
+        {!viewerStartId && viewerSrc && (
+          <ChatImageViewer key="viewer-one" startId="one" convKey={bubbleKey}
+            items={[{ id: 'one', url: viewerSrc, iv: null, sender: '', createdAt: new Date().toISOString(), msg: null }]}
+            onClose={() => setViewerSrc(null)} />
+        )}
       </AnimatePresence>
 
-      {/* ── Fullscreen media viewer ── */}
-      {viewerSrc && (
-        <div onClick={() => setViewerSrc(null)} style={{
-          position: 'absolute', inset: 0, zIndex: 100,
-          background: 'rgba(0,0,0,0.95)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {/* Close button - top right */}
-          <button
-            onClick={() => setViewerSrc(null)}
-            style={{
-              position: 'absolute', top: 16, right: 16, zIndex: 101,
-              width: 44, height: 44, borderRadius: '50%',
-              background: 'rgba(255,255,255,0.18)', backdropFilter: 'blur(8px)',
-              border: '1px solid rgba(255,255,255,0.25)',
-              cursor: 'pointer', color: '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            <X style={{ width: 20, height: 20 }} />
-          </button>
-
-          {/* Download button - bottom center, pill shape, clearly labelled */}
-          <button
-            onClick={async (e) => {
-              e.stopPropagation()
-              const btn = e.currentTarget
-              btn.setAttribute('disabled', 'true')
-              try {
-                const res = await fetch(viewerSrc)
-                const blob = await res.blob()
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = viewerSrc.split('/').pop()?.split('?')[0] || 'image'
-                document.body.appendChild(a)
-                a.click()
-                document.body.removeChild(a)
-                URL.revokeObjectURL(url)
-              } catch {
-                import('@/lib/safeUrl').then(({ openExternal }) => openExternal(viewerSrc))
-              } finally {
-                btn.removeAttribute('disabled')
-              }
-            }}
-            style={{
-              position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
-              zIndex: 101,
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '12px 28px',
-              borderRadius: 999,
-              background: 'var(--brand)',
-              border: 'none',
-              color: '#fff',
-              fontSize: 15, fontWeight: 600, letterSpacing: 0.2,
-              cursor: 'pointer',
-              boxShadow: 'var(--shadow-2)',
-              WebkitTapHighlightColor: 'transparent',
-              minWidth: 160,
-              justifyContent: 'center',
-            }}
-          >
-            <ArrowDownToLine style={{ width: 18, height: 18, flexShrink: 0 }} />
-            Save Image
-          </button>
-
-          <img
-            src={viewerSrc}
-            alt="full view"
-            onClick={e => e.stopPropagation()}
-            style={{ maxWidth: '100vw', maxHeight: '80vh', objectFit: 'contain', borderRadius: 8 }}
-          />
-        </div>
-      )}
-
-      {/* ── Delete message bottom sheet ── */}
+      {/* ── Delete message confirm ── */}
       <AnimatePresence>
         {deleteTargets && (() => {
           const n = deleteTargets.length
           const allMineRecent = deleteTargets.every((m: any) => m.isMine && m.content !== '[deleted]' && Date.now() - new Date(m.created_at).getTime() < DELETE_FOR_EVERYONE_MS)
           return (
-            <motion.div key="del"
-              className="absolute inset-0 z-50 flex items-center justify-center px-6"
-              onClick={() => !deleting && setDeleteTargets(null)}>
-          {/* Only the dim fades; the card stays solid (PopupDim). */}
-          <PopupDim background="rgba(0,0,0,0.55)" />
-              <motion.div initial={DIALOG_CARD.initial} animate={DIALOG_CARD.animate} exit={DIALOG_CARD.exit} transition={DIALOG_CARD.transition}
-                onClick={e => e.stopPropagation()} className="w-full rounded-3xl px-6 pt-6 pb-3"
-                style={{ position: 'relative', background: 'var(--surface)', border: '1px solid var(--border)', maxWidth: 360 }}>
+            <DesktopDialogFrame key="del" maxWidth={360} onClose={() => { if (!deleting) setDeleteTargets(null) }}>
+              <div className="px-6 pt-6 pb-3">
                 <p className="text-[18px] font-bold text-text-primary">{n > 1 ? `Delete ${n} messages?` : 'Delete message?'}</p>
                 {n === 1 && deleteTargets[0].content !== '[deleted]' && (
                   <p className="mt-2 text-[13.5px] line-clamp-2" style={{ color: 'var(--text-secondary)' }}>“{messagePreview(deleteTargets[0].content)}”</p>
@@ -5928,8 +5831,8 @@ export function ChatConversationPage() {
                   <button disabled={deleting} onClick={() => deleteForMeMany(deleteTargets)} className="py-3 px-1 text-[15px] font-semibold disabled:opacity-50 text-link">Delete for me</button>
                   <button disabled={deleting} onClick={() => setDeleteTargets(null)} className="py-3 px-1 text-[15px] font-semibold" style={{ color: 'var(--text-secondary)' }}>Cancel</button>
                 </div>
-              </motion.div>
-            </motion.div>
+              </div>
+            </DesktopDialogFrame>
           )
         })()}
 
@@ -5941,7 +5844,7 @@ export function ChatConversationPage() {
         )}
 
         {infoMsg && (
-          <motion.div key="info" initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }} transition={SHEET_SPRING}
+          <motion.div key="info" {...chatPushMotion(isDesktop)}
             className="absolute inset-0 z-50 flex flex-col" style={{ background: 'var(--bg)' }}>
             <div className="flex items-center gap-3 px-4 pt-header pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
               <button onClick={() => setInfoMsg(null)} className="back-btn" aria-label="Back"><ArrowLeft className="w-5 h-5 text-text-primary" /></button>

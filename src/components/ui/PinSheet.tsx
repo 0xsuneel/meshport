@@ -41,6 +41,9 @@ export interface PinSheetProps {
    *  handles Back for this step itself. */
   backClose?: boolean
   id?: string
+  /** Stacking order, to sit over a popup that stays open (e.g. 210 over a
+   *  DesktopDialogFrame at 200). Default: the sheet's / dialog's own. */
+  zIndex?: number
   // Desktop dialog
   amountLabel?: string
   placement?: 'center' | 'panel'
@@ -70,7 +73,7 @@ export function PinSheet(p: PinSheetProps) {
       <AnimatePresence>
         {p.open && (
           <DesktopTransactionAuthDialog key={p.id ?? 'pin'} onClose={close} title={p.title} amountLabel={p.amountLabel} subLabel={said}
-            placement={p.placement} panelWidth={p.panelWidth} anchor={p.anchor} instantExit={p.instantExit} backClose={p.backClose ?? true}>
+            placement={p.placement} panelWidth={p.panelWidth} anchor={p.anchor} instantExit={p.instantExit} backClose={p.backClose ?? true} zIndex={p.zIndex}>
             {p.header}
             {pad}
             {p.footer}
@@ -80,7 +83,7 @@ export function PinSheet(p: PinSheetProps) {
     )
   }
   return (
-    <ActionSheet open={p.open} onClose={close} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={p.backClose ?? true}>
+    <ActionSheet open={p.open} onClose={close} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={p.backClose ?? true} zIndex={p.zIndex}>
       <div className="flex flex-col px-6 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] overflow-y-auto">
         {p.header}
         <div className="text-center mb-7">

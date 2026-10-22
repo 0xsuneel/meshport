@@ -1,21 +1,19 @@
 import { useState, useRef, useEffect } from 'react'
-import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
-import { useStepDirection, stepMotion } from '@/hooks/useStepDirection'
+import { useStepDirection } from '@/hooks/useStepDirection'
 import { useNavigate } from 'react-router-dom'
-import { PinKeypad } from '@/components/ui/PinKeypad'
+import { PinSheet } from '@/components/ui/PinSheet'
 import {
   ArrowLeft, Plus, Trash2, Upload, CheckCircle, XCircle,
   Send, ExternalLink, Search, Loader2, User, Download,
   Users, DollarSign, HelpCircle, AlertCircle
 } from 'lucide-react'
 import { ScreenPush } from '@/components/ui/ScreenPush'
-import { PopupOpen } from '@/hooks/usePopupOpen'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
+import { MENU_MOTION } from '@/lib/motion'
 import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
-import { AmountKeypad } from '@/components/ui/AmountKeypad'
+import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { formatAmount, midShortenAddress, trimTrailingZeros } from '@/lib/utils'
 import { getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
@@ -24,11 +22,8 @@ import { hasAnyActivityForTx } from '@/lib/ActivityService'
 import { searchUsersDb, getUserByWalletAddress, type DbUser } from '@/lib/supabase'
 import { isValidAddress } from '@/lib/arcService'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
-import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
-import { sheetDrag } from '@/lib/sheetDrag'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen'
 
@@ -66,17 +61,9 @@ function parseCSV(text: string): Array<{ input: string; amount: number }> {
   })
 }
 
-// Digit/decimal sanitizing for the desktop "Amount" native input (mirrors
-// AmountKeypad's own internal sanitizer, which isn't exported) - max one
-// '.', capped at 2 typed decimal places.
-function sanitizeBulkAmount(raw: string): string {
-  let cleaned = raw.replace(/[^\d.]/g, '')
-  const firstDot = cleaned.indexOf('.')
-  if (firstDot !== -1) cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '')
-  const [intPart, decPart] = cleaned.split('.')
-  if (decPart !== undefined) cleaned = intPart + '.' + decPart.slice(0, 2)
-  return cleaned
-}
+// Decimal places a row amount can be typed with - the same cap for the typed
+// field (desktop) and the keypad (phone). Max and the totals work in cents.
+const BULK_DECIMALS = 2
 
 function downloadCSVTemplate() {
   const csv = 'username,amount\njohn.arc,50\nalice.arc,100\n0x1234567890abcdef1234567890abcdef12345678,75'
@@ -383,7 +370,7 @@ export function BulkPayoutPage() {
   }, [recipientsHeld])
 
   // ── Shared content, extracted into variables ──────────────────────────
-  // Mobile renders these inside the existing AnimatePresence-stepped single
+  // Mobile renders these inside the ScreenPush-stepped single
   // column + fixed bottom bar, completely unchanged. Desktop renders them
   // split across a persistent left column (recipients + summary) and a
   // step-driven right column (purpose → review → processing → results),
@@ -546,56 +533,54 @@ export function BulkPayoutPage() {
             )}
           </div>
 
-          {/* Mobile only - desktop's live amount input is the
-              always-open AmountKeypad card below instead of a
-              tap-to-reveal box; its own Add button moves below the
-              card there too (see the isDesktop block after it). */}
-          {!isDesktop && (
-            <div className="space-y-2">
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Amount (USDC)</div>
+          {/* One amount field: typed straight in on desktop, tapping it opens
+              the keypad sheet on the phone. The phone shows its label, the
+              over-balance line and the Add button with it; desktop's Add
+              button sits right under the field. */}
+          {(() => {
+            const overRemaining = (parseFloat(rowAmount) || 0) > remainingForNext + 1e-9
+            const field = (
               <AmountField
+                id={isDesktop ? 'bulk-amount-input' : undefined}
                 value={rowAmount}
-                onChange={raw => setRowAmount(sanitizeBulkAmount(raw))}
-                onTap={openBulkAmountPad}
+                onChange={raw => setRowAmount(sanitizeAmountInput(raw, BULK_DECIMALS))}
+                autoFocus={false}
+                onTap={isDesktop ? undefined : openBulkAmountPad}
                 editing={showBulkAmountPad}
-                boxRef={bulkAmountBoxRef}
-                invalid={(parseFloat(rowAmount) || 0) > remainingForNext + 1e-9}
+                boxRef={isDesktop ? undefined : bulkAmountBoxRef}
+                invalid={!isDesktop && overRemaining}
                 ariaLabel="Amount in USDC"
                 token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
                 onMax={balance > 0 ? () => setRowAmount(trimTrailingZeros((Math.floor(remainingForNext * 100) / 100).toFixed(2))) : undefined}
                 quick={quickAmounts([10, 50, 100], '$', setRowAmount, remainingForNext)}
               />
-              {(parseFloat(rowAmount) || 0) > remainingForNext + 1e-9 && (
-                <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)', margin: 0 }}>
-                  Insufficient balance · Max {formatAmount(Math.floor(remainingForNext * 100) / 100)}
-                </p>
-              )}
-              <button onClick={() => { setShowBulkAmountPad(false); handleRowAdd() }}
-                disabled={!rowAmount || parseFloat(rowAmount) <= 0 || parseFloat(rowAmount) > remainingForNext + 1e-9}
-                className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand-text rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition-all">
-                <Plus className="w-4 h-4" /> Add Recipient
-              </button>
-            </div>
-          )}
-          {isDesktop ? (
-            <AmountField
-              id="bulk-amount-input"
-              value={rowAmount}
-              onChange={raw => setRowAmount(sanitizeBulkAmount(raw))}
-              autoFocus={false}
-              ariaLabel="Amount in USDC"
-              token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
-              onMax={balance > 0 ? () => setRowAmount(trimTrailingZeros((Math.floor(remainingForNext * 100) / 100).toFixed(2))) : undefined}
-              quick={quickAmounts([10, 50, 100], '$', setRowAmount, remainingForNext)}
-            />
-          ) : null}
-          {isDesktop && (
-            <button onClick={handleRowAdd}
-              disabled={!rowAmount || parseFloat(rowAmount) <= 0}
-              className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand-text rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition-all">
-              <Plus className="w-4 h-4" /> Add Recipient
-            </button>
-          )}
+            )
+            return isDesktop ? (
+              <>
+                {field}
+                <button onClick={handleRowAdd}
+                  disabled={!rowAmount || parseFloat(rowAmount) <= 0}
+                  className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand-text rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition-all">
+                  <Plus className="w-4 h-4" /> Add Recipient
+                </button>
+              </>
+            ) : (
+              <div className="space-y-2">
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Amount (USDC)</div>
+                {field}
+                {overRemaining && (
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)', margin: 0 }}>
+                    Insufficient balance · Max {formatAmount(Math.floor(remainingForNext * 100) / 100)}
+                  </p>
+                )}
+                <button onClick={() => { setShowBulkAmountPad(false); handleRowAdd() }}
+                  disabled={!rowAmount || parseFloat(rowAmount) <= 0 || overRemaining}
+                  className="w-full flex items-center justify-center gap-1.5 px-5 py-3.5 bg-brand/15 border border-brand/30 text-brand-text rounded-xl text-base font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-brand/25 transition-all">
+                  <Plus className="w-4 h-4" /> Add Recipient
+                </button>
+              </div>
+            )
+          })()}
         </div>
       )}
 
@@ -979,32 +964,33 @@ export function BulkPayoutPage() {
           </div>
 
           <div ref={stepColumnRef} data-leave-guard={step === 'processing' ? '' : undefined} style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto', borderRadius: 20 }}>
-            <AnimatePresence initial={false} mode="wait">
+            {/* Steps fade in place (ScreenPush's desktop fade, same as Pay / Swap). */}
+            <ScreenPush screenKey={step} back={stepDir === 'back'}>
               {step === 'setup' && (
-                <motion.div key="d-setup" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div key="d-setup" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {purposeSection}
                   {summarySection}
                   {setupActionButtons}
-                </motion.div>
+                </div>
               )}
               {step === 'review' && (
-                <motion.div key="d-review" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div key="d-review" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {reviewContent}
                   {reviewActionButtons}
-                </motion.div>
+                </div>
               )}
               {step === 'processing' && (
-                <motion.div key="d-processing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION} className="py-16 text-center space-y-6">
+                <div key="d-processing" className="py-16 text-center space-y-6">
                   {processingContent}
-                </motion.div>
+                </div>
               )}
               {step === 'results' && (
-                <motion.div key="d-results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div key="d-results" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                   {resultsContent}
                   {resultsActionButtons}
-                </motion.div>
+                </div>
               )}
-            </AnimatePresence>
+            </ScreenPush>
           </div>
         </div>
       ) : (
@@ -1018,32 +1004,32 @@ export function BulkPayoutPage() {
 
         {/* ══════════════════ SETUP STEP ══════════════════ */}
         {step === 'setup' && (
-          <motion.div key="setup" initial={false} className="px-4 space-y-4">
+          <div key="setup" className="px-4 space-y-4">
             {addRecipientsSection}
             {purposeSection}
             {summarySection}
-          </motion.div>
+          </div>
         )}
 
         {/* ══════════════════ REVIEW STEP ══════════════════ */}
         {step === 'review' && (
-          <motion.div key="review" initial={false} className="px-4 space-y-4">
+          <div key="review" className="px-4 space-y-4">
             {reviewContent}
-          </motion.div>
+          </div>
         )}
 
         {/* ══════════════════ PROCESSING ══════════════════ */}
         {step === 'processing' && (
-          <motion.div key="processing" initial={false} data-leave-guard="" className="px-4 py-16 text-center space-y-6">
+          <div key="processing" data-leave-guard="" className="px-4 py-16 text-center space-y-6">
             {processingContent}
-          </motion.div>
+          </div>
         )}
 
         {/* ══════════════════ RESULTS ══════════════════ */}
         {step === 'results' && (
-          <motion.div key="results" initial={false} className="px-4 space-y-4">
+          <div key="results" className="px-4 space-y-4">
             {resultsContent}
-          </motion.div>
+          </div>
         )}
 
       </ScreenPush>
@@ -1055,6 +1041,8 @@ export function BulkPayoutPage() {
         onChange={v => setRowAmount(v)}
         balance={remainingForNext}
         token="USDC"
+        // Same decimals cap as the typed field.
+        decimals={BULK_DECIMALS}
         // The amount box above already has its own Max, like Transfer.
         showMax={false}
         onClose={() => setShowBulkAmountPad(false)}
@@ -1073,90 +1061,58 @@ export function BulkPayoutPage() {
       </>
       )}
 
-      {/* ── Review step: Pay PIN sheet / dialog - opens only when Pay is tapped ── */}
-      <AnimatePresence>
-        {showReviewPinSheet && (() => {
-          const keypadContent = (
-            <>
-              <PinKeypad
-                value={passEntry}
-                onChange={v => { setPassEntry(v); setPassError('') }}
-                length={6}
-                error={!!passError}
-                onComplete={async () => {
-                  // Synchronous guard - prevents a double-fire from triggering
-                  // two separate batch payout transactions.
-                  if (payoutInFlightRef.current) return
-                  payoutInFlightRef.current = true
-                  try {
-                    const { verifyPasscode } = await import('@/lib/security')
-                    const ok = await verifyPasscode(passEntry, storedPasscode!)
-                    if (!ok) { setPassError('Incorrect passcode'); setPassEntry(''); return }
-                    setPassEntry(''); setPassError('')
-                    setShowReviewPinSheet(false)
-                    await executePayout()
-                  } finally {
-                    payoutInFlightRef.current = false
-                  }
-                }}
-              />
-              {passError && <p role="alert" className="text-xs text-danger text-center mt-2">{passError}</p>}
-            </>
-          )
-          const pinContent = (
-            <>
-              <p className="text-center text-sm text-text-secondary mb-1">Confirm bulk payout of</p>
-              <p className="text-center text-2xl font-bold text-text-primary mb-6">${formatAmount(totalAmount)} USDC</p>
-              <p className="text-xs font-medium text-text-secondary text-center mb-2">Enter passcode to confirm</p>
-              {keypadContent}
-            </>
-          )
-          const close = () => { if (!processing) { setShowReviewPinSheet(false); setPassEntry(''); setPassError('') } }
-          return isDesktop ? (
-            <DesktopTransactionAuthDialog
-              onClose={close}
-              title="Authorize Bulk Payout"
-              anchor={stepColumnRef.current}
-              amountLabel={`$${formatAmount(totalAmount)} USDC`}
-              subLabel={`To ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}`}
-            >
-              {keypadContent}
-            </DesktopTransactionAuthDialog>
-          ) : (
-            <>
-              {/* Plain dim - no backdrop blur (Android re-blurs it every frame of the fade). */}
-              <PopupOpen key="bp-popup-open" />
-              <motion.div key="bp-pass-dim" transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.24 } }}
-                className="absolute inset-0 bg-black/70 z-40"
-                onClick={close} />
-              <motion.div {...sheetDrag('bp-pass', close)} initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}
-                transition={SHEET_SPRING}
-                className="absolute bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-3xl px-6 pt-5 pb-10">
-                <div className="w-10 h-1 rounded-full mx-auto mb-6" style={{ background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)' }} />
-                {pinContent}
-              </motion.div>
-            </>
-          )
-        })()}
-      </AnimatePresence>
+      {/* ── Review step: the passcode step - opens only when Pay is tapped.
+          Can't be closed while the payout is sending. ── */}
+      <PinSheet
+        open={showReviewPinSheet}
+        onClose={() => { setShowReviewPinSheet(false); setPassEntry(''); setPassError('') }}
+        locked={processing}
+        id="bp-pass"
+        // Phone: the total sits above the title.
+        header={isDesktop ? undefined : (
+          <>
+            <p className="text-center text-sm text-text-secondary mb-1">Confirm bulk payout of</p>
+            <p className="text-center text-2xl font-bold text-text-primary mb-6">${formatAmount(totalAmount)} USDC</p>
+          </>
+        )}
+        title={isDesktop ? 'Authorize Bulk Payout' : 'Enter passcode to confirm'}
+        subtitle={`To ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}`}
+        amountLabel={`$${formatAmount(totalAmount)} USDC`}
+        anchor={stepColumnRef.current}
+        value={passEntry}
+        onChange={v => { setPassEntry(v); setPassError('') }}
+        error={passError || undefined}
+        onComplete={async () => {
+          // Synchronous guard - prevents a double-fire from triggering
+          // two separate batch payout transactions.
+          if (payoutInFlightRef.current) return
+          payoutInFlightRef.current = true
+          try {
+            const { verifyPasscode } = await import('@/lib/security')
+            const ok = await verifyPasscode(passEntry, storedPasscode!)
+            if (!ok) { setPassError('Incorrect passcode'); setPassEntry(''); return }
+            setPassEntry(''); setPassError('')
+            setShowReviewPinSheet(false)
+            await executePayout()
+          } finally {
+            payoutInFlightRef.current = false
+          }
+        }}
+      />
 
       {/* How it works tooltip - tap anywhere to dismiss */}
       <AnimatePresence>
         {showHowItWorks && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+          // Only the card moves (the menu motion); the layer around it just
+          // catches the tap that dismisses it.
+          <div
+            key="how-it-works"
             className="absolute inset-0 z-50 flex items-start justify-end"
             style={{ paddingTop: '80px', paddingRight: '16px' }}
             onClick={() => setShowHowItWorks(false)}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.92, y: -8 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: -8 }}
-              transition={{ duration: 0.18 }}
+              {...MENU_MOTION}
               onClick={e => e.stopPropagation()}
               className="rounded-2xl p-4 w-72"
               style={{ background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-3)' }}
@@ -1185,7 +1141,7 @@ export function BulkPayoutPage() {
               </div>
               <p className="text-[10px] text-text-muted text-center mt-3">Tap anywhere to dismiss</p>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

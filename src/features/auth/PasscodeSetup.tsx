@@ -11,78 +11,6 @@ import { hasBiometricRegistered, verifyBiometricAndGetPasscode, biometricLabel, 
 import { afterSplash } from '@/lib/splash'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 
-function PasscodeDots({ filled, error }: { filled: number; error: boolean }) {
-  return (
-    <div className="flex items-center justify-center gap-4 my-8 short:my-5">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <motion.div key={i}
-          animate={error ? { x: [0,-8,8,-6,6,0] } : { scale: filled > i ? 1.1 : 1 }}
-          transition={{ duration: error ? 0.4 : 0.1 }}
-          className={`w-4 h-4 rounded-full border-2 transition-colors ${
-            error ? 'border-danger bg-danger'
-            : filled > i ? 'border-brand bg-brand'
-            : 'border-text-secondary/40'
-          }`}
-        />
-      ))}
-    </div>
-  )
-}
-
-function NumPad({ onPress, onBiometric, showBiometric, biometricTrying, BiometricIcon }: {
-  onPress: (k: string) => void
-  onBiometric?: () => void
-  showBiometric?: boolean
-  biometricTrying?: boolean
-  BiometricIcon?: ComponentType<{ className?: string }>
-}) {
-  // Shorter keys on short phones so the pad fits with the page around it.
-  const short = useMediaQuery('(max-height: 700px)')
-  const keyH = short ? 48 : 56
-  return (
-    <div className="grid grid-cols-3 gap-2.5 short:gap-2 w-full max-w-xs mx-auto">
-      {['1','2','3','4','5','6','7','8','9','biometric','0','⌫'].map((k, i) => {
-        if (k === 'biometric') {
-          if (!showBiometric || !BiometricIcon) return <div key={i} style={{ height: keyH }} />
-          return (
-            // Plain button, not motion.button - same reasoning as
-            // PinKeypad's biometric key: WebKit is notably stricter than
-            // Chromium about a WebAuthn call happening inside a genuine,
-            // immediate user gesture, so the OS prompt trigger itself is
-            // kept as close to a raw native click as possible rather than
-            // going through Framer Motion's gesture-recognition wrapper.
-            <button key={i} onClick={onBiometric} disabled={biometricTrying}
-              className="flex items-center justify-center text-brand-text mp-key"
-              style={{ height: keyH, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}
-              aria-label="Use biometric unlock">
-              <motion.div
-                animate={biometricTrying ? { scale: [1, 1.18, 1], opacity: [1, 0.55, 1] } : { scale: 1, opacity: 1 }}
-                transition={biometricTrying ? { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.15 }}
-              >
-                <BiometricIcon className="w-6 h-6" />
-              </motion.div>
-            </button>
-          )
-        }
-        return (
-          <button key={i} onClick={() => onPress(k)}
-            className={`mp-key flex items-center justify-center text-2xl font-semibold ${
-              k === '⌫' ? 'text-text-secondary' : 'text-text-primary'
-            }`}
-            style={{ height: keyH, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' }}>
-            {k === '⌫'
-              ? <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M12 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 12l6.414 6.414a2 2 0 001.414.586H19a2 2 0 002-2V7a2 2 0 00-2-2h-8.172a2 2 0 00-1.414.586L3 12z"/>
-                </svg>
-              : k}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 export function PasscodeSetupPage() {
   const navigate       = useNavigate()
   const [searchParams] = useSearchParams()
@@ -102,8 +30,8 @@ export function PasscodeSetupPage() {
 
   // Display state (drives UI only)
   const [step,     setStep]     = useState<'create' | 'confirm'>('create')
-  const [filled1,  setFilled1]  = useState(0)   // dots for step 1
-  const [filled2,  setFilled2]  = useState(0)   // dots for step 2
+  const [first,    setFirst]    = useState('')  // the passcode chosen (step 1)
+  const [second,   setSecond]   = useState('')  // typed again (step 2)
   const [error,    setError]    = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
   const [hashing,  setHashing]  = useState(false)
@@ -121,66 +49,48 @@ export function PasscodeSetupPage() {
   returningRef.current = returning
   loginTypeRef.current = loginType
 
-  // Single stable press handler - reads from refs only
-  const pressRef = useRef(async (key: string) => {
-    // Clear error
+  // The shared passcode keypad (PinKeypad) types into the current step; the
+  // refs keep the async save below free of stale closures.
+  const change = (v: string) => {
+    if (hashingRef.current) return
+    // A key after a mismatch just clears it (and the confirm dots).
     if (errorRef.current) {
       errorRef.current = false
       setError(false)
       setErrorMsg('')
-      if (stepRef.current === 'confirm') {
-        secondRef.current = ''
-        setFilled2(0)
-      }
+      secondRef.current = ''
+      setSecond('')
       return
     }
+    if (stepRef.current === 'create') { firstRef.current = v; setFirst(v) }
+    else { secondRef.current = v; setSecond(v) }
+  }
 
+  const completeRef = useRef(() => {
     if (stepRef.current === 'create') {
-      if (key === '⌫') {
-        firstRef.current = firstRef.current.slice(0, -1)
-        setFilled1(firstRef.current.length)
-        return
-      }
-      if (firstRef.current.length >= 6) return
-      firstRef.current += key
-      setFilled1(firstRef.current.length)
-      if (firstRef.current.length < 6) return
-
       // Move to confirm
       setTimeout(() => {
         stepRef.current = 'confirm'
         setStep('confirm')
       }, 180)
-
-    } else {
-      // Confirm step
-      if (key === '⌫') {
-        secondRef.current = secondRef.current.slice(0, -1)
-        setFilled2(secondRef.current.length)
+      return
+    }
+    // Verify match
+    setTimeout(async () => {
+      if (secondRef.current !== firstRef.current) {
+        errorRef.current = true
+        setError(true)
+        setErrorMsg("Passcodes don't match. Try again.")
+        setTimeout(() => {
+          errorRef.current = false
+          setError(false)
+          setErrorMsg('')
+          secondRef.current = ''
+          setSecond('')
+        }, 900)
         return
       }
-      if (secondRef.current.length >= 6) return
-      secondRef.current += key
-      setFilled2(secondRef.current.length)
-      if (secondRef.current.length < 6) return
-
-      // Verify match
-      setTimeout(async () => {
-        if (secondRef.current !== firstRef.current) {
-          errorRef.current = true
-          setError(true)
-          setErrorMsg("Passcodes don't match. Try again.")
-          setTimeout(() => {
-            errorRef.current = false
-            setError(false)
-            setErrorMsg('')
-            secondRef.current = ''
-            setFilled2(0)
-          }, 900)
-          return
-        }
-
-        // Match - save
+      // Match - save
         hashingRef.current = true
         setHashing(true)
         const hashed = await hashPasscode(firstRef.current)

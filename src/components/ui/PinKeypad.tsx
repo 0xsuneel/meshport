@@ -51,6 +51,12 @@ interface PinKeypadProps {
    *  (default on). Off where the pad isn't asking for the current passcode,
    *  e.g. choosing a new one. */
   autoBiometric?: boolean
+  /** A screen that runs its own biometric flow (the lock screen: prompt after
+   *  the splash, lockout reset) shows the grid's fingerprint key with this
+   *  instead: `show` = the key is there, `onTry` runs on tap, `trying` pulses
+   *  it. The pad's own biometric (probe, auto prompt, fingerprint-first view)
+   *  is then off. Omitted everywhere else - nothing changes there. */
+  biometricKey?: { show: boolean; onTry: () => void; trying?: boolean }
 }
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del']
@@ -67,6 +73,7 @@ export function PinKeypad({
   onBiometric,
   biometricAvailable,
   autoBiometric = true,
+  biometricKey,
 }: PinKeypadProps) {
   // Wrong PIN: two short knocks along with the shake / red dots.
   useEffect(() => { if (shake || error) hapticError() }, [shake, error])
@@ -102,19 +109,21 @@ export function PinKeypad({
   // null until the live probe answers: the key shows meanwhile (as before),
   // but the automatic prompt below waits for a real yes.
   const [liveSupported, setLiveSupported] = useState<boolean | null>(null)
+  const ownBiometric = !biometricKey
   useEffect(() => {
-    if (biometricAvailable === false) return // caller already opted out - no need to probe
+    if (biometricAvailable === false || !ownBiometric) return // caller already opted out (or runs its own) - no need to probe
     let cancelled = false
     isBiometricSupported().then(ok => { if (!cancelled) setLiveSupported(ok) })
     return () => { cancelled = true }
-  }, [biometricAvailable])
+  }, [biometricAvailable, ownBiometric])
 
   const biometricReady =
+    ownBiometric &&
     biometricAvailable !== false &&
     biometricEnabled &&
     !!walletAddress &&
     hasBiometricRegistered(walletAddress)
-  const canUseBiometric = biometricReady && liveSupported !== false
+  const canUseBiometric = biometricKey ? biometricKey.show : biometricReady && liveSupported !== false
 
   // Biometric on (phone) → fingerprint / Face ID first: the number pad only
   // appears once the scan fails or is cancelled, or on "Use passcode".
@@ -179,6 +188,10 @@ export function PinKeypad({
     else document.addEventListener('visibilitychange', onVisible)
     return () => { if (timer) clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible) }
   }, [canAuto])
+
+  // The fingerprint key: the pad's own check, or the screen's (biometricKey).
+  const onBiometricKey = biometricKey ? biometricKey.onTry : tryBiometric
+  const keyTrying = biometricKey ? !!biometricKey.trying : biometricTrying
 
   const handleKey = (key: string) => {
     if (key === '') return
@@ -271,15 +284,15 @@ export function PinKeypad({
           />
           {canUseBiometric && (
             <button
-              onClick={tryBiometric}
-              disabled={biometricTrying}
+              onClick={onBiometricKey}
+              disabled={keyTrying}
               className="flex items-center justify-center mp-key"
               style={{ width: 52, height: 52, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand-text)', flexShrink: 0 }}
               aria-label={`Use ${label}`}
             >
               <motion.div
-                animate={biometricTrying ? { scale: [1, 1.18, 1], opacity: [1, 0.55, 1] } : { scale: 1, opacity: 1 }}
-                transition={biometricTrying ? { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.15 }}
+                animate={keyTrying ? { scale: [1, 1.18, 1], opacity: [1, 0.55, 1] } : { scale: 1, opacity: 1 }}
+                transition={keyTrying ? { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.15 }}
               >
                 <Icon className="w-5 h-5" />
               </motion.div>
@@ -301,15 +314,15 @@ export function PinKeypad({
             return (
               <button
                 key={i}
-                onClick={tryBiometric}
-                disabled={biometricTrying}
+                onClick={onBiometricKey}
+                disabled={keyTrying}
                 className="w-full flex items-center justify-center mp-key"
                 style={{ height: keyH, borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--brand-text)' }}
                 aria-label={`Use ${label}`}
               >
                 <motion.div
-                  animate={biometricTrying ? { scale: [1, 1.18, 1], opacity: [1, 0.55, 1] } : { scale: 1, opacity: 1 }}
-                  transition={biometricTrying ? { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.15 }}
+                  animate={keyTrying ? { scale: [1, 1.18, 1], opacity: [1, 0.55, 1] } : { scale: 1, opacity: 1 }}
+                  transition={keyTrying ? { duration: 1.1, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.15 }}
                 >
                   <Icon className="w-6 h-6" />
                 </motion.div>

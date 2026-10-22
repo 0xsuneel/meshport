@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import { AlertCircle, RotateCw } from 'lucide-react'
 import { Button } from './Button'
 
@@ -17,10 +16,9 @@ export function ErrorState({
   retryLabel = 'Retry',
 }: ErrorStateProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.24, ease: 'easeOut' }}
+    // No entrance of its own: it usually arrives inside a page or step that
+    // is already sliding / fading in (a second fade+rise was a double animation).
+    <div
       className="flex flex-col items-center justify-center text-center px-8 py-16"
     >
       <div className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
@@ -37,6 +35,6 @@ export function ErrorState({
           </Button>
         </div>
       )}
-    </motion.div>
+    </div>
   )
 }

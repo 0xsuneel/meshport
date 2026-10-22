@@ -54,7 +54,7 @@ export function MerchantApplyPage() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="header-row sticky top-0 z-20 bg-bg/95 backdrop-blur-md px-5 pt-header pb-header">
+      <div className="header-row sticky top-0 z-20 bg-bg px-5 pt-header pb-header">
         <div className="flex items-center gap-3">
           {!isDesktop && (
             <button onClick={() => navigate(-1)} className="back-btn">

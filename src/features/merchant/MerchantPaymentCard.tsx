@@ -10,6 +10,7 @@
 //     "Paid" (customer). A paid or closed card can't be opened or paid again.
 import { useEffect, useState } from 'react'
 import { CheckCircle2, Clock, Receipt } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
 import { cardInnerWidth } from '@/features/chat/chatCard'
 import { formatAmount } from '@/lib/utils'
 import { dueText } from '@/lib/businessBills'
@@ -202,9 +203,11 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
           </button>
         )}
       </div>
-      {open && <BillReceipt v={v} isMine={isMine} isBill={isBill} loading={loading} canPay={canPay}
+      <AnimatePresence>
+      {open && <BillReceipt key="receipt" v={v} isMine={isMine} isBill={isBill} loading={loading} canPay={canPay}
         onPay={() => { setOpen(false); window.dispatchEvent(new CustomEvent(BILL_PAY_EVENT, { detail: v })) }}
         onClose={() => setOpen(false)} />}
+      </AnimatePresence>
     </div>
   )
 }

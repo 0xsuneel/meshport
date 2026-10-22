@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { Button } from './Button'
 
@@ -13,10 +12,9 @@ interface EmptyStateProps {
 /** Shared empty-state layout: icon, title, helper text, one primary action. */
 export function EmptyState({ icon, title, description, actionLabel, onAction }: EmptyStateProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.24, ease: 'easeOut' }}
+    // No entrance of its own: it usually arrives inside a page or step that
+    // is already sliding / fading in (a second fade+rise was a double animation).
+    <div
       className="flex flex-col items-center justify-center text-center px-8 py-16"
     >
       <div className="w-16 h-16 rounded-full bg-surface border border-border flex items-center justify-center text-text-secondary mb-5">
@@ -31,6 +29,6 @@ export function EmptyState({ icon, title, description, actionLabel, onAction }: 
           <Button variant="primary" fullWidth onClick={onAction}>{actionLabel}</Button>
         </div>
       )}
-    </motion.div>
+    </div>
   )
 }

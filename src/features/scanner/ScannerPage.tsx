@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getShopInfo } from '@/lib/shop'
-import { SHEET_BACKDROP, DIALOG_CARD } from '@/lib/motion'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {Zap, Camera, CheckCircle, AlertCircle, Loader2, Image as ImageIcon, Flashlight, X} from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PopupDim } from '@/components/ui/PopupDim'
+import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { Button } from '@/components/ui/Button'
 import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
@@ -649,20 +648,12 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
         )}
       </div>
 
-      {/* Resolved user - a card centred over the scanner */}
+      {/* Resolved user - the app's centred popup. Tap outside, Esc or Back
+          does what Scan Again does. */}
       <AnimatePresence>
         {resolvedUser && (
-          <motion.div key="resolved"
-            className="absolute inset-0 z-30 flex items-center justify-center px-5"
-          >
-          {/* Only the dim fades; the card stays solid (PopupDim). */}
-          <PopupDim background="rgba(0,0,0,0.6)" />
-          <motion.div
-            initial={DIALOG_CARD.initial} animate={DIALOG_CARD.animate} exit={DIALOG_CARD.exit}
-            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-            className="mp-popup w-full p-6 space-y-5"
-            style={{ position: 'relative', maxWidth: 420 }}
-          >
+          <DesktopDialogFrame key="resolved" onClose={reset} maxWidth={420}>
+          <div className="p-6 space-y-5">
             <div className="flex items-center gap-4">
               <Avatar name={resolvedUser.display_name} src={resolvedUser.avatar_url} size="xl" />
               <div className="flex-1 min-w-0">
@@ -700,8 +691,8 @@ export function ScannerPage({ embedded }: { embedded?: EmbeddedScan } = {}) {
                 {walletMode ? 'Use this address' : scannedAmount ? `Pay $${scannedAmount}` : 'Pay'}
               </Button>
             </div>
-          </motion.div>
-          </motion.div>
+          </div>
+          </DesktopDialogFrame>
         )}
       </AnimatePresence>
 

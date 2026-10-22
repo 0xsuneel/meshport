@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, ChevronRight, Shield, Upload, Key,
-  User, HelpCircle, Info, FileText, LogOut, BookOpen, Copy, Check, Share2, Palette, Sun, Moon, Store,
+  User, HelpCircle, Info, FileText, LogOut, BookOpen, Copy, Check, Share2, Palette, Sun, Moon, Store, X,
 } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useAuthStore, useUIStore } from '@/store'
 import { useThemeStore, resolveTheme } from '@/store/themeStore'
 import { Avatar } from '@/components/ui/Avatar'
-import { Sheet } from '@/components/ui/Sheet'
+import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useMerchant } from '@/lib/merchant'
@@ -271,7 +271,15 @@ export function ProfilePage() {
         )}
       </div>
 
-      <Sheet isOpen={showLogoutConfirm} onClose={() => setShowLogoutConfirm(false)} title="Sign Out?">
+      <AnimatePresence>
+        {showLogoutConfirm && (
+        <DesktopDialogFrame onClose={() => setShowLogoutConfirm(false)} maxWidth={480}>
+        <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3">
+          <h2 className="text-[19px] font-extrabold tracking-tight text-text-primary">Sign Out?</h2>
+          <button onClick={() => setShowLogoutConfirm(false)} className="mp-popup-close ml-auto" aria-label="Close">
+            <X className="w-[18px] h-[18px]" strokeWidth={2.4} />
+          </button>
+        </div>
         <div className="px-5 pb-6 space-y-4">
           <p className="text-sm text-text-secondary">
             {loginType === 'social'
@@ -292,7 +300,9 @@ export function ProfilePage() {
             </button>
           </div>
         </div>
-      </Sheet>
+        </DesktopDialogFrame>
+        )}
+      </AnimatePresence>
 
       {isDesktop ? (
         // Left column: profile card + Wallet section (settings cards already

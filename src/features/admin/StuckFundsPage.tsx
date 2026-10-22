@@ -12,7 +12,9 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties, type Rea
 import {
   AlertTriangle, ArrowRight, Bell, Check, Copy, ExternalLink, Lock, RefreshCw, Search, ShieldCheck, X, Zap, Clock, RotateCcw,
 } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
 import { AdminCard } from '@/components/admin/AdminCard'
+import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { copyToClipboard } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'

@@ -4,6 +4,7 @@
 import { SendIcon } from '@/components/ui/SendIcon'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
+import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { X, Loader2 } from 'lucide-react'
 import { cachedMedia, loadMedia, metaOf, fmtBytes, extOf, mimeOf, saveNameFor } from './chatMediaStore'
 
@@ -239,7 +240,7 @@ export function MediaPreview({ items, recipient, onChange, onAddMore, onClose, o
   }
   const tb: React.CSSProperties = { width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.12)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={MOBILE_TAB_FADE_TRANSITION}
       className="absolute inset-0 z-[80] flex flex-col" style={{ background: '#000', color: '#fff' }}>
       <div className="flex items-center gap-2 px-3 pt-header pb-2">
         <button style={tb} aria-label="Close" onClick={onClose}><X className="w-5 h-5" /></button>
@@ -433,7 +434,7 @@ export function ChatImageViewer({ items, startId, convKey, onClose, onReply, onF
   const ab: React.CSSProperties = { border: 'none', background: 'none', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 10.5, cursor: 'pointer', minWidth: 52 }
   const time = new Date(item.createdAt)
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={MOBILE_TAB_FADE_TRANSITION}
       className="absolute inset-0 z-[100] flex flex-col select-none" style={{ background: '#000', color: '#fff', touchAction: 'none' }}>
       <div className="flex items-center gap-3 px-3 pt-header pb-3" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.75), rgba(0,0,0,0))', position: 'relative', zIndex: 2 }}>
         <button onClick={onClose} aria-label="Close" style={{ width: 40, height: 40, border: 'none', background: 'none', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

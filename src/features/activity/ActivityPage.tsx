@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { useHideOnScroll, collapseStyle } from '@/hooks/useHideOnScroll'
 import {useLocation, useNavigate, useSearchParams} from 'react-router-dom'
@@ -1005,7 +1005,7 @@ export function ActivityPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-bg">
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}} @keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* Header */}
       <div className="sticky top-0 z-20 backdrop-blur-md" style={{ background: 'color-mix(in srgb, var(--bg) 95%, transparent)' }}>
