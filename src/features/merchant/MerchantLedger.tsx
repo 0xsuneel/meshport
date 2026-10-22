@@ -17,8 +17,7 @@ import {
   listUnmatchedDeposits, assignDeposit, dismissDeposit, completeOrder,
   listChainReceipts, getAutoConvert, setAutoConvert, isOwnReceipt, isBridgeReceipt,
   type MerchantIntent, type MerchantPayment, type UnmatchedDeposit, type ChainReceipt, orderKindOf, orderTitle, orderDisplay } from '@/lib/merchantPay'
-import { createPortal } from 'react-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import { HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { PinSheet } from '@/components/ui/PinSheet'

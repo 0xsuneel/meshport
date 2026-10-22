@@ -2077,7 +2077,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           {/* Passcode - the app's passcode step (PinSheet), on this same page,
               no navigation: phone = bottom sheet, desktop = the authorize
               dialog in the right-hand panel. */}
-          <PinSheet open={showPasscodeSheet} id="mc-pass" backClose={false}
+          <PinSheet open={showPasscodeSheet} id="mc-pass"
             onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
             title={desktopInput ? 'Authorize Claim' : 'Enter Passcode'}
             subtitle={desktopInput ? `From ${selectedChain ? getMeta(selectedChain.chainId).label : 'Multichain'}` : `Confirm claim of $${formatAmount(selectedTotal)} USDC`}
