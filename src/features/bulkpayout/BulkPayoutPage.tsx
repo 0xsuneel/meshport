@@ -25,6 +25,7 @@ import { isValidAddress } from '@/lib/arcService'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
+import { PointsEarnedLine } from '@/components/rewards/PointsEarnedLine'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen'
 
@@ -785,6 +786,7 @@ export function BulkPayoutPage() {
           <p className="text-sm text-danger">Failed</p>
         </div>
       </div>
+      {successCount > 0 && <div className="flex justify-center"><PointsEarnedLine type="bulkpay" /></div>}
       {/* The whole payout is one transaction (Multicall3): one link for it,
           not the same link on every row. */}
       {sharedTxHash && (

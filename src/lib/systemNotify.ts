@@ -24,11 +24,12 @@ export function urlFor(n: Pick<AppNotification, 'id' | 'tradeId' | 'type'>): str
   const type = String(n.type)
   if (n.tradeId) return `/p2p/trade/${n.tradeId}`
   if (n.id.startsWith('claim_')) return '/multichain'
-  if (type === 'merchant_payment_received') return '/business?tab=payments'
-  if (type === 'merchant_chain_payment') return '/business?tab=settlements'
-  if (type === 'merchant_approved' || type === 'business_staff_invite') return '/business'
-  if (type === 'merchant_refund' || type === 'payment_received') return '/activity'
+  if (['merchant_payment_received', 'merchant_payment_partial', 'merchant_payment_arriving'].includes(type)) return '/business?tab=payments'
+  if (['merchant_chain_payment', 'merchant_ledger_credited', 'merchant_ledger_moving', 'merchant_funds_moved'].includes(type)) return '/business?tab=settlements'
+  if (type === 'merchant_refund' || type === 'merchant_order_completed' || type === 'payment_received') return '/activity'
+  if (type === 'merchant_bill_reminder') return '/chat'
   if (type === 'reward_earned') return '/rewards'
+  if (type.startsWith('merchant_') || type.startsWith('business_')) return '/business'
   return '/notifications'
 }
 
@@ -38,11 +39,15 @@ export function urlFor(n: Pick<AppNotification, 'id' | 'tradeId' | 'type'>): str
  * USDC arriving on another chain. Kept in the notification list, never put
  * in the phone's shade (the app already showed the result on screen).
  */
-export function isOwnActionNotification(n: Pick<AppNotification, 'type' | 'title'>): boolean {
+export function isOwnActionNotification(n: Pick<AppNotification, 'type' | 'title'> & { body?: string }): boolean {
   const type = String(n.type)
   return type === 'reward_earned' || type === 'swap_complete'
     || type === 'merchant_order_paid' || type === 'merchant_refund_sent'
     || (type === 'merchant_chain_payment' && /^Your USDC arrived/i.test(n.title ?? ''))
+    // The payer's copy of a partial payment ("You paid $2 of $5 …").
+    || (type === 'merchant_payment_partial' && /^You paid/i.test(n.body ?? ''))
+    // Points you claimed to USDC (notifyRewardClaimed).
+    || (type === 'payment_received' && / from MeshPort Rewards$/.test(n.body ?? ''))
 }
 
 export function mirrorToSystem(n: AppNotification): void {

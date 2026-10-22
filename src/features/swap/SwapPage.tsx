@@ -1851,6 +1851,7 @@ export function SwapPage() {
           return (
           <motion.div key="done" initial={false} style={isDesktop ? { margin: '-16px -16px 0' } : { margin: '-16px -16px -32px', flex: 1, display: 'flex', flexDirection: 'column' }}>
             <SuccessReceipt
+              reward="swap"
               style={isDesktop ? undefined : { height: 'auto', flex: 1 }}
               title="Swap Successful!"
               subtitle={<>{tokenIn.id} → {tokenOut.id} on Arc</>}

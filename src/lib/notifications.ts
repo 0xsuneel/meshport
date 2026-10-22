@@ -258,6 +258,10 @@ export function notifyRewardSend(points = 20, tokenSymbol = 'USDC') {
   maybeRewardNotif(`You earned ${points} points for sending ${tokenSymbol}.`)
 }
 
+export function notifyRewardChatPay(points = 20) {
+  maybeRewardNotif(`You earned ${points} points for paying in chat.`)
+}
+
 export function notifyRewardSwap(points = 20) {
   maybeRewardNotif(`You earned ${points} points for completing a swap.`)
 }

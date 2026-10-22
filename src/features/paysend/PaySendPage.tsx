@@ -1670,6 +1670,7 @@ export function PaySendPage() {
               const amountLabel = `${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token}`
               return (
                 <SuccessReceipt
+                  reward="pay_send"
                   title={payPending ? 'Payment Submitted' : 'Paid Successfully'}
                   subtitle={payPending
                     ? <>Still confirming on Arc. Activity updates when it lands.</>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { POINTS_EARNED_EVENT } from '@/lib/pointsEarned'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence } from 'framer-motion'
@@ -321,6 +322,15 @@ export function RewardsPage() {
   }, [userId, walletAddress])
 
   useEffect(() => { load() }, [load])
+  // Live: a task done while this page is open (desktop: Pay / Swap beside
+  // it) ticks off at once; back in the app, re-read for tasks done meanwhile.
+  useEffect(() => {
+    const onEarned = () => { void load() }
+    const onVisible = () => { if (document.visibilityState === 'visible') void load() }
+    window.addEventListener(POINTS_EARNED_EVENT, onEarned)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { window.removeEventListener(POINTS_EARNED_EVENT, onEarned); document.removeEventListener('visibilitychange', onVisible) }
+  }, [load])
 
   const dailyRemaining = Math.max(0, MAX_DAILY_POINTS - dailyClaimedPoints)
   const maxClaimable = Math.min(totalPoints, dailyRemaining, MAX_CLAIM_POINTS)

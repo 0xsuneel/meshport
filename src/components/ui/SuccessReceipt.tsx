@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from 'react'
+import { PointsEarnedLine } from '@/components/rewards/PointsEarnedLine'
+import type { RewardActionType } from '@/lib/rewards'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { Check, ChevronDown, Copy, ExternalLink, Zap } from 'lucide-react'
 import { EASE_OUT } from '@/lib/motion'
@@ -58,6 +60,8 @@ interface SuccessReceiptProps {
    * primary button, so they stay visible while "More details" is open.
    */
   actions?: Array<{ label: string; onClick: () => void; primary?: boolean }>
+  /** The daily reward task this action counts for: "+20 points · …" once it pays out. */
+  reward?: RewardActionType
 }
 
 /** Size of the header's white check circle - the traveling checkmark's target. */
@@ -136,7 +140,7 @@ function Confetti() {
 export function SuccessReceipt({
   title, subtitle, pill, bubble, rows, steps, detailRows, fullHash, links, linksNote,
   primaryLabel = 'Done', onPrimary, checkRef, revealed, checkContent, style,
-  status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions,
+  status = 'success', celebrate = true, detailsTitle = 'Transaction details', stamp, actions, reward,
 }: SuccessReceiptProps) {
   // Takes over from the success flash, which switches the page's blurs off
   // while it's up. Holding them off here too means the hand-off doesn't turn
@@ -272,6 +276,7 @@ export function SuccessReceipt({
               </div>
             </Reveal>
           )}
+          {reward && revealed && <div style={{ marginTop: 8 }}><PointsEarnedLine type={reward} /></div>}
 
           <div style={{ textAlign: 'left', marginTop: 10 }}>
             {rows.map((r, i) => <Row key={r.label} row={r} i={i + 3} revealed={revealed} />)}
