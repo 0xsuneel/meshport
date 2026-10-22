@@ -1,3 +1,4 @@
+import { CONTROL_MOTION } from '@/lib/motion'
 import { useEffect, useState, useRef } from 'react'
 import { takeBiometricPasscode, clearBiometricPasscode } from '@/lib/biometricHandoff'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -94,7 +95,7 @@ export function EnableBiometricPage() {
       <div className="flex-1 flex flex-col items-center justify-center text-center gap-6">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-          transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+          transition={CONTROL_MOTION}
           className="w-24 h-24 rounded-full flex items-center justify-center bg-brand/15 border border-brand/25"
         >
           <Icon className="w-11 h-11 text-brand-text" />

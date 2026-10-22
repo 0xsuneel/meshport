@@ -1,3 +1,4 @@
+import { CONTROL_MOTION } from '@/lib/motion'
 import { useEffect } from 'react'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -216,13 +217,13 @@ export function BottomNav() {
                     {isActive && (
                       <motion.div
                         layoutId="bottom-nav-pill"
-                        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                        transition={CONTROL_MOTION}
                         style={{ position: 'absolute', inset: 0, borderRadius: 16, background: 'var(--brand)' }}
                       />
                     )}
                     <motion.div
                       animate={{ scale: isActive ? 1.04 : 1 }}
-                      transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                      transition={CONTROL_MOTION}
                       style={{ position: 'relative', display: 'flex' }}
                     >
                       {tab.id === 'home'     && <HomeIcon active={isActive} filled />}
@@ -236,7 +237,7 @@ export function BottomNav() {
                         key={badgeCount}
                         initial={{ scale: 0.6 }}
                         animate={{ scale: 1 }}
-                        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                        transition={CONTROL_MOTION}
                         style={{
                           position: 'absolute', top: -4, right: -6,
                           minWidth: 16, height: 16, background: 'var(--danger)',

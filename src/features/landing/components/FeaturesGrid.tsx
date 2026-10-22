@@ -1,3 +1,4 @@
+import { CONTROL_MOTION } from '@/lib/motion'
 import { motion } from 'framer-motion'
 import {
   AtSign, QrCode, MessageCircle, Banknote, Layers, ArrowLeftRight, Repeat, Handshake, Activity,
@@ -56,7 +57,7 @@ export function FeaturesGrid() {
                   key={f.title}
                   variants={staggerItem}
                   whileHover={{ y: -4, boxShadow: '0 16px 40px -12px rgba(0,0,0,0.18)' }}
-                  transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                  transition={CONTROL_MOTION}
                   className="group flex flex-col gap-4 rounded-[20px] border border-border bg-surface p-6 shadow-elevation-1"
                 >
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand/12 text-brand-text transition-colors group-hover:bg-brand group-hover:text-white">
