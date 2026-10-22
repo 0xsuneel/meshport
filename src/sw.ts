@@ -127,6 +127,17 @@ self.addEventListener('push', (event: PushEvent) => {
   event.waitUntil(self.registration.showNotification(title, options))
 })
 
+// Asks the app in `client` to open `url` in place (AppLayout listens for
+// 'meshport:open'); true once it confirms, false if it doesn't within 1.5 s.
+function askAppToOpen(client: WindowClient, url: string): Promise<boolean> {
+  return new Promise(resolve => {
+    const ch = new MessageChannel()
+    const t = setTimeout(() => resolve(false), 1500)
+    ch.port1.onmessage = () => { clearTimeout(t); resolve(true) }
+    try { client.postMessage({ type: 'meshport:open', url }, [ch.port2]) } catch { clearTimeout(t); resolve(false) }
+  })
+}
+
 // ── Tap a notification - focus an existing tab or open a new one ───────────
 self.addEventListener('notificationclick', (event: NotificationEvent) => {
   event.notification.close()
@@ -145,6 +156,10 @@ self.addEventListener('notificationclick', (event: NotificationEvent) => {
       const client = windows.find(c => c.focused) ?? windows[0]
       if (client) {
         const focused = await client.focus()
+        // The app open in that window moves to the page itself (no reload,
+        // so it stays unlocked); only if it doesn't answer is the window
+        // loaded at that address.
+        if (await askAppToOpen(focused ?? client, targetUrl)) return
         try {
           await (focused ?? client).navigate(targetUrl)
         } catch {

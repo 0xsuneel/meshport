@@ -19,16 +19,35 @@ function tagFor(n: Pick<AppNotification, 'id' | 'source'>): string {
   return `n-${id}`                                       // notifications table trigger push
 }
 
-function urlFor(n: Pick<AppNotification, 'id' | 'tradeId' | 'type'>): string {
+/** Where tapping it goes - the thing it is about, not the notification list. */
+export function urlFor(n: Pick<AppNotification, 'id' | 'tradeId' | 'type'>): string {
+  const type = String(n.type)
   if (n.tradeId) return `/p2p/trade/${n.tradeId}`
   if (n.id.startsWith('claim_')) return '/multichain'
-  if (String(n.type).startsWith('merchant_')) return '/merchant'
+  if (type === 'merchant_payment_received') return '/business?tab=payments'
+  if (type === 'merchant_chain_payment') return '/business?tab=settlements'
+  if (type === 'merchant_approved' || type === 'business_staff_invite') return '/business'
+  if (type === 'merchant_refund' || type === 'payment_received') return '/activity'
+  if (type === 'reward_earned') return '/rewards'
   return '/notifications'
+}
+
+/**
+ * Your own action, not something that happened to you: points for paying,
+ * a swap you just made, "You paid … to <shop>", a refund you sent, your own
+ * USDC arriving on another chain. Kept in the notification list, never put
+ * in the phone's shade (the app already showed the result on screen).
+ */
+export function isOwnActionNotification(n: Pick<AppNotification, 'type' | 'title'>): boolean {
+  const type = String(n.type)
+  return type === 'reward_earned' || type === 'swap_complete'
+    || type === 'merchant_order_paid' || type === 'merchant_refund_sent'
+    || (type === 'merchant_chain_payment' && /^Your USDC arrived/i.test(n.title ?? ''))
 }
 
 export function mirrorToSystem(n: AppNotification): void {
   try {
-    if (n.isRead) return
+    if (n.isRead || isOwnActionNotification(n)) return
     if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) return
     if (Notification.permission !== 'granted') return
     const t = Date.parse(n.timestamp)

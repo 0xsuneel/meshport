@@ -91,6 +91,24 @@ export function AppLayout() {
   useVisibleFrame(frameRef, !isDesktop)
   useFrameScrollGuard(frameRef, !isDesktop)
 
+  // A tapped phone notification (sw.ts notificationclick): open its page
+  // right here, without reloading the app (a reload would lock it again).
+  const openFromNotification = useNavigate()
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type !== 'meshport:open' || typeof e.data.url !== 'string') return
+      try {
+        const u = new URL(e.data.url, window.location.origin)
+        if (u.origin !== window.location.origin) return
+        openFromNotification(u.pathname + u.search + u.hash)
+        e.ports?.[0]?.postMessage('ok')
+      } catch { /* not ours - the service worker falls back to loading the page */ }
+    }
+    navigator.serviceWorker.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage)
+  }, [openFromNotification])
+
   // Links this session to the account with a wallet signature (see
   // syncAuthUidToProfile). Re-checked when the app comes back to the front,
   // since a sign-out/in elsewhere or an expired session gives a new session id.
