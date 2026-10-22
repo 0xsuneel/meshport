@@ -52,7 +52,12 @@ export function classifyStuckRelease(p: StuckReleaseProbe): StuckReleaseDecision
   return { verdict: 'cancel', reason: 'No escrow was ever deposited, so the release could never have succeeded - cancelling and unlocking the offer.' }
 }
 
-export const STUCK_RELEASE_GRACE_MS = 5 * 60 * 1000
+// Measured from the claim (the 'release_claimed' audit row) when it is known.
+// A release on Arc lands in seconds; two minutes leaves room for a slow
+// signature or network without making the buyer wait long when the seller's
+// app closed mid-release. Restoring is safe even if a release does land later:
+// the contract releases a trade once, and the release path completes the row.
+export const STUCK_RELEASE_GRACE_MS = 2 * 60 * 1000
 
 // ── Activation boundary - mirror of the canonical file, parity-enforced ──────
 // Fails closed: no cutoff configured means process NOTHING. See the canonical
@@ -70,6 +75,8 @@ export function parseActivationCutoff(raw: string | undefined | null): number | 
 export interface ReconcileEligibilityInput {
   tradeId: string
   createdAtIso: string
+  /** When the release was claimed; the grace window runs from here when known. */
+  claimedAtIso?: string | null
   cutoffMs: number | null
   graceMs: number
   nowMs: number
@@ -90,7 +97,9 @@ export function isEligibleForReconcile(i: ReconcileEligibilityInput): { eligible
   if (createdMs <= i.cutoffMs) {
     return { eligible: false, reason: 'Trade predates the activation cutoff - historical, left for manual review.' }
   }
-  if (createdMs > i.nowMs - i.graceMs) {
+  const claimedMs = i.claimedAtIso ? Date.parse(i.claimedAtIso) : NaN
+  const sinceMs = Number.isFinite(claimedMs) ? Math.max(createdMs, claimedMs) : createdMs
+  if (sinceMs > i.nowMs - i.graceMs) {
     return { eligible: false, reason: 'Trade is still inside the grace window - a release may yet be in flight.' }
   }
   return { eligible: true, reason: 'Created after activation and past the grace window.' }

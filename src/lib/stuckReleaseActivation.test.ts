@@ -103,10 +103,23 @@ describe('activation boundary - new trades ARE processed', () => {
   })
 
   it('a trade created after activation but still inside the grace window is not yet eligible', () => {
-    const justNow = new Date(NOW - 60_000).toISOString()   // 1 min ago, grace is 5
+    const justNow = new Date(NOW - 60_000).toISOString()   // 1 min ago, grace is 2
     const r = gate({ createdAtIso: justNow })
     expect(r.eligible).toBe(false)
     expect(r.reason).toMatch(/grace window/i)
+  })
+
+  it('the grace window runs from the release claim, not from trade creation', () => {
+    const created = '2026-08-22T13:00:00.000Z'   // long past
+    expect(gate({ createdAtIso: created, claimedAtIso: new Date(NOW - 60_000).toISOString() }).eligible).toBe(false)
+    expect(gate({ createdAtIso: created, claimedAtIso: new Date(NOW - STUCK_RELEASE_GRACE_MS - 1).toISOString() }).eligible).toBe(true)
+    // An unreadable claim time falls back to created_at.
+    expect(gate({ createdAtIso: created, claimedAtIso: 'nonsense' }).eligible).toBe(true)
+    for (const ago of [0, 60_000, STUCK_RELEASE_GRACE_MS, STUCK_RELEASE_GRACE_MS + 1]) {
+      const input = { tradeId: 'c', createdAtIso: created, claimedAtIso: new Date(NOW - ago).toISOString(),
+        cutoffMs: Date.parse(ACTIVATION), graceMs: STUCK_RELEASE_GRACE_MS, nowMs: NOW }
+      expect(srvIsEligible(input).eligible, `ago=${ago}`).toBe(isEligibleForReconcile(input).eligible)
+    }
   })
 
   it('an unparseable created_at is refused rather than assumed', () => {
