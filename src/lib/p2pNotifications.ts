@@ -19,6 +19,7 @@
 // AppLayout.tsx) - it seeds the store with recent unread rows, subscribes
 // to new ones in real time, and returns an unsubscribe function.
 
+import { isOwnActionNotification } from './systemNotify'
 import { supabase } from './supabase'
 import { authHeaders, subscribeWithRetry } from './chatService'
 import { bootPart } from './homeBootstrap'
@@ -149,6 +150,8 @@ export function startP2PNotifications(userId: string): () => void {
         // A business's payment arrivals already get the full-screen "Payment
         // received" popup (PaymentReceivedWatcher) - no second toast on top.
         if (POPUP_COVERED.has(row.type)) return
+        // Your own payment / refund / transfer: on screen already, no toast.
+        if (isOwnActionNotification({ type: row.type, title: row.title } as any)) return
         // Foreground toast - the OS-level push (dispatched server-side, see
         // the migration's push trigger) is what covers the app being
         // closed/backgrounded; this covers "app is open right now".
