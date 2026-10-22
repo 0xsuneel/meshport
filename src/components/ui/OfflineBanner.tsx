@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { TOAST_MOTION } from '@/lib/motion'
 import { useOnline, useSlowNetwork } from '@/lib/connectivity'
 
 // A small pill at the top of the screen: "No internet connection" while the
@@ -36,8 +37,7 @@ export function OfflineBanner() {
     <AnimatePresence>
       {state && (
         <motion.div key={state} role="status" aria-live="polite"
-          initial={{ y: -16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -16, opacity: 0 }}
-          transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+          {...TOAST_MOTION}
           style={{
             position: 'fixed', zIndex: 10000, left: '50%', translateX: '-50%',
             top: 'calc(env(safe-area-inset-top, 0px) + 10px)',

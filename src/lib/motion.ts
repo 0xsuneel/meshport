@@ -173,6 +173,10 @@ export const PUSH_PARALLAX = '-28%'
 /** How dark the page underneath gets while a page is pushed over it. */
 export const PUSH_DIM = 0.22
 export const DESKTOP_FADE_MS = 150
+/** The first page of a new frame (landing → sign-in, sign-up → Home) has
+ *  no old page to slide over: it glides this far and fades up instead. */
+export const FRAME_ENTRY_PX = 32
+export const FRAME_ENTRY_MS = 240
 /** Desktop page / screen entrance as Web Animations keyframes. */
 export const DESKTOP_FADE_KEYFRAMES: Keyframe[] = [{ opacity: 0, transform: `translateY(${4}px)` }, { opacity: 1, transform: 'none' }]
 
