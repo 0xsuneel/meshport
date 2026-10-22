@@ -10,7 +10,7 @@ import { flushSync, createPortal } from 'react-dom'
 import { useNavigate, useSearchParams, type NavigateFunction } from 'react-router-dom'
 import { Copy, Check, Users, Download, Share2, DollarSign, X, Fingerprint, ScanFace } from 'lucide-react'
 import { useMotionValue, animate, motion, AnimatePresence } from 'framer-motion'
-import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
+import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { parseUnits } from 'viem'
 import { ARC } from '@/blockchain/chains'
 import { arcAddressUri } from '@/lib/merchantQr'
@@ -46,6 +46,7 @@ import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { SearchField } from '@/components/ui/SearchField'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
+import { ActionSheet } from '@/components/ui/ActionSheet'
 import { ActionIcon } from '@/components/ui/ActionIcon'
 import { NavIcon } from '@/components/layout/navIcons'
 import { biometricLabel } from '@/lib/biometric'
@@ -503,7 +504,7 @@ function BiometricFooterRow({ isDesktop }: { isDesktop: boolean }) {
 
 
 // ── More Actions Sheet ────────────────────────────────────────────────────────
-function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; navigate: (p: string) => void; hasOngoingP2P?: boolean }) {
+function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; onClose: () => void; navigate: (p: string) => void; hasOngoingP2P?: boolean }) {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const hub = useHubLabel()
   // Merchants: Rewards is replaced by the Business tab.
@@ -514,10 +515,11 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
   // Business not approved yet: the actions stay visible with a lock - tapping
   // one opens the "available after approval" screen. No staff mode.
   const { locked } = useAccountLock()
+  // Looked up when the sheet opens (it stays mounted so it can animate out).
   useEffect(() => {
-    if (business) return
+    if (business || !open) return
     import('@/lib/businessTeam').then(m => m.myMemberships()).then(l => setStaffOf(l.length > 0)).catch(() => {})
-  }, [business])
+  }, [business, open])
   // Two groups, four across (Money, then Explore).
   const groups: { title: string; actions: { label: string; path: string; icon: React.ReactNode }[] }[] = [
     { title: 'Money', actions: [
@@ -575,38 +577,19 @@ function MoreSheet({ onClose, navigate, hasOngoingP2P }: { onClose: () => void; 
     </>
   )
 
-  // Desktop: centred popup. Phone: slides up from the bottom exactly like the
-  // amount keypad (same half-sheet, handle, light dim and spring).
-  if (isDesktop) {
-    return (
-      <DesktopDialogFrame onClose={onClose} maxWidth={420}>
-        <div style={{ padding: '24px 20px 28px' }}>{content}</div>
-      </DesktopDialogFrame>
-    )
-  }
+  // The app's bottom sheet (ActionSheet): slides up on phones, a centred
+  // popup on desktop.
   // iOS Safari can create a separate compositing/stacking context for the
   // Home layout, which lets the fixed bottom navigation paint above a fixed
-  // sheet even when the sheet has a higher local z-index. Portal the mobile
-  // sheet to document.body so it participates in the root stacking context.
+  // sheet even when the sheet has a higher local z-index. Portal it to
+  // document.body so it participates in the root stacking context.
   return createPortal(
-    <>
-      <motion.div key="more-backdrop"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={SHEET_BACKDROP.transition}
-        onClick={onClose}
-        style={{ position: 'fixed', inset: 0, maxWidth: 430, margin: '0 auto', zIndex: 9990, background: 'rgba(0,0,0,0.32)' }} />
-      <motion.div key="more-sheet" role="dialog" aria-modal="true" aria-label="Actions"
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT} transition={SHEET_SPRING}
-        style={{
-          position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 9991,
-          maxWidth: 430, margin: '0 auto',
-          background: 'var(--surface)', borderRadius: '28px 28px 0 0',
-          borderTop: '1px solid var(--border)', boxShadow: 'var(--shadow-3)',
-          padding: '10px 20px calc(env(safe-area-inset-bottom, 0px) + 28px)',
-        }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)', margin: '4px auto 14px' }} />
-        {content}
-      </motion.div>
-    </>,
+    <ActionSheet open={open} onClose={onClose} isDesktop={isDesktop} id="home-more" fixed zIndex={9991} desktopMaxWidth={420}>
+      <div style={{
+        overflowY: 'auto', overscrollBehavior: 'contain',
+        padding: isDesktop ? '24px 20px 28px' : '6px 20px calc(env(safe-area-inset-bottom, 0px) + 28px)',
+      }}>{content}</div>
+    </ActionSheet>,
     document.body,
   )
 }
@@ -1082,7 +1065,7 @@ function OrderTicker({ popups, onOpenOrder, onDismissOrder, onViewAll }: {
             <motion.div
               key={current.id}
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={MOBILE_TAB_FADE_TRANSITION}
               style={{ fontSize: 11, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
             >
               <span style={{ fontWeight: 700 }}>{current.title}</span>
@@ -1130,33 +1113,18 @@ function OrderTicker({ popups, onOpenOrder, onDismissOrder, onViewAll }: {
 }
 
 // ── "View all" scrollable list - every pending order, not just the one the
-// ticker currently happens to be showing. Portalled with a genuinely
-// opaque + blurred backdrop (this exact spot had a bug before: a
-// translucent backdrop let the Home screen show through it - fixed here
-// by using a near-opaque scrim, not a light tint).
+// ticker currently happens to be showing. The app's centred popup
+// (DesktopDialogFrame, bare: this list draws its own compact card), so it
+// dims, opens, closes (Esc / tap outside / phone Back) like every popup.
 function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
   popups: Array<{ id: string; title: string; body: string; type: string; tradeId?: string }>
   onOpenOrder: (n: { id: string; tradeId?: string }) => void
   onDismissOrder: (n: { id: string; tradeId?: string }) => void
   onClose: () => void
 }) {
-  return createPortal(
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 9998,
-        // Was 0.88 opacity + 14px blur - nearly opaque, so the Home screen
-        // behind it read as flat black rather than a genuine frosted-glass
-        // backdrop. Much lower opacity so Home's own content actually shows
-        // through (softened/blurred, not hidden), lighter blur per explicit
-        // "not too much blur" ask.
-        background: 'rgba(5,7,9,0.35)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '16px 16px 0',
-      }}
-    >
+  return (
+    <DesktopDialogFrame onClose={onClose} bare maxWidth={320} zIndex={9998}>
       <div
-        onClick={e => e.stopPropagation()}
-        className="max-w-xs w-full"
         style={{
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18,
           boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
@@ -1181,14 +1149,9 @@ function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
                 role="button"
                 style={{
                   display: 'flex', alignItems: 'center', gap: 8,
-                  // Was var(--bg) - nearly the same dark shade as the modal's
-                  // own backdrop behind it, so rows had almost no visible
-                  // separation from the surrounding blank space. Lighter,
-                  // blurred glass surface instead - same visual language as
-                  // the ticker itself and GlassPopCard elsewhere in the app.
+                  // A shade lighter than the card, so each row stands apart.
                   background: 'color-mix(in srgb, var(--text-primary) 6%, var(--surface))',
                   border: '1px solid var(--border)', borderRadius: 12,
-                  backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
                   padding: '9px 10px', cursor: 'pointer',
                 }}
               >
@@ -1223,8 +1186,7 @@ function AllOrdersPopup({ popups, onOpenOrder, onDismissOrder, onClose }: {
           })}
         </div>
       </div>
-    </div>,
-    document.body
+    </DesktopDialogFrame>
   )
 }
 
@@ -3744,18 +3706,20 @@ export function HomePage() {
           onDismissOrder={clearTradePopupsFor}
           onViewAll={() => setShowAllOrders(true)}
         />
-        {showAllOrders && (
-          <AllOrdersPopup
-            popups={allP2PPopups}
-            onClose={() => setShowAllOrders(false)}
-            onOpenOrder={(n) => {
-              clearTradePopupsFor(n)
-              setShowAllOrders(false)
-              navigate(n.tradeId ? `/p2p/trade/${n.tradeId}` : '/p2p/my-trades')
-            }}
-            onDismissOrder={clearTradePopupsFor}
-          />
-        )}
+        <AnimatePresence>
+          {showAllOrders && (
+            <AllOrdersPopup key="all-orders"
+              popups={allP2PPopups}
+              onClose={() => setShowAllOrders(false)}
+              onOpenOrder={(n) => {
+                clearTradePopupsFor(n)
+                setShowAllOrders(false)
+                navigate(n.tradeId ? `/p2p/trade/${n.tradeId}` : '/p2p/my-trades')
+              }}
+              onDismissOrder={clearTradePopupsFor}
+            />
+          )}
+        </AnimatePresence>
 
         {/* Desktop: 3 columns - Balance/Multichain Hub/Recent/Assets far left;
             Quick Actions/Recent Activity in the middle; Insights on the
@@ -4133,23 +4097,25 @@ export function HomePage() {
       </div>
 
       {/* ── MORE ACTIONS SHEET ───────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showMore && <MoreSheet key="more" onClose={() => setShowMore(false)} navigate={navigate} hasOngoingP2P={ongoingTradesCount > 0} />}
-      </AnimatePresence>
+      <MoreSheet open={showMore} onClose={() => setShowMore(false)} navigate={navigate} hasOngoingP2P={ongoingTradesCount > 0} />
 
       {/* ── CUSTOMIZE QUICK ACTIONS SHEET ────────────────────────────────────── */}
-      {showCustomizeActions && (
-        <CustomizeQuickActionsSheet
-          selectedIds={quickActionIds}
-          onToggle={toggleQuickAction}
-          onClose={() => setShowCustomizeActions(false)}
-          warning={quickActionsLimitWarning}
-        />
-      )}
+      <AnimatePresence>
+        {showCustomizeActions && (
+          <CustomizeQuickActionsSheet key="customize-actions"
+            selectedIds={quickActionIds}
+            onToggle={toggleQuickAction}
+            onClose={() => setShowCustomizeActions(false)}
+            warning={quickActionsLimitWarning}
+          />
+        )}
+      </AnimatePresence>
 
-      {selectedActivity && (
-        <DetailSheet record={selectedActivity} onClose={() => { recentFlash.closed(selectedActivity.id); setSelectedActivity(null) }} />
-      )}
+      <AnimatePresence>
+        {selectedActivity && (
+          <DetailSheet key={selectedActivity.id} record={selectedActivity} onClose={() => { recentFlash.closed(selectedActivity.id); setSelectedActivity(null) }} />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

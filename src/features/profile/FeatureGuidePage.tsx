@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ChevronRight, X } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { SECTIONS } from './featureGuideData'
 
 // ── MeshPort Feature Guide ────────────────────────────────────────────────────
@@ -104,16 +106,21 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
         <p className="text-[11.5px] text-text-muted text-center px-4">Some screens show sample names and amounts.</p>
       </div>
 
-      {zoom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 mp-fade-in" style={{ background: 'rgba(0,0,0,0.75)' }} onClick={() => setZoom(null)}>
-          <button onClick={() => setZoom(null)} aria-label="Close"
-            className="absolute top-5 right-5 w-10 h-10 rounded-full bg-white/15 flex items-center justify-center">
-            <X className="w-5 h-5 text-white" />
-          </button>
-          <img src={`/guide/${zoom.image}.jpg`} alt={`${zoom.title} screen`}
-            className="max-h-full max-w-full rounded-3xl shadow-2xl" onClick={e => e.stopPropagation()} />
-        </div>
-      )}
+      {/* Screenshot zoom: the app's centred popup (bare - the image is the card). */}
+      <AnimatePresence>
+        {zoom && (
+          <DesktopDialogFrame key="zoom" onClose={() => setZoom(null)} bare maxWidth={520}>
+            <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
+              <img src={`/guide/${zoom.image}.jpg`} alt={`${zoom.title} screen`}
+                className="max-w-full rounded-3xl shadow-2xl" style={{ display: 'block', maxHeight: 'calc(100dvh - 32px)' }} />
+              <button onClick={() => setZoom(null)} aria-label="Close"
+                className="absolute top-3 right-3 w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.42)' }}>
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+          </DesktopDialogFrame>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

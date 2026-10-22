@@ -9,8 +9,8 @@ import { safeStorageUrl, openExternal } from '@/lib/safeUrl'
 import { useState, useEffect, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ADMIN_PATH } from '@/lib/adminPath'
-import { motion, AnimatePresence } from 'framer-motion'
-import { PopupDim } from '@/components/ui/PopupDim'
+import { AnimatePresence } from 'framer-motion'
+import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { ArrowLeft, Snowflake, XCircle, Scale, Ban, ShieldAlert, PauseCircle, PlayCircle, Power, Tag, Lock, Unlock, Sliders, ListChecks } from 'lucide-react'
 import { useUIStore } from '@/store'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -626,11 +626,8 @@ export function P2PAdminPage() {
       {/* Ban modal */}
       <AnimatePresence>
       {banTarget && (
-        <motion.div
-          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          {/* Only the dim fades; the card stays solid (PopupDim). */}
-          <PopupDim background="rgba(0,0,0,0.5)" />
-          <div style={{ position: 'relative', width: '100%', maxWidth: 380, background: COLORS.surface, borderRadius: 18, padding: 20 }}>
+        <DesktopDialogFrame key="ban" onClose={() => setBanTarget(null)} maxWidth={380}>
+          <div style={{ padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <ShieldAlert size={18} color={COLORS.error} />
               <p style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, margin: 0 }}>Ban User</p>
@@ -643,18 +640,16 @@ export function P2PAdminPage() {
               <button onClick={doBan} style={{ flex: 1, padding: '11px 0', borderRadius: 10, border: '1px solid color-mix(in srgb, black 12%, transparent)', background: COLORS.error, color: '#fff', fontSize: 13, fontWeight: 700 }}>Confirm Ban</button>
             </div>
           </div>
-        </motion.div>
+        </DesktopDialogFrame>
       )}
       </AnimatePresence>
 
       {/* Dispute modal */}
       <AnimatePresence>
       {disputeTarget && (
-        <motion.div
-          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          {/* Only the dim fades; the card stays solid (PopupDim). */}
-          <PopupDim background="rgba(0,0,0,0.5)" />
-          <div style={{ position: 'relative', width: '100%', maxWidth: 380, background: COLORS.surface, borderRadius: 18, padding: 20 }}>
+        // Can't be dismissed while a resolution is being sent (like its Close button).
+        <DesktopDialogFrame key="dispute" onClose={() => { if (!resolving) setDisputeTarget(null) }} maxWidth={380}>
+          <div style={{ padding: 20 }}>
             <p style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, marginBottom: 12 }}>Resolve Dispute</p>
 
             <p style={{ fontSize: 11, fontWeight: 700, color: COLORS.muted, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 6 }}>Trade chat</p>
@@ -815,7 +810,7 @@ export function P2PAdminPage() {
             </div>
             <button onClick={() => setDisputeTarget(null)} disabled={resolving} style={{ width: '100%', padding: '10px 0', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 13, opacity: resolving ? 0.6 : 1 }}>Close</button>
           </div>
-        </motion.div>
+        </DesktopDialogFrame>
       )}
       </AnimatePresence>
       <ProcessingFlipCard {...flipState} onDismiss={dismissFlip} />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, Navigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
+import { AnimatePresence } from 'framer-motion'
 import { useAuthStore, useWalletStore } from '@/store'
 import { formatAmount, trimTrailingZeros } from '@/lib/utils'
 import { type ActivityRecord } from '@/lib/ActivityService'
@@ -177,7 +178,9 @@ export function AssetPage() {
           ))}
         </div>
       </div>
-      {selected && <DetailSheet record={selected} onClose={() => { setFlashId(selected.id ?? null); setSelected(null) }} />}
+      <AnimatePresence>
+        {selected && <DetailSheet key={selected.id} record={selected} onClose={() => { setFlashId(selected.id ?? null); setSelected(null) }} />}
+      </AnimatePresence>
     </div>
   )
 }

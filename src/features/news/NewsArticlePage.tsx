@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { useUIStore } from '@/store'
 import { copyToClipboard } from '@/lib/utils'
 import { fetchNewsItem, fetchNewsPage, markNewsRead, newsDate, newsHost, NEWS_SOURCE_LABEL, type NewsItem } from '@/lib/news'
@@ -143,8 +144,9 @@ export function NewsArticlePage() {
   }
 
   // Desktop: the article on the left, "More updates" and the story's details
-  // on the right - the same 65/35 split as Swap and Activity, so the page is
-  // filled instead of one narrow column in the middle.
+  // on the right - the shared 65/35 layout (DesktopTwoColumn) of Swap and
+  // Activity, so the page is filled instead of one narrow column in the
+  // middle. Each column scrolls on its own, so the panel stays in view.
   const others = (more ?? []).filter(n => n.id !== id).slice(0, 6)
   const facts: [string, string][] = item ? [
     ['Source', NEWS_SOURCE_LABEL[item.source]],
@@ -154,13 +156,13 @@ export function NewsArticlePage() {
     ...(host ? [['Original', host] as [string, string]] : []),
   ] : []
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
-      <div style={{ display: 'flex', gap: 28, padding: '20px 24px 40px', alignItems: 'flex-start' }}>
-        <div style={{ flex: '65 1 0%', minWidth: 0 }}>
+    <div style={{ flex: 1, minHeight: 0, height: '100%', background: 'var(--bg)' }}>
+      <DesktopTwoColumn
+        main={<div style={{ paddingBottom: 26 }}>
           {cover}
           {article}
-        </div>
-        <aside style={{ flex: '35 1 0%', minWidth: 0, position: 'sticky', top: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        </div>}
+        side={<aside style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, padding: '14px 16px 6px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>More updates</span>
@@ -196,8 +198,8 @@ export function NewsArticlePage() {
               ))}
             </div>
           )}
-        </aside>
-      </div>
+        </aside>}
+      />
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { ActivityRecord, fetchActivityById } from '@/lib/ActivityService'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DetailSheet, ActivityPage } from './ActivityPage'
 import { AnimatePresence } from 'framer-motion'
+import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 
 export function TransactionDetailPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -31,15 +32,18 @@ export function TransactionDetailPage() {
       <ActivityPage />
       <AnimatePresence>
         {record && <DetailSheet key="detail" record={record} onClose={close} />}
-      </AnimatePresence>
-      {!loading && !record && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3" style={{ background: 'rgba(6,10,14,0.62)' }} onClick={close}>
-          <p className="text-white font-semibold">Transaction not found</p>
-          {!isDesktop && (
-            <button onClick={close} className="back-btn"><ArrowLeft className="w-5 h-5 text-white"/></button>
-          )}
-        </div>
-      )}
+        {/* Nothing to show: the app's centred popup says so (tap outside,
+            Esc, Back or the arrow close it, like the receipt). */}
+        {!loading && !record && (
+          <DesktopDialogFrame key="not-found" onClose={close} maxWidth={320}>
+            <div className="flex flex-col items-center gap-3" style={{ padding: '24px 20px' }}>
+              <p className="text-text-primary font-semibold">Transaction not found</p>
+              {!isDesktop && (
+                <button onClick={close} className="back-btn" aria-label="Back"><ArrowLeft className="w-5 h-5 text-text-primary"/></button>
+              )}
+            </div>
+          </DesktopDialogFrame>
+        )}
     </div>
   )
 }

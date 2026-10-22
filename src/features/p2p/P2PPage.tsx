@@ -7,26 +7,26 @@
 // happens between the two people, outside the app.
 
 import { SendIcon } from '@/components/ui/SendIcon'
-import { PopupOpen } from '@/hooks/usePopupOpen'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { safeStorageUrl, openExternal } from '@/lib/safeUrl'
 import { useState, useEffect, useCallback, useRef, type ReactNode, type CSSProperties } from 'react'
-import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
+import { DIALOG_BACKDROP, POPUP_DIM } from '@/lib/motion'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PopupDim } from '@/components/ui/PopupDim'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import {
   ArrowLeft, Search, Filter, Plus,
   Clock, CheckCircle2, Star, Paperclip, X as XIcon, History, Pencil, PlusCircle, Trash2,
 } from 'lucide-react'
 import { useAuthStore, useUIStore, useP2PTradesCountStore, useWalletStore } from '@/store'
-import { PinKeypad } from '@/components/ui/PinKeypad'
+import { PinSheet } from '@/components/ui/PinSheet'
+import { AmountKeypad, sanitizeAmountInput, tokenDecimals } from '@/components/ui/AmountKeypad'
+import { AmountField } from '@/components/ui/AmountField'
+import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { useProcessingFlip, ProcessingFlipCard } from '@/components/ui/ProcessingFlipCard'
 import { useGlassPop, GlassPopCard } from '@/components/ui/GlassPopCard'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
-import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton } from '@/components/ui/DesktopHistoryPanel'
 import { timeAgo, trimTrailingZeros, copyToClipboard } from '@/lib/utils'
 import {
@@ -44,7 +44,6 @@ import {
   fetchOfferPaymentOptions, fetchMyPaymentMethods, fetchTradePayTo, updateOfferStatus, type P2PPaymentMethod,
 } from '@/lib/p2pService'
 import { MerchantLine, MethodTag, PaymentMethodPicker, PaymentMethodSheet, PAYMENT_METHOD_TYPES } from './p2pUi'
-import { sheetDrag } from '@/lib/sheetDrag'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
@@ -123,94 +122,11 @@ export function statusMeta(status: string): { label: string; color: string } {
   }
 }
 
-/**
- * Passcode confirmation sheet - gates every P2P action that moves USDC
- * on-chain (deposit to escrow on offer creation, withdraw-remaining on
- * offer cancel, release-to-buyer on trade release). Same bottom-sheet +
- * PinKeypad pattern as Swap/Multichain Send/Claim (see SwapPage.tsx /
- * MultichainClaimPage.tsx) - copied here rather than re-derived so the
- * feel (dot progress, biometric key, shake-on-error) matches exactly.
- * When the user has no passcode set (storedPasscode is falsy), falls back
- * to a plain "Confirm" button - same fallback those other screens use -
- * so the sheet still acts as an explicit are-you-sure step either way.
- */
-function PasscodeSheet({
-  title, subtitle, storedPasscode, passEntry, setPassEntry, passError, setPassError, onConfirm, onClose,
-}: {
-  title: string
-  subtitle: ReactNode
-  storedPasscode: string | null | undefined
-  passEntry: string
-  setPassEntry: (v: string) => void
-  passError: string
-  setPassError: (v: string) => void
-  onConfirm: () => void
-  onClose: () => void
-}) {
-  const isDesktop = useMediaQuery('(min-width: 980px)')
-  // Keypad/confirm-button only - the title+subtitle text block above it is
-  // handled separately per branch below (mobile's inline heading vs. the
-  // desktop dialog's own title/subLabel props), so this part alone is
-  // what's shared/reused between the two.
-  const keypadContent = storedPasscode ? (
-    <PinKeypad
-      value={passEntry}
-      onChange={v => { setPassEntry(v); setPassError('') }}
-      length={6}
-      error={!!passError}
-      shake={!!passError}
-      onComplete={() => onConfirm()}
-    />
-  ) : (
-    <button onClick={() => onConfirm()}
-      style={{ width: '100%', padding: '15px 0', borderRadius: 16, border: '1px solid color-mix(in srgb, black 12%, transparent)', cursor: 'pointer', background: COLORS.primary, color: '#fff', fontSize: 14.5, fontWeight: 700 }}>
-      {title}
-    </button>
-  )
-  const content = (
-    <>
-      <div style={{ textAlign: 'center', marginBottom: 28 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 700, color: COLORS.text, margin: 0 }}>{title}</h2>
-        <p style={{ fontSize: 12, marginTop: 6, color: passError ? COLORS.error : COLORS.muted }}>
-          {passError || subtitle}
-        </p>
-      </div>
-      {keypadContent}
-    </>
-  )
-
-  // Callers wrap this in <AnimatePresence> around their condition, so the
-  // sheet slides away when closed instead of vanishing in one frame (an
-  // AnimatePresence inside here unmounted along with it, so no exit ran).
-  if (isDesktop) {
-    return (
-      <DesktopTransactionAuthDialog
-        onClose={onClose}
-        title={title}
-        subLabel={passError ? <span role="alert" style={{ color: COLORS.error }}>{passError}</span> : subtitle}
-      >
-        {keypadContent}
-      </DesktopTransactionAuthDialog>
-    )
-  }
-  return (
-    <>
-      <PopupOpen />
-      {/* Plain dim - no backdrop blur (Android re-blurs it every frame of the fade). */}
-      <motion.div key="pass-backdrop"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.24 } }}
-        transition={SHEET_BACKDROP.transition}
-        style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200 }}
-        onClick={onClose} />
-      <motion.div {...sheetDrag('p2p-pass', onClose)} key="pass-sheet"
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}
-        transition={SHEET_SPRING}
-        style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201, borderRadius: '24px 24px 0 0', paddingTop: 12, paddingBottom: 40, paddingLeft: 24, paddingRight: 24, background: COLORS.surface, borderTop: `1px solid ${COLORS.border}`, maxWidth: 480, margin: '0 auto' }}>
-        <div style={{ width: 40, height: 4, borderRadius: 2, margin: '0 auto 24px', background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)' }} />
-        {content}
-      </motion.div>
-    </>
-  )
+/** sanitizeAmountInput for a value that may be negative (a margin over
+ *  market): one leading "-" kept, the rest capped at `decimals`. */
+function signedAmountInput(raw: string, decimals: number): string {
+  const neg = raw.trim().startsWith('-')
+  return (neg ? '-' : '') + sanitizeAmountInput(raw, decimals)
 }
 
 // Last loaded lists, so coming back to a P2P page (or switching to a tab /
@@ -429,7 +345,7 @@ export function P2PHubPage() {
             <div style={{ padding: '0 16px 10px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: COLORS.surface, borderRadius: 12, padding: '10px 12px', border: `1px solid ${COLORS.border}` }}>
                 <span style={{ fontSize: 13, color: COLORS.muted, whiteSpace: 'nowrap' }}>{buying ? 'I want to pay' : 'I want to receive'}</span>
-                <input inputMode="decimal" value={fiatAmount} onChange={e => setFiatAmount(e.target.value.replace(/[^\d.]/g, ''))} placeholder="Any amount"
+                <input inputMode="decimal" value={fiatAmount} onChange={e => setFiatAmount(sanitizeAmountInput(e.target.value, 2))} placeholder="Any amount"
                   style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', color: COLORS.text, fontSize: 14, fontWeight: 600, textAlign: 'right' }} />
                 <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{currency || 'fiat'}</span>
               </div>
@@ -522,14 +438,10 @@ export function P2PHubPage() {
   if (!isDesktop) return flow
 
   // ── Desktop: flow (left) + P2P History (right), independently scrollable ──
-  // Fills the full available content width (no maxWidth cap) at a fixed
-  // 65/35 grow split, same treatment as Swap/Multichain Transfer/Pay/
-  // Multichain Claim. Bottom padding trimmed so both columns reach down
-  // close to the viewport's bottom edge.
+  // The app's desktop two-column layout (65/35), as on Swap/Multichain
+  // Transfer/Pay/Multichain Claim.
   return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
-      <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto' }}>{flow}</div>
-      <div style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0 }}>
+    <DesktopTwoColumn main={flow} side={
         <DesktopHistoryPanel title="P2P History" onViewAll={() => navigate('/p2p/history')}>
           {!p2pHistoryLoaded ? (
             <DesktopHistorySkeleton />
@@ -555,8 +467,7 @@ export function P2PHubPage() {
             })
           )}
         </DesktopHistoryPanel>
-      </div>
-    </div>
+    } />
   )
 }
 
@@ -714,7 +625,7 @@ export function P2PCreateOfferPage() {
   const stepper = (value: string, set: (v: string) => void, delta: number, suffix = '') => (
     <div style={{ display: 'flex', alignItems: 'center', borderRadius: 12, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
       <button onClick={() => set(String(Math.round(((parseFloat(value) || 0) - delta) * 100) / 100))} style={{ padding: '10px 18px', background: 'none', border: 'none', fontSize: 20, color: COLORS.muted, cursor: 'pointer' }}>−</button>
-      <input inputMode="decimal" value={value} onChange={e => set(e.target.value.replace(/[^\d.-]/g, ''))}
+      <input inputMode="decimal" value={value} onChange={e => set(signedAmountInput(e.target.value, 2))}
         style={{ flex: 1, minWidth: 0, textAlign: 'center', background: 'none', border: 'none', outline: 'none', fontSize: 18, fontWeight: 700, color: COLORS.text }} />
       {suffix && <span style={{ color: COLORS.muted, fontWeight: 700 }}>{suffix}</span>}
       <button onClick={() => set(String(Math.round(((parseFloat(value) || 0) + delta) * 100) / 100))} style={{ padding: '10px 18px', background: 'none', border: 'none', fontSize: 20, color: COLORS.muted, cursor: 'pointer' }}>+</button>
@@ -798,7 +709,7 @@ export function P2PCreateOfferPage() {
             {offerType === 'sell' && (
               <div>
                 <div style={labelStyle}>Total amount (USDC)</div>
-                <input inputMode="decimal" value={totalAmount} onChange={e => setTotalAmount(e.target.value.replace(/[^\d.]/g, ''))}
+                <input inputMode="decimal" value={totalAmount} onChange={e => setTotalAmount(sanitizeAmountInput(e.target.value, tokenDecimals('USDC')))}
                   style={{ ...inputStyle, fontSize: 18, fontWeight: 700, ...(sellInsufficient ? { borderColor: 'var(--danger)' } : {}) }} />
                 <div style={{ fontSize: 12, marginTop: 6, color: sellInsufficient ? 'var(--danger)' : COLORS.muted, fontWeight: sellInsufficient ? 600 : 400 }}>
                   {sellInsufficient ? 'Insufficient balance · ' : 'Wallet '}{trimTrailingZeros(usdcBalance.toFixed(2))} USDC
@@ -809,9 +720,9 @@ export function P2PCreateOfferPage() {
             <div>
               <div style={labelStyle}>Order limit per trade (USDC)</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input inputMode="decimal" value={minAmount} onChange={e => setMinAmount(e.target.value.replace(/[^\d.]/g, ''))} style={inputStyle} aria-label="Minimum per trade" />
+                <input inputMode="decimal" value={minAmount} onChange={e => setMinAmount(sanitizeAmountInput(e.target.value, tokenDecimals('USDC')))} style={inputStyle} aria-label="Minimum per trade" />
                 <span style={{ color: COLORS.muted, fontSize: 13 }}>to</span>
-                <input inputMode="decimal" value={maxAmount} onChange={e => setMaxAmount(e.target.value.replace(/[^\d.]/g, ''))} style={inputStyle} aria-label="Maximum per trade" />
+                <input inputMode="decimal" value={maxAmount} onChange={e => setMaxAmount(sanitizeAmountInput(e.target.value, tokenDecimals('USDC')))} style={inputStyle} aria-label="Maximum per trade" />
               </div>
               <div style={{ fontSize: 12, marginTop: 6, color: offerType === 'sell' && parseFloat(maxAmount || '0') > parseFloat(totalAmount || '0') ? 'var(--danger)' : COLORS.muted }}>
                 {offerType === 'sell' && parseFloat(maxAmount || '0') > parseFloat(totalAmount || '0')
@@ -908,21 +819,17 @@ export function P2PCreateOfferPage() {
           onSaved={m => { setMyMethods(ms => [...ms, m]); setMethodIds(ids => ids.length >= 5 ? ids : [...ids, m.id]) }} />
       )}
 
-      <AnimatePresence>
-      {showPasscodeSheet && (
-        <PasscodeSheet key="pin"
-          title={storedPasscode ? 'Enter Passcode' : 'Post Ad'}
-          subtitle={offerType === 'sell'
-            ? <>Lock {totalAmount || '0'} USDC in escrow and post your ad</>
-            : <>Post your ad to buy {minAmount || '0'}–{maxAmount || '0'} USDC</>}
-          storedPasscode={storedPasscode}
-          passEntry={passEntry} setPassEntry={setPassEntry}
-          passError={passError} setPassError={setPassError}
-          onConfirm={handlePasscodeConfirm}
-          onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
-        />
-      )}
-      </AnimatePresence>
+      <PinSheet open={showPasscodeSheet} id="p2p-pass"
+        title={storedPasscode ? 'Enter Passcode' : 'Post Ad'}
+        subtitle={offerType === 'sell'
+          ? <>Lock {totalAmount || '0'} USDC in escrow and post your ad</>
+          : <>Post your ad to buy {minAmount || '0'}–{maxAmount || '0'} USDC</>}
+        value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }}
+        error={passError || undefined}
+        onComplete={() => { void handlePasscodeConfirm() }}
+        fallbackConfirm={storedPasscode ? undefined : { label: 'Post Ad', onConfirm: () => { void handlePasscodeConfirm() } }}
+        onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
+      />
       <ProcessingFlipCard {...flipState} onDismiss={handleDismissCreateFlip}
         onExited={() => { const go = afterCreateFlip.current; afterCreateFlip.current = null; go?.() }} />
     </div>
@@ -959,6 +866,10 @@ export function P2POfferDetailPage() {
   const [amount, setAmount] = useState('')
   const [typed, setTyped] = useState('')
   const [inFiat, setInFiat] = useState(true)
+  // Phones: the amount number pad (AmountKeypad) is up. Fiat types to the
+  // cent, USDC to its on-chain 6 decimals - the same cap typed or tapped.
+  const [showAmountPad, setShowAmountPad] = useState(false)
+  const typedDecimals = inFiat ? 2 : tokenDecimals('USDC')
   const [livePrice, setLivePrice] = useState<number | null>(null)
   const [stats, setStats] = useState<MerchantStats | undefined>(undefined)
   // Which account the buyer pays: one of the ad's (sell ads), or the
@@ -1171,15 +1082,23 @@ export function P2POfferDetailPage() {
                   </button>
                 ))}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)', borderRadius: 14, padding: '12px 14px',
-                border: `1.5px solid ${outOfLimit || sellShort ? 'var(--danger)' : 'transparent'}` }}>
-                <span style={{ fontSize: 26, fontWeight: 700, color: COLORS.muted }}>{inFiat ? sym : ''}</span>
-                <input autoFocus={isDesktop} inputMode="decimal" value={typed} onChange={e => setTyped(e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1'))}
-                  placeholder="0.00" aria-label={inFiat ? `Amount in ${offer.currency}` : 'Amount in USDC'}
-                  style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', color: COLORS.text, fontSize: 26, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{inFiat ? offer.currency : 'USDC'}</span>
-                <button onClick={setAll} style={{ background: 'none', border: 'none', color: COLORS.primaryText, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', padding: '0 0 0 4px' }}>All</button>
-              </div>
+              {/* The app's amount box: typed on desktop, the number pad on phones (as on Pay). */}
+              <AmountField
+                value={typed}
+                onChange={raw => setTyped(sanitizeAmountInput(raw, typedDecimals))}
+                autoFocus={isDesktop}
+                onTap={isDesktop ? undefined : () => setShowAmountPad(true)}
+                editing={showAmountPad}
+                invalid={outOfLimit || sellShort}
+                symbol={inFiat ? sym : ''}
+                compact
+                ariaLabel={inFiat ? `Amount in ${offer.currency}` : 'Amount in USDC'}
+                tokenPicker={
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{inFiat ? offer.currency : 'USDC'}</span>
+                    <button onClick={setAll} style={{ background: 'none', border: 'none', color: COLORS.primaryText, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', padding: '0 0 0 4px' }}>All</button>
+                  </div>
+                } />
               <div style={{ fontSize: 12, marginTop: 7, color: outOfLimit || sellShort ? 'var(--danger)' : COLORS.muted, fontWeight: outOfLimit || sellShort ? 600 : 400 }}>
                 {sellShort ? `Insufficient balance · you have ${trimTrailingZeros(usdcBalanceForSell.toFixed(2))} USDC`
                   : `Limit ${price ? `${sym}${fmt(offer.minAmount * price)} – ${sym}${fmt(effMax * price)}` : `${offer.minAmount} – ${trimTrailingZeros(effMax.toFixed(2))} USDC`}`}
@@ -1239,21 +1158,30 @@ export function P2POfferDetailPage() {
           onSaved={m => { setMyMethods(ms => [...ms, m]); setPayMethodId(m.id) }} />
       )}
 
-      <AnimatePresence>
-      {showPasscodeSheet && (
-        <PasscodeSheet key="pin"
-          title={storedPasscode ? 'Enter Passcode' : 'Confirm Order'}
-          subtitle={offer.offerType === 'buy'
-            ? <>Lock {trimTrailingZeros(amt.toFixed(6))} USDC in escrow and sell</>
-            : <>Buy {trimTrailingZeros(amt.toFixed(6))} USDC{price ? ` for ${sym}${fmt(fiatTotal)}` : ''}</>}
-          storedPasscode={storedPasscode}
-          passEntry={passEntry} setPassEntry={setPassEntry}
-          passError={passError} setPassError={setPassError}
-          onConfirm={handlePasscodeConfirm}
-          onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
-        />
-      )}
-      </AnimatePresence>
+      <AmountKeypad
+        // The amount field has its own "All".
+        showMax={false}
+        open={showAmountPad && !isDesktop}
+        value={typed}
+        onChange={setTyped}
+        decimals={typedDecimals}
+        // Only bounds the Done button; the limits show under the field.
+        balance={Number.POSITIVE_INFINITY}
+        onClose={() => setShowAmountPad(false)}
+        doneLabel="Done"
+        onDone={() => setShowAmountPad(false)} />
+
+      <PinSheet open={showPasscodeSheet} id="p2p-pass"
+        title={storedPasscode ? 'Enter Passcode' : 'Confirm Order'}
+        subtitle={offer.offerType === 'buy'
+          ? <>Lock {trimTrailingZeros(amt.toFixed(6))} USDC in escrow and sell</>
+          : <>Buy {trimTrailingZeros(amt.toFixed(6))} USDC{price ? ` for ${sym}${fmt(fiatTotal)}` : ''}</>}
+        value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }}
+        error={passError || undefined}
+        onComplete={() => { void handlePasscodeConfirm() }}
+        fallbackConfirm={storedPasscode ? undefined : { label: 'Confirm Order', onConfirm: () => { void handlePasscodeConfirm() } }}
+        onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
+      />
       <ProcessingFlipCard {...flipState} onDismiss={handleDismissAcceptFlip}
         onExited={() => { const go = afterAcceptFlip.current; afterAcceptFlip.current = null; go?.() }} />
     </div>
@@ -1825,8 +1753,10 @@ export function P2PTradePage() {
       {/* Fake payment-processing overlay - see handleMarkPaid's comment */}
       <AnimatePresence>
         {processingPayment && (
-          <motion.div data-leave-guard="" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+          // The popup dim and its fade (DIALOG_BACKDROP); the loader fades with it.
+          <motion.div data-leave-guard="" initial={DIALOG_BACKDROP.initial} animate={DIALOG_BACKDROP.animate} exit={DIALOG_BACKDROP.exit}
+            transition={DIALOG_BACKDROP.transition}
+            style={{ position: 'fixed', inset: 0, background: POPUP_DIM, zIndex: 200, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
             <MeshLoader size={44} color="#5CD6CB" label="Processing" />
             <p style={{ fontSize: 14.5, fontWeight: 600, color: '#fff' }}>Notifying the seller…</p>
             <p style={{ fontSize: 11.5, color: COLORS.muted, textAlign: 'center', maxWidth: 260 }}>Recording on Arc that you've paid - the seller can no longer cancel.</p>
@@ -1963,25 +1893,21 @@ export function P2PTradePage() {
         })()}
       </AnimatePresence>
 
-      <AnimatePresence>
-      {pendingAction && (
-        <PasscodeSheet key="pin"
-          title={storedPasscode ? 'Enter Passcode' : (pendingAction === 'release' ? 'Confirm Release' : pendingAction === 'confirm' ? 'Confirm Trade' : 'Confirm Cancel')}
-          subtitle={pendingAction === 'release'
-            ? <>Release {trade.amountUsdc} USDC from escrow to the buyer</>
-            : pendingAction === 'confirm'
-            ? <>Register this trade on-chain so the buyer can pay</>
-            : !isBuyer
-            ? <>Only cancel if you have <strong>not</strong> received payment. If the buyer has already paid, cancelling takes their money — open a dispute instead. Escrowed USDC returns to you.</>
-            : <>Cancel this trade</>}
-          storedPasscode={storedPasscode}
-          passEntry={passEntry} setPassEntry={setPassEntry}
-          passError={passError} setPassError={setPassError}
-          onConfirm={handlePasscodeConfirm}
-          onClose={() => { setPendingAction(null); setPassEntry(''); setPassError('') }}
-        />
-      )}
-      </AnimatePresence>
+      <PinSheet open={!!pendingAction} id="p2p-pass"
+        title={storedPasscode ? 'Enter Passcode' : (pendingAction === 'release' ? 'Confirm Release' : pendingAction === 'confirm' ? 'Confirm Trade' : 'Confirm Cancel')}
+        subtitle={pendingAction === 'release'
+          ? <>Release {trade.amountUsdc} USDC from escrow to the buyer</>
+          : pendingAction === 'confirm'
+          ? <>Register this trade on-chain so the buyer can pay</>
+          : !isBuyer
+          ? <>Only cancel if you have <strong>not</strong> received payment. If the buyer has already paid, cancelling takes their money — open a dispute instead. Escrowed USDC returns to you.</>
+          : <>Cancel this trade</>}
+        value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }}
+        error={passError || undefined}
+        onComplete={() => { void handlePasscodeConfirm() }}
+        fallbackConfirm={storedPasscode ? undefined : { label: pendingAction === 'release' ? 'Confirm Release' : pendingAction === 'confirm' ? 'Confirm Trade' : 'Confirm Cancel', onConfirm: () => { void handlePasscodeConfirm() } }}
+        onClose={() => { setPendingAction(null); setPassEntry(''); setPassError('') }}
+      />
       <ProcessingFlipCard {...flipState} onDismiss={dismissFlip} />
       <GlassPopCard {...glassPop} onDismiss={dismissGlassPop} />
     </div>
@@ -2340,11 +2266,8 @@ export function P2PMyOffersPage() {
       {/* Stepped aside while its passcode sheet is up, so confirming doesn't
           uncover it undimmed for a moment before it fades out. */}
       {editingOffer && !showEditPasscode && (
-        <motion.div
-          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          {/* Only the dim fades; the card stays solid (PopupDim). */}
-          <PopupDim background="rgba(0,0,0,0.6)" />
-          <div className="mp-popup" style={{ position: 'relative', width: '100%', maxWidth: 480, padding: 20, maxHeight: '100%', overflowY: 'auto', animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}>
+        <DesktopDialogFrame key="edit-offer" onClose={() => setEditingOffer(null)} maxWidth={480}>
+          <div style={{ padding: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <p style={{ fontSize: 16, fontWeight: 700, color: COLORS.text, margin: 0 }}>Edit Offer</p>
               <button onClick={() => setEditingOffer(null)} style={{ background: 'none', border: 'none', padding: 4, cursor: 'pointer' }}>
@@ -2356,8 +2279,8 @@ export function P2PMyOffersPage() {
               <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 6, fontWeight: 600 }}>
                 {editingOffer.priceType === 'floating' ? 'Margin over market (−20% to +20%)' : `Price per USDC (${currencySymbol(editingOffer.currency)})`}
               </div>
-              <input type="number" inputMode="decimal" value={editingOffer.priceType === 'floating' ? editMargin : editPrice}
-                onChange={e => (editingOffer.priceType === 'floating' ? setEditMargin : setEditPrice)(e.target.value)}
+              <input inputMode="decimal" value={editingOffer.priceType === 'floating' ? editMargin : editPrice}
+                onChange={e => editingOffer.priceType === 'floating' ? setEditMargin(signedAmountInput(e.target.value, 2)) : setEditPrice(sanitizeAmountInput(e.target.value, 2))}
                 style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
             </div>
 
@@ -2366,12 +2289,12 @@ export function P2PMyOffersPage() {
               <div style={{ display: 'flex', gap: 12 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>Min per trade</div>
-                  <input type="number" inputMode="decimal" value={editMinAmount} onChange={e => setEditMinAmount(e.target.value)}
+                  <input inputMode="decimal" value={editMinAmount} onChange={e => setEditMinAmount(sanitizeAmountInput(e.target.value, tokenDecimals('USDC')))}
                     style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11, color: COLORS.muted, marginBottom: 4 }}>Max per trade</div>
-                  <input type="number" inputMode="decimal" value={editMaxAmount} onChange={e => setEditMaxAmount(e.target.value)}
+                  <input inputMode="decimal" value={editMaxAmount} onChange={e => setEditMaxAmount(sanitizeAmountInput(e.target.value, tokenDecimals('USDC')))}
                     style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: '12px 14px', fontSize: 14, outline: 'none', boxSizing: 'border-box' }} />
                 </div>
               </div>
@@ -2415,31 +2338,26 @@ export function P2PMyOffersPage() {
               opacity: editSaving ? 0.6 : 1,
             }}>{editSaving ? 'Saving…' : 'Save Changes'}</button>
           </div>
-        </motion.div>
+        </DesktopDialogFrame>
       )}
       </AnimatePresence>
 
-      <AnimatePresence>
-      {showEditPasscode && (
-        <PasscodeSheet key="pin"
-          title={storedPasscode ? 'Enter Passcode' : 'Confirm Changes'}
-          subtitle={<>Confirm changes to your offer's price and payment methods</>}
-          storedPasscode={storedPasscode}
-          passEntry={passEntry} setPassEntry={setPassEntry}
-          passError={passError} setPassError={setPassError}
-          onConfirm={handleEditPasscodeConfirm}
-          onClose={() => { setShowEditPasscode(false); setPassEntry(''); setPassError('') }}
-        />
-      )}
-      </AnimatePresence>
+      <PinSheet open={showEditPasscode} id="p2p-pass"
+        title={storedPasscode ? 'Enter Passcode' : 'Confirm Changes'}
+        subtitle={<>Confirm changes to your offer's price and payment methods</>}
+        value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }}
+        error={passError || undefined}
+        onComplete={() => { void handleEditPasscodeConfirm() }}
+        fallbackConfirm={storedPasscode ? undefined : { label: 'Confirm Changes', onConfirm: () => { void handleEditPasscodeConfirm() } }}
+        onClose={() => { setShowEditPasscode(false); setPassEntry(''); setPassError('') }}
+      />
 
       <AnimatePresence>
-      {toppingUpOffer && (
-        <motion.div
-          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          {/* Only the dim fades; the card stays solid (PopupDim). */}
-          <PopupDim background="rgba(0,0,0,0.5)" />
-          <div style={{ position: 'relative', width: '100%', maxWidth: 380, background: COLORS.surface, borderRadius: 18, padding: 20, animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}>
+      {/* Stepped aside while its passcode sheet is up (like Edit Offer), so
+          the passcode step is never hidden under it. */}
+      {toppingUpOffer && !showTopUpPasscode && (
+        <DesktopDialogFrame key="top-up" onClose={() => setToppingUpOffer(null)} maxWidth={380}>
+          <div style={{ padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <PlusCircle size={18} color={COLORS.success} />
               <p style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, margin: 0 }}>Top Up Escrow</p>
@@ -2447,7 +2365,7 @@ export function P2PMyOffersPage() {
             <p style={{ fontSize: 12, color: COLORS.muted, marginBottom: 12 }}>
               Deposits additional USDC into this offer's escrow and raises its available capacity by the same amount.
             </p>
-            <input type="number" inputMode="decimal" value={topUpAmount} onChange={e => setTopUpAmount(e.target.value)} placeholder="Amount in USDC"
+            <input inputMode="decimal" value={topUpAmount} onChange={e => setTopUpAmount(sanitizeAmountInput(e.target.value, tokenDecimals('USDC')))} placeholder="Amount in USDC"
               style={{ width: '100%', background: COLORS.surface, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: 12, fontSize: 14, marginBottom: 14, boxSizing: 'border-box' }} />
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setToppingUpOffer(null)} style={{ flex: 1, padding: '11px 0', borderRadius: 10, border: `1px solid ${COLORS.border}`, background: 'none', color: COLORS.muted, fontSize: 13 }}>Cancel</button>
@@ -2457,49 +2375,38 @@ export function P2PMyOffersPage() {
               </button>
             </div>
           </div>
-        </motion.div>
+        </DesktopDialogFrame>
       )}
       </AnimatePresence>
 
-      <AnimatePresence>
-      {showTopUpPasscode && (
-        <PasscodeSheet key="pin"
-          title={storedPasscode ? 'Enter Passcode' : 'Confirm Top Up'}
-          subtitle={<>Deposit {topUpAmount || '0'} USDC to this offer's escrow</>}
-          storedPasscode={storedPasscode}
-          passEntry={passEntry} setPassEntry={setPassEntry}
-          passError={passError} setPassError={setPassError}
-          onConfirm={handleTopUpPasscodeConfirm}
-          onClose={() => { setShowTopUpPasscode(false); setPassEntry(''); setPassError('') }}
-        />
-      )}
-      </AnimatePresence>
+      <PinSheet open={showTopUpPasscode} id="p2p-pass"
+        title={storedPasscode ? 'Enter Passcode' : 'Confirm Top Up'}
+        subtitle={<>Deposit {topUpAmount || '0'} USDC to this offer's escrow</>}
+        value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }}
+        error={passError || undefined}
+        onComplete={() => { void handleTopUpPasscodeConfirm() }}
+        fallbackConfirm={storedPasscode ? undefined : { label: 'Confirm Top Up', onConfirm: () => { void handleTopUpPasscodeConfirm() } }}
+        onClose={() => { setShowTopUpPasscode(false); setPassEntry(''); setPassError('') }}
+      />
 
-      <AnimatePresence>
-      {offerToCancel && (
-        <PasscodeSheet key="pin"
-          title={storedPasscode ? 'Enter Passcode' : 'Confirm Cancel'}
-          subtitle={offerToCancel.offerType === 'sell'
-            ? <>Cancel offer and return escrowed USDC to your wallet</>
-            : <>Cancel this buy offer</>}
-          storedPasscode={storedPasscode}
-          passEntry={passEntry} setPassEntry={setPassEntry}
-          passError={passError} setPassError={setPassError}
-          onConfirm={handlePasscodeConfirm}
-          onClose={() => { setOfferToCancel(null); setPassEntry(''); setPassError('') }}
-        />
-      )}
-      </AnimatePresence>
+      <PinSheet open={!!offerToCancel} id="p2p-pass"
+        title={storedPasscode ? 'Enter Passcode' : 'Confirm Cancel'}
+        subtitle={offerToCancel.offerType === 'sell'
+          ? <>Cancel offer and return escrowed USDC to your wallet</>
+          : <>Cancel this buy offer</>}
+        value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }}
+        error={passError || undefined}
+        onComplete={() => { void handlePasscodeConfirm() }}
+        fallbackConfirm={storedPasscode ? undefined : { label: 'Confirm Cancel', onConfirm: () => { void handlePasscodeConfirm() } }}
+        onClose={() => { setOfferToCancel(null); setPassEntry(''); setPassError('') }}
+      />
 
       {/* Delete never moves funds or signs anything - a plain confirm is
           enough, no passcode/wallet unlock needed like Cancel/Top Up. */}
       <AnimatePresence>
       {offerToDelete && (
-        <motion.div
-          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          {/* Only the dim fades; the card stays solid (PopupDim). */}
-          <PopupDim background="rgba(0,0,0,0.5)" />
-          <div style={{ position: 'relative', width: '100%', maxWidth: 380, background: COLORS.surface, borderRadius: 18, padding: 20, animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}>
+        <DesktopDialogFrame key="delete-offer" onClose={() => setOfferToDelete(null)} maxWidth={380}>
+          <div style={{ padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Trash2 size={18} color={COLORS.error} />
               <p style={{ fontSize: 15, fontWeight: 700, color: COLORS.text, margin: 0 }}>Delete Offer</p>
@@ -2515,7 +2422,7 @@ export function P2PMyOffersPage() {
               </button>
             </div>
           </div>
-        </motion.div>
+        </DesktopDialogFrame>
       )}
       </AnimatePresence>
       <ProcessingFlipCard {...flipState} onDismiss={dismissFlip} />

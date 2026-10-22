@@ -6,12 +6,8 @@
 // a buyer sees on an order - see p2pService's p2p_payment_methods notes).
 
 import { useState, type ReactNode } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { ShieldCheck, X as XIcon } from 'lucide-react'
-import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
-import { PopupOpen } from '@/hooks/usePopupOpen'
-import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { sheetDrag } from '@/lib/sheetDrag'
+import { ActionSheet } from '@/components/ui/ActionSheet'
 import { savePaymentMethod, paymentMethodSummary, type P2PPaymentMethod, type MerchantStats } from '@/lib/p2pService'
 
 // Each type lists the details a buyer needs to pay it.
@@ -89,35 +85,22 @@ const inputStyle: React.CSSProperties = {
   borderRadius: 12, padding: '12px 14px', fontSize: 14.5, color: 'var(--text-primary)', outline: 'none',
 }
 
-/** Bottom sheet (phone) / dialog (desktop) shell used by the P2P sheets. */
+/** The P2P sheets' shell: the app's bottom sheet (phone) / centred dialog
+ *  (desktop) - ActionSheet - with a title row and a close button. Sits above
+ *  P2P's own layers (zIndex 201). Also used by Rewards' claim sheet. */
 export function P2PSheet({ open, onClose, title, children, id }: { open: boolean; onClose: () => void; title: string; children: ReactNode; id: string }) {
-  const isDesktop = useMediaQuery('(min-width: 980px)')
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <PopupOpen />
-          <motion.div key={`${id}-dim`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0.2 } }}
-            transition={SHEET_BACKDROP.transition} onClick={onClose}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200 }} />
-          <motion.div key={`${id}-sheet`} {...(isDesktop ? {} : sheetDrag(id, onClose))}
-            initial={isDesktop ? { opacity: 0, scale: 0.97 } : { y: '100%' }} animate={isDesktop ? { opacity: 1, scale: 1 } : { y: 0 }}
-            exit={isDesktop ? { opacity: 0, scale: 0.97, transition: { duration: 0.15 } } : SHEET_EXIT} transition={SHEET_SPRING}
-            style={isDesktop
-              ? { position: 'fixed', top: '50%', left: '50%', translate: '-50% -50%', width: 440, maxHeight: '86vh', overflowY: 'auto', zIndex: 201, borderRadius: 20, padding: 22, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-3)' }
-              : { position: 'fixed', bottom: 0, left: 0, right: 0, maxWidth: 480, margin: '0 auto', maxHeight: '90vh', overflowY: 'auto', zIndex: 201, borderRadius: '24px 24px 0 0', padding: '12px 20px calc(env(safe-area-inset-bottom, 0px) + 22px)', background: 'var(--surface)', borderTop: '1px solid var(--border)' }}>
-            {!isDesktop && <div style={{ width: 40, height: 4, borderRadius: 2, margin: '0 auto 14px', background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)' }} />}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h2>
-              <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}>
-                <XIcon size={18} color="var(--text-secondary)" />
-              </button>
-            </div>
-            {children}
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+    <ActionSheet open={open} onClose={onClose} id={id} fixed zIndex={201}>
+      <div style={{ overflowY: 'auto', padding: '6px 20px calc(env(safe-area-inset-bottom, 0px) + 22px)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h2>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, display: 'flex' }}>
+            <XIcon size={18} color="var(--text-secondary)" />
+          </button>
+        </div>
+        {children}
+      </div>
+    </ActionSheet>
   )
 }
 

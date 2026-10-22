@@ -3,7 +3,7 @@
 // ONE Arc payment through lib/batchPay (the same engine as Bulk Pay) - all
 // inside Business. A due group shows here and as a notification; nothing is
 // sent without the owner.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Trash2, Users, CalendarClock, Check, Search, AlertCircle, Loader2, ShieldCheck } from 'lucide-react'
 import { useAuthStore, useUIStore, useWalletStore } from '@/store'
 import { Avatar } from '@/components/ui/Avatar'
@@ -19,7 +19,8 @@ import {
   listPayouts, savePayout, deletePayout, payoutTotal, markPayoutPaid,
   type BusinessPayout, type PayoutRecipient, type PayoutRepeat,
 } from '@/lib/businessPayouts'
-import { BusinessScreen, PrimaryBtn, GhostBtn, Skeleton, Field, TextInput, ChipSelect } from './ui'
+import { sanitizeAmountInput } from '@/components/ui/AmountKeypad'
+import { BusinessScreen, ScreenLevel, useScreenLevel, PrimaryBtn, GhostBtn, Skeleton, Field, TextInput, ChipSelect } from './ui'
 import { usePasscodeGate } from './passcodeGate'
 import { unlockKey } from './settlement'
 
@@ -54,13 +55,14 @@ type RunRow = {
   key: string; input: string; label?: string; amount: string; on: boolean
   payee: Omit<BatchRecipient, 'id' | 'amount'> | null; state: 'checking' | 'ok' | 'missing' | 'refused'; why?: string
 }
-type Run = { payoutId: string | null; name: string; nextDue: string | null; repeat: PayoutRepeat; rows: RunRow[] }
+type Run = { id: number; payoutId: string | null; name: string; nextDue: string | null; repeat: PayoutRepeat; rows: RunRow[] }
 type Phase = { kind: 'review' } | { kind: 'sending'; status: string } | { kind: 'done'; paid: RunRow[]; total: number } | { kind: 'failed'; error: string }
 
 type DraftRow = { to: string; name: string; avatar: string | null; amount: string; label: string }
 type Draft = { id?: string; name: string; repeat: PayoutRepeat; nextDue: string; rows: DraftRow[] }
 const emptyDraft = (once = false): Draft => ({ name: once ? 'One-time payment' : '', repeat: once ? 'none' : 'monthly', nextDue: today(), rows: [] })
-const amountInput = (v: string) => v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/^(\d*\.\d{0,2}).*$/, '$1').slice(0, 9)
+// Pay is in dollars and cents: 2 decimals, like the totals.
+const amountInput = (v: string) => sanitizeAmountInput(v, 2).slice(0, 9)
 
 export function PayoutsScreen({ open, onBack }: { open: boolean; onBack: () => void }) {
   const toast = useUIStore(s => s.showToastMessage)
@@ -99,32 +101,35 @@ export function PayoutsScreen({ open, onBack }: { open: boolean; onBack: () => v
     return () => { live = false }
   }, [open])
 
+  // Each run / draft opened gets its own screen (fresh state); the last one
+  // stays rendered while it slides off.
+  const seq = useRef(0)
+  const openDraft = (d: Draft) => { seq.current++; setDraft(d) }
   const startRun = (p: { id: string | null; name: string; recipients: PayoutRecipient[]; nextDue: string | null; repeat: PayoutRepeat }) =>
-    setRun({ payoutId: p.id, name: p.name, nextDue: p.nextDue, repeat: p.repeat, rows: p.recipients.map((r, i) => ({
+    setRun({ id: ++seq.current, payoutId: p.id, name: p.name, nextDue: p.nextDue, repeat: p.repeat, rows: p.recipients.map((r, i) => ({
       key: `${i}_${r.to}`, input: r.to, label: r.label, amount: String(r.amount), on: true, payee: null, state: 'checking',
     })) })
-
-  if (run) return <RunScreen open={open} run={run} onBack={() => { setRun(null); load() }} onEdit={run.payoutId ? () => {
-    const p = list?.find(x => x.id === run.payoutId); if (!p) return
-    setRun(null); setDraft(draftOf(p))
-  } : undefined} />
-  if (draft) return <DraftScreen open={open} draft={draft} setDraft={setDraft} onDone={(saved, pay) => {
-    setDraft(null)
-    if (saved && pay) startRun({ id: saved.id, name: saved.name, recipients: saved.recipients, nextDue: saved.nextDue, repeat: saved.repeat })
-    else load()
-  }} onDelete={async id => {
-    try { await deletePayout(id); setDraft(null); load() } catch (e) { toast(e instanceof Error ? e.message : 'Could not delete', 'error') }
-  }} />
 
   // Next group to pay: overdue or due within a week, soonest first.
   const due = (list ?? []).map(p => ({ p, d: daysToDue(p) })).filter(x => x.d !== null && x.d <= 7).sort((a, b) => a.d! - b.d!)
   const next = due[0]?.p
   const recent = (list ?? []).filter(p => p.lastPaidAt).sort((a, b) => b.lastPaidAt!.localeCompare(a.lastPaidAt!)).slice(0, 3)
 
+  const lastRun = useRef(run)
+  if (run) lastRun.current = run
+  const lastDraft = useRef<{ draft: Draft; key: number } | null>(null)
+  if (draft) lastDraft.current = { draft, key: seq.current }
+  // A run (check this month's pay) and a pay group being made or edited push
+  // over the list, which stays mounted and shifts left beneath them - like
+  // any screen opened from another (Cash out's tracker does the same).
+  const { level, covered } = useScreenLevel()
+
   return (
+    <>
+    <ScreenLevel.Provider value={{ level, covered: covered || !!run || !!draft }}>
     <BusinessScreen open={open} title="Pay staff" onBack={onBack}
-      action={list?.length ? <button type="button" onClick={() => setDraft(emptyDraft())} className="min-h-[36px] px-2 text-[13px] font-semibold text-brand-text">+ New</button> : undefined}
-      footer={<GhostBtn onClick={() => setDraft(emptyDraft(true))}>Pay someone once</GhostBtn>}>
+      action={list?.length ? <button type="button" onClick={() => openDraft(emptyDraft())} className="min-h-[36px] px-2 text-[13px] font-semibold text-brand-text">+ New</button> : undefined}
+      footer={<GhostBtn onClick={() => openDraft(emptyDraft(true))}>Pay someone once</GhostBtn>}>
       <div className="flex flex-col gap-4 px-5 pt-5 pb-6">
         {resuming && (
           <div className="flex items-center gap-2.5 rounded-2xl bg-card border border-border p-3.5 text-sm text-text-secondary">
@@ -138,7 +143,7 @@ export function PayoutsScreen({ open, onBack }: { open: boolean; onBack: () => v
             <span className="size-12 rounded-full bg-brand/10 text-brand-text inline-flex items-center justify-center"><Users className="size-5" /></span>
             <p className="text-sm font-semibold text-text-primary">Pay your team in one tap</p>
             <p className="text-xs text-text-muted max-w-[270px]">Save your staff salary or a supplier once. Each time it's due, check the amounts and pay everyone together.</p>
-            <div className="w-full max-w-[260px] mt-3"><PrimaryBtn onClick={() => setDraft(emptyDraft())}>Create a pay group</PrimaryBtn></div>
+            <div className="w-full max-w-[260px] mt-3"><PrimaryBtn onClick={() => openDraft(emptyDraft())}>Create a pay group</PrimaryBtn></div>
           </div>
         ) : (
           <>
@@ -161,7 +166,7 @@ export function PayoutsScreen({ open, onBack }: { open: boolean; onBack: () => v
                   const chip = dueChip(p)
                   return (
                     <div key={p.id} className="flex items-center gap-3 px-3.5 py-3">
-                      <button type="button" className="flex-1 min-w-0 flex items-center gap-3 text-left" onClick={() => setDraft(draftOf(p))}>
+                      <button type="button" className="flex-1 min-w-0 flex items-center gap-3 text-left" onClick={() => openDraft(draftOf(p))}>
                         <Avatar name={p.name} size="sm" />
                         <span className="min-w-0">
                           <span className="block text-[14px] font-semibold text-text-primary truncate">{p.name}</span>
@@ -199,6 +204,21 @@ export function PayoutsScreen({ open, onBack }: { open: boolean; onBack: () => v
         )}
       </div>
     </BusinessScreen>
+    </ScreenLevel.Provider>
+    <ScreenLevel.Provider value={{ level: level + 1, covered }}>
+      {lastRun.current && <RunScreen key={`run${lastRun.current.id}`} open={open && !!run} run={lastRun.current} onBack={() => { setRun(null); load() }} onEdit={lastRun.current.payoutId ? () => {
+        const p = list?.find(x => x.id === run?.payoutId); if (!p) return
+        setRun(null); openDraft(draftOf(p))
+      } : undefined} />}
+      {lastDraft.current && <DraftScreen key={`draft${lastDraft.current.key}`} open={open && !!draft} draft={lastDraft.current.draft} setDraft={setDraft} onDone={(saved, pay) => {
+        setDraft(null)
+        if (saved && pay) startRun({ id: saved.id, name: saved.name, recipients: saved.recipients, nextDue: saved.nextDue, repeat: saved.repeat })
+        else load()
+      }} onDelete={async id => {
+        try { await deletePayout(id); setDraft(null); load() } catch (e) { toast(e instanceof Error ? e.message : 'Could not delete', 'error') }
+      }} />}
+    </ScreenLevel.Provider>
+    </>
   )
 }
 
@@ -270,11 +290,13 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
   const name = (r: RunRow) => r.payee?.displayName || r.input
   const handle = (r: RunRow) => r.payee ? (r.payee.username.startsWith('0x') ? shortenAddress(r.payee.walletAddress) : `${r.payee.username.replace(/\.arc$/, '')}.arc`) : r.input
 
+  // One screen for every phase (each its own step: review → sending → done /
+  // failed, and back to the list), so a phase change pushes like any step.
+  let screen: { title: string; back: () => void; step: string; footer?: ReactNode; action?: ReactNode; body: ReactNode }
   if (phase.kind === 'sending') {
     const at = /Confirming/.test(phase.status) ? 2 : /Sending|Preparing|balance|Connecting|signer/i.test(phase.status) ? 1 : 0
     const steps = [`Checked all ${chosen.length} accounts`, 'Signed on this phone', 'Confirming on Arc · usually 1–2 s']
-    return (
-      <BusinessScreen open={open} title="Paying your staff" onBack={() => {}} step="sending">
+    screen = { title: 'Paying your staff', back: () => {}, step: 'sending', body: (
         <div className="flex flex-col items-center gap-5 px-5 pt-8 pb-6">
           <Loader2 className="size-14 text-brand-text animate-spin" strokeWidth={1.6} />
           <div className="text-center">
@@ -292,13 +314,9 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
           </div>
           <p className="text-xs text-text-muted text-center max-w-[280px]">Keep this screen open. If the app closes, it checks how the payment ended when you come back.</p>
         </div>
-      </BusinessScreen>
-    )
-  }
-
-  if (phase.kind === 'done') {
-    return (
-      <BusinessScreen open={open} title="Paid" onBack={onBack} step="done" footer={<PrimaryBtn onClick={onBack}>Done</PrimaryBtn>}>
+    ) }
+  } else if (phase.kind === 'done') {
+    screen = { title: 'Paid', back: onBack, step: 'done', footer: <PrimaryBtn onClick={onBack}>Done</PrimaryBtn>, body: (
         <div className="flex flex-col items-center gap-4 px-5 pt-8 pb-6">
           <span className="size-16 rounded-full bg-success/12 text-success inline-flex items-center justify-center"><Check className="size-8" strokeWidth={3} /></span>
           <div className="text-center">
@@ -321,30 +339,22 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
           )}
           <p className="text-xs text-text-muted">Everyone's payment is in Activity.</p>
         </div>
-      </BusinessScreen>
-    )
-  }
-
-  if (phase.kind === 'failed') {
-    return (
-      <BusinessScreen open={open} title={initial.name} onBack={onBack} step="failed"
-        footer={<div className="flex flex-col gap-2"><PrimaryBtn onClick={() => setPhase({ kind: 'review' })}>Back to the list</PrimaryBtn></div>}>
+    ) }
+  } else if (phase.kind === 'failed') {
+    screen = { title: initial.name, back: onBack, step: 'failed',
+      footer: <div className="flex flex-col gap-2"><PrimaryBtn onClick={() => setPhase({ kind: 'review' })}>Back to the list</PrimaryBtn></div>, body: (
         <div className="flex flex-col items-center gap-3 px-5 pt-10 pb-6 text-center">
           <span className="size-14 rounded-full bg-danger/10 text-danger inline-flex items-center justify-center"><AlertCircle className="size-7" /></span>
           <p className="text-base font-semibold text-text-primary">Nobody was paid</p>
           <p className="text-sm text-text-secondary max-w-[300px]">{phase.error}</p>
         </div>
-      </BusinessScreen>
-    )
-  }
-
-  return (
-    <>
-      <BusinessScreen open={open} title={initial.name} onBack={onBack} step="review"
-        action={onEdit ? <button type="button" onClick={onEdit} className="min-h-[36px] px-2 text-[13px] font-semibold text-brand-text">Edit group</button> : undefined}
-        footer={<PrimaryBtn disabled={!canPay} onClick={pay}>
+    ) }
+  } else {
+    screen = { title: initial.name, back: onBack, step: '',
+      action: onEdit ? <button type="button" onClick={onEdit} className="min-h-[36px] px-2 text-[13px] font-semibold text-brand-text">Edit group</button> : undefined,
+      footer: <PrimaryBtn disabled={!canPay} onClick={pay}>
           {checking ? 'Checking accounts…' : chosen.length ? `Pay ${people(chosen.length)} · ${money(total)}` : 'Pick someone to pay'}
-        </PrimaryBtn>}>
+        </PrimaryBtn>, body: (
         <div className="flex flex-col gap-4 px-5 pt-5 pb-6">
           <p className="text-xs text-text-secondary">Untick anyone you're skipping, or change an amount for this time only. The saved group stays the same.</p>
           <div className="rounded-2xl bg-card border border-border divide-y divide-border">
@@ -380,6 +390,13 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
           {blocked.length > 0 && <p className="text-xs font-semibold text-danger">Untick {blocked.length === 1 ? 'the person' : 'the people'} in red, or fix the group, to continue.</p>}
           <p className="flex items-center gap-1.5 text-xs text-text-muted"><ShieldCheck className="size-3.5" /> Everyone is paid together in one payment, or nobody is.</p>
         </div>
+    ) }
+  }
+
+  return (
+    <>
+      <BusinessScreen open={open} title={screen.title} onBack={screen.back} step={screen.step} footer={screen.footer} action={screen.action}>
+        {screen.body}
       </BusinessScreen>
       {gate.sheet}
     </>

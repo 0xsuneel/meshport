@@ -4,12 +4,11 @@ import { prewarmCamera } from '@/lib/scannerPrewarm'
 import { isAccountLockedNow, ACCOUNT_LOCKED_MESSAGE } from '@/lib/accountLockRule'
 import { PanelScanner } from '@/features/scanner/PanelScanner'
 import { ubFeeBreakdown, ubSpendAmount, ubQuoteFees } from '@/lib/transferFees'
-import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/motion'
-import { useStepDirection } from '@/hooks/useStepDirection'
-import { createPortal } from 'react-dom'
+import { EASE_OUT, PUSH_OPEN_MS, PUSH_EASE_CSS, DESKTOP_FADE_KEYFRAMES, DESKTOP_FADE_MS } from '@/lib/motion'
+import { pushLook } from '@/lib/pushLook'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { PinKeypad } from '@/components/ui/PinKeypad'
-import { AmountKeypad } from '@/components/ui/AmountKeypad'
+import { PinSheet } from '@/components/ui/PinSheet'
+import { AmountKeypad, sanitizeAmountInput, tokenDecimals } from '@/components/ui/AmountKeypad'
 import { HubPage, HubPageBack, HUB_PANEL_BOX } from '@/components/multichain/HubPage'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
@@ -19,9 +18,9 @@ import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import {
   ArrowLeft, QrCode, Lock, CheckCircle, XCircle, AlertCircle, Loader2, ChevronDown, Clock,
 } from 'lucide-react'
-import { motion, AnimatePresence, useAnimationControls } from 'framer-motion'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { MeshLoader } from '@/components/ui/MeshLoader'
-import { MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
+import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useWalletStore, useAuthStore, useUIStore } from '@/store'
 import { awardTransactionPoints } from '@/lib/rewards'
 import { notifyRewardMultichain } from '@/lib/notifications'
@@ -36,14 +35,7 @@ import { gatewaySelfMintsTo, forwarderMintRetry, getUnifiedBalances, UB_MIN_SWEE
 import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
 import { logTestEvent, newRunId, type TestService } from '@/lib/multichainTestLog'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
-import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
-import { ActivityRow, activityMove } from '@/features/activity/ActivityPage'
-import { moveLabels, formatFee, formatMoveAmount } from '@/lib/moveFees'
-import { useReturnFlash } from '@/hooks/useReturnFlash'
-import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
-import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -59,9 +51,11 @@ const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) =
   ? 'Arc'
   : 'Arc_Testnet'
 
-// Digit/decimal sanitizing for the desktop "Amount" native input (mirrors
-// AmountKeypad's own internal sanitizer, which isn't exported) - max one
-// '.', capped at 2 typed decimal places.
+// Decimal places an amount can be typed with - the same cap for the typed
+// (desktop) input and the phone keypad: USDC's on-chain 6, which is also
+// what Max fills in (the typed box used to stop at 2 while the keypad and
+// Max allowed 6).
+const USDC_DECIMALS = tokenDecimals('USDC')
 
 /** Speed tag on a route button. Out of Arc both routes are Fast: Arc is final
  *  in under a second, so neither waits for source finality. */
@@ -73,15 +67,6 @@ function SpeedTag({ fast, on }: { fast: boolean; on: boolean }) {
       {fast ? 'Fast' : 'Slow'}
     </span>
   )
-}
-
-function sanitizeMultichainAmount(raw: string): string {
-  let cleaned = raw.replace(/[^\d.]/g, '')
-  const firstDot = cleaned.indexOf('.')
-  if (firstDot !== -1) cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '')
-  const [intPart, decPart] = cleaned.split('.')
-  if (decPart !== undefined) cleaned = intPart + '.' + decPart.slice(0, 2)
-  return cleaned
 }
 
 // ── Module-level caches - survive re-renders, reset only on full page reload ──
@@ -533,9 +518,11 @@ function makeUBSteps(destName: string): BridgeStepState[] {
 }
 
 export function MultichainTransferPage({ embedded = false, onClose, onFocusChange }: { embedded?: boolean; onClose?: () => void; onFocusChange?: (f: 'none' | 'processing' | 'result') => void } = {}) {
-  // Inside the Hub sheet the page always uses its phone layout.
+  // Only ever rendered inside the Hub (MultichainPage), so the page always
+  // uses its phone layout; on desktop its screens open in the Hub's
+  // right-hand panel (isDesktopMq).
   const isDesktopMq = useMediaQuery('(min-width: 980px)')
-  const isDesktop = embedded ? false : isDesktopMq
+  const reduceMotion = useReducedMotion()
   // The amount box and the passcode follow the real screen size even when
   // embedded in the Hub: on desktop they type with the keyboard (Swap-style
   // box) and authorise in a centred popup, never the phone keypad sheets.
@@ -614,8 +601,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }, [embedded, focus])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => () => onFocusChange?.('none'), [])
-  // Form ⇄ Review slide like pages (forward from the right, back from the left).
-  const stepDir = useStepDirection(step, ['form', 'review', 'confirm', 'broadcasting', 'success', 'failed'] as const)
   // Embedded in the Hub: the device/browser back button steps back inside
   // the form (confirm → review → form) instead of leaving the Hub.
   const stepRef = useRef(step)
@@ -649,15 +634,19 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
    
   }, [inBackableStep])
   // Hub on a phone: processing and its result open as a full page that
-  // slides in from the right, like the form and Review before them.
+  // slides in from the right over Review - the app's page push (timing,
+  // curve and edge shadow), on the browser's own animation engine like
+  // ScreenPush / PushLayer. Desktop: it opens in the right-hand panel with
+  // the desktop page fade, no slide.
   const procPage = sheetMode && (step === 'broadcasting' || step === 'success' || step === 'failed' || showResumed)
-  const pageSlide = useAnimationControls()
+  const procPageRef = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => {
-    if (!sheetMode) return
-    if (procPage) {
-      pageSlide.set({ x: '100%' })
-      pageSlide.start({ x: 0, transition: { duration: 0.3, ease: [0.32, 0.72, 0, 1] } })
-    } else pageSlide.set({ x: 0 })
+    const el = procPageRef.current
+    if (!procPage || !el || reduceMotion) return
+    const anim = isDesktopMq
+      ? el.animate(DESKTOP_FADE_KEYFRAMES, { duration: DESKTOP_FADE_MS, easing: PUSH_EASE_CSS })
+      : el.animate([{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }], { duration: PUSH_OPEN_MS, easing: PUSH_EASE_CSS })
+    return () => anim.cancel()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [procPage])
   // Same for the Hub's form page: back closes it. (While Review is open its
@@ -733,20 +722,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const lastFlashRectRef = useRef<DOMRect | null>(null)
   const [travelRect, setTravelRect] = useState<{ from: DOMRect; to: DOMRect } | null>(null)
   const [travelDone, setTravelDone] = useState(false)
-  // Desktop's flash overlay used to portal straight to `document.body` with
-  // `position:fixed; inset:0` - meaning it flashed the ENTIRE screen,
-  // covering the Recent History column too, not just the flow column the
-  // rest of this page's desktop layout confines itself to. It was ported
-  // to `document.body` in the first place because PageTransition's
-  // motion.div (wraps every route) leaves a stray transform on itself,
-  // which makes it the containing block for any `position:fixed`
-  // descendant - so a naive non-portalled fixed overlay rendered sized/
-  // positioned to that transformed ancestor instead of the viewport. The
-  // portal still needs to happen for that reason, but on desktop the
-  // overlay's rect is now pinned to this ref (the same flow-column
-  // wrapper `flow` already renders inside further down) instead of the
-  // full viewport, so it visually respects the two-column layout.
-  const desktopColumnRef = useRef<HTMLDivElement>(null)
+  // Desktop: the flash overlay (portaled to `document.body`, as
+  // PageTransition's motion.div leaves a stray transform that would capture
+  // a fixed overlay) is pinned to the Hub's right-hand panel's rect instead
+  // of the full viewport.
   const [flashColumnRect, setFlashColumnRect] = useState<DOMRect | null>(null)
 
   useLayoutEffect(() => {
@@ -763,19 +742,17 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // effect runs → setState with a "new" (referentially different, even if
   // numerically identical) rect → React sees a state change → re-render →
   // effect runs again → setState again → infinite loop (React error #185,
-  // "Maximum update depth exceeded"). Gating on [successPhase, isDesktop]
+  // "Maximum update depth exceeded"). Gating on [successPhase, isDesktopMq]
   // makes it fire once per entry into the flash phase instead.
   useLayoutEffect(() => {
     if (successPhase !== 'flash' || !isDesktopMq) return
-    // Embedded in the Hub on desktop: cover just the Hub's own screen (its
+    // In the Hub on desktop: cover just the Hub's own screen (its
     // scroll area beside the sidebar), not the whole window.
-    const target = isDesktop
-      ? desktopColumnRef.current
-      : (flowRootRef.current?.closest('[data-hub-page], [data-flow-scroller]') as HTMLElement | null) ?? flowRootRef.current
+    const target = (flowRootRef.current?.closest('[data-hub-page], [data-flow-scroller]') as HTMLElement | null) ?? flowRootRef.current
     if (target) setFlashColumnRect(target.getBoundingClientRect())
   // Re-measured on reaching success: before that the flow isn't the
   // right-hand panel yet, so it would measure the Hub column instead.
-  }, [successPhase, isDesktop, isDesktopMq, step === 'success'])
+  }, [successPhase, isDesktopMq, step === 'success'])
 
   // Measured in a layout effect (before paint) so the traveling checkmark is
   // already on screen in the receipt's very first frame - no frame where
@@ -799,26 +776,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     setTimeout(() => setHashCopied(false), 1500)
   }
 
-  // ── Desktop-only: Transfer History (right column) ────────────────────────
-  // Real data - this wallet's own outgoing 'bridge' rows. fetchActivity's
-  // 'bridge' filter also returns 'claim'/'withdraw' rows server-side (see
-  // ActivityService.ts), so this filters back down to just 'bridge' client-
-  // side - the same technique MultichainPage.tsx's hub already uses for its
-  // own combined list. Skipped entirely on mobile; re-fetched once a
-  // transfer actually succeeds so it shows up without a page reload.
-  // (`isDesktop` is already declared above, at the top of this component.)
-  const [transferHistory, setTransferHistory] = useState<ActivityRecord[]>([])
-  const [transferHistoryLoaded, setTransferHistoryLoaded] = useState(false)
-  const [transferHistDetail, setTransferHistDetail] = useState<ActivityRecord | null>(null)
-  const transferFlash = useReturnFlash()
-  useEffect(() => {
-    if (!isDesktop || !senderAddress) return
-    let cancelled = false
-    fetchActivity(senderAddress, { activityType: 'bridge', limit: 50 })
-      .then(records => { if (!cancelled) setTransferHistory(records.filter(r => r.activityType === 'bridge')) })
-      .finally(() => { if (!cancelled) setTransferHistoryLoaded(true) })
-    return () => { cancelled = true }
-  }, [isDesktop, senderAddress, step === 'success'])
   const [address, setAddress] = useState('')
   const [addrHint, setAddrHint] = useState<{ type: 'ok' | 'warn' | 'error' | ''; text: string }>({ type: '', text: 'Enter wallet address on destination chain' })
   const [amount, setAmount] = useState('')
@@ -831,7 +788,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // Phone keypad open → focus mode: the other fields fold away so the amount
   // sits right under the header, above the keys, on any screen height.
   const amountFocus = showAmountPad && !desktopInput
-  const keypadLift = useKeypadLift(showAmountPad, amountBoxRef, !isDesktop && !amountFocus)
+  const keypadLift = useKeypadLift(showAmountPad, amountBoxRef, !amountFocus)
   // Leaving the Transfer Funds page (back to the Hub) closes its keypad -
   // it was left open on the Hub screen.
   useEffect(() => { if (sheetMode && formSheet === 0) setShowAmountPad(false) }, [sheetMode, formSheet])
@@ -3146,7 +3103,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       <div style={{ marginTop: 8 }}>
         <AmountField
           value={amount}
-          onChange={v => setAmount(sanitizeMultichainAmount(v))}
+          onChange={v => setAmount(sanitizeAmountInput(v, USDC_DECIMALS))}
           onTap={desktopInput ? undefined : () => setShowAmountPad(true)}
           editing={amountFocus}
           boxRef={amountBoxRef}
@@ -3171,6 +3128,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       onChange={v => setAmount(v)}
       balance={balance}
       token="USDC"
+      decimals={USDC_DECIMALS}
       // Same reserve as the inline Max button below - this sheet
       // has its own separate Max button and was filling in the
       // full balance too. No live fee estimate is fetched here
@@ -3200,7 +3158,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const foldable = (node: React.ReactNode) => (
     <motion.div initial={false} aria-hidden={amountFocus || undefined}
       animate={amountFocus ? { height: 0, opacity: 0, marginBottom: -18 } : { height: 'auto', opacity: 1, marginBottom: 0 }}
-      transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+      transition={{ duration: 0.28, ease: EASE_OUT }}
       style={{ overflow: amountFocus ? 'hidden' : 'visible', pointerEvents: amountFocus ? 'none' : undefined }}>
       {node}
     </motion.div>
@@ -3209,7 +3167,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const amountFocusLine = (
     <motion.div initial={false}
       animate={amountFocus ? { height: 'auto', opacity: 1, marginBottom: 0 } : { height: 0, opacity: 0, marginBottom: -18 }}
-      transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }} style={{ overflow: 'hidden' }}>
+      transition={{ duration: 0.28, ease: EASE_OUT }} style={{ overflow: 'hidden' }}>
       <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.4, color: 'var(--text-secondary)' }}>
         Sending to {isEVMAddress(address)
           ? <b style={{ color: 'var(--text-primary)', fontWeight: 600, fontFamily: 'ui-monospace, monospace' }}>{address.slice(0, 6)}…{address.slice(-6)}</b>
@@ -3225,74 +3183,17 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       {numAmount >= MIN_AMOUNT ? `Review ${formatAmount(numAmount)} USDC transfer` : 'Review'}
     </button>
   )
-  const formActions = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {reviewButton}
-      {/* Desktop's header has no back arrow - keep a quiet way back there. */}
-      {isDesktop && (
-        <button onClick={() => navigate('/multichain')}
-          style={{ height: 40, border: 'none', background: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)' }}>
-          Cancel
-        </button>
-      )}
-    </div>
-  )
-
   const flow = (
-    <div ref={flowRootRef} className={`relative flex flex-col bg-bg ${isDesktop || embedded ? 'h-full' : 'h-screen'}`}
+    <div ref={flowRootRef} className="relative flex flex-col bg-bg h-full"
       // Hub on a phone: processing → result is a full page over Review.
       data-hub-page={procPage ? '' : undefined}
       // Desktop: the same screens in the Hub's right-hand panel.
       style={procPage ? (isDesktopMq ? { ...HUB_PANEL_BOX, zIndex: 45 } : { position: 'fixed', inset: 0, zIndex: 45, maxWidth: 430, margin: '0 auto', background: 'transparent' }) : undefined}>
-      {/* Desktop-only compact "Success" header (same padding/size as
-          MultichainClaimPage's own done-step header) - the success step
-          had no header at all before, so its content started right at
-          the column's top edge instead of level with DesktopHistoryPanel's
-          own header row next to it. */}
-      {isDesktop && step === 'success' && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', padding: '16px', flexShrink: 0 }}>
-          {!isDesktop && (
-            <button onClick={() => navigate('/')} style={{ position: 'absolute', left: 16, background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-primary)', display: 'flex', alignItems: 'center' }}>
-              <ArrowLeft className="w-5 h-5"/>
-            </button>
-          )}
-          <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>Success</span>
-        </div>
-      )}
-      {!embedded && !['broadcasting','success','failed'].includes(step) && (
-        <div
-          className="header-row sticky top-0 z-20 gap-3 px-5 pt-header pb-header"
-          // Desktop-only, ~20% less top/bottom padding than pt-header/
-          // pb-header's shared 22px/18px. Actually shrinks the header's own
-          // box (unlike the transform this replaced), so the form below
-          // moves up with it instead of leaving a gap where the header used
-          // to be. Mobile keeps the untouched shared classes (isDesktop is
-          // false there, so no inline override is applied).
-          style={isDesktop ? { paddingTop: 18, paddingBottom: 14 } : undefined}
-        >
-          {!isDesktop && (
-            <button onClick={() => { if (step === 'form') { navigate('/multichain') } else { resetUBTransientState(); setStep('form') } }} className="back-btn">
-              <ArrowLeft className="w-5 h-5 text-text-primary" />
-            </button>
-          )}
-          <div className="flex-1">
-            <h1 className="text-xl font-bold text-text-primary">Transfer Out</h1>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="text-[10px] font-semibold text-[var(--brand)] bg-brand/10 border border-brand/20 rounded-full px-2 py-0.5">21 chains</span>
-              <span className="text-[10px] text-text-secondary">•</span>
-              <span className="text-[10px] text-text-secondary">CCTP + UB Gateway</span>
-              <span className="text-[10px] text-text-secondary">•</span>
-              <span className="text-[10px] text-text-secondary">USDC only</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <motion.div className="flex-1 overflow-y-auto px-3 pb-3" animate={pageSlide} initial={false} style={{
-        ...(isDesktop ? { padding: '0 10.8px 10.8px' } : {}),
+      <div ref={procPageRef} className="flex-1 overflow-y-auto px-3 pb-3" style={{
         // Hub on a phone: the processing page slides in from the right over
-        // Review (which stays underneath until it has arrived).
-        ...(procPage ? { position: 'relative', zIndex: 41, background: 'var(--bg)', paddingTop: 'env(safe-area-inset-top, 0px)', boxShadow: '-12px 0 32px rgba(0,0,0,0.25)' } : {}),
+        // Review (which stays underneath until it has arrived - see its
+        // HubPage's `leaveUnder`).
+        ...(procPage ? { position: 'relative', zIndex: 41, background: 'var(--bg)', paddingTop: 'env(safe-area-inset-top, 0px)', boxShadow: isDesktopMq ? undefined : pushLook().shadow } : {}),
         // Success: this column stops scrolling and hands its full height to
         // the receipt, which scrolls its own details above a pinned
         // View in Hub / Done bar (see SuccessReceipt's `actions`).
@@ -3316,42 +3217,23 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
           {/* ── FORM ─────────────────────────────────────────────────────── */}
           {!showResumed && (step === 'form' || step === 'review' || step === 'confirm') && (
-            <motion.div key="form" initial={false}
-              // Phone: the form pushes up behind Review. Hub on desktop: Review
-              // opens in the right-hand panel, so the Hub card stays put under
-              // the dim (as with Bring) instead of vanishing.
-              animate={(step === 'review' || step === 'confirm') && !(isDesktopMq && sheetMode) ? { opacity: 0, y: '-28%' } : { opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }} transition={{ duration: 0.32, ease: [0.32, 0.72, 0, 1] }} className={isDesktop ? "space-y-[9px] pt-1" : "space-y-2.5 pt-1"}>
+            // The Hub's Transfer card. Its pages (Transfer Funds, Review) open
+            // over it as HubPages, which move the Hub underneath themselves;
+            // leaving for processing it goes at once, so the processing page
+            // slides in already showing its own screen.
+            <motion.div key="form" initial={false} exit={{ opacity: 0, transition: { duration: 0 } }} className="space-y-2.5 pt-1">
 
               {/* ── Transfer Out form (Arc Bridge layout, MeshPort brand) ── */}
-              <motion.div animate={{ y: sheetMode ? 0 : -keypadLift }} initial={false} transition={KEYPAD_SPRING}
-                style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 22, padding: isDesktop ? 20 : 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 22, padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {formTitle}
-                {/* The From card below already shows the balance outside the Hub sheet. */}
-                {sheetMode && formBalance}
-                {sheetMode ? (
-                  <button onClick={() => setFormSheet(1)}
-                    className="active:scale-[.98] transition-all"
-                    style={{ width: '100%', padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, border: 'none',
-                      cursor: 'pointer', color: '#fff', background: 'var(--brand)' }}>
-                    Transfer Funds
-                  </button>
-                ) : (<>
-                  {foldable(formDestination)}
-                  {foldable(formChainSelect)}
-                  {foldable(formRecipient)}
-                  {amountFocusLine}
-                  {formAmount}
-                  {foldable(formRoute)}
-                  {formGasWarning && foldable(formGasWarning)}
-                  {formActions}
-                </>)}
-
-              </motion.div>
-
-
-              {/* Hub (phone): the keypad opens inside the Transfer Funds page instead (see HubPage below). */}
-              {!desktopInput && !sheetMode && amountKeypad}
+                {formBalance}
+                <button onClick={() => setFormSheet(1)}
+                  className="active:scale-[.98] transition-all"
+                  style={{ width: '100%', padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, border: 'none',
+                    cursor: 'pointer', color: '#fff', background: 'var(--brand)' }}>
+                  Transfer Funds
+                </button>
+              </div>
 
             </motion.div>
           )}
@@ -3363,7 +3245,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                underneath the success flash (portaled on top) so the screen is
                never blank while the flash's circle grows. ── */}
           {(step === 'broadcasting' || (step === 'success' && successPhase === 'flash')) && (
-            <motion.div key="broadcasting" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION}
+            // No fade of its own: it arrives with the processing page's push.
+            <motion.div key="broadcasting" initial={false}
               style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
               <MoveProgress
                 kind="transfer" route={chain.ub ? 'ub' : 'cctp'}
@@ -3555,7 +3438,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
             const mintMayHaveSucceeded = sourceActionAlreadyDone
               || /relayer failed to forward|mint may still have succeeded|forwarder transfer failed|already been used|transfer spec/i.test(txError)
             return (
-            <motion.div key="failed" initial={DIALOG_CARD.initial} animate={DIALOG_CARD.animate} transition={DIALOG_CARD.transition} className="text-center py-8 space-y-5">
+            <motion.div key="failed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION} className="text-center py-8 space-y-5">
               <div className="w-24 h-24 bg-danger/20 rounded-full flex items-center justify-center mx-auto"><XCircle className="w-14 h-14 text-danger" /></div>
               <div>
                 <h2 className="text-2xl font-bold text-text-primary">
@@ -3699,7 +3582,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           })()}
 
         </AnimatePresence>
-      </motion.div>
+      </div>
 
       {/* ── Hub (phone): the form as a full page that slides in from the
           right. Review opens the same way on top; the passcode, amount
