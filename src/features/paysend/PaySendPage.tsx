@@ -6,21 +6,20 @@ import { TokenMenu } from '@/components/ui/TokenMenu'
 import { TokenLogo } from '@/components/ui/TokenLogo'
 import { arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { prewarmCamera } from '@/lib/scannerPrewarm'
-import { SHEET_SPRING, SHEET_BACKDROP, DIALOG_CARD, SHEET_EXIT } from '@/lib/motion'
-import { createPortal } from 'react-dom'
+import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Wallet,
   AlertCircle, Loader2, CheckCircle2, QrCode,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MOBILE_SLIDE_TRANSITION } from '@/lib/motion'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { PanelScanner } from '@/features/scanner/PanelScanner'
 import { Avatar } from '@/components/ui/Avatar'
 import { UsernameDisplay } from '@/components/ui/UsernameDisplay'
-import { PinKeypad } from '@/components/ui/PinKeypad'
-import { AmountKeypad } from '@/components/ui/AmountKeypad'
+import { PinSheet } from '@/components/ui/PinSheet'
+import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
+import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { useWalletStore, useAuthStore, useUIStore } from '@/store'
 import { formatAmount, shortenAddress, midShortenAddress, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
@@ -35,7 +34,6 @@ import { fetchRecentContacts } from '@/lib/recentContacts'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { hasAnyActivityForTx } from '@/lib/ActivityService'
-import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
 import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
@@ -45,7 +43,6 @@ import { ActivityRow } from '@/features/activity/ActivityPage'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { ProcessingRing } from '@/components/ui/ProcessingRing'
-import { sheetDrag } from '@/lib/sheetDrag'
 import { ScreenPush } from '@/components/ui/ScreenPush'
 import { readPeople, writePeople } from '@/lib/peopleCache'
 import { loadPayContacts } from '@/lib/payPeople'
@@ -89,24 +86,6 @@ interface Recipient {
 }
 
 const QUICK_AMOUNTS = [10, 20, 50, 100]
-
-// Digit/decimal sanitizing for the desktop "Amount" native input (mirrors
-// AmountKeypad's own internal sanitizer, which isn't exported).
-// BUG FIX: this used to hardcode a 2-decimal cap regardless of token,
-// making it impossible to even TYPE a cirBTC amount finer than 0.01 --
-// takes the target token so the cap matches tokenDisplayDecimals (8 for
-// cirBTC, 3 otherwise).
-function sanitizeSendAmount(raw: string, decimals: number = 3): string {
-  let cleaned = raw.replace(/[^\d.]/g, '')
-  const firstDot = cleaned.indexOf('.')
-  if (firstDot !== -1) cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '')
-  const [intPart, decPart] = cleaned.split('.')
-  if (decPart !== undefined) cleaned = intPart + '.' + decPart.slice(0, decimals)
-  return cleaned
-}
-
-// Phone: screens swap instantly inside ScreenPush, which does the slide.
-const INSTANT_SCREEN = { initial: false, animate: { opacity: 1, x: 0 }, exit: { opacity: 1, transition: { duration: 0 } } } as const
 
 export function PaySendPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
@@ -203,7 +182,6 @@ export function PaySendPage() {
   // second argument (see PinKeypad.tsx's own comment on why that exists).
   const [paidViaBiometric, setPaidViaBiometric] = useState(false)
   const [pinError, setPinError] = useState(false)
-  const [pinShake, setPinShake] = useState(false)
   const [processStage, setProcessStage] = useState<ProcessStage>('idle')
   const [txHash, setTxHash] = useState('')
   const [txError, setTxError] = useState('')
@@ -872,8 +850,7 @@ export function PaySendPage() {
         const { verifyPasscode } = await import('@/lib/security')
         const correct = await verifyPasscode(pin, storedPasscode)
         if (!correct) {
-          setPinError(true); setPinShake(true)
-          setTimeout(() => setPinShake(false), 400)
+          setPinError(true)
           setTimeout(() => { setPin(''); setPinError(false) }, 500)
           sendInFlightRef.current = false
           return
@@ -1197,16 +1174,13 @@ export function PaySendPage() {
     <div data-leave-guard={isProcessing ? '' : undefined} className={`flex flex-col ${isDesktop ? 'h-full' : 'h-screen overflow-hidden'}`} style={{ background: 'var(--bg)', borderRadius: isDesktop ? 20 : undefined }}>
       {/* Search → amount → review push like pages (ScreenPush), so two
           screens are never seen through each other mid-change. Desktop:
-          ScreenPush's quick fade in place, same as Swap. */}
+          ScreenPush's quick fade in place, same as Swap. The screens
+          themselves swap instantly - ScreenPush does all the motion. */}
       <ScreenPush screenKey={screen} back={direction === 'back'}>
-      <AnimatePresence initial={false} mode="popLayout">
 
         {/* ══════════════ SCREEN 1 - SEARCH RECIPIENT ══════════════ */}
         {screen === 'search' && (
-          <motion.div key="search" data-pay-search=""
-            {...INSTANT_SCREEN}
-            transition={MOBILE_SLIDE_TRANSITION}
-            className="flex flex-col h-full">
+          <div key="search" data-pay-search="" className="flex flex-col h-full">
             {/* Desktop: the QR scanner opens over this column only, not the whole screen. */}
             {scanAnchor && (
               <PanelScanner anchor={scanAnchor} wallet={false}
@@ -1402,15 +1376,12 @@ export function PaySendPage() {
                 </>
               )}
             </div>
-          </motion.div>
+          </div>
         )}
 
         {/* ══════════════ SCREEN 2 - ENTER AMOUNT ══════════════ */}
         {screen === 'amount' && recipient && (
-          <motion.div key="amount"
-            {...INSTANT_SCREEN}
-            transition={MOBILE_SLIDE_TRANSITION}
-            className="flex flex-col h-full">
+          <div key="amount" className="flex flex-col h-full">
 
             <div className="header-row sticky top-0 z-20 gap-3 px-5 pt-header pb-header flex-shrink-0">
               {!isDesktop && (
@@ -1463,7 +1434,7 @@ export function PaySendPage() {
               <div ref={amountBoxRef}>
               <AmountField
                 value={amount}
-                onChange={raw => { if (merchantPayCode) return; setAmount(sanitizeSendAmount(raw, tokenDisplayDecimals(token))); setAmountError('') }}
+                onChange={raw => { if (merchantPayCode) return; setAmount(sanitizeAmountInput(raw, tokenDisplayDecimals(token))); setAmountError('') }}
                 autoFocus={isDesktop && !merchantPayCode}
                 // Mobile: the same field opens the number pad.
                 onTap={isDesktop ? undefined : () => setShowAmountPad(true)}
@@ -1620,15 +1591,12 @@ export function PaySendPage() {
                 </div>
               )
             })()}
-          </motion.div>
+          </div>
         )}
 
         {/* ══════════════ SCREEN 3 - REVIEW + INLINE STATES ══════════════ */}
         {screen === 'review' && recipient && (
-          <motion.div key="review"
-            {...INSTANT_SCREEN}
-            transition={MOBILE_SLIDE_TRANSITION}
-            className="flex flex-col h-full">
+          <div key="review" className="flex flex-col h-full">
 
             {/* This is the REAL isDone branch - the one that actually
                 renders (confirmed against a live screenshot: this hero
@@ -1770,9 +1738,9 @@ export function PaySendPage() {
                     now (hero card + the new full-screen flash phase before
                     it) - see that block's own comment. */}
 
-                {/* ── FAILED STATE (inline) ── */}
+                {/* ── FAILED STATE (inline): an in-place swap, so a quick fade ── */}
                 {processStage === 'failed' && (
-                  <motion.div key="failed" initial={DIALOG_CARD.initial} animate={DIALOG_CARD.animate} transition={DIALOG_CARD.transition}
+                  <motion.div key="failed" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={MOBILE_TAB_FADE_TRANSITION}
                     className="flex flex-col items-center pt-10 pb-4 space-y-5">
                     <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: 'color-mix(in srgb, var(--danger) 12%, transparent)' }}>
                       <AlertCircle className="w-11 h-11 text-danger" />
@@ -1879,65 +1847,28 @@ export function PaySendPage() {
             )}
             </>
             )}
-          </motion.div>
+          </div>
         )}
-      </AnimatePresence>
       </ScreenPush>
 
-      {/* ══════════════ PASSCODE SHEET / DIALOG (modal over review) ══════════════ */}
-      <AnimatePresence>
-        {showPasscodeSheet && (isDesktop ? (
-          <DesktopTransactionAuthDialog
-            onClose={() => setShowPasscodeSheet(false)}
-            title="Authorize Payment"
-            anchor={desktopColumnRef.current}
-            amountLabel={`${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token}`}
-            subLabel={`To ${recipient?.displayName}`}
-          >
-            {pinError && (
-              <p role="alert" className="text-xs text-center mb-4" style={{ color: 'var(--danger)' }}>Incorrect passcode. Try again.</p>
-            )}
-            <PinKeypad
-              value={pin}
-              onChange={setPin}
-              length={6}
-              error={pinError}
-              shake={pinShake}
-              onComplete={(_, viaBiometric) => { if (!isProcessing) { setPaidViaBiometric(!!viaBiometric); verifyAndSend() } }}
-            />
-          </DesktopTransactionAuthDialog>
-        ) : (
-          <>
-            <motion.div transition={SHEET_BACKDROP.transition} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="absolute inset-0 z-40"
-              style={{ background: 'rgba(0,0,0,0.6)' }}
-              onClick={() => setShowPasscodeSheet(false)} />
-            <motion.div {...sheetDrag('ps-pass', () => setShowPasscodeSheet(false))}
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}
-              transition={SHEET_SPRING}
-              className="absolute bottom-0 left-0 right-0 z-50 rounded-t-3xl pt-3 pb-10 px-6"
-              style={{ background: 'var(--surface)', borderTop: '1px solid var(--border)' }}>
-              <div className="w-10 h-1 rounded-full mx-auto mb-6" style={{ background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)' }} />
-              <div className="text-center mb-7">
-                <h2 className="text-lg font-bold text-text-primary">Enter Passcode</h2>
-                <p className="text-xs mt-1.5" style={{ color: 'var(--text-secondary)' }}>
-                  {pinError
-                    ? <span role="alert" className="text-danger">Incorrect passcode. Try again.</span>
-                    : `Authorise ${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token} to ${recipient?.displayName}`}
-                </p>
-              </div>
-              <PinKeypad
-                value={pin}
-                onChange={setPin}
-                length={6}
-                error={pinError}
-                shake={pinShake}
-                onComplete={(_, viaBiometric) => { if (!isProcessing) { setPaidViaBiometric(!!viaBiometric); verifyAndSend() } }}
-              />
-            </motion.div>
-          </>
-        ))}
-      </AnimatePresence>
+      {/* ══════════════ PASSCODE STEP (modal over review) ══════════════ */}
+      {/* Desktop: the authorize dialog over the flow column. Phone Back is
+          handled by this page's own step history (popstate above). */}
+      <PinSheet
+        open={showPasscodeSheet}
+        onClose={() => setShowPasscodeSheet(false)}
+        backClose={false}
+        id="ps-pass"
+        title={isDesktop ? 'Authorize Payment' : 'Enter Passcode'}
+        subtitle={isDesktop ? `To ${recipient?.displayName}`
+          : `Authorise ${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token} to ${recipient?.displayName}`}
+        amountLabel={`${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token}`}
+        anchor={desktopColumnRef.current}
+        value={pin}
+        onChange={setPin}
+        error={pinError ? 'Incorrect passcode. Try again.' : undefined}
+        onComplete={(_, viaBiometric) => { if (!isProcessing) { setPaidViaBiometric(!!viaBiometric); verifyAndSend() } }}
+      />
 
     </div>
   )
@@ -1945,14 +1876,12 @@ export function PaySendPage() {
   if (!isDesktop) return flow
 
   // ── Desktop: flow (left) + Pay History (right), independently scrollable ──
-  // Fills the full available content width (no maxWidth cap) at a fixed
-  // 65/35 grow split, same treatment as Swap/Multichain Transfer. Bottom
-  // padding trimmed so both columns reach down close to the viewport's
-  // bottom edge.
+  // The shared 65/35 desktop layout (DesktopTwoColumn), same as Swap.
   return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
-      <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto' }} ref={desktopColumnRef}>{flow}</div>
-      <div style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0 }}>
+    <DesktopTwoColumn
+      mainRef={desktopColumnRef}
+      main={flow}
+      side={
         <DesktopHistoryPanel title="Recent History" onViewAll={() => navigate('/activity')}>
           {!payHistoryLoaded ? (
             <DesktopHistorySkeleton />
@@ -1965,7 +1894,8 @@ export function PaySendPage() {
             ))
           )}
         </DesktopHistoryPanel>
-      </div>
+      }
+      extra={
       <AnimatePresence>
         {payHistDetail && (() => {
           const r = payHistDetail
@@ -1990,7 +1920,8 @@ export function PaySendPage() {
           )
         })()}
       </AnimatePresence>
-    </div>
+      }
+    />
   )
 }
 

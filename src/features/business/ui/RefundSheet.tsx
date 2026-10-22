@@ -5,6 +5,7 @@
 import React from 'react'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { Sheet } from './primitives'
+import { sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 
 export interface RefundSheetProps {
   open: boolean
@@ -87,7 +88,7 @@ export function RefundSheet({
               <label className="flex items-center justify-center gap-0.5 text-danger">
                 <span className="text-4xl font-bold">$</span>
                 <input inputMode="decimal" aria-label="Refund amount" value={value ?? ''}
-                  onChange={e => onValue(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/(\.\d{2})\d+/, '$1'))}
+                  onChange={e => onValue(sanitizeAmountInput(e.target.value, 2))}
                   className="w-44 bg-transparent text-4xl font-bold tabular-nums text-danger text-center outline-none" />
               </label>
               <div className="flex gap-2 mt-1">

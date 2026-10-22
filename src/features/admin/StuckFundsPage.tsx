@@ -419,14 +419,14 @@ export function StuckFundsPage() {
       ) : (
         <>
           {list}
-          {selected && (
-            <div role="dialog" aria-modal="true" onClick={() => setSelectedId(null)}
-              style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-              <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 560, maxHeight: '100%', overflowY: 'auto', boxSizing: 'border-box', animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}>
+          <AnimatePresence>
+            {selected && (
+              // Detail draws its own card (bare).
+              <DesktopDialogFrame key="stuck-detail" bare onClose={() => setSelectedId(null)} maxWidth={560}>
                 <Detail item={selected} onClose={() => setSelectedId(null)} onChanged={() => void load()} />
-              </div>
-            </div>
-          )}
+              </DesktopDialogFrame>
+            )}
+          </AnimatePresence>
         </>
       )}
 

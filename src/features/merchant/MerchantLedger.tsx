@@ -21,12 +21,8 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
-import { PinKeypad } from '@/components/ui/PinKeypad'
-import { PopupDim } from '@/components/ui/PopupDim'
-import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
+import { PinSheet } from '@/components/ui/PinSheet'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { usePopupOpen } from '@/hooks/usePopupOpen'
-import { SHEET_PANEL } from '@/lib/motion'
 import { ClaimAllScreen, type ClaimAllChain } from './ClaimAllScreen'
 import { lastClaimAllAt, CLAIM_ALL_COOLDOWN_MS, CLAIM_ALL_MIN_CHAIN, type ClaimAllStep } from '@/lib/ubClaim'
 import { merchantQrChain, MERCHANT_QR_EXTERNAL } from '@/lib/merchantQr'
@@ -415,13 +411,7 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
     : `Claim All · $${formatAmount(total)} USDC`
   const enabled = ready && !running && !scanning && due.length > 0
 
-  const keypad = (
-    <PinKeypad value={pin} length={6} error={pinError}
-      onChange={v => { setPin(v); setPinError(false) }}
-      onComplete={p => { void confirmPin(p) }} />
-  )
   const pinAmount = retryIds ? runChains.filter(c => retryIds.includes(c.chainId)).reduce((t, c) => t + c.balance, 0) : total
-  const confirmText = pinError ? 'Incorrect passcode. Try again.' : `Confirm ${retryIds ? 'retry' : 'Claim All'} of $${formatAmount(pinAmount)} USDC`
   const hasRun = runChains.length > 0 && Object.keys(steps).length > 0
 
   return (
@@ -459,35 +449,16 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {pinOpen && (isDesktop ? (
-          <DesktopTransactionAuthDialog key="pin" onClose={() => setPinOpen(false)} title={retryIds ? 'Confirm retry' : 'Confirm Claim All'}
-            amountLabel={`$${formatAmount(pinAmount)} USDC`} subLabel={pinError ? <span role="alert" style={{ color: 'var(--danger, #D64545)' }}>Incorrect passcode. Try again.</span> : 'To your Arc balance'}>
-            {keypad}
-          </DesktopTransactionAuthDialog>
-        ) : (
-          <PinSheet key="pin" onClose={() => setPinOpen(false)} text={confirmText} error={pinError}>{keypad}</PinSheet>
-        ))}
-      </AnimatePresence>
+      {/* The app's passcode step: the bottom sheet on phones, the authorize
+          dialog on desktop. */}
+      <PinSheet open={pinOpen} onClose={() => setPinOpen(false)} id="claim-all-pin"
+        title={isDesktop ? (retryIds ? 'Confirm retry' : 'Confirm Claim All') : 'Enter Passcode'}
+        subtitle={isDesktop ? 'To your Arc balance' : `Confirm ${retryIds ? 'retry' : 'Claim All'} of $${formatAmount(pinAmount)} USDC`}
+        amountLabel={`$${formatAmount(pinAmount)} USDC`}
+        error={pinError ? 'Incorrect passcode. Try again.' : undefined}
+        value={pin} onChange={v => { setPin(v); setPinError(false) }}
+        onComplete={p => { void confirmPin(p) }} />
     </div>
-  )
-}
-
-/** Mobile passcode sheet, rendered into document.body. */
-function PinSheet({ onClose, text, error, children }: { onClose: () => void; text: string; error: boolean; children: React.ReactNode }) {
-  usePopupOpen()
-  return createPortal(
-    <div onClick={e => { e.stopPropagation(); onClose() }} style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'flex-end' }}>
-      <PopupDim background="rgba(0,0,0,0.5)" />
-      <motion.div onClick={e => e.stopPropagation()} {...SHEET_PANEL}
-        style={{ position: 'relative', width: '100%', background: 'var(--surface)', borderRadius: '24px 24px 0 0',
-          padding: '20px 20px calc(env(safe-area-inset-bottom, 0px) + 20px)', boxShadow: 'var(--shadow-3)' }}>
-        <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0, textAlign: 'center' }}>Enter Passcode</p>
-        <p role={error ? 'alert' : undefined} style={{ fontSize: 12, margin: '6px 0 24px', textAlign: 'center', color: error ? 'var(--danger, #D64545)' : 'var(--text-secondary)' }}>{text}</p>
-        {children}
-      </motion.div>
-    </div>,
-    document.body,
   )
 }
 

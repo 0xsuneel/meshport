@@ -9,10 +9,9 @@
 //                claims, MeshPort pays the gas), live progress and history
 //
 // The UI kit in ./ui was designed with Arc Studio.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { useReducedMotion } from 'framer-motion'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { DESKTOP_QUERY, PAGE_SLIDE_X } from '@/lib/motion'
+import { DESKTOP_QUERY } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useBackLayer } from '@/lib/backLayers'
 import { useBizTerms } from '@/lib/businessCategories'
@@ -42,18 +41,17 @@ import { logBusiness } from '@/lib/businessActivity'
 import { readArcBalanceOrThrow, notifyExternalBalanceChanged } from '@/blockchain/BlockchainManager'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { useUIStore } from '@/store'
+import { PinSheet } from '@/components/ui/PinSheet'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton } from '@/components/ui/DesktopHistoryPanel'
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, CustomersScreen, ReportsScreen, ProfileScreen, ReceiptScreen, HelpScreen } from './screens'
 import {
   BusinessHeader, SetupBanner, HubView, LockedHubView, PaymentsView, PaymentDetailSheet, PaymentRow,
-  SettlementsView, SettleProgressSheet, PasscodeSheet, VoiceSheet, RefundSheet, TrendChip,
-  DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, ScreenLevel, PushLayer,
+  SettlementsView, SettleProgressSheet, VoiceSheet, RefundSheet, TrendChip,
+  DateRangeSheet, PeriodSheet, ArcBalanceCard, AutoSettleCard, SettleDueSheet, ScreenLevel, PushLayer, useHubShift,
   type BusinessTab, type Payment, type VerificationStatus, type SettleProgressRow,
 } from './ui'
 
 type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools' | 'activity'
-
-const EASE_CSS = 'cubic-bezier(0.32, 0.72, 0, 1)'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.method === 'own_transfer' ? 'Your transfer'
@@ -270,6 +268,8 @@ function OwnerBusinessPage() {
   const [historyId, setHistoryId] = useState<string | null>(() => query.get('claim'))
   const [pin, setPin] = useState<{ kind: 'settle'; retry?: string[] } | { kind: 'one'; chainId: string } | { kind: 'refund' } | null>(null)
   const [pinError, setPinError] = useState<string | undefined>()
+  const [pinValue, setPinValue] = useState('')
+  const askPin = (p: NonNullable<typeof pin>) => { setPinError(undefined); setPinValue(''); setPin(p) }
 
   // Open screens, bottom to top: a screen opened from another one (Business
   // tools → Stores & staff, Stores → a store's QR, a payment → its receipt)
@@ -307,7 +307,7 @@ function OwnerBusinessPage() {
     if (settle.running) { setProgressOpen(true); return }
     // Settle all once per cooldown (retrying failed chains is part of the same run).
     if (!retry && !settle.ready) { setTab('settlements'); return }
-    if (settle.needsPasscode) { setPinError(undefined); setPin({ kind: 'settle', retry }); return }
+    if (settle.needsPasscode) { askPin({ kind: 'settle', retry }); return }
     setProgressOpen(true)
     logSettle(retry)
     void settle.settle(undefined, retry)
@@ -318,7 +318,7 @@ function OwnerBusinessPage() {
     void logBusiness('settle_run', { target: list.map(c => chainLabel(c.id)).join(', ') || null, amount: list.reduce((t, c) => t + c.balance, 0) })
   }
   const onPin = async (code: string) => {
-    if (!await settle.checkPasscode(code)) { setPinError('Incorrect passcode. Try again.'); return }
+    if (!await settle.checkPasscode(code)) { setPinValue(''); setPinError('Incorrect passcode. Try again.'); return }
     const p = pin
     setPin(null)
     if (p?.kind === 'refund') { void runRefund(code); return }
@@ -331,7 +331,7 @@ function OwnerBusinessPage() {
   /** Settle one chain (Settlements → On each chain → Settle). */
   const beginSettleOne = (chainId: string) => {
     if (settle.running) { setProgressOpen(true); return }
-    if (settle.needsPasscode) { setPinError(undefined); setPin({ kind: 'one', chainId }); return }
+    if (settle.needsPasscode) { askPin({ kind: 'one', chainId }); return }
     setProgressOpen(true)
     logSettle(undefined, chainId)
     void settle.settleOne(chainId)
@@ -369,7 +369,7 @@ function OwnerBusinessPage() {
   // What can still go back on the payment being refunded.
   const refundLeft = refundFor ? kept(refundFor) : 0
   const confirmRefund = () => {
-    if (settle.needsPasscode) { setPinError(undefined); setPin({ kind: 'refund' }); return }
+    if (settle.needsPasscode) { askPin({ kind: 'refund' }); return }
     void runRefund()
   }
   const runRefund = async (passcode?: string) => {
@@ -500,24 +500,10 @@ function OwnerBusinessPage() {
   // overlays below already supply this themselves.)
   const subOpen = tab !== 'overview'
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
-  const reduce = useReducedMotion()
   // Desktop: screens fade in the content area (no sliding), nothing shifts.
   const hubCovered = !isDesktop && (!!screen || subOpen)
-  // Opening shifts on the 300ms push, coming back on the 250ms back push.
-  const shiftCss = (on: boolean) => `transform ${reduce ? 0 : on ? 0.3 : 0.25}s ${EASE_CSS}`
-  const hubShift = { transform: hubCovered ? `translateX(-${PAGE_SLIDE_X})` : undefined, transition: shiftCss(hubCovered), willChange: 'transform' }
-  // The bottom tab bar belongs to the hub: like a page push from a tab, it
-  // shifts left with it under the dim (PageTransition moves it the same way).
-  useLayoutEffect(() => {
-    const nav = document.querySelector<HTMLElement>('[data-bottom-nav]')
-    if (!nav) return
-    nav.style.transition = shiftCss(hubCovered)
-    nav.style.transform = hubCovered ? `translateX(-${PAGE_SLIDE_X})` : ''
-  }, [hubCovered]) // eslint-disable-line react-hooks/exhaustive-deps
-  useLayoutEffect(() => () => {
-    const nav = document.querySelector<HTMLElement>('[data-bottom-nav]')
-    if (nav) { nav.style.transform = ''; nav.style.transition = '' }
-  }, [])
+  // The hub (and the bottom tab bar) parallaxes left under a pushed page.
+  const hubShift = useHubShift(hubCovered)
   // Manage orders / money shifts left too when a screen opens over it.
   const subCovered = !isDesktop && !!screen
   // Phone / browser Back from Manage orders / money returns to the overview.
@@ -659,10 +645,11 @@ function OwnerBusinessPage() {
         onRetryFailed={() => { if (failedIds.length) beginSettle(failedIds) }}
         onTrack={id => { const c = settle.run.find(r => r.id === id)?.claimId; if (c) { setProgressOpen(false); setHistoryId(c) } }} />
 
-      <PasscodeSheet open={!!pin} title={pin?.kind === 'refund' ? 'Confirm refund' : 'Confirm settle'}
+      <PinSheet open={!!pin} title={pin?.kind === 'refund' ? 'Confirm refund' : 'Confirm settle'}
         subtitle={pin?.kind === 'refund' ? `Send ${money(Number(refundAmount) || 0)} back to ${refundFor ? who(refundFor) : 'the customer'}`
           : pin?.kind === 'one' ? `Move ${money((chains ?? []).find(c => c.id === pin.chainId)?.balance ?? 0)} from ${chainLabel(pin.chainId)} to Arc`
           : `Move ${money(pin?.kind === 'settle' && pin.retry ? settle.run.filter(r => pin.retry!.includes(r.id)).reduce((s, r) => s + r.balance, 0) : settle.total)} to your Arc balance`}
+        value={pinValue} onChange={v => { setPinValue(v); setPinError(undefined) }}
         error={pinError} onComplete={code => { void onPin(code) }} onClose={() => setPin(null)} />
 
       <VoiceSheet open={voiceOpen} enabled={voice.enabled}

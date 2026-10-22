@@ -1,11 +1,12 @@
 /**
- * PaymentReceivedOverlay — full-screen success overlay shown on payment receipt.
+ * PaymentReceivedOverlay — the success popup shown on payment receipt.
  * Auto-dismiss is the parent's responsibility.
  */
 import React from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { CheckCircle2 } from 'lucide-react'
-import { EASE_OUT, POPUP_CARD, DIALOG_BACKDROP } from '@/lib/motion'
+import { EASE_OUT } from '@/lib/motion'
+import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 
 export interface PaymentReceivedOverlayProps {
   open: boolean
@@ -27,22 +28,10 @@ export function PaymentReceivedOverlay({
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          className="fixed inset-0 z-[60] flex items-center justify-center px-6"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={DIALOG_BACKDROP.transition}
-        >
-          {/* Dim */}
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-
-          {/* Card — the app's shared popup pop-in (tween, no spring bounce),
-              the same as every other success/confirm dialog. */}
-          <motion.div
-            className="relative w-full max-w-sm rounded-3xl bg-surface shadow-2xl overflow-hidden"
-            {...POPUP_CARD}
-          >
+        // The app's centred popup (dim, pop-in, Esc, tap-outside, Back); the
+        // card below draws its own look (green band), so the frame is bare.
+        <DesktopDialogFrame onClose={onDone} bare maxWidth={384} zIndex={60}>
+          <div className="relative w-full rounded-3xl bg-surface shadow-2xl overflow-hidden">
             {/* Green header band */}
             <div className="h-1.5 w-full bg-success" />
 
@@ -94,8 +83,8 @@ export function PaymentReceivedOverlay({
                 Done
               </button>
             </div>
-          </motion.div>
-        </motion.div>
+          </div>
+        </DesktopDialogFrame>
       )}
     </AnimatePresence>
   )

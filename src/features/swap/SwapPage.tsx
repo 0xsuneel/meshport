@@ -1,10 +1,9 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { TokenMenu } from '@/components/ui/TokenMenu'
 import { HistoryIcon } from '@/components/ui/HistoryRow'
-import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
-import { createPortal } from 'react-dom'
-import { PinKeypad } from '@/components/ui/PinKeypad'
-import { AmountKeypad } from '@/components/ui/AmountKeypad'
+import { PinSheet } from '@/components/ui/PinSheet'
+import { AmountKeypad, sanitizeAmountInput, tokenDecimals } from '@/components/ui/AmountKeypad'
+import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { AmountField } from '@/components/ui/AmountField'
 import { TransactionComplete } from '@/components/ui/TransactionComplete'
 import { SuccessReceipt } from '@/components/ui/SuccessReceipt'
@@ -20,7 +19,7 @@ import {
   ArrowLeft, ArrowUpDown, Settings, CheckCircle, XCircle, RefreshCw, ChevronDown, Clock, ChevronRight,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
+import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isCoinEnabled } from '@/lib/featureFilters'
@@ -30,10 +29,8 @@ import { saveResumableOperation, getResumableOperation, clearResumableOperation 
 import { hasAnyActivityForTx } from '@/lib/ActivityService'
 import { amountFontSize } from '@/lib/amountFontSize'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { DesktopHistoryPanel, DesktopHistoryEmpty } from '@/components/ui/DesktopHistoryPanel'
 import { MeshLoader } from '@/components/ui/MeshLoader'
-import { sheetDrag } from '@/lib/sheetDrag'
 import { ARC_EXPLORER } from '@/lib/chainExplorers'
 import { refreshBalancesAfterTx, BALANCES_STALE_EVENT } from '@/lib/balanceRefresh'
 import { readArcBalanceOrThrow } from '@/blockchain/BlockchainManager'
@@ -108,6 +105,8 @@ function timeAgo(ts: number): string {
 // wrong amount. Matches PaySendPage.tsx's / ChatPage.tsx's own identical
 // helper -- kept as its own local copy here rather than a new shared
 // cross-file import, consistent with how those two files already do it.
+// Display only: typing (field and keypad) is capped at the token's on-chain
+// precision, tokenDecimals().
 function swapTokenDecimals(id: string): number {
   return id === 'cirBTC' ? 8 : 3
 }
@@ -115,21 +114,6 @@ function swapTokenDecimals(id: string): number {
 // token, so 18.4 EURC read as "$18.4" and 0.001 cirBTC as "$0.001".
 function swapTokenSymbolChar(id: string): string {
   return id === 'USDC' ? '$' : id === 'EURC' ? '€' : '₿'
-}
-
-// Digit/decimal sanitizing for the desktop "You pay" native input (mirrors
-// AmountKeypad's own internal sanitizer, which isn't exported).
-// BUG FIX: this used to hardcode a 2-decimal cap regardless of token --
-// fine for USDC/EURC, but it made it impossible to even TYPE a cirBTC
-// amount finer than 0.01, e.g. a real 0.00042320 balance. Takes the target
-// token so the cap matches swapTokenDecimals (8 for cirBTC, 3 otherwise).
-function sanitizeSwapAmount(raw: string, decimals: number = 3): string {
-  let cleaned = raw.replace(/[^\d.]/g, '')
-  const firstDot = cleaned.indexOf('.')
-  if (firstDot !== -1) cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '')
-  const [intPart, decPart] = cleaned.split('.')
-  if (decPart !== undefined) cleaned = intPart + '.' + decPart.slice(0, decimals)
-  return cleaned
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -1469,7 +1453,7 @@ export function SwapPage() {
           <AnimatePresence initial={false}>
           {isActive && (
           <motion.button key="slippage" onClick={() => setShowSettings(s => !s)} aria-label="Slippage settings"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={MOBILE_TAB_FADE_TRANSITION}
             className="w-9 h-9 rounded-2xl flex items-center justify-center active:scale-95"
             style={showSettings ? { background:'var(--brand)' } : { background:'var(--surface)', border:'1px solid color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
             <Settings className="w-4 h-4 text-text-secondary"/>
@@ -1502,7 +1486,7 @@ export function SwapPage() {
             screen that is sliding in. */}
         <AnimatePresence custom={isActive}>
         {showSettings && isActive && (
-          <motion.div key="set" initial={{ height:0, opacity:0 }} animate={{ height:'auto', opacity:1 }}
+          <motion.div key="set" initial={{ height:0, opacity:0 }} animate={{ height:'auto', opacity:1 }} transition={MOBILE_TAB_FADE_TRANSITION}
             variants={{ leave: (stillOnForm: boolean) => stillOnForm ? { height: 0, opacity: 0 } : { opacity: 0, transition: { duration: 0 } } }}
             exit="leave" className="overflow-hidden">
             <div className="p-4 rounded-2xl space-y-3" style={{ background:'var(--surface)', border:'1px solid color-mix(in srgb, var(--brand) 20%, transparent)' }}>
@@ -1549,7 +1533,9 @@ export function SwapPage() {
             <div style={{ marginTop: 12 }}>
               <AmountField
                 value={amountIn}
-                onChange={raw => { setAmountIn(sanitizeSwapAmount(raw, swapTokenDecimals(tokenIn.id))); setEstimate(null) }}
+                // Typed (desktop) with the same decimals cap as the keypad
+                // (the token's on-chain precision).
+                onChange={raw => { setAmountIn(sanitizeAmountInput(raw, tokenDecimals(tokenIn.id))); setEstimate(null) }}
                 symbol={swapTokenSymbolChar(tokenIn.id)}
                 tokenPicker={
                   <div className="flex-shrink-0" style={{ position: 'relative', zIndex: pickerFor === 'in' ? 41 : undefined }}>
@@ -1985,79 +1971,23 @@ export function SwapPage() {
       </ScreenPush>
       </div>
 
-      {/* Passcode sheet/dialog - opens on Swap tap, same page, no navigation */}
-      <AnimatePresence>
-      {showPasscodeSheet && (() => {
-        const closeSheet = () => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }
-        // Keypad/confirm content only - title + amount summary (and the
-        // error message, which replaces the subtitle on mobile but needs
-        // its own line on desktop since desktop's subLabel is fixed to the
-        // swap summary) are handled by each branch's own chrome below.
-        const keypadContent = (
-          <>
-            {storedPasscode ? (
-              <PinKeypad
-                value={passEntry}
-                onChange={v => { setPassEntry(v); setPassError('') }}
-                length={6}
-                error={!!passError}
-                shake={!!passError}
-                accentFrom="var(--brand)"
-                accentTo="var(--brand)"
-                onComplete={(_, viaBiometric) => { setPaidViaBiometric(!!viaBiometric); handleConfirm() }}
-              />
-            ) : (
-              <button onClick={() => handleConfirm()}
-                className="w-full py-4 rounded-2xl text-base font-bold text-white active:scale-[0.98] transition-transform"
-                style={{ background:'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
-                Confirm Swap
-              </button>
-            )}
-          </>
-        )
-
-        return isDesktop ? (
-          <DesktopTransactionAuthDialog
-            onClose={closeSheet}
-            title={storedPasscode ? 'Authorize Swap' : 'Confirm Swap'}
-            anchor={desktopColumnRef.current}
-            amountLabel={`${trimTrailingZeros(parseFloat(amountIn || '0').toFixed(swapTokenDecimals(tokenIn.id)))} ${tokenIn.id}`}
-            subLabel={`For ~${trimTrailingZeros(parseFloat(estimate?.estimatedOutput?.amount ?? '0').toFixed(swapTokenDecimals(tokenOut.id)))} ${tokenOut.id}`}
-          >
-            {passError && <p role="alert" className="text-xs text-center mb-4" style={{ color: 'var(--danger)' }}>{passError}</p>}
-            {keypadContent}
-          </DesktopTransactionAuthDialog>
-        ) : (
-          <>
-            <motion.div key="pass-backdrop"
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              transition={SHEET_BACKDROP.transition}
-              className="absolute inset-0 z-40"
-              style={{ background: 'rgba(0,0,0,0.6)' }}
-              onClick={closeSheet}/>
-            <motion.div {...sheetDrag('sw-pass', closeSheet)} key="pass-sheet"
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}
-              transition={SHEET_SPRING}
-              className="absolute bottom-0 left-0 right-0 z-50 rounded-t-3xl pt-3 pb-10 px-6"
-              style={{ background: 'var(--surface)', borderTop: '1px solid color-mix(in srgb, var(--brand) 18%, transparent)' }}>
-              <div className="w-10 h-1 rounded-full mx-auto mb-6" style={{ background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)' }}/>
-              <div className="text-center mb-7">
-                <h2 className="text-lg font-bold text-text-primary">
-                  {storedPasscode ? 'Enter Passcode' : 'Confirm Swap'}
-                </h2>
-                <p className="text-xs mt-1.5" style={{ color: 'var(--text-secondary)' }}>
-                  {passError
-                    ? <span role="alert" className="text-danger">{passError}</span>
-                    : <>Swap {trimTrailingZeros(parseFloat(amountIn || '0').toFixed(swapTokenDecimals(tokenIn.id)))} {tokenIn.id} for ~{trimTrailingZeros(parseFloat(estimate?.estimatedOutput?.amount ?? '0').toFixed(swapTokenDecimals(tokenOut.id)))} {tokenOut.id}</>}
-                </p>
-              </div>
-              {keypadContent}
-            </motion.div>
-          </>
-        )
-      })()}
-      </AnimatePresence>
-
+      {/* Passcode step - opens on Swap tap, same page, no navigation. With no
+          passcode set, a plain "Confirm Swap" button stands in for the keypad. */}
+      <PinSheet
+        open={showPasscodeSheet}
+        onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
+        id="sw-pass"
+        title={isDesktop ? (storedPasscode ? 'Authorize Swap' : 'Confirm Swap') : (storedPasscode ? 'Enter Passcode' : 'Confirm Swap')}
+        subtitle={isDesktop ? `For ~${trimTrailingZeros(parseFloat(estimate?.estimatedOutput?.amount ?? '0').toFixed(swapTokenDecimals(tokenOut.id)))} ${tokenOut.id}`
+          : `Swap ${trimTrailingZeros(parseFloat(amountIn || '0').toFixed(swapTokenDecimals(tokenIn.id)))} ${tokenIn.id} for ~${trimTrailingZeros(parseFloat(estimate?.estimatedOutput?.amount ?? '0').toFixed(swapTokenDecimals(tokenOut.id)))} ${tokenOut.id}`}
+        amountLabel={`${trimTrailingZeros(parseFloat(amountIn || '0').toFixed(swapTokenDecimals(tokenIn.id)))} ${tokenIn.id}`}
+        anchor={desktopColumnRef.current}
+        value={passEntry}
+        onChange={v => { setPassEntry(v); setPassError('') }}
+        error={passError || undefined}
+        fallbackConfirm={storedPasscode ? undefined : { label: 'Confirm Swap', onConfirm: () => handleConfirm() }}
+        onComplete={(_, viaBiometric) => { setPaidViaBiometric(!!viaBiometric); handleConfirm() }}
+      />
 
       {/* History detail modal */}
       <AnimatePresence>
@@ -2075,16 +2005,12 @@ export function SwapPage() {
   // component the mobile inline list already uses - just always visible
   // here (not gated to the idle/estimating step) and opens the same
   // `HistoryDetail` modal (rendered above, inside `flow`) on tap.
+  // The shared 65/35 desktop layout (DesktopTwoColumn).
   return (
-    // Fills the full available content width (no maxWidth cap - the row
-    // stretches edge to edge minus the outer padding) at a fixed 65/35
-    // grow split, per explicit sizing direction. Bottom padding trimmed
-    // so the row - and DesktopHistoryPanel's own height:100% column
-    // inside it - reaches down close to the viewport's bottom edge
-    // instead of leaving a gap under it.
-    <div style={{ display: 'flex', height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
-      <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto' }} ref={desktopColumnRef}>{flow}</div>
-      <div style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0 }}>
+    <DesktopTwoColumn
+      mainRef={desktopColumnRef}
+      main={flow}
+      side={
         <DesktopHistoryPanel title="Recent History" onViewAll={() => navigate('/activity?filter=swap')}>
           {history.length === 0 ? (
             <DesktopHistoryEmpty label="Your completed swaps will appear here" />
@@ -2094,7 +2020,7 @@ export function SwapPage() {
             ))
           )}
         </DesktopHistoryPanel>
-      </div>
-    </div>
+      }
+    />
   )
 }

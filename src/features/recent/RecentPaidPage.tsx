@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
 import { fetchRecentContacts, recentSendTarget, RECENT_AVATAR_COLORS, type RecentContact } from '@/lib/recentContacts'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 
 // Same "Recent" as the Home avatar row and the Send page recent row (see
 // src/lib/recentContacts.ts), just scanning more history and showing more
@@ -222,14 +223,16 @@ export function RecentPaidPage() {
   const totalSent = others.reduce((sum, p) => sum + (p.total_sent || 0), 0)
   const mostPaid = [...others].sort((a, b) => b.total_sent - a.total_sent).slice(0, 3)
   const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16 }
+  // The shared desktop layout (DesktopTwoColumn): each column scrolls on its
+  // own, so the summary stays in view beside a long list.
   return (
-    <div style={{ flex: 1, overflowY: 'auto', background: 'var(--bg)' }}>
-      <div style={{ display: 'flex', gap: 24, padding: '20px 24px 40px', alignItems: 'flex-start' }}>
-        <div style={{ flex: '65 1 0%', minWidth: 0 }}>
+    <div style={{ flex: 1, minHeight: 0, height: '100%', background: 'var(--bg)' }}>
+      <DesktopTwoColumn
+        main={<div style={{ paddingBottom: 26 }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px', marginBottom: 16 }}>Recent</div>
           {list}
-        </div>
-        <aside style={{ flex: '35 1 0%', minWidth: 0, position: 'sticky', top: 20, marginTop: 44, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        </div>}
+        side={<aside style={{ marginTop: 44, display: 'flex', flexDirection: 'column', gap: 14 }}>
           {(loading || others.length > 0) && (
             <div style={{ ...card, display: 'flex' }}>
               {([['Total sent', `$${formatAmount(totalSent)}`], ['People', String(others.length)]] as const).map(([k, v], i) => (
@@ -259,8 +262,8 @@ export function RecentPaidPage() {
               ))}
             </div>
           )}
-        </aside>
-      </div>
+        </aside>}
+      />
     </div>
   )
 }

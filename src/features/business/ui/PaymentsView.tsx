@@ -2,10 +2,11 @@
  * PaymentsView — searchable, filterable list of all payments.
  * Grouped by day with a day-total header row.
  */
-import React, { useState, useMemo, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { CreditCard, X } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
+import { TokenMenu } from '@/components/ui/TokenMenu'
 import { SearchField } from '@/components/ui/SearchField'
 import type { Payment } from './types'
 import { groupByDay, formatTime } from './types'
@@ -67,36 +68,26 @@ function PaymentRow({ payment, onClick }: { payment: Payment; onClick: (p: Payme
 }
 
 // Activity-style filter menu under the search box's Filter chip: status only
-// (the list is already grouped by day).
+// (the list is already grouped by day). The app's dropdown (TokenMenu),
+// portalled over the page at the chip's spot like Activity's filter.
 function FilterMenu({ anchor, status, onStatus, onClose }: {
   anchor: HTMLElement | null; status: Filter; onStatus: (id: Filter) => void; onClose: () => void
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
   const r = anchor?.getBoundingClientRect()
   if (!r) return null
   const row = (on: boolean, label: string, onClick: () => void) => (
-    <button key={label} type="button" role="option" aria-selected={on} onClick={onClick}
+    <button key={label} type="button" role="menuitemradio" aria-checked={on} onClick={onClick}
       className="flex items-center rounded-full active:opacity-70 transition-opacity text-left"
-      style={{ height: 38, padding: '0 14px', background: on ? 'var(--brand)' : 'transparent', border: 'none', cursor: 'pointer' }}>
+      style={{ height: 38, flexShrink: 0, padding: '0 14px', background: on ? 'var(--brand)' : 'transparent', border: 'none', cursor: 'pointer' }}>
       <span className="text-[15px] font-bold" style={{ color: on ? '#fff' : 'var(--text-primary)', whiteSpace: 'nowrap' }}>{label}</span>
     </button>
   )
   return createPortal(
-    <>
-      <div aria-hidden onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 60 }} />
-      <motion.div role="listbox" aria-label="Filter payments"
-        initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6 }}
-        transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
-        style={{ position: 'fixed', top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right), width: 210, zIndex: 61, transformOrigin: 'top right',
-          display: 'flex', flexDirection: 'column', gap: 2, padding: 4, borderRadius: 22,
-          background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 12px 28px rgba(0,0,0,0.3)' }}>
+    <div style={{ position: 'fixed', top: r.top, left: r.left, width: r.width, height: r.height, zIndex: 60 }}>
+      <TokenMenu width={210} ariaLabel="Filter payments" onClose={onClose}>
         {FILTERS.map(f => row(status === f.id, f.label, () => { onStatus(f.id); onClose() }))}
-      </motion.div>
-    </>,
+      </TokenMenu>
+    </div>,
     document.body,
   )
 }

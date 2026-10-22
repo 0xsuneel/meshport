@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { AnimatePresence } from 'framer-motion'
+import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { LifeBuoy, X } from 'lucide-react'
 import { AdminCard } from '@/components/admin/AdminCard'
 import { useAdminStore } from '@/store/adminStore'
@@ -90,11 +92,10 @@ export function SupportTicketsPage() {
         </div>
       )}
 
+      <AnimatePresence>
       {active && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-          onClick={() => setActive(null)}>
-          <div style={{ width: '100%', maxWidth: 480, maxHeight: '100%', overflowY: 'auto', background: 'var(--surface)', borderRadius: 24, border: '1px solid var(--border)', padding: 20, animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}
-            onClick={e => e.stopPropagation()}>
+        <DesktopDialogFrame key="ticket" onClose={() => setActive(null)} maxWidth={480}>
+          <div style={{ padding: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
               <div>
                 <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{active.subject}</p>
@@ -137,8 +138,9 @@ export function SupportTicketsPage() {
               </button>
             )}
           </div>
-        </div>
+        </DesktopDialogFrame>
       )}
+      </AnimatePresence>
     </div>
   )
 }

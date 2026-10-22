@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { Info } from 'lucide-react'
 import { useAuthStore } from '@/store'
@@ -13,12 +13,14 @@ import { timeAgo, formatAmount } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { AmountField } from '@/components/ui/AmountField'
+import { AmountKeypad } from '@/components/ui/AmountKeypad'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { ActionIcon } from '@/components/ui/ActionIcon'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { P2PSheet } from '@/features/p2p/p2pUi'
-import { PopupOpen } from '@/hooks/usePopupOpen'
+import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
+import { TokenMenu } from '@/components/ui/TokenMenu'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 
 interface ClaimRecord {
@@ -121,40 +123,34 @@ export interface ClaimProgress {
   error?: string; txHash?: string | null; usdcReceived?: number
 }
 
-/** How rewards work, in the token picker's floating panel style (TokenMenu). */
-function HowItWorksMenu({ onClose }: { onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-  return (<>
-    <div aria-hidden onClick={e => { e.stopPropagation(); onClose() }} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-    <motion.div role="dialog" aria-label="How rewards work"
-      initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
-      style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 'min(300px, calc(100vw - 32px))', zIndex: 41, transformOrigin: 'top right',
-        display: 'flex', flexDirection: 'column', gap: 2, padding: 4, borderRadius: 22,
-        background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 12px 28px rgba(0,0,0,0.3)' }}>
-      <div style={{ padding: '8px 10px 4px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-        Once a day each (resets 00:00 UTC)
-      </div>
-      {TASKS.map(t => (
-        <div key={t.type} className="flex items-center gap-2" style={{ height: 38, padding: '0 12px 0 4px', borderRadius: 999 }}>
-          <span className="flex items-center justify-center rounded-full flex-shrink-0"
-            style={{ width: 30, height: 30, background: 'color-mix(in srgb, var(--brand) 16%, transparent)' }}>
-            <ActionIcon name={t.action} size={17} color="var(--brand-text)" />
-          </span>
-          <span className="text-[15px] font-bold" style={{ flex: 1, minWidth: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.label}</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)' }}>+{POINTS_PER_TX}</span>
+/** How rewards work, in the dropdown panel (TokenMenu), portalled over the
+ *  page at the pill's spot `rect` (the sticky blurred header would clip it
+ *  otherwise). Render inside AnimatePresence so it animates out. */
+function HowItWorksMenu({ rect, onClose }: { rect: DOMRect; onClose: () => void }) {
+  return createPortal(
+    <div style={{ position: 'fixed', top: rect.top, left: rect.left, width: rect.width, height: rect.height, zIndex: 60 }}>
+      <TokenMenu onClose={onClose} width={300} ariaLabel="How rewards work">
+        <div style={{ padding: '8px 10px 4px', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+          Once a day each (resets 00:00 UTC)
         </div>
-      ))}
-      <div style={{ margin: '4px 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, var(--brand) 10%, transparent)', fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-        <b style={{ color: 'var(--text-primary)' }}>1,000 pts = ${formatAmount(pointsToUSDC(1000))} USDC</b>, sent to your Arc wallet.
-        {' '}{MIN_CLAIM_POINTS}–{MAX_CLAIM_POINTS.toLocaleString()} pts per claim, up to {MAX_DAILY_POINTS.toLocaleString()} a day. Earn up to {MAX_DAILY_EARN_POINTS} pts a day.
-      </div>
-    </motion.div>
-  </>)
+        {TASKS.map(t => (
+          <div key={t.type} className="flex items-center gap-2" style={{ height: 38, padding: '0 12px 0 4px', borderRadius: 999 }}>
+            <span className="flex items-center justify-center rounded-full flex-shrink-0"
+              style={{ width: 30, height: 30, background: 'color-mix(in srgb, var(--brand) 16%, transparent)' }}>
+              <ActionIcon name={t.action} size={17} color="var(--brand-text)" />
+            </span>
+            <span className="text-[15px] font-bold" style={{ flex: 1, minWidth: 0, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.label}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)' }}>+{POINTS_PER_TX}</span>
+          </div>
+        ))}
+        <div style={{ margin: '4px 4px 4px', padding: '10px 12px', borderRadius: 18, background: 'color-mix(in srgb, var(--brand) 10%, transparent)', fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+          <b style={{ color: 'var(--text-primary)' }}>1,000 pts = ${formatAmount(pointsToUSDC(1000))} USDC</b>, sent to your Arc wallet.
+          {' '}{MIN_CLAIM_POINTS}–{MAX_CLAIM_POINTS.toLocaleString()} pts per claim, up to {MAX_DAILY_POINTS.toLocaleString()} a day. Earn up to {MAX_DAILY_EARN_POINTS} pts a day.
+        </div>
+      </TokenMenu>
+    </div>,
+    document.body,
+  )
 }
 
 function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgress; balanceLeft: number; onClose: () => void; onRetry: () => void }) {
@@ -163,94 +159,93 @@ function ClaimProgressCard({ p, balanceLeft, onClose, onRetry }: { p: ClaimProgr
   const travIdx = Math.min(doneIdx, STEPS.length - 1)
   const ok = p.phase === 'success'
   const dim = 'color-mix(in srgb, var(--text-primary) 45%, transparent)'
+  const running = p.phase === 'running'
+  // The app's centred popup (bare: this card draws itself). While the claim
+  // runs it can't be closed (tap outside / Esc do nothing, and the page's
+  // leave guard holds Back); once it settles, they close it like Done.
   return (
-    <>
-      <PopupOpen />
+    <DesktopDialogFrame onClose={running ? () => {} : onClose} bare maxWidth={380} zIndex={300} backClose={!running}>
       <style>{CLAIM_PROGRESS_CSS}</style>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 22 }}>
-        <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }} transition={{ duration: 0.22 }}
-          role="dialog" aria-live="polite" aria-label="Claiming reward" data-leave-guard={p.phase === 'running' ? '' : undefined}
-          style={{ width: '100%', maxWidth: 380, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 26, padding: '26px 22px 22px', textAlign: 'center', boxShadow: 'var(--shadow-3)' }}>
-          {/* Logo → result */}
-          <div style={{ position: 'relative', width: 96, height: 96, margin: '0 auto' }}>
-            {p.phase === 'running' && <div style={{ position: 'absolute', inset: 8 }}><MeshLoader size={80} label="Claiming" /></div>}
-            {ok && (
-              <div className="rw-ok" style={{ position: 'absolute', inset: 6, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 0 12px color-mix(in srgb, var(--success) 14%, transparent)' }}>
-                <svg viewBox="0 0 84 84" style={{ position: 'absolute', inset: 0 }}><path d="M25 43 L37 55 L60 31" stroke="#fff" strokeWidth={7} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              </div>
-            )}
-            {p.phase === 'failed' && (
-              <div className="rw-ok" style={{ position: 'absolute', inset: 6, borderRadius: '50%', background: 'var(--danger)', color: '#fff', fontSize: 38, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 12px color-mix(in srgb, var(--danger) 14%, transparent)' }}>!</div>
-            )}
-          </div>
-          <div style={{ marginTop: 14 }}>
-            {p.phase === 'running' && <>
-              <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)' }}>${formatAmount(p.usdc)} USDC</div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 4 }}>Claiming {p.points.toLocaleString()} pts to your wallet</div>
-            </>}
-            {ok && <div className="rw-fade">
-              <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--success)' }}>+${formatAmount(p.usdcReceived ?? p.usdc)} USDC</div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 4 }}>Sent to your MeshPort wallet</div>
-            </div>}
-            {p.phase === 'failed' && <div className="rw-fade">
-              <div style={{ fontSize: 21, fontWeight: 800, color: 'var(--text-primary)' }}>Claim didn't go through</div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 4 }}>Your {p.points.toLocaleString()} pts were not deducted.</div>
-            </div>}
-          </div>
-
-          {/* Steps with the travelling check */}
-          <div style={{ position: 'relative', textAlign: 'left', margin: '18px 0 0' }}>
-            <div style={{ position: 'absolute', left: 13, top: 12, width: 2, height: STEP_H * (STEPS.length - 1), background: 'var(--border)' }} />
-            <div style={{ position: 'absolute', left: 13, top: 12, width: 2, height: STEP_H * Math.min(doneIdx, STEPS.length - 1), background: 'var(--success)', transition: 'height .55s cubic-bezier(.32,.72,0,1)' }} />
-            {p.phase === 'running' && (
-              <div className="rw-trav" aria-hidden style={{ position: 'absolute', left: 0, top: 6, width: 28, height: 28, borderRadius: '50%', zIndex: 3, transform: `translateY(${travIdx * STEP_H}px)`,
-                background: 'var(--success)', color: '#fff', fontWeight: 900, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 0 0 5px color-mix(in srgb, var(--success) 22%, transparent), 0 4px 14px color-mix(in srgb, var(--success) 45%, transparent)' }}>✓</div>
-            )}
-            {STEPS.map((s, i) => {
-              const isDone = i < doneIdx
-              const isFailed = i === failedIdx
-              const t = p.times[s.key]
-              return (
-                <div key={s.key} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, height: STEP_H, fontSize: 13.5 }}>
-                  <span style={{ width: 28, display: 'flex', justifyContent: 'center', flexShrink: 0, position: 'relative', zIndex: 2 }}>
-                    {isDone ? (
-                      <span className="rw-tick" style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--success)', color: '#fff', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</span>
-                    ) : isFailed ? (
-                      <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--danger)', color: '#fff', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</span>
-                    ) : (
-                      <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--surface)', border: '2px solid var(--border)' }} />
-                    )}
-                  </span>
-                  <span style={{ color: isFailed ? 'var(--danger)' : isDone || i === doneIdx ? 'var(--text-primary)' : dim, fontWeight: i === doneIdx && p.phase === 'running' ? 600 : 500 }}>{s.label}</span>
-                  {isDone && t != null && <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--text-secondary)' }}>{t < 1000 ? `${(t / 1000).toFixed(1)}s` : `${(t / 1000).toFixed(1)}s`}</span>}
-                </div>
-              )
-            })}
-          </div>
-
-          {p.phase === 'running' && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 14 }}>Keep the app open - this takes a few seconds</div>}
+      <div aria-live="polite" aria-label="Claiming reward" data-leave-guard={running ? '' : undefined}
+        style={{ width: '100%', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 26, padding: '26px 22px 22px', textAlign: 'center', boxShadow: 'var(--shadow-3)', boxSizing: 'border-box' }}>
+        {/* Logo → result */}
+        <div style={{ position: 'relative', width: 96, height: 96, margin: '0 auto' }}>
+          {p.phase === 'running' && <div style={{ position: 'absolute', inset: 8 }}><MeshLoader size={80} label="Claiming" /></div>}
           {ok && (
-            <div className="rw-fade">
-              <div style={{ textAlign: 'left', marginTop: 14, padding: '8px 12px', borderRadius: 14, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
-                <Line k="Points used" v={`${p.points.toLocaleString()} pts`} />
-                <Line k="Balance left" v={`${balanceLeft.toLocaleString()} pts`} />
-                {p.txHash && <Line k="Transaction" v={<a href={arcExplorerTxUrl(p.txHash)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-text)', textDecoration: 'none' }}>{p.txHash.slice(0, 6)}…{p.txHash.slice(-4)} ↗</a>} />}
-              </div>
-              <button onClick={onClose} style={{ width: '100%', border: 'none', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', marginTop: 16, cursor: 'pointer' }}>Done</button>
+            <div className="rw-ok" style={{ position: 'absolute', inset: 6, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 0 12px color-mix(in srgb, var(--success) 14%, transparent)' }}>
+              <svg viewBox="0 0 84 84" style={{ position: 'absolute', inset: 0 }}><path d="M25 43 L37 55 L60 31" stroke="#fff" strokeWidth={7} fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </div>
           )}
           {p.phase === 'failed' && (
-            <div className="rw-fade">
-              {p.error && <div role="alert" style={{ textAlign: 'left', marginTop: 14, padding: '10px 12px', borderRadius: 14, fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>{p.error}</div>}
-              <button onClick={onRetry} style={{ width: '100%', border: 'none', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', marginTop: 16, cursor: 'pointer' }}>Try again</button>
-              <button onClick={onClose} style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 14, padding: 13, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', background: 'transparent', marginTop: 8, cursor: 'pointer' }}>Close</button>
-            </div>
+            <div className="rw-ok" style={{ position: 'absolute', inset: 6, borderRadius: '50%', background: 'var(--danger)', color: '#fff', fontSize: 38, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 12px color-mix(in srgb, var(--danger) 14%, transparent)' }}>!</div>
           )}
-        </motion.div>
-      </motion.div>
-    </>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          {p.phase === 'running' && <>
+            <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)' }}>${formatAmount(p.usdc)} USDC</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 4 }}>Claiming {p.points.toLocaleString()} pts to your wallet</div>
+          </>}
+          {ok && <div className="rw-fade">
+            <div style={{ fontSize: 26, fontWeight: 800, color: 'var(--success)' }}>+${formatAmount(p.usdcReceived ?? p.usdc)} USDC</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 4 }}>Sent to your MeshPort wallet</div>
+          </div>}
+          {p.phase === 'failed' && <div className="rw-fade">
+            <div style={{ fontSize: 21, fontWeight: 800, color: 'var(--text-primary)' }}>Claim didn't go through</div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 4 }}>Your {p.points.toLocaleString()} pts were not deducted.</div>
+          </div>}
+        </div>
+
+        {/* Steps with the travelling check */}
+        <div style={{ position: 'relative', textAlign: 'left', margin: '18px 0 0' }}>
+          <div style={{ position: 'absolute', left: 13, top: 12, width: 2, height: STEP_H * (STEPS.length - 1), background: 'var(--border)' }} />
+          <div style={{ position: 'absolute', left: 13, top: 12, width: 2, height: STEP_H * Math.min(doneIdx, STEPS.length - 1), background: 'var(--success)', transition: 'height .55s cubic-bezier(.32,.72,0,1)' }} />
+          {p.phase === 'running' && (
+            <div className="rw-trav" aria-hidden style={{ position: 'absolute', left: 0, top: 6, width: 28, height: 28, borderRadius: '50%', zIndex: 3, transform: `translateY(${travIdx * STEP_H}px)`,
+              background: 'var(--success)', color: '#fff', fontWeight: 900, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 0 0 5px color-mix(in srgb, var(--success) 22%, transparent), 0 4px 14px color-mix(in srgb, var(--success) 45%, transparent)' }}>✓</div>
+          )}
+          {STEPS.map((s, i) => {
+            const isDone = i < doneIdx
+            const isFailed = i === failedIdx
+            const t = p.times[s.key]
+            return (
+              <div key={s.key} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, height: STEP_H, fontSize: 13.5 }}>
+                <span style={{ width: 28, display: 'flex', justifyContent: 'center', flexShrink: 0, position: 'relative', zIndex: 2 }}>
+                  {isDone ? (
+                    <span className="rw-tick" style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--success)', color: '#fff', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</span>
+                  ) : isFailed ? (
+                    <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--danger)', color: '#fff', fontSize: 13, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</span>
+                  ) : (
+                    <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--surface)', border: '2px solid var(--border)' }} />
+                  )}
+                </span>
+                <span style={{ color: isFailed ? 'var(--danger)' : isDone || i === doneIdx ? 'var(--text-primary)' : dim, fontWeight: i === doneIdx && p.phase === 'running' ? 600 : 500 }}>{s.label}</span>
+                {isDone && t != null && <span style={{ marginLeft: 'auto', fontSize: 11.5, color: 'var(--text-secondary)' }}>{t < 1000 ? `${(t / 1000).toFixed(1)}s` : `${(t / 1000).toFixed(1)}s`}</span>}
+              </div>
+            )
+          })}
+        </div>
+
+        {p.phase === 'running' && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 14 }}>Keep the app open - this takes a few seconds</div>}
+        {ok && (
+          <div className="rw-fade">
+            <div style={{ textAlign: 'left', marginTop: 14, padding: '8px 12px', borderRadius: 14, background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>
+              <Line k="Points used" v={`${p.points.toLocaleString()} pts`} />
+              <Line k="Balance left" v={`${balanceLeft.toLocaleString()} pts`} />
+              {p.txHash && <Line k="Transaction" v={<a href={arcExplorerTxUrl(p.txHash)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--brand-text)', textDecoration: 'none' }}>{p.txHash.slice(0, 6)}…{p.txHash.slice(-4)} ↗</a>} />}
+            </div>
+            <button onClick={onClose} style={{ width: '100%', border: 'none', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', marginTop: 16, cursor: 'pointer' }}>Done</button>
+          </div>
+        )}
+        {p.phase === 'failed' && (
+          <div className="rw-fade">
+            {p.error && <div role="alert" style={{ textAlign: 'left', marginTop: 14, padding: '10px 12px', borderRadius: 14, fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-secondary)', background: 'color-mix(in srgb, var(--text-primary) 5%, transparent)' }}>{p.error}</div>}
+            <button onClick={onRetry} style={{ width: '100%', border: 'none', borderRadius: 14, padding: 14, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', marginTop: 16, cursor: 'pointer' }}>Try again</button>
+            <button onClick={onClose} style={{ width: '100%', border: '1px solid var(--border)', borderRadius: 14, padding: 13, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', background: 'transparent', marginTop: 8, cursor: 'pointer' }}>Close</button>
+          </div>
+        )}
+      </div>
+    </DesktopDialogFrame>
   )
 }
 
@@ -534,15 +529,13 @@ export function RewardsPage() {
   )
 
   // How it works - the earning and redeeming rules, floating down from the
-  // pill like the token picker (TokenMenu's panel), portalled over the page
-  // at the pill's spot (the sticky blurred header would clip it otherwise).
+  // pill (TokenMenu), at the pill's spot.
   const howRect = showEarnInfo ? howBtnRef.current?.getBoundingClientRect() : undefined
-  const howItWorks = howRect ? createPortal(
-    <div style={{ position: 'fixed', top: howRect.top, left: howRect.left, width: howRect.width, height: howRect.height, zIndex: 60 }}>
-      <HowItWorksMenu onClose={() => setShowEarnInfo(false)} />
-    </div>,
-    document.body,
-  ) : null
+  const howItWorks = (
+    <AnimatePresence>
+      {howRect && <HowItWorksMenu key="rw-how" rect={howRect} onClose={() => setShowEarnInfo(false)} />}
+    </AnimatePresence>
+  )
 
   // Claim sheet - pick the points, see the USDC.
   const sheet = (
@@ -559,6 +552,9 @@ export function RewardsPage() {
         quick={[100, 250, 500].filter(v => v < maxClaimable).map(v => ({ label: String(v), onClick: () => setClaimInput(String(v)) }))}
         onMax={() => setClaimInput(String(maxClaimable))}
         onEnter={() => { if (claimOk) handleClaim() }}
+        // Phone: the app's keypad below (whole points), never the system keyboard.
+        onTap={isDesktop ? undefined : () => {}}
+        editing={!isDesktop}
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, padding: '12px 14px', borderRadius: 14, background: 'color-mix(in srgb, var(--success) 10%, transparent)' }}>
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>You receive</span>
@@ -576,6 +572,14 @@ export function RewardsPage() {
         </p>
       )}
       {claimError && <p role="alert" style={{ fontSize: 12.5, color: 'var(--danger)', margin: '8px 0 0' }}>{claimError}</p>}
+      {/* Phone: the keys right in the sheet (whole points, same 5-digit cap
+          as typing on desktop); the field above shows what's entered. */}
+      {!isDesktop && (
+        <div style={{ marginTop: 14 }}>
+          <AmountKeypad variant="inline" open value={claimInput} onChange={setClaimInput}
+            token="pts" allowDecimal={false} maxDigits={5} showMax={false} />
+        </div>
+      )}
       <button onClick={handleClaim} disabled={!claimOk || claiming}
         style={{ width: '100%', border: 'none', borderRadius: 14, padding: 15, fontSize: 15, fontWeight: 800, color: '#fff', background: 'var(--brand)', marginTop: 14, cursor: 'pointer', opacity: !claimOk || claiming ? 0.45 : 1 }}>
         Claim ${formatAmount(pointsToUSDC(claimOk ? typedPoints : 0))} USDC
@@ -585,7 +589,9 @@ export function RewardsPage() {
 
   const overlays = (
     <>
-      {claimReceipt && <RewardClaimReceipt claim={claimReceipt} onClose={() => { claimFlash.closed(claimReceipt.id); setClaimReceipt(null) }} />}
+      <AnimatePresence>
+        {claimReceipt && <RewardClaimReceipt key={claimReceipt.id} claim={claimReceipt} onClose={() => { claimFlash.closed(claimReceipt.id); setClaimReceipt(null) }} />}
+      </AnimatePresence>
       {howItWorks}
       {sheet}
       <AnimatePresence>

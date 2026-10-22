@@ -2,6 +2,8 @@
 // for support. This is the only place an admin sees other people's orders:
 // the admin's own app (Receive → My requests, Ledger) lists just their own.
 import { useEffect, useMemo, useState } from 'react'
+import { AnimatePresence } from 'framer-motion'
+import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { ReceiptText, X, ExternalLink } from 'lucide-react'
 import { AdminCard } from '@/components/admin/AdminCard'
 import { formatAmount } from '@/lib/utils'
@@ -135,11 +137,10 @@ export function OrdersPage() {
         </div>
       )}
 
+      <AnimatePresence>
       {active && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-          onClick={() => setActive(null)}>
-          <div style={{ width: '100%', maxWidth: 520, maxHeight: '100%', overflowY: 'auto', background: 'var(--surface)', borderRadius: 24, border: '1px solid var(--border)', padding: 20, animation: 'mpDialogIn 0.26s cubic-bezier(0.32, 0.72, 0, 1)' }}
-            onClick={e => e.stopPropagation()}>
+        <DesktopDialogFrame key="order" onClose={() => setActive(null)} maxWidth={520}>
+          <div style={{ padding: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
               <div>
                 <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{orderTitle(orderKindOf(active), active.orderNumber || active.code)}</p>
@@ -196,8 +197,9 @@ export function OrdersPage() {
               )
             })}
           </div>
-        </div>
+        </DesktopDialogFrame>
       )}
+      </AnimatePresence>
     </div>
   )
 }

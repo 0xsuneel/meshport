@@ -13,6 +13,7 @@ import {
   paymentMethodSummary, fetchCounterpartyProfiles, inr, type BuyerOffer, type P2PTrade, type P2PPaymentMethod, type P2PMessage,
 } from '@/lib/businessCashOut'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
+import { sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import {
   BusinessScreen, ScreenLevel, useScreenLevel, Sheet, PrimaryBtn, GhostBtn, Skeleton,
   CashOutAmountCard, CashOutPickRow, BuyerList, PayoutAccountList, PayoutAccountForm, CashOutTracker, CashOutChat, CashOutHistoryList,
@@ -159,7 +160,8 @@ export function CashOutScreen({ open, onBack }: { open: boolean; onBack: () => v
                 <ChevronRight className="size-4 text-text-muted shrink-0" />
               </button>
             ))}
-            <CashOutAmountCard value={amount} onChange={v => { setAmount(v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').slice(0, 10)) }}
+            {/* Dollars and cents (Max is floored to cents too). */}
+            <CashOutAmountCard value={amount} onChange={v => { setAmount(sanitizeAmountInput(v, 2).slice(0, 10)) }}
               available={money(arc)} quick={quick} error={err}
               fiat={value && rate ? inr(Math.round(value * rate * 100) / 100) : ''} rate={rate ? rateText(rate) : undefined} />
             <div className="rounded-2xl bg-card border border-border divide-y divide-border overflow-hidden">

@@ -88,3 +88,25 @@ export function PushLayer({ open, covered = false, zIndex, children }: {
     </>
   )
 }
+
+/** The tab underneath Business screens (the owner's hub, staff mode's home):
+ *  while a screen is pushed over it (`covered`, phone only) it shifts
+ *  PUSH_PARALLAX left on the push's timing, and the bottom tab bar - which
+ *  belongs to the tab, like a page push from a tab (PageTransition) - moves
+ *  with it. Returns the style for the tab's root. */
+export function useHubShift(covered: boolean): React.CSSProperties {
+  const reduce = useReducedMotion()
+  // Opening shifts on the open push, coming back on the back push.
+  const shiftCss = (on: boolean) => `transform ${reduce ? 0 : on ? OPEN_MS : BACK_MS}ms ${EASE}`
+  React.useLayoutEffect(() => {
+    const nav = document.querySelector<HTMLElement>('[data-bottom-nav]')
+    if (!nav) return
+    nav.style.transition = shiftCss(covered)
+    nav.style.transform = covered ? `translateX(${PUSH_PARALLAX})` : ''
+  }, [covered]) // eslint-disable-line react-hooks/exhaustive-deps
+  React.useLayoutEffect(() => () => {
+    const nav = document.querySelector<HTMLElement>('[data-bottom-nav]')
+    if (nav) { nav.style.transform = ''; nav.style.transition = '' }
+  }, [])
+  return { transform: covered ? `translateX(${PUSH_PARALLAX})` : undefined, transition: shiftCss(covered), willChange: 'transform' }
+}

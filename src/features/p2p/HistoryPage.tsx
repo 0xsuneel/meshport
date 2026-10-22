@@ -20,6 +20,7 @@ import {
   type P2PTrade, type CounterpartyProfile,
 } from '@/lib/p2pService'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { SkeletonCards } from '@/components/ui/Skeleton'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
@@ -279,9 +280,8 @@ export function P2PHistoryPage() {
   const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 2 })
   const card: React.CSSProperties = { background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16 }
   return (
-    <div style={{ display: 'flex', gap: 24, height: '100%', minHeight: 0, padding: '0 24px 0 0', background: COLORS.bg }}>
-      <div style={{ flex: '65 1 0%', minWidth: 0, height: '100%' }}>{page}</div>
-      <aside style={{ flex: '35 1 0%', minWidth: 0, paddingTop: 84, display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <DesktopTwoColumn main={page} side={
+      <aside style={{ paddingTop: 84, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ ...card, display: 'flex' }}>
           {([['Trades', String(summary.total)], ['Completed', String(summary.completed)], ['In progress', String(summary.open)]] as const).map(([k, v], i) => (
             <div key={k} style={{ flex: 1, padding: '14px 16px', borderLeft: i ? `1px solid ${COLORS.border}` : 'none' }}>
@@ -299,6 +299,6 @@ export function P2PHistoryPage() {
           ))}
         </div>
       </aside>
-    </div>
+    } />
   )
 }

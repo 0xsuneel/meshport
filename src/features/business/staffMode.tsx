@@ -14,7 +14,7 @@ import { displayOrderNumber, myAuthUid, type MerchantPayment } from '@/lib/merch
 import { RequestMaker, ShopQrScreen, ReceiveScreen, RequestsList, StatementBody } from './screens'
 import { setDueDate } from '@/lib/businessBills'
 import { logBusiness } from '@/lib/businessActivity'
-import { StaffBanner, StaffModeHeader, PaymentsView, OverviewView, PaymentRow, Skeleton, BusinessScreen, type Payment } from './ui'
+import { StaffBanner, StaffModeHeader, PaymentsView, OverviewView, PaymentRow, Skeleton, BusinessScreen, useHubShift, type Payment } from './ui'
 import { chainLabel } from './settlement'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY } from '@/lib/motion'
@@ -49,6 +49,9 @@ export function StaffModePage() {
     chainLogo: chainLogoSrc(p.chain), time: p.createdAt, order: p.orderNumber ? displayOrderNumber(p.orderNumber) : undefined, late: !!p.late, blocked: !!p.screenFlag, status: 'received' as const })), [raw])
   const today = raw.filter(p => new Date(p.createdAt).toDateString() === new Date().toDateString())
   const total = today.reduce((s, p) => s + p.amount, 0)
+  // Like the owner's hub: the home (and the bottom tab bar) parallaxes left
+  // under a Business screen pushed over it (phone only).
+  const homeShift = useHubShift(!isDesktop && !!active && !!screen)
 
   if (!list) return <div className="p-5"><Skeleton className="h-40 w-full" /></div>
 
@@ -85,6 +88,7 @@ export function StaffModePage() {
   return (
     <div className={isDesktop ? 'flex h-full min-h-0 bg-bg gap-7 px-6 pt-5 pb-3.5 box-border' : 'contents'}>
     <div className={isDesktop ? 'relative flex-[65_1_0%] min-w-0 min-h-0 flex flex-col overflow-hidden' : 'flex flex-col h-full min-h-0 bg-bg'}>
+      <div className="flex-1 min-h-0 flex flex-col" style={homeShift}>
       <div style={{ paddingTop: isDesktop ? 0 : 'calc(env(safe-area-inset-top, 0px) + 8px)' }}>
         <StaffModeHeader store={active.storeName ? `${active.ownerName} · ${active.storeName}` : active.ownerName} role={active.role} onExit={() => setActiveId(null)} />
       </div>
@@ -103,6 +107,7 @@ export function StaffModePage() {
             {row(<FileText className="size-[18px]" />, 'Statement', 'CSV or PDF of the store\'s payments', openStatement)}
           </div>
         )}
+      </div>
       </div>
       {manager && (
         <>
