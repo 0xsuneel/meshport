@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
+import { MENU_MOTION } from '@/lib/motion'
 
 // Token choice that floats down from a token pill (Swap, Pay, Chat Pay):
 // one shared panel exactly the pill's width, shown only while open, over the
@@ -9,10 +10,13 @@ export type TokenMenuOption = { id: string; label: string; icon: ReactNode; disa
 
 // `width` (with right-aligned placement) floats it under a small button instead,
 // e.g. Activity's filter icon. `maxHeight` makes a long list (networks) scroll.
-export function TokenMenu({ options, selected, onSelect, onClose, width, maxHeight, ariaLabel = 'Choose token' }: {
-  options: TokenMenuOption[]
-  selected: string
-  onSelect: (id: string) => void
+// `children` instead of `options`: the same floating panel around your own
+// content (Rewards' "How it works", a filter list) - THE dropdown look.
+export function TokenMenu({ options = [], selected = '', onSelect = () => {}, onClose, width, maxHeight, ariaLabel = 'Choose token', children }: {
+  options?: TokenMenuOption[]
+  selected?: string
+  onSelect?: (id: string) => void
+  children?: ReactNode
   onClose: () => void
   width?: number
   maxHeight?: number
@@ -25,14 +29,13 @@ export function TokenMenu({ options, selected, onSelect, onClose, width, maxHeig
   }, [onClose])
   return (<>
     <div aria-hidden onClick={e => { e.stopPropagation(); onClose() }} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-    <motion.div role="listbox" aria-label={ariaLabel}
-      initial={{ opacity: 0, y: -6, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6 }}
-      transition={{ duration: 0.16, ease: [0.32, 0.72, 0, 1] }}
+    <motion.div role={children ? 'menu' : 'listbox'} aria-label={ariaLabel}
+      {...MENU_MOTION}
       style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, ...(width ? { width } : { left: 0 }), zIndex: 41, transformOrigin: width ? 'top right' : 'top center',
         display: 'flex', flexDirection: 'column', gap: 2, padding: 4, borderRadius: 22,
         ...(maxHeight ? { maxHeight, overflowY: 'auto', overscrollBehavior: 'contain' } : {}),
         background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: '0 12px 28px rgba(0,0,0,0.3)' }}>
-      {options.map(o => {
+      {children ?? options.map(o => {
         const on = o.id === selected
         return (
           <button key={o.id} role="option" aria-selected={on} disabled={o.disabled}

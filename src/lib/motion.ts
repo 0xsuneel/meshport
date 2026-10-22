@@ -3,15 +3,19 @@
 // Every animated surface imports its values from here, so the same kind of
 // thing always moves the same way:
 //
-//   Page open  (mobile) ... slides in from the RIGHT; going back slides in
-//                           from the LEFT (PageTransition decides direction).
-//   Tab switch (bottom nav) quick cross-fade, no sliding (like native apps).
-//   In-page steps ......... same slide as pages (forward → from right,
-//                           back → from left), e.g. Pay's amount → review.
+//   Page open  (mobile) ... the new page slides in across the whole width
+//                           from the RIGHT while the old one shifts left and
+//                           dims; back reverses it (PUSH_*). One look for
+//                           routes (PageTransition), in-page steps
+//                           (ScreenPush), Business screens (PushLayer) and
+//                           Hub pages (HubPage).
+//   Tab switch (bottom nav) instant, like native apps.
 //   Bottom sheets ......... slide up from the bottom on one curve, dimmed
-//                           backdrop fades - every sheet, PIN sheet and the
-//                           amount keypad.
-//   Centered popups ....... fade + gentle scale-in (dialogs, confirms).
+//                           backdrop fades - ActionSheet (every sheet), the
+//                           passcode sheet (PinSheet) and the amount keypad.
+//   Centered popups ....... DesktopDialogFrame: the dim fades, the card grows
+//                           in (dialogs, pickers, confirms, receipts).
+//   Dropdown menus ........ MENU_MOTION (TokenMenu).
 //   Toasts ................ drop in from the top, fade out.
 //   Errors ................ fade in with a small drop (and wrap inside the
 //                           screen - see .mp-alert in index.css).
@@ -99,6 +103,10 @@ export const SHEET_PANEL = {
   exit: SHEET_EXIT,
   transition: SHEET_SPRING,
 } as const
+/** The dim behind every bottom sheet (Tailwind bg-black/70). */
+export const SHEET_DIM = 'rgba(0,0,0,0.7)'
+/** The dim behind every centred popup (PopupDim). */
+export const POPUP_DIM = 'rgba(6,10,14,0.62)'
 export const SHEET_BACKDROP = {
   initial: { opacity: 0 },
   animate: { opacity: 1 },
@@ -141,6 +149,32 @@ export const DIALOG_BACKDROP = byScreen({
   exit: { opacity: 0, transition: { duration: 0.12, ease: EASE_OUT } },
   transition: { duration: 0.15, ease: EASE_OUT },
 })
+
+// ── Dropdown menus (TokenMenu and every menu like it) ─────────────────────
+export const MENU_MOTION = {
+  initial: { opacity: 0, y: -6, scale: 0.98 },
+  animate: { opacity: 1, y: 0, scale: 1 },
+  exit: { opacity: 0, y: -4, scale: 0.98 },
+  transition: { duration: 0.16, ease: EASE_OUT },
+} as const
+
+// ── Push pages ─────────────────────────────────────────────────────────────
+// Every page that opens over another - a route (PageTransition), a step in a
+// flow (ScreenPush), a Business screen (PushLayer), a Hub page (HubPage) -
+// moves the same way: the new page slides in across the whole width while
+// the old one shifts left by PUSH_PARALLAX and dims; back reverses it. Both
+// pages stay fully opaque (no cross-fade). On desktop a page only fades in
+// with a few px of rise (DESKTOP_FADE_*).
+export const PUSH_OPEN_MS = 300
+export const PUSH_BACK_MS = 250
+/** EASE_OUT as a CSS easing (Web Animations). */
+export const PUSH_EASE_CSS = 'cubic-bezier(0.32, 0.72, 0, 1)'
+export const PUSH_PARALLAX = '-28%'
+/** How dark the page underneath gets while a page is pushed over it. */
+export const PUSH_DIM = 0.22
+export const DESKTOP_FADE_MS = 150
+/** Desktop page / screen entrance as Web Animations keyframes. */
+export const DESKTOP_FADE_KEYFRAMES: Keyframe[] = [{ opacity: 0, transform: `translateY(${4}px)` }, { opacity: 1, transform: 'none' }]
 
 // ── Toasts / banners ───────────────────────────────────────────────────────
 // Slides down from above the screen fully opaque (like a phone

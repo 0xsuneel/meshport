@@ -17,11 +17,12 @@ import { PopupDim } from './PopupDim'
 import { createPortal } from 'react-dom'
 import { DIALOG_CARD } from '@/lib/motion'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
-import { type ReactNode } from 'react'
+import { type ReactNode, useEffect, useRef } from 'react'
+import { useBackLayer } from '@/lib/backLayers'
 import { HUB_PANEL_WIDTH } from '@/components/multichain/HubPage'
 
 export function DesktopTransactionAuthDialog({
-  onClose, title, amountLabel, subLabel, accent = 'var(--brand)', maxWidth = 420, placement = 'center', panelWidth = HUB_PANEL_WIDTH, anchor, instantExit = false, children,
+  onClose, title, amountLabel, subLabel, accent = 'var(--brand)', maxWidth = 420, placement = 'center', panelWidth = HUB_PANEL_WIDTH, anchor, instantExit = false, backClose = true, children,
 }: {
   onClose: () => void
   title: string
@@ -44,9 +45,20 @@ export function DesktopTransactionAuthDialog({
   /** Card leaves at once (only the dim fades) - for a dialog over a panel
    *  whose own content would otherwise show through the fading card. */
   instantExit?: boolean
+  /** Phone / browser Back closes it (default). */
+  backClose?: boolean
   children: ReactNode
 }) {
   usePopupOpen()
+  useBackLayer(backClose, onClose)
+  // Esc closes it, like every other dialog.
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeRef.current() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
   const box = anchor?.getBoundingClientRect()
   return createPortal(
     <div

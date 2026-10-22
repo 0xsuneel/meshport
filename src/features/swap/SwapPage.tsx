@@ -1589,7 +1589,6 @@ export function SwapPage() {
                 onChange={v => { setAmountIn(v); setEstimate(null) }}
                 balance={inBalance}
                 token={tokenIn.id}
-                quickAmounts={[10, 20, 50, 100]}
                 onClose={() => setShowAmountPad(false)}
                 onDone={() => setShowAmountPad(false)}
                 // Arc's native gas token is USDC, so a USDC→X swap pays gas

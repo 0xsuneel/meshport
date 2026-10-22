@@ -8,7 +8,8 @@
 import { motion } from 'framer-motion'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Shield, Palette, Store, Upload, Key, HelpCircle, BookOpen, Info, FileText, User } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useRef, useEffect } from 'react'
+import { DESKTOP_FADE_Y, DESKTOP_FADE_TRANSITION } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useAuthStore } from '@/store'
 import { useMerchant } from '@/lib/merchant'
@@ -45,6 +46,10 @@ export function SettingsDesktopSplit() {
   const loginType = useAuthStore(s => s.loginType)
   const walletSource = useAuthStore(s => s.walletSource)
   const merchant = useMerchant()
+  // The pane eases in only when it changes inside this layout - arriving
+  // from another page, the page itself already fades in (PageTransition).
+  const firstPane = useRef(true)
+  useEffect(() => { firstPane.current = false }, [])
 
   if (!isDesktop) return <Outlet />
 
@@ -53,8 +58,8 @@ export function SettingsDesktopSplit() {
   const name = user?.displayName || username || 'You'
   const handle = `${String(user?.username || username || name).replace(/\.arc$/, '')}.arc`
   const isWallet = loginType === 'wallet' || loginType === null
-  // The pane keys on the page (not sub-steps like Change Passcode under Security).
-  const pane = SETTINGS_PATHS.find(p => is(p)) ?? path
+  // Every settings page and sub-step (Security → Change Passcode) eases in.
+  const pane = path
 
   return (
     <div style={{ display: 'flex', height: '100%', minHeight: 0 }}>
@@ -89,8 +94,8 @@ export function SettingsDesktopSplit() {
       </nav>
       <div style={{ flex: 1, minWidth: 0, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {/* Only this column changes between Settings pages; the menu stays put. */}
-        <motion.div key={pane} className="mp-settings-pane" initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+        <motion.div key={pane} className="mp-settings-pane" initial={firstPane.current ? false : { opacity: 0, y: DESKTOP_FADE_Y }} animate={{ opacity: 1, y: 0 }}
+          transition={DESKTOP_FADE_TRANSITION}
           style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <Outlet />
         </motion.div>

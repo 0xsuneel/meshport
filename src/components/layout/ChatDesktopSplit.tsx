@@ -13,7 +13,8 @@
 // a second time, since that's literally what the bare `/chat` route's own
 // element is).
 import { motion } from 'framer-motion'
-import { type ReactNode } from 'react'
+import { type ReactNode, useRef, useEffect } from 'react'
+import { DESKTOP_FADE_Y, DESKTOP_FADE_TRANSITION } from '@/lib/motion'
 import { Outlet, useLocation, useParams } from 'react-router-dom'
 import { MessageCircle } from 'lucide-react'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -24,6 +25,11 @@ export function ChatDesktopSplit({ list }: { list: ReactNode }) {
   const path = useLocation().pathname.replace(/\/$/, '')
   // Chat privacy and New chat open in the conversation column too.
   const panelKey = path === '/chat/privacy' ? 'privacy' : path === '/chat/new' ? 'new' : id
+
+  // The column eases in only when it changes inside this layout - arriving
+  // from another page, the page itself already fades in (PageTransition).
+  const firstPane = useRef(true)
+  useEffect(() => { firstPane.current = false }, [])
 
   if (!isDesktop) return <Outlet />
 
@@ -36,8 +42,8 @@ export function ChatDesktopSplit({ list }: { list: ReactNode }) {
         {panelKey ? (
           // Only this column changes when another chat is opened (like
           // WhatsApp): the conversation eases in, the list stays put.
-          <motion.div key={panelKey} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+          <motion.div key={panelKey} initial={firstPane.current ? false : { opacity: 0, y: DESKTOP_FADE_Y }} animate={{ opacity: 1, y: 0 }}
+            transition={DESKTOP_FADE_TRANSITION}
             style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <Outlet />
           </motion.div>

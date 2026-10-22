@@ -1,3 +1,4 @@
+import { backLayerPop } from '@/lib/backLayers'
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { HistoryIcon } from '@/components/ui/HistoryRow'
@@ -428,6 +429,8 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
     window.history.pushState({ ...(window.history.state ?? {}), mpHubSub: true }, '')
     const close = () => { setClaimChain(null); setTrackUb(null); setTrackCctp(null); closeTracking() }
     const onPop = () => {
+      // Back closed a sheet / keypad on top (lib/backLayers): not ours.
+      if (backLayerPop()) return
       // A bring is processing in this panel: keep it open (put the entry
       // back), blink and ask; Leave closes it with the on-screen path.
       if (isLeaveGuarded()) {

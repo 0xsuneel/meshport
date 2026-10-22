@@ -15,17 +15,24 @@ import { createPortal } from 'react-dom'
 import { POPUP_CARD } from '@/lib/motion'
 import { PopupDim } from './PopupDim'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
+import { useBackLayer } from '@/lib/backLayers'
 import { type ReactNode, useEffect, useRef } from 'react'
 
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 
-export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex = 200 }: {
+export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex = 200, backClose = true, bare = false }: {
   onClose: () => void
   children: ReactNode
   maxWidth?: number
   zIndex?: number
+  /** Phone / browser Back closes it (default). Off where the page already
+   *  handles Back for this popup itself. */
+  backClose?: boolean
+  /** No card chrome (.mp-popup): the child draws its own card (receipts). */
+  bare?: boolean
 }) {
   usePopupOpen()
+  useBackLayer(backClose, onClose)
   // Esc closes it, like any desktop dialog (keyboards on phones too).
   const closeRef = useRef(onClose)
   closeRef.current = onClose
@@ -49,7 +56,7 @@ export function DesktopDialogFrame({ onClose, children, maxWidth = 440, zIndex =
       <motion.div
         onClick={e => e.stopPropagation()}
         role="dialog" aria-modal="true"
-        className="mp-popup"
+        className={bare ? undefined : 'mp-popup'}
         initial={POPUP_CARD.initial}
         animate={POPUP_CARD.animate}
         exit={POPUP_CARD.exit}

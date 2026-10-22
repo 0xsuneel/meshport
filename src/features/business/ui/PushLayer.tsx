@@ -14,11 +14,11 @@ import React from 'react'
 import { useReducedMotion } from 'framer-motion'
 import { pushLook } from '@/lib/pushLook'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DESKTOP_QUERY, PAGE_SLIDE_X } from '@/lib/motion'
+import { DESKTOP_QUERY, PUSH_PARALLAX, PUSH_OPEN_MS, PUSH_BACK_MS, PUSH_EASE_CSS, DESKTOP_FADE_KEYFRAMES, DESKTOP_FADE_MS } from '@/lib/motion'
 
-const OPEN_MS = 300
-const BACK_MS = 250
-const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
+const OPEN_MS = PUSH_OPEN_MS
+const BACK_MS = PUSH_BACK_MS
+const EASE = PUSH_EASE_CSS
 
 /** Animates one property of `el` from where it is now to `to` (and leaves it
  *  there). Interrupting a running move starts from the current spot. */
@@ -58,11 +58,11 @@ export function PushLayer({ open, covered = false, zIndex, children }: {
       shown.current = true
       if (isDesktop) {
         // Desktop: a quick fade in the content area, like desktop pages.
-        if (fresh) { p.style.opacity = '1'; if (k) p.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 150, easing: EASE }) }
-        else move(p, 'opacity', '1', 150 * k)
+        if (fresh) { p.style.opacity = '1'; if (k) p.animate(DESKTOP_FADE_KEYFRAMES, { duration: DESKTOP_FADE_MS, easing: EASE }) }
+        else move(p, 'opacity', '1', DESKTOP_FADE_MS * k)
         return
       }
-      move(p, 'transform', covered ? `translateX(-${PAGE_SLIDE_X})` : 'translateX(0)', (covered || fresh ? OPEN_MS : BACK_MS) * k, fresh ? 'translateX(100%)' : undefined)
+      move(p, 'transform', covered ? `translateX(${PUSH_PARALLAX})` : 'translateX(0)', (covered || fresh ? OPEN_MS : BACK_MS) * k, fresh ? 'translateX(100%)' : undefined)
       if (v) move(v, 'opacity', String(look.dim), OPEN_MS * k, fresh ? '0' : undefined)
       return
     }

@@ -1,3 +1,4 @@
+import { PUSH_OPEN_MS, PUSH_BACK_MS, PUSH_EASE_CSS, PUSH_PARALLAX, DESKTOP_FADE_KEYFRAMES, DESKTOP_FADE_MS } from '@/lib/motion'
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useNavigationType } from 'react-router-dom'
 import { pushLook } from '@/lib/pushLook'
@@ -23,10 +24,10 @@ interface PageTransitionProps {
 // subscription or effect ever runs twice. Everything moves with the
 // browser's own animation engine (Web Animations on transform/opacity), on
 // the compositor, and the first frame is set before paint: no flicker.
-const OPEN_MS = 300
-const BACK_MS = 250
-const EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
-const PARALLAX = '-28%'
+const OPEN_MS = PUSH_OPEN_MS
+const BACK_MS = PUSH_BACK_MS
+const EASE = PUSH_EASE_CSS
+const PARALLAX = PUSH_PARALLAX
 
 type Snapshot = {
   key: string; node: HTMLElement; scrolls: Array<[number, number, number]>
@@ -108,7 +109,7 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
       if (scroller) scroller.scrollTop = 0
       // Content area only (sidebar and header stay): a quick cross-fade,
       // like desktop apps - no sliding.
-      page.animate([{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { duration: 150, easing: EASE })
+      page.animate(DESKTOP_FADE_KEYFRAMES, { duration: DESKTOP_FADE_MS, easing: EASE })
       return
     }
     // Tabs switch instantly, like a native tab bar. A fade from opacity 0

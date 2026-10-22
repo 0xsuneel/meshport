@@ -3,7 +3,6 @@
  * Pure presentational — no state, no fetching.
  */
 import React from 'react'
-import { motion } from 'framer-motion'
 
 // ─── Skeleton shimmer ────────────────────────────────────────────────────────
 
@@ -116,13 +115,7 @@ export function Divider({ className = '' }: { className?: string }) {
 
 // ─── Sheet backdrop + container ─────────────────────────────────────────────
 
-import { AnimatePresence } from 'framer-motion'
-import { DESKTOP_QUERY, SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
-import { sheetDrag } from '@/lib/sheetDrag'
-import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { PopupOpen } from '@/hooks/usePopupOpen'
-import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
-import { useBackLayer } from '@/lib/backLayers'
+import { ActionSheet } from '@/components/ui/ActionSheet'
 
 interface SheetProps {
   open: boolean
@@ -130,52 +123,15 @@ interface SheetProps {
   children: React.ReactNode
   /** "half" for payment detail; "full" for progress / passcode */
   height?: 'half' | 'full'
-  /** Unique per sheet, for drag-to-close bookkeeping. */
+  /** Unique per sheet, for drag-to-close bookkeeping (generated when left out). */
   id?: string
 }
 
-// One bottom sheet for the whole business UI - the same motion, backdrop,
-// corner radius, handle and drag-to-close as the app's ActionSheet, so a
-// business sheet opens and lands exactly like every other sheet in the app
-// (shared tween, not the old spring bounce). On desktop it's the app's centred
-// dialog, like ActionSheet and every other sheet there.
-export function Sheet({ open, onClose, children, height = 'half', id = 'biz-sheet' }: SheetProps) {
-  const isDesktop = useMediaQuery(DESKTOP_QUERY)
-  // Phone / browser Back closes it, like a tap on the dim.
-  useBackLayer(open, onClose)
-  if (isDesktop) {
-    return (
-      <AnimatePresence>
-        {open && (
-          <DesktopDialogFrame key={id} onClose={onClose} maxWidth={440}>
-            <div className="flex flex-col" style={{ maxHeight: 'min(86dvh, 760px)', minHeight: height === 'full' ? 'min(80dvh, 720px)' : undefined }}>{children}</div>
-          </DesktopDialogFrame>
-        )}
-      </AnimatePresence>
-    )
-  }
-  return (
-    <>
-    {open && <PopupOpen />}
-    <AnimatePresence>
-      {open && [
-        <motion.div key={id + '-dim'} transition={SHEET_BACKDROP.transition}
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 bg-black/70" onClick={onClose} />,
-        <motion.div key={id} {...sheetDrag(id, onClose)}
-          initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT} transition={SHEET_SPRING}
-          role="dialog" aria-modal="true"
-          className={`fixed bottom-0 left-0 right-0 z-50 mx-auto max-w-md bg-surface border-t border-border rounded-t-3xl flex flex-col${height === 'full' ? ' h-[92dvh]' : ''}`}
-          style={{ maxHeight: 'calc(100% - 40px)' }}>
-          <div data-sheet-handle className="flex justify-center pt-2.5 pb-1 flex-shrink-0">
-            <div style={{ width: 38, height: 5, borderRadius: 3, background: 'var(--border)' }} />
-          </div>
-          {children}
-        </motion.div>,
-      ]}
-    </AnimatePresence>
-    </>
-  )
+// The business UI's bottom sheet is the app's one sheet (ActionSheet): the
+// same motion, dim, corner radius, handle, drag-to-close and Back as every
+// other sheet; a centred dialog on desktop.
+export function Sheet({ open, onClose, children, height = 'half', id }: SheetProps) {
+  return <ActionSheet open={open} onClose={onClose} id={id} fixed height={height === 'full' ? 'full' : 'auto'}>{children}</ActionSheet>
 }
 
 // ─── Primary action button ───────────────────────────────────────────────────
