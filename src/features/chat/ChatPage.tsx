@@ -4150,12 +4150,12 @@ export function ChatConversationPage() {
       (async () => {
         try {
           const { awardTransactionPoints } = await import('@/lib/rewards')
-          const { notifyRewardSend } = await import('@/lib/notifications')
+          const { notifyRewardChatPay } = await import('@/lib/notifications')
           const { user: u, walletAddress: wa } = useAuthStore.getState()
           const pointUserId = u?.id && !u.id.startsWith('usr_') ? u.id : wa ? `wallet_${wa.toLowerCase().slice(2, 18)}` : null
           if (pointUserId && wa) {
             const r = await awardTransactionPoints({ userId: pointUserId, walletAddress: wa, txHash: result.txHash, actionType: 'chatpay' })
-            if (r.pointsAwarded > 0) notifyRewardSend(r.pointsAwarded, payToken || 'USDC')
+            if (r.pointsAwarded > 0) notifyRewardChatPay(r.pointsAwarded)
           }
         } catch {}
       })()
@@ -5686,6 +5686,7 @@ export function ChatConversationPage() {
                 const toLabel = `${recipientClean}.arc`
                 return (
                 <SuccessReceipt
+                  reward="chatpay"
                   style={{ flex: 1, minHeight: 0, height: 'auto', padding: 0, background: 'transparent' }}
                   title={payPending ? 'Payment Submitted' : 'Payment Sent'}
                   subtitle={payPending ? <>Still confirming on Arc. Activity updates when it lands.</> : <>Delivered in your chat</>}

@@ -229,6 +229,8 @@ export async function awardTransactionPoints(params: {
     return { pointsAwarded: 0, error: `Points recorded but balance update failed: ${upError.message}` }
   }
 
+  // The action's success screen and an open Rewards page show it at once.
+  void import('./pointsEarned').then(m => m.announcePointsEarned(params.actionType, POINTS_PER_TX)).catch(() => {})
   return { pointsAwarded: POINTS_PER_TX, error: null }
 }
 

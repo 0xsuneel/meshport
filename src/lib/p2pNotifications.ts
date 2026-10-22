@@ -151,7 +151,7 @@ export function startP2PNotifications(userId: string): () => void {
         // received" popup (PaymentReceivedWatcher) - no second toast on top.
         if (POPUP_COVERED.has(row.type)) return
         // Your own payment / refund / transfer: on screen already, no toast.
-        if (isOwnActionNotification({ type: row.type, title: row.title } as any)) return
+        if (isOwnActionNotification({ type: row.type, title: row.title, body: row.message } as any)) return
         // Foreground toast - the OS-level push (dispatched server-side, see
         // the migration's push trigger) is what covers the app being
         // closed/backgrounded; this covers "app is open right now".
