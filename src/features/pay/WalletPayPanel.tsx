@@ -15,6 +15,7 @@ import {
 import { MERCHANT_QR_NETWORK_NAME } from '@/lib/merchantQr'
 import { ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { useLeaveGuard } from '@/lib/leaveGuard'
+import { sanitizeAmountInput, tokenDecimals } from '@/components/ui/AmountKeypad'
 
 type Props = {
   /** Recipient wallet on Arc. */
@@ -121,7 +122,7 @@ export function WalletPayPanel({ to, amount, code, orderNumber, chain = ARC_PAY_
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 4 }}>
           <span style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-secondary)' }}>$</span>
           <input inputMode="decimal" value={typed} placeholder="0.00" aria-label="Amount in USDC"
-            onChange={e => setTyped(e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').replace(/^(\d*\.\d{0,6}).*$/, '$1'))}
+            onChange={e => setTyped(sanitizeAmountInput(e.target.value, tokenDecimals('USDC')))}
             style={{ width: `${Math.max(4, typed.length) + 0.6}ch`, maxWidth: 220, fontSize: 32, fontWeight: 800, textAlign: 'center', background: 'transparent', border: 'none', outline: 'none', color: 'var(--text-primary)' }} />
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>USDC</span>
         </div>

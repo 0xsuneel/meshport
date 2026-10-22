@@ -14,6 +14,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { drawMeshportQr } from '@/lib/qrLogo'
 import { QrCard, QrInfoBox } from '@/features/business/ui/QrCard'
 import { qrCardFile } from '@/lib/qrCardImage'
+import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton } from '@/components/ui/DesktopHistoryPanel'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { listMyIntents, subscribeMerchantPayments, orderLabel, orderKindOf, orderTitle, type MerchantIntent } from '@/lib/merchantPay'
@@ -331,11 +332,12 @@ export function ReceivePage() {
   if (!isDesktop) return flow
 
   // ── Desktop: flow (left) + My requests (right) - the same 65/35 split as
-  // Pay, Swap and P2P.
+  // Pay, Swap and P2P (DesktopTwoColumn).
   return (
-    <div style={{ display: 'flex', height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box', background: 'var(--bg)' }}>
-      <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0 }}>{flow}</div>
-      <div style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0 }}>
+    <div style={{ height: '100%', minHeight: 0, background: 'var(--bg)' }}>
+    <DesktopTwoColumn
+      main={flow}
+      side={
         <DesktopHistoryPanel title="My requests" onViewAll={() => navigate('/receive/requests')}>
           {requests === null ? <DesktopHistorySkeleton />
             : requests.length === 0 ? <DesktopHistoryEmpty label="Payment requests you make show up here" />
@@ -354,7 +356,8 @@ export function ReceivePage() {
               )
             })}
         </DesktopHistoryPanel>
-      </div>
+      }
+    />
     </div>
   )
 }

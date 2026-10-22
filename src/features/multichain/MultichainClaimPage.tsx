@@ -15,8 +15,6 @@
  */
 import { backLayerPop } from '@/lib/backLayers'
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef, type CSSProperties, type ReactNode } from 'react'
-import { SHEET_SPRING, SHEET_BACKDROP, SHEET_EXIT } from '@/lib/motion'
-import { createPortal } from 'react-dom'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { fetchActivity, type ActivityRecord } from '@/lib/ActivityService'
 import { notifyClaimArrived, requestPushPermission } from '@/lib/bridgeTracker'
@@ -25,8 +23,8 @@ import {
   Activity as ActivityIcon,
 } from 'lucide-react'
 import { ActionIcon } from '@/components/ui/ActionIcon'
-import { PinKeypad } from '@/components/ui/PinKeypad'
-import { AmountKeypad } from '@/components/ui/AmountKeypad'
+import { PinSheet } from '@/components/ui/PinSheet'
+import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
 import { useKeypadLift, KEYPAD_SPRING } from '@/hooks/useKeypadLift'
 import { TravelingCheckmark } from '@/components/ui/TravelingCheckmark'
 import { SuccessFlash } from '@/components/ui/SuccessFlash'
@@ -36,14 +34,9 @@ import { FlashAuthIcon } from '@/components/ui/FlashAuthIcon'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { HubPush } from '@/components/multichain/HubPage'
 import { MeshLoader } from '@/components/ui/MeshLoader'
-import { slideStepVariants, MOBILE_SLIDE_TRANSITION, MOBILE_SLIDE_X, MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION, type NavDirection } from '@/lib/motion'
+import { MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION, type NavDirection } from '@/lib/motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
-import { DesktopTransactionAuthDialog } from '@/components/ui/DesktopTransactionAuthDialog'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
-import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton, DesktopHistoryDetail } from '@/components/ui/DesktopHistoryPanel'
-import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
-import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { supabase } from '@/lib/supabase'
 import { formatAmount, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
@@ -71,7 +64,6 @@ import { fetchCctpProgress, useCctpProgress } from '@/lib/cctpTracker'
 import { ARC_RPCS } from '@/lib/arc'
 import { UB_CLAIM_CHAINS, runUbClaim, ubBringTime, ubClaimEta, estimateUbClaimFee } from '@/lib/ubClaim'
 import { RPC_BY_CHAIN_NAME as BASE_RPC_BY_CHAIN_NAME } from '@/lib/chainRpcs'
-import { sheetDrag } from '@/lib/sheetDrag'
 import { revealFlow } from '@/lib/revealFlow'
 import { refreshBalancesAfterTx } from '@/lib/balanceRefresh'
 import { claimFeeSummary, type SignedClaimFee } from '@/lib/claimFees'
@@ -155,17 +147,11 @@ function SpeedTag({ fast, on }: { fast: boolean; on: boolean }) {
   )
 }
 
-// Digit/decimal sanitizing for the desktop "Amount" native input (mirrors
-// AmountKeypad's own internal sanitizer, which isn't exported) - max one
-// '.', capped at 2 typed decimal places.
-function sanitizeClaimAmount(raw: string): string {
-  let cleaned = raw.replace(/[^\d.]/g, '')
-  const firstDot = cleaned.indexOf('.')
-  if (firstDot !== -1) cleaned = cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '')
-  const [intPart, decPart] = cleaned.split('.')
-  if (decPart !== undefined) cleaned = intPart + '.' + decPart.slice(0, 2)
-  return cleaned
-}
+// Decimal places a claim amount can be typed with - the same cap for the
+// typed (desktop) input and the phone keypad. Claims are in whole cents:
+// every chain's claimable balance is floored to 2 decimals and Max fills in
+// 2 (the keypad used to allow 6 while the typed box stopped at 2).
+const CLAIM_DECIMALS = 2
 
 
 function getMeta(id: string) {
@@ -309,11 +295,19 @@ type Step =
 // 'submitted' / 'tracking' are server-backed: the claim row already exists in
 // Supabase and claim-worker is advancing it independently of this page.
 type ConfirmPhase = 'processing' | 'submitted' | 'tracking' | 'done'
-// Hub Bring page (phone): screens swap at once instead of fading out to an
-// empty page and back in (HubPush slides the next one in instead).
-const INSTANT_STEP = { initial: false, exit: { opacity: 1, transition: { duration: 0 } } } as const
-function PushIf({ on, screenKey, children }: { on: boolean; screenKey: string; children: ReactNode }) {
-  return on ? <HubPush screenKey={screenKey}>{children}</HubPush> : <>{children}</>
+// Hub Bring page: HubPush (ScreenPush) slides the next screen in over a
+// picture of the old one, so the screens themselves swap at once - rendered
+// directly, with no AnimatePresence holding the old one on screen (under
+// mode="wait" the push showed the OLD step sliding in) and no enter fade of
+// their own (that would be a second animation inside the push).
+const INSTANT_STEP = { initial: false } as const
+function PushIf({ on, screenKey, back, children }: { on: boolean; screenKey: string; back: boolean; children: ReactNode }) {
+  return on ? <HubPush screenKey={screenKey} back={back}>{children}</HubPush> : <>{children}</>
+}
+/** Swaps the steps: at once inside a push (see PushIf); otherwise a quick
+ *  cross-fade, the old one popped out of the layout as the new one fades in. */
+function StepSwap({ push, children }: { push: boolean; children: ReactNode }) {
+  return push ? <>{children}</> : <AnimatePresence initial={false} mode="popLayout">{children}</AnimatePresence>
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
@@ -322,9 +316,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   /** Hub on a phone (inside its Bring page): screens swap at once, and the
    *  processing and Track Progress screens slide in from the right. */
   pushScreens?: boolean } = {}) {
-  // Inside the Hub sheet the page always uses its phone layout.
+  // Only ever rendered inside the Hub (MultichainPage), so the page always
+  // uses its phone layout; on desktop its screens open in the Hub's
+  // right-hand panel (isDesktopMq).
   const isDesktopMq  = useMediaQuery('(min-width: 980px)')
-  const isDesktop    = embedded ? false : isDesktopMq
   // The amount box and the passcode follow the real screen size even when
   // embedded in the Hub: on desktop they type with the keyboard (Swap-style
   // box) and authorise in a centred popup, never the phone keypad sheets.
@@ -416,26 +411,6 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => () => onFocusChange?.('none'), [])
 
-  // ── Desktop-only: Claimed History (right column) ────────────────────────
-  // Real data - claims are NOT written to the `activity` table by this
-  // page's flow (they go through the server-owned `claims` table via
-  // submitClaim()/claim-worker instead - see claimService.ts), so this
-  // reads from fetchClaimsForWallet, the same source MultichainPage's hub
-  // already uses for its own claims list. Skipped entirely on mobile;
-  // re-fetched once a claim finishes so it shows up without a page reload.
-  const [claimHistory, setClaimHistory] = useState<ServerClaim[]>([])
-  const [claimHistoryLoaded, setClaimHistoryLoaded] = useState(false)
-  const [claimHistDetail, setClaimHistDetail] = useState<ServerClaim | null>(null)
-  const claimFlash = useReturnFlash()
-  useEffect(() => {
-    if (!isDesktop || !walletAddress) return
-    let cancelled = false
-    fetchClaimsForWallet(walletAddress)
-      .then(claims => { if (!cancelled) setClaimHistory(claims) })
-      .finally(() => { if (!cancelled) setClaimHistoryLoaded(true) })
-    return () => { cancelled = true }
-  }, [isDesktop, walletAddress, confirmPhase === 'done'])
-
   // Device/browser back button on Track Progress → Multichain Hub, matching
   // the in-app back arrow. confirmPhase is component state, not a route, so
   // without this a back-press would just unwind normal browser history to
@@ -474,7 +449,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const [amountConfirmed, setAmountConfirmed] = useState(false)
   const [keypadOpen,     setKeypadOpen]    = useState(false)
   const amountBoxRef = useRef<HTMLDivElement>(null)
-  const keypadLift = useKeypadLift(keypadOpen && !showPasscodeSheet, amountBoxRef, !isDesktop)
+  const keypadLift = useKeypadLift(keypadOpen && !showPasscodeSheet, amountBoxRef, true)
   // When the amount keypad closes, bring Back / Bring into view: the page
   // scrolls up once the form has glided back down, so the buttons are never
   // left hidden below the fold.
@@ -483,11 +458,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   useEffect(() => {
     const open = keypadOpen && !showPasscodeSheet
     if (open) { keypadWasOpen.current = true; return }
-    if (!keypadWasOpen.current || isDesktop || showPasscodeSheet) return
+    if (!keypadWasOpen.current || showPasscodeSheet) return
     keypadWasOpen.current = false
     const t = setTimeout(() => actionsRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 380)
     return () => clearTimeout(t)
-  }, [keypadOpen, showPasscodeSheet, isDesktop])
+  }, [keypadOpen, showPasscodeSheet])
   const [isSubmitted,    setIsSubmitted]   = useState(false)
   const [chains,         setChains]        = useState<ChainEntry[]>(() => prefilledFromHub
     ? [{ chainId: initialChain!, claimable: Math.floor((initialBalance ?? 0) * 100) / 100, pending: 0 }] : [])
@@ -588,20 +563,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   const lastFlashRectRef = useRef<DOMRect | null>(null)
   const [travelRect, setTravelRect] = useState<{ from: DOMRect; to: DOMRect } | null>(null)
   const [travelDone, setTravelDone] = useState(false)
-  // Desktop's flash overlay used to portal straight to `document.body` with
-  // `position:fixed; inset:0` - meaning it flashed the ENTIRE screen,
-  // covering the Claimed History column too, not just the flow column the
-  // rest of this page's desktop layout confines itself to. It was ported
-  // to `document.body` in the first place because PageTransition's
-  // motion.div (wraps every route) leaves a stray transform on itself,
-  // which makes it the containing block for any `position:fixed`
-  // descendant - so a naive non-portalled fixed overlay rendered sized/
-  // positioned to that transformed ancestor instead of the viewport. The
-  // portal still needs to happen for that reason, but on desktop the
-  // overlay's rect is now pinned to this ref (the same flow-column
-  // wrapper `flow` already renders inside further down) instead of the
-  // full viewport, so it visually respects the two-column layout.
-  const desktopColumnRef = useRef<HTMLDivElement>(null)
+  // Desktop: the flash overlay (portaled to `document.body`, as
+  // PageTransition's motion.div leaves a stray transform that would capture
+  // a fixed overlay) is pinned to the Hub's right-hand panel's rect instead
+  // of the full viewport.
   const [flashColumnRect, setFlashColumnRect] = useState<DOMRect | null>(null)
 
   useLayoutEffect(() => {
@@ -618,17 +583,15 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // effect runs → setState with a "new" (referentially different, even if
   // numerically identical) rect → React sees a state change → re-render →
   // effect runs again → setState again → infinite loop (React error #185,
-  // "Maximum update depth exceeded"). Gating on [successPhase, isDesktop]
+  // "Maximum update depth exceeded"). Gating on [successPhase, isDesktopMq]
   // makes it fire once per entry into the flash phase instead.
   useLayoutEffect(() => {
     if (successPhase !== 'flash' || !isDesktopMq) return
     // Embedded in the Hub on desktop: cover just the Hub's own screen (its
     // scroll area beside the sidebar), not the whole window.
-    const target = isDesktop
-      ? desktopColumnRef.current
-      : (flowRootRef.current?.closest('[data-hub-page], [data-flow-scroller]') as HTMLElement | null) ?? flowRootRef.current
+    const target = (flowRootRef.current?.closest('[data-hub-page], [data-flow-scroller]') as HTMLElement | null) ?? flowRootRef.current
     if (target) setFlashColumnRect(target.getBoundingClientRect())
-  }, [successPhase, isDesktop, isDesktopMq])
+  }, [successPhase, isDesktopMq])
 
   // Measured in a layout effect (before paint) so the traveling checkmark is
   // already on screen in the receipt's very first frame - no frame where
@@ -1962,7 +1925,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 <div style={{ marginTop: 8 }}>
                   <AmountField
                     value={claimAmounts[selected!] ?? ''}
-                    onChange={v => { setClaimAmounts(prev => ({ ...prev, [selected!]: sanitizeClaimAmount(v) })); setError('') }}
+                    onChange={v => { setClaimAmounts(prev => ({ ...prev, [selected!]: sanitizeAmountInput(v, CLAIM_DECIMALS) })); setError('') }}
                     onTap={desktopInput ? undefined : () => { setAmountConfirmed(false); setKeypadOpen(true) }}
                     editing={keypadOpen}
                     boxRef={amountBoxRef}
@@ -2108,6 +2071,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
                 onChange={v => { setClaimAmounts(prev => ({ ...prev, [selected!]: v })); setError('') }}
                 balance={selectedChain.claimable}
                 token="USDC"
+                decimals={CLAIM_DECIMALS}
                 doneLabel="Done"
                 doneEnabled={true}
                 error={claimOver ? 'Insufficient balance' : claimAmt > 0 && claimAmt < MIN_CLAIM_AMOUNT ? `Minimum $${trimTrailingZeros(MIN_CLAIM_AMOUNT.toFixed(2))}` : ''}
