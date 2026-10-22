@@ -248,17 +248,19 @@ const MIN_PRIORITY_FEE: Record<number, bigint> = {
   11155111: 500_000_000n, // 0.5 gwei
 }
 
-/** viem chain `fees`: the RPC's suggested tip, raised to the chain's floor. */
-function relayFees(chainId: number) {
+/** EIP-1559 fees for a relayed transaction on a chain with a tip floor: the
+ *  RPC's suggested tip raised to the floor, and room for the base fee to
+ *  double. Passed explicitly - viem otherwise lets the node fill in the fees
+ *  (eth_fillTransaction), which ignores the floor. {} elsewhere. */
+async function relayFees(pub: any, chainId: number): Promise<{ maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint }> {
   const floor = MIN_PRIORITY_FEE[chainId]
-  if (!floor) return undefined
-  return {
-    async maxPriorityFeePerGas({ client }: { client: any }) {
-      let suggested = 0n
-      try { suggested = BigInt(await client.request({ method: 'eth_maxPriorityFeePerGas' })) } catch { /* use the floor */ }
-      return suggested > floor ? suggested : floor
-    },
-  }
+  if (!floor) return {}
+  let suggested = 0n
+  try { suggested = BigInt(await pub.request({ method: 'eth_maxPriorityFeePerGas' })) } catch { /* use the floor */ }
+  const tip = suggested > floor ? suggested : floor
+  const block = await pub.getBlock()
+  const base = BigInt(block.baseFeePerGas ?? 0n)
+  return { maxPriorityFeePerGas: tip, maxFeePerGas: base * 2n + tip }
 }
 
 async function clients(chainKey: string) {
@@ -267,7 +269,7 @@ async function clients(chainKey: string) {
   const rpc = process.env[`BRIDGE_RPC_${chainKey.toUpperCase()}`] || c.rpc
   // Arc's native currency is USDC, not Ether (18 native decimals on both).
   const nativeCurrency = c.id === 5042002 ? { name: 'USDC', symbol: 'USDC', decimals: 18 } : { name: 'Ether', symbol: 'ETH', decimals: 18 }
-  const chain = defineChain({ id: c.id, name: c.name, nativeCurrency, rpcUrls: { default: { http: [rpc] } }, fees: relayFees(c.id) })
+  const chain = defineChain({ id: c.id, name: c.name, nativeCurrency, rpcUrls: { default: { http: [rpc] } } })
   // Receipt waits check every 250ms on Arc (sub-second blocks) and every 1s
   // elsewhere - viem's 4s default added seconds to every relayed step.
   const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }), pollingInterval: pollMsFor(c.id) })
@@ -428,7 +430,7 @@ async function callClients(chainKey: string) {
     const probe: any = createPublicClient({ transport: http(rpc, { timeout: 15_000 }) })
     id = await probe.getChainId()
   }
-  const chain = defineChain({ id, name: chainKey, nativeCurrency: { name: 'Native', symbol: 'NATIVE', decimals: 18 }, rpcUrls: { default: { http: [rpc] } }, fees: relayFees(id) })
+  const chain = defineChain({ id, name: chainKey, nativeCurrency: { name: 'Native', symbol: 'NATIVE', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } })
   const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }), pollingInterval: pollMsFor(id) })
   let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
   if (key && !key.startsWith('0x')) key = '0x' + key
@@ -603,7 +605,7 @@ async function relayCall(req: VercelRequest, res: VercelResponse) {
   // Simulate first: an already-used or invalid signature/attestation never costs gas.
   try { await cl.pub.call({ account: cl.wallet.account, to, data }) }
   catch (e: any) { return res.status(400).json({ error: e?.shortMessage || 'Call would fail' }) }
-  const txHash = await cl.wallet.sendTransaction({ to, data })
+  const txHash = await cl.wallet.sendTransaction({ to, data, ...(await relayFees(cl.pub, cl.pub.chain.id)) })
   try {
     const receipt = await cl.pub.waitForTransactionReceipt({ hash: txHash, timeout: 40_000 })
     if (receipt.status !== 'success') return res.status(502).json({ error: 'Transaction reverted', txHash })
@@ -850,7 +852,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { request } = await pub.simulateContract({
       account: wallet.account, address: router, abi: ROUTER_ABI, functionName: 'bridgeWithAuthorization', args: [bridgeArgs, authArgs],
     }).catch((e: any) => { throw Object.assign(new Error(e?.shortMessage || 'Transfer would fail'), { status: 400 }) })
-    const txHash = await wallet.writeContract(request)
+    const txHash = await wallet.writeContract({ ...request, ...(await relayFees(pub, pub.chain.id)) })
 
     // Wait briefly for the burn; if it's slow, it's submitted (not failed) - tracking takes over.
     try {
