@@ -361,6 +361,13 @@ export async function createPaymentRequest(p: { amount: number; customer?: strin
   return mapIntent(data)
 }
 
+/**
+ * An order the business asked to be paid (a request or a bill). A Shop QR
+ * order is the customer paying an amount they typed - a payment, not a
+ * request - so it stays out of request lists and "still to collect".
+ */
+export const isAskedOrder = (i: { via?: string | null }) => i.via !== 'shop_qr'
+
 export async function listMyIntents(limit = 200): Promise<MerchantIntent[]> {
   const uid = await myAuthUid()
   if (!uid) return []

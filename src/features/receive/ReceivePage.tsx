@@ -17,7 +17,7 @@ import { qrCardFile } from '@/lib/qrCardImage'
 import { DesktopTwoColumn } from '@/components/layout/DesktopTwoColumn'
 import { DesktopHistoryPanel, DesktopHistoryEmpty, DesktopHistorySkeleton } from '@/components/ui/DesktopHistoryPanel'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
-import { listMyIntents, subscribeMerchantPayments, orderLabel, orderKindOf, orderTitle, type MerchantIntent } from '@/lib/merchantPay'
+import { listMyIntents, isAskedOrder, subscribeMerchantPayments, orderLabel, orderKindOf, orderTitle, type MerchantIntent } from '@/lib/merchantPay'
 import { requestBucket, requestStatus, statusLine } from './MyRequestsPage'
 
 const APP_URL = 'https://meshport.xyz'
@@ -64,7 +64,7 @@ export function ReceivePage() {
   const [requests, setRequests] = useState<MerchantIntent[] | null>(null)
   useEffect(() => {
     if (!isDesktop) return
-    const load = () => { listMyIntents(30).then(setRequests).catch(() => setRequests(prev => prev ?? [])) }
+    const load = () => { listMyIntents(30).then(l => setRequests(l.filter(isAskedOrder))).catch(() => setRequests(prev => prev ?? [])) }
     load()
     const unsub = walletAddress ? subscribeMerchantPayments(walletAddress, load) : () => {}
     const iv = setInterval(load, 30_000)

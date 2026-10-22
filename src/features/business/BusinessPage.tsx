@@ -23,7 +23,7 @@ import { useAuthStore, useWalletStore } from '@/store'
 import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { explorerTxUrl } from '@/lib/chainExplorers'
 import { chainLogoSrc } from '@/lib/chainLogos'
-import { listMyPayments, listMyIntents, listChainReceipts, subscribeMerchantPayments, subscribeChainReceipts, createPaymentRequest, displayOrderNumber, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
+import { listMyPayments, listMyIntents, isAskedOrder, listChainReceipts, subscribeMerchantPayments, subscribeChainReceipts, createPaymentRequest, displayOrderNumber, type MerchantPayment, type MerchantIntent } from '@/lib/merchantPay'
 import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
 import { StorePicker } from '@/features/merchant/StorePicker'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment } from '@/lib/voiceAlerts'
@@ -463,7 +463,7 @@ function OwnerBusinessPage() {
   const pending = useMemo(() => {
     if (!intents) return null
     const now = Date.now()
-    const live = intents.filter(i => (i.status === 'pending' || i.status === 'partially_paid')
+    const live = intents.filter(i => isAskedOrder(i) && (i.status === 'pending' || i.status === 'partially_paid')
       && (!i.expiresAt || Date.parse(i.expiresAt) > now) && (!activeStore || inStore(i, activeStore.id)))
     return { count: live.length, due: live.reduce((t, i) => t + Math.max(0, i.amount - i.received), 0) }
   }, [intents, activeStore, mainStoreId])
