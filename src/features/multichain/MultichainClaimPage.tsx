@@ -39,23 +39,17 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { supabase } from '@/lib/supabase'
-import { formatAmount, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
+import { formatAmount, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import {
   submitClaim,
   getClaim,
   subscribeToClaim,
   kickClaimWorker,
-  fetchClaimsForWallet,
   type Claim as ServerClaim,
 } from '@/lib/claimService'
 import { isGaslessBridgeAvailable, quoteGaslessBridge, bringFundsGasless } from '@/lib/gaslessBridge'
-import { moveBreakdown, formatFee, formatMoveAmount } from '@/lib/moveFees'
 
-/** A finished bring: what was sent (MeshPort's fee included), what arrived, and the fees. */
-const claimMove = (c: ServerClaim) => c.status === 'completed'
-  ? moveBreakdown('bring', { amount: c.amount, arrivedAmount: c.arrivedAmount, claimedAmount: c.amount, meshportFee: c.meshportFee })
-  : null
 import { relayedProviderFor } from '@/lib/relayedProvider'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForClaim, CHAIN_CLAIM_FEATURE_MAP } from '@/lib/featureFilters'
