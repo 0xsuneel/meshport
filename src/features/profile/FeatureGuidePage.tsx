@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { SECTIONS } from './featureGuideData'
+import { useBusinessTab } from '@/lib/merchant'
 
 // ── MeshPort Feature Guide ────────────────────────────────────────────────────
 // Every feature, with a real screenshot of its screen (public/guide/*.jpg,
@@ -13,6 +14,11 @@ import { SECTIONS } from './featureGuideData'
 
 /** isPublic: the /guide page for visitors who aren't signed in (no app links). */
 export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = {}) {
+  // Rewards is for personal accounts only (the public guide shows everything).
+  const business = useBusinessTab()
+  const sections = SECTIONS
+    .map(sec => ({ ...sec, features: sec.features.filter(f => !(business && !isPublic && f.id === 'rewards')) }))
+    .filter(sec => sec.features.length > 0)
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
   const [zoom, setZoom] = useState<{ title: string; image: string } | null>(null)
@@ -45,7 +51,7 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
 
         {/* ── All features ── */}
         <div className="bg-surface border border-border rounded-3xl p-4 space-y-4">
-          {SECTIONS.map(section => (
+          {sections.map(section => (
             <div key={section.heading}>
               <p className="text-[11px] font-bold text-text-secondary uppercase tracking-wider mb-2 px-1">{section.heading}</p>
               <div className="flex flex-wrap gap-2">
@@ -61,7 +67,7 @@ export function FeatureGuidePage({ isPublic = false }: { isPublic?: boolean } = 
         </div>
 
         {/* ── Each feature ── */}
-        {SECTIONS.map(section => (
+        {sections.map(section => (
           <div key={section.heading} className="space-y-3">
             <p className="text-xs font-bold text-text-secondary uppercase tracking-wider px-1">{section.heading}</p>
             {section.features.map(f => (

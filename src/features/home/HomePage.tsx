@@ -563,7 +563,7 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; 
     { title: 'Explore', actions: [
       { label: 'Multichain Hub', path: '/multichain', icon: <ActionIcon name="hub" size={27} /> },
       { label: 'P2P',            path: '/p2p',        icon: <ActionIcon name="p2p" size={27} /> },
-      ...(isMerchant ? [] : [{ label: 'Rewards', path: '/rewards', icon: <ActionIcon name="rewards" size={27} /> }]),
+      ...(business ? [] : [{ label: 'Rewards', path: '/rewards', icon: <ActionIcon name="rewards" size={27} /> }]),
       // A business sees its own sales and customers (Business → Reports).
       isMerchant
         ? { label: 'Business Insights', path: '/business?screen=reports', icon: <ActionIcon name="insights" size={27} /> }
@@ -748,7 +748,9 @@ function useQuickActionLabel(): (a: { id: string; label: string }) => string {
 
 function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: { navigate: (p: string) => void; actionIds: string[]; onCustomize: () => void; hasOngoingP2P?: boolean }) {
   const qaLabel = useQuickActionLabel()
-  const tiles = actionIds.map(id => QUICK_ACTION_POOL.find(a => a.id === id)).filter((a): a is typeof QUICK_ACTION_POOL[number] => !!a)
+  const business = useBusinessTab()
+  const tiles = actionIds.map(id => QUICK_ACTION_POOL.find(a => a.id === id))
+    .filter((a): a is typeof QUICK_ACTION_POOL[number] => !!a && !(business && a.id === 'claim-rewards'))
   const { locked } = useAccountLock()
   return (
     <div style={{
@@ -801,6 +803,7 @@ function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: {
 function CustomizeQuickActionsSheet({ selectedIds, onToggle, onClose, warning }: {
   selectedIds: string[]; onToggle: (id: string) => void; onClose: () => void; warning: boolean;
 }) {
+  const business = useBusinessTab()
   const qaLabel = useQuickActionLabel()
   const content = (
     <>
@@ -819,7 +822,7 @@ function CustomizeQuickActionsSheet({ selectedIds, onToggle, onClose, warning }:
         </div>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 4 }}>
-        {QUICK_ACTION_POOL.map(a => {
+        {QUICK_ACTION_POOL.filter(a => !(business && a.id === 'claim-rewards')).map(a => {
           const selected = selectedIds.includes(a.id)
           return (
             <div key={a.id} onClick={() => onToggle(a.id)}
@@ -2580,8 +2583,9 @@ export function HomePage() {
   const [navigatingId, setNavigatingId] = useState<string | null>(null)
 
   const isMerchantSearch = useMerchant().isMerchant
+  const businessSearch = useBusinessTab()
   const accountLock = useAccountLock()
-  const searchServices = filterServices(searchQuery, isMerchantSearch, accountLock.locked)
+  const searchServices = filterServices(searchQuery, isMerchantSearch, accountLock.locked, businessSearch)
 
   // Fetch known people once, lazily, the first time search is opened -
   // merges explicit saved contacts with people from recent send/receive

@@ -22,10 +22,11 @@ const MERCHANT_HUB_KEYWORDS = ['merchant', 'merchant hub', 'ledger', 'payment re
 
 /** `locked`: a business account that isn't approved yet - its locked
  *  features (lib/accountLock.ts) are left out of the results. */
-export function filterServices(query: string, isMerchant = false, locked = false) {
+export function filterServices(query: string, isMerchant = false, locked = false, business = false) {
   const q = query.trim().toLowerCase()
   if (!q) return []
-  const base = locked ? SERVICES.filter(s => !isLockedPath(s.path)) : SERVICES
+  // Rewards is for personal accounts only.
+  const base = SERVICES.filter(s => !(locked && isLockedPath(s.path)) && !(business && s.path === '/rewards'))
   const list = isMerchant
     ? base.map(s => s.path === '/multichain' ? { ...s, label: 'Merchant Hub', keywords: [...s.keywords, ...MERCHANT_HUB_KEYWORDS] }
         : s.path === '/insights' ? { ...s, label: 'Ledger Insights', keywords: [...s.keywords, 'ledger insights', 'sales', 'revenue', 'customers'] }

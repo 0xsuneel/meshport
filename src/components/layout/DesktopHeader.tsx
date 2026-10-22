@@ -19,7 +19,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { searchUsersDb, getOrCreateConversation, fetchContactsDb, type DbUser } from '@/lib/supabase'
 import { getRemovedContacts } from '@/lib/removedContacts'
 import { filterServices } from '@/lib/searchServices'
-import { useMerchant } from '@/lib/merchant'
+import { useMerchant, useBusinessTab } from '@/lib/merchant'
 import { useAccountLock } from '@/lib/accountLock'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 
@@ -96,7 +96,8 @@ export function DesktopHeader() {
 
   const isMerchant = useMerchant().isMerchant
   const { locked } = useAccountLock()
-  const services = filterServices(query, isMerchant, locked)
+  const businessAccount = useBusinessTab()
+  const services = filterServices(query, isMerchant, locked, businessAccount)
 
   // Close on outside click / Escape.
   useEffect(() => {
