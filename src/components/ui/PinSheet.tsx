@@ -50,6 +50,10 @@ export interface PinSheetProps {
   panelWidth?: string
   anchor?: HTMLElement | null
   instantExit?: boolean
+  /** It's closing because the next page is coming in over it (the passcode
+   *  is right → processing): it leaves underneath that page - no slide down
+   *  or fade on top of it. */
+  leaveUnder?: boolean
 }
 
 export function PinSheet(p: PinSheetProps) {
@@ -70,7 +74,7 @@ export function PinSheet(p: PinSheetProps) {
 
   if (desktop) {
     return (
-      <AnimatePresence>
+      <AnimatePresence custom={!!p.leaveUnder}>
         {p.open && (
           <DesktopTransactionAuthDialog key={p.id ?? 'pin'} onClose={close} title={p.title} amountLabel={p.amountLabel} subLabel={said}
             placement={p.placement} panelWidth={p.panelWidth} anchor={p.anchor} instantExit={p.instantExit} backClose={p.backClose ?? true} zIndex={p.zIndex}>
@@ -83,7 +87,7 @@ export function PinSheet(p: PinSheetProps) {
     )
   }
   return (
-    <ActionSheet open={p.open} onClose={close} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={p.backClose ?? true} zIndex={p.zIndex}>
+    <ActionSheet open={p.open} onClose={close} isDesktop={false} id={p.id} fixed={!p.inPanel} backClose={p.backClose ?? true} zIndex={p.zIndex} leaveUnder={p.leaveUnder}>
       <div className="flex flex-col px-6 pt-2 pb-[max(28px,env(safe-area-inset-bottom))] overflow-y-auto">
         {p.header}
         <div className="text-center mb-7">

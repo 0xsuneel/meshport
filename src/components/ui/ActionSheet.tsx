@@ -8,17 +8,23 @@
 // Phone / browser Back closes it, like a tap on the dim.
 // Desktop: a centred dialog (DesktopDialogFrame).
 import { type ReactNode, useId } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, motion, type TargetAndTransition } from 'framer-motion'
 import { X } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
 import { PopupOpen } from '@/hooks/usePopupOpen'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { SHEET_PANEL, SHEET_BACKDROP, SHEET_DIM, DESKTOP_QUERY } from '@/lib/motion'
+import { SHEET_PANEL, SHEET_BACKDROP, SHEET_DIM, DESKTOP_QUERY, PUSH_OPEN_MS } from '@/lib/motion'
 import { sheetDrag } from '@/lib/sheetDrag'
 import { useBackLayer } from '@/lib/backLayers'
 
-export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, height = 'auto', backClose = true, desktopMaxWidth = 440, zIndex, children }: {
+/** Exit for a sheet's panel / dim: its own, or (leaving under a page that is
+ *  sliding in over it) stay put until that page has arrived, then go. */
+const leaveVariant = (own: object) => (under?: boolean): TargetAndTransition => under
+  ? { opacity: 0, transition: { delay: PUSH_OPEN_MS / 1000, duration: 0 } }
+  : own as TargetAndTransition
+
+export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, height = 'auto', backClose = true, desktopMaxWidth = 440, zIndex, leaveUnder = false, children }: {
   open: boolean
   onClose: () => void
   /** Defaults to the screen width (≥980px = desktop). */
@@ -35,6 +41,10 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
   desktopMaxWidth?: number
   /** Stacking order of the panel (the dim sits one below); default 50. */
   zIndex?: number
+  /** It's closing because a page is sliding in over it (a passcode sheet →
+   *  the processing page): it stays exactly as it is until that page has
+   *  arrived, then goes at once - no slide down / dim fade under the page. */
+  leaveUnder?: boolean
   children: ReactNode
 }) {
   const autoId = useId()
@@ -58,11 +68,13 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
   return (
     <>
       {open && <PopupOpen />}
-      <AnimatePresence>
+      {/* `custom`: an exiting child keeps the props it last had, so how it
+          leaves (leaveUnder) is read here, at the moment it closes. */}
+      <AnimatePresence custom={leaveUnder}>
         {open && [
-          <motion.div key={sid + '-dim'} {...SHEET_BACKDROP}
+          <motion.div key={sid + '-dim'} {...SHEET_BACKDROP} variants={{ leave: leaveVariant(SHEET_BACKDROP.exit) }} exit="leave"
             className={`${pos} inset-0`} style={{ background: SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40 }} onClick={onClose} />,
-          <motion.div key={sid} {...sheetDrag(sid, onClose)} {...SHEET_PANEL}
+          <motion.div key={sid} {...sheetDrag(sid, onClose)} {...SHEET_PANEL} variants={{ leave: leaveVariant(SHEET_PANEL.exit) }} exit="leave"
             role="dialog" aria-modal="true"
             className={`${pos} bottom-0 left-0 right-0 bg-surface border-t border-border rounded-t-3xl flex flex-col${fixed ? ' mx-auto max-w-md' : ''}${height === 'full' ? ' h-[92dvh]' : ''}`}
             style={{ maxHeight: 'calc(100% - 40px)', zIndex: z }}>

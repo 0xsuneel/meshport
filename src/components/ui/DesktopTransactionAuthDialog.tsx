@@ -81,7 +81,10 @@ export function DesktopTransactionAuthDialog({
         onClick={e => e.stopPropagation()}
         initial={DIALOG_CARD.initial}
         animate={DIALOG_CARD.animate}
-        exit={instantExit ? { opacity: 0, transition: { duration: 0 } } : DIALOG_CARD.exit}
+        // Instant: asked for (instantExit), or the AnimatePresence around it
+        // says it's leaving under the page that replaces it (`custom`).
+        variants={{ leave: (instant?: boolean) => instant || instantExit ? { opacity: 0, transition: { duration: 0 } } : DIALOG_CARD.exit }}
+        exit="leave"
         transition={DIALOG_CARD.transition}
         style={{
           position: 'relative', width: '100%', maxWidth, maxHeight: '85vh', overflowY: 'auto', pointerEvents: 'auto',
