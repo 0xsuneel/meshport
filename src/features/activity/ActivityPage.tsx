@@ -707,6 +707,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     { label: 'Status', value: isFailed ? 'Failed ✗' : isSuccess ? 'Completed ✓' : 'Processing…' },
     { label: 'Date',   value: new Date(createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) },
     { label: 'Time',   value: new Date(createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) },
+    // A recovery is listed when its money landed; this is when the transfer was first tried.
+    ...((metadata as any)?.started_at ? [{ label: 'First tried', value: new Date((metadata as any).started_at).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) }] : []),
     ...(txHash && !isRecoveredClaim ? [{ label: sourceHashLabel, value: txHash.slice(0,6) + '…' + txHash.slice(-6), copy: txHash }] : []),
     ...((isClaim || isTransfer) && destinationTxHash ? [{ label: destinationHashLabel, value: destinationTxHash.slice(0,6) + '…' + destinationTxHash.slice(-6), copy: destinationTxHash }] : []),
   ]
