@@ -1,4 +1,4 @@
-import { PUSH_OPEN_MS, PUSH_BACK_MS, PUSH_EASE_CSS, PUSH_PARALLAX, DESKTOP_FADE_KEYFRAMES, DESKTOP_FADE_MS } from '@/lib/motion'
+import { PUSH_OPEN_MS, PUSH_BACK_MS, PUSH_EASE_CSS, PUSH_PARALLAX, DESKTOP_FADE_KEYFRAMES, DESKTOP_FADE_MS, FRAME_ENTRY_PX, FRAME_ENTRY_MS } from '@/lib/motion'
 import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { useNavigationType } from 'react-router-dom'
 import { pushLook } from '@/lib/pushLook'
@@ -205,9 +205,9 @@ export function PageTransition({ children, locationKey }: PageTransitionProps) {
     const dir = navType === 'POP' ? (nav === 'none' ? null : 'back') : 'forward'
     if (!page || reduceMotion || isDesktop || !dir) return
     const a = page.animate([
-      { opacity: 0, transform: `translateX(${dir === 'back' ? -32 : 32}px)` },
+      { opacity: 0, transform: `translateX(${dir === 'back' ? -FRAME_ENTRY_PX : FRAME_ENTRY_PX}px)` },
       { opacity: 1, transform: 'none' },
-    ], { duration: 240, easing: EASE })
+    ], { duration: FRAME_ENTRY_MS, easing: EASE })
     return () => a.cancel()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
