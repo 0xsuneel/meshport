@@ -2158,12 +2158,14 @@ function MobileHeroCarousel({
 // ── Feature promo banner ───────────────────────────────────────────────────
 // Auto-rotating promotion banners for MeshPort's features (rewards are
 // deliberately not advertised here). Tap opens the feature; swipe to change.
+// Taglines stay short (~24 characters): beside "Try now" on a phone a longer
+// one is cut off.
 const FEATURE_BANNERS: Array<{ title: string; text: string; path: string; icon: 'globe' | 'p2p' | 'swap' | 'chat' | 'bulk' }> = [
-  { title: 'Multichain Hub',    text: 'Move USDC across 20+ chains',   path: '/multichain',  icon: 'globe' },
-  { title: 'P2P Marketplace',   text: 'Buy & sell USDC with escrow',   path: '/p2p',         icon: 'p2p' },
-  { title: 'Instant Swap',      text: 'Swap USDC, EURC and cirBTC',    path: '/swap',        icon: 'swap' },
-  { title: 'Pay in Chat',       text: 'Send money while you talk',     path: '/chat',        icon: 'chat' },
-  { title: 'Bulk Payout',       text: 'Pay many people in one go',     path: '/bulk-payout', icon: 'bulk' },
+  { title: 'Multichain Hub',    text: 'USDC across 20+ chains',        path: '/multichain',  icon: 'globe' },
+  { title: 'P2P Marketplace',   text: 'Buy & sell USDC safely',        path: '/p2p',         icon: 'p2p' },
+  { title: 'Instant Swap',      text: 'USDC, EURC and cirBTC',         path: '/swap',        icon: 'swap' },
+  { title: 'Pay in Chat',       text: 'Send money as you chat',        path: '/chat',        icon: 'chat' },
+  { title: 'Bulk Payout',       text: 'Pay many people at once',       path: '/bulk-payout', icon: 'bulk' },
 ]
 
 // Same icons as Home's buttons / More sheet; Pay in Chat uses the Chats tab icon.

@@ -425,7 +425,7 @@ export function RewardsPage() {
       </div>
       <p style={{ fontSize: 14, margin: '12px 0 0', color: 'var(--text-primary)' }}><b>{MIN_CLAIM_POINTS - totalPoints} more points</b> to your first USDC claim</p>
       <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-        Each task below earns +{POINTS_PER_TX} pts once a day · {MIN_CLAIM_POINTS} pts = ${formatAmount(pointsToUSDC(MIN_CLAIM_POINTS))} USDC
+        Each task below earns +{POINTS_PER_TX} pts once a day · <span style={{ whiteSpace: 'nowrap' }}>{MIN_CLAIM_POINTS} pts = ${formatAmount(pointsToUSDC(MIN_CLAIM_POINTS))}</span>
       </p>
     </div>
   ) : (

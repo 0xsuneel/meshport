@@ -1235,7 +1235,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.3px' }}>{isMerchant ? 'Collect from chains' : 'Bring Funds to Arc'}</div>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{isMerchant ? 'Tap a chain to claim it, or use Claim All' : 'Move USDC from any chain to Arc Testnet'}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 2 }}>{isMerchant ? 'Tap a chain to claim it, or use Claim All' : 'Move USDC from any chain to Arc'}</div>
               </div>
               <button onClick={() => { setScanning(true); setScanNonce(n => n + 1) }} disabled={scanning} aria-label="Refresh"
                 style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 10px', borderRadius: 12, cursor: scanning ? 'default' : 'pointer',

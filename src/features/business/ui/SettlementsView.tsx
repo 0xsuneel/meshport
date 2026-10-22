@@ -18,7 +18,7 @@ export interface SettlementsViewProps {
   settle: {
     enabled: boolean
     label: string    // "Settle $312.40 to Arc" | "Next settle in 4h 10m" | "Nothing to settle"
-    note: string     // "Uses CCTP. MeshPort pays the gas."
+    note: string     // "Moves your USDC to Arc - MeshPort pays the gas."
   }
   onSettle: () => void
   onRefresh: () => void

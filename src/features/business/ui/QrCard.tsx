@@ -54,7 +54,9 @@ export function QrInfoBox({ label, value, onCopy, copied = false, mono = true, o
       {!onCopy && onOpen && <ChevronDown className="w-4 h-4 text-brand-text flex-shrink-0" />}
     </>
   )
-  const cls = 'flex-1 min-w-0 flex items-center gap-2 rounded-xl px-3 py-2 text-left'
+  // Sized to their text (flex-auto): a long username gets the room a short
+  // address doesn't need, instead of both being cut at half width.
+  const cls = 'flex-auto min-w-0 flex items-center gap-2 rounded-xl px-3 py-2 text-left'
   const style = { background: 'color-mix(in srgb, var(--brand) 12%, var(--surface))', border: '1px solid color-mix(in srgb, var(--brand) 28%, transparent)' }
   const tap = onCopy ?? onOpen
   return tap

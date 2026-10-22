@@ -10,6 +10,10 @@ import { enablePushNotifications, getNotificationPermission, isPushSupported } f
 // scratch, replacing a subscription the push service has revoked.
 const SNOOZE_KEY = 'mp_push_banner_snooze'
 const SNOOZE_MS = 3 * 24 * 3600_000
+// Blocked in the phone's settings: the user chose that - say it once, briefly
+// (it sits over the page header), then not again for a month.
+const DENIED_SNOOZE_MS = 30 * 24 * 3600_000
+const DENIED_SHOW_MS = 8000
 
 export function PushPermissionBanner() {
   const userId = useAuthStore(s => s.user?.id)
@@ -21,7 +25,7 @@ export function PushPermissionBanner() {
     if (!userId || !isPushSupported()) return
     const perm = getNotificationPermission()
     let snoozed = false
-    try { snoozed = Date.now() - Number(localStorage.getItem(SNOOZE_KEY) || 0) < SNOOZE_MS } catch { /* ignore */ }
+    try { snoozed = Date.now() - Number(localStorage.getItem(SNOOZE_KEY) || 0) < (perm === 'denied' ? DENIED_SNOOZE_MS : SNOOZE_MS) } catch { /* ignore */ }
     if (snoozed) return
     if (perm === 'denied') { setDenied(true); setShow(true); return }
     if (perm !== 'granted') { setShow(true); return }
@@ -34,6 +38,16 @@ export function PushPermissionBanner() {
     }, 5000)
     return () => clearTimeout(t)
   }, [userId])
+
+  // Blocked: goes away by itself (and counts as seen).
+  useEffect(() => {
+    if (!show || !denied) return
+    const t = setTimeout(() => {
+      try { localStorage.setItem(SNOOZE_KEY, String(Date.now())) } catch { /* ignore */ }
+      setShow(false)
+    }, DENIED_SHOW_MS)
+    return () => clearTimeout(t)
+  }, [show, denied])
 
   if (!show) return null
 

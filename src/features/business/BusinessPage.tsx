@@ -428,7 +428,7 @@ function OwnerBusinessPage() {
     : !settle.ready ? `Settle all again in ${inWords(settle.nextAt - Date.now())}`
     : settle.due.length === 0 ? 'Nothing to settle'
     : `Settle all · ${money(settle.total)} to Arc`
-  const settleNote = `Uses CCTP. MeshPort pays the gas.${settle.waitHours ? ` Settle all once every ${settle.waitHours} hour${settle.waitHours === 1 ? '' : 's'}; settle one chain any time below.` : ' You can also settle one chain at a time below.'}`
+  const settleNote = `Moves your USDC to Arc - MeshPort pays the gas.${settle.waitHours ? ` Settle all once every ${settle.waitHours} hour${settle.waitHours === 1 ? '' : 's'}; settle one chain any time below.` : ' You can also settle one chain at a time below.'}`
 
   const handle = `${application?.username || username || 'store'}.arc`
   // The business is its username; the name set in Business profile (or one

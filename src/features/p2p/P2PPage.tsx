@@ -403,7 +403,8 @@ export function P2PHubPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, flexShrink: 0 }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                  {/* Side by side, so a second method doesn't push this offer's price lower than the others'. */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: '3px 10px', maxWidth: 150 }}>
                     {offer.paymentMethods.slice(0, 3).map(m => <MethodTag key={m} name={m} />)}
                   </div>
                   <button onClick={e => { e.stopPropagation(); navigate(`/p2p/offer/${offer.id}`, { state: { offerType: offer.offerType } }) }}
