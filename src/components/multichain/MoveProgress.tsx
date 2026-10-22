@@ -11,7 +11,7 @@
 // progress. Callers show their success screen once `current` reaches the
 // end (all steps done).
 
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, X } from 'lucide-react'
 import { MeshLoader } from '@/components/ui/MeshLoader'
 import { TrackDetails, type TrackDetailRow } from './TrackDetails'
@@ -32,7 +32,7 @@ function RouteLogo({ name }: { name: string }) {
 
 export function MoveProgress({
   kind, route, fromLabel, toLabel, amount, steps, current, failed, safe, activeElapsed, txs, notes,
-  holdText, onViewHub, onBack, backIcon = 'back', loading = false, details, trackButton = true,
+  holdText, onViewHub, onBack, backIcon = 'back', loading = false, details, trackButton = true, timeSteps = false,
 }: {
   kind: MoveKind; route: MoveRoute
   fromLabel: string; toLabel: string
@@ -46,6 +46,9 @@ export function MoveProgress({
   safe: boolean
   /** Seconds the step in progress has been running (a live timer). */
   activeElapsed?: number
+  /** No activeElapsed from the caller: time the step in progress here, from
+   *  when it became the current step on this screen. */
+  timeSteps?: boolean
   /** Per step: the transaction it produced, shown once it's done. */
   txs?: Array<MoveTx | undefined>
   /** Extra lines under the checklist (e.g. "taking longer than usual"). */
@@ -77,6 +80,18 @@ export function MoveProgress({
     : errored ? failed!
     : activeStep ? activeStep.active : 'Finishing…'
   const folded = focus && !showDone
+
+  // Own step timer (timeSteps): restarts whenever the step in progress changes.
+  const stepStartRef = useRef<{ at: number; since: number } | null>(null)
+  const [, setTick] = useState(0)
+  const ownTimer = timeSteps && activeElapsed == null && running && !errored && !loading
+  if (ownTimer && stepStartRef.current?.at !== at) stepStartRef.current = { at, since: Date.now() }
+  useEffect(() => {
+    if (!ownTimer) return
+    const id = setInterval(() => setTick(t => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [ownTimer])
+  const elapsed = activeElapsed ?? (ownTimer && stepStartRef.current ? Math.floor((Date.now() - stepStartRef.current.since) / 1000) : undefined)
 
   const toggleFocus = () => {
     setFocus(f => !f)
@@ -170,7 +185,7 @@ export function MoveProgress({
                   <span style={{ fontSize: 14, fontWeight: 600, color: done ? 'var(--success)' : bad ? 'var(--danger)' : active ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{s.label}</span>
                   {active && (
                     <span style={{ marginLeft: 'auto', fontSize: 11.5, fontWeight: 600, color: 'var(--accent-text)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                      {activeElapsed != null && activeElapsed > 0 ? `${Math.floor(activeElapsed / 60)}:${String(activeElapsed % 60).padStart(2, '0')}` : focus ? s.eta : ''}
+                      {elapsed != null && elapsed > 0 ? `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}` : focus ? s.eta : ''}
                     </span>
                   )}
                 </div>
