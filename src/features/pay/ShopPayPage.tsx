@@ -10,7 +10,12 @@ import { getShopLimits, type ShopInfo, type ShopLimits } from '@/lib/shop'
 import { useUIStore } from '@/store'
 import { Avatar } from '@/components/ui/Avatar'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { AmountKeypad, type KeypadKey } from '@/features/business/ui'
+import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
+import { AmountField } from '@/components/ui/AmountField'
+
+// Shop payments: cents, up to $100,000 - the same caps typed and on the keys.
+const SHOP_DECIMALS = 2
+const SHOP_MAX = 100000
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
@@ -24,12 +29,11 @@ export function ShopPayPage({ shop, initialAmount }: { shop: ShopInfo; initialAm
   const [limits, setLimits] = useState<ShopLimits>({ min: null, max: null })
   useEffect(() => { getShopLimits(shop.username).then(setLimits).catch(() => {}) }, [shop.username])
 
-  const press = (k: KeypadKey) => setAmount(a => {
-    if (k === 'del') return a.slice(0, -1)
-    if (k === '.') return a.includes('.') ? a : (a || '0') + '.'
-    const next = a === '0' ? k : a + k
-    return /\.\d{3,}$/.test(next) || Number(next) > 100000 ? a : next
-  })
+  // Typed (desktop): same caps as the keys (AmountKeypad's decimals / maxValue).
+  const type = (raw: string) => {
+    const next = sanitizeAmountInput(raw, SHOP_DECIMALS)
+    if (Number(next) <= SHOP_MAX) setAmount(next)
+  }
   const value = Number(amount) || 0
   const limitError = !value ? null
     : limits.min != null && value < limits.min ? `The smallest payment here is ${money(limits.min)}`
@@ -74,8 +78,27 @@ export function ShopPayPage({ shop, initialAmount }: { shop: ShopInfo; initialAm
             </span>
           )}
         </div>
-        <div className="mx-auto w-full max-w-md">
-          <AmountKeypad value={amount} onKey={press} note={note} onNote={setNote} />
+        {/* The app's amount field: typed straight in on desktop; on a phone
+            the keys sit right in the page under it. */}
+        <div className="mx-auto w-full max-w-md flex flex-col gap-5 px-5 pt-6">
+          <AmountField value={amount} onChange={type} ariaLabel="Amount in USDC"
+            token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }}
+            onTap={isDesktop ? undefined : () => {}} editing={!isDesktop} />
+          <div className="w-full max-w-[280px] mx-auto">
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Add a note (optional)"
+              maxLength={60}
+              className="w-full bg-transparent text-sm text-center text-text-secondary placeholder:text-text-muted border-b border-border pb-1.5 outline-none focus:border-brand-text transition-colors"
+              aria-label="Payment note"
+            />
+          </div>
+          {!isDesktop && (
+            <AmountKeypad variant="inline" open value={amount} onChange={setAmount} token="USDC"
+              decimals={SHOP_DECIMALS} maxValue={SHOP_MAX} showMax={false} />
+          )}
         </div>
       </div>
 

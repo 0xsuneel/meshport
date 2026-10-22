@@ -1,9 +1,12 @@
-import { useState, useRef, useEffect, type ComponentType } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { MeshPortLogo } from '@/components/ui/MeshPortLogo'
 import { BiometricFirst } from '@/components/ui/BiometricFirst'
 import { handBiometricPasscode } from '@/lib/biometricHandoff'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { ArrowLeft, Fingerprint, ScanFace } from 'lucide-react'
+import { PinKeypad } from '@/components/ui/PinKeypad'
+import { ScreenPush } from '@/components/ui/ScreenPush'
+import { ERROR_MOTION } from '@/lib/motion'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthStore, useUIStore } from '@/store'
 import { hashPasscode, verifyPasscode, getPasscodeLockoutRemainingMs, clearPasscodeLockout } from '@/lib/security'
@@ -91,57 +94,56 @@ export function PasscodeSetupPage() {
         return
       }
       // Match - save
-        hashingRef.current = true
-        setHashing(true)
-        const hashed = await hashPasscode(firstRef.current)
-        savePcRef.current(hashed)
-        const { stashRawPasscode } = await import('@/lib/restoreWallet')
-        stashRawPasscode(firstRef.current)
-        hashingRef.current = false
-        setHashing(false)
-        showToastRef.current(returningRef.current ? 'Welcome back!' : 'Passcode set!', 'success')
+      hashingRef.current = true
+      setHashing(true)
+      const hashed = await hashPasscode(firstRef.current)
+      savePcRef.current(hashed)
+      const { stashRawPasscode } = await import('@/lib/restoreWallet')
+      stashRawPasscode(firstRef.current)
+      hashingRef.current = false
+      setHashing(false)
+      showToastRef.current(returningRef.current ? 'Welcome back!' : 'Passcode set!', 'success')
 
-        if (returningRef.current) {
-          try { sessionStorage.removeItem('mp_returning_signin') } catch { /* none */ }
-          // This flow fires when the account exists but THIS browser has no
-          // local passcode yet (a fresh device, or storage was cleared) -
-          // see App.tsx's comment on the returning=1 route.
-          //
-          // Bug fix: this used to `await restorePrivateKey(...)` BEFORE
-          // deciding where to navigate - for a social-auto (Google/Email)
-          // account, that's a real server round-trip that can take several
-          // seconds, during which the screen just sat there with the
-          // confirm dots already filled and nothing else happening. That's
-          // exactly what read as the keypad "stuck." Navigate immediately
-          // and let the restore happen in the background - same pattern
-          // already used in PasscodeLockPage's handleUnlock.
-          //
-          // No biometric offer here - relogin goes straight into the app.
-          // Biometric can still be turned on any time from Settings.
-          // Google / email accounts: the wallet opens only with the
-          // passkey or Recovery QR on a new sign-in - go straight there.
-          const st = useAuthStore.getState()
-          if (st.loginType === 'social' && st.walletSource === 'social-auto' && !st.privateKey) {
-            navigateRef.current('/auth/recover-wallet', { replace: true })
-            return
-          }
-          navigateRef.current('/', { replace: true })
-          import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(firstRef.current)).catch(() => {})
-        } else {
-          // New signup (create/import/social) - go straight to the next
-          // step (create-wallet / import-wallet / auto-wallet / wallet-
-          // setup). No biometric offer during registration either - it
-          // stays available afterward from Settings, same as relogin above.
-          const next =
-            nextRef.current === 'create' ? '/auth/create-wallet'
-            : nextRef.current === 'import' ? '/auth/import-wallet'
-            : loginTypeRef.current === 'social' ? '/auth/auto-wallet'
-            : '/auth/wallet-setup'
-          navigateRef.current(next, { replace: true })
+      if (returningRef.current) {
+        try { sessionStorage.removeItem('mp_returning_signin') } catch { /* none */ }
+        // This flow fires when the account exists but THIS browser has no
+        // local passcode yet (a fresh device, or storage was cleared) -
+        // see App.tsx's comment on the returning=1 route.
+        //
+        // Bug fix: this used to `await restorePrivateKey(...)` BEFORE
+        // deciding where to navigate - for a social-auto (Google/Email)
+        // account, that's a real server round-trip that can take several
+        // seconds, during which the screen just sat there with the
+        // confirm dots already filled and nothing else happening. That's
+        // exactly what read as the keypad "stuck." Navigate immediately
+        // and let the restore happen in the background - same pattern
+        // already used in PasscodeLockPage's handleUnlock.
+        //
+        // No biometric offer here - relogin goes straight into the app.
+        // Biometric can still be turned on any time from Settings.
+        // Google / email accounts: the wallet opens only with the
+        // passkey or Recovery QR on a new sign-in - go straight there.
+        const st = useAuthStore.getState()
+        if (st.loginType === 'social' && st.walletSource === 'social-auto' && !st.privateKey) {
+          navigateRef.current('/auth/recover-wallet', { replace: true })
+          return
         }
+        navigateRef.current('/', { replace: true })
+        import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(firstRef.current)).catch(() => {})
+      } else {
+        // New signup (create/import/social) - go straight to the next
+        // step (create-wallet / import-wallet / auto-wallet / wallet-
+        // setup). No biometric offer during registration either - it
+        // stays available afterward from Settings, same as relogin above.
+        const next =
+          nextRef.current === 'create' ? '/auth/create-wallet'
+          : nextRef.current === 'import' ? '/auth/import-wallet'
+          : loginTypeRef.current === 'social' ? '/auth/auto-wallet'
+          : '/auth/wallet-setup'
+        navigateRef.current(next, { replace: true })
+      }
 
-      }, 180)
-    }
+    }, 180)
   })
 
   const handleBack = () => {
@@ -149,7 +151,7 @@ export function PasscodeSetupPage() {
       stepRef.current = 'create'
       setStep('create')
       secondRef.current = ''
-      setFilled2(0)
+      setSecond('')
     } else if (returning) {
       navigate('/auth', { replace: true })
     } else {
@@ -157,7 +159,6 @@ export function PasscodeSetupPage() {
     }
   }
 
-  const filledCount = step === 'create' ? filled1 : filled2
   const title    = returning
     ? (step === 'create' ? 'Set New Passcode'  : 'Confirm New Passcode')
     : (step === 'create' ? 'Create Passcode'   : 'Confirm Passcode')
@@ -176,6 +177,9 @@ export function PasscodeSetupPage() {
         <div className={`flex-1 h-1 rounded-full transition-colors duration-300 ${step === 'confirm' ? 'bg-brand' : 'bg-text-primary/10'}`} />
       </div>
 
+      {/* Create → Confirm pushes like the other sign-up steps (back slides
+          back). The keypad stays one instance; on Confirm it starts empty. */}
+      <ScreenPush screenKey={step} back={step === 'create'}>
       <div className="flex-1 flex flex-col items-center">
         <div className="text-center mt-6 short:mt-2 mb-2">
           <div className="w-16 h-16 short:w-12 short:h-12 bg-brand/15 rounded-3xl flex items-center justify-center mx-auto mb-4 short:mb-2">
@@ -184,42 +188,41 @@ export function PasscodeSetupPage() {
                 d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
             </svg>
           </div>
-          {/* The title just changes - any fade between "Set" and "Confirm"
-              reads as a flicker on a phone. */}
           <div>
             <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">{title}</h2>
             <p className="text-text-secondary mt-1 text-[14px] leading-[1.5]">{subtitle}</p>
           </div>
         </div>
 
-        {/* Keyed by step: the dots start empty on Confirm instead of fading
-            out from the six filled ones. */}
-        <PasscodeDots key={step} filled={filledCount} error={error} />
-
         {/* Fixed-height status line: an error or "Securing…" appearing never
             pushes the keypad down, and the keypad stays mounted (just
             disabled) while the passcode is saved - swapping it out for text
             made the whole screen jump right before moving on. */}
-        <div className="h-6 mb-2 short:mb-0 flex items-center justify-center">
+        <div className="h-6 my-3 short:my-2 flex items-center justify-center">
           <AnimatePresence mode="popLayout" initial={false}>
             {errorMsg ? (
-              <motion.p key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              <motion.p key="err" {...ERROR_MOTION}
                 className="text-danger text-sm text-center">{errorMsg}</motion.p>
             ) : hashing ? (
-              <motion.p key="saving" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              <motion.p key="saving" {...ERROR_MOTION}
                 className="text-text-secondary text-sm">Securing passcode…</motion.p>
             ) : null}
           </AnimatePresence>
         </div>
 
+        {/* The app's passcode keypad (typed input on desktop). No fingerprint
+            here: this is choosing a passcode, not checking one. */}
         <div className="w-full" style={{ pointerEvents: hashing ? 'none' : undefined, opacity: hashing ? 0.5 : 1, transition: 'opacity 0.15s' }}>
-          <NumPad onPress={(k) => pressRef.current(k)} />
+          <PinKeypad value={step === 'create' ? first : second} onChange={change} length={6}
+            error={error} shake={error} biometricAvailable={false} autoBiometric={false}
+            onComplete={() => completeRef.current()} />
         </div>
 
         <p className="text-xs text-text-muted text-center mt-8 short:mt-4 px-4">
           Stored securely on this device. Cannot be recovered if lost.
         </p>
       </div>
+      </ScreenPush>
     </div>
   )
 }
@@ -415,14 +418,11 @@ export function PasscodeLockPage() {
     return () => { cancelSplash(); if (timer) clearTimeout(timer); document.removeEventListener('visibilitychange', onVisible) }
   }, [canAuto])
 
-  const handlePress = async (key: string) => {
+  // The shared keypad types here; a key after a wrong passcode just clears it.
+  const handleChange = (v: string) => {
     if (error) { setError(false); setInput(''); return }
-    if (key === '⌫') { setInput(c => c.slice(0, -1)); return }
-    if (input.length >= 6 || checking) return
-    const val = input + key
-    setInput(val)
-    if (val.length < 6) return
-    setTimeout(() => handleUnlock(val), 180)
+    if (checking) return
+    setInput(v)
   }
 
   const handleSignOut = () => { logout(); navigate('/auth', { replace: true }) }
@@ -454,37 +454,40 @@ export function PasscodeLockPage() {
             {/* Same space as dots + status line + number pad, so "Use
                 passcode" swaps in place without the logo moving. */}
             <BiometricFirst Icon={BiometricIcon} label={label} trying={biometricTrying || autoPending} onTry={tryBiometric}
-              onUsePasscode={() => { setAutoPending(false); setMode("pin") }} height={short ? 314 : 374} />
+              onUsePasscode={() => { setAutoPending(false); setMode("pin") }} height={short ? 290 : 336} />
             <button onClick={handleSignOut} className="mt-6 text-text-muted text-sm hover:text-text-secondary transition-colors">
               Sign out
             </button>
           </>
           ) : (
           <>
-            <PasscodeDots filled={input.length} error={error} />
             {/* One fixed-height status line (as on passcode setup): a message
-                appearing never moves the dots and keypad, and only one shows
-                at a time. */}
-            <div className="h-6 -mt-2 flex items-center justify-center">
+                appearing never moves the keypad, and only one shows at a time. */}
+            <div className="h-6 mt-2 mb-3 flex items-center justify-center">
               <AnimatePresence mode="popLayout" initial={false}>
                 {error ? (
-                  <motion.p key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  <motion.p key="err" {...ERROR_MOTION}
                     className="text-danger text-sm text-center">
                     {lockoutMs > 0
                       ? `Too many attempts - try again in ${Math.ceil(lockoutMs / 1000)}s`
                       : `Incorrect passcode${attempts > 1 ? ` · ${attempts} attempts` : ''}`}
                   </motion.p>
                 ) : checking ? (
-                  <motion.p key="verify" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  <motion.p key="verify" {...ERROR_MOTION}
                     className="text-text-secondary text-sm text-center">Verifying…</motion.p>
                 ) : biometricTrying ? (
-                  <motion.p key="bio" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                  <motion.p key="bio" {...ERROR_MOTION}
                     className="text-text-secondary text-sm text-center">Checking {label}…</motion.p>
                 ) : null}
               </AnimatePresence>
             </div>
-            <div className="w-full mt-2">
-              <NumPad onPress={handlePress} onBiometric={tryBiometric} showBiometric={canUseBiometric} biometricTrying={biometricTrying} BiometricIcon={BiometricIcon} />
+            {/* The app's passcode keypad (typed input on desktop). The lock
+                screen runs its own fingerprint flow (after the splash, clears
+                the lockout), so the pad's key calls it (biometricKey). */}
+            <div className="w-full">
+              <PinKeypad value={input} onChange={handleChange} length={6} error={error} shake={error}
+                onComplete={val => { void handleUnlock(val) }}
+                biometricKey={{ show: canUseBiometric, onTry: tryBiometric, trying: biometricTrying }} />
             </div>
             <button onClick={handleSignOut} className="mt-6 text-text-muted text-sm hover:text-text-secondary transition-colors">
               Sign out
