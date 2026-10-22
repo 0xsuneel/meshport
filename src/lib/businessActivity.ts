@@ -26,7 +26,7 @@ export const ACTION_LABEL: Record<ActivityAction, string> = {
   order_completed: 'Marked completed',
   refund_sent: 'Sent a refund',
   settle_run: 'Settled to Arc',
-  payout_paid: 'Paid a payout',
+  payout_paid: 'Paid staff',
   staff_invited: 'Invited staff',
   staff_removed: 'Removed staff',
   staff_left: 'Left the team',

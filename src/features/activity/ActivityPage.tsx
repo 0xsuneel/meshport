@@ -177,6 +177,15 @@ const P2P_FAILED_TITLES: Record<string, string> = {
   refund_failed: 'P2P refund',
 }
 
+// Business → Pay staff sends a batch tagged 'payroll' (lib/batchPay): it reads
+// as paying staff, never as a bulk payment.
+const isPayroll = (m: any) => m?.kind === 'payroll'
+const bulkWord = (m: any) => isPayroll(m) ? (m?.direction === 'received' ? 'Staff payment' : 'Paid staff') : 'Bulk Payment'
+// Selling USDC into a buyer's rupee ad is a cash out to the bank (Business →
+// Cash out, or the same trade from P2P): lib/p2pService tags those rows.
+const cashOutTitle = (type: string, m: any) => !m?.cashOut ? null
+  : type === 'p2p_sell_order' ? 'Cash out to bank' : type === 'p2p_refund' ? 'Cash out cancelled' : null
+
 export function deriveActivityRow(record: ActivityRecord) {
   const { activityType: type, status, sourceChain, destinationChain, createdAt, amount, tokenSymbol } = record
   const metadata: any = (record as any).metadata || {}
@@ -249,7 +258,9 @@ export function deriveActivityRow(record: ActivityRecord) {
   )
 
   const bulkSubtitle = isBulkReceived
-    ? `from ${isSelfTransfer ? 'Self' : (counterpartyLabel || 'payer')}`
+    ? `from ${isSelfTransfer ? 'Self' : (isPayroll(meta) && meta.fromName ? String(meta.fromName) : counterpartyLabel || 'payer')}`
+    : isBulk && isPayroll(meta)
+    ? [meta.purpose, meta.recipientCount ? `${meta.recipientCount} ${meta.recipientCount === 1 ? 'person' : 'people'}` : ''].filter(Boolean).join(' · ')
     : isBulk
     ? meta.recipientCount ? `${meta.recipientCount} recipients` : meta.purpose || ''
     : ''
@@ -301,7 +312,8 @@ export function deriveActivityRow(record: ActivityRecord) {
               : isSend     ? 'Paid to'
               : isReceive  ? 'Received from'
               : isSwap     ? 'Swap'
-              : isBulk     ? 'Bulk Payment'
+              : isBulk     ? bulkWord(meta)
+              : cashOutTitle(type, meta) && !(typeof meta.kind === 'string' && meta.kind.endsWith('_failed')) ? cashOutTitle(type, meta)!
               // BUG FIX: a top-up (topUpOfferEscrow) writes the same
               // p2p_sell_order activityType as the original offer, so it
               // showed the exact same "P2P Sell Order Created" title -
@@ -583,7 +595,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
               // Who it went to: "Self" for your own wallet, else their
               // username or shortened address (the chain is in the details).
               : isTransfer ? (transferToLabel ? `Transfer to ${transferToLabel}` : `Transfer to ${chainLabel(destinationChain) || 'another chain'}`)
-              : type === 'send' ? 'Paid to' : type === 'receive' ? 'Received from' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment'
+              : type === 'send' ? 'Paid to' : type === 'receive' ? 'Received from' : type === 'swap' ? 'Swap' : type === 'bulk' ? bulkWord(metadata)
+              : cashOutTitle(type, metadata) ? cashOutTitle(type, metadata)!
               // See deriveActivityRow's identical comment on why p2p_refund
               // is labeled "Sell Order Cancelled" here - product decision,
               // not a claim every row is literally that.
@@ -655,7 +668,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const move = activityMove(record)
   const moveLbl = moveLabels(isTransfer ? 'transfer' : 'bring', (record as any).counterpartyAddress, (record as any).walletAddress)
   const rows = [
-    { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Settlement from ${chain || 'other chain'}` : merchantOrderDetail ? orderWord : activityOrderKind(metadata) === 'shop' && (type === 'receive' || type === 'send') ? 'Payment' : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? 'Bulk Payment' : type },
+    { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Settlement from ${chain || 'other chain'}` : merchantOrderDetail ? orderWord : activityOrderKind(metadata) === 'shop' && (type === 'receive' || type === 'send') ? 'Payment' : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? bulkWord(metadata) : cashOutTitle(type, metadata) ?? type },
     { label: 'Chain',  value: chain },
     ...(merchantOrderDetail ? [{ label: activityOrderKind(metadata) === 'bill' ? 'Bill' : activityOrderKind(metadata) === 'merchant_request' ? 'Requested Payment' : 'Request', value: displayOrderNumber(merchantOrderDetail) }] : []),
     ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Merchant', value: String((metadata as any).merchantName) }] : []),
@@ -665,7 +678,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
       ? [{ label: 'Paid to', value: `${String((record as any).walletAddress).slice(0, 6)}…${String((record as any).walletAddress).slice(-6)}`, copy: String((record as any).walletAddress) }]
       : []),
     ...(type === 'bulk' && metadata.purpose ? [{ label: 'Purpose', value: metadata.purpose }] : []),
-    ...(type === 'bulk' && !isBulkReceived && metadata.recipientCount ? [{ label: 'Recipients', value: String(metadata.recipientCount) }] : []),
+    ...(type === 'bulk' && !isBulkReceived && metadata.recipientCount ? [{ label: isPayroll(metadata) ? 'People' : 'Recipients', value: String(metadata.recipientCount) }] : []),
+    ...(isBulkReceived && isPayroll(metadata) && metadata.fromName ? [{ label: 'Business', value: String(metadata.fromName) }] : []),
     ...(isSwapType ? [
       { label: 'From',   value: `${metadata.amountIn || formatAmt(amount)} ${metadata.tokenIn || tokenSymbol || 'USDC'}` },
       { label: 'To',     value: isFailed ? `Not swapped${metadata.tokenOut ? ` (${metadata.tokenOut})` : ''}` : `${metadata.amountOut ? formatAmt(metadata.amountOut) : '?'} ${metadata.tokenOut || '?'}` },
@@ -698,13 +712,13 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     : isReceive || isBulkReceived ? 'Payment Received'
     : isSwapType ? 'Swap Successful!'
     : isTransfer ? 'Transfer Complete'
-    : type === 'bulk' ? 'Bulk Payment Sent'
+    : type === 'bulk' ? (isPayroll(metadata) ? 'Staff Paid' : 'Bulk Payment Sent')
     : type === 'send' ? 'Paid Successfully'
     : title
   const receiptTitle = isRecovery ? 'Needs recovery'
     : receiptStatus === 'success' ? doneTitle
     : receiptStatus === 'failed' ? (isSwapType ? 'Swap Failed' : isTransfer ? 'Transfer Failed' : isClaim ? 'Claim Failed'
-      : type === 'bulk' ? 'Bulk Payment Failed' : (isP2PSellOrder || type === 'p2p_refund') ? `${title} Failed`
+      : type === 'bulk' ? (isPayroll(metadata) ? 'Staff Payment Failed' : 'Bulk Payment Failed') : (isP2PSellOrder || type === 'p2p_refund') ? `${title} Failed`
       : isReceive && (metadata as any)?.receiveKind === 'reward_claim' ? 'Reward Claim Failed' : 'Payment Failed')
     : 'Processing…'
   const amountText = isSwapType

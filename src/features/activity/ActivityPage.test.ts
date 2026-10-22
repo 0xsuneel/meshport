@@ -35,7 +35,7 @@ vi.mock('@/lib/supabase', () => ({
   },
 }))
 
-import { dedupeAndSortActivityRecords } from './ActivityPage'
+import { dedupeAndSortActivityRecords, deriveActivityRow } from './ActivityPage'
 import type { ActivityRecord } from '@/lib/ActivityService'
 
 const WALLET = '0x1111111111111111111111111111111111111111'
@@ -166,5 +166,40 @@ describe('dedupeAndSortActivityRecords - swap-output quiet filter unaffected', (
 
     const result = dedupeAndSortActivityRecords([swap, unrelated])
     expect(result.map(r => r.id).sort()).toEqual(['receive-1', 'swap-1'])
+  })
+})
+
+describe('deriveActivityRow - Pay staff and Cash out read as what they are', () => {
+  it('a Pay staff batch reads "Paid staff" with the group and head count', () => {
+    const r = deriveActivityRow(row({ id: 'p1', createdAt: '2026-10-22T10:00:00Z', activityType: 'bulk', amount: 1840,
+      metadata: { direction: 'sent', kind: 'payroll', purpose: 'Staff salary', recipientCount: 4 } }))
+    expect(r.title).toBe('Paid staff')
+    expect(r.subtitle).toBe('Staff salary · 4 people')
+  })
+
+  it('each person paid sees a staff payment from the business by name', () => {
+    const r = deriveActivityRow(row({ id: 'p2', createdAt: '2026-10-22T10:00:00Z', activityType: 'bulk', amount: 520,
+      counterpartyAddress: '0x2222222222222222222222222222222222222222',
+      metadata: { direction: 'received', kind: 'payroll', fromUsername: 'sunil.arc', fromName: 'Sunil Stores', purpose: 'Staff salary' } } as any))
+    expect(r.title).toBe('Staff payment')
+    expect(r.subtitle).toBe('from Sunil Stores')
+  })
+
+  it('a plain bulk payment keeps its own wording', () => {
+    const r = deriveActivityRow(row({ id: 'p3', createdAt: '2026-10-22T10:00:00Z', activityType: 'bulk',
+      metadata: { direction: 'sent', recipientCount: 3 } }))
+    expect(r.title).toBe('Bulk Payment')
+  })
+
+  it('selling into a buy ad reads as a cash out, and its refund as cancelled', () => {
+    const sold = deriveActivityRow(row({ id: 'c1', createdAt: '2026-10-22T10:00:00Z', activityType: 'p2p_sell_order',
+      metadata: { tradeId: 'abcdef12-0000', kind: 'trade_accepted', cashOut: true } }))
+    expect(sold.title).toBe('Cash out to bank')
+    const back = deriveActivityRow(row({ id: 'c2', createdAt: '2026-10-22T10:00:00Z', activityType: 'p2p_refund',
+      metadata: { tradeId: 'abcdef12-0000', kind: 'trade_expired', cashOut: true } }))
+    expect(back.title).toBe('Cash out cancelled')
+    const offer = deriveActivityRow(row({ id: 'c3', createdAt: '2026-10-22T10:00:00Z', activityType: 'p2p_sell_order',
+      metadata: { offerId: 'abcdef12-0000', kind: 'offer_created' } }))
+    expect(offer.title).toBe('P2P Sell Order Created')
   })
 })
