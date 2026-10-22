@@ -203,3 +203,16 @@ describe('deriveActivityRow - Pay staff and Cash out read as what they are', () 
     expect(offer.title).toBe('P2P Sell Order Created')
   })
 })
+
+describe('dedupeAndSortActivityRecords - a recovery is listed once', () => {
+  it('drops a claim or receive logged separately for the mint a recovery landed with', () => {
+    const recovery = row({ id: 'rec', createdAt: '2026-10-08T05:36:34Z', activityType: 'withdraw', txHash: '0xdeposit',
+      metadata: { ub_recovery: true, resolution: 'refund', completed_tx_hash: '0xMINT' } })
+    const claim = row({ id: 'dup-claim', createdAt: '2026-10-08T05:36:32Z', activityType: 'claim', txHash: '0xmint' })
+    const recv = row({ id: 'dup-recv', createdAt: '2026-08-13T04:38:42Z', activityType: 'receive', txHash: '0xmint2' })
+    const withdrawal = row({ id: 'rec2', createdAt: '2026-08-13T04:38:02Z', activityType: 'withdraw', txHash: '0xinit',
+      destinationTxHash: '0xMINT2', metadata: { ub_recovery: true } })
+    const other = row({ id: 'other', createdAt: '2026-10-08T05:40:00Z', activityType: 'receive', txHash: '0xelse' })
+    expect(dedupeAndSortActivityRecords([recovery, claim, recv, withdrawal, other]).map(r => r.id)).toEqual(['other', 'rec', 'rec2'])
+  })
+})

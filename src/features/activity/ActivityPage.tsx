@@ -131,8 +131,20 @@ export function dedupeAndSortActivityRecords(records: ActivityRecord[]): Activit
     seen.add(k); return true
   })
 
-  const swaps = base.filter(r => r.activityType === 'swap')
-  const afterSwapFilter = swaps.length === 0 ? base : base.filter(r => {
+  // A recovery's money landing on Arc can also have been logged on its own
+  // (a scanner's "claim" or "External deposit" for the same mint). The
+  // recovery row already shows it - drop the second one.
+  const landed = new Set<string>()
+  for (const r of base) {
+    const m: any = (r as any).metadata ?? {}
+    if (r.activityType !== 'withdraw' || !m.ub_recovery) continue
+    for (const h of [r.destinationTxHash, m.completed_tx_hash]) if (h) landed.add(String(h).toLowerCase())
+  }
+  const afterRecoveryFilter = landed.size === 0 ? base : base.filter(r =>
+    !((r.activityType === 'claim' || r.activityType === 'receive') && r.txHash && landed.has(r.txHash.toLowerCase())))
+
+  const swaps = afterRecoveryFilter.filter(r => r.activityType === 'swap')
+  const afterSwapFilter = swaps.length === 0 ? afterRecoveryFilter : afterRecoveryFilter.filter(r => {
     if (r.activityType !== 'receive') return true
     const isSwapOutputLeg = swaps.some(s => {
       const meta: any = (s as any).metadata || {}
