@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, BadgeCheck, Store } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getShopLimits, type ShopInfo, type ShopLimits } from '@/lib/shop'
-import { useUIStore } from '@/store'
+import { useAuthStore, useUIStore } from '@/store'
 import { Avatar } from '@/components/ui/Avatar'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
@@ -46,6 +46,14 @@ export function ShopPayPage({ shop, initialAmount }: { shop: ShopInfo; initialAm
     try {
       const { data, error } = await supabase.rpc('shop_open_order', { p_username: shop.username, p_amount: value, p_store: shop.storeId, p_note: note || null })
       if (error) throw new Error(error.message)
+      // Signed in: straight to the pay screen's Review - the amount was just
+      // typed here, so there is nothing to confirm on an order page. The
+      // order page stays for paying from another wallet (it picks a network).
+      if (useAuthStore.getState().isAuthenticated) {
+        const { getPayment, orderPaySendUrl, isOrderPayable } = await import('@/lib/merchantPay')
+        const v = await getPayment(String(data)).catch(() => null)
+        if (v && isOrderPayable(v)) { navigate(`${orderPaySendUrl(v)}&review=1`, { state: { merchantView: v } }); return }
+      }
       navigate(`/paylink/r/${data}`)
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Could not start the payment', 'error')
