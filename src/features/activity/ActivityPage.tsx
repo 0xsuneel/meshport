@@ -8,7 +8,7 @@ import {useLocation, useNavigate, useSearchParams} from 'react-router-dom'
 import { RefreshCw, Loader2, X } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useActivity } from '@/hooks/useActivity'
-import { ActivityRecord, ActivityType, recoveredViaLabel } from '@/lib/ActivityService'
+import { ActivityRecord, ActivityType, recoveredViaLabel, merchantRefundInfo } from '@/lib/ActivityService'
 import { needsRecovery, failureReason } from '@/lib/failure'
 import { moveBreakdown, moveLabels, formatFee, formatMoveAmount, type MoveBreakdown } from '@/lib/moveFees'
 import { backfillP2PActivity } from '@/lib/p2pService'
@@ -232,7 +232,9 @@ export function deriveActivityRow(record: ActivityRecord) {
   const meta = (record as any).metadata || {}
   const counterpartyUsername = meta.toUsername || meta.fromUsername || ''
 
-  const counterpartyLabel = counterpartyUsername
+  const refund = merchantRefundInfo(record)
+  const counterpartyLabel = refund ? `${refund.from}${refund.order ? ` · ${displayOrderNumber(refund.order)}` : ''}`
+    : counterpartyUsername
     ? (SYSTEM_LABELS[counterpartyUsername] ?? `${counterpartyUsername.replace(/\.arc$/i, '')}.arc`)
     : counterparty
     ? (counterparty.startsWith('0x')
@@ -305,6 +307,7 @@ export function deriveActivityRow(record: ActivityRecord) {
               : merchantOrder ? paidOrderTitle(metadata, merchantOrder, isReceive, true)
               : shopPay && isReceive ? 'Payment Received'
               : recoveredTitle ? recoveredTitle
+              : refund ? 'Refund from'
               // A rewards claim that didn't go through (lib/rewards.ts).
               : isReceive && isFailed && metadata.receiveKind === 'reward_claim' ? 'Reward claim'
               : isSelfTransfer && isSend    ? 'Paid to'
@@ -584,6 +587,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     : isSelfTransferDetail ? 'Self'
     : transferCpName || (transferCp ? `${transferCp.slice(0, 6)}…${transferCp.slice(-4)}` : '')
   const recoveredDetail = recoveredViaLabel(record)
+  const refundDetail = merchantRefundInfo(record)
   const merchantOrderDetail = (type === 'receive' || type === 'send') && (metadata as any)?.merchantOrder && activityOrderKind(metadata) !== 'shop' ? String((metadata as any).merchantOrder) : null
   const orderWord = merchantOrderDetail ? paidOrderTitle(metadata, merchantOrderDetail, type === 'receive') : ''
   const title = isClaim && (metadata as any)?.merchant ? `Payment received · ${chainLabel(sourceChain) || 'External'}`
@@ -591,6 +595,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
               : type === 'receive' && activityOrderKind(metadata) === 'shop' ? 'Payment Received'
               : recoveredDetail && isClaim ? `${recoveredDetail} · ${chainLabel(sourceChain) || 'External'}`
               : recoveredDetail ? recoveredDetail
+              : refundDetail ? `Refund from ${refundDetail.from}`
               : isSelfTransferDetail && type === 'send'    ? 'Paid to Self'
               : isSelfTransferDetail && type === 'receive' ? 'Received from Self'
               : isClaim    ? `Claimed from ${chainLabel(sourceChain) || 'External'}`
@@ -660,6 +665,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   const cpUsername = metadata?.toUsername || metadata?.fromUsername || ''
   const cpLabel = isSelfTransferDetail
     ? 'Self'
+    : refundDetail ? refundDetail.from
     : cpUsername
     ? (SYSTEM_LABELS[cpUsername] ?? `${cpUsername.replace(/\.arc$/i, '')}.arc`)
     : counterparty
@@ -763,6 +769,8 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     ...(nameInSubtitle && (cpUsername || (isTransfer && !isSelfTransferDetail)) && counterparty && !isSwapType
       ? [toReceiptRow({ label: 'Wallet', value: `${counterparty.slice(0, 6)}…${counterparty.slice(-6)}`, copy: counterparty })]
       : []),
+    ...(refundDetail?.order ? [toReceiptRow({ label: 'For', value: `Order ${displayOrderNumber(refundDetail.order)}` })] : []),
+    ...(refundDetail?.reason ? [toReceiptRow({ label: 'Reason', value: refundDetail.reason })] : []),
     ...(type === 'bulk' && Array.isArray(metadata.recipients)
       ? metadata.recipients.map((r: any, i: number) => ({
           label: r.label?.startsWith('0x') ? `${r.label.slice(0, 6)}…${r.label.slice(-4)}` : (r.label || `Recipient ${i + 1}`),

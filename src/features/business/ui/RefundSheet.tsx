@@ -5,7 +5,10 @@
 import React from 'react'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { Sheet } from './primitives'
-import { sanitizeAmountInput } from '@/components/ui/AmountKeypad'
+import { AmountKeypad, sanitizeAmountInput } from '@/components/ui/AmountKeypad'
+import { AmountField } from '@/components/ui/AmountField'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { DESKTOP_QUERY } from '@/lib/motion'
 
 export interface RefundSheetProps {
   open: boolean
@@ -64,6 +67,13 @@ export function RefundSheet({
   const top = max != null ? Math.floor(max * 100 + 1e-6) / 100 : 0
   const badAmount = !!onValue && !(typed + 1e-9 >= 0.01 && max != null && typed <= max + 1e-9)
   const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  // Phone: the amount is entered on the app's keypad, right in this sheet
+  // (the rest folds away until Done). Desktop types straight in.
+  const isDesktop = useMediaQuery(DESKTOP_QUERY)
+  const [editing, setEditing] = React.useState(false)
+  React.useEffect(() => { if (!open) setEditing(false) }, [open])
+  const keypadUp = editing && !isDesktop
+  const over = max != null && typed > max + 1e-9
   return (
     <Sheet open={open} onClose={onClose}>
       <div className="flex flex-col px-5 pb-8 pt-2 overflow-y-auto max-h-[88dvh] gap-5">
@@ -85,21 +95,14 @@ export function RefundSheet({
         <div className="flex flex-col items-center gap-1 py-2">
           {onValue && max != null ? (
             <>
-              <label className="flex items-center justify-center gap-0.5 text-danger">
-                <span className="text-4xl font-bold">$</span>
-                <input inputMode="decimal" aria-label="Refund amount" value={value ?? ''}
-                  onChange={e => onValue(sanitizeAmountInput(e.target.value, 2))}
-                  className="w-44 bg-transparent text-4xl font-bold tabular-nums text-danger text-center outline-none" />
-              </label>
-              <div className="flex gap-2 mt-1">
-                {[{ l: already ? 'All left' : 'Full', v: top }, { l: 'Half', v: Math.floor(max * 50) / 100 }].filter(o => o.v >= 0.01).map(o => (
-                  <button key={o.l} type="button" onClick={() => onValue(o.v.toFixed(2))}
-                    className={`min-h-[32px] px-3 rounded-full text-xs font-semibold border ${Math.abs(typed - o.v) < 1e-9 ? 'border-danger bg-danger/10 text-danger' : 'border-border text-text-secondary'}`}>
-                    {o.l} · {fmt(o.v)}
-                  </button>
-                ))}
+              <div className="w-full">
+                <AmountField value={value ?? ''} onChange={raw => onValue(sanitizeAmountInput(raw, 2))} ariaLabel="Refund amount" autoFocus={false}
+                  token={{ label: 'USDC', logo: '/logos/tokens/usdc.png' }} invalid={over}
+                  quick={[{ l: already ? 'All left' : 'Full', v: top }, { l: 'Half', v: Math.floor(max * 50) / 100 }].filter(o => o.v >= 0.01)
+                    .map(o => ({ label: `${o.l} · ${fmt(o.v)}`, onClick: () => onValue(o.v.toFixed(2)) }))}
+                  onTap={isDesktop ? undefined : () => { (document.activeElement as HTMLElement | null)?.blur?.(); setEditing(true) }} editing={keypadUp} />
               </div>
-              {typed > (max ?? 0) + 1e-9 && <p className="text-xs text-danger mt-1">At most {fmt(top)} - what's left on this payment</p>}
+              {over && <p className="text-xs text-danger mt-1">At most {fmt(top)} - what's left on this payment</p>}
             </>
           ) : (
             <p className="display text-4xl font-bold tabular-nums text-danger">{amount}</p>
@@ -110,86 +113,91 @@ export function RefundSheet({
           {already && <p className="text-xs text-text-muted">{already}</p>}
         </div>
 
+        {keypadUp && onValue && max != null ? (
+          <AmountKeypad variant="inline" open value={value ?? ''} onChange={v => onValue(sanitizeAmountInput(v, 2))} token="USDC"
+            decimals={2} showMax={false} balance={max} onDone={() => setEditing(false)} doneLabel="Done" replaceOnFirstKey />
+        ) : (<>
         {/* Where it goes back */}
-        {destinations && destinations.length > 1 && (
+          {destinations && destinations.length > 1 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Send back on</p>
+              <div className="grid grid-cols-2 gap-2">
+                {destinations.map(d => (
+                  <button key={d.id} type="button" onClick={() => onDestination?.(d.id)} aria-pressed={destination === d.id}
+                    className={`text-left rounded-2xl border px-3.5 py-3 min-h-[60px] transition-colors ${destination === d.id ? 'border-brand bg-brand/10' : 'border-border bg-surface'}`}>
+                    <span className={`block text-sm font-semibold ${destination === d.id ? 'text-brand-text' : 'text-text-primary'}`}>{d.label}</span>
+                    <span className="block text-[11px] text-text-muted mt-0.5 leading-snug">{d.hint}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+  
+          {/* Reason chips */}
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Send back on</p>
-            <div className="grid grid-cols-2 gap-2">
-              {destinations.map(d => (
-                <button key={d.id} type="button" onClick={() => onDestination?.(d.id)} aria-pressed={destination === d.id}
-                  className={`text-left rounded-2xl border px-3.5 py-3 min-h-[60px] transition-colors ${destination === d.id ? 'border-brand bg-brand/10' : 'border-border bg-surface'}`}>
-                  <span className={`block text-sm font-semibold ${destination === d.id ? 'text-brand-text' : 'text-text-primary'}`}>{d.label}</span>
-                  <span className="block text-[11px] text-text-muted mt-0.5 leading-snug">{d.hint}</span>
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Reason</p>
+            <div className="flex flex-wrap gap-2">
+              {reasons.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => onReason(r)}
+                  className={`rounded-full px-4 py-2 text-xs font-medium transition-colors min-h-[36px] ${
+                    reason === r
+                      ? 'bg-danger/10 text-danger border border-danger/30'
+                      : 'bg-surface border border-border text-text-secondary hover:border-text-muted'
+                  }`}
+                >
+                  {r}
                 </button>
               ))}
             </div>
           </div>
-        )}
-
-        {/* Reason chips */}
-        <div className="flex flex-col gap-2">
-          <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Reason</p>
-          <div className="flex flex-wrap gap-2">
-            {reasons.map((r) => (
-              <button
-                key={r}
-                type="button"
-                onClick={() => onReason(r)}
-                className={`rounded-full px-4 py-2 text-xs font-medium transition-colors min-h-[36px] ${
-                  reason === r
-                    ? 'bg-danger/10 text-danger border border-danger/30'
-                    : 'bg-surface border border-border text-text-secondary hover:border-text-muted'
-                }`}
-              >
-                {r}
-              </button>
-            ))}
+  
+          {/* Optional note */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-text-muted uppercase tracking-wider" htmlFor="refund-note">
+              Note <span className="normal-case font-normal text-text-muted">(optional)</span>
+            </label>
+            <input
+              id="refund-note"
+              type="text"
+              placeholder="Add a note for your records..."
+              value={note}
+              onChange={(e) => onNote(e.target.value)}
+              className="w-full bg-transparent border-b border-border py-2 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-text-secondary transition-colors"
+            />
           </div>
-        </div>
-
-        {/* Optional note */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-text-muted uppercase tracking-wider" htmlFor="refund-note">
-            Note <span className="normal-case font-normal text-text-muted">(optional)</span>
-          </label>
-          <input
-            id="refund-note"
-            type="text"
-            placeholder="Add a note for your records..."
-            value={note}
-            onChange={(e) => onNote(e.target.value)}
-            className="w-full bg-transparent border-b border-border py-2 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-text-secondary transition-colors"
-          />
-        </div>
-
-        {/* Warning box */}
-        <div className="flex items-start gap-3 rounded-2xl bg-warning/10 border border-warning/20 px-4 py-3.5">
-          <AlertTriangle className="size-4 text-warning shrink-0 mt-0.5" />
-          <p className="text-xs text-text-secondary leading-relaxed">
-            The USDC goes back to the wallet that paid you.
-            This can&apos;t be undone.
-            {onValue && max != null && typed > 0 && typed < max - 1e-9 && max - typed >= 0.01 - 1e-9 && (
-              <span className="block mt-1 font-medium">You can refund up to {fmt(Math.floor((max - typed) * 100 + 1e-6) / 100)} more later.</span>
-            )}
-            {note2 && <span className="block mt-1 text-text-muted">{note2}</span>}
-          </p>
-        </div>
-
-        {/* Error */}
-        {(error || blocked) && (
-          <p className="text-xs text-danger text-center">{error || blocked}</p>
-        )}
-
-        {/* Confirm */}
-        <button
-          type="button"
-          disabled={!reason || busy || badAmount || !!blocked}
-          onClick={onConfirm}
-          className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold border-2 border-danger text-danger hover:bg-danger/10 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {busy && <Loader2 className="size-4 animate-spin" />}
-          {busy ? 'Refunding…' : 'Confirm refund'}
-        </button>
+  
+          {/* Warning box */}
+          <div className="flex items-start gap-3 rounded-2xl bg-warning/10 border border-warning/20 px-4 py-3.5">
+            <AlertTriangle className="size-4 text-warning shrink-0 mt-0.5" />
+            <p className="text-xs text-text-secondary leading-relaxed">
+              The USDC goes back to the wallet that paid you.
+              This can&apos;t be undone.
+              {onValue && max != null && typed > 0 && typed < max - 1e-9 && max - typed >= 0.01 - 1e-9 && (
+                <span className="block mt-1 font-medium">You can refund up to {fmt(Math.floor((max - typed) * 100 + 1e-6) / 100)} more later.</span>
+              )}
+              {note2 && <span className="block mt-1 text-text-muted">{note2}</span>}
+            </p>
+          </div>
+  
+          {/* Error */}
+          {(error || blocked) && (
+            <p className="text-xs text-danger text-center">{error || blocked}</p>
+          )}
+  
+          {/* Confirm */}
+          <button
+            type="button"
+            disabled={!reason || busy || badAmount || !!blocked}
+            onClick={onConfirm}
+            className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 text-sm font-semibold border-2 border-danger text-danger hover:bg-danger/10 active:scale-[0.98] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            {busy ? 'Refunding…' : 'Confirm refund'}
+          </button>
+        </>)}
       </div>
     </Sheet>
   )

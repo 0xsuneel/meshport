@@ -1173,6 +1173,28 @@ export function recoveredViaLabel(r: { activityType: ActivityType; metadata?: Re
   return null
 }
 
+/** MeshPortRefunds on Arc (lib/merchantRefunds.ts): a business's refund comes from it. */
+const REFUNDS_CONTRACT_ADDR = '0x53e5c71290dc5147089b7b40679f3d6a164c8c2b'
+
+/**
+ * A refund a business sent this user: the receive the refund created
+ * (merchant-refund marks it with receiveKind 'merchant_refund', the business
+ * name, order and reason; before that, it's known by its sender - the
+ * refunds contract). null for any other row.
+ */
+export function merchantRefundInfo(r: { activityType: ActivityType; metadata?: Record<string, any>; counterpartyAddress?: string | null }):
+  { from: string; order: string | null; reason: string | null } | null {
+  if (r.activityType !== 'receive') return null
+  const m = r.metadata ?? {}
+  const viaContract = String(r.counterpartyAddress ?? '').toLowerCase() === REFUNDS_CONTRACT_ADDR
+  if (m.receiveKind !== 'merchant_refund' && !viaContract) return null
+  return {
+    from: typeof m.merchantName === 'string' && m.merchantName.trim() ? m.merchantName.trim() : 'a business',
+    order: typeof m.merchantOrder === 'string' && m.merchantOrder ? m.merchantOrder : null,
+    reason: typeof m.refundReason === 'string' && m.refundReason ? m.refundReason : null,
+  }
+}
+
 export function activityLabel(type: ActivityType): string {
   const MAP: Record<ActivityType, string> = {
     send:    'Sent',

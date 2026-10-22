@@ -66,13 +66,6 @@ type Draft = { id?: string; name: string; repeat: PayoutRepeat; nextDue: string;
 const emptyDraft = (once = false): Draft => ({ name: once ? 'One-time payment' : '', repeat: once ? 'none' : 'monthly', nextDue: today(), rows: [] })
 // Pay is in dollars and cents: 2 decimals, like the totals.
 const amountInput = (v: string) => sanitizeAmountInput(v, 2).slice(0, 9)
-/** Keypad on a pre-filled amount: the first key typed starts a new amount
- *  (480, then 5 → 5, not 4805); backspace still edits what's there. */
-const firstKeyReplaces = (fresh: { current: boolean }, before: string, next: string) => {
-  if (!fresh.current) return next
-  fresh.current = false
-  return next.length > before.length && next.startsWith(before) ? next.slice(before.length) : next
-}
 /** Phone: keep the row being edited in view above the keypad sheet. */
 const revealRow = (label: string) => requestAnimationFrame(() =>
   document.querySelector(`[aria-label="${CSS.escape(label)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }))
@@ -254,7 +247,6 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
   const [padKey, setPadKey] = useState<string | null>(null)
   const padRow = rows.find(r => r.key === padKey)
-  const padFresh = useRef(false)
 
   // Who each saved person is now (name, photo, wallet).
   useEffect(() => {
@@ -391,7 +383,7 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
                 </span>
                 <AmountChip value={r.amount} ariaLabel={`Amount for ${name(r)}`} disabled={!r.on}
                   onChange={v => setRow(r.key, { amount: amountInput(v) })}
-                  onTap={isDesktop ? undefined : () => { padFresh.current = true; setPadKey(r.key); revealRow(`Amount for ${name(r)}`) }} editing={padKey === r.key} />
+                  onTap={isDesktop ? undefined : () => { setPadKey(r.key); revealRow(`Amount for ${name(r)}`) }} editing={padKey === r.key} />
               </div>
             ))}
           </div>
@@ -414,8 +406,8 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
         {screen.body}
       </BusinessScreen>
       {!isDesktop && (
-        <AmountKeypad open={open && phase.kind === 'review' && !!padRow?.on} value={padRow?.amount ?? ''} token="USDC" decimals={2} showMax={false}
-          balance={balance} onChange={v => { if (padRow) setRow(padRow.key, { amount: amountInput(firstKeyReplaces(padFresh, padRow.amount, v)) }) }} onClose={() => setPadKey(null)} />
+        <AmountKeypad open={open && phase.kind === 'review' && !!padRow?.on} value={padRow?.amount ?? ''} token="USDC" decimals={2} showMax={false} replaceOnFirstKey
+          balance={balance} onChange={v => { if (padRow) setRow(padRow.key, { amount: amountInput(v) }) }} onClose={() => setPadKey(null)} />
       )}
       {gate.sheet}
     </>
@@ -438,7 +430,6 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
   const isDesktop = useMediaQuery(DESKTOP_QUERY)
   const [padIdx, setPadIdx] = useState<number | null>(null)
   const padRow = padIdx != null ? draft.rows[padIdx] : undefined
-  const padFresh = useRef(false)
 
   // Saved people show their name and photo, not just what was typed.
   useEffect(() => {
@@ -546,7 +537,7 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
                       className="w-full bg-transparent text-xs text-text-secondary placeholder:text-text-muted focus:outline-none" />
                   </span>
                   <AmountChip value={r.amount} ariaLabel={`Amount for ${r.name}`} onChange={v => setRow(i, { amount: amountInput(v) })}
-                    onTap={isDesktop ? undefined : () => { (document.activeElement as HTMLElement | null)?.blur?.(); padFresh.current = true; setPadIdx(i); revealRow(`Amount for ${r.name}`) }}
+                    onTap={isDesktop ? undefined : () => { (document.activeElement as HTMLElement | null)?.blur?.(); setPadIdx(i); revealRow(`Amount for ${r.name}`) }}
                     editing={padIdx === i} />
                   <button type="button" aria-label={`Remove ${r.name}`} onClick={() => setDraft({ ...draft, rows: draft.rows.filter((_, j) => j !== i) })}
                     className="shrink-0 size-9 inline-flex items-center justify-center rounded-xl text-text-muted active:bg-border/30">
@@ -564,8 +555,8 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
       </div>
     </BusinessScreen>
     {!isDesktop && (
-      <AmountKeypad open={open && !!padRow} value={padRow?.amount ?? ''} token="USDC" decimals={2} showMax={false}
-        onChange={v => { if (padIdx != null && padRow) setRow(padIdx, { amount: amountInput(firstKeyReplaces(padFresh, padRow.amount, v)) }) }} onClose={() => setPadIdx(null)} />
+      <AmountKeypad open={open && !!padRow} value={padRow?.amount ?? ''} token="USDC" decimals={2} showMax={false} replaceOnFirstKey
+        onChange={v => { if (padIdx != null && padRow) setRow(padIdx, { amount: amountInput(v) }) }} onClose={() => setPadIdx(null)} />
     )}
     </>
   )

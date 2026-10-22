@@ -91,6 +91,9 @@ interface AmountKeypadProps {
   maxDigits?: number
   /** 'inline': the keys right in the page (always shown, no sheet). */
   variant?: 'sheet' | 'inline'
+  /** Opened on a pre-filled amount: the first digit typed starts a new
+   *  amount (480, then 5 → 5); backspace edits what's there. */
+  replaceOnFirstKey?: boolean
   /** Phone / browser Back closes the sheet. Off by default: the amount is a
    *  step of a page that already handles Back itself (Pay, Transfer, …). */
   backClose?: boolean
@@ -117,6 +120,7 @@ export function AmountKeypad({
   maxDigits,
   variant = 'sheet',
   backClose = false,
+  replaceOnFirstKey = false,
 }: AmountKeypadProps) {
   // Desktop users type on a physical keyboard - the tap-grid below is a
   // mobile-only affordance. Same value/onChange contract either way.
@@ -157,7 +161,15 @@ export function AmountKeypad({
   // Phone / browser Back closes the keypad sheet where asked (backClose).
   useBackLayer(sheetOpen && backClose && !!onClose, () => onClose?.())
 
+  // replaceOnFirstKey: armed each time the keypad opens.
+  const fresh = useRef(false)
+  useEffect(() => { if (open) fresh.current = replaceOnFirstKey }, [open, replaceOnFirstKey])
+
   const handleKey = (key: string) => {
+    if (fresh.current) {
+      fresh.current = false
+      if (key !== 'del') { onChange(key === '.' ? (decimalCap ? '0.' : '') : key); return }
+    }
     if (key === 'del') { onChange(value.slice(0, -1)); return }
     if (key === '.') {
       if (!decimalCap || value.includes('.')) return
@@ -435,3 +447,4 @@ export function AmountKeypad({
     document.body,
   )
 }
+
