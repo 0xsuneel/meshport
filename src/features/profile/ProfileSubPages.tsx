@@ -420,6 +420,8 @@ export function ChangePasscodePage() {
               </div>
               <PinKeypad
                 autoBiometric={false} // choosing a new passcode - not a check of the current one
+                // The fingerprint key fills in the CURRENT passcode, so only on that step.
+                biometricAvailable={activeField === 'old'}
                 value={activeField === 'old' ? oldPass : activeField === 'new' ? newPass : confirmPass}
                 onChange={v => {
                   setError('')

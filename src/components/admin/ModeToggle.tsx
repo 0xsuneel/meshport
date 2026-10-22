@@ -21,6 +21,7 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { MENU_MOTION } from '@/lib/motion'
 import { ShieldCheck, Smartphone } from 'lucide-react'
 import { useAdminStore } from '@/store/adminStore'
 import { ADMIN_PATH } from '@/lib/adminPath'
@@ -128,16 +129,19 @@ export function ModeToggle() {
       <AnimatePresence>
         {expanded && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: openUp ? 6 : -6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: openUp ? 6 : -6 }}
-            transition={{ duration: 0.15 }}
+            // The app's dropdown menu (TokenMenu's look and MENU_MOTION),
+            // rising instead of dropping when it opens upward.
+            initial={{ ...MENU_MOTION.initial, y: openUp ? -MENU_MOTION.initial.y : MENU_MOTION.initial.y }}
+            animate={MENU_MOTION.animate}
+            exit={{ ...MENU_MOTION.exit, y: openUp ? -MENU_MOTION.exit.y : MENU_MOTION.exit.y }}
+            transition={MENU_MOTION.transition}
             style={{
               position: 'fixed', left: menuLeft, top: menuTop, width: MENU_W, zIndex: 200,
-              background: 'color-mix(in srgb, var(--surface) 96%, transparent)',
-              border: '1px solid var(--border)', borderRadius: 16,
-              boxShadow: 'var(--shadow-3)', backdropFilter: 'blur(8px)',
-              padding: 6, display: 'flex', flexDirection: 'column', gap: 2,
+              transformOrigin: `${openUp ? 'bottom' : 'top'} ${openLeft ? 'right' : 'left'}`,
+              background: 'var(--surface)',
+              border: '1px solid var(--border)', borderRadius: 22,
+              boxShadow: '0 12px 28px rgba(0,0,0,0.3)',
+              padding: 4, display: 'flex', flexDirection: 'column', gap: 2,
             }}
             role="menu"
             aria-label="Switch between normal app and admin panel"

@@ -1,4 +1,8 @@
 import { NavLink } from 'react-router-dom'
+import { AnimatePresence, motion } from 'framer-motion'
+import { SHEET_BACKDROP, SHEET_DIM, PUSH_OPEN_MS, PUSH_BACK_MS, PUSH_EASE_CSS, DESKTOP_QUERY } from '@/lib/motion'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
+import { useBackLayer } from '@/lib/backLayers'
 import { ADMIN_PATH } from '@/lib/adminPath'
 import {
   LayoutDashboard, ToggleLeft, Coins, Link2, Landmark,
@@ -37,18 +41,25 @@ interface AdminSidebarProps {
 }
 
 export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
+  // Phone / browser Back closes the drawer (it's always shown on desktop).
+  const desktop = useMediaQuery(DESKTOP_QUERY)
+  useBackLayer(open && !desktop, onClose)
   return (
     <>
-      {/* Overlay - mobile only */}
-      {open && (
-        <div
-          onClick={onClose}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 40,
-          }}
-          className="admin-sidebar-overlay"
-        />
-      )}
+      {/* Overlay - mobile only. The sheet dim and its fade, in and out. */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="admin-sidebar-dim"
+            {...SHEET_BACKDROP}
+            onClick={onClose}
+            style={{
+              position: 'fixed', inset: 0, background: SHEET_DIM, zIndex: 40,
+            }}
+            className="admin-sidebar-overlay"
+          />
+        )}
+      </AnimatePresence>
 
       <aside
         style={{
@@ -59,7 +70,8 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
           borderRight: '1px solid var(--border)',
           zIndex: 50,
           transform: open ? 'translateX(0)' : 'translateX(-100%)',
-          transition: 'transform 0.22s ease',
+          // The app's push timing: opens on PUSH_OPEN_MS, closes on PUSH_BACK_MS.
+          transition: `transform ${open ? PUSH_OPEN_MS : PUSH_BACK_MS}ms ${PUSH_EASE_CSS}`,
           display: 'flex',
           flexDirection: 'column',
           padding: 16,

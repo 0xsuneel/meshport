@@ -44,6 +44,7 @@ export function TransactionDetailPage() {
             </div>
           </DesktopDialogFrame>
         )}
+      </AnimatePresence>
     </div>
   )
 }

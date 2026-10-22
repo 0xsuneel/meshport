@@ -29,6 +29,7 @@ import { merchantQrChain, MERCHANT_QR_EXTERNAL } from '@/lib/merchantQr'
 import { ChainPicker, WalletPaymentDetails } from './MerchantQrPanel'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
+import { ScreenPush } from '@/components/ui/ScreenPush'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { drawMeshportQr } from '@/lib/qrLogo'
@@ -93,21 +94,23 @@ export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains
   const allPayments = useMemo(() => withChainReceipts(payments, receipts, walletAddress), [payments, receipts, walletAddress])
   // New payment requests / QR live in Home → Receive.
   const newRequest = (customer?: string) => navigate(`/receive?request=1${customer ? `&customer=${encodeURIComponent(customer)}` : ''}`)
-  if (view.kind === 'request') {
-    const it = intents.find(i => i.code === view.code)
-    return box(<RequestDetail code={view.code} intent={it ?? null} payments={payments.filter(p => p.intentId === it?.id)} onBack={() => setView({ kind: 'home' })} onChanged={load} />)
-  }
-  if (view.kind === 'customer') {
-    return box(<CustomerDetail keyId={view.key} payments={allPayments} intents={intents}
-      onBack={() => setView({ kind: 'home' })} onRequest={c => newRequest(c)} onOpenRequest={code => setView({ kind: 'request', code })} />)
-  }
+  // Request / customer detail push in like any step (ScreenPush), and back to
+  // the home slides back - the same move as the flows around the Ledger.
+  const it = view.kind === 'request' ? intents.find(i => i.code === view.code) : undefined
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {review.length > 0 && box(<NeedsReview deposits={review} intents={intents} onDone={load} />)}
-      {box(<LedgerHome loaded={loaded} intents={intents} payments={allPayments} receipts={receipts} chains={children} claimChains={claimChains} onClaimed={onClaimed}
-        ledgerBalance={ledgerBalance} ledgerChains={ledgerChains}
-        onOpenRequest={code => setView({ kind: 'request', code })} onOpenCustomer={key => setView({ kind: 'customer', key })} />)}
-    </div>
+    <ScreenPush screenKey={view.kind === 'home' ? 'home' : view.kind === 'request' ? `request:${view.code}` : `customer:${view.key}`} back={view.kind === 'home'}>
+      {view.kind === 'request' ? box(<RequestDetail code={view.code} intent={it ?? null} payments={payments.filter(p => p.intentId === it?.id)} onBack={() => setView({ kind: 'home' })} onChanged={load} />)
+        : view.kind === 'customer' ? box(<CustomerDetail keyId={view.key} payments={allPayments} intents={intents}
+          onBack={() => setView({ kind: 'home' })} onRequest={c => newRequest(c)} onOpenRequest={code => setView({ kind: 'request', code })} />)
+        : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {review.length > 0 && box(<NeedsReview deposits={review} intents={intents} onDone={load} />)}
+            {box(<LedgerHome loaded={loaded} intents={intents} payments={allPayments} receipts={receipts} chains={children} claimChains={claimChains} onClaimed={onClaimed}
+              ledgerBalance={ledgerBalance} ledgerChains={ledgerChains}
+              onOpenRequest={code => setView({ kind: 'request', code })} onOpenCustomer={key => setView({ kind: 'customer', key })} />)}
+          </div>
+        )}
+    </ScreenPush>
   )
 }
 
@@ -682,7 +685,9 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
           ))}
         </Section>
       )}
-      {receiptFor && <MerchantPaymentReceipt p={receiptFor} orderNumber={intent ? orderTitle(orderKindOf(intent), orderLabel(intent)) : null} note={intent?.note ?? null} onClose={() => { payFlash.closed(receiptFor.id); setReceiptFor(null) }} />}
+      <AnimatePresence>
+        {receiptFor && <MerchantPaymentReceipt key="receipt" p={receiptFor} orderNumber={intent ? orderTitle(orderKindOf(intent), orderLabel(intent)) : null} note={intent?.note ?? null} onClose={() => { payFlash.closed(receiptFor.id); setReceiptFor(null) }} />}
+      </AnimatePresence>
 
       {!done && (
         <>
@@ -761,12 +766,14 @@ function CustomerDetail({ keyId, payments, intents, onBack, onRequest, onOpenReq
           )
         })}
       </Section>
+      <AnimatePresence>
       {receiptFor && (() => {
         const it = intentById.get(receiptFor.intentId)
-        return <MerchantPaymentReceipt p={receiptFor} orderNumber={it ? orderTitle(orderKindOf(it), orderLabel(it)) : null} note={it?.note ?? null}
+        return <MerchantPaymentReceipt key="receipt" p={receiptFor} orderNumber={it ? orderTitle(orderKindOf(it), orderLabel(it)) : null} note={it?.note ?? null}
           onViewOrder={it ? () => { setReceiptFor(null); onOpenRequest(it.code) } : undefined}
           onClose={() => { payFlash.closed(receiptFor.id); setReceiptFor(null) }} />
       })()}
+      </AnimatePresence>
     </div>
   )
 }

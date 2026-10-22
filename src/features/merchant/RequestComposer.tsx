@@ -7,12 +7,12 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { AmountField } from '@/components/ui/AmountField'
+import { AmountKeypad } from '@/components/ui/AmountKeypad'
 import { sheetInputClass, sheetInputStyle } from '@/components/ui/ActionSheet'
 import { formatAmount } from '@/lib/utils'
 
 export const MAX_REQUEST = 1_000_000 // the database's limit for one request
 const QUICK = ['5', '10', '20', '50']
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'del']
 
 /** Typed amount → at most `places` decimals (USDC: 6), one dot, no leading zeros. */
 export function cleanRequestAmount(raw: string, places = 6): string {
@@ -62,12 +62,6 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
   // The button repeats exactly what was typed ("12.50" stays "12.50").
   const amtLabel = amount.replace(/\.$/, '')
   const set = (v: string) => { setAmount(cleanRequestAmount(v, places)); setError('') }
-
-  const press = (key: string) => {
-    if (key === 'del') { set(amount.slice(0, -1)); return }
-    if (key === '.' && amount.includes('.')) return
-    set(amount + key)
-  }
 
   const submit = async () => {
     if (!valid || busy) return
@@ -142,18 +136,9 @@ export function RequestAmountForm({ open, isDesktop, header, hint, verb = 'Reque
           scroll if a phone is too short for all of it. */}
       <div className="px-5 flex-shrink-0" style={{ paddingTop: 10, paddingBottom: compact ? 12 : 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>
         {!isDesktop && !compact && !more && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, width: '100%', maxWidth: 320, margin: '0 auto 10px' }}>
-            {KEYS.map(key => (
-              <button key={key} type="button" onClick={() => press(key)} aria-label={key === 'del' ? 'Delete' : key}
-                style={{ height: 'clamp(40px, 6.4dvh, 52px)', borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                  fontSize: key === '.' ? 28 : 24, fontWeight: 600, color: key === 'del' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
-                {key === 'del'
-                  ? <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 002-2V6a2 2 0 00-2-2z" /><line x1="18" y1="9" x2="12" y2="15" /><line x1="12" y1="9" x2="18" y2="15" /></svg>
-                  : key}
-              </button>
-            ))}
-          </div>
+          // The app's amount keypad, right in the form (same decimals cap as
+          // typing; keys past the per-request limit are ignored).
+          <AmountKeypad variant="inline" open value={amount} onChange={set} decimals={places} maxValue={MAX_REQUEST} showMax={false} />
         )}
         {error && <p role="alert" className="text-sm text-danger text-center mb-2">{error}</p>}
         <div className="flex gap-3">

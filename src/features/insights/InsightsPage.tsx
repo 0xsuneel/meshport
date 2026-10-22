@@ -1,7 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {ArrowLeft, Calendar, ChevronDown, ArrowUp, ArrowDown, Link2, Sparkles} from 'lucide-react'
-import { motion } from 'framer-motion'
 import { useAuthStore } from '@/store'
 import { formatAmount } from '@/lib/utils'
 import { fetchActivity } from '@/lib/ActivityService'
@@ -565,8 +564,7 @@ export function InsightsPage() {
 
       {/* ── HERO CARD ──────────────────────────────────────────────────── */}
       <div style={{ margin: '0 14px 12px' }}>
-        <motion.div
-          initial={false} animate={{ opacity: 1, y: 0 }}
+        <div
           style={{
             borderRadius: 20,
             background: 'var(--surface)',
@@ -656,7 +654,7 @@ export function InsightsPage() {
             </div>
 
           </div>
-        </motion.div>
+        </div>
       </div>
 
       {/* ── STAT CARDS ──────────────────────────────────────────────────── */}
@@ -699,10 +697,8 @@ export function InsightsPage() {
             sparkColor: 'var(--accent)',
           },
         ].map((c, i) => (
-          <motion.div
+          <div
             key={i}
-            initial={false} animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 * i }}
             style={{
               background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
               borderRadius: 16, padding: '11px 10px 9px', overflow: 'hidden',
@@ -722,14 +718,12 @@ export function InsightsPage() {
               {Math.abs(c.pct)}% vs last month
             </div>
             <Sparkline values={c.spark} color={c.sparkColor}/>
-          </motion.div>
+          </div>
         ))}
       </div>
 
       {/* ── ACTIVITY CARD ───────────────────────────────────────────────── */}
-      <motion.div
-        initial={false} animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
+      <div
         style={{
           margin: '0 14px 12px',
           background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
@@ -781,15 +775,13 @@ export function InsightsPage() {
           highlightIdx={chartData.highlightIdx}
           tooltip={chartData.tooltip}
         />
-      </motion.div>
+      </div>
 
       {/* ── BOTTOM ROW ──────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '0 14px' }}>
 
         {/* Multichain Usage */}
-        <motion.div
-          initial={false} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.12 }}
+        <div
           style={{
             background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
             borderRadius: 20, padding: 14,
@@ -836,12 +828,10 @@ export function InsightsPage() {
             <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Total Transactions</span>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-text)' }}>{stats.totalMcTxs}</span>
           </div>
-        </motion.div>
+        </div>
 
         {/* Payment Intelligence */}
-        <motion.div
-          initial={false} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.14 }}
+        <div
           style={{
             background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--text-primary) 7%, transparent)',
             borderRadius: 20, padding: 14,
@@ -915,7 +905,7 @@ export function InsightsPage() {
             </div>
           ))}
 
-        </motion.div>
+        </div>
 
       </div>
 

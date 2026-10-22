@@ -3,13 +3,25 @@
 // chat's key and uploaded again with the other chat's key - and carries a
 // "Forwarded" label. Payments and payment records are never forwarded.
 import { useEffect, useMemo, useState } from 'react'
-import { SHEET_SPRING, SHEET_BACKDROP } from '@/lib/motion'
+import { PUSH_OPEN_MS, PUSH_BACK_MS, EASE_OUT, DESKTOP_FADE_Y, DESKTOP_FADE_TRANSITION, DESKTOP_QUERY } from '@/lib/motion'
 import { motion } from 'framer-motion'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { X, Search, Check, Loader2 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { plainTextOf, parseMedia } from './chatMessageText'
 
 const MAX_TARGETS = 5
+
+// Pages pushed over the chat (Forward, Message info, Contact info,
+// Transaction History): the page push on phones - in from the right on the
+// push timing - and the desktop fade on wide screens.
+const PUSH_IN = { duration: PUSH_OPEN_MS / 1000, ease: EASE_OUT }
+const PUSH_OUT = { duration: PUSH_BACK_MS / 1000, ease: EASE_OUT }
+export function chatPushMotion(desktop: boolean) {
+  return desktop
+    ? { initial: { opacity: 0, y: DESKTOP_FADE_Y }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0 }, transition: DESKTOP_FADE_TRANSITION }
+    : { initial: { x: '100%' }, animate: { x: 0, transition: PUSH_IN }, exit: { x: '100%', transition: PUSH_OUT } }
+}
 
 export function ChatForwardSheet({ messages, sourceKey, myUserId, walletAddress, onClose, onDone, onError }: {
   messages: any[]
@@ -24,6 +36,7 @@ export function ChatForwardSheet({ messages, sourceKey, myUserId, walletAddress,
   const [q, setQ] = useState('')
   const [picked, setPicked] = useState<string[]>([])
   const [sending, setSending] = useState(false)
+  const desktop = useMediaQuery(DESKTOP_QUERY)
 
   useEffect(() => {
     import('@/lib/supabase').then(({ fetchConversations }) => fetchConversations(myUserId))
@@ -101,7 +114,7 @@ export function ChatForwardSheet({ messages, sourceKey, myUserId, walletAddress,
   const names = picked.map(id => (convs ?? []).find(c => c.id === id)?.other_user?.display_name || (convs ?? []).find(c => c.id === id)?.other_user?.username).filter(Boolean)
 
   return (
-    <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }} transition={SHEET_SPRING}
+    <motion.div {...chatPushMotion(desktop)}
       className="absolute inset-0 z-50 flex flex-col" style={{ background: 'var(--bg)' }}>
       <div className="flex items-center gap-3 px-4 pt-header pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
         <button onClick={onClose} className="back-btn" aria-label="Close"><X className="w-5 h-5 text-text-primary" /></button>

@@ -24,11 +24,11 @@ import { MOBILE_TAB_FADE_TRANSITION } from '@/lib/motion'
 import { useWalletStore, useAuthStore, useUIStore } from '@/store'
 import { awardTransactionPoints } from '@/lib/rewards'
 import { notifyRewardMultichain } from '@/lib/notifications'
-import { formatAmount, shortenAddress, midShortenAddress, timeAgo, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
+import { formatAmount, shortenAddress, midShortenAddress, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { saveResumableOperation, getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForTransfer, resolveChainMechanism, resolveAvailableMechanisms } from '@/lib/featureFilters'
-import { ARC_EXPLORER, explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
+import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ARC_RPCS, ARC_NETWORK } from '@/lib/arc'
 import { circleForwarderMintsTo, noteForwarderMintFailed } from '@/lib/chainRpcs'
 import { gatewaySelfMintsTo, forwarderMintRetry, getUnifiedBalances, UB_MIN_SWEEP } from '@/lib/ubClaim'
@@ -3586,9 +3586,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
       {/* ── Hub (phone): the form as a full page that slides in from the
           right. Review opens the same way on top; the passcode, amount
-          keypad and chain picker open above them. ── */}
-      {sheetMode && !showResumed && (step === 'form' || step === 'review' || step === 'confirm') && (
-        <HubPage open={formSheet === 1} behind={step !== 'form'}
+          keypad and chain picker open above them. Always rendered so it
+          animates out too; leaving for processing it stays under the
+          processing page until that has slid in. ── */}
+        <HubPage open={formSheet === 1 && !showResumed && (step === 'form' || step === 'review' || step === 'confirm')}
+          behind={step !== 'form'} leaveUnder={procPage}
           header={
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 12px' }}>
               <HubPageBack onClick={() => setFormSheet(0)} />
@@ -3612,60 +3614,20 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               after going back to the Hub. */}
           {!desktopInput && amountKeypad}
         </HubPage>
-      )}
 
-      {/* ── Confirm & Pay: clean passcode entry, matching the same bottom
-          sheet pattern used in Send/Pay - drag handle, title, one subtitle
-          line, then PinKeypad directly. No summary card or fee breakdown
-          here; that's all already shown on the Review page underneath. ── */}
       {scanAnchor && (
         <PanelScanner anchor={scanAnchor} wallet onClose={() => setScanAnchor(null)}
           onWallet={addr => { setScanAnchor(null); handleAddressChange(addr) }} />
       )}
 
-      {/* ── REVIEW page - rises from the bottom and stays (the form pushes up
-          behind it); Back reverses it. The passcode sheet opens on top.
-          In the Hub on a phone it slides in from the right like the form
-          pages, and gives way to the processing screen without sliding back. */}
-      <AnimatePresence custom={step}>
-      {(step === 'review' || step === 'confirm') && (
-        // Phone / tablet: a full page in the app's 430px column. Desktop: a
-        // centred card over the Hub, so the sidebar and header stay visible.
-        <motion.div key="mt-review-page"
-          {...(isDesktopMq && sheetMode
-            // Hub on desktop: the review opens in the right-hand panel, on top of the form.
-            ? { initial: { opacity: 0, x: 24 }, animate: { opacity: 1, x: 0 }, exit: { opacity: 0, transition: { duration: 0.12 } }, transition: { duration: 0.18, ease: [0.32, 0.72, 0, 1] },
-                className: 'overflow-y-auto',
-                style: { ...HUB_PANEL_BOX, zIndex: 34 } }
-            : isDesktopMq
-            ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.2 },
-                onClick: () => { if (step === 'review') { setStep('form'); setFeeChangedNotice('') } },
-                className: 'fixed inset-0 z-40 flex items-center justify-center p-6',
-                style: { background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)' } }
-            : sheetMode
-            ? { custom: step, initial: { x: '100%' }, animate: { x: 0 }, transition: { duration: 0.3, ease: [0.32, 0.72, 0, 1] },
-                variants: { leave: (st: MCStep) => st === 'form'
-                  ? { x: '100%', transition: { duration: 0.25, ease: [0.32, 0.72, 0, 1] } }
-                  // To processing: stay put until its page has slid in on top.
-                  : { opacity: 0, transition: { delay: 0.32, duration: 0 } } },
-                exit: 'leave',
-                className: 'fixed inset-0 z-40 overflow-y-auto',
-                style: { background: 'var(--bg)', maxWidth: 430, marginLeft: 'auto', marginRight: 'auto', boxShadow: '-10px 0 28px rgba(0,0,0,0.28)',
-                  paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' } }
-            : { initial: { y: '100%' }, animate: { y: 0 }, exit: { y: '100%' }, transition: { duration: 0.34, ease: [0.32, 0.72, 0, 1] },
-                className: `${embedded ? 'fixed' : 'absolute'} inset-0 z-40 overflow-y-auto`,
-                style: { background: 'var(--bg)', maxWidth: 430, marginLeft: 'auto', marginRight: 'auto',
-                  paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' } })}>
-          <motion.div
-            {...(isDesktopMq && sheetMode
-              ? { className: 'px-5 py-4 flex flex-col', style: { minHeight: '100%' } }
-              : isDesktopMq
-              ? { initial: { y: 24, opacity: 0 }, animate: { y: 0, opacity: 1 }, exit: { y: 16, opacity: 0 }, transition: { duration: 0.26, ease: [0.32, 0.72, 0, 1] },
-                  onClick: (e: React.MouseEvent) => e.stopPropagation(),
-                  className: 'w-full overflow-y-auto px-5 py-4',
-                  style: { maxWidth: 540, maxHeight: '90vh', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 24, boxShadow: 'var(--shadow-3, 0 20px 60px rgba(0,0,0,.45))' } }
-              // Phone: fills the page so Back / Confirm sit at the bottom, like the form's buttons.
-              : { className: 'px-4 flex flex-col', style: { minHeight: '100%' } })}>
+      {/* ── REVIEW page - a Hub page opened over Transfer Funds (level 1):
+          slides in from the right on a phone, fades in the right-hand panel
+          on desktop; Back reverses it. The passcode sheet opens on top. It
+          gives way to the processing screen without sliding back. */}
+      <HubPage open={step === 'review' || step === 'confirm'} level={1} leaveUnder={procPage}>
+          {/* Fills the page so Back / Confirm sit at the bottom, like the form's buttons. */}
+          <div className={isDesktopMq ? 'px-5 py-4 flex flex-col' : 'px-4 flex flex-col'}
+            style={isDesktopMq ? { flex: '1 0 auto' } : { flex: '1 0 auto', paddingTop: 12, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
             <div className="flex items-center gap-3 py-2 mb-1">
               <button onClick={() => { setStep('form'); setFeeChangedNotice('') }} className="back-btn" aria-label="Back to transfer"
                 // This column has 16px side padding (page headers 20px): line the arrow up with them.
@@ -3774,127 +3736,24 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                 </button>
               </div>
             </div>
-          </motion.div>
-        </motion.div>
-      )}
-      </AnimatePresence>
+          </div>
+      </HubPage>
 
-      <AnimatePresence>
-      {step === 'confirm' && (() => {
-        const closeSheet = () => { setStep('review'); setPassEntry(''); setPassError('') }
-        const keypadContent = (
-          <PinKeypad
-            value={passEntry}
-            onChange={v => { setPassEntry(v); setPassError('') }}
-            length={6}
-            error={!!passError}
-            onComplete={(_, viaBiometric) => { if (!loading) { setPaidViaBiometric(!!viaBiometric); handleConfirm() } }}
-          />
-        )
-        const passContent = (
-          <>
-            <div className="text-center mb-7">
-              <h2 className="text-lg font-bold text-text-primary">Enter Passcode</h2>
-              <p className="text-xs mt-1.5" style={{ color: 'var(--text-secondary)' }}>
-                {passError
-                  ? <span role="alert" className="text-danger">{passError}</span>
-                  : `Authorise $${formatAmount(numAmount)} USDC to ${chain.name}`}
-              </p>
-            </div>
-            {keypadContent}
-          </>
-        )
-        return desktopInput ? (
-          <DesktopTransactionAuthDialog
-            onClose={closeSheet}
-            title="Authorize Transfer"
-            placement={embedded ? 'panel' : 'center'}
-            amountLabel={`$${formatAmount(numAmount)} USDC`}
-            subLabel={`To ${chain.name}`}
-          >
-            {passError && <p role="alert" className="text-xs text-center mb-4" style={{ color: 'var(--danger)' }}>{passError}</p>}
-            {keypadContent}
-          </DesktopTransactionAuthDialog>
-        ) : (
-          <>
-            <motion.div transition={SHEET_BACKDROP.transition} initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
-              className={`${embedded ? 'fixed' : 'absolute'} inset-0 z-50`} style={{background:'rgba(0,0,0,0.6)'}}
-              onClick={closeSheet} />
-            <motion.div {...sheetDrag('mt-pass', closeSheet)}
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={SHEET_EXIT}
-              transition={SHEET_SPRING}
-              className={`${embedded ? 'fixed' : 'absolute'} bottom-0 left-0 right-0 z-50 rounded-t-3xl pt-3 pb-10 px-6`}
-              style={{ background: 'var(--surface)', borderTop: '1px solid var(--border)' }}>
-              <div className="w-10 h-1 rounded-full mx-auto mb-6" style={{ background: 'color-mix(in srgb, var(--text-primary) 18%, transparent)' }} />
-              {passContent}
-            </motion.div>
-          </>
-        )
-      })()}
-      </AnimatePresence>
+      {/* ── Confirm & Pay: the app's passcode step (PinSheet) - phone: the
+          bottom sheet with the keypad; desktop: the authorize dialog in the
+          right-hand panel. No summary card or fee breakdown here; that's all
+          already shown on the Review page underneath. This page handles Back
+          for this step itself (confirm → review, above). ── */}
+      <PinSheet open={step === 'confirm'} id="mt-pass" backClose={false}
+        onClose={() => { setStep('review'); setPassEntry(''); setPassError('') }}
+        title={desktopInput ? 'Authorize Transfer' : 'Enter Passcode'}
+        subtitle={desktopInput ? `To ${chain.name}` : `Authorise $${formatAmount(numAmount)} USDC to ${chain.name}`}
+        amountLabel={`$${formatAmount(numAmount)} USDC`} placement="panel"
+        value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }} error={passError || undefined}
+        onComplete={(_, viaBiometric) => { if (!loading) { setPaidViaBiometric(!!viaBiometric); handleConfirm() } }} />
 
     </div>
   )
 
-  if (!isDesktop) return flow
-
-  // ── Desktop: flow (left) + Transfer History (right), independently scrollable ──
-  return (
-    // Fills the full available content width (no maxWidth cap - the row
-    // stretches edge to edge minus the outer padding) at a fixed 65/35
-    // grow split, per explicit sizing direction. Bottom padding trimmed
-    // so the row - and DesktopHistoryPanel's own height:100% column
-    // inside it - reaches down close to the viewport's bottom edge
-    // instead of leaving a gap under it.
-    <div style={{ display: 'flex', height: '100%', minHeight: 0, gap: 28, padding: '20px 24px 14px', boxSizing: 'border-box' }}>
-      <div style={{ flex: '65 1 0%', minWidth: 0, minHeight: 0, overflowY: 'auto' }} ref={desktopColumnRef}>{flow}</div>
-      <div style={{ flex: '35 1 0%', minWidth: 0, minHeight: 0 }}>
-        <DesktopHistoryPanel title="Recent History" onViewAll={() => navigate('/multichain', { state: { tab: 'activity' } })}>
-          {!transferHistoryLoaded ? (
-            <DesktopHistorySkeleton />
-          ) : transferHistory.length === 0 ? (
-            <DesktopHistoryEmpty label="Transfers you send across chains will show up here" />
-          ) : (
-            transferHistory.map((r, i, list) => (
-              <ActivityRow key={r.id} record={r} isFirst={i === 0} isLast={i === list.length - 1} inPanel
-                onSelect={() => { transferFlash.opened(); setTransferHistDetail(r) }} flash={r.id === transferFlash.flashId} />
-            ))
-          )}
-        </DesktopHistoryPanel>
-      </div>
-      <AnimatePresence>
-        {transferHistDetail && (() => {
-          const r = transferHistDetail
-          const failed = r.status === 'failed'
-          const chainLabel = (r.destinationChain || 'Unknown chain').replace(/_/g, ' ')
-          return (
-            <DesktopHistoryDetail
-              onClose={() => { transferFlash.closed(r.id); setTransferHistDetail(null) }}
-              title="Transfer Details"
-              icon={<svg width="20" height="20" viewBox="0 0 14 14" fill="none"><path d="M2 12L12 2M12 2H6M12 2V8" stroke={failed ? 'var(--danger)' : 'var(--brand)'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-              iconColor={failed ? 'var(--danger)' : 'var(--brand)'}
-              amountLabel={`-${formatAmount(r.amount)} ${r.tokenSymbol}`}
-              amountColor={failed ? 'var(--danger)' : 'var(--text-primary)'}
-              rows={[
-                { label: 'To', value: chainLabel },
-                ...(() => {
-                  const move = activityMove(r)
-                  const lbl = moveLabels('transfer', r.counterpartyAddress, senderAddress)
-                  return move ? [
-                    { label: lbl.sent, value: `${formatMoveAmount(move.sent)} ${r.tokenSymbol}` },
-                    { label: lbl.received, value: `${formatMoveAmount(move.received)} ${r.tokenSymbol}` },
-                    { label: 'Fees paid', value: formatFee(move.fees) },
-                  ] : []
-                })(),
-                { label: 'Time', value: timeAgo(r.createdAt) },
-                { label: 'Status', value: failed ? 'Failed' : 'Completed' },
-                ...(r.txHash ? [{ label: 'Tx Hash', value: `${r.txHash.slice(0, 8)}…${r.txHash.slice(-6)}` }] : []),
-              ]}
-              explorerLinks={r.txHash ? [{ label: 'View on Arc Explorer', href: `${ARC_EXPLORER}/tx/${r.txHash}` }] : undefined}
-            />
-          )
-        })()}
-      </AnimatePresence>
-    </div>
-  )
+  return flow
 }
