@@ -238,13 +238,36 @@ function pollMsFor(chainId: number): number {
   return chainId === 5042002 ? 250 : 1000
 }
 
+// Lowest priority fee (tip) the relayer offers, per chain id. Ethereum
+// Sepolia's RPCs suggest a tip of ~12 wei (its base fee is ~16 wei), but many
+// proposers there only include tips of at least 0.001 gwei - so a mint sent
+// with the suggested tip waited 1-2 minutes for a proposer that would take
+// it, while the median tip in those blocks was ~1 gwei. The floor costs about
+// 0.0001 Sepolia ETH per mint.
+const MIN_PRIORITY_FEE: Record<number, bigint> = {
+  11155111: 500_000_000n, // 0.5 gwei
+}
+
+/** viem chain `fees`: the RPC's suggested tip, raised to the chain's floor. */
+function relayFees(chainId: number) {
+  const floor = MIN_PRIORITY_FEE[chainId]
+  if (!floor) return undefined
+  return {
+    async maxPriorityFeePerGas({ client }: { client: any }) {
+      let suggested = 0n
+      try { suggested = BigInt(await client.request({ method: 'eth_maxPriorityFeePerGas' })) } catch { /* use the floor */ }
+      return suggested > floor ? suggested : floor
+    },
+  }
+}
+
 async function clients(chainKey: string) {
   const { createPublicClient, createWalletClient, http, defineChain } = await import('viem')
   const c = CHAINS[chainKey]
   const rpc = process.env[`BRIDGE_RPC_${chainKey.toUpperCase()}`] || c.rpc
   // Arc's native currency is USDC, not Ether (18 native decimals on both).
   const nativeCurrency = c.id === 5042002 ? { name: 'USDC', symbol: 'USDC', decimals: 18 } : { name: 'Ether', symbol: 'ETH', decimals: 18 }
-  const chain = defineChain({ id: c.id, name: c.name, nativeCurrency, rpcUrls: { default: { http: [rpc] } } })
+  const chain = defineChain({ id: c.id, name: c.name, nativeCurrency, rpcUrls: { default: { http: [rpc] } }, fees: relayFees(c.id) })
   // Receipt waits check every 250ms on Arc (sub-second blocks) and every 1s
   // elsewhere - viem's 4s default added seconds to every relayed step.
   const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }), pollingInterval: pollMsFor(c.id) })
@@ -405,7 +428,7 @@ async function callClients(chainKey: string) {
     const probe: any = createPublicClient({ transport: http(rpc, { timeout: 15_000 }) })
     id = await probe.getChainId()
   }
-  const chain = defineChain({ id, name: chainKey, nativeCurrency: { name: 'Native', symbol: 'NATIVE', decimals: 18 }, rpcUrls: { default: { http: [rpc] } } })
+  const chain = defineChain({ id, name: chainKey, nativeCurrency: { name: 'Native', symbol: 'NATIVE', decimals: 18 }, rpcUrls: { default: { http: [rpc] } }, fees: relayFees(id) })
   const pub: any = createPublicClient({ chain, transport: http(rpc, { timeout: 15_000 }), pollingInterval: pollMsFor(id) })
   let key = (process.env.BRIDGE_RELAYER_PRIVATE_KEY || '').trim()
   if (key && !key.startsWith('0x')) key = '0x' + key

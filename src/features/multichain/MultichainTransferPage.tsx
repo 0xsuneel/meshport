@@ -2893,19 +2893,29 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     attestation: 150,
     mint:        150,
   }
+  // Who submits the destination mint: Circle's forwarder, or MeshPort's
+  // relayer on chains where the forwarder's mint fails (Ethereum Sepolia).
+  const transferForwarder = !chain.ub && circleForwarderMintsTo(chain.sdk)
+  const meshportMints = chain.ub ? gatewaySelfMintsTo(chain.sdk) : !transferForwarder
   const STEP_INFO_HINT: Record<string, string> = {
     approve:     'Waiting on your wallet to confirm the approval.',
     burn:        'Waiting on Arc Testnet to confirm the burn.',
     attestation: "Circle's attestation service is signing off on the burn. This step normally takes 20-90 seconds - nothing to worry about yet.",
-    mint:        "Circle's relayer is submitting the mint on the destination chain. This is normal and usually resolves within a minute or two.",
+    mint:        meshportMints
+      ? "MeshPort's relayer is submitting the mint on the destination chain. This is normal and usually resolves within a minute or two."
+      : "Circle's forwarder is submitting the mint on the destination chain. This is normal and usually resolves within a minute or two.",
     ubAttest:    'Circle Gateway is checking your Unified Balance and attesting the transfer.',
-    spend:       "Circle's forwarder is minting on the destination chain. This usually resolves within a minute.",
+    spend:       meshportMints
+      ? "MeshPort's relayer is minting on the destination chain. This usually resolves within a minute."
+      : "Circle's forwarder is minting on the destination chain. This usually resolves within a minute.",
   }
   const STEP_TIMEOUT_HINT: Record<string, string> = {
     approve:     'Wallet may be slow to sign. Check your RPC connection.',
     burn:        'Arc Testnet RPC may be congested. Check ArcScan for activity.',
     attestation: "This is past Circle's normal 20-90s attestation window. Your funds are safe on Arc - still waiting on Circle's network.",
-    mint:        'Destination mint is taking longer than usual via the relayer. Your funds are not lost - still waiting on Circle to submit it.',
+    mint:        meshportMints
+      ? "The destination mint is taking longer than usual. Your funds are not lost - MeshPort's relayer is still waiting for it to confirm."
+      : 'Destination mint is taking longer than usual. Your funds are not lost - still waiting on Circle to submit it.',
     spend:       'The destination mint is taking longer than usual. Your funds are safe in your Unified Balance - if it fails they appear in Multichain Hub → Recover.',
   }
   const activeStepElapsed = activeStep?.startedAt
@@ -2918,7 +2928,6 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const stepInfoHint = activeStep ? (STEP_INFO_HINT[activeStep.name] ?? '') : ''
   const stepTimeoutHint = activeStep ? (STEP_TIMEOUT_HINT[activeStep.name] ?? '') : ''
   // The shared progress page's view of this transfer (see lib/moveSteps).
-  const transferForwarder = !chain.ub && circleForwarderMintsTo(chain.sdk)
   const transferStepTexts = moveSteps({
     kind: 'transfer', route: chain.ub ? 'ub' : 'cctp', from: 'Arc', to: chain.name,
     amount: formatAmount(numAmount), recipient: address ? `${address.slice(0, 6)}…${address.slice(-4)}` : undefined,
