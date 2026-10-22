@@ -1762,14 +1762,15 @@ const MessageBubble = memo(function MessageBubble({
                 {formatAmount(msg.payment_amount || 0, chatPayTokenDecimals((msg.token_symbol as ChatPayToken) || 'USDC'))} <span style={{ fontSize: 14, fontWeight: 700, opacity: 0.85 }}>{msg.token_symbol || 'USDC'}</span>
               </p>
             </div>
-            {billRef && (
+            {billRef && orderTag?.kind !== 'shop' && (
               // Reply to the bill card this payment settles - tap to jump to it.
               // Same as any reply: scroll to the bill card's message and flash it.
+              // A Shop QR payment has no card in the chat to point at - none.
               <div role="button" onClick={e => {
                   e.stopPropagation()
                   const mid = document.getElementById(billAnchor!)?.closest('[data-mid]')?.getAttribute('data-mid')
                   if (mid && onJumpTo) onJumpTo(mid)
-                  else useUIStore.getState().showToastMessage('That bill is further up in this chat - scroll up to load it', 'info')
+                  else useUIStore.getState().showToastMessage(`That ${orderTag?.kind === 'bill' || !orderTag?.kind ? 'bill' : 'request'} is further up in this chat - scroll up to load it`, 'info')
                 }}
                 style={{
                   margin: '7px 10px 0', padding: '4px 8px', borderRadius: 8, cursor: 'pointer',
