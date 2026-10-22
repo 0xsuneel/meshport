@@ -870,16 +870,44 @@ const BIZ_PERIOD_DAYS = { week: 7, month: 30, year: 365 } as const
 const bizMoney = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const hourText = (h: number) => `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`
 
+/** Small bar chart for Business Insights; the tallest (or `highlight`) bar is solid. */
+function BizBars({ values, labels, labelEvery = 1, highlight }: { values: number[]; labels: string[]; labelEvery?: number; highlight?: number }) {
+  const max = Math.max(...values, 0)
+  const hi = highlight ?? (max > 0 ? values.indexOf(max) : -1)
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: values.length > 20 ? 2 : 4, height: 56 }}>
+        {values.map((v, i) => (
+          <div key={i} title={`${labels[i] ?? ''}: ${bizMoney(v)}`} style={{
+            flex: 1, minWidth: 0, borderRadius: '3px 3px 1px 1px',
+            height: `${max > 0 ? Math.max(4, (v / max) * 100) : 4}%`,
+            background: i === hi && v > 0 ? 'var(--brand)' : 'color-mix(in srgb, var(--brand) 30%, transparent)',
+          }} />
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: values.length > 20 ? 2 : 4, marginTop: 4 }}>
+        {labels.map((l, i) => (
+          <span key={i} style={{ flex: 1, minWidth: 0, fontSize: 8.5, color: 'var(--text-secondary)', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'visible' }}>
+            {i % labelEvery === 0 ? l : ''}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function BusinessInsightsColumn({ walletAddress, period, setPeriod, navigate }: {
   walletAddress: string | null
   period: 'week' | 'month' | 'year'
   setPeriod: (p: 'week' | 'month' | 'year') => void
   navigate: (p: string) => void
 }) {
-  const [sales, setSales] = useState<import('@/lib/merchantPay').MerchantPayment[] | null>(null)
+  const [report, setReport] = useState<Awaited<ReturnType<typeof import('@/lib/businessSales').loadBusinessReport>> | null>(null)
+  const sales = report?.sales ?? null
   useEffect(() => {
     let live = true
-    const load = () => import('@/lib/businessSales').then(m => m.loadBusinessSales(walletAddress)).then(l => { if (live) setSales(l) }).catch(() => { if (live) setSales(s => s ?? []) })
+    const load = () => import('@/lib/businessSales').then(m => m.loadBusinessReport(walletAddress)).then(r => { if (live) setReport(r) })
+      .catch(() => { if (live) setReport(r => r ?? { sales: [], stores: [], storeOf: () => null }) })
     void load()
     const t = setInterval(() => { if (document.visibilityState === 'visible') void load() }, 60_000)
     return () => { live = false; clearInterval(t) }
@@ -893,13 +921,27 @@ function BusinessInsightsColumn({ walletAddress, period, setPeriod, navigate }: 
     const to = Date.now(), from = to - days * 86_400_000
     const n = period === 'year' ? 12 : days
     const len = (to - from) / n
+    const stores = report?.stores ?? []
+    const storeOf = report?.storeOf
+    const inWindow = sales.filter(p => { const t = Date.parse(p.createdAt); return t >= from && t < to })
+    // Bar labels: weekday for 7 days, date for 30, month for 12 months.
+    const barLabels = Array.from({ length: n }, (_, i) => {
+      const d = new Date(from + (i + 0.5) * len)
+      return period === 'week' ? d.toLocaleDateString('en-US', { weekday: 'short' })
+        : period === 'month' ? String(d.getDate()) : d.toLocaleDateString('en-US', { month: 'short' })
+    })
     return {
+      barLabels,
+      storeRows: stores.length > 1 && storeOf ? stores.map(st => {
+        const l = inWindow.filter(p => storeOf(p) === st.id)
+        return { id: st.id, name: st.name, isDefault: st.isDefault, total: l.reduce((t, p) => t + p.amount, 0), count: l.length }
+      }).sort((a, b) => b.total - a.total) : [],
       sum: mod.summarizeSales(sales, from, to),
       series: mod.salesSeries(sales, from, to, n),
       countSeries: mod.salesSeries(sales.map(p => ({ ...p, amount: 1 })), from, to, n),
       customerSeries: Array.from({ length: n }, (_, i) => new Set(sales.filter(p => { const t = Date.parse(p.createdAt); return t >= from + i * len && t < from + (i + 1) * len }).map(mod.salesCustomer)).size),
     }
-  }, [mod, sales, days, period])
+  }, [mod, sales, report, days, period])
   const periodWord = period === 'week' ? 'last 7 days' : period === 'month' ? 'last 30 days' : 'last 12 months'
   const card = { background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)', boxShadow: 'var(--shadow-1)' } as const
   const small = { fontSize: 9.5, color: 'var(--text-secondary)' } as const
@@ -949,6 +991,23 @@ function BusinessInsightsColumn({ walletAddress, period, setPeriod, navigate }: 
         <InsightStatCard label="Customers" value={sum ? String(sum.customers) : '-'} changePct={sum?.customersChange ?? null} sparkValues={view?.customerSeries ?? []} />
       </div>
 
+      {/* Full report: sales by day (or month), by hour, by customer, chain and store. */}
+      <div style={{ ...card, borderRadius: 14, padding: '10px 12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>{period === 'year' ? 'Sales by month' : 'Sales by day'}</div>
+          <div style={small}>{periodWord}</div>
+        </div>
+        <BizBars values={view?.series ?? []} labels={view?.barLabels ?? []} labelEvery={period === 'month' ? 5 : 1} />
+      </div>
+
+      <div style={{ ...card, borderRadius: 14, padding: '10px 12px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Sales by hour</div>
+          <div style={small}>{sum?.peakHour != null ? `Busiest: ${hourText(sum.peakHour)}` : periodWord}</div>
+        </div>
+        <BizBars values={sum?.hours ?? new Array(24).fill(0)} labels={Array.from({ length: 24 }, (_, h) => hourText(h))} labelEvery={6} highlight={sum?.peakHour ?? -1} />
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div style={{ ...card, borderRadius: 14, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Top customers</div>
@@ -966,11 +1025,11 @@ function BusinessInsightsColumn({ walletAddress, period, setPeriod, navigate }: 
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Sales by chain</div>
           {!sum || sum.chains.length === 0 ? (
             <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>{sum ? 'No sales in this period' : 'Loading…'}</p>
-          ) : sum.chains.slice(0, 4).map(c => (
+          ) : sum.chains.slice(0, 5).map(c => (
             <div key={c.chain}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, marginBottom: 2 }}>
                 <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{c.chain === 'Arc_Testnet' ? 'Arc' : c.chain.replace(/_(Sepolia|Testnet|Fuji|Amoy_Testnet|Apothem)$/, '').replace(/_/g, ' ')}</span>
-                <span style={{ color: 'var(--text-secondary)' }}>{Math.round(c.share * 100)}%</span>
+                <span style={{ color: 'var(--text-secondary)' }}>{bizMoney(c.total)} · {Math.round(c.share * 100)}%</span>
               </div>
               <div style={{ height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
                 <div style={{ width: `${Math.round(c.share * 100)}%`, height: '100%', background: 'var(--brand)', borderRadius: 2 }} />
@@ -980,11 +1039,26 @@ function BusinessInsightsColumn({ walletAddress, period, setPeriod, navigate }: 
         </div>
       </div>
 
+      {view && view.storeRows.length > 0 && (
+        <div style={{ ...card, borderRadius: 14, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>Compare stores</div>
+          {view.storeRows.map(st => (
+            <div key={st.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5 }}>
+              <span style={{ flex: 1, minWidth: 0, color: 'var(--text-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {st.name}{st.isDefault && <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}> · Main store</span>}
+              </span>
+              <span style={{ color: 'var(--text-secondary)' }}>{st.count} payment{st.count === 1 ? '' : 's'}</span>
+              <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontVariantNumeric: 'tabular-nums', minWidth: 64, textAlign: 'right' }}>{bizMoney(st.total)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       <button onClick={() => navigate('/business?screen=reports')} style={{
         ...card, borderRadius: 14, padding: '11px 14px', cursor: 'pointer', textAlign: 'left',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 600, color: 'var(--brand-text)',
       }}>
-        <span>Full report · by day, hour and store</span>
+        <span>Statement · download CSV or PDF</span>
         <span aria-hidden>→</span>
       </button>
     </>
@@ -3607,7 +3681,7 @@ export function HomePage() {
       if ((r.activityType !== 'send' && r.activityType !== 'receive' && r.activityType !== 'bulk') || !r.counterpartyAddress) return
       const key = r.counterpartyAddress.toLowerCase()
       const uname = ((r.metadata?.toUsername || r.metadata?.fromUsername || '') as string).replace(/\.arc$/, '')
-      const label = uname || (key.slice(0, 6) + '...' + key.slice(-4))
+      const label = uname ? `${uname}.arc` : (key.slice(0, 6) + '...' + key.slice(-4))
       const entry = contactCounts.get(key)
       if (entry) entry.count++
       else contactCounts.set(key, { count: 1, label })
