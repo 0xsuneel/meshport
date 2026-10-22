@@ -4096,10 +4096,13 @@ export function ChatConversationPage() {
         const code = billPay.code
         // Confirmed server-side against the order number + amount.
         const check = { orderNumber: billPay.orderNumber ?? undefined, amount: billPay.amount }
-        import('@/lib/merchantPay').then(({ submitPayment, BILL_UPDATED_EVENT }) =>
-          submitPayment(code, ARC_CHAIN_KEY, result.txHash, check)
-            .then(() => window.dispatchEvent(new CustomEvent(BILL_UPDATED_EVENT, { detail: code })))
-        ).catch(e => {
+        import('@/lib/merchantPay').then(({ submitPayment, notePaidLocally, BILL_UPDATED_EVENT }) => {
+          // Confirmed on-chain: the card reads Paid and the order leaves the
+          // pending strip now, not after the server's check.
+          if (result.state !== 'pending' && numAmount + 1e-6 >= billPay.amount) notePaidLocally(code)
+          return submitPayment(code, ARC_CHAIN_KEY, result.txHash, check)
+            .then(v => window.dispatchEvent(new CustomEvent(BILL_UPDATED_EVENT, { detail: v })))
+        }).catch(e => {
           console.error('[Chat] order payment confirm failed:', e)
           showToastMessage(e instanceof Error ? e.message : 'Could not confirm the order payment', 'error')
         })

@@ -210,8 +210,32 @@ export function chatCardMessage(i: { kind?: 'request' | 'invoice'; code: string;
 
 /** Chat → pay a bill in-chat (ChatPage listens and opens its pay sheet). */
 export const BILL_PAY_EVENT = 'meshport:bill-pay'
-/** Fired after a bill payment is submitted so chat cards refresh at once. */
+/** Chat cards / the pending strip refresh at once. detail: the order's code,
+ *  its fresh PaymentView (used as is), or nothing (every order re-reads). */
 export const BILL_UPDATED_EVENT = 'meshport:bill-updated'
+
+// Paid in this app, before the server has confirmed it: shown at once, and
+// kept over an older server reading for a short while (the server confirms
+// within seconds; after that its reading wins).
+const PAID_LOCALLY_MS = 2 * 60 * 1000
+const _paidLocally = new Map<string, number>()
+/** This app just paid what was due on order `code` (the transfer is confirmed on-chain). */
+export function notePaidLocally(code: string) {
+  _paidLocally.set(code, Date.now())
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(BILL_UPDATED_EVENT, { detail: code }))
+}
+/** Order `code` was paid in full in this app and the server may not show it yet. */
+export function paidLocally(code: string): boolean {
+  const at = _paidLocally.get(code)
+  if (at == null) return false
+  if (Date.now() - at > PAID_LOCALLY_MS) { _paidLocally.delete(code); return false }
+  return true
+}
+/** A server reading with this app's own unconfirmed payment counted in. */
+export function withLocalPayment(v: PaymentView): PaymentView {
+  if (!paidLocally(v.code) || ['paid', 'expired', 'cancelled', 'failed'].includes(v.status)) return v
+  return { ...v, received: Math.max(v.received, v.amount), status: 'paid' }
+}
 
 /** Pulls the request code out of a MeshPort payment link (for chat cards). */
 export function codeFromLink(text: string): string | null {
