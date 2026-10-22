@@ -8,6 +8,7 @@
 // didn't work at all from any page other than Home). Notification bell
 // reuses the exact same useNotificationStore fields PageHeader.tsx already
 // reads.
+import { CONTROL_MOTION } from '@/lib/motion'
 import { useEffect, useRef, useState, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -323,7 +324,7 @@ export function DesktopHeader() {
         aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
         whileHover={{ scale: 1.06, boxShadow: 'var(--shadow-2)' }}
         whileTap={{ scale: 0.92 }}
-        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+        transition={CONTROL_MOTION}
         style={{
           width: 38, height: 38, borderRadius: '50%',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -338,7 +339,7 @@ export function DesktopHeader() {
         onClick={handleFaucet}
         whileHover={{ scale: 1.04, boxShadow: 'var(--shadow-2)' }}
         whileTap={{ scale: 0.96 }}
-        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+        transition={CONTROL_MOTION}
         style={{
           display: 'flex', alignItems: 'center', gap: 7,
           padding: '8px 16px', borderRadius: 999,
@@ -373,7 +374,7 @@ export function DesktopHeader() {
         onClick={() => setShowNotifications(true)}
         whileHover={{ scale: 1.06, boxShadow: 'var(--shadow-2)' }}
         whileTap={{ scale: 0.92 }}
-        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+        transition={CONTROL_MOTION}
         style={{
           position: 'relative', width: 38, height: 38, borderRadius: '50%',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -386,7 +387,7 @@ export function DesktopHeader() {
           <motion.span
             key={badgeLabel}
             initial={{ scale: 0.6 }} animate={{ scale: 1 }}
-            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+            transition={CONTROL_MOTION}
             style={{
               position: 'absolute', top: 2, right: 2, width: 16, height: 16, borderRadius: 8,
               background: 'var(--danger)', color: '#fff', fontSize: 10, fontWeight: 700,
@@ -402,7 +403,7 @@ export function DesktopHeader() {
         onClick={() => setShowHelp(true)}
         whileHover={{ scale: 1.06, boxShadow: 'var(--shadow-2)' }}
         whileTap={{ scale: 0.92 }}
-        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+        transition={CONTROL_MOTION}
         style={{
           width: 38, height: 38, borderRadius: '50%',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -417,7 +418,7 @@ export function DesktopHeader() {
         onClick={() => navigate('/profile')}
         whileHover={{ boxShadow: 'var(--shadow-2)' }}
         whileTap={{ scale: 0.97 }}
-        transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+        transition={CONTROL_MOTION}
         style={{
           display: 'flex', alignItems: 'center', gap: 9,
           padding: 5, borderRadius: 999,

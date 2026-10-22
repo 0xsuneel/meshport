@@ -29,34 +29,9 @@ export type NavDirection = 'forward' | 'back'
 export const EASE_OUT: [number, number, number, number] = [0.32, 0.72, 0, 1]
 
 // ── Pages & steps ───────────────────────────────────────────────────────────
-/** How far a page / step travels while fading in (share of its width). */
-export const PAGE_SLIDE_X = '28%'
+/** A page / step move's length and curve (framer pushes use it; PUSH_* below
+ *  are the same values for Web Animations). */
 export const PAGE_TRANSITION: Transition = { duration: 0.3, ease: EASE_OUT }
-
-/** Page / step entrance for a direction ('back' comes from the left). */
-export function pageSlide(direction: NavDirection) {
-  const from = direction === 'back' ? `-${PAGE_SLIDE_X}` : PAGE_SLIDE_X
-  return { initial: { opacity: 0, x: from }, animate: { opacity: 1, x: 0 } }
-}
-
-/**
- * Variants for a screen that's part of a browsable, back-able step sequence
- * (Pay's search → amount → review, a claim flow's chain → amount, …) -
- * identical to a page opening, plus an exit for AnimatePresence.
- */
-export function slideStepVariants(direction: NavDirection) {
-  const from = direction === 'back' ? `-${PAGE_SLIDE_X}` : PAGE_SLIDE_X
-  const to = direction === 'back' ? PAGE_SLIDE_X : `-${PAGE_SLIDE_X}`
-  return {
-    initial: { opacity: 0, x: from },
-    animate: { opacity: 1, x: 0 },
-    exit: { opacity: 0, x: to },
-  }
-}
-
-// Kept names (older call sites) - now the same system.
-export const MOBILE_SLIDE_X = 96
-export const MOBILE_SLIDE_TRANSITION: Transition = PAGE_TRANSITION
 
 /** Tab switches / state swaps inside a screen: a quick cross-fade. */
 export const MOBILE_TAB_FADE_Y = 0
@@ -152,6 +127,9 @@ export const DIALOG_BACKDROP = byScreen({
   exit: { opacity: 0, transition: { duration: 0.12, ease: EASE_OUT } },
   transition: { duration: 0.15, ease: EASE_OUT },
 })
+
+// ── Controls (press / hover, the bottom-nav pill, badges) ────────────────
+export const CONTROL_MOTION: Transition = { duration: 0.22, ease: EASE_OUT }
 
 // ── Dropdown menus (TokenMenu and every menu like it) ─────────────────────
 export const MENU_MOTION = {

@@ -1,3 +1,4 @@
+import { CONTROL_MOTION } from '@/lib/motion'
 import { KeyRound, Fingerprint, QrCode, ShieldOff, MessageCircle, BadgeCheck } from 'lucide-react'
 import { Reveal, RevealGroup, staggerItem } from './Reveal'
 import { motion } from 'framer-motion'
@@ -42,7 +43,7 @@ export function SelfCustody() {
             key={p.title}
             variants={staggerItem}
             whileHover={{ y: -3 }}
-            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+            transition={CONTROL_MOTION}
             className="flex flex-col gap-3 rounded-[20px] border border-border bg-surface p-6 shadow-elevation-1"
           >
             <p.icon size={22} className="text-brand-text" />

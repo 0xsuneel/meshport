@@ -1,3 +1,4 @@
+import { CONTROL_MOTION } from '@/lib/motion'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Bell } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -44,7 +45,7 @@ export function PageHeader({ title, showBack = true, showNotifications = false, 
                 key={badgeLabel}
                 initial={{ scale: 0.6 }}
                 animate={{ scale: 1 }}
-                transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                transition={CONTROL_MOTION}
                 className="absolute top-1 right-1 w-4 h-4 bg-danger rounded-full text-[10px] font-bold flex items-center justify-center text-white"
               >
                 {badgeLabel}
