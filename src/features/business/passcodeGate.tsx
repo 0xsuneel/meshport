@@ -2,6 +2,7 @@
 // ask() runs the action at once when no passcode is set, else after the
 // right one is typed into the app's passcode step (PinSheet). A wrong code
 // clears the digits and shows the error under the title.
+import { useLatched } from '@/hooks/useLatched'
 import { useState } from 'react'
 import { useAuthStore } from '@/store'
 import { PinSheet } from '@/components/ui/PinSheet'
@@ -12,8 +13,9 @@ export function usePasscodeGate() {
   const [error, setError] = useState<string>()
   const [value, setValue] = useState('')
   const ask = (title: string, subtitle: string, run: (code?: string) => void) => { if (!hash) { run(); return } setError(undefined); setValue(''); setPending({ title, subtitle, run }) }
+  const shownPending = useLatched(pending)
   const sheet = (
-    <PinSheet open={!!pending} title={pending?.title ?? ''} subtitle={pending?.subtitle ?? ''} error={error}
+    <PinSheet open={!!pending} title={shownPending?.title ?? ''} subtitle={shownPending?.subtitle ?? ''} error={error}
       value={value} onChange={v => { setValue(v); if (v) setError(undefined) }}
       onClose={() => setPending(null)}
       onComplete={async code => {

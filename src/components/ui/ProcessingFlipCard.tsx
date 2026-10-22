@@ -12,7 +12,7 @@
 import { useCallback, useState } from 'react'
 import { PopupOpen } from '@/hooks/usePopupOpen'
 import { PopupDim } from './PopupDim'
-import { POPUP_CARD } from '@/lib/motion'
+import { POPUP_CARD, stableLayer } from '@/lib/motion'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -103,7 +103,7 @@ export function ProcessingFlipCard({ open, phase, processingLabel, title, messag
         >
           <PopupOpen />
           <PopupDim />
-          <motion.div {...POPUP_CARD} style={{ perspective: 1200, position: 'relative' }} onClick={e => e.stopPropagation()}>
+          <motion.div {...POPUP_CARD} transformTemplate={stableLayer} style={{ perspective: 1200, position: 'relative' }} onClick={e => e.stopPropagation()}>
             <motion.div
               animate={{ rotateY: phase === 'processing' ? 0 : 180 }}
               transition={{ duration: 0.55, ease: 'easeInOut' }}

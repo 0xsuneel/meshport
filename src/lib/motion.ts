@@ -69,6 +69,18 @@ function byScreen<T extends object>(phone: T, desktop: object): T {
 // A tween, not a spring: the old spring (damping 32 / stiffness 300) was just
 // under-damped, so every sheet overshot its resting place and settled back -
 // a small rubber-band bounce. This lands once, iOS-style, and stays.
+/**
+ * framer-motion `transformTemplate` for anything that pops or slides in over
+ * the page (popups, sheets, a success screen's rows): it stays on its own
+ * GPU layer for its whole life. Without it, the moment an animation settles
+ * framer writes `transform: none`, Chrome drops the layer and paints the
+ * content again - on Android that repaint shows as a one-frame blink at the
+ * end of opening (and again as closing starts). translateZ(0) changes nothing
+ * on screen; it only keeps the layer.
+ */
+export const stableLayer = (_: unknown, generated: string): string =>
+  generated && generated !== 'none' ? `${generated} translateZ(0)` : 'translateZ(0)'
+
 export const SHEET_SPRING: Transition = { duration: 0.38, ease: EASE_OUT }
 /** Sheets leave a little quicker than they arrive (ease-in, like the OS). */
 export const SHEET_EXIT = { y: '100%', transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } } as const
@@ -77,6 +89,7 @@ export const SHEET_PANEL = {
   animate: { y: 0 },
   exit: SHEET_EXIT,
   transition: SHEET_SPRING,
+  transformTemplate: stableLayer,
 } as const
 /** The dim behind every bottom sheet (Tailwind bg-black/70). */
 export const SHEET_DIM = 'rgba(0,0,0,0.7)'

@@ -14,8 +14,15 @@ import { useLayoutEffect } from 'react'
 // A counter keeps the class on while popups are stacked.
 let openPopups = 0
 
+// Phones: index.css already switches every page blur off for good (the
+// `(hover: none) and (pointer: coarse)` rule), so the class would change
+// nothing - and toggling it restyles the whole page (`#root *`) as each popup
+// opens and closes, a dropped frame right when it starts and ends. Skipped.
+const BLURS_ALWAYS_OFF = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none) and (pointer: coarse)').matches
+
 export function usePopupOpen() {
   useLayoutEffect(() => {
+    if (BLURS_ALWAYS_OFF) return
     openPopups += 1
     document.documentElement.classList.add('popup-open')
     return () => {

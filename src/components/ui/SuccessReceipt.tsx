@@ -3,7 +3,7 @@ import { PointsEarnedLine } from '@/components/rewards/PointsEarnedLine'
 import type { RewardActionType } from '@/lib/rewards'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { Check, ChevronDown, Copy, ExternalLink, Zap } from 'lucide-react'
-import { EASE_OUT } from '@/lib/motion'
+import { EASE_OUT, stableLayer } from '@/lib/motion'
 import { usePopupOpen } from '@/hooks/usePopupOpen'
 
 // The receipt card every success flow lands on after SuccessFlash:
@@ -111,7 +111,7 @@ function Row({ row, i, revealed }: { row: ReceiptRow; i?: number; revealed?: boo
 function Reveal({ i, revealed, children, style }: { i: number; revealed: boolean; children: ReactNode; style?: CSSProperties }) {
   return (
     <motion.div initial={false} animate={revealed ? { opacity: 1, y: 0 } : { opacity: 0, y: 12 }}
-      transition={{ duration: 0.45, delay: revealed ? i * 0.07 : 0, ease: EASE_OUT }} style={style}>
+      transition={{ duration: 0.45, delay: revealed ? i * 0.07 : 0, ease: EASE_OUT }} style={style} transformTemplate={stableLayer}>
       {children}
     </motion.div>
   )
