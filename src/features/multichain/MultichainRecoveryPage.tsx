@@ -26,6 +26,9 @@ import {
 import { useLeaveGuard } from '@/lib/leaveGuard'
 
 const card: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: 16 }
+// How long Circle's hold on a failed delivery can last before the 7-day
+// withdrawal of the on-chain balance is offered (it normally ends in hours).
+const STUCK_HOLD_FALLBACK_MS = 6 * 60 * 60 * 1000
 const btn: React.CSSProperties = { padding: '10px 14px', borderRadius: 12, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }
 
 const STATE_TEXT: Record<CctpDiagnosis['state'], string> = {
@@ -64,7 +67,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
   // Leftover fee dust per chain (each below UB_MIN_SWEEP). Shown only once it totals UB_DUST_CLAIM_MIN.
   const [ubDust, setUbDust] = useState<Array<{ chain: string; amount: number }>>([])
   // Failed UB transfers (Arc → other chain) still sitting in the Arc Unified Balance.
-  const [ubStuck, setUbStuck] = useState<Array<import('@/lib/ubFundRecovery').UbStuckTransfer & { available: number }>>([])
+  const [ubStuck, setUbStuck] = useState<Array<import('@/lib/ubFundRecovery').UbStuckTransfer & { available: number; onChain: number }>>([])
   // Arc Unified Balance not reserved for a stuck transfer above - it's the
   // person's, and was never listed anywhere.
   const [ubArc, setUbArc] = useState(0)
@@ -104,12 +107,18 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
           setUbDust([])
           // Stuck transfers draw on the Arc Unified Balance, oldest first.
           try {
-            const { listUbStuckTransfers } = await import('@/lib/ubFundRecovery')
+            const { listUbStuckTransfers, getArcGatewayOnChainBalance } = await import('@/lib/ubFundRecovery')
             let arcLeft = rows.filter(r => r.chain === ARC_CHAIN_KEY).reduce((s, r) => s + r.confirmed, 0)
-            const stuck = (await listUbStuckTransfers(walletAddress)).map(t => {
+            const open = await listUbStuckTransfers(walletAddress)
+            // What the contract itself holds - the 7-day withdrawal's limit,
+            // which Circle's hold on a failed delivery doesn't lower.
+            let chainLeft = open.length ? (await getArcGatewayOnChainBalance(walletAddress)) ?? 0 : 0
+            const stuck = open.map(t => {
               const available = Math.min(t.amount, arcLeft)
               arcLeft = Math.max(0, arcLeft - available)
-              return { ...t, available }
+              const onChain = Math.min(t.amount, chainLeft)
+              chainLeft = Math.max(0, chainLeft - onChain)
+              return { ...t, available, onChain }
             })
             // Keep every open stuck transfer visible. While Circle still holds
             // the amount for the failed delivery (its attestation, ~10 min),
@@ -367,6 +376,12 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
         const held = Math.max(0, t.amount - t.available)
         const holding = held > Math.max(0.5, t.amount * 0.05)
           && Date.now() - new Date(t.createdAt).getTime() < 24 * 60 * 60 * 1000
+        // Circle normally lets go within a few hours. Past that, the money is
+        // still in the wallet's Gateway balance on-chain (the contract doesn't
+        // see Circle's hold), so the 7-day withdrawal can take it back.
+        const heldLong = held > 0.01 && Date.now() - new Date(t.createdAt).getTime() > STUCK_HOLD_FALLBACK_MS
+        const canWithdraw = (heldLong ? t.onChain : t.available) >= 0.1
+        const withdrawAmount = heldLong ? t.onChain : t.available
         const row = (label: string, value: string, mono = false) => (
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13, padding: '6px 0', borderTop: '1px solid var(--border)' }}>
             <span style={{ color: 'var(--text-secondary)' }}>{label}</span>
@@ -390,8 +405,11 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
             {r?.error && <div role="alert" style={{ fontSize: 13, marginTop: 10, color: 'var(--danger)' }}>{r.error}</div>}
             {(holding || t.available < 0.1) ? (
               <div style={{ fontSize: 13, marginTop: 10, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
-                Circle is still holding {held.toFixed(2)} USDC for the delivery that failed. It isn't lost - it comes
-                back to your Unified Balance once that delivery expires. Tap Refresh later, then choose where to send it.
+                {heldLong
+                  ? <>Circle is still holding {held.toFixed(2)} USDC for the delivery that didn&apos;t finish and hasn&apos;t released it.
+                      It&apos;s still in your Unified Balance - you can take it back yourself below, no Circle needed.</>
+                  : <>Circle is still holding {held.toFixed(2)} USDC for the delivery that didn&apos;t finish. It isn&apos;t lost - Circle
+                      usually releases it within a few hours. Tap Refresh later, then choose where to send it.</>}
               </div>
             ) : (
             <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
@@ -403,10 +421,10 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
               </button>
             </div>
             )}
-            {!holding && t.available >= 0.1 && (
-              <button style={{ ...btn, marginTop: 8, width: '100%', fontSize: 12.5, color: 'var(--text-secondary)' }} disabled={isBusy}
-                onClick={() => void withdrawTrustless(key, { chain: ARC_CHAIN_KEY, amount: t.available, label: t.destinationLabel, replaceRowId: t.id })}>
-                Withdraw without Circle (7-day wait)
+            {(heldLong || !holding) && canWithdraw && (
+              <button style={{ ...btn, marginTop: 8, width: '100%', fontSize: 12.5, ...(heldLong ? {} : { color: 'var(--text-secondary)' }) }} disabled={isBusy}
+                onClick={() => void withdrawTrustless(key, { chain: ARC_CHAIN_KEY, amount: withdrawAmount, label: t.destinationLabel, replaceRowId: t.id })}>
+                Withdraw {withdrawAmount.toFixed(2)} USDC without Circle (7-day wait)
               </button>
             )}
             <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 8 }}>

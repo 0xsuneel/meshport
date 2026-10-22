@@ -137,6 +137,25 @@ export async function getUbWithdrawalStatus(walletAddress: string): Promise<UbWi
   }
 }
 
+/**
+ * The wallet's Arc Unified Balance as the Gateway contract holds it
+ * (availableBalance). Circle's API can read lower: it keeps the amount of a
+ * signed delivery nobody minted reserved, sometimes for a day or more. The
+ * contract doesn't know about that hold, so this is what the 7-day
+ * withdrawal can take back. null when it can't be read.
+ */
+export async function getArcGatewayOnChainBalance(walletAddress: string): Promise<number | null> {
+  try {
+    const provider = await getArcProvider()
+    const pad = (a: string) => a.toLowerCase().replace(/^0x/, '').padStart(64, '0')
+    const raw = await provider.call({ to: GATEWAY_WALLET, data: '0x3ccb64ae' + pad(ARC_USDC) + pad(walletAddress) })   // availableBalance(token, depositor)
+    return Number(BigInt(raw)) / 1e6
+  } catch (e) {
+    console.warn('[ubFundRecovery] could not read the on-chain Unified Balance:', e instanceof Error ? e.message : e)
+    return null
+  }
+}
+
 async function getKitAndAdapter(privateKey: string, chain: string = ARC_CHAIN_KEY) {
   const { AppKit, createEthersAdapterFromPrivateKey } = await loadSdk()
   const kit = new AppKit({ disableErrorReporting: true } as any)
