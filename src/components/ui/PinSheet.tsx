@@ -13,6 +13,7 @@ import { DesktopTransactionAuthDialog } from './DesktopTransactionAuthDialog'
 import { PinKeypad } from './PinKeypad'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY } from '@/lib/motion'
+import type { BiometricVerb } from '@/lib/biometricWording'
 
 export interface PinSheetProps {
   open: boolean
@@ -35,6 +36,13 @@ export interface PinSheetProps {
   locked?: boolean
   biometricAvailable?: boolean
   autoBiometric?: boolean
+  /** What this flow does, for the fingerprint view: "Pay with Face ID",
+   *  "Swap with fingerprint"... (default Confirm). */
+  bioVerb?: BiometricVerb
+  /** Phone: what it's for and how much, as a card under the title (in place
+   *  of the subtitle), so it's in view before the fingerprint.
+   *  `label` heads it: "Paying", "Swapping", "Sending to", "Claiming"... */
+  card?: { label: string; name: string; detail?: string; amount: string; unit?: string }
   /** Inside a panel (the chat) instead of over the whole app. */
   inPanel?: boolean
   /** Phone / browser Back closes it (default). Off where the page already
@@ -66,7 +74,7 @@ export function PinSheet(p: PinSheetProps) {
     </button>
   ) : (
     <PinKeypad value={p.value} onChange={p.onChange} length={6} error={!!p.error} shake={!!p.error}
-      onComplete={p.onComplete} biometricAvailable={p.biometricAvailable} autoBiometric={p.autoBiometric} />
+      onComplete={p.onComplete} biometricAvailable={p.biometricAvailable} autoBiometric={p.autoBiometric} bioVerb={p.bioVerb} />
   )
   const said = p.error
     ? <span role="alert" className="text-danger">{p.error}</span>
@@ -92,11 +100,32 @@ export function PinSheet(p: PinSheetProps) {
         {p.header}
         <div className="text-center mb-7">
           <h2 className="text-lg font-bold text-text-primary">{p.title}</h2>
-          <p className="text-[12.5px] mt-1.5 text-text-secondary">{said}</p>
+          {(!p.card || p.error) && <p className="text-[12.5px] mt-1.5 text-text-secondary">{said}</p>}
+          {p.card && <SummaryCard {...p.card} />}
         </div>
         {pad}
         {p.footer}
       </div>
     </ActionSheet>
+  )
+}
+
+function SummaryCard({ label, name, detail, amount, unit }: NonNullable<PinSheetProps['card']>) {
+  return (
+    <div className="mt-4 flex items-center gap-3 rounded-[18px] bg-bg px-4 py-3.5 text-left">
+      <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0 text-[18px] font-extrabold text-brand-text"
+        style={{ background: 'color-mix(in srgb, var(--brand) 16%, transparent)' }}>
+        {name.trim().charAt(0).toUpperCase() || '?'}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[12.5px] text-text-secondary">{label}</p>
+        <p className="text-[15.5px] font-bold text-text-primary truncate">{name}</p>
+        {detail && <p className="text-[12.5px] text-text-secondary truncate">{detail}</p>}
+      </div>
+      <div className="text-right shrink-0">
+        <p className="text-[22px] font-extrabold tracking-[-0.5px] text-text-primary tabular-nums">{amount}</p>
+        {unit && <p className="text-[12.5px] text-text-secondary">{unit}</p>}
+      </div>
+    </div>
   )
 }

@@ -29,6 +29,7 @@ import { hasBiometricRegistered, verifyBiometricAndGetPasscode, biometricLabel, 
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { hapticError } from '@/lib/feedback'
 import { BiometricFirst } from './BiometricFirst'
+import type { BiometricVerb } from '@/lib/biometricWording'
 
 interface PinKeypadProps {
   value: string
@@ -57,6 +58,9 @@ interface PinKeypadProps {
    *  it. The pad's own biometric (probe, auto prompt, fingerprint-first view)
    *  is then off. Omitted everywhere else - nothing changes there. */
   biometricKey?: { show: boolean; onTry: () => void; trying?: boolean }
+  /** What the fingerprint view says: "Pay with Face ID", "Confirm with
+   *  fingerprint"... (default Confirm). */
+  bioVerb?: BiometricVerb
 }
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del']
@@ -74,6 +78,7 @@ export function PinKeypad({
   biometricAvailable,
   autoBiometric = true,
   biometricKey,
+  bioVerb = 'Confirm',
 }: PinKeypadProps) {
   // Wrong PIN: two short knocks along with the shake / red dots.
   useEffect(() => { if (shake || error) hapticError() }, [shake, error])
@@ -125,8 +130,9 @@ export function PinKeypad({
     hasBiometricRegistered(walletAddress)
   const canUseBiometric = biometricKey ? biometricKey.show : biometricReady && liveSupported !== false
 
-  // Biometric on (phone) → fingerprint / Face ID first: the number pad only
-  // appears once the scan fails or is cancelled, or on "Use passcode".
+  // Biometric on (phone) → fingerprint / Face ID first. A cancelled or failed
+  // scan stays here ("Pay with fingerprint" to try again); the number pad
+  // appears on "Use passcode", or after a wrong passcode.
   const [mode, setMode] = useState<'bio' | 'pin'>(() =>
     autoBiometric && biometricReady && !isDesktop ? 'bio' : 'pin')
   // The prompt is about to open by itself (below): show "Waiting for…" from
@@ -147,14 +153,13 @@ export function PinKeypad({
     // Accepted: stay on "Waiting for…" while the sheet closes - switching
     // back to "Tap to use…" for that moment read like the scan had failed.
     if (!pc) setBiometricTrying(false)
-    // A cancelled/failed check just leaves the keypad ready for manual
-    // entry - no error shown, cancelling is a normal choice here.
+    // A cancelled/failed check shows no error - cancelling is a normal
+    // choice. The fingerprint view stays, with its button to try again and
+    // "Use passcode"; from the number pad, the pad just stays.
     if (pc) {
       viaBiometricRef.current = true
       onBiometric?.() // optional notification hook for a caller that wants one
       onChange(pc)
-    } else {
-      setMode('pin')
     }
   }
 
@@ -228,7 +233,7 @@ export function PinKeypad({
     return (
       <div className="w-full">
         {/* Same height as dots (46) + number pad (4×56 + 3×10) */}
-        <BiometricFirst Icon={Icon} label={label} trying={biometricTrying || autoPending} onTry={tryBiometric}
+        <BiometricFirst Icon={Icon} label={label} verb={bioVerb} trying={biometricTrying || autoPending} onTry={tryBiometric}
           onUsePasscode={() => { setAutoPending(false); setMode('pin') }} height={short ? 254 : 300} />
       </div>
     )

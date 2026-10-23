@@ -3,7 +3,7 @@ import { MeshPortLogo } from '@/components/ui/MeshPortLogo'
 import { BiometricFirst } from '@/components/ui/BiometricFirst'
 import { handBiometricPasscode } from '@/lib/biometricHandoff'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
-import { ArrowLeft, Fingerprint, ScanFace } from 'lucide-react'
+import { ArrowLeft, Fingerprint, ScanFace, Sun, Sunset, Moon } from 'lucide-react'
 import { PinKeypad } from '@/components/ui/PinKeypad'
 import { ScreenPush } from '@/components/ui/ScreenPush'
 import { ERROR_MOTION } from '@/lib/motion'
@@ -12,6 +12,7 @@ import { useAuthStore, useUIStore } from '@/store'
 import { hashPasscode, verifyPasscode, getPasscodeLockoutRemainingMs, clearPasscodeLockout } from '@/lib/security'
 import { hasBiometricRegistered, verifyBiometricAndGetPasscode, biometricLabel, isBiometricSupported, wasBiometricOfferSkippedRecently } from '@/lib/biometric'
 import { afterSplash } from '@/lib/splash'
+import { greetingTime, greetingText } from '@/lib/greeting'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 
 export function PasscodeSetupPage() {
@@ -257,6 +258,10 @@ export function PasscodeLockPage() {
   const [biometricTrying, setBiometricTrying] = useState(false)
 
   const displayName = user?.displayName || user?.username?.replace('.arc','') || 'Welcome back'
+  const greetName = user?.displayName || user?.username?.replace('.arc','') || ''
+  // Set once per visit, so it doesn't change under them while unlocking.
+  const [greetAt] = useState(() => greetingTime())
+  const GreetIcon = greetAt === 'night' ? Moon : greetAt === 'evening' ? Sunset : Sun
   const noPasscode  = !passcode
   const label = biometricLabel()
   const BiometricIcon = label === 'Face ID' ? ScanFace : Fingerprint
@@ -369,9 +374,9 @@ export function PasscodeLockPage() {
     // Accepted: stay on "Waiting…" until Home is up - switching back to "Tap
     // to use biometrics" for that moment read like the scan had failed.
     if (!pc) setBiometricTrying(false)
-    // A cancelled/failed biometric check just falls back to the normal
-    // passcode entry already on screen - no error shown, since cancelling
-    // is an entirely normal choice here, not a mistake.
+    // A cancelled/failed biometric check shows no error - cancelling is an
+    // entirely normal choice here, not a mistake. The fingerprint view stays
+    // ("Unlock with fingerprint" to try again, or "Use passcode").
     if (pc) {
       // Fixed (/cso follow-up): a real OS-verified Face ID/fingerprint
       // success recovers the true passcode via a device-bound credential -
@@ -381,8 +386,6 @@ export function PasscodeLockPage() {
       // unlock "broken" too, even though they just authenticated for real.
       clearPasscodeLockout()
       handleUnlock(pc)
-    } else {
-      setMode('pin')
     }
   }
 
@@ -433,9 +436,14 @@ export function PasscodeLockPage() {
           above) if a very short screen still can't fit it all. */}
       <div className="my-auto flex flex-col items-center gap-2 py-4">
         <MeshPortLogo className="w-20 h-20 short:w-16 short:h-16 mx-auto mb-2" splashTarget />
-        <h2 className="text-[20px] tracking-[-0.2px] font-bold text-text-primary">MeshPort</h2>
+        {/* "Good morning, Sunil" - the name on its own line, large. */}
+        <p className="flex items-center gap-1.5 text-[14.5px] font-semibold text-text-secondary">
+          <GreetIcon className="w-4 h-4" style={{ color: greetAt === 'night' ? 'var(--brand-text)' : '#E8A33A' }} />
+          {greetText(greetAt, greetName)}
+        </p>
+        {greetName && <h2 className="-mt-1.5 text-[26px] leading-tight tracking-[-0.5px] font-bold text-text-primary">{greetName}</h2>}
         <p className="text-text-secondary text-[14px] leading-[1.5]">
-          {noPasscode ? `Signed in as ${displayName}` : mode === 'bio' ? `Unlock with ${label === 'Fingerprint' ? 'your fingerprint' : label === 'Biometric' ? 'biometrics' : label}` : 'Enter passcode to unlock'}
+          {noPasscode ? `Signed in as ${displayName}` : mode === 'bio' ? 'MeshPort is locked' : 'Enter passcode to unlock'}
         </p>
         {noPasscode ? (
           <div className="mt-8 w-full max-w-xs space-y-3">
@@ -453,8 +461,8 @@ export function PasscodeLockPage() {
           <>
             {/* Same space as dots + status line + number pad, so "Use
                 passcode" swaps in place without the logo moving. */}
-            <BiometricFirst Icon={BiometricIcon} label={label} trying={biometricTrying || autoPending} onTry={tryBiometric}
-              onUsePasscode={() => { setAutoPending(false); setMode("pin") }} height={short ? 294 : 344} />
+            <BiometricFirst Icon={BiometricIcon} label={label} verb="Unlock" trying={biometricTrying || autoPending} onTry={tryBiometric}
+              onUsePasscode={() => { setAutoPending(false); setMode("pin") }} height={short ? 302 : 352} />
             <button onClick={handleSignOut} className="mt-6 text-text-muted text-sm hover:text-text-secondary transition-colors">
               Sign out
             </button>
@@ -498,4 +506,9 @@ export function PasscodeLockPage() {
       </div>
     </div>
   )
+}
+
+// "Good morning," above the name; just "Good morning" when there's no name.
+function greetText(t: ReturnType<typeof greetingTime>, name: string) {
+  return name ? `${greetingText(t)},` : greetingText(t)
 }
