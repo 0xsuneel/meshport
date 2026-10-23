@@ -98,7 +98,7 @@ function StaffBody({ open, onEditing, stores }: { open: boolean; onEditing: (e: 
   return (
       <div className="px-5 pt-4 pb-6">
         {edit ? (
-          <StaffForm username={edit.username} onUsername={v => setEdit({ ...edit, username: v })} role={edit.role} onRole={r => setEdit({ ...edit, role: r })}
+          <StaffForm checkUser={!edit.id} username={edit.username} onUsername={v => setEdit({ ...edit, username: v })} role={edit.role} onRole={r => setEdit({ ...edit, role: r })}
             stores={[{ id: '', name: `All ${terms.stores.toLowerCase()}` }, ...stores.map(s => ({ id: s.id, name: s.name }))]} store={edit.store} onStore={v => setEdit({ ...edit, store: v })}
             busy={busy} error={error} onSave={save} onCancel={() => changeEdit(null)} />
         ) : staff === null ? <Skeleton className="h-40 w-full" /> : (

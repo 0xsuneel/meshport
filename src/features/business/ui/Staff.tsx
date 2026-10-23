@@ -8,6 +8,9 @@ import React from 'react'
 import {
   UserPlus, Pencil, Trash2, Loader2, ShieldCheck, UserCheck, ExternalLink,
 } from 'lucide-react'
+import { useAuthStore } from '@/store'
+import { useUserSearch } from '@/hooks/useUserSearch'
+import { pickerProblem } from '@/lib/userSearch'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -158,12 +161,21 @@ export interface StaffFormProps {
   error?: string
   onSave: () => void
   onCancel: () => void
+  /** Inviting someone new: check the username as it's typed. */
+  checkUser?: boolean
 }
+
+const NO_PEOPLE: never[] = []
 
 export function StaffForm({
   username, onUsername, role, onRole, stores, store, onStore,
-  busy, error, onSave, onCancel,
+  busy, error, onSave, onCancel, checkUser = false,
 }: StaffFormProps) {
+  // Only a full username.arc is looked up; the hint says what's wrong.
+  const me = useAuthStore(s => s.user?.username ?? '')
+  const { results, searching } = useUserSearch(checkUser ? username : '', NO_PEOPLE, true)
+  const self = !!me && username.trim().toLowerCase().replace(/\.arc$/, '') === me.toLowerCase().replace(/\.arc$/, '')
+  const problem = checkUser ? pickerProblem(username, { searching, found: self ? 0 : results.length, self }) : null
   return (
     <div className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
@@ -176,6 +188,7 @@ export function StaffForm({
           autoCapitalize="none"
           className="h-12 px-4 rounded-2xl bg-card border border-border text-text-primary text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand/40"
         />
+        {problem && <span className={`text-[12px] px-0.5 ${problem.tone === 'danger' ? 'text-danger font-semibold' : 'text-text-muted'}`} role={problem.tone === 'danger' ? 'alert' : undefined}>{problem.text}</span>}
       </label>
 
       {/* Role segmented */}

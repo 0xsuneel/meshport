@@ -43,9 +43,17 @@ describe('pickerProblem / exactPick', () => {
     expect(pickerProblem('', { searching: false, found: 0, self: false })).toBeNull()
     expect(pickerProblem('ghost.arc', { searching: true, found: 0, self: false })).toBeNull()
     expect(pickerProblem('ghost.arc', { searching: false, found: 1, self: false })).toBeNull()
-    expect(pickerProblem('ghost.arc', { searching: false, found: 0, self: false })).toEqual({ text: 'No MeshPort user called ghost.arc', tone: 'danger' })
+    expect(pickerProblem('ghost.arc', { searching: false, found: 0, self: false })).toEqual({ text: 'User not found - no MeshPort user is called ghost.arc', tone: 'danger' })
     expect(pickerProblem('me.arc', { searching: false, found: 0, self: true })?.text).toBe("That's your own username")
     expect(pickerProblem('gho', { searching: false, found: 0, self: false })?.tone).toBe('muted')
+    // Still typing the ending: a hint, not an error.
+    expect(pickerProblem('ravi.ar', { searching: false, found: 0, self: false })).toEqual({ text: 'Type the full username, like ravi.arc', tone: 'muted' })
+    // A wrong ending.
+    expect(pickerProblem('ravi.acd', { searching: false, found: 0, self: false })).toEqual({ text: 'Usernames end in .arc - did you mean ravi.arc?', tone: 'danger' })
+    expect(pickerProblem('ravi.com', { searching: false, found: 0, self: false })?.tone).toBe('danger')
+    // Wallet addresses where allowed.
+    expect(pickerProblem('0x12ab', { searching: false, found: 0, self: false, allowAddress: true })?.tone).toBe('muted')
+    expect(pickerProblem('0x' + 'a'.repeat(40), { searching: false, found: 0, self: false, allowAddress: true })).toBeNull()
   })
   it('finds the person a full username names', () => {
     expect(exactPick('Sunil.arc', [sun, sunil])).toBe(sunil)

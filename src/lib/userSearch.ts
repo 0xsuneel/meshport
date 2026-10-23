@@ -53,11 +53,24 @@ export function recentFirst<T extends PersonLite>(recents: readonly T[], contact
 }
 
 /** What the picker says under a typed name nobody was picked for (null: nothing). */
-export function pickerProblem(query: string, opts: { searching: boolean; found: number; self: boolean }): { text: string; tone: 'danger' | 'muted' } | null {
+export function pickerProblem(query: string, opts: { searching: boolean; found: number; self: boolean; allowAddress?: boolean }): { text: string; tone: 'danger' | 'muted' } | null {
+  const raw = query.trim().replace(/^@/, '')
   const bare = bareHandle(query)
   if (!bare || opts.searching || opts.found > 0) return null
-  if (!isFullUsername(query)) return { text: `Type their full username, like ${bare}.arc`, tone: 'muted' }
-  return opts.self ? { text: "That's your own username", tone: 'danger' } : { text: `No MeshPort user called ${bare}.arc`, tone: 'danger' }
+  if (opts.allowAddress && /^0x/i.test(raw)) {
+    return /^0x[0-9a-f]{40}$/i.test(raw) ? null : { text: 'A wallet address is 0x and 40 more characters - check it', tone: 'muted' }
+  }
+  if (!isFullUsername(query)) {
+    // "ravi.acd", "ravi.com": a wrong ending (still typing ".a" / ".ar" is fine).
+    const dot = raw.lastIndexOf('.')
+    const ending = dot > 0 ? raw.slice(dot + 1).toLowerCase() : null
+    if (ending !== null && !'arc'.startsWith(ending)) {
+      return { text: `Usernames end in .arc - did you mean ${bareHandle(raw.slice(0, dot))}.arc?`, tone: 'danger' }
+    }
+    const base = dot > 0 ? bareHandle(raw.slice(0, dot)) : bare
+    return { text: `Type the full username, like ${base}.arc`, tone: 'muted' }
+  }
+  return opts.self ? { text: "That's your own username", tone: 'danger' } : { text: `User not found - no MeshPort user is called ${bare}.arc`, tone: 'danger' }
 }
 
 /** The person exactly named by `query` among `results` (a full username typed but not tapped). */
