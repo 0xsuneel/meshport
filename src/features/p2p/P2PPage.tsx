@@ -15,10 +15,7 @@ import { DIALOG_BACKDROP, POPUP_DIM } from '@/lib/motion'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MeshLoader } from '@/components/ui/MeshLoader'
-import {
-  ArrowLeft, Search, Filter, Plus,
-  Clock, CheckCircle2, Star, Paperclip, X as XIcon, History, Pencil, PlusCircle, Trash2,
-} from 'lucide-react'
+import { ArrowLeft, Filter, Plus, Clock, CheckCircle2, Star, Paperclip, X as XIcon, History, Pencil, PlusCircle, Trash2 } from 'lucide-react'
 import { useAuthStore, useUIStore, useP2PTradesCountStore, useWalletStore } from '@/store'
 import { PinSheet } from '@/components/ui/PinSheet'
 import { AmountKeypad, sanitizeAmountInput, tokenDecimals } from '@/components/ui/AmountKeypad'
@@ -50,6 +47,7 @@ import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { useLeaveGuard } from '@/lib/leaveGuard'
 import { searchTerm } from '@/lib/searchTerm'
+import { SearchField } from '@/components/ui/SearchField'
 
 export const COLORS = {
   bg: 'var(--bg)', surface: 'var(--surface)', surfaceSecondary: 'var(--surface)',
@@ -351,10 +349,8 @@ export function P2PHubPage() {
                   style={{ flex: 1, minWidth: 0, background: 'none', border: 'none', outline: 'none', color: COLORS.text, fontSize: 14, fontWeight: 600, textAlign: 'right' }} />
                 <span style={{ fontSize: 13, fontWeight: 700, color: COLORS.text }}>{currency || 'fiat'}</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: COLORS.surface, borderRadius: 12, padding: '10px 12px', border: `1px solid ${COLORS.border}` }}>
-                <Search size={15} color={COLORS.muted} />
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search trader or payment method"
-                  style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: COLORS.text, fontSize: 13 }} />
+              <div style={{ display: 'flex' }}>
+                <SearchField value={search} onChange={setSearch} ariaLabel="Search trader or payment method" placeholder={['Search trader or payment method', 'Search']} />
               </div>
               <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none' }}>
                 {(['all', 'verified', 'community'] as MerchantFilter[]).map(f => (

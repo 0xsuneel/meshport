@@ -4,7 +4,7 @@
 // inside Business. A due group shows here and as a notification; nothing is
 // sent without the owner.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Trash2, Users, CalendarClock, Check, Search, AlertCircle, Loader2, ShieldCheck } from 'lucide-react'
+import { Trash2, Users, CalendarClock, Check, AlertCircle, Loader2, ShieldCheck } from 'lucide-react'
 import { useAuthStore, useUIStore, useWalletStore } from '@/store'
 import { Avatar } from '@/components/ui/Avatar'
 import { useLeaveGuard } from '@/lib/leaveGuard'
@@ -26,6 +26,7 @@ import { DESKTOP_QUERY } from '@/lib/motion'
 import { BusinessScreen, ScreenLevel, useScreenLevel, PrimaryBtn, GhostBtn, Skeleton, Field, TextInput, ChipSelect } from './ui'
 import { usePasscodeGate } from './passcodeGate'
 import { unlockKey } from './settlement'
+import { SearchField } from '@/components/ui/SearchField'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const short = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
@@ -496,9 +497,8 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
         )}
         <Field label="Add a person" hint="Full username.arc or wallet address">
           <div className="flex flex-col gap-2">
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-text-muted pointer-events-none" />
-              <TextInput value={q} onChange={e => setQ(e.target.value)} placeholder="Search people" autoCapitalize="none" autoCorrect="off" spellCheck={false} className="pl-10" />
+            <div className="flex">
+              <SearchField wrap value={q} onChange={setQ} ariaLabel="Search people" placeholder={['Search username.arc or wallet address', 'Search people']} />
             </div>
             {(results.length > 0 || typedAddress || searching) && (
               <div className="rounded-2xl bg-card border border-border divide-y divide-border">

@@ -6,10 +6,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { PUSH_OPEN_MS, PUSH_BACK_MS, EASE_OUT, DESKTOP_FADE_Y, DESKTOP_FADE_TRANSITION, DESKTOP_QUERY } from '@/lib/motion'
 import { motion } from 'framer-motion'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { X, Search, Check, Loader2 } from 'lucide-react'
+import { X, Check, Loader2 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { plainTextOf, parseMedia } from './chatMessageText'
 import { searchTerm } from '@/lib/searchTerm'
+import { SearchField } from '@/components/ui/SearchField'
 
 const MAX_TARGETS = 5
 
@@ -125,11 +126,9 @@ export function ChatForwardSheet({ messages, sourceKey, myUserId, walletAddress,
         </div>
       </div>
       <div className="px-4 py-2">
-        <label className="flex items-center gap-2 rounded-full px-3.5" style={{ height: 40, background: 'color-mix(in srgb, var(--text-primary) 6%, transparent)' }}>
-          <Search className="w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or username" autoCapitalize="none"
-            className="flex-1 bg-transparent text-sm text-text-primary focus:outline-none" />
-        </label>
+        <div className="flex">
+          <SearchField value={q} onChange={setQ} placeholder="Search name or username" />
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto pb-28">
         {convs === null ? (
