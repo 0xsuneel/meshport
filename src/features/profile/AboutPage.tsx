@@ -89,7 +89,7 @@ export function AboutPage() {
             company behind USDC - designed for stablecoin payments, where USDC itself pays the network fee. You hold
             and send <span className="text-text-primary font-medium">USDC</span> and <span className="text-text-primary font-medium">EURC</span>
             {' '}(digital dollars and euros) and can swap into <span className="text-text-primary font-medium">cirBTC</span>.
-            Every payment settles on a public ledger, so it’s final and verifiable by anyone.
+            Every payment settles on a public blockchain, so it’s final and verifiable by anyone.
           </p>
           <p className="text-sm text-text-secondary leading-relaxed">
             Beyond everyday payments, MeshPort includes payment links, bulk payouts, merchant bills and order

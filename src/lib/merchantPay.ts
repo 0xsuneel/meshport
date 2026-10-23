@@ -25,7 +25,7 @@ export type PaymentStage = 'confirmed' | 'in_ledger' | 'collected'
 /** Where a merchant payment is right now, in merchant words. */
 export function paymentStageLabel(p: { method: string; status: PaymentStage }): string {
   if (p.method !== 'external_ub') return 'Received'
-  return p.status === 'confirmed' ? 'Received in Ledger · waiting for Claim All' : p.status === 'in_ledger' ? 'In Ledger · moving to Arc' : 'In Arc balance'
+  return p.status === 'confirmed' ? 'Received on another chain · waiting for Claim All' : p.status === 'in_ledger' ? 'Moving to Arc' : 'In Arc balance'
 }
 /**
  * Still on its way. A payment on another chain is already received the moment

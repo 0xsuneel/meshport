@@ -295,7 +295,7 @@ export function LedgerInsightsPage() {
               </div>
               <button onClick={() => navigate('/multichain', { state: { tab: 'bring' } })}
                 style={{ marginTop: 12, width: '100%', padding: '10px 12px', borderRadius: 12, border: '1px solid var(--border)', background: 'transparent', color: 'var(--brand-text)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                Open Ledger
+                View other chains
               </button>
             </div>
 

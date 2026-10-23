@@ -129,7 +129,7 @@ export function MerchantPaymentCard({ code, isMine, text }: { code: string; isMi
   const statusLine = loading ? 'Checking status…'
     : paid && v.completedByMerchant ? '✓ Completed'
     : paid ? (isMine ? '✓ Payment received' : '✓ Paid')
-    : v.status === 'processing' && v.payments.some(p => p.status === 'in_ledger') ? 'In Ledger · moving to Arc'
+    : v.status === 'processing' && v.payments.some(p => p.status === 'in_ledger') ? 'Moving to Arc'
     : closed ? 'Can no longer be paid' // the band already says expired / cancelled / failed
     : expiryText(v.expiresAt) && v.status !== 'processing' ? `${STATUS_LABEL[v.status]} · ${expiryText(v.expiresAt)!.replace(/^Expires/, 'expires')}`
     : STATUS_LABEL[v.status]
@@ -248,7 +248,7 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
     : kind
   const statusText = loading ? 'Checking status…'
     : paid && v.completedByMerchant ? 'Completed by merchant'
-    : v.status === 'processing' && v.payments.some(p => p.status === 'in_ledger') ? 'In Ledger · moving to Arc'
+    : v.status === 'processing' && v.payments.some(p => p.status === 'in_ledger') ? 'Moving to Arc'
     : STATUS_LABEL[v.status]
   const hash = payment?.txHash || null
   const explorerHref = hash
