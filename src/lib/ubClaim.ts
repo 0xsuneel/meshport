@@ -541,7 +541,7 @@ export async function signSpendToArc(params: {
 }
 
 /**
- * Signs ONE Ledger (Unified Balance) → Arc transfer drawn from several chains
+ * Signs ONE Unified Balance → Arc transfer drawn from several chains
  * at once, without submitting it (same capture as signSpendToArc). The fee is
  * shared across the chains in proportion to each chain's amount.
  */
@@ -694,7 +694,7 @@ export async function recordUbClaim(p: {
 
 // ── Merchant Claim All ────────────────────────────────────────────────────
 // Approved merchants: customer payments on other chains stay there until the
-// merchant taps Claim All (Hub → Ledger → Chains). Nothing moves by itself.
+// merchant taps Claim All (Business → Manage money → Chains). Nothing moves by itself.
 // Claim All is offered once every 6 hours - single chains can still be
 // claimed any time from the chain list.
 // Merchants use CCTP only (no Unified Balance): one gasless claim per chain

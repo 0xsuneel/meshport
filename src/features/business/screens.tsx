@@ -726,9 +726,9 @@ export function ProfileScreen({ open, onBack, handle }: { open: boolean; onBack:
   }
 
   const card: { tone: StatusCardTone; title: string; text: string } =
-    status === 'approved' ? { tone: 'success', title: 'Verified business', text: 'All merchant tools are on. Add your shops in Stores & staff.' }
+    status === 'approved' ? { tone: 'success', title: 'Verified business', text: 'All business tools are on. Add your shops in Stores & staff.' }
     : status === 'pending' ? { tone: 'warning', title: 'Under review', text: "MeshPort is reviewing your business. You'll get a notification when it's approved." }
-    : closed ? { tone: 'danger', title: status === 'revoked' ? 'Merchant access removed' : 'Not approved', text: application?.reviewNote || 'Check the details and send it again.' }
+    : closed ? { tone: 'danger', title: status === 'revoked' ? 'Business access removed' : 'Not approved', text: application?.reviewNote || 'Check the details and send it again.' }
     : { tone: 'brand', title: 'Apply for business approval', text: 'Add your business name and tell MeshPort why you need a business account. Payments, orders and business tools turn on once approved.' }
 
   return (

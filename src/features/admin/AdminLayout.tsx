@@ -20,7 +20,7 @@ const titles: Record<string, string> = {
   [`${ADMIN_PATH}/logs`]:        'Logs',
   [`${ADMIN_PATH}/support`]:     'Support Tickets',
   [`${ADMIN_PATH}/stuck-funds`]: 'Stuck Funds',
-  [`${ADMIN_PATH}/merchants`]:   'Merchants',
+  [`${ADMIN_PATH}/merchants`]:   'Businesses',
   [`${ADMIN_PATH}/orders`]:      'Orders',
   [`${ADMIN_PATH}/settings`]:    'Settings',
 }

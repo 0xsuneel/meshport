@@ -359,7 +359,7 @@ export function P2PHubPage() {
               <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none' }}>
                 {(['all', 'verified', 'community'] as MerchantFilter[]).map(f => (
                   <button key={f} onClick={() => setMerchantFilter(f)} style={chip(merchantFilter === f)}>
-                    {f === 'all' ? 'All traders' : f === 'verified' ? 'Verified merchants' : 'Community'}
+                    {f === 'all' ? 'All traders' : f === 'verified' ? 'Verified traders' : 'Community'}
                   </button>
                 ))}
                 <select aria-label="Region" value={country} onChange={e => setCountry(e.target.value)} style={selectStyle}>

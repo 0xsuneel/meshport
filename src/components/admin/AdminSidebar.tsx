@@ -29,7 +29,7 @@ const navItems = [
   { to: `${ADMIN_PATH}/maintenance`,  label: 'Maintenance',   icon: AlertTriangle },
   { to: `${ADMIN_PATH}/logs`,         label: 'Logs',           icon: ScrollText },
   { to: `${ADMIN_PATH}/stuck-funds`,  label: 'Stuck Funds',    icon: Wrench },
-  { to: `${ADMIN_PATH}/merchants`,    label: 'Merchants',      icon: Store },
+  { to: `${ADMIN_PATH}/merchants`,    label: 'Businesses',      icon: Store },
   { to: `${ADMIN_PATH}/orders`,       label: 'Orders',         icon: ReceiptText },
   { to: `${ADMIN_PATH}/support`,      label: 'Support Tickets', icon: LifeBuoy },
   { to: `${ADMIN_PATH}/settings`,     label: 'Settings',      icon: Settings },

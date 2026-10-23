@@ -37,9 +37,9 @@ Chats are **end-to-end encrypted**, with every chat key signed by its wallet.
 One balance on Arc, reachable from 20+ chains: bring USDC in, send it out,
 track every step. Built on Circle Gateway and CCTP V2.
 
-### 🧾 Payment links & merchants
+### 🧾 Payment links & business accounts
 Shareable links (`meshport.xyz/paylink/you?amount=10`) with rich previews,
-QR payments, merchant bills, bulk payouts, swaps (USDC · EURC · cirBTC) and P2P
+QR payments, business bills, bulk payouts, swaps (USDC · EURC · cirBTC) and P2P
 trading with on-chain escrow.
 
 ## Self-custody at a glance
@@ -77,14 +77,32 @@ You'll need a Supabase project and a `.env` — see
 
 | Path | What it is |
 |---|---|
-| [`src/`](src) | React + Vite PWA — wallet, chat, pay, multichain, merchant, P2P |
+| [`src/`](src) | React + Vite PWA — wallet, chat, pay, multichain, business, P2P |
 | [`src/lib/`](src/lib) | Wallet, passkey, Recovery QR and chat crypto; payment logic |
 | [`src/blockchain/`](src/blockchain) | Balance readers, RPC providers, chain config |
 | [`api/`](api) | Vercel functions — link previews, relayer, profile, push |
-| [`supabase/functions/`](supabase/functions) | Edge Functions — claims, ledger, merchant pay, indexer |
+| [`supabase/functions/`](supabase/functions) | Edge Functions — claims, accounting ledger, business pay (`merchant-pay`), indexer |
 | [`supabase/migrations/`](supabase/migrations) | Database schema and row-level security |
 | [`contracts/`](contracts) | Solidity — rewards, P2P escrow, bridge router |
 | [`docs/`](docs) | Architecture, self-custody, chat encryption, audits |
+
+## Names in the app vs. names in the code
+
+The app has two account types, **Personal** and **Business**. Some code and
+database names are older than the app's wording; they mean the same thing:
+
+| In the app | In code and the database |
+|---|---|
+| Business account | `merchant` (`useMerchant`, `isMerchant`, `merchant_*` tables, `merchant-pay`) |
+| Business verification | `merchant_applications` |
+| Cross-chain Transfer (business) / Multichain Hub (personal) | `/multichain`, `MultichainPage` |
+| Business Insights | `/business?screen=reports`, `BusinessInsightsPage` (desktop) |
+| Manage money · money on other chains | `BusinessMoney`, Unified Balance; payment status `in_ledger` = waiting on another chain |
+| Bill · Request · Shop QR payment | `merchant_payment_intents` (`kind` = `invoice` is a bill; `via` = `shop_qr` is a Shop QR payment; otherwise a request) |
+
+The `ledger` folders and `ledger_events` table (`server/ledger/`,
+`supabase/functions/ledger-interpret/`) are the internal accounting record
+that Activity is built from. It is never shown in the app.
 
 ## Tech
 

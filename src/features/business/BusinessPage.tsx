@@ -469,7 +469,7 @@ function OwnerBusinessPage() {
     : status === 'pending'
       ? <SetupBanner tone="warning" title="Business account under review" text={`We're reviewing ${storeInText}. You'll get a notification when it's approved.`} action="View application" onAction={open('profile')} />
       : status === 'rejected' || status === 'revoked'
-        ? <SetupBanner tone="danger" title={status === 'revoked' ? 'Merchant access removed' : 'Business account not approved'} text={application?.reviewNote || 'Check the details and send it again.'} action="Apply again" onAction={open('profile')} />
+        ? <SetupBanner tone="danger" title={status === 'revoked' ? 'Business access removed' : 'Business account not approved'} text={application?.reviewNote || 'Check the details and send it again.'} action="Apply again" onAction={open('profile')} />
         : <SetupBanner tone="brand" title="Apply for business approval" text={`Send ${storeInText} for review. Payments, orders and business tools turn on once MeshPort approves it.`} action="Apply for approval" onAction={open('profile')} />
 
   // History rows from claims; a tapped one opens in the progress sheet.

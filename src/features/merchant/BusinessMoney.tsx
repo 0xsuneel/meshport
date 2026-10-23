@@ -1,4 +1,4 @@
-// Merchant Ledger (Multichain Hub → Ledger, approved merchants only).
+// Manage money (Business → Manage money, approved merchants only).
 //   • Receive payment → payment request with QR + link (share / send in chat)
 //   • Arriving payments (paid on another chain, being moved to Arc)
 //   • Customers: totals, count, last payment → per-customer history
@@ -57,12 +57,12 @@ const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', pad
 /** A chain with USDC waiting, as the Hub's chain list shows it. */
 export type ClaimChain = { chainId: string; label: string; balance: number }
 
-export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains, claimChains, onClaimed }: {
+export function BusinessMoney({ children, boxStyle, chainsBalance, fundedChainCount, claimChains, onClaimed }: {
   children?: React.ReactNode; boxStyle?: React.CSSProperties
   /** Chains with USDC for Claim All; undefined while scanning. */
   claimChains?: ClaimChain[]; onClaimed?: () => void
-  /** Real USDC on the Ledger chains (what the Hub card shows); undefined while scanning. */
-  ledgerBalance?: number; ledgerChains?: number
+  /** Real USDC on the other chains (what the Hub card shows); undefined while scanning. */
+  chainsBalance?: number; fundedChainCount?: number
 }) {
   const walletAddress = useAuthStore(s => s.walletAddress)
   const [view, setView] = useState<View>({ kind: 'home' })
@@ -94,7 +94,7 @@ export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains
   // New payment requests / QR live in Home → Receive.
   const newRequest = (customer?: string) => navigate(`/receive?request=1${customer ? `&customer=${encodeURIComponent(customer)}` : ''}`)
   // Request / customer detail push in like any step (ScreenPush), and back to
-  // the home slides back - the same move as the flows around the Ledger.
+  // the home slides back - the same move as the flows around Manage money.
   const it = view.kind === 'request' ? intents.find(i => i.code === view.code) : undefined
   return (
     <ScreenPush screenKey={view.kind === 'home' ? 'home' : view.kind === 'request' ? `request:${view.code}` : `customer:${view.key}`} back={view.kind === 'home'}>
@@ -104,8 +104,8 @@ export function MerchantLedger({ children, boxStyle, ledgerBalance, ledgerChains
         : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {review.length > 0 && box(<NeedsReview deposits={review} intents={intents} onDone={load} />)}
-            {box(<LedgerHome loaded={loaded} intents={intents} payments={allPayments} receipts={receipts} chains={children} claimChains={claimChains} onClaimed={onClaimed}
-              ledgerBalance={ledgerBalance} ledgerChains={ledgerChains}
+            {box(<MoneyHome loaded={loaded} intents={intents} payments={allPayments} receipts={receipts} chains={children} claimChains={claimChains} onClaimed={onClaimed}
+              chainsBalance={chainsBalance} fundedChainCount={fundedChainCount}
               onOpenRequest={code => setView({ kind: 'request', code })} onOpenCustomer={key => setView({ kind: 'customer', key })} />)}
           </div>
         )}
@@ -126,7 +126,7 @@ export function withChainReceipts(payments: MerchantPayment[], receipts: ChainRe
   const known = new Set(payments.map(p => `${p.chain}:${(p.txHash ?? '').toLowerCase()}`))
   const usernameOf = (from: string) => payments.find(p => p.from?.toLowerCase() === from.toLowerCase())?.customerUsername ?? null
   const extra: MerchantPayment[] = receipts
-    // The merchant's own transfers are listed in the Ledger, but aren't revenue or a customer.
+    // The merchant's own transfers are listed in Manage money, but aren't revenue or a customer.
     .filter(r => !r.orderNumber && !isOwnReceipt(r, ownWallet) && !known.has(`${r.chain}:${r.txHash.toLowerCase()}`))
     .map(r => ({
       id: `rcpt_${r.id}`, intentId: '', chain: r.chain, txHash: r.txHash, from: r.from ?? '', amount: r.amount,
@@ -154,28 +154,28 @@ export function customersOf(payments: MerchantPayment[]): Customer[] {
   return [...map.values()].sort((a, b) => b.last.localeCompare(a.last))
 }
 
-type LedgerTab = 'requests' | 'customers' | 'chains'
-let lastLedgerTab: LedgerTab = 'chains'
+type MoneyTab = 'requests' | 'customers' | 'chains'
+let lastMoneyTab: MoneyTab = 'chains'
 
-function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, onClaimed, onOpenRequest, onOpenCustomer, ledgerBalance, ledgerChains }: {
+function MoneyHome({ loaded, intents, payments, receipts, chains, claimChains, onClaimed, onOpenRequest, onOpenCustomer, chainsBalance, fundedChainCount }: {
   loaded: boolean; intents: MerchantIntent[]; payments: MerchantPayment[]; chains?: React.ReactNode
-  ledgerBalance?: number; ledgerChains?: number
+  chainsBalance?: number; fundedChainCount?: number
   receipts: ChainReceipt[]; claimChains?: ClaimChain[]; onClaimed?: () => void
   onOpenRequest: (code: string) => void; onOpenCustomer: (key: string) => void
 }) {
   // Back from a request or customer: same tab, and that row flashes.
-  const listFlash = useReturnFlash('merchant-ledger')
-  const [tab, setTabState] = useState<LedgerTab>(() => (listFlash.flashId ? lastLedgerTab : 'chains'))
-  const setTab = (t: LedgerTab) => { lastLedgerTab = t; setTabState(t) }
+  const listFlash = useReturnFlash('business-money')
+  const [tab, setTabState] = useState<MoneyTab>(() => (listFlash.flashId ? lastMoneyTab : 'chains'))
+  const setTab = (t: MoneyTab) => { lastMoneyTab = t; setTabState(t) }
   const walletAddress = useAuthStore(s => s.walletAddress)
   const [q, setQ] = useState('')
   const [showAllReq, setShowAllReq] = useState(false)
   const [showAllCust, setShowAllCust] = useState(false)
   const arriving = payments.filter(isArriving)
-  // The real USDC on the Ledger chains (same as the Hub card). Payment records
+  // The real USDC on the other chains (same as the Hub card). Payment records
   // only cover what arrived since tracking began, so they're just a fallback
   // while the chain balances load.
-  const waitingTotal = ledgerBalance ?? receipts.filter(r => r.status !== 'converted').reduce((sum, r) => sum + r.amount, 0)
+  const waitingTotal = chainsBalance ?? receipts.filter(r => r.status !== 'converted').reduce((sum, r) => sum + r.amount, 0)
   const onTheWay = arriving.reduce((s, p) => s + p.amount, 0)
   const allCustomers = useMemo(() => customersOf(payments), [payments])
   const needle = q.trim().toLowerCase().replace(/^@/, '')
@@ -225,7 +225,7 @@ function LedgerHome({ loaded, intents, payments, receipts, chains, claimChains, 
 
       {waitingTotal > 0 && (
         <button onClick={() => setTab('chains')} style={{ ...card, padding: '10px 12px', textAlign: 'left', cursor: 'pointer', borderColor: 'color-mix(in srgb, var(--warning) 35%, var(--border))' }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--warning)' }}>${formatAmount(waitingTotal)} USDC on {ledgerChains ? `${ledgerChains} other chain${ledgerChains === 1 ? '' : 's'}` : 'other chains'}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--warning)' }}>${formatAmount(waitingTotal)} USDC on {fundedChainCount ? `${fundedChainCount} other chain${fundedChainCount === 1 ? '' : 's'}` : 'other chains'}</div>
           <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2 }}>
             Open Chains to move it to Arc with Claim All
           </div>
@@ -637,7 +637,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
         <>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
             <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 12, border: '1px solid var(--border)' }}>
-              {([['link', 'MeshPort QR'], ['wallet', 'Merchant QR']] as const).map(([m, label]) => (
+              {([['link', 'MeshPort QR'], ['wallet', 'Wallet QR']] as const).map(([m, label]) => (
                 <button key={m} onClick={() => setQrMode(m)} disabled={m === 'wallet' && !walletAddress}
                   style={{ padding: '7px 14px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700,
                     background: qrMode === m ? 'var(--brand)' : 'transparent', color: qrMode === m ? '#fff' : 'var(--text-secondary)' }}>

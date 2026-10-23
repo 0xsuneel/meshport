@@ -28,13 +28,13 @@ export function MerchantHomeCard() {
   const arriving = payments.filter(isArriving)
   const recent = payments.filter(p => !isArriving(p)).slice(0, 3)
   const who = (p: MerchantPayment) => p.customerUsername ? `${p.customerUsername}.arc` : `${p.from.slice(0, 6)}…${p.from.slice(-4)}`
-  const openLedger = () => navigate('/business', { state: { btab: 'settlements' } })
+  const openMoney = () => navigate('/business', { state: { btab: 'settlements' } })
 
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>Payments</span>
-        <button onClick={openLedger} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 12, border: 'none', background: 'var(--brand)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+        <button onClick={openMoney} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 12, border: 'none', background: 'var(--brand)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
           <QrCode size={15} /> Receive
         </button>
       </div>
@@ -42,7 +42,7 @@ export function MerchantHomeCard() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Arriving payments</span>
           {arriving.map(p => (
-            <div key={p.id} onClick={openLedger} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <div key={p.id} onClick={openMoney} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <Clock size={16} color="var(--warning)" />
               <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{who(p)} · {LABEL[p.chain] ?? p.chain} → Arc · {paymentStageLabel(p)}</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--warning)' }}>${formatAmount(p.amount)}</span>
@@ -55,7 +55,7 @@ export function MerchantHomeCard() {
         {recent.length === 0 ? (
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>No payments yet - tap Receive to create a payment request.</span>
         ) : recent.map(p => (
-          <div key={p.id} onClick={openLedger} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+          <div key={p.id} onClick={openMoney} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
             <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>{who(p)} <span style={{ color: 'var(--text-secondary)' }}>· {timeAgo(p.createdAt)}</span></span>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--success)' }}>+${formatAmount(p.amount)}</span>
           </div>

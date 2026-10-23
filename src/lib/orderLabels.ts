@@ -3,7 +3,7 @@
 //
 // Order numbers count from 100001 in the database; people see them as a
 // short #N: ORD-100042 → #42. This is the one number people see everywhere
-// (bills, requests, receipts, the Ledger, chat, exports). Display only -
+// (bills, requests, receipts, Manage money, chat, exports). Display only -
 // links, card anchors, the text stored in chat messages and payment
 // verification keep the stored ORD-100042.
 export function displayOrderNumber(n: string | null | undefined): string {

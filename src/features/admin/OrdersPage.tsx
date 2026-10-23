@@ -1,6 +1,6 @@
 // Admin → Orders. Every account's payment requests and bills (read-only),
 // for support. This is the only place an admin sees other people's orders:
-// the admin's own app (Receive → My requests, Ledger) lists just their own.
+// the admin's own app (Receive → My requests, Manage money) lists just their own.
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence } from 'framer-motion'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
@@ -154,8 +154,8 @@ export function OrdersPage() {
             <div style={{ marginBottom: 14 }}>
               {row('Amount', `$${formatAmount(active.amount)} USDC`)}
               {row('Received', active.received > 0 ? `$${formatAmount(active.received)} USDC` : null)}
-              {row(isBill(active) ? 'Merchant' : 'Requested by', handle(active.merchantUsername) || active.merchantName)}
-              {row('Merchant wallet', active.merchantWallet)}
+              {row(isBill(active) ? 'Business' : 'Requested by', handle(active.merchantUsername) || active.merchantName)}
+              {row('Business wallet', active.merchantWallet)}
               {row(isBill(active) ? 'Customer' : 'Requested from', handle(active.customerUsername))}
               {row('Customer wallet', active.customerWallet)}
               {row('Link code', active.code)}
@@ -163,7 +163,7 @@ export function OrdersPage() {
               {row('Created', new Date(active.createdAt).toLocaleString())}
               {row('Expires', active.expiresAt ? new Date(active.expiresAt).toLocaleString() : null)}
               {row('Paid', active.paidAt ? new Date(active.paidAt).toLocaleString() : null)}
-              {row('Completed by merchant', active.completedByMerchant ? (active.completedNote || 'Yes') : null)}
+              {row('Completed by business', active.completedByMerchant ? (active.completedNote || 'Yes') : null)}
             </div>
 
             {active.items?.length ? (

@@ -42,7 +42,7 @@ export function notifyClaimArrived(amount: number, sourceChain: string, timeTake
     // "Claimed from {chain}" - matches ActivityPage.tsx's label for the
     // same claim row (deriveActivityRow / DetailSheet), not the old
     // generic "Funds Arrived!".
-    // A merchant's claim moves Ledger money to Arc - same wording as the Hub.
+    // A merchant's claim moves other-chain money to Arc - same wording as the Hub.
     ...(isMerchantClaim({ createdAt: createdAt ?? new Date().toISOString(), sourceChain })
       ? { title: 'Settled to Arc',
           body:  `$${formatAmount(amount)} USDC from ${chainLabel} is in your Arc balance` }

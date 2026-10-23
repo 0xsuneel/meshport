@@ -131,10 +131,10 @@ function TermsContent() {
         <p>Cross-chain transfers depend on third-party infrastructure (Circle’s Gateway and CCTP) and can take longer than payments on Arc. If one gets stuck, the Recover tab helps you finish it, but timing isn’t guaranteed.</p>
       </Block>
 
-      <Block title="6. Rewards, P2P and merchants">
+      <Block title="6. Rewards, P2P and business accounts">
         <p><span className="text-text-primary">Rewards</span> points have no cash value outside the app. Earning rules, limits and claim amounts may change or end at any time, and claims depend on the rewards treasury having funds.</p>
         <p><span className="text-text-primary">P2P marketplace</span> trades are between users. Escrow holds the crypto side of a trade until it completes, but MeshPort isn’t a party to the trade and doesn’t process fiat payments. On testnet, currencies and payment methods are for demonstration only.</p>
-        <p><span className="text-text-primary">Merchant accounts</span> are approved at MeshPort’s discretion. Merchants are responsible for what they sell and for their dealings with customers.</p>
+        <p><span className="text-text-primary">Business accounts</span> are approved at MeshPort’s discretion. Businesses are responsible for what they sell and for their dealings with customers.</p>
       </Block>
 
       <Block title="7. Acceptable use">
@@ -170,9 +170,9 @@ function PrivacyContent() {
       <Block title="2. What we collect">
         <p><span className="text-text-primary">Account</span> - your email address (from Google or the email code you sign in with), username, display name and profile photo if you add one.</p>
         <p><span className="text-text-primary">Wallet</span> - your public wallet address. For Google and email accounts we also store your passkeys’ public details (credential id, the device name it was added on, the date) and your wallet key <em>encrypted by your passkey</em>, which only your passkey can unlock. For the Recovery QR we store only the date you made it.</p>
-        <p><span className="text-text-primary">Activity</span> - payments, swaps, multichain transfers, claims, bulk payouts, rewards, P2P trades and merchant bills you make in the app, to show your history, Insights and notifications. Most of this is also public on the blockchain.</p>
+        <p><span className="text-text-primary">Activity</span> - payments, swaps, multichain transfers, claims, bulk payouts, rewards, P2P trades and business bills you make in the app, to show your history, Insights and notifications. Most of this is also public on the blockchain.</p>
         <p><span className="text-text-primary">Chats</span> - messages, photos and files are end-to-end encrypted, so we store and relay them only as ciphertext. We can see who you chat with and when, and the details of payment cards (amount, token, transaction), which are public on the blockchain anyway. Your chat key’s public half and your wallet’s signature over it are stored so others can verify it’s really you.</p>
-        <p><span className="text-text-primary">Merchants and support</span> - what you enter when you apply for a merchant account (business name, type, optional contact) and the tickets you send to Help & Support.</p>
+        <p><span className="text-text-primary">Business accounts and support</span> - what you enter when you apply for a business account (business name, type, optional contact) and the tickets you send to Help & Support.</p>
         <p><span className="text-text-primary">Device and usage</span> - notification subscriptions if you allow push notifications, and basic technical logs (errors, feature usage) to keep the app working.</p>
       </Block>
 

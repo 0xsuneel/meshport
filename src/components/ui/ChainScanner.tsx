@@ -1,7 +1,7 @@
 import { useReducedMotion } from 'framer-motion'
 
 // "Scanning chains" animation shared by Bring Funds, the Multichain Hub's
-// Bring list and the Merchant Ledger's chains tab. Chain logos glide past a
+// Bring list and Manage money's chains tab. Chain logos glide past a
 // glowing scan beam inside a bordered card, so the scan is clearly visible
 // instead of a line of grey "Checking chains…" text. `compact` is a slimmer
 // strip used above an already-listed set of chains while it refreshes.

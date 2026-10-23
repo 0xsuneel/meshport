@@ -61,7 +61,7 @@ export function MerchantApplyPage() {
               <ArrowLeft className="w-5 h-5 text-text-primary" />
             </button>
           )}
-          <h1 className="text-xl font-bold text-text-primary">{status === 'none' && accountType === 'business' ? 'Complete your business account' : 'Merchant account'}</h1>
+          <h1 className="text-xl font-bold text-text-primary">{status === 'none' && accountType === 'business' ? 'Complete your business account' : 'Business account'}</h1>
         </div>
       </div>
 
@@ -71,7 +71,7 @@ export function MerchantApplyPage() {
         ) : personalOnly ? (
           <div className="bg-surface border border-border rounded-3xl p-6 flex flex-col items-center text-center gap-3">
             <Store className="w-10 h-10 text-brand-text" />
-            <p className="text-base font-bold text-text-primary">Merchant tools are for business accounts</p>
+            <p className="text-base font-bold text-text-primary">Business tools are for business accounts</p>
             <p className="text-sm text-text-secondary leading-relaxed max-w-[340px]">
               This is a personal account. To accept payments as a store, create a business account: choose Business on the first sign-up screen and claim your store username.
             </p>
@@ -125,7 +125,7 @@ export function MerchantApplyPage() {
               <button onClick={submit} disabled={submitting}
                 className="w-full py-3 rounded-2xl text-white text-sm font-semibold active:scale-95 transition-transform disabled:opacity-60"
                 style={{ background: 'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)' }}>
-                {submitting ? 'Submitting…' : 'Apply for merchant'}
+                {submitting ? 'Submitting…' : 'Apply for business account'}
               </button>
             </div>
           </>
@@ -136,8 +136,8 @@ export function MerchantApplyPage() {
             {(status === 'rejected' || status === 'revoked') && <XCircle className="w-10 h-10 text-danger" />}
             <p className="text-base font-bold text-text-primary">
               {status === 'pending' ? 'Application under review'
-                : status === 'approved' ? 'You’re a merchant'
-                : status === 'revoked' ? 'Merchant access removed'
+                : status === 'approved' ? 'Business account approved'
+                : status === 'revoked' ? 'Business access removed'
                 : 'Application not approved'}
             </p>
             <p className="text-sm text-text-secondary">{application.businessName}{application.businessType ? ` · ${application.businessType}` : ''}</p>

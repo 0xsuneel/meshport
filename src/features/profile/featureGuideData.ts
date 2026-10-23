@@ -203,7 +203,7 @@ export const SECTIONS: Section[] = [
         ],
       },
       {
-        id: 'merchant', title: 'Merchant account', image: 'merchant', path: '/merchant',
+        id: 'merchant', title: 'Business account', image: 'merchant', path: '/merchant',
         summary: 'Take payments as a business, with bills, order numbers and customer records.',
         steps: [
           'Apply with your business name and type.',

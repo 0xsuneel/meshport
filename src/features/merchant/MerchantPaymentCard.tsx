@@ -1,6 +1,6 @@
 // Payment request / bill card shown inside a chat message that contains a
 // /paylink/r/<code> link (or an older /pay/r/<code> one). Chat stays messaging; the card reads the live status
-// of the linked request (the Ledger is the financial record).
+// of the linked request (Manage money is the financial record).
 //
 // Everything happens inside the conversation - no separate page:
 //   • Customer taps "Pay invoice" → the chat's own pay sheet opens with the
@@ -247,7 +247,7 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
     : closed ? `${kind} ${STATUS_LABEL[v.status]}`
     : kind
   const statusText = loading ? 'Checking status…'
-    : paid && v.completedByMerchant ? 'Completed by merchant'
+    : paid && v.completedByMerchant ? 'Completed by business'
     : v.status === 'processing' && v.payments.some(p => p.status === 'in_ledger') ? 'Moving to Arc'
     : STATUS_LABEL[v.status]
   const hash = payment?.txHash || null
@@ -277,7 +277,7 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
         ...(when(v.paidAt ?? payment?.createdAt) ? [{ label: paid ? 'Paid on' : 'Time', value: when(v.paidAt ?? payment?.createdAt)! }] : []),
       ]}
       detailRows={[
-        ...(v.merchantName || v.merchantUsername ? [{ label: 'Merchant', value: v.merchantName || `${v.merchantUsername}.arc` }] : []),
+        ...(v.merchantName || v.merchantUsername ? [{ label: 'Business', value: v.merchantName || `${v.merchantUsername}.arc` }] : []),
         ...(v.customerUsername ? [{ label: 'Customer', value: `${v.customerUsername.replace(/\.arc$/i, '')}.arc` }] : []),
         ...(isBill && v.items?.length
           ? v.items.map(i => ({
@@ -289,7 +289,7 @@ export function BillReceipt({ v, isMine, isBill, loading, canPay, onPay, onClose
         ...(routeLabel ? [{ label: 'Route', value: routeLabel }] : []),
         ...(when(v.createdAt) ? [{ label: 'Created', value: when(v.createdAt)! }] : []),
         ...(!paid && !closed && when(v.expiresAt) ? [{ label: 'Expires', value: when(v.expiresAt)! }] : []),
-        ...(v.completedByMerchant && v.completedNote ? [{ label: 'Merchant note', value: v.completedNote }] : []),
+        ...(v.completedByMerchant && v.completedNote ? [{ label: 'Business note', value: v.completedNote }] : []),
       ]}
       detailsTitle={`${kind} details`}
       // Only a settled (paid) bill is history; an open or closed one isn't.

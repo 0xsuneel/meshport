@@ -16,7 +16,7 @@ function InlineSpinner() {
 import { UB_CLAIM_CHAINS } from '@/lib/ubClaim'
 import { isGaslessBridgeAvailable } from '@/lib/gaslessBridge'
 import { useMerchant, useBusinessTab, isMerchantClaim } from '@/lib/merchant'
-import { MerchantLedger } from '@/features/merchant/MerchantLedger'
+import { BusinessMoney } from '@/features/merchant/BusinessMoney'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
 import { formatAmount, timeAgo, copyToClipboard } from '@/lib/utils'
@@ -79,10 +79,10 @@ interface ActivityItem {
   ubHeld?: boolean
   // UB claim made by an approved merchant - a customer payment.
   merchant?: boolean
-  // Merchant Claim All (or the old auto-convert): one Ledger → Arc transfer covering several chains.
+  // Merchant Claim All (or the old auto-convert): one other-chain → Arc transfer covering several chains.
   autoConvert?: boolean
   // Merchant: a payment received on another chain (Hub only - not in the
-  // main Activity page until it reaches Arc as "Ledger payment received").
+  // main Activity page until it reaches Arc as "Cross-chain payment received").
   chainReceipt?: 'received' | 'converting' | 'converted'
   /** A chain receipt that is the merchant's own Transfer Funds from Arc. */
   ownReceipt?: boolean
@@ -181,7 +181,7 @@ function hubItemTitle(item: ActivityItem): string {
   const chain = item.chainLabel || item.chain
   if (item.chainReceipt) return item.ownReceipt ? 'Own payment received' : `Payment received on ${chain}`
   if (item.autoConvert && item.type === 'claim') return item.status === 'pending' ? 'Funds moving to Arc' : 'Cross-chain payment received'
-  // A merchant's claim moves Ledger money (already received) to Arc.
+  // A merchant's claim moves other-chain money (already received) to Arc.
   if (item.merchant && item.type === 'claim') return item.ownClaim ? 'Moved to Arc (Own)' : 'Moved to Arc'
   // 7-day Unified Balance withdrawal still running (or a refund row).
   if (item.isRecovery) {
@@ -328,21 +328,21 @@ function HubHeroCard({ arcAvailable, claimAvailable, scanning, scanChain = null,
 /**
  * mode 'hub'    - /multichain. Normal users: Multichain Hub. Approved
  *                 merchants: "Cross-chain Transfer" (Transfer / Activity /
- *                 Recover); their Ledger lives in the Business tab.
- * mode 'ledger' - the merchant Ledger only (Chains + Claim All), shown inside
+ *                 Recover); their other-chain money lives in the Business tab.
+ * mode 'chains' - the business's other-chain money only (Chains + Claim All), shown inside
  *                 Business → Settlements. Same claim logic as before.
  */
-export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {}) {
+export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {}) {
   useEffect(() => { preloadHubFlows() }, [])
-  const ledgerMode = mode === 'ledger'
+  const chainsOnly = mode === 'chains'
   const isDesktop   = useMediaQuery('(min-width: 980px)')
   // Phones narrower than ~400px (SE, small Androids): compact tab labels.
   const narrow      = useMediaQuery('(max-width: 399px)')
-  // Approved merchants get the Ledger (CCTP chains, Claim All) instead of Bring Funds.
+  // Approved merchants get Manage money (CCTP chains, Claim All) instead of Bring Funds.
   const isMerchant  = useMerchant().isMerchant
   // A business account on /multichain sees cross-chain transfer only: no
   // Bring Funds and no other-chain balance (that is settled in Business).
-  const merchantTransfer = useBusinessTab() && !ledgerMode
+  const merchantTransfer = useBusinessTab() && !chainsOnly
   const navigate    = useNavigate()
   const walletAddress = useAuthStore(s => s.walletAddress)
   const { balance: arcBalance } = useWalletStore()
@@ -380,11 +380,11 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
   // Any money-moving step running anywhere (Recover, Claim All, a Bring…).
   const leaveGuardOn = useLeaveGuardStore(s => Object.keys(s.guards).length > 0)
   const [hubTab, setHubTab]               = useState<HubTab>(() => {
-    if (ledgerMode) return 'bring'
+    if (chainsOnly) return 'bring'
     const t = (location.state as any)?.tab ?? initialQuery.get('tab') ?? (initialQuery.get('claim') || initialQuery.get('chain') ? 'bring' : null)
     return t === 'bring' || t === 'activity' || t === 'recovery' ? t : 'transfer'
   })
-  // Ledger links (Claim All tracking, "open Ledger") reach a merchant's
+  // Manage money links (Claim All tracking, "open Manage money") reach a merchant's
   // Business → Settlements, keeping ?claim= / ?chain= so tracking still opens.
   useEffect(() => {
     if (merchantTransfer && hubTab === 'bring') navigate('/business' + location.search, { replace: true, state: { btab: 'settlements' } })
@@ -1090,7 +1090,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
   const page = (
     <div data-flow-scroller className={isDesktop ? undefined : 'lg:max-w-[900px]'} style={{ flex: 1, overflowY: flowFocus === 'processing' ? 'hidden' : 'auto', overscrollBehavior: flowFocus === 'processing' ? 'none' : undefined, background: 'var(--bg)', paddingBottom: isDesktop ? 90 : 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}>
       {/* Header */}
-      {!ledgerMode && <div data-scroll-header style={{ position: flowFocused ? 'relative' : 'sticky', top: 0, zIndex: 20, background: 'var(--bg)',
+      {!chainsOnly && <div data-scroll-header style={{ position: flowFocused ? 'relative' : 'sticky', top: 0, zIndex: 20, background: 'var(--bg)',
         paddingTop: 'calc(env(safe-area-inset-top, 0px) + var(--header-gap, 22px))', paddingBottom: 18,
         paddingLeft: 20, paddingRight: 20, minHeight: 44, boxSizing: 'border-box',
         display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1134,8 +1134,8 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
           claimAvailable={isMerchant ? bringRows.reduce((sum, c) => sum + (c.balance >= DUST_USDC ? c.balance : 0), 0) : totalExternal}
           balanceHidden={balanceHidden} onToggleHidden={toggleBalanceHidden} chains={bringRows} transferOnly={merchantTransfer} />
 
-        {/* Tab strip (none in the Business Ledger view) */}
-        {!ledgerMode && <div role="tablist" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 16,
+        {/* Tab strip (none in Manage money view) */}
+        {!chainsOnly && <div role="tablist" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 16,
           background: 'var(--surface)', border: '1px solid var(--border)' }}>
           {([
             // Short labels on narrow phones so all four tabs stay on one line.
@@ -1225,7 +1225,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
 
         {hubTab === 'bring' && (() => {
           const chainCard = (
-          // Merchants: shown inside the Ledger's "Chains" tab (already a card).
+          // Merchants: shown inside Manage money's "Chains" tab (already a card).
           <div style={isMerchant ? undefined : { ...cardS, borderRadius: 20, padding: isDesktop ? 20 : 18 }}>
             {/* Title + Refresh */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1301,13 +1301,13 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
           // Merchants: payment requests, customers and arriving payments on
           // top; the chain list (collect from chains) below it.
           return isMerchant
-            ? <MerchantLedger boxStyle={{ ...cardS, borderRadius: 20, padding: isDesktop ? 20 : 18 }}
-                // Same real on-chain balance as the "In Ledger Chains" card above.
-                ledgerBalance={scanning ? undefined : bringRows.reduce((sum, c) => sum + (c.balance >= DUST_USDC ? c.balance : 0), 0)}
-                ledgerChains={bringRows.filter(c => c.balance >= DUST_USDC).length}
+            ? <BusinessMoney boxStyle={{ ...cardS, borderRadius: 20, padding: isDesktop ? 20 : 18 }}
+                // Same real on-chain balance as the "On Other Chains" card above.
+                chainsBalance={scanning ? undefined : bringRows.reduce((sum, c) => sum + (c.balance >= DUST_USDC ? c.balance : 0), 0)}
+                fundedChainCount={bringRows.filter(c => c.balance >= DUST_USDC).length}
                 claimChains={scanning ? undefined : bringRows.filter(c => c.balance >= DUST_USDC).map(c => ({ chainId: c.id, label: c.label, balance: c.balance }))}
                 // After Claim All: rescan so the chain list shows what moved.
-                onClaimed={() => { setScanning(true); setScanNonce(n => n + 1) }}>{chainCard}</MerchantLedger>
+                onClaimed={() => { setScanning(true); setScanNonce(n => n + 1) }}>{chainCard}</BusinessMoney>
             : chainCard
         })()}
 
@@ -1418,7 +1418,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
     </div>
   )
 
-  if (!isDesktop || ledgerMode) return page
+  if (!isDesktop || chainsOnly) return page
 
   // ── Desktop: Hub (left) + Multichain Activity (right), each scrolling on
   // its own - the shared 65/35 layout (DesktopTwoColumn), as Swap and Pay.
@@ -1448,7 +1448,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
             style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>{page}</div>
         }
         side={
-          <DesktopHistoryPanel title={isMerchant ? 'Merchant Activity' : 'Multichain Activity'} onViewAll={() => navigate('/activity?filter=bridge')}>
+          <DesktopHistoryPanel title={isMerchant ? 'Cross-chain Activity' : 'Multichain Activity'} onViewAll={() => navigate('/activity?filter=bridge')}>
             {renderActivity(true)}
           </DesktopHistoryPanel>
         } />
