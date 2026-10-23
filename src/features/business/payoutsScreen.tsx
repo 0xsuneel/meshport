@@ -11,6 +11,7 @@ import { useLeaveGuard } from '@/lib/leaveGuard'
 import { useMerchant } from '@/lib/merchant'
 import { isValidAddress } from '@/lib/arcService'
 import { searchUsersDb, type DbUser } from '@/lib/supabase'
+import { isFullUsername, pickerProblem } from '@/lib/userSearch'
 import { shortenAddress } from '@/lib/utils'
 import { getResumableOperation, clearResumableOperation } from '@/lib/resumableOperation'
 import { hasAnyActivityForTx } from '@/lib/ActivityService'
@@ -448,7 +449,8 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
 
   useEffect(() => {
     const t = q.trim()
-    if (!t || isValidAddress(t)) { setFound([]); setSearching(false); return }
+    // Only a full username.arc is looked up - never part of a name.
+    if (!t || isValidAddress(t) || !isFullUsername(t)) { setFound([]); setSearching(false); return }
     setSearching(true)
     const h = setTimeout(() => { searchUsersDb(t, me).then(setFound).catch(() => setFound([])).finally(() => setSearching(false)) }, 250)
     return () => clearTimeout(h)
@@ -521,6 +523,10 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
                 )}
               </div>
             )}
+            {(() => {
+              const problem = typedAddress || found.length ? null : pickerProblem(q, { searching, found: 0, self: false, allowAddress: true })
+              return problem && <p className={`text-[12px] px-0.5 ${problem.tone === 'danger' ? 'text-danger font-semibold' : 'text-text-muted'}`} role={problem.tone === 'danger' ? 'alert' : undefined}>{problem.text}</p>
+            })()}
           </div>
         </Field>
         <Field label={`In this group${draft.rows.length ? ` · ${draft.rows.length}` : ''}`} hint={draft.rows.length ? short(total) : undefined}>
