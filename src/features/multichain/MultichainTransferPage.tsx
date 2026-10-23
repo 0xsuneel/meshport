@@ -3764,10 +3764,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
 
       {/* ── Confirm & Pay: the app's passcode step (PinSheet) - phone: the
           bottom sheet with the keypad; desktop: the authorize dialog in the
-          right-hand panel. No summary card or fee breakdown here; that's all
-          already shown on the Review page underneath. This page handles Back
-          for this step itself (confirm → review, above). ── */}
-      <PinSheet open={step === 'confirm'} id="mt-pass" backClose={false}
+          right-hand panel. A small summary card (where and how much); the fee
+          breakdown is on the Review page underneath. Phone Back closes the
+          sheet (back to Review) like any sheet. ── */}
+      <PinSheet open={step === 'confirm'} id="mt-pass"
         onClose={() => { setStep('review'); setPassEntry(''); setPassError('') }}
         title={desktopInput ? 'Authorize Transfer' : 'Confirm transfer'}
         subtitle={desktopInput ? `To ${chain.name}` : `Authorise $${formatAmount(numAmount)} USDC to ${chain.name}`}

@@ -94,8 +94,9 @@ interface AmountKeypadProps {
   /** Opened on a pre-filled amount: the first digit typed starts a new
    *  amount (480, then 5 → 5); backspace edits what's there. */
   replaceOnFirstKey?: boolean
-  /** Phone / browser Back closes the sheet. Off by default: the amount is a
-   *  step of a page that already handles Back itself (Pay, Transfer, …). */
+  /** Phone / browser Back closes the sheet (default on). It sits over the
+   *  page like any sheet, so Back closes it first; a page with its own steps
+   *  (Pay, Transfer) leaves that Back alone (backLayerPop). */
   backClose?: boolean
 }
 
@@ -119,7 +120,7 @@ export function AmountKeypad({
   allowDecimal = true,
   maxDigits,
   variant = 'sheet',
-  backClose = false,
+  backClose = true,
   replaceOnFirstKey = false,
 }: AmountKeypadProps) {
   // Desktop users type on a physical keyboard - the tap-grid below is a

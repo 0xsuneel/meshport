@@ -1879,12 +1879,12 @@ export function PaySendPage() {
       </ScreenPush>
 
       {/* ══════════════ PASSCODE STEP (modal over review) ══════════════ */}
-      {/* Desktop: the authorize dialog over the flow column. Phone Back is
-          handled by this page's own step history (popstate above). */}
+      {/* Desktop: the authorize dialog over the flow column. Phone Back
+          closes it first (it's a layer over Review); the page's own step
+          history (popstate above) leaves that Back alone. */}
       <PinSheet
         open={showPasscodeSheet}
         onClose={() => setShowPasscodeSheet(false)}
-        backClose={false}
         id="ps-pass"
         title={isDesktop ? 'Authorize Payment' : 'Confirm payment'}
         subtitle={isDesktop ? `To ${recipient?.displayName}`
