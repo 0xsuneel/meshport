@@ -179,7 +179,9 @@ function RecentBox({ navigate }: { navigate: NavigateFunction }) {
         onClick={() => pay(front)}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pay(front) } }}
         onPointerDown={hold} onPointerUp={release} onPointerLeave={release} onPointerCancel={release}
-        style={{ position: 'relative', height: CONTENT_H, cursor: 'pointer', WebkitTapHighlightColor: 'transparent', touchAction: 'pan-y' }}>
+        style={{ position: 'relative', height: CONTENT_H, cursor: 'pointer', WebkitTapHighlightColor: 'transparent', touchAction: 'pan-y',
+          // Its avatars and ring stack only inside this card (never over Home's search list).
+          isolation: 'isolate' }}>
         {front && width > 0 && (
           // Who is in front. Re-keyed per person so it fades between names.
           <motion.div key={front.wallet_address} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}

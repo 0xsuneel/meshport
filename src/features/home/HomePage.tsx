@@ -3853,7 +3853,8 @@ export function HomePage() {
           (opened via DesktopHeader's search box, see isDesktop above). */}
       {(!isDesktop || searchOpen) && (
       <div ref={stickyHeaderRef} style={{
-        position: 'sticky', top: 0, zIndex: 20,
+        // Above the page's cards while search is open (its results float over them).
+        position: 'sticky', top: 0, zIndex: searchOpen ? 40 : 20,
         // Solid, no backdrop blur: a blur under a sticky header is redrawn on
         // every frame of a scroll.
         background: 'var(--bg)',
