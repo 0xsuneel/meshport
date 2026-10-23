@@ -2,7 +2,7 @@
 //
 // Merchant payment requests (client side).
 //   Merchant: create a request (amount, optional customer, note, expiry) →
-//             link /paylink/r/<code> + QR; follow its status live; Ledger data.
+//             link /paylink/r/<code> + QR; follow its status live; Manage money data.
 //   Customer: open the link and pay -
 //     • MeshPort user with Arc USDC  → the normal Pay/Send flow on Arc
 //     • external wallet on Arc       → a USDC transfer on Arc, signed in the wallet
@@ -29,7 +29,7 @@ export function paymentStageLabel(p: { method: string; status: PaymentStage }): 
 }
 /**
  * Still on its way. A payment on another chain is already received the moment
- * it lands in the merchant's wallet there (their Ledger) - moving it to Arc is
+ * it lands in the merchant's wallet there (their other-chain money) - moving it to Arc is
  * the merchant's own Claim All later. Only a transfer already moving to Arc
  * (older Unified Balance runs) is "arriving".
  */
@@ -299,7 +299,7 @@ export type UnmatchedDeposit = {
 
 // "My" lists filter on the signed-in login explicitly instead of trusting RLS
 // alone: RLS also lets admins read every merchant's rows (mpi_admin, mp_admin,
-// mud_admin, mcr_select_own), so an admin's My requests / Ledger showed other
+// mud_admin, mcr_select_own), so an admin's My requests / Manage money showed other
 // accounts' orders. Each filter mirrors that table's own-row policy.
 export async function myAuthUid(): Promise<string | null> {
   const { data } = await supabase.auth.getSession()
@@ -407,7 +407,7 @@ export async function listMyIntents(limit = 200): Promise<MerchantIntent[]> {
 // ─── Admin panel only ─────────────────────────────────────────────────────────
 // Every account's requests and bills, for Admin → Orders. Readable only by
 // admins (RLS mpi_admin / mp_admin). The normal app never calls these - an
-// admin's own My requests / Ledger use the listMy* functions above.
+// admin's own My requests / Manage money use the listMy* functions above.
 export type AdminOrder = MerchantIntent & {
   merchantUsername: string | null; merchantName: string | null; merchantWallet: string
 }
@@ -498,10 +498,10 @@ export async function fetchMerchantFlags(userIds: string[]): Promise<Set<string>
 /** Live updates for this merchant's requests and payments. */
 export function subscribeMerchantPayments(merchantWallet: string, onChange: () => void): () => void {
   const w = merchantWallet.toLowerCase()
-  // Unique name per subscriber: the app shell and the Ledger both subscribe,
+  // Unique name per subscriber: the app shell and Manage money both subscribe,
   // and a shared name returns the already-joined channel, where adding
   // listeners throws ("cannot add postgres_changes callbacks after subscribe")
-  // and crashed the Ledger. Removing one must not remove the other either.
+  // and crashed Manage money. Removing one must not remove the other either.
   const ch = supabase.channel(`merchant-pay-${w}-${Math.random().toString(36).slice(2, 10)}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_payment_intents', filter: `merchant_wallet=eq.${w}` }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'merchant_payments', filter: `merchant_wallet=eq.${w}` }, onChange)

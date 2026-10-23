@@ -158,9 +158,9 @@ export function ProfilePage() {
       {/* Business accounts only - personal accounts have no merchant option. */}
       {merchant.status !== 'none' && (
         <MenuItem icon={<Store className="w-5 h-5" />}
-          label={merchant.status === 'approved' ? 'Merchant account'
-            : merchant.status === 'pending' ? 'Merchant application · In review'
-            : 'Merchant application'}
+          label={merchant.status === 'approved' ? 'Business account'
+            : merchant.status === 'pending' ? 'Business verification · In review'
+            : 'Business verification'}
           color={merchant.status === 'approved' ? 'bg-success/20 text-success' : 'bg-warning/20 text-warning'}
           onClick={() => navigate('/merchant')} />
       )}

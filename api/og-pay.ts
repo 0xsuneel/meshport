@@ -147,7 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (code) {
     // Merchant bill / payment request: the public view the pay page shows.
-    displayName = 'MeshPort merchant'
+    displayName = 'MeshPort business'
     handle = ''
     const order = String(req.query.order || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32)
     if (supabaseUrl && key) {

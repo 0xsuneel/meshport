@@ -112,7 +112,7 @@ export function MerchantPayPage() {
         {/* Header */}
         <div className="text-center space-y-2">
           <p className="text-sm text-text-secondary">Pay</p>
-          <p className="text-xl font-bold text-text-primary">{view.merchantName ?? 'Merchant'}</p>
+          <p className="text-xl font-bold text-text-primary">{view.merchantName ?? 'Business'}</p>
           {/* The store (branch) it's for, when it isn't just the business name. */}
           {view.storeName && view.storeName.toLowerCase() !== (view.merchantName ?? '').toLowerCase() && (
             <p className="text-sm font-semibold text-text-secondary -mt-1">{view.storeName}</p>
@@ -163,7 +163,7 @@ export function MerchantPayPage() {
             <CheckCircle2 className="w-12 h-12 text-success" />
             <p className="text-base font-bold text-text-primary">{view.completedByMerchant ? 'Order completed' : 'Payment received'}</p>
             <p className="text-sm text-text-secondary">{view.completedByMerchant
-              ? `${view.merchantName ?? 'The merchant'} marked this order as completed.`
+              ? `${view.merchantName ?? 'The business'} marked this order as completed.`
               : 'Confirmed on-chain.'}</p>
           </div>
         )}

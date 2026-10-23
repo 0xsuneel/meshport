@@ -172,7 +172,7 @@ export function MerchantApplicationsPage() {
             {active.status !== 'rejected' && active.status !== 'revoked' && (
               <>
                 <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                  {active.status === 'approved' ? 'Reason for removing merchant access' : 'Note to the user (required to reject)'}
+                  {active.status === 'approved' ? 'Reason for removing business access' : 'Note to the user (required to reject)'}
                 </p>
                 <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} placeholder="Shown to the user in their notification"
                   style={{ width: '100%', background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)', borderRadius: 14, padding: 12, fontSize: 13, color: 'var(--text-primary)', outline: 'none', resize: 'none', marginBottom: 12, boxSizing: 'border-box' }} />

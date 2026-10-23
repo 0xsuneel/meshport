@@ -3905,7 +3905,7 @@ export function ChatConversationPage() {
     return () => window.removeEventListener(PAY_LINK_EVENT, onPayLink)
   }, [otherUser?.username])
 
-  // Merchant Ledger → "Receive payment" for a customer: the request card is
+  // Manage money → "Receive payment" for a customer: the request card is
   // sent into this chat automatically (once) as soon as the chat is ready.
   const autoSendRef = useRef<string | null>(
     typeof (location.state as any)?.autoSend === 'string' ? String((location.state as any).autoSend).slice(0, 2000) : null
@@ -4540,7 +4540,7 @@ export function ChatConversationPage() {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', borderRadius: 14,
                     background: 'color-mix(in srgb, var(--brand) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--brand) 30%, transparent)' }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{orderTitle(billPay.kind, billPay.number)}</span>
-                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Amount set by merchant</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Amount set by business</span>
                   </div>
                 )}
 

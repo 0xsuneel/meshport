@@ -465,7 +465,7 @@ export function AppLayout() {
       // tick (or the network getting better) finishes it.
       if (isSlowNetwork()) return
       import('@/lib/ubClaim').then(async ({ autoFinishUbClaims }) => {
-        // Merchants too: this only finishes money already in the Ledger
+        // Merchants too: this only finishes money already on other chains
         // (Unified Balance). Customer payments sitting in the wallet on other
         // chains wait for the merchant's Claim All - nothing collects them.
         const n = await autoFinishUbClaims({ walletAddress, privateKey })

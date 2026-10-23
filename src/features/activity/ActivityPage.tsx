@@ -36,7 +36,7 @@ const FILTERS: { id: ActivityTab; label: string }[] = [
   { id: 'p2p',     label: 'P2P'       },
   { id: 'rewards', label: 'Rewards'   },
   // Approved merchants only (hidden for everyone else in the filter sheet).
-  { id: 'merchant', label: 'Merchant' },
+  { id: 'merchant', label: 'Business' },
 ]
 
 // Non-MeshPort-username senders/recipients (system-generated activity) - shown
@@ -691,7 +691,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
     { label: 'Type',   value: (isClaim && isMerchantClaim(record as any)) ? `Settlement from ${chain || 'other chain'}` : merchantOrderDetail ? orderWord : activityOrderKind(metadata) === 'shop' && (type === 'receive' || type === 'send') ? 'Payment' : isClaim ? 'Claim to Arc' : isTransfer ? 'Transfer out' : type === 'swap' ? 'Swap' : type === 'bulk' ? bulkWord(metadata) : cashOutTitle(type, metadata) ?? type },
     { label: 'Chain',  value: chain },
     ...(merchantOrderDetail ? [{ label: activityOrderKind(metadata) === 'bill' ? 'Bill' : activityOrderKind(metadata) === 'merchant_request' ? 'Requested Payment' : 'Request', value: displayOrderNumber(merchantOrderDetail) }] : []),
-    ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Merchant', value: String((metadata as any).merchantName) }] : []),
+    ...(merchantOrderDetail && type === 'send' && (metadata as any)?.merchantName ? [{ label: 'Business', value: String((metadata as any).merchantName) }] : []),
     // The business's store that took the payment (merchant side).
     ...(type === 'receive' && (metadata as any)?.merchantStore ? [{ label: 'Store', value: String((metadata as any).merchantStore) }] : []),
     ...(isClaim && (metadata as any)?.merchant && (record as any).walletAddress
@@ -767,7 +767,7 @@ export function DetailSheet({ record, onClose }: { record: ActivityRecord; onClo
   // no To/From row repeating the subtitle (the wallet address goes in the
   // details instead), no Status, and no Type that just restates the title.
   const nameInSubtitle = receiptSubtitle !== title || (isTransfer && !!transferToLabel)
-  const MAIN_LABELS = new Set(['Order', 'Merchant', 'Paid to', 'Purpose', 'Recipients', 'You claimed', 'You transferred', 'Receiver got', 'You received', 'Fees paid', 'MeshPort fee', 'Circle fee', 'Gateway fee', sourceHashLabel, ...(nameInSubtitle || isSwapType ? [] : ['From', 'To'])])
+  const MAIN_LABELS = new Set(['Order', 'Business', 'Paid to', 'Purpose', 'Recipients', 'You claimed', 'You transferred', 'Receiver got', 'You received', 'Fees paid', 'MeshPort fee', 'Circle fee', 'Gateway fee', sourceHashLabel, ...(nameInSubtitle || isSwapType ? [] : ['From', 'To'])])
   const DROP_LABELS = new Set(['Amount', 'Status', 'Date', 'Time',
     ...(isSwapType || nameInSubtitle ? ['From', 'To'] : []),
     ...((isClaim && isMerchantClaim(record as any)) ? [] : ['Type'])])
@@ -1013,8 +1013,8 @@ export function ActivityPage() {
     ).filter(r => {
       if (r.activityType === 'deposit') return false
       const md: any = (r as any).metadata ?? {}
-      // A merchant's Ledger → Arc transfer shows here only once it has landed
-      // ("Ledger payment received"); while it runs it's in the Merchant Hub.
+      // A merchant's other-chain → Arc transfer shows here only once it has landed
+      // ("Cross-chain payment received"); while it runs it's in the Cross-chain Transfer.
       if (md.auto_convert && r.status !== 'completed') return false
       if (activeTab === 'merchant') return !!(md.merchant || md.auto_convert || md.merchantOrder || md.merchantPayment) && r.activityType !== 'send'
       if (activeTab === 'all')     return true

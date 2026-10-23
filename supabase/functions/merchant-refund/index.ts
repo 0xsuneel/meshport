@@ -404,7 +404,7 @@ Deno.serve(async (req: Request) => {
   if (target.customerUserId) {
     await db.from('notifications').insert({
       user_id: target.customerUserId, type: 'merchant_refund', read: false,
-      title: `Refund from ${target.merchantName || 'a merchant'}`,
+      title: `Refund from ${target.merchantName || 'a business'}`,
       message: `${usd(found.amount)} USDC was refunded${target.orderNumber ? ` for ${orderDisplay(target.orderNumber)}` : ''}${route !== 'contract' ? ` on ${target.chain.replace(/_(Sepolia|Testnet|Fuji)$/, '').replace(/_/g, ' ')}` : ''}${found.reason ? ` · ${found.reason}` : ''}`,
     }).then(() => {}, () => {})
   }

@@ -1,8 +1,8 @@
-// Ledger Insights - Insights for approved merchants (normal users keep
+// Business Insights - Insights for approved merchants (normal users keep
 // InsightsPage). Everything here comes from the merchant's own records:
 //   • order payments (merchant_payments) and payments received straight to
 //     the wallet on other chains (merchant_chain_receipts) - the same list the
-//     Ledger shows (withChainReceipts)
+//     Manage money shows (withChainReceipts)
 //   • payment requests / bills (merchant_payment_intents)
 //   • merchant claims moved to Arc (activity claims, isMerchantClaim)
 import { useEffect, useMemo, useState } from 'react'
@@ -16,7 +16,7 @@ import { listMyIntents, listMyPayments, listChainReceipts, type MerchantIntent, 
 import { fetchActivity } from '@/lib/ActivityService'
 import { isMerchantClaim, useMerchant } from '@/lib/merchant'
 import { chainLogoSrc } from '@/lib/chainLogos'
-import { withChainReceipts, customersOf, customerKey } from '@/features/merchant/MerchantLedger'
+import { withChainReceipts, customersOf, customerKey } from '@/features/merchant/BusinessMoney'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 
 type Period = 'week' | 'month' | 'year'
@@ -95,7 +95,7 @@ function Bar({ share }: { share: number }) {
   )
 }
 
-export function LedgerInsightsPage() {
+export function BusinessInsightsPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
   const walletAddress = useAuthStore(s => s.walletAddress) ?? ''

@@ -19,7 +19,7 @@ export function lockCopy(status: string, reviewNote: string | null | undefined) 
   }
   if (status === 'rejected' || status === 'revoked') return {
     text: reviewNote?.trim() || (status === 'revoked'
-      ? 'Merchant access was removed from this account. Check your details and apply again.'
+      ? 'Business access was removed from this account. Check your details and apply again.'
       : "Your business application wasn't approved. Check your details and apply again."),
     action: 'Apply again',
   }

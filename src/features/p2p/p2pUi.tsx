@@ -70,7 +70,7 @@ export function MerchantLine({ name, verified, stats, compact }: { name: string;
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
         <Avatar name={name} size={compact ? 18 : 22} />
         <span style={{ fontSize: compact ? 12.5 : 13.5, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-        {verified && <ShieldCheck size={13} color="var(--brand-text)" style={{ flexShrink: 0 }} aria-label="Verified merchant" />}
+        {verified && <ShieldCheck size={13} color="var(--brand-text)" style={{ flexShrink: 0 }} aria-label="Verified trader" />}
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 3, fontSize: 11.5, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
         <span>{stats ? `${stats.orders.toLocaleString()} orders` : 'New trader'}{stats?.completionPct != null ? ` · ${stats.completionPct}%` : ''}</span>

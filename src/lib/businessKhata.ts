@@ -35,7 +35,7 @@ const expired = (o: KhataOrder, now: number) => !!o.expiresAt && Date.parse(o.ex
 export const isOutstanding = (o: KhataOrder, now = Date.now()) =>
   OPEN.has(o.status) && !expired(o, now) && o.amount - o.received > 1e-6
 
-/** Ledger for one list of orders (one customer's). */
+/** Credit book for one list of orders (one customer's). */
 export function khataOf(orders: KhataOrder[], now = Date.now(), today = new Date(now).toLocaleDateString('en-CA')): Khata {
   const k: Khata = { billed: 0, paid: 0, outstanding: 0, open: 0, overdue: 0 }
   for (const o of orders) {
@@ -54,7 +54,7 @@ export function khataOf(orders: KhataOrder[], now = Date.now(), today = new Date
   return { ...k, billed: round(k.billed), paid: round(k.paid), outstanding: round(k.outstanding) }
 }
 
-/** Ledgers for every named customer, keyed like Customers (`u:<username>`). */
+/** Credit books for every named customer, keyed like Customers (`u:<username>`). */
 export function khataByCustomer(orders: KhataOrder[], now = Date.now()): Map<string, Khata> {
   const groups = new Map<string, KhataOrder[]>()
   for (const o of orders) {

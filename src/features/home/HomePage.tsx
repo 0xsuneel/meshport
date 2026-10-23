@@ -2264,7 +2264,7 @@ function BusinessApprovalBanner() {
   const c = status === 'pending'
     ? { tone: 'var(--warning)', title: 'Business account under review', text: "We're reviewing your business. You'll get a notification when it's approved.", action: 'View application' }
     : status === 'rejected' || status === 'revoked'
-      ? { tone: 'var(--danger)', title: status === 'revoked' ? 'Merchant access removed' : 'Business account not approved', text: application?.reviewNote || 'Check the details and send it again.', action: 'Apply again' }
+      ? { tone: 'var(--danger)', title: status === 'revoked' ? 'Business access removed' : 'Business account not approved', text: application?.reviewNote || 'Check the details and send it again.', action: 'Apply again' }
       : { tone: 'var(--brand)', title: 'Apply for business approval', text: 'Payments, orders and business tools turn on once MeshPort approves your business.', action: 'Apply for approval' }
   return (
     <div style={{ margin: '12px 0 0', padding: 16, borderRadius: 20, background: 'var(--card)', border: '1px solid var(--border)', borderLeft: `4px solid ${c.tone}` }}>
@@ -3544,7 +3544,7 @@ export function HomePage() {
   const settingsLoaded = useSettingsStore((s) => s.loaded)
   const chainBalancesRef = useRef<Record<string, number>>({})
   // Merchants: the hero's "Available To Bring" counts Unified Balance
-  // (Ledger) chains only - CCTP-only chain balances are left out.
+  // (Unified Balance) chains only - CCTP-only chain balances are left out.
   const { isMerchant } = useMerchant()
   const isMerchantRef = useRef(isMerchant)
   isMerchantRef.current = isMerchant
@@ -3661,7 +3661,7 @@ export function HomePage() {
       const days = PERIOD_DAYS[insightsPeriod]
       const since = new Date(Date.now() - days * 2 * 86400000).toISOString()
       const records = await fetchActivity(walletAddress, { limit: 1000, since })
-      // A merchant's Ledger → Arc transfer appears only once it has landed.
+      // A merchant's other-chain → Arc transfer appears only once it has landed.
       if (!cancelled && mySeq === seq) setHomeRecentActivity(records.filter(r => !((r as any).metadata?.auto_convert && r.status !== 'completed')))
     }
     load()

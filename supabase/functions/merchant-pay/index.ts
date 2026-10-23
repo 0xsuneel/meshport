@@ -414,7 +414,7 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
     if (!minedAt) return { pending: true }
     if (minedAt + 60_000 < createdAt) return { error: 'This transaction was sent before the order was created.', status: 409 }
     if (!who?.wallet && Date.now() - minedAt > 30 * 60_000) {
-      return { error: 'This transaction is too old to confirm here - ask the merchant to verify it.', status: 409 }
+      return { error: 'This transaction is too old to confirm here - ask the business to verify it.', status: 409 }
     }
   }
 

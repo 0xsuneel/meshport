@@ -4,7 +4,7 @@
 // database refuses applications from personal accounts; an admin approves
 // or rejects it (Admin → Merchants). Only an APPROVED
 // application turns on the merchant flow:
-//   • Multichain Hub: "Bring Funds" becomes "Ledger" (UB and CCTP chains)
+//   • Multichain Hub: "Bring Funds" becomes "Other chains" (UB and CCTP chains)
 //   • USDC on other chains waits there until the merchant taps Claim All
 //   • those claims show as "Payment received" with the chain + address
 // Everyone else - no application, pending, rejected or revoked - keeps the
@@ -61,7 +61,7 @@ const emit = () => listeners.forEach(l => l())
 const set = (s: State) => { state = s; emit(); if (s.loaded) rememberHint(s.status === 'approved', s.accountType === 'business') }
 
 // Display hint only: the last known "is a merchant" for this wallet, so the
-// screen opens with the right labels (Merchant Hub / Ledger) instead of
+// screen opens with the right labels (Cross-chain Transfer / Manage money) instead of
 // flashing the normal ones for a moment after a reload. The real status
 // from the server replaces it as soon as it loads; isMerchantNow() (used by
 // non-UI code) never reads the hint.
@@ -193,7 +193,7 @@ export function isBusinessAccountNow(): boolean {
 
 /**
  * A claim from another chain by an approved merchant moves customer payments
- * to Arc - shown as "Ledger payment received". New rows carry metadata.merchant
+ * to Arc - shown as "Cross-chain payment received". New rows carry metadata.merchant
  * (tagged server-side when written); rows written before that tag existed
  * are recognised by date: made on another chain after the approval.
  */
