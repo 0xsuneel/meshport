@@ -30,13 +30,18 @@ export function PushPermissionBanner() {
     if (perm === 'denied') { setDenied(true); setShow(true); return }
     if (perm !== 'granted') { setShow(true); return }
     // Granted - give the automatic setup (App.tsx) a moment, then make sure
-    // this device really ended up with a subscription.
+    // this device really ended up with a subscription. Missing (dropped by the
+    // push service, site data cleared...): permission is already given, so
+    // subscribe again quietly - no tap needed. Only a failed repair asks.
+    let cancelled = false
     const t = setTimeout(() => {
-      navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(sub => {
-        if (!sub) setShow(true)
-      }).catch(() => {})
+      navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(async sub => {
+        if (sub || cancelled) return
+        const r = await enablePushNotifications(userId)
+        if (!r.ok && !cancelled) setShow(true)
+      }).catch(() => { if (!cancelled) setShow(true) })
     }, 5000)
-    return () => clearTimeout(t)
+    return () => { cancelled = true; clearTimeout(t) }
   }, [userId])
 
   // Blocked: goes away by itself (and counts as seen).
