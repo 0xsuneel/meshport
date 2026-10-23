@@ -15,6 +15,6 @@ export function PopupDim({ background = POPUP_DIM }: { background?: string }) {
       initial={DIALOG_BACKDROP.initial} animate={DIALOG_BACKDROP.animate}
       variants={{ leave: (instant?: boolean) => instant ? { opacity: 0, transition: { duration: 0 } } : DIALOG_BACKDROP.exit }} exit="leave"
       transition={DIALOG_BACKDROP.transition}
-      style={{ position: 'absolute', inset: 0, background }} />
+      style={{ position: 'absolute', inset: 0, background, willChange: 'opacity' }} />
   )
 }

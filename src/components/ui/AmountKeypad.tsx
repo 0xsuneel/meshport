@@ -412,6 +412,7 @@ export function AmountKeypad({
               maxWidth: 448, margin: '0 auto',
               zIndex: 40,
               background: LIGHT_DIM,
+              willChange: 'opacity',
             }}
           />,
 

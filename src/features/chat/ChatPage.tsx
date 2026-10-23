@@ -5545,7 +5545,7 @@ export function ChatConversationPage() {
       <AnimatePresence>
         {!isDesktop && (payStep === 'processing' || payStep === 'success') && (
           <motion.div key="chat-pay-dim" {...SHEET_BACKDROP}
-            className="absolute inset-0 z-40" style={{ background: SHEET_DIM }}
+            className="absolute inset-0 z-40" style={{ background: SHEET_DIM, willChange: 'opacity' }}
             onClick={() => {
               if (payStep === 'success') { setPayStep('closed'); setMessagesReady(true); setTimeout(() => scrollToBottom(false), 50) }
             }} />
