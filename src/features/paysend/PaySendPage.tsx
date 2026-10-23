@@ -1087,7 +1087,8 @@ export function PaySendPage() {
           const { ensureConversation, persistMessage, touchConversation } = await import('@/lib/chatService')
           // Paying an order by link / QR: the chat gets the same payment card
           // as paying the request in chat - with "Bill ORD-… · Paid in full".
-          const orderTag = merchantPayCode && merchantOrderNumber ? paymentOrderTag(merchantOrderKind, merchantOrderNumber) : ''
+          // A Shop QR payment has no number but is still tagged (" · Payment").
+          const orderTag = merchantPayCode && (merchantOrderNumber || merchantOrderKind === 'shop') ? paymentOrderTag(merchantOrderKind, merchantOrderNumber) : ''
           const chatName = recipient.isUsername ? recipient.display.replace('.arc', '') : merchantPayCode ? merchantUsername : null
           if (chatName && user) {
             await ensureAnonSession()

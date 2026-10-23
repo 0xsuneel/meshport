@@ -104,6 +104,15 @@ describe('Shop QR payments', () => {
     expect(t.kind).toBe('shop')
     expect(paidTitleFromTag(t, true, true)).toBe('Payment Received')
   })
+  it('a Shop QR payment with no number still reads as a shop payment', () => {
+    const msg = 'Sent 1 USDC to resort.arc' + paymentOrderTag('shop', null)
+    expect(msg).toBe('Sent 1 USDC to resort.arc · Payment')
+    const t = parsePaymentOrderTag(msg)!
+    expect(t.kind).toBe('shop'); expect(t.number).toBe(''); expect(msg.slice(0, t.index)).toBe('Sent 1 USDC to resort.arc')
+    expect(paidTitleFromTag(t, true, true)).toBe('Payment Received')
+    expect(paidTitleFromTag(t, true)).toBe('Payment Paid')
+    expect(parsePaymentOrderTag('Sent 1 USDC to resort.arc')).toBeNull()
+  })
 })
 
 describe('shopFrom', () => {

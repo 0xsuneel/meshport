@@ -66,17 +66,20 @@ export function orderTitle(kind: OrderKind, number: string | null | undefined, o
 
 // A payment that settles an order ends with a tag naming it, e.g.
 // "Sent 3 USDC to bob.arc · Bill #ORD-100042". Older payments say "Order"
-// (or "Bill #ABC123" before order numbers existed).
-export const PAYMENT_ORDER_TAG = / · (Bill|Request|Requested|Payment|Order) #([A-Z0-9-]{6,20})$/
-export function paymentOrderTag(kind: OrderKind, number: string): string {
-  return ` · ${kind === 'bill' ? 'Bill' : kind === 'merchant_request' ? 'Requested' : kind === 'shop' ? 'Payment' : 'Request'} #${number}`
+// (or "Bill #ABC123" before order numbers existed). A Shop QR payment has no
+// number: " · Payment" (older ones carried one: " · Payment #ORD-100108").
+export const PAYMENT_ORDER_TAG = / · (?:(Bill|Request|Requested|Payment|Order) #([A-Z0-9-]{6,20})|(Payment))$/
+export function paymentOrderTag(kind: OrderKind, number?: string | null): string {
+  if (kind === 'shop') return number ? ` · Payment #${number}` : ' · Payment'
+  return ` · ${kind === 'bill' ? 'Bill' : kind === 'merchant_request' ? 'Requested' : 'Request'} #${number}`
 }
-/** The order a payment message settles: its stored number and kind (null kind = older "Order" tag). */
+/** The order a payment message settles: its stored number ('' for Shop QR) and kind (null kind = older "Order" tag). */
 export function parsePaymentOrderTag(text: string): { number: string; kind: OrderKind | null; index: number } | null {
   const m = PAYMENT_ORDER_TAG.exec(text)
   if (!m) return null
-  const kind: OrderKind | null = m[1] === 'Request' ? 'request' : m[1] === 'Requested' ? 'merchant_request' : m[1] === 'Bill' ? 'bill' : m[1] === 'Payment' ? 'shop' : null
-  return { number: m[2], kind, index: m.index }
+  const word = m[1] ?? m[3]
+  const kind: OrderKind | null = word === 'Request' ? 'request' : word === 'Requested' ? 'merchant_request' : word === 'Bill' ? 'bill' : word === 'Payment' ? 'shop' : null
+  return { number: m[2] ?? '', kind, index: m.index }
 }
 /** Title for a paid order from a payment tag; an older untyped tag reads "Paid ORD-00042". */
 /** `received`: the receiver's side ("Bill ORD-00042 Received"); older untyped tags read "ORD-00042 Received". */
