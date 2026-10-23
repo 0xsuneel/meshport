@@ -9,9 +9,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Search,
-} from 'lucide-react'
+
 import { useAuthStore } from '@/store'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { COLORS, Header, statusMeta } from './P2PPage'
@@ -27,6 +25,7 @@ import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { AnimatePresence } from 'framer-motion'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { searchTerm } from '@/lib/searchTerm'
+import { SearchField } from '@/components/ui/SearchField'
 
 type CategoryTab = 'all' | 'buy' | 'sell' | 'completed' | 'cancelled' | 'disputed' | 'refunded'
 
@@ -211,10 +210,8 @@ export function P2PHistoryPage() {
 
       {/* Search */}
       <div style={{ padding: '4px 16px 10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: COLORS.surface, borderRadius: 12, padding: '10px 12px', border: `1px solid ${COLORS.border}` }}>
-          <Search size={15} color={COLORS.muted} />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search Trade ID, wallet, or username"
-            style={{ flex: 1, background: 'none', border: 'none', outline: 'none', color: COLORS.text, fontSize: 13 }} />
+        <div style={{ display: 'flex' }}>
+          <SearchField value={search} onChange={setSearch} ariaLabel="Search Trade ID, wallet or username" placeholder={['Search Trade ID, wallet or username', 'Search']} />
         </div>
       </div>
 

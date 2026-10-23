@@ -7,7 +7,7 @@
 // only the merchant-pay Edge Function changes after verifying on-chain.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Copy, Share2, MessageCircle, QrCode, Search, Users, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Copy, Share2, MessageCircle, QrCode, Users, CheckCircle2 } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useSettingsStore } from '@/store/settingsStore'
 import { formatAmount, timeAgo, copyToClipboard } from '@/lib/utils'
@@ -34,6 +34,7 @@ import { useLeaveGuard } from '@/lib/leaveGuard'
 import { drawMeshportQr } from '@/lib/qrLogo'
 import { QrCard } from '@/features/business/ui/QrCard'
 import { qrCardFile } from '@/lib/qrCardImage'
+import { SearchField } from '@/components/ui/SearchField'
 
 /** Chat text for a request / bill - the chat renders it as a live card. */
 const chatMessageFor = (i: MerchantIntent): string => chatCardMessage(i, formatAmount(i.amount))
@@ -279,9 +280,8 @@ function MoneyHome({ loaded, intents, payments, receipts, chains, claimChains, o
 
       {tab === 'customers' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ position: 'relative' }}>
-            <Search size={15} color="var(--text-secondary)" style={{ position: 'absolute', left: 12, top: 13 }} />
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search username or address" autoCapitalize="none" autoCorrect="off" spellCheck={false} style={{ ...input, paddingLeft: 34 }} />
+          <div style={{ display: 'flex' }}>
+            <SearchField value={q} onChange={setQ} ariaLabel="Search customers" placeholder={['Search username or address', 'Search']} />
           </div>
           {!loaded ? <SkeletonRows count={4} className="px-0" /> : customers.length === 0 ? <Empty text={needle ? 'No customer matches this username or address.' : 'Customers who pay you will show here.'} /> : (
             <>
