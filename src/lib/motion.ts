@@ -126,13 +126,19 @@ export const DIALOG_CARD = byScreen({
 export const POPUP_CARD = byScreen({
   initial: { opacity: 0.85, scale: 0.9, y: 22 },
   animate: { opacity: 1, scale: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } },
+  // Closing: the card goes first and fast (most of it in the first frames),
+  // while the dim behind it lifts gently (DIALOG_BACKDROP). The other way
+  // round - a card that lingers while the dim lifts at once - the page jumped
+  // to full brightness and showed through the half-faded card, its text
+  // floating over the page: the screen read as flashing.
+  exit: { opacity: 0, scale: 0.97, y: 6, transition: { duration: 0.12, ease: EASE_OUT } },
   transition: { duration: 0.36, ease: POPUP_GROW, opacity: POPUP_FADE } as Transition, // no overshoot
 } as const, DESKTOP_POPUP)
 export const DIALOG_BACKDROP = byScreen({
   initial: { opacity: 0 },
   animate: { opacity: 1 },
-  exit: { opacity: 0 },
+  // Lifts slowly at first (the card is leaving over it), then eases off.
+  exit: { opacity: 0, transition: { duration: 0.24, ease: [0.45, 0, 0.25, 1] } },
   transition: { duration: 0.18, ease: EASE_OUT },
 } as const, {
   initial: { opacity: 0 },
