@@ -2079,9 +2079,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
               dialog in the right-hand panel. */}
           <PinSheet open={showPasscodeSheet} id="mc-pass"
             onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
-            title={desktopInput ? 'Authorize Claim' : 'Enter Passcode'}
+            title={desktopInput ? 'Authorize Claim' : 'Confirm claim'}
             subtitle={desktopInput ? `From ${selectedChain ? getMeta(selectedChain.chainId).label : 'Multichain'}` : `Confirm claim of $${formatAmount(selectedTotal)} USDC`}
             amountLabel={`$${formatAmount(selectedTotal)} USDC`} placement="panel"
+            card={{ label: 'Claiming from', name: selectedChain ? getMeta(selectedChain.chainId).label : 'Multichain', detail: 'To your Arc balance', amount: `$${formatAmount(selectedTotal)}`, unit: 'USDC' }}
+            bioVerb="Claim"
             value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }} error={passError || undefined}
             onComplete={(_, viaBiometric) => { setPaidViaBiometric(!!viaBiometric); handlePasscodeConfirm() }} />
         </motion.div>

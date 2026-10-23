@@ -5617,6 +5617,7 @@ export function ChatConversationPage() {
         onClose={isDesktop ? () => { setPayStep('form'); setPayPassEntry('') } : () => { setPayStep('closed'); setPayPassEntry('') }}
         id="chat-pay-pin"
         inPanel
+        bioVerb="Pay"
         title="Authorize Payment"
         subtitle={isDesktop ? `To ${recipientClean}.arc` : 'Enter passcode to confirm'}
         value={payPassEntry}

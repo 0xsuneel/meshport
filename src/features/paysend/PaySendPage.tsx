@@ -1886,10 +1886,16 @@ export function PaySendPage() {
         onClose={() => setShowPasscodeSheet(false)}
         backClose={false}
         id="ps-pass"
-        title={isDesktop ? 'Authorize Payment' : 'Enter Passcode'}
+        title={isDesktop ? 'Authorize Payment' : 'Confirm payment'}
         subtitle={isDesktop ? `To ${recipient?.displayName}`
           : `Authorise ${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token} to ${recipient?.displayName}`}
         amountLabel={`${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))} ${token}`}
+        card={recipient ? {
+          label: 'Paying', name: recipient.displayName || recipient.display,
+          detail: recipient.display && recipient.display !== recipient.displayName ? recipient.display : undefined,
+          amount: `${tokenSymbolChar(token)}${formatAmount(numAmount, tokenDisplayDecimals(token))}`, unit: token,
+        } : undefined}
+        bioVerb="Pay"
         anchor={desktopColumnRef.current}
         value={pin}
         onChange={setPin}

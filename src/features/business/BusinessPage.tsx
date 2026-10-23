@@ -665,6 +665,7 @@ function OwnerBusinessPage() {
         subtitle={pinShown?.kind === 'refund' ? `Send ${money(Number(refundAmount) || 0)} back to ${refundShown ? who(refundShown) : 'the customer'}`
           : pinShown?.kind === 'one' ? `Move ${money((chains ?? []).find(c => c.id === pinShown.chainId)?.balance ?? 0)} from ${chainLabel(pinShown.chainId)} to Arc`
           : `Move ${money(pinShown?.kind === 'settle' && pinShown.retry ? settle.run.filter(r => pinShown.retry!.includes(r.id)).reduce((s, r) => s + r.balance, 0) : settle.total)} to your Arc balance`}
+        bioVerb={pinShown?.kind === 'refund' ? 'Refund' : 'Settle'}
         value={pinValue} onChange={v => { setPinValue(v); setPinError(undefined) }}
         error={pinError} onComplete={code => { void onPin(code) }} onClose={() => setPin(null)} />
 

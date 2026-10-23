@@ -3769,9 +3769,10 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
           for this step itself (confirm → review, above). ── */}
       <PinSheet open={step === 'confirm'} id="mt-pass" backClose={false}
         onClose={() => { setStep('review'); setPassEntry(''); setPassError('') }}
-        title={desktopInput ? 'Authorize Transfer' : 'Enter Passcode'}
+        title={desktopInput ? 'Authorize Transfer' : 'Confirm transfer'}
         subtitle={desktopInput ? `To ${chain.name}` : `Authorise $${formatAmount(numAmount)} USDC to ${chain.name}`}
         amountLabel={`$${formatAmount(numAmount)} USDC`} placement="panel"
+        card={{ label: 'Sending to', name: chain.name, amount: `$${formatAmount(numAmount)}`, unit: 'USDC' }} bioVerb="Transfer"
         value={passEntry} onChange={v => { setPassEntry(v); setPassError('') }} error={passError || undefined}
         onComplete={(_, viaBiometric) => { if (!loading) { setPaidViaBiometric(!!viaBiometric); handleConfirm() } }}
         // Right passcode → the processing page comes in over the sheet.

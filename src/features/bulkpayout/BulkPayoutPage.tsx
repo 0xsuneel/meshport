@@ -1076,14 +1076,10 @@ export function BulkPayoutPage() {
         onClose={() => { setShowReviewPinSheet(false); setPassEntry(''); setPassError('') }}
         locked={processing}
         id="bp-pass"
-        // Phone: the total sits above the title.
-        header={isDesktop ? undefined : (
-          <>
-            <p className="text-center text-sm text-text-secondary mb-1">Confirm bulk payout of</p>
-            <p className="text-center text-2xl font-bold text-text-primary mb-6">${formatAmount(totalAmount)} USDC</p>
-          </>
-        )}
-        title={isDesktop ? 'Authorize Bulk Payout' : 'Enter passcode to confirm'}
+        bioVerb="Pay"
+        title={isDesktop ? 'Authorize Bulk Payout' : 'Confirm payout'}
+        // Phone: who and the total, as a card under the title.
+        card={{ label: 'Paying', name: `${recipients.length} recipient${recipients.length === 1 ? '' : 's'}`, detail: 'Bulk payout', amount: `$${formatAmount(totalAmount)}`, unit: 'USDC' }}
         subtitle={`To ${recipients.length} recipient${recipients.length === 1 ? '' : 's'}`}
         amountLabel={`$${formatAmount(totalAmount)} USDC`}
         anchor={stepColumnRef.current}

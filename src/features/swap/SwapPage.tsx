@@ -1978,10 +1978,16 @@ export function SwapPage() {
         open={showPasscodeSheet}
         onClose={() => { setShowPasscodeSheet(false); setPassEntry(''); setPassError('') }}
         id="sw-pass"
-        title={isDesktop ? (storedPasscode ? 'Authorize Swap' : 'Confirm Swap') : (storedPasscode ? 'Enter Passcode' : 'Confirm Swap')}
+        title={isDesktop ? (storedPasscode ? 'Authorize Swap' : 'Confirm Swap') : 'Confirm swap'}
         subtitle={isDesktop ? `For ~${trimTrailingZeros(parseFloat(estimate?.estimatedOutput?.amount ?? '0').toFixed(swapTokenDecimals(tokenOut.id)))} ${tokenOut.id}`
           : `Swap ${trimTrailingZeros(parseFloat(amountIn || '0').toFixed(swapTokenDecimals(tokenIn.id)))} ${tokenIn.id} for ~${trimTrailingZeros(parseFloat(estimate?.estimatedOutput?.amount ?? '0').toFixed(swapTokenDecimals(tokenOut.id)))} ${tokenOut.id}`}
         amountLabel={`${trimTrailingZeros(parseFloat(amountIn || '0').toFixed(swapTokenDecimals(tokenIn.id)))} ${tokenIn.id}`}
+        card={{
+          label: 'Swapping', name: `${tokenIn.id} → ${tokenOut.id}`,
+          detail: `Get ~${trimTrailingZeros(parseFloat(estimate?.estimatedOutput?.amount ?? '0').toFixed(swapTokenDecimals(tokenOut.id)))} ${tokenOut.id}`,
+          amount: trimTrailingZeros(parseFloat(amountIn || '0').toFixed(swapTokenDecimals(tokenIn.id))), unit: tokenIn.id,
+        }}
+        bioVerb="Swap"
         anchor={desktopColumnRef.current}
         value={passEntry}
         onChange={v => { setPassEntry(v); setPassError('') }}
