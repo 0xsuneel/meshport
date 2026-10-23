@@ -740,7 +740,7 @@ async function notifyClaimComplete(supabase: SupabaseClient, claim: Claim, amoun
       body: JSON.stringify({
         userId: user.id,
         ...(merchant
-          ? { title: 'Moved to Arc', body: `$${amount.toFixed(2)} USDC from your ${chainLabel} Ledger` }
+          ? { title: 'Moved to Arc', body: `$${amount.toFixed(2)} USDC from ${chainLabel}` }
           : { title: 'Claim Complete', body: `$${amount.toFixed(2)} USDC arrived on Arc from ${chainLabel}` }),
         url:    '/multichain',
         tag:    `claim-complete-${claim.id}`,

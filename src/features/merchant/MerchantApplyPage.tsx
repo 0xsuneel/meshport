@@ -83,7 +83,7 @@ export function MerchantApplyPage() {
               <div>
                 <p className="text-sm font-semibold text-text-primary">Receive payments as a business</p>
                 <p className="text-xs text-text-secondary mt-1 leading-relaxed">
-                  Customers can pay you in USDC on supported chains. Payments are collected to your Arc wallet automatically and listed in your Ledger.
+                  Customers can pay you in USDC on supported chains. Payments are collected to your Arc wallet automatically and listed in your Business tab.
                   MeshPort reviews every application.
                 </p>
               </div>

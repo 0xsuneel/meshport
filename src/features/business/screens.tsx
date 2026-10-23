@@ -1092,7 +1092,7 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
           {currentKhata && currentKhata.billed > 0 && (
             <div className="flex flex-col gap-3">
               <div className="flex items-baseline justify-between">
-                <p className="text-base font-bold text-text-primary">Credit ledger</p>
+                <p className="text-base font-bold text-text-primary">Credit book</p>
                 {currentKhata.overdue > 0 && <span className="text-xs font-semibold text-danger">{currentKhata.overdue} overdue</span>}
               </div>
               <div className="grid grid-cols-3 gap-2">

@@ -170,7 +170,7 @@ function hubMove(item: ActivityItem): MoveBreakdown | null {
 function chainReceiptLabel(item: ActivityItem): string | null {
   if (!item.chainReceipt) return null
   const chain = item.chainLabel || item.chain
-  return item.chainReceipt === 'converted' ? 'Moved to Arc' : item.chainReceipt === 'converting' ? 'Moving to Arc' : `In ${chain} Ledger`
+  return item.chainReceipt === 'converted' ? 'Moved to Arc' : item.chainReceipt === 'converting' ? 'Moving to Arc' : `On ${chain}`
 }
 
 // Hub Activity shows the latest 20; See all opens the main Activity's Multichain tab.
@@ -179,8 +179,8 @@ const HUB_RECENT = 20
 // Row / detail title for Hub Activity.
 function hubItemTitle(item: ActivityItem): string {
   const chain = item.chainLabel || item.chain
-  if (item.chainReceipt) return item.ownReceipt ? 'Own payment received' : `Payment received in Ledger (${chain})`
-  if (item.autoConvert && item.type === 'claim') return item.status === 'pending' ? 'Ledger funds moving to Arc' : 'Ledger payment received'
+  if (item.chainReceipt) return item.ownReceipt ? 'Own payment received' : `Payment received on ${chain}`
+  if (item.autoConvert && item.type === 'claim') return item.status === 'pending' ? 'Funds moving to Arc' : 'Cross-chain payment received'
   // A merchant's claim moves Ledger money (already received) to Arc.
   if (item.merchant && item.type === 'claim') return item.ownClaim ? 'Moved to Arc (Own)' : 'Moved to Arc'
   // 7-day Unified Balance withdrawal still running (or a refund row).
@@ -972,7 +972,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
                 : isPending || isRecovery ? 'var(--warning)' : isSuccess ? 'var(--success)' : 'var(--danger)'
               const merchantClaim = isClaim && item.merchant && !item.chainReceipt && !item.autoConvert
               const statusLabel = receiptLabel ?? (isPending ? 'Processing...' : isSuccess
-                ? (merchantClaim ? `From ${item.chainLabel || item.chain} Ledger` : 'Completed')
+                ? (merchantClaim ? `From ${item.chainLabel || item.chain}` : 'Completed')
                 : isRecovery ? 'Needs recovery' : 'Failed')
               const oneLine: React.CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }
               const openRecover = () => { setClaimChain(null); setTrackUb(null); setTrackCctp(null); setHubTab('recovery'); setShowRecovery(true); window.scrollTo?.({ top: 0, behavior: 'smooth' }) }
@@ -1208,7 +1208,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
             header={!flowFocused && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px 4px' }}>
                 <HubPageBack onClick={() => setClaimChain(null)} />
-                <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>{isMerchant ? 'Ledger' : 'Bring Funds'}</span>
+                <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)' }}>{isMerchant ? 'Other chains' : 'Bring Funds'}</span>
               </div>
             )}>
             {sheetClaimChain && (
@@ -1256,7 +1256,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
                 <ChainScanner compact logos={SCAN_LOGOS} title="Refreshing…" subtitle="Checking every chain" />
               )}
               {scanning && bringRows.length === 0 ? (
-                <ChainScanner logos={SCAN_LOGOS} subtitle={isMerchant ? 'Looking for payments on your ledger chains' : 'Finding USDC you can bring to Arc'} />
+                <ChainScanner logos={SCAN_LOGOS} subtitle={isMerchant ? 'Looking for payments on your other chains' : 'Finding USDC you can bring to Arc'} />
               ) : bringRows.length === 0 ? (
                 <div style={{ padding: 18, textAlign: 'center', fontSize: 13, color: 'var(--text-secondary)' }}>
                   No chains to show. Get test USDC from the faucet.
@@ -1394,7 +1394,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'ledger' } = {
             ]}
             detailRows={[
               ...(chainReceiptLabel(it) ? [{ label: 'Status', value: chainReceiptLabel(it)!, positive: status === 'success' }] : []),
-              ...(it.merchant && !it.isRecovery ? [{ label: 'Type', value: `Moved to Arc from ${it.chainLabel || it.chain} Ledger` }] : []),
+              ...(it.merchant && !it.isRecovery ? [{ label: 'Type', value: `Moved to Arc from ${it.chainLabel || it.chain}` }] : []),
               ...(isClaimItem && it.route ? [{ label: 'Route', value: it.route === 'ub' ? 'Unified Balance' : 'CCTP' }] : []),
               ...(it.recoveredVia ? [{ label: 'Recovered', value: `Via ${it.recoveredVia.toUpperCase()}` }] : []),
               ...(move && move.meshportFee > 0 ? [

@@ -1658,7 +1658,7 @@ function MultichainHubCard({
           <div style={{ fontSize: 11.5, color: '#8FE9CB', fontWeight: 600, letterSpacing: '0.3px', marginBottom: 2, lineHeight: '14px',
             ...(claimLoading ? { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5, overflow: 'visible' } : null) }}>
             {claimLoading && <span style={{ margin: '-2px 0', display: 'flex' }}><ChainScanSpinner chain={scanChain} /></span>}
-            <span style={claimLoading ? { minWidth: 0 } : undefined}>{isMerchantHero ? 'In Ledger Chains' : 'Available To Bring'}</span>
+            <span style={claimLoading ? { minWidth: 0 } : undefined}>{isMerchantHero ? 'On Other Chains' : 'Available To Bring'}</span>
           </div>
           <div style={{ fontSize: claimFontSize, fontWeight: 800, color: '#fff', letterSpacing: '-0.8px', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums', ...ellipsisLine }}>
             {balanceHidden ? '••••' : <>${renderStat(claimAvailable, claimFontSize)}</>}
