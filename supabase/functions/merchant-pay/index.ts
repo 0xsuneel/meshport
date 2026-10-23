@@ -161,7 +161,9 @@ function orderDisplay(n: string | null | undefined): string {
 }
 function orderName(i: any): string {
   const no = orderDisplay(i.order_number)
-  return i.kind === 'invoice' ? `Bill ${no}` : i.via === 'shop_qr' ? `Payment ${no}` : i.personal === false ? `Requested Payment ${no}` : `Request ${no}`
+  // Shop QR orders have no number (new ones get none): just "Payment".
+  const name = i.kind === 'invoice' ? 'Bill' : i.via === 'shop_qr' ? 'Payment' : i.personal === false ? 'Requested Payment' : 'Request'
+  return i.via === 'shop_qr' || !no ? name : `${name} ${no}`
 }
 
 function publicView(i: any, payments: any[]) {
