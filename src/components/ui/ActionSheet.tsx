@@ -73,7 +73,7 @@ export function ActionSheet({ open, onClose, isDesktop, id, fixed = false, heigh
       <AnimatePresence custom={leaveUnder}>
         {open && [
           <motion.div key={sid + '-dim'} {...SHEET_BACKDROP} variants={{ leave: leaveVariant(SHEET_BACKDROP.exit) }} exit="leave"
-            className={`${pos} inset-0`} style={{ background: SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40 }} onClick={onClose} />,
+            className={`${pos} inset-0`} style={{ background: SHEET_DIM, zIndex: fixed || zIndex ? z - 1 : 40, willChange: 'opacity' }} onClick={onClose} />,
           <motion.div key={sid} {...sheetDrag(sid, onClose)} {...SHEET_PANEL} variants={{ leave: leaveVariant(SHEET_PANEL.exit) }} exit="leave"
             role="dialog" aria-modal="true"
             className={`${pos} bottom-0 left-0 right-0 bg-surface border-t border-border rounded-t-3xl flex flex-col${fixed ? ' mx-auto max-w-md' : ''}${height === 'full' ? ' h-[92dvh]' : ''}`}

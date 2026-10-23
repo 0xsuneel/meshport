@@ -54,7 +54,7 @@ export function AdminSidebar({ open, onClose }: AdminSidebarProps) {
             {...SHEET_BACKDROP}
             onClick={onClose}
             style={{
-              position: 'fixed', inset: 0, background: SHEET_DIM, zIndex: 40,
+              position: 'fixed', inset: 0, background: SHEET_DIM, zIndex: 40, willChange: 'opacity',
             }}
             className="admin-sidebar-overlay"
           />

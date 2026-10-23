@@ -91,20 +91,24 @@ export const SHEET_PANEL = {
   transition: SHEET_SPRING,
   transformTemplate: stableLayer,
 } as const
-/** The dim behind every bottom sheet (Tailwind bg-black/70). */
-export const SHEET_DIM = 'rgba(0,0,0,0.7)'
+/** The dim behind every bottom sheet. 40% black (Material's scrim is ~32%):
+ *  a darker dim made closing a big jump in brightness on light pages, which
+ *  read as a flash. Same in light and dark. */
+export const SHEET_DIM = 'rgba(0,0,0,0.4)'
 /** A light dim that keeps the page readable behind it: the amount keypad
  *  sheet and the desktop chat Pay drawer. */
 export const LIGHT_DIM = 'rgba(0,0,0,0.16)'
-/** The dim behind every centred popup (PopupDim). */
-export const POPUP_DIM = 'rgba(6,10,14,0.62)'
+/** The dim behind every centred popup (PopupDim). As light as SHEET_DIM, for
+ *  the same reason. */
+export const POPUP_DIM = 'rgba(6,10,14,0.4)'
 export const SHEET_BACKDROP = {
   initial: { opacity: 0 },
   animate: { opacity: 1 },
-  // Closing: the dim lifts slowly at first while the sheet slides away, then
-  // eases off. On EASE_OUT it lifted at once - the page jumped to full
-  // brightness with the sheet still up, which read as the screen flashing.
-  exit: { opacity: 0, transition: { duration: 0.26, ease: [0.45, 0, 0.25, 1] } },
+  // Closing: the dim lifts on the sheet's own exit timing (same duration, same
+  // curve), so the page brightens exactly as the sheet slides away - like
+  // iOS (dimming view animated alongside the dismissal) and Vaul (one
+  // transition for both). Out of step, the two read as a flicker.
+  exit: { opacity: 0, transition: SHEET_EXIT.transition },
   transition: { duration: 0.22, ease: EASE_OUT },
 } as const
 
@@ -118,10 +122,13 @@ export const SHEET_BACKDROP = {
 // than appearing at once. Only the dim fades behind it (PopupDim).
 const POPUP_FADE: Transition = { duration: 0.08, ease: 'linear' }
 const POPUP_GROW = [0.16, 1, 0.3, 1] as const
+/** One close timing for a centred popup's card AND its dim (they must move
+ *  together). */
+const POPUP_EXIT: Transition = { duration: 0.16, ease: EASE_OUT }
 export const DIALOG_CARD = byScreen({
   initial: { opacity: 0.85, scale: 0.94, y: 10 },
   animate: { opacity: 1, scale: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.97, y: 4 },
+  exit: { opacity: 0, scale: 0.97, y: 4, transition: POPUP_EXIT },
   transition: { duration: 0.32, ease: POPUP_GROW, opacity: POPUP_FADE } as Transition, // no overshoot
 } as const, DESKTOP_POPUP)
 /** Centred popups (DesktopDialogFrame / Sheet): a slightly livelier pop-in
@@ -129,19 +136,15 @@ export const DIALOG_CARD = byScreen({
 export const POPUP_CARD = byScreen({
   initial: { opacity: 0.85, scale: 0.9, y: 22 },
   animate: { opacity: 1, scale: 1, y: 0 },
-  // Closing: the card goes first and fast (most of it in the first frames),
-  // while the dim behind it lifts gently (DIALOG_BACKDROP). The other way
-  // round - a card that lingers while the dim lifts at once - the page jumped
-  // to full brightness and showed through the half-faded card, its text
-  // floating over the page: the screen read as flashing.
-  exit: { opacity: 0, scale: 0.97, y: 6, transition: { duration: 0.12, ease: EASE_OUT } },
+  // Closing: card and dim leave together on one clock (POPUP_EXIT), like
+  // the OS dialogs - the page brightens exactly as the card fades.
+  exit: { opacity: 0, scale: 0.97, y: 6, transition: POPUP_EXIT },
   transition: { duration: 0.36, ease: POPUP_GROW, opacity: POPUP_FADE } as Transition, // no overshoot
 } as const, DESKTOP_POPUP)
 export const DIALOG_BACKDROP = byScreen({
   initial: { opacity: 0 },
   animate: { opacity: 1 },
-  // Lifts slowly at first (the card is leaving over it), then eases off.
-  exit: { opacity: 0, transition: { duration: 0.24, ease: [0.45, 0, 0.25, 1] } },
+  exit: { opacity: 0, transition: POPUP_EXIT },
   transition: { duration: 0.18, ease: EASE_OUT },
 } as const, {
   initial: { opacity: 0 },
