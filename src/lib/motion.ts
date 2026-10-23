@@ -101,7 +101,10 @@ export const POPUP_DIM = 'rgba(6,10,14,0.62)'
 export const SHEET_BACKDROP = {
   initial: { opacity: 0 },
   animate: { opacity: 1 },
-  exit: { opacity: 0 },
+  // Closing: the dim lifts slowly at first while the sheet slides away, then
+  // eases off. On EASE_OUT it lifted at once - the page jumped to full
+  // brightness with the sheet still up, which read as the screen flashing.
+  exit: { opacity: 0, transition: { duration: 0.26, ease: [0.45, 0, 0.25, 1] } },
   transition: { duration: 0.22, ease: EASE_OUT },
 } as const
 
