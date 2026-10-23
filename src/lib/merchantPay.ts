@@ -448,12 +448,15 @@ export async function listMyPayments(limit = 500): Promise<MerchantPayment[]> {
 }
 
 function mapPayment(r: any): MerchantPayment {
+  const orderKind = r.merchant_payment_intents ? orderKindOf(r.merchant_payment_intents) : null
   return {
     id: r.id, intentId: r.intent_id, chain: r.source_chain, txHash: r.tx_hash, from: r.from_address, amount: Number(r.amount),
     method: r.method, status: r.status, customerUsername: r.customer_username, createdAt: r.created_at,
-    orderNumber: r.order_number ?? null, matchedBy: r.matched_by ?? null,
+    // A Shop QR payment isn't an order anyone asked for: no number on screen
+    // (the database still numbers it; its store comes from intentId).
+    orderNumber: orderKind === 'shop' ? null : r.order_number ?? null, matchedBy: r.matched_by ?? null,
     late: r.late === true, screenFlag: r.screen_flag ?? null,
-    orderKind: r.merchant_payment_intents ? orderKindOf(r.merchant_payment_intents) : null,
+    orderKind,
   }
 }
 

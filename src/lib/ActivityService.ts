@@ -780,6 +780,60 @@ export async function fetchActivity(
 // the session so each page load doesn't look the same addresses up again.
 const counterpartyNames = new Map<string, { username: string; display_name: string } | null>()
 
+// ── Counterparty usernames ───────────────────────────────────────────────────
+// A send / receive row that only has the other side's address gets their
+// MeshPort username. Used by the first load (fetchActivity) and by rows that
+// arrive live (realtime, on-chain checks), so a payment from a MeshPort user
+// never shows as a bare 0x… first and turns into the name later.
+const needsCounterpartyName = (r: ActivityRecord) =>
+  (r.activityType === 'send' || r.activityType === 'receive') && !!r.counterpartyAddress &&
+  !(r as any).metadata?.toUsername && !(r as any).metadata?.fromUsername
+
+/** Looks up (once per address) the users behind these addresses. */
+export async function primeCounterpartyNames(addresses: string[]): Promise<void> {
+  const addrs = [...new Set(addresses.filter(Boolean).map(a => a.toLowerCase()))].filter(a => !counterpartyNames.has(a))
+  if (addrs.length === 0) return
+  try {
+    const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
+    const orFilter = addrs.map(a => `wallet_address.ilike.${a}`).join(',')
+    // Use the session JWT as bearer - not the anon key - so this read is
+    // scoped to the signed-in session. The anon key as a bearer is only
+    // safe for truly unauthenticated reads and should never be reused for
+    // authenticated write paths or user-data lookups.
+    const { authHeaders } = await import('./chatService')
+    const res = await fetch(
+      `${SUPA_URL}/rest/v1/users?or=(${orFilter})&select=wallet_address,username,display_name`,
+      { headers: { ...(await authHeaders()), 'Accept': 'application/json' } }
+    )
+    if (!res.ok) return
+    const users = await res.json() as any[]
+    // Hits and misses are both remembered, so a repeat skips the round trip.
+    for (const a of addrs) counterpartyNames.set(a, null)
+    for (const u of users) counterpartyNames.set((u.wallet_address || '').toLowerCase(), u)
+  } catch { /* the address shows instead */ }
+}
+
+/** Fills in names already looked up; rows that don't change stay the same object. */
+export function withKnownCounterpartyNames(records: ActivityRecord[]): ActivityRecord[] {
+  let changed = false
+  const out = records.map(r => {
+    if (!needsCounterpartyName(r)) return r
+    const u = counterpartyNames.get(r.counterpartyAddress!.toLowerCase())
+    if (!u?.username) return r
+    const username = u.username.endsWith('.arc') ? u.username : u.username + '.arc'
+    const meta = (r as any).metadata || {}
+    changed = true
+    return { ...r, metadata: r.activityType === 'send' ? { ...meta, toUsername: username } : { ...meta, fromUsername: username } } as ActivityRecord
+  })
+  return changed ? out : records
+}
+
+/** Both: look the names up, then fill them in. */
+export async function resolveCounterpartyNames(records: ActivityRecord[]): Promise<ActivityRecord[]> {
+  await primeCounterpartyNames(records.filter(needsCounterpartyName).map(r => r.counterpartyAddress!))
+  return withKnownCounterpartyNames(records)
+}
+
 async function fetchActivityRaw(
   walletAddress: string,
   opts: FetchOptions = {},
@@ -994,55 +1048,9 @@ async function fetchActivityRaw(
       return true
     })
 
-    // Pass 4: resolve counterparty addresses → MeshPort usernames in one batch query
-    // For rows where metadata.toUsername/fromUsername is missing but counterpartyAddress exists
-    const needsLookup = pass3.filter(r =>
-      (r.activityType === 'send' || r.activityType === 'receive') &&
-      r.counterpartyAddress &&
-      !(r as any).metadata?.toUsername &&
-      !(r as any).metadata?.fromUsername
-    )
-
-    if (needsLookup.length > 0) {
-      try {
-        // Only ask about addresses not seen before (hits and misses are both
-        // remembered), so a repeat load skips this second round trip.
-        const addrs = [...new Set(needsLookup.map(r => r.counterpartyAddress!.toLowerCase()))]
-          .filter(a => !counterpartyNames.has(a))
-        if (addrs.length > 0) {
-          const orFilter = addrs.map(a => `wallet_address.ilike.${a}`).join(',')
-          // Use the session JWT as bearer - not the anon key - so this read is
-          // scoped to the signed-in session. The anon key as a bearer is only
-          // safe for truly unauthenticated reads and should never be reused for
-          // authenticated write paths or user-data lookups.
-          const { authHeaders } = await import('./chatService')
-          const res2 = await fetch(
-            `${SUPA_URL}/rest/v1/users?or=(${orFilter})&select=wallet_address,username,display_name`,
-            { headers: { ...(await authHeaders()), 'Accept': 'application/json' } }
-          )
-          if (res2.ok) {
-            const users = await res2.json() as any[]
-            for (const a of addrs) counterpartyNames.set(a, null)
-            for (const u of users) counterpartyNames.set((u.wallet_address || '').toLowerCase(), u)
-          }
-        }
-        // Enrich records with resolved username
-        return pass3.map(r => {
-          if ((r.activityType !== 'send' && r.activityType !== 'receive') || !r.counterpartyAddress) return r
-          const meta = (r as any).metadata || {}
-          if (meta.toUsername || meta.fromUsername) return r
-          const u = counterpartyNames.get(r.counterpartyAddress.toLowerCase())
-          if (!u) return r
-          const username = u.username?.endsWith('.arc') ? u.username : (u.username ? u.username + '.arc' : '')
-          const enrichedMeta = r.activityType === 'send'
-            ? { ...meta, toUsername: username }
-            : { ...meta, fromUsername: username }
-          return { ...r, metadata: enrichedMeta } as ActivityRecord
-        })
-      } catch {}
-    }
-
-    return pass3
+    // Pass 4: counterparty addresses → MeshPort usernames (one batch query).
+    await primeCounterpartyNames(pass3.filter(needsCounterpartyName).map(r => r.counterpartyAddress!))
+    return withKnownCounterpartyNames(pass3)
   } catch (e: any) {
     console.error('[ActivityService] fetchActivity ERROR:', e?.message)
     if (opts.meta) opts.meta.failed = true

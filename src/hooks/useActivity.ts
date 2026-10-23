@@ -30,6 +30,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   fetchActivity,
   subscribeToActivity,
+  resolveCounterpartyNames,
+  primeCounterpartyNames,
+  withKnownCounterpartyNames,
   ActivityRecord,
   ActivityType,
   ActivityStatus,
@@ -360,14 +363,18 @@ export function useActivity(walletAddress: string | null, initialFilter?: Activi
   useEffect(() => {
     if (!walletAddress) return
     const PENDING_HIDDEN = ['bridge', 'claim', 'withdraw']
-    const unsub = subscribeToActivity(walletAddress, (newRecord) => {
+    // A live row goes in with the sender's / receiver's username already on
+    // it (looked up first), never as a bare address that changes later.
+    const unsub = subscribeToActivity(walletAddress, (raw) => {
       // The main list excludes pending multichain rows (fetchActivity's
       // default) - realtime must not sneak them in either.
-      if (PENDING_HIDDEN.includes(newRecord.activityType) && newRecord.status === 'pending') return
-      if (recordsRef.current.some(r => r.id === newRecord.id)) return
-      setRecords(prev => prev.some(r => r.id === newRecord.id) ? prev : [newRecord, ...prev])
-      setTotal(t => t + 1)
-    }, (updated) => {
+      if (PENDING_HIDDEN.includes(raw.activityType) && raw.status === 'pending') return
+      void resolveCounterpartyNames([raw]).then(([newRecord]) => {
+        if (recordsRef.current.some(r => r.id === newRecord.id)) return
+        setRecords(prev => prev.some(r => r.id === newRecord.id) ? prev : [newRecord, ...prev])
+        setTotal(t => t + 1)
+      })
+    }, (raw) => void resolveCounterpartyNames([raw]).then(([updated]) => {
       setRecords(prev => {
         const i = prev.findIndex(r => r.id === updated.id)
         if (i === -1) {
@@ -377,7 +384,7 @@ export function useActivity(walletAddress: string | null, initialFilter?: Activi
         }
         const next = prev.slice(); next[i] = updated; return next
       })
-    })
+    }))
     return unsub
   }, [walletAddress])
 
@@ -391,7 +398,8 @@ export function useActivity(walletAddress: string | null, initialFilter?: Activi
     if (!walletAddress) return
     const onchainTxs = await fetchRecentOnchainReceived(walletAddress)
     if (onchainTxs.length === 0) return
-    setRecords(prev => mergeOnchainIntoRecords(walletAddress, prev, onchainTxs))
+    await primeCounterpartyNames(onchainTxs.map(t => t.fromAddress))
+    setRecords(prev => withKnownCounterpartyNames(mergeOnchainIntoRecords(walletAddress, prev, onchainTxs)))
   }, [walletAddress])
 
   useEffect(() => {
@@ -433,7 +441,8 @@ export function useActivity(walletAddress: string | null, initialFilter?: Activi
     const mergeFromWatcher = () => {
       const txs = getRecentArcDeposits()
       if (txs.length === 0) return
-      setRecords(prev => mergeOnchainIntoRecords(walletAddress, prev, txs))
+      void primeCounterpartyNames(txs.map(t => t.fromAddress)).then(() =>
+        setRecords(prev => withKnownCounterpartyNames(mergeOnchainIntoRecords(walletAddress, prev, txs))))
     }
     mergeFromWatcher() // seed from the buffer immediately (survives remounts)
     const onDeposit = () => mergeFromWatcher()
