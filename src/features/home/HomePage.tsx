@@ -3862,7 +3862,7 @@ export function HomePage() {
       }}>
         <div style={{
           borderRadius: 14, padding: '14px 0 4px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 40,
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 65,
         }}>
           {searchOpen ? (
             <>
@@ -3933,9 +3933,12 @@ export function HomePage() {
           )}
         </div>
 
-        {/* Search results - grouped People / Services */}
+        {/* Search results - grouped People / Services. Floats over the page
+            (like a dropdown) so the balance card underneath stays put. */}
         {searchOpen && searchQuery.trim() && (
-          <div style={{ background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--brand) 25%, transparent)', borderRadius: 18, marginTop: 8, padding: '4px 10px 10px', maxHeight: '60vh', overflowY: 'auto' }}>
+          <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 20, right: 20, zIndex: 1,
+            background: 'var(--surface)', border: '1px solid color-mix(in srgb, var(--brand) 25%, transparent)', borderRadius: 18, padding: '4px 10px 10px',
+            maxHeight: '60vh', overflowY: 'auto', overscrollBehavior: 'contain', boxShadow: '0 12px 32px rgba(0,0,0,0.18)' }}>
             {searching && searchPeople.length === 0 && (
               <p style={{ color: 'var(--text-secondary)', fontSize: 12, textAlign: 'center', padding: '16px 0' }}>Searching...</p>
             )}
