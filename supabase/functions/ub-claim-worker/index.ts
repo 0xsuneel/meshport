@@ -130,7 +130,7 @@ async function recordActivity(row: any, mintTx: string | null) {
 }
 
 async function processWaiting(row: any) {
-  // Merchant auto-convert: the combined Ledger → Arc transfer is signed at
+  // Business auto-convert: the combined other-chain → Arc transfer is signed at
   // the deposit run and submitted at its scheduled time (an hour later).
   if (row.not_before && new Date(row.not_before).getTime() > Date.now()) return 'scheduled'
   const intents = intentsOf(row.transfer_body)

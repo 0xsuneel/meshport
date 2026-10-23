@@ -379,7 +379,7 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
     if (!(head - parseInt(receipt.blockNumber, 16) >= depth)) return { pending: true }
   }
   const { amount, from } = usdcToMerchant(receipt, chain.usdc, i.merchant_wallet, chainId)
-  if (!(amount > 0) || !from) return { error: `This transaction didn't send USDC to ${i.merchant_name ?? 'the merchant'} on ${chain.label}.`, status: 409 }
+  if (!(amount > 0) || !from) return { error: `This transaction didn't send USDC to ${i.merchant_name ?? 'the business'} on ${chain.label}.`, status: 409 }
   if (order.amount != null && amount + 0.000001 < order.amount) {
     return { error: `This transaction sent $${amount} USDC, but ${orderName(i)} is for $${order.amount} USDC.`, status: 409 }
   }
@@ -718,7 +718,7 @@ async function watchDeposits(pick?: (chainId: string) => boolean) {
         const to = ('0x' + String(log.topics?.[2]).slice(-40)).toLowerCase()
         const from = ('0x' + String(log.topics?.[1]).slice(-40)).toLowerCase()
         if (from === to) continue // self-sends
-        if (GATEWAY_CONTRACTS.has(from)) continue // the merchant's own Ledger withdrawals
+        if (GATEWAY_CONTRACTS.has(from)) continue // the business's own Unified Balance withdrawals
         // MeshPort's own contracts - a P2P escrow release, a swap's output, a
         // BulkPay payout - are never a customer paying an order.
         if (isKnownInternalContract(from, P2P_ESCROWS)) continue

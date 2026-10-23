@@ -131,7 +131,7 @@ async function notifyClaimComplete(
     const { data: user } = await supabase
       .from('users').select('id').eq('wallet_address', walletAddress.toLowerCase()).maybeSingle()
     if (!user?.id) return
-    // A merchant's claim moves Ledger money to Arc - same wording as the Hub.
+    // A business's claim moves its other-chain money to Arc - same wording as the app.
     const { data: m } = await supabase.from('merchant_applications').select('status')
       .eq('wallet_address', walletAddress.toLowerCase()).eq('status', 'approved').limit(1)
     const merchant = (m?.length ?? 0) > 0
