@@ -543,15 +543,33 @@ function MoreSheet({ open, onClose, navigate, hasOngoingP2P }: { open: boolean; 
   const { isMerchant } = useMerchant()
   // Staff of a business (invited by its owner) get "Staff mode" here.
   const business = useBusinessTab()
-  const [staffOf, setStaffOf] = useState(false)
+  // Known before the sheet ever opens: looked up as Home loads and remembered
+  // on the device. Looked up only on open, the "Staff mode" row arrived while
+  // the sheet was sliding up - it grew mid-animation (the sheet "danced").
+  const wallet = useAuthStore(s => s.walletAddress)
+  const staffKey = `mp_staff_of_${(wallet ?? '').toLowerCase()}`
+  const [staffOf, setStaffOf] = useState(() => { try { return localStorage.getItem(staffKey) === '1' } catch { return false } })
   // Business not approved yet: the actions stay visible with a lock - tapping
   // one opens the "available after approval" screen. No staff mode.
   const { locked } = useAccountLock()
-  // Looked up when the sheet opens (it stays mounted so it can animate out).
+  // A fresh answer that would change the sheet while it's open waits until it closes.
+  const [pendingStaff, setPendingStaff] = useState<boolean | null>(null)
+  useEffect(() => { if (!open && pendingStaff !== null) { setStaffOf(pendingStaff); setPendingStaff(null) } }, [open, pendingStaff])
+  const openRef = useRef(open)
+  openRef.current = open
+  // On Home load, and again each time the sheet opens (an invite may have
+  // been accepted meanwhile).
   useEffect(() => {
-    if (business || !open) return
-    import('@/lib/businessTeam').then(m => m.myMemberships()).then(l => setStaffOf(l.length > 0)).catch(() => {})
-  }, [business, open])
+    if (business || !wallet) return
+    let live = true
+    import('@/lib/businessTeam').then(m => m.myMemberships()).then(l => {
+      if (!live) return
+      const v = l.length > 0
+      try { localStorage.setItem(staffKey, v ? '1' : '0') } catch { /* ignore */ }
+      if (openRef.current) setPendingStaff(v); else setStaffOf(v)
+    }).catch(() => {})
+    return () => { live = false }
+  }, [business, wallet, staffKey, open])
   // Two groups, four across (Money, then Explore).
   const groups: { title: string; actions: { label: string; path: string; icon: React.ReactNode }[] }[] = [
     { title: 'Money', actions: [
