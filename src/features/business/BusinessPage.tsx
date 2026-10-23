@@ -55,6 +55,12 @@ import {
 } from './ui'
 
 type ScreenId = 'qr' | 'receive' | 'customers' | 'reports' | 'profile' | 'receipt' | 'help' | 'cashout' | 'team' | 'payouts' | 'tools' | 'activity'
+/** Screens a link (?screen=) can open - all but a payment's receipt. */
+const LINKABLE: ScreenId[] = ['qr', 'receive', 'customers', 'reports', 'profile', 'help', 'cashout', 'team', 'payouts', 'tools', 'activity']
+const linkedScreenOf = (q: URLSearchParams): ScreenId | null => {
+  const v = q.get('screen') as ScreenId | null
+  return v && LINKABLE.includes(v) ? v : null
+}
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const who = (p: MerchantPayment) => p.method === 'own_transfer' ? 'Your transfer'
@@ -218,7 +224,7 @@ function OwnerBusinessPage() {
   // A payment on another chain is "to settle" while that chain still holds USDC.
   const toRow = (p: MerchantPayment): Payment => ({
     id: p.id, from: who(p), amount: money(p.amount), chainLabel: chainLabel(p.chain), chainLogo: chainLogoSrc(p.chain),
-    time: p.createdAt, order: p.orderNumber ? displayOrderNumber(p.orderNumber) : undefined, late: !!p.late, blocked: !!p.screenFlag,
+    time: p.createdAt, order: p.orderNumber ? displayOrderNumber(p.orderNumber) : undefined, wallet: p.from, late: !!p.late, blocked: !!p.screenFlag,
     status: refundedIds.has(p.id) ? 'refunded' as const
       : p.chain !== 'Arc_Testnet' && p.status !== 'collected' && waitingOn.has(p.chain) ? 'to_settle' as const : 'received' as const,
     partlyRefunded: !refundedIds.has(p.id) && refundedOf(p.id) > 0 ? money(refundedOf(p.id)) : undefined,
@@ -272,8 +278,10 @@ function OwnerBusinessPage() {
   // Open screens, bottom to top: a screen opened from another one (Business
   // tools → Stores & staff, Stores → a store's QR, a payment → its receipt)
   // pushes over it, and back uncovers the one beneath - like pages.
-  // ?screen=reports (More → Business Insights) opens Reports on Insights.
-  const linkedScreen = useRef<ScreenId | null>(query.get('screen') === 'reports' ? 'reports' : null)
+  // ?screen=<id> opens that screen directly (More → Business Insights opens
+  // Reports; search opens any of them). ?tab=payments / settlements opens
+  // Manage orders / Manage money.
+  const linkedScreen = useRef<ScreenId | null>(linkedScreenOf(query))
   const [stack, setStack] = useState<ScreenId[]>(() => query.get('apply') ? ['profile'] : linkedScreen.current ? [linkedScreen.current] : [])
   const screen = stack.length ? stack[stack.length - 1] : null
   // Back from Cash out or Payouts: USDC may have moved (escrow, staff pay).
@@ -292,6 +300,17 @@ function OwnerBusinessPage() {
     if (tab !== 'overview') setTab('overview')
     if (stack.some(id => id !== 'profile' && id !== 'help')) setStack([])
   }, [locked, tab, stack])
+  // A link while Business is already open (search from the desktop header).
+  const lastSearch = useRef(location.search)
+  useEffect(() => {
+    if (location.search === lastSearch.current) return
+    lastSearch.current = location.search
+    const q = new URLSearchParams(location.search)
+    const id = linkedScreenOf(q)
+    if (id) { linkedScreen.current = id; setStack([id]) }
+    const t = q.get('tab')
+    if (t === 'payments' || t === 'settlements') { setStack([]); setTab(t) }
+  }, [location.search])
   const open = (id: ScreenId) => () => setStack([id])
   const close = () => setStack([])
   const back = () => {

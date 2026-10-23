@@ -49,6 +49,7 @@ import { SkeletonCards } from '@/components/ui/Skeleton'
 import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { useLeaveGuard } from '@/lib/leaveGuard'
+import { searchTerm } from '@/lib/searchTerm'
 
 export const COLORS = {
   bg: 'var(--bg)', surface: 'var(--surface)', surfaceSecondary: 'var(--surface)',
@@ -271,7 +272,7 @@ export function P2PHubPage() {
     return () => { if (debounceTimer) clearTimeout(debounceTimer); unsubscribe() }
   }, [load])
 
-  const q = search.trim().toLowerCase()
+  const q = searchTerm(search)
   const want = parseFloat(fiatAmount) || 0
   const priced = offers.map(o => ({ o, price: offerLivePrice(o, rates) }))
   const filtered = priced.filter(({ o, price }) => {

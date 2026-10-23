@@ -13,6 +13,7 @@
 // Visuals come from the Arc Studio kit in ./ui; this file holds the logic.
 // Money in uses the merchant-pay service (payment requests, live status);
 // nothing here moves funds out.
+import { searchTerm } from '@/lib/searchTerm'
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { shopPayLink } from '@/lib/payLinks'
 import { qrCardFile } from '@/lib/qrCardImage'
@@ -432,7 +433,7 @@ export function RequestsList({ active, storeId, mainStoreId = null, storeName = 
     for (const i of inStore) c[filterOf(requestStatus(i))]++
     return c
   }, [inStore])
-  const q = query.trim().toLowerCase().replace(/^#/, '')
+  const q = searchTerm(query).replace(/^#/, '')
   const shown = inStore
     .filter(i => filter === 'all' || filterOf(requestStatus(i)) === filter)
     .filter(i => !q || [i.orderNumber, i.orderNumber && displayOrderNumber(i.orderNumber), i.customerUsername, i.note, i.code, i.amount.toFixed(2)]
@@ -1030,8 +1031,8 @@ export function CustomersScreen({ open, onBack, payments, refundedIds, onPayment
     }
     return [...m.values()].sort((a, b) => (khata.get(b.key)?.outstanding ?? 0) - (khata.get(a.key)?.outstanding ?? 0) || b.total - a.total)
   }, [payments, refundedIds, orders, khata])
-  const q = query.trim().toLowerCase()
-  const shown = q ? customers.filter(c => c.name.toLowerCase().includes(q) || (c.wallet ?? '').toLowerCase().includes(q)) : customers
+  const q = searchTerm(query)
+  const shown = q ? customers.filter(c => c.name.toLowerCase().includes(q) || (c.username ?? '').toLowerCase().includes(q) || (c.wallet ?? '').toLowerCase().includes(q)) : customers
   const current = customers.find(c => c.key === selected) ?? null
   const currentKhata = current ? khata.get(current.key) : undefined
   const openBills = useMemo(() => !current?.username ? [] : orders
