@@ -9,6 +9,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { X, Search, Check, Loader2 } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { plainTextOf, parseMedia } from './chatMessageText'
+import { searchTerm } from '@/lib/searchTerm'
 
 const MAX_TARGETS = 5
 
@@ -45,7 +46,7 @@ export function ChatForwardSheet({ messages, sourceKey, myUserId, walletAddress,
   }, [myUserId])
 
   const shown = useMemo(() => {
-    const needle = q.trim().toLowerCase().replace(/^@/, '')
+    const needle = searchTerm(q)
     return (convs ?? []).filter(c => !needle
       || String(c.other_user?.display_name ?? '').toLowerCase().includes(needle)
       || String(c.other_user?.username ?? '').toLowerCase().includes(needle))

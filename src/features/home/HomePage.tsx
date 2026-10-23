@@ -757,11 +757,11 @@ const LEGACY_QUICK_ACTION_IDS: Record<string, string> = { 'multichain-transfer':
 const MAX_QUICK_ACTIONS = 8
 
 /** A Quick Action's label: the Hub's name for it, and for a business the
- *  Insights tile says what it opens (/insights is Ledger Insights there). */
+ *  Insights tile says what it opens (/insights is Business Insights there). */
 function useQuickActionLabel(): (a: { id: string; label: string }) => string {
   const hub = useHubLabel()
   const { isMerchant } = useMerchant()
-  return a => a.id === 'insights' && isMerchant ? 'Ledger Insights' : hub(a.label)
+  return a => a.id === 'insights' && isMerchant ? 'Business Insights' : hub(a.label)
 }
 
 function QuickActionsCard({ navigate, actionIds, onCustomize, hasOngoingP2P }: { navigate: (p: string) => void; actionIds: string[]; onCustomize: () => void; hasOngoingP2P?: boolean }) {
@@ -2624,8 +2624,11 @@ export function HomePage() {
             // so the client never uses the anon key as an authorization header
             // for user data (which had no ownership check).
             const SUPA_URL = (import.meta.env.VITE_SUPABASE_URL as string) || ''
-            const SUPA_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || ''
-            const headers = { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` }
+            // The signed-in session, not the anon key: activity rows are
+            // only readable as their owner (with the anon key this list
+            // came back empty, so "people you've paid" never showed).
+            const { authHeaders } = await import('@/lib/chatService')
+            const headers = await authHeaders()
             const myAddr = walletAddress.toLowerCase()
             const [sentRes, recvRes] = await Promise.all([
               fetch(`${SUPA_URL}/rest/v1/activity?wallet_address=eq.${myAddr}&activity_type=eq.send&order=created_at.desc&limit=20&select=counterparty_address`, { headers }),
@@ -2665,8 +2668,9 @@ export function HomePage() {
       (c.username || '').toLowerCase().includes(ql)
     )
 
-    // Full .arc handle typed? Also check for a NEW (not-already-known) user.
-    const isFullHandle = ql.endsWith('.arc')
+    // Full .arc handle or a full wallet address typed? Also check for a NEW
+    // (not-already-known) user - exact matches only.
+    const isFullHandle = ql.endsWith('.arc') || /^0x[0-9a-f]{40}$/.test(ql)
     if (!isFullHandle) {
       setSearchPeople(contactMatches.slice(0, 6))
       setSearching(false)
@@ -3971,9 +3975,9 @@ export function HomePage() {
 
             {!searching && searchPeople.length === 0 && searchServices.length === 0 && (
               <p style={{ color: 'var(--text-secondary)', fontSize: 12, textAlign: 'center', padding: '16px 0' }}>
-                {searchQuery.trim().toLowerCase().endsWith('.arc')
+                {/\.arc$|^0x[0-9a-f]{40}$/i.test(searchQuery.trim())
                   ? `No results for "${searchQuery.trim()}"`
-                  : 'No saved contact matches - enter the full username.arc to find someone new'}
+                  : 'No matches - enter the full username.arc or wallet address to find someone new'}
               </p>
             )}
           </div>

@@ -26,6 +26,7 @@ import { HistoryRow, HistoryIcon } from '@/components/ui/HistoryRow'
 import { useReturnFlash } from '@/hooks/useReturnFlash'
 import { AnimatePresence } from 'framer-motion'
 import { arcExplorerTxUrl } from '@/lib/chainExplorers'
+import { searchTerm } from '@/lib/searchTerm'
 
 type CategoryTab = 'all' | 'buy' | 'sell' | 'completed' | 'cancelled' | 'disputed' | 'refunded'
 
@@ -166,7 +167,7 @@ export function P2PHistoryPage() {
 
     if (category !== 'all') rows = rows.filter(t => matchesCategory(t, user?.id, category))
 
-    const q = search.trim().toLowerCase()
+    const q = searchTerm(search)
     if (q) {
       rows = rows.filter(t => {
         const cp = counterparties.get(t.buyerId === user?.id ? t.sellerId : t.buyerId)

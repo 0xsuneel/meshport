@@ -73,7 +73,9 @@ export function SearchField({ value, onChange, placeholder, autoFocus, onFocus, 
   return (
     <div style={{
       flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10,
-      ...(wrap ? { minHeight: 44, borderRadius: 22 } : { height: 44, borderRadius: 999 }),
+      // minHeight too: in a column layout `flex: 1` overrides `height`, and the
+      // box shrank to its text (the Guests screen's thin search box).
+      ...(wrap ? { minHeight: 44, borderRadius: 22 } : { height: 44, minHeight: 44, borderRadius: 999 }),
       padding: `0 ${trailing ? 6 : 8}px 0 14px`, boxSizing: 'border-box',
       background: 'var(--surface)',
       border: `1px solid ${focused ? 'color-mix(in srgb, var(--success) 55%, transparent)' : 'var(--border)'}`,

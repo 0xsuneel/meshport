@@ -296,7 +296,7 @@ export async function adminReviewMerchant(id: string, status: 'approved' | 'reje
  *  money from other chains is settled in the Business tab (label only). */
 export function hubLabel(label: string, isMerchant: boolean): string {
   if (!isMerchant) return label
-  return label === 'Multichain Hub' ? 'Cross-chain Transfer' : label === 'Insights' ? 'Ledger Insights' : label
+  return label === 'Multichain Hub' ? 'Cross-chain Transfer' : label === 'Insights' ? 'Business Insights' : label
 }
 
 /** Business tab instead of Rewards: every business account (from sign-up,

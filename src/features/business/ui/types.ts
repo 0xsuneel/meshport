@@ -12,6 +12,8 @@ export interface Payment {
   chainLogo: string   // URL; falls back to letter circle
   time: string        // ISO timestamp
   order?: string      // optional order reference
+  /** The payer's full wallet address (search finds a pasted address). */
+  wallet?: string
   status: PaymentStatus
   /** Arrived after its order expired */
   late?: boolean

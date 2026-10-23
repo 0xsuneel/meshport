@@ -494,7 +494,7 @@ function DraftScreen({ open, draft, setDraft, onDone, onDelete }: {
             <TextInput type="date" value={draft.nextDue} min={today()} onChange={e => setDraft({ ...draft, nextDue: e.target.value })} />
           </Field>
         )}
-        <Field label="Add a person" hint="Name, username or wallet address">
+        <Field label="Add a person" hint="Full username.arc or wallet address">
           <div className="flex flex-col gap-2">
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-text-muted pointer-events-none" />

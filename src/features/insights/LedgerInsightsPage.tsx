@@ -218,7 +218,7 @@ export function LedgerInsightsPage() {
             </button>
           )}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px', lineHeight: 1.2 }}>Ledger Insights</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.2px', lineHeight: 1.2 }}>Business Insights</div>
             <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {businessName ? `${businessName} · sales and customers` : 'Your sales and customers'}
             </div>

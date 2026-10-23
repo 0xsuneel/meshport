@@ -2,6 +2,7 @@
  * PaymentsView — searchable, filterable list of all payments.
  * Grouped by day with a day-total header row.
  */
+import { searchTerm } from '@/lib/searchTerm'
 import React, { useState, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { CreditCard, X } from 'lucide-react'
@@ -99,14 +100,17 @@ export function PaymentsView({ loading, payments, onPayment, onExport, initialFi
   const chipRef = useRef<HTMLDivElement>(null)
 
   const filtered = useMemo(() => {
-    const q = query.toLowerCase()
+    const q = searchTerm(query)
+    const qNum = q.replace(/^[#$]/, '')
     return payments.filter((p) => {
       const matchFilter = filter === 'all' || p.status === filter
       const matchQuery =
         !q ||
         p.from.toLowerCase().includes(q) ||
+        (p.wallet?.toLowerCase().includes(q) ?? false) ||
         p.chainLabel.toLowerCase().includes(q) ||
-        (p.order?.toLowerCase().includes(q) ?? false)
+        (p.order?.toLowerCase().includes(q) ?? false) ||
+        (!!qNum && p.amount.replace(/[$,]/g, '').startsWith(qNum))
       return matchFilter && matchQuery
     })
   }, [payments, query, filter])
