@@ -206,6 +206,11 @@ export async function storeMpc(address: string, phone: KeyShare, backup: KeyShar
   putChecked(MPC_BACKUP + a, b)
 }
 
+export function forgetMpc(address: string) {
+  del(ls(), MPC + norm(address))
+  del(ls(), MPC_BACKUP + norm(address))
+}
+
 export async function mpcShare(address: string, which: 'phone' | 'backup' = 'phone'): Promise<KeyShare> {
   const sealed = get(ls(), (which === 'phone' ? MPC : MPC_BACKUP) + norm(address))
   if (!sealed) throw new VaultError('not-found', 'No MPC wallet on this device')

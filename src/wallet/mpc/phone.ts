@@ -80,6 +80,19 @@ export class PhoneKeygen {
 
   get finished(): boolean { return this.done.size === LOCAL.length }
 
+  /**
+   * Both local shares, as soon as they exist - one request before the server
+   * finishes. Store them now: if that fails, signup stops before the server
+   * saves its share, so it is never left with a wallet nobody can use.
+   * The address is this phone's own result; finish() checks the server's.
+   */
+  get shares(): { phone: KeyShare; backup: KeyShare; address: Hex } | null {
+    const phone = this.done.get(PHONE), backup = this.done.get(BACKUP)
+    if (!phone || !backup) return null
+    if (phone.address !== backup.address) throw new ChannelError('The two local shares disagree')
+    return { phone: phone.share, backup: backup.share, address: phone.address.toLowerCase() as Hex }
+  }
+
   /** Run local parties as far as they can go; seal what the server needs. */
   private async run(sent: MpcMsg[]): Promise<string> {
     this.mail.push(...sent.filter(m => m.to !== SERVER))

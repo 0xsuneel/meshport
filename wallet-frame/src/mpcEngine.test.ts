@@ -20,16 +20,23 @@ let svc: MpcService
 let engine: MpcEngine
 let clock = Date.now()
 const shares = new Map<string, { phone: KeyShare; backup: KeyShare }>() // the frame's vault, in memory
+let storeFails = false // a phone whose storage refuses the shares
+let uid = 'uid-ravi'
+const stored = new Map<string, { address: string; shareCt: string }>() // the server's table
 
 // main.ts: frame requests over the engine, with storage.
 const frame: MpcFrame = {
   keygenBegin: async () => json(await engine.keygenBegin()),
-  keygenNext: async (session, reply) => json(await engine.keygenNext(session, json(reply) as any)),
-  async keygenFinish(session, address) {
-    const r = await engine.keygenFinish(session, address)
-    shares.set(r.address, { phone: r.phone, backup: r.backup })
-    return { address: r.address } // shares never leave the frame
+  async keygenNext(session, reply) {
+    const r = await engine.keygenNext(session, json(reply) as any)
+    if (r.shares) {
+      // Stored before this box goes out, as main.ts does.
+      if (storeFails) throw new Error("This browser couldn't save the wallet")
+      shares.set(r.shares.address, { phone: r.shares.phone, backup: r.shares.backup })
+    }
+    return { box: r.box } // shares never leave the frame
   },
+  keygenFinish: async (session, address) => json(await engine.keygenFinish(session, address)),
   async signBegin(address, request) {
     const s = shares.get(address.toLowerCase())
     if (!s) throw new Error('no MPC wallet here')
@@ -41,7 +48,6 @@ const frame: MpcFrame = {
 // api/wallet-mpc.ts: the HTTP actions over the service, for one signed-in user.
 const post: MpcPost = async (body) => {
   const b = json(body) as any
-  const uid = 'uid-ravi'
   switch (b.action) {
     case 'keygen-begin': return json(await svc.keygenBegin(uid, b.phonePub))
     case 'keygen-step': return json(await svc.keygenStep(uid, b.token, b.box))
@@ -57,7 +63,6 @@ describe('MPC wallet: app driver + frame engine + signing service', () => {
   beforeAll(async () => {
     mpc = await loadMpc(readFileSync(new URL('../../src/wallet/mpc/meshport_mpc.wasm', import.meta.url)))
     const steps = new Set<string>()
-    const stored = new Map<string, { address: string; shareCt: string }>()
     svc = await createMpcService({
       mpc, secret: crypto.getRandomValues(new Uint8Array(32)), now: () => clock,
       repo: {
@@ -69,6 +74,15 @@ describe('MPC wallet: app driver + frame engine + signing service', () => {
     })
     engine = createMpcEngine({ mpc: async () => mpc, identityPub: svc.identityPub, now: () => clock })
     address = await mpcSignup(frame, post)
+  }, 120_000)
+
+  it('if the phone can not store its shares, signup stops before the server saves its share', async () => {
+    uid = 'uid-full-storage'
+    storeFails = true
+    try {
+      await expect(mpcSignup(frame, post)).rejects.toThrow(/couldn't save/)
+      expect(stored.has('uid-full-storage')).toBe(false) // no orphaned server share
+    } finally { storeFails = false; uid = 'uid-ravi' }
   }, 120_000)
 
   it('signup leaves the phone share and the backup share in the frame', () => {

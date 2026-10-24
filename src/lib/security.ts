@@ -41,12 +41,20 @@ async function deriveKey(passcode: string, salt: Uint8Array<ArrayBuffer>, usage:
   )
 }
 
-function toBase64(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes))
+// In chunks: spreading a whole buffer into String.fromCharCode throws past
+// ~65 KB in V8 ("Maximum call stack size exceeded"), and an MPC key share
+// (wallet-frame vault) is ~300 KB. Same output as the one-shot version.
+export function toBase64(bytes: Uint8Array): string {
+  let s = ''
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  return btoa(s)
 }
 
-function fromBase64(str: string): Uint8Array<ArrayBuffer> {
-  return new Uint8Array(atob(str).split('').map(c => c.charCodeAt(0)))
+export function fromBase64(str: string): Uint8Array<ArrayBuffer> {
+  const bin = atob(str)
+  const out = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
 }
 
 // ─── Hash passcode - salt embedded in output string ───────────────────────────

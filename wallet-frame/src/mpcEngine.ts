@@ -36,9 +36,14 @@ export function hashRequest(r: MpcSignRequest): Hex {
 export interface MpcEngine {
   keygenBegin(): Promise<{ session: string; phonePub: Hex }>
   /** keygen-begin's reply, then each keygen-step reply that has a box. */
-  keygenNext(session: string, reply: { sid?: Hex; hello?: ServerHello; box: string }): Promise<{ box: string }>
+  /**
+   * The step where the phone finishes also returns its shares, to be stored
+   * before that box is sent - so a failed store stops signup before the
+   * server saves its share.
+   */
+  keygenNext(session: string, reply: { sid?: Hex; hello?: ServerHello; box: string }): Promise<{ box: string; shares?: { address: Hex; phone: KeyShare; backup: KeyShare } }>
   /** The server's final { address }: both local shares must agree. */
-  keygenFinish(session: string, address: Hex): Promise<{ address: Hex; phone: KeyShare; backup: KeyShare }>
+  keygenFinish(session: string, address: Hex): Promise<{ address: Hex }>
   signBegin(share: KeyShare, request: MpcSignRequest): Promise<{ session: string; phonePub: Hex; with: number; hash: Hex }>
   /** sign-begin's reply → a box; sign-step's reply → the signature. */
   signNext(session: string, reply: { signId?: Hex; hash?: Hex; hello?: ServerHello; box: string }): Promise<{ box: string } | { signature: EcdsaSig }>
@@ -90,18 +95,22 @@ export function createMpcEngine(opts: {
     async keygenNext(session, reply) {
       const e = get(keygens, session)
       return guarded(keygens, session, async () => {
-        if (e.started) return { box: await e.k.next(reply) }
-        if (!reply.sid || !reply.hello) throw new MpcEngineError('Expected the signing service\'s first reply')
-        e.started = true
-        return { box: await e.k.begin({ sid: reply.sid, hello: reply.hello, box: reply.box }) }
+        let box: string
+        if (e.started) box = await e.k.next(reply)
+        else {
+          if (!reply.sid || !reply.hello) throw new MpcEngineError('Expected the signing service\'s first reply')
+          e.started = true
+          box = await e.k.begin({ sid: reply.sid, hello: reply.hello, box: reply.box })
+        }
+        const shares = e.k.shares
+        return shares ? { box, shares } : { box }
       })
     },
 
     async keygenFinish(session, address) {
       const e = get(keygens, session)
       keygens.delete(session)
-      const out = e.k.finish({ address })
-      return { address: out.address, phone: out.phone, backup: out.backup }
+      return { address: e.k.finish({ address }).address }
     },
 
     async signBegin(share, request) {
