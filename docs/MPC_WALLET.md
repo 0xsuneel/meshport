@@ -28,12 +28,21 @@ message flow in `src/wallet/mpc/protocol.ts` stays the same.
   (`dkg1`..`dkg4`, `sign1`..`sign4`, `share_info`), built to WebAssembly
   (`wasm32-wasip1`). A party's secret working state between rounds goes back
   to the caller, so the server needs no memory between requests.
-- `src/wallet/mpc/wasm.ts` - loads the module in the browser or Deno with a
+- `src/wallet/mpc/wasm.ts` - loads the module in the browser or Node with a
   five-function WASI shim (randomness from `crypto.getRandomValues`).
 - `src/wallet/mpc/protocol.ts` - one party's side of key generation and
   signing as steps; messages are `{ from, to, kind, body }`.
 - `src/wallet/mpc/meshport_mpc.wasm` (+ `.sha256`) - the built module,
   committed so the app builds without Rust. The test checks the hash.
+- `src/wallet/mpc/channel.ts` - end-to-end encryption between the wallet
+  frame and the signing service. The app page carries the messages (the frame
+  has no network) but sees only sealed boxes: per-session ECDH, AES-256-GCM,
+  numbered boxes (no replay or reordering). The server signs its session key
+  with an identity key the frame has built in (`VITE_WALLET_MPC_SERVER_KEY`),
+  so the app page can't pose as the server.
+- `src/wallet/mpc/phone.ts` - the phone's side as the frame runs it
+  (`PhoneKeygen`, `PhoneSign`): checks the server's identity, refuses to sign
+  a hash other than the one it computed, runs every round it can.
 - `server/mpc/service.ts` - MeshPort's side (party 2): key generation and
   co-signing. Stateless between requests: round state goes back to the client
   sealed (AES-256-GCM, bound to user + session, 5 minutes); the server share
@@ -44,13 +53,16 @@ message flow in `src/wallet/mpc/protocol.ts` stays the same.
 - `api/wallet-mpc.ts` - the HTTP endpoint (Vercel). Not a Supabase Edge
   Function: one key-generation round needs ~1.8 s of CPU, against Edge
   Functions' 2 s cap.
-- `supabase/migrations/20261024140000_wallet_mpc.sql` - `wallet_mpc_shares`
-  and `wallet_mpc_sign_log`, service role only.
+- `supabase/migrations/20261024140000_wallet_mpc.sql` - `wallet_mpc_shares`,
+  `wallet_mpc_sign_log` and `wallet_mpc_steps`, service role only. Each
+  (session, step) is accepted once: the server is stateless, and re-running
+  an MPC round from the same sealed state ("rewinding") could leak its share.
 
 ## Configuration (before deploying)
 
 | Where | What |
 |---|---|
+| Vercel (wallet frame project) | `VITE_WALLET_MPC_SERVER_KEY` - the service's identity public key (POST `{"action":"identity"}` to `/api/wallet-mpc` once `MPC_SECRET` is set). |
 | Vercel (app project) | `MPC_SECRET` - 32 random bytes as 64 hex characters. Losing it makes every stored server share unreadable; leaking it alone opens nothing without the database. |
 | Supabase | Apply the migration above. |
 
@@ -58,7 +70,7 @@ message flow in `src/wallet/mpc/protocol.ts` stays the same.
 
 | Step | Requests | Server CPU |
 |---|---|---|
-| Signup (key generation) | 4: `keygen-begin`, `keygen-step` ×3 | ~1.5 s and ~1.8 s on the two heavy rounds |
+| Signup (key generation) | 3: `keygen-begin`, `keygen-step` ×2 | ~1.5 s and ~1.8 s on the two heavy rounds |
 | Each signature | 2: `sign-begin`, `sign-step` | ~40-50 ms each |
 
 ## Rebuilding the module

@@ -49,3 +49,22 @@ create index if not exists wallet_mpc_sign_log_uid_created_idx
 alter table public.wallet_mpc_sign_log enable row level security;
 alter table public.wallet_mpc_sign_log force row level security;
 revoke all on public.wallet_mpc_sign_log from anon, authenticated;
+
+-- Each step of each MPC session is accepted once. The signing service keeps
+-- no memory between requests (its round state travels sealed with the
+-- client), so this is what stops the same state being sent twice: re-running
+-- an MPC round from one state ("rewinding") can leak the server's share.
+-- Rows are only useful while a session is live (5 minutes); old ones can go.
+create table if not exists public.wallet_mpc_steps (
+  session_id  text        not null,
+  step        integer     not null,
+  created_at  timestamptz not null default now(),
+  primary key (session_id, step)
+);
+
+create index if not exists wallet_mpc_steps_created_idx
+  on public.wallet_mpc_steps (created_at);
+
+alter table public.wallet_mpc_steps enable row level security;
+alter table public.wallet_mpc_steps force row level security;
+revoke all on public.wallet_mpc_steps from anon, authenticated;

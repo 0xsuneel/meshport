@@ -2,7 +2,7 @@
 //
 // Loads the MPC WebAssembly module (mpc/, DKLs23 2-of-3 threshold ECDSA) and
 // calls it. Runs unchanged in the wallet frame (browser) and the signing
-// service (Deno): the module needs only five WASI imports, provided here -
+// service (Node, api/wallet-mpc.ts): the module needs only five WASI imports, provided here -
 // randomness from crypto.getRandomValues, an empty environment, and stdout /
 // stderr for Rust panic messages. No network, no filesystem.
 //
