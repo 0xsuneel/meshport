@@ -6,7 +6,7 @@ import { copyToClipboard } from '@/lib/utils'
 import { useAuthStore } from '@/store'
 import {
   circleCall, circleConfigured, circleGoogleConfigured, CircleError, finishGoogleSignIn,
-  loadCircleSession, meshportAccount, signOutCircle, startGoogleSignIn,
+  loadCircleSession, meshportAccount, pendingSignInReturn, signOutCircle, startGoogleSignIn,
 } from '@/wallet/circle'
 
 // ── Circle wallet ─────────────────────────────────────────────────────────────
@@ -161,9 +161,11 @@ export function CircleLoginReturnPage() {
   const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
   const started = useRef(false)
+  const back = useRef('/auth')
   useEffect(() => {
     if (started.current) return
     started.current = true
+    back.current = pendingSignInReturn()
     finishGoogleSignIn()
       .then(({ returnTo }) => navigate(returnTo, { replace: true }))
       .catch(async e => {
@@ -184,7 +186,7 @@ export function CircleLoginReturnPage() {
       {error ? (
         <>
           <p role="alert" className="text-sm text-danger">{error}</p>
-          <button className="btn-primary px-6 py-3" onClick={() => navigate('/auth', { replace: true })}>Back to sign-in</button>
+          <button className="btn-primary px-6 py-3" onClick={() => navigate(back.current, { replace: true })}>Back</button>
         </>
       ) : (
         <p className="flex items-center gap-2 text-sm text-text-secondary"><Loader2 className="w-4 h-4 animate-spin" /> Signing you in…</p>
