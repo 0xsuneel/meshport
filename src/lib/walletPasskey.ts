@@ -13,15 +13,18 @@
 //
 // Nothing here derives the wallet key from the passkey, the credential id,
 // the email or any login: the key is random (made on the device) and the
-// passkey only locks and unlocks it.
+// passkey only locks and unlocks it. This module runs the WebAuthn ceremony
+// and the storage; the locking itself happens inside the wallet frame
+// (src/wallet, lib/passkeyWrap.ts), which holds the key - the app passes it
+// the PRF secret and gets back only the ciphertext.
 //
 // This is separate from biometric.ts, which unlocks the app passcode on one
 // device.
 
 import { supabase } from './supabase'
+import type { WalletAccount } from '@/wallet'
 
 const RP_NAME = 'MeshPort'
-const HKDF_INFO = new TextEncoder().encode('meshport-wallet-passkey-v1')
 
 export interface WalletPasskey {
   id: string
@@ -39,14 +42,6 @@ function fromB64(s: string): Uint8Array<ArrayBuffer> {
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
   return out
 }
-function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
-  const h = hex.startsWith('0x') ? hex.slice(2) : hex
-  const out = new Uint8Array(new ArrayBuffer(h.length / 2))
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16)
-  return out
-}
-const toHex = (b: Uint8Array) => '0x' + Array.from(b, x => x.toString(16).padStart(2, '0')).join('')
-
 /** True when this browser can make passkeys at all (PRF support is only known once one is used). */
 export async function isPasskeySupported(): Promise<boolean> {
   try {
@@ -64,17 +59,6 @@ function prfOutput(cred: PublicKeyCredential | null): Uint8Array | null {
   return r ? new Uint8Array(r) : null
 }
 
-async function lockKey(prf: Uint8Array, salt: Uint8Array): Promise<CryptoKey> {
-  const base = await crypto.subtle.importKey('raw', prf as BufferSource, 'HKDF', false, ['deriveKey'])
-  return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: salt as BufferSource, info: HKDF_INFO }, base,
-    { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
-}
-
-async function addressOf(privateKey: string): Promise<string> {
-  const { privateKeyToAccount } = await import('viem/accounts')
-  return privateKeyToAccount(privateKey as `0x${string}`).address
-}
-
 export class PasskeyError extends Error {
   constructor(public code: 'unsupported' | 'cancelled' | 'no-prf' | 'none' | 'mismatch' | 'failed', message: string) { super(message) }
 }
@@ -84,12 +68,9 @@ export class PasskeyError extends Error {
  * Must run from a tap (browsers require a user gesture).
  */
 export async function registerWalletPasskey(opts: {
-  userId: string; username: string; walletAddress: string; privateKey: string
+  userId: string; username: string; walletAddress: string
 }): Promise<void> {
   if (!(await isPasskeySupported())) throw new PasskeyError('unsupported', "This device can't create passkeys")
-  if ((await addressOf(opts.privateKey)).toLowerCase() !== opts.walletAddress.toLowerCase()) {
-    throw new PasskeyError('mismatch', 'Wallet key does not match this account')
-  }
   const prfSalt = crypto.getRandomValues(new Uint8Array(32))
   const label = opts.username ? `${opts.username}.arc` : 'MeshPort wallet'
   let cred: PublicKeyCredential | null
@@ -120,12 +101,12 @@ export async function registerWalletPasskey(opts: {
     throw new PasskeyError('no-prf', "This device's passkeys can't secure a wallet. Use a Recovery QR instead, or another device.")
   }
 
-  const key = await lockKey(prf, prfSalt)
-  prf.fill(0)
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const pk = hexToBytes(opts.privateKey)
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pk))
-  pk.fill(0)
+  // The frame locks the open key for this address (it refuses if it's locked).
+  const { wrapWithPasskey } = await import('@/wallet')
+  let ct: Uint8Array, iv: Uint8Array
+  try { ({ ct, iv } = await wrapWithPasskey(opts.walletAddress, prf, prfSalt)) }
+  catch { throw new PasskeyError('failed', 'Unlock your wallet first, then try again') }
+  finally { prf.fill(0) }
 
   const { error } = await supabase.from('wallet_passkeys').insert({
     user_id: opts.userId,
@@ -167,10 +148,10 @@ export async function listWalletPasskeys(userId: string): Promise<WalletPasskey[
 
 /**
  * Unlock the wallet with any of this account's passkeys (Face ID /
- * fingerprint). Must run from a tap. Returns the key only after checking it
- * is `walletAddress`'s.
+ * fingerprint). Must run from a tap. The frame opens the key and checks it
+ * is `walletAddress`'s; this returns the signer, never the key.
  */
-export async function unlockWithPasskey(userId: string, walletAddress: string): Promise<string> {
+export async function unlockWithPasskey(userId: string, walletAddress: string): Promise<WalletAccount> {
   const { data, error } = await supabase.from('wallet_passkeys')
     .select('credential_id, prf_salt, encrypted_wallet, iv, wallet_address').eq('user_id', userId)
   if (error) throw new PasskeyError('failed', "Couldn't reach MeshPort - check your connection")
@@ -186,20 +167,15 @@ export async function unlockWithPasskey(userId: string, walletAddress: string): 
   if (!got) throw new PasskeyError('no-prf', "This device's passkeys can't unlock a wallet - use your Recovery QR")
   const row = rows.find(r => r.credential_id === got!.credentialId)
   if (!row) { got.prf.fill(0); throw new PasskeyError('none', 'That passkey is not set up for this wallet') }
-  const key = await lockKey(got.prf, fromB64(row.prf_salt))
-  got.prf.fill(0)
-  let pk: Uint8Array
+  const { openWithPasskey, WalletFrameError } = await import('@/wallet')
   try {
-    pk = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromB64(row.iv) }, key, fromB64(row.encrypted_wallet)))
-  } catch {
+    return await openWithPasskey(walletAddress, {
+      prf: got.prf, salt: fromB64(row.prf_salt), ct: fromB64(row.encrypted_wallet), iv: fromB64(row.iv),
+    })
+  } catch (e) {
+    if (e instanceof WalletFrameError && e.code === 'mismatch') throw new PasskeyError('mismatch', 'This passkey belongs to a different wallet')
     throw new PasskeyError('failed', "This passkey couldn't unlock the wallet")
-  }
-  const privateKey = toHex(pk)
-  pk.fill(0)
-  if ((await addressOf(privateKey)).toLowerCase() !== walletAddress.toLowerCase()) {
-    throw new PasskeyError('mismatch', 'This passkey belongs to a different wallet')
-  }
-  return privateKey
+  } finally { got.prf.fill(0) }
 }
 
 /** Remove one of this account's passkeys. */

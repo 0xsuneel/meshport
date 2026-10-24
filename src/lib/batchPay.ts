@@ -7,7 +7,7 @@
 // resumable as soon as the batch is out, and one Activity row for the payer
 // plus one for each person paid.
 import { createPublicClient, encodeFunctionData } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
+import type { WalletAccount } from '@/wallet'
 import { useAuthStore } from '@/store'
 import { arcTransport, arcRpcJson } from '@/lib/arc'
 import { isValidAddress } from '@/lib/arcService'
@@ -179,13 +179,13 @@ export async function sendBatch(resolved: BatchRecipient[], opts: SendBatchOptio
   const idempotencyKey = crypto.randomUUID()
 
   status('Restoring wallet signer...')
-  let activePrivateKey = useAuthStore.getState().privateKey
-  if (!activePrivateKey) {
+  let activeSigner = useAuthStore.getState().signer
+  if (!activeSigner) {
     const { restorePrivateKey } = await import('@/lib/restoreWallet')
     await restorePrivateKey()
-    activePrivateKey = useAuthStore.getState().privateKey
+    activeSigner = useAuthStore.getState().signer
   }
-  if (!activePrivateKey) { useAuthStore.getState().lock(); return { state: 'locked' } }
+  if (!activeSigner) { useAuthStore.getState().lock(); return { state: 'locked' } }
 
   // A definite batch failure goes to Activity as one failed Bulk Payment
   // row with its exact reason (lib/failure.ts); "may still complete" never does.
@@ -202,7 +202,7 @@ export async function sendBatch(resolved: BatchRecipient[], opts: SendBatchOptio
   let bulkTxHash: `0x${string}` | null = null
   try {
     status('Connecting to Arc Testnet...')
-    const account = privateKeyToAccount(activePrivateKey as `0x${string}`)
+    const account = activeSigner
     const sameWallet = early?.from === account.address.toLowerCase()
 
     status('Checking balance...')

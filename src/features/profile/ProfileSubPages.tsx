@@ -40,6 +40,7 @@ import { biometricLabel, removeBiometric } from '@/lib/biometric'
 import { markP2PNotificationRead, markAllP2PNotificationsReadOnServer, P2P_TYPES } from '@/lib/p2pNotifications'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DesktopDialogFrame } from '@/components/ui/DesktopDialogFrame'
+import { WalletSecretFrame } from '@/components/wallet/WalletSecretFrame'
 
 // ─── Security (same for all users) ────────────────────────────────────────────
 export function SecurityPage() {
@@ -321,7 +322,7 @@ export function ChangePasscodePage() {
     if (newPass !== confirmPass) { setError('New passcodes do not match'); return }
     setSaving(true)
     try {
-      const { hashPasscode, encryptPrivateKey, storeEncryptedKey, getEncryptedMnemonic, decryptMnemonic, encryptMnemonic, storeEncryptedMnemonic } = await import('@/lib/security')
+      const { hashPasscode } = await import('@/lib/security')
       const hashed = await hashPasscode(newPass)
 
       // Keep every local secret that's derived from the passcode in sync
@@ -331,36 +332,14 @@ export function ChangePasscodePage() {
       // failing with "wrong passcode" the next time they're used (biometric
       // unlock, or signing a transaction). Never a separate/new passcode -
       // both are just re-encrypted copies of this same new value.
-      const { walletAddress, privateKey, walletSource, biometricEnabled } = useAuthStore.getState()
-      if (walletAddress && privateKey && walletSource !== 'social-auto') {
+      const { walletAddress, signer, walletSource, biometricEnabled } = useAuthStore.getState()
+      if (walletAddress && signer && walletSource !== 'social-auto') {
         // create / import-seed / import-privkey wallets only - social-auto
-        // wallets have no local encrypted key (server-side vault instead).
-        const reEncrypted = await encryptPrivateKey(privateKey, newPass)
-        storeEncryptedKey(walletAddress, reEncrypted)
-      }
-      // SECURITY FIX: same passcode-rotation problem the private key already
-      // solved above, now closed for the mnemonic too - otherwise the
-      // locally-encrypted recovery phrase would silently stay decryptable
-      // only under the OLD passcode, and BackupRecoveryPhrasePage's reveal
-      // flow (which authenticates with the CURRENT passcode) would start
-      // failing to decrypt it. Deliberately decrypts-then-re-encrypts from
-      // STORAGE with the just-verified `oldPass` (not from in-memory
-      // `mnemonic` state, the way the private key does above) - the
-      // mnemonic is no longer guaranteed to be sitting in memory the way
-      // privateKey is (see store/index.ts's persist `migrate`), so this is
-      // the one path that reliably has it regardless of what triggered this
-      // passcode change.
-      if (walletAddress && walletSource !== 'social-auto') {
-        try {
-          const encMnemonic = getEncryptedMnemonic(walletAddress)
-          if (encMnemonic) {
-            const plainMnemonic = await decryptMnemonic(encMnemonic, storedPasscode ? oldPass : newPass)
-            if (plainMnemonic) {
-              const reEncryptedMnemonic = await encryptMnemonic(plainMnemonic, newPass)
-              storeEncryptedMnemonic(walletAddress, reEncryptedMnemonic)
-            }
-          }
-        } catch (e) { console.warn('[ChangePasscode] mnemonic re-encryption failed (non-fatal):', e) }
+        // wallets are never encrypted with the passcode. The wallet frame
+        // re-encrypts the key AND the recovery phrase (opened with the
+        // just-verified old passcode) under the new one.
+        const { setWalletPasscode } = await import('@/wallet')
+        await setWalletPasscode(walletAddress, newPass, storedPasscode ? oldPass : newPass)
       }
       if (walletAddress && biometricEnabled) {
         const { updateBiometricPasscode } = await import('@/lib/biometric')
@@ -471,60 +450,27 @@ function BackupPrivateKeyOnlyPage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
   const walletAddress = useAuthStore(s => s.walletAddress)
-  const inMemoryKey = useAuthStore(s => s.privateKey)
   const storedPasscode = useAuthStore(s => s.passcode)
-  const { showToastMessage } = useUIStore()
   const [revealed, setRevealed] = useState(false)
-  const [copied, setCopied] = useState(false)
   const [passcode, setPasscode] = useState('')
   const [passcodeError, setPasscodeError] = useState('')
   const [verifying, setVerifying] = useState(false)
-  const [decryptedKey, setDecryptedKey] = useState<string | null>(null)
 
   const handleReveal = async () => {
     if (passcode.length < 6) { setPasscodeError('Enter your 6-digit passcode'); return }
     setVerifying(true); setPasscodeError('')
     try {
       const { verifyPasscode } = await import('@/lib/security')
-      let correct = false
-      if (storedPasscode) {
-        correct = await verifyPasscode(passcode, storedPasscode)
-      }
-      if (correct) {
-        // Try in-memory key first, then restore from cloud/encrypted store
-        let key = inMemoryKey
-        if (!key) {
-          const { stashRawPasscode, clearRawPasscode, restorePrivateKey } = await import('@/lib/restoreWallet')
-          try {
-            stashRawPasscode(passcode)
-            const restored = await restorePrivateKey(passcode)
-            if (restored) key = useAuthStore.getState().privateKey
-          } catch (restoreErr) {
-          } finally {
-            clearRawPasscode()
-          }
-        }
-        setDecryptedKey(key)
-        if (key) {
-          setRevealed(true)
-        } else {
-          setPasscodeError('Could not retrieve private key. Go to Home to unlock your wallet first, then try again.')
-        }
-      } else {
-        setPasscodeError('Incorrect passcode. Try again.')
-      }
+      const correct = !!storedPasscode && await verifyPasscode(passcode, storedPasscode)
+      if (!correct) setPasscodeError('Incorrect passcode. Try again.')
+      else if (await openForReveal(passcode)) setRevealed(true)
+      else setPasscodeError('Could not open your wallet. Go to Home to unlock it first, then try again.')
     } catch (e) {
-      console.error('[Backup] Decrypt failed:', e)
-      setPasscodeError('Failed to retrieve private key. Try again.')
+      console.error('[Backup] Reveal failed:', e)
+      setPasscodeError('Failed to open your wallet. Try again.')
     }
+    setPasscode('')
     setVerifying(false)
-  }
-
-  const handleCopy = async () => {
-    if (decryptedKey) {
-      const ok = await copySensitiveToClipboard(decryptedKey)
-      setCopied(true); showToastMessage(ok ? 'Private key copied' : 'Could not copy key', ok ? 'success' : 'error'); setTimeout(() => setCopied(false), 2000)
-    }
   }
 
   return (
@@ -545,7 +491,7 @@ function BackupPrivateKeyOnlyPage() {
         <Card className="p-5 space-y-4">
           <h3 className="font-bold text-text-primary">Private Key (Hex Format)</h3>
 
-          {!revealed ? (
+          {!revealed || !walletAddress ? (
             <div className="space-y-3">
               <p className="text-sm text-text-secondary">Enter your passcode to view your private key</p>
               <PinKeypad
@@ -556,26 +502,10 @@ function BackupPrivateKeyOnlyPage() {
                 onComplete={() => handleReveal()}
               />
               {passcodeError && <p role="alert" className="text-xs text-danger text-center">{passcodeError}</p>}
+              {verifying && <p className="text-xs text-text-secondary text-center">Opening…</p>}
             </div>
           ) : (
-            <div className="space-y-3">
-              {decryptedKey ? (
-                <>
-                  <div className="bg-surface rounded-xl p-4 font-mono text-xs break-all">
-                    <span className="text-text-primary">{decryptedKey}</span>
-                  </div>
-                  <button onClick={handleCopy}
-                    className="w-full flex items-center justify-center gap-2 py-3 bg-surface rounded-2xl text-sm font-medium text-text-primary border border-border">
-                    {copied ? <CheckCircle className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                    {copied ? 'Copied!' : 'Copy Private Key'}
-                  </button>
-                </>
-              ) : (
-                <div className="p-4 bg-surface rounded-2xl text-center">
-                  <p className="text-sm text-text-secondary">Could not retrieve private key</p>
-                </div>
-              )}
-            </div>
+            <WalletSecretFrame address={walletAddress} what="privateKey" />
           )}
         </Card>
 
@@ -587,30 +517,33 @@ function BackupPrivateKeyOnlyPage() {
   )
 }
 
+// Opens the wallet in the wallet frame (if it isn't already) after the
+// passcode was verified - the secret itself is then shown by the frame
+// (WalletSecretFrame); this page never holds it.
+async function openForReveal(passcode: string): Promise<boolean> {
+  if (useAuthStore.getState().signer) return true
+  const { stashRawPasscode, clearRawPasscode, restorePrivateKey } = await import('@/lib/restoreWallet')
+  try {
+    stashRawPasscode(passcode)
+    return await restorePrivateKey(passcode)
+  } catch { return false } finally { clearRawPasscode() }
+}
+
 // ─── Backup Recovery Phrase (Self-Custody Users only) ─────────────────────────
 function BackupRecoveryPhrasePage() {
   const isDesktop = useMediaQuery('(min-width: 980px)')
   const navigate = useNavigate()
-  const mnemonic = useAuthStore(s => s.mnemonic)
-  const inMemoryKey = useAuthStore(s => s.privateKey)
   const walletAddress = useAuthStore(s => s.walletAddress)
   const storedPasscode = useAuthStore(s => s.passcode)
-  const walletSource = useAuthStore(s => s.walletSource)
   const { showToastMessage } = useUIStore()
   const [revealed, setRevealed] = useState(false)
   const [verified, setVerified] = useState(false)
-  const [copiedSeed, setCopiedSeed] = useState(false)
-  const [copiedKey, setCopiedKey] = useState(false)
   const [passcode, setPasscode] = useState('')
+  // The verified passcode, kept only while the backup is shown: the wallet
+  // frame needs it to open the passcode-encrypted recovery phrase.
+  const [revealPasscode, setRevealPasscode] = useState('')
   const [passcodeError, setPasscodeError] = useState('')
   const [verifying, setVerifying] = useState(false)
-  const [decryptedKey, setDecryptedKey] = useState<string | null>(null)
-  // SECURITY FIX: mnemonic is no longer persisted in plain text (see
-  // store/index.ts's persist `migrate` / security.ts's encryptMnemonic), so
-  // it's typically NOT in the store's in-memory `mnemonic` field after a
-  // reload - this holds the value once handleReveal decrypts it on demand,
-  // exactly mirroring decryptedKey's existing role for the private key.
-  const [decryptedMnemonic, setDecryptedMnemonic] = useState<string | null>(null)
   // Both 'create' and 'import-seed' wallets expose both Seed + Private Key tabs.
   // The router already guarantees this component only renders for non-import-privkey wallets.
   const showPrivateKeyTab = true
@@ -625,80 +558,18 @@ function BackupRecoveryPhrasePage() {
     setVerifying(true); setPasscodeError('')
     try {
       const { verifyPasscode } = await import('@/lib/security')
-      let correct = false
-      if (storedPasscode) {
-        correct = await verifyPasscode(passcode, storedPasscode)
-      }
-      if (correct) {
-        // Retrieve the private key - try in-memory first, then derive from mnemonic, then restore
-        let key = inMemoryKey
-        if (!key && mnemonic) {
-          try {
-            const { importFromMnemonic } = await import('@/lib/arc')
-            const w = await importFromMnemonic(mnemonic)
-            if (w?.privateKey) key = w.privateKey
-          } catch {}
-        }
-        if (!key) {
-          const { stashRawPasscode, clearRawPasscode, restorePrivateKey } = await import('@/lib/restoreWallet')
-          try {
-            stashRawPasscode(passcode)
-            const restored = await restorePrivateKey(passcode)
-            if (restored) key = useAuthStore.getState().privateKey
-          } catch (restoreErr) {
-          } finally {
-            clearRawPasscode()
-          }
-        }
-        // Retrieve the mnemonic the same way - try in-memory first (only
-        // ever populated within the same session that created/imported the
-        // wallet, see restoreWallet.ts), then decrypt from local storage
-        // using the passcode just verified above. Best-effort: a private-
-        // key-only import (walletSource 'import-privkey') has no mnemonic
-        // at all, so getEncryptedMnemonic correctly returns null there and
-        // this silently no-ops - the UI already hides the Seed tab for that
-        // wallet type (showPrivateKeyTab / the router-level guard mentioned
-        // above).
-        let revealedMnemonic = mnemonic
-        if (!revealedMnemonic && walletAddress) {
-          try {
-            const { getEncryptedMnemonic, decryptMnemonic } = await import('@/lib/security')
-            const encMnemonic = getEncryptedMnemonic(walletAddress)
-            if (encMnemonic) revealedMnemonic = await decryptMnemonic(encMnemonic, passcode)
-          } catch {}
-        }
-        if (key) {
-          setDecryptedKey(key)
-          if (revealedMnemonic) setDecryptedMnemonic(revealedMnemonic)
-          setRevealed(true)
-        } else {
-          setPasscodeError('Could not retrieve private key. Go to Home to unlock your wallet first, then try again.')
-        }
-      } else {
-        setPasscodeError('Incorrect passcode. Try again.')
-      }
+      const correct = !!storedPasscode && await verifyPasscode(passcode, storedPasscode)
+      if (!correct) setPasscodeError('Incorrect passcode. Try again.')
+      else if (await openForReveal(passcode)) { setRevealPasscode(passcode); setRevealed(true) }
+      else setPasscodeError('Could not open your wallet. Go to Home to unlock it first, then try again.')
     } catch (e) {
       console.error('[Backup] Verification failed:', e)
       setPasscodeError('Verification failed. Please try again.')
     }
+    setPasscode('')
     setVerifying(false)
   }
-
-  const handleCopySeed = async () => {
-    const seed = mnemonic || decryptedMnemonic
-    if (seed) {
-      const ok = await copySensitiveToClipboard(seed)
-      setCopiedSeed(true); showToastMessage(ok ? 'Recovery phrase copied' : 'Could not copy phrase', ok ? 'success' : 'error'); setTimeout(() => setCopiedSeed(false), 2000)
-    }
-  }
-  const handleCopyKey = async () => {
-    if (decryptedKey) {
-      const ok = await copySensitiveToClipboard(decryptedKey)
-      setCopiedKey(true); showToastMessage(ok ? 'Private key copied' : 'Could not copy key', ok ? 'success' : 'error'); setTimeout(() => setCopiedKey(false), 2000)
-    }
-  }
-
-  const words = (mnemonic || decryptedMnemonic) ? (mnemonic || decryptedMnemonic)!.split(' ') : []
+  const hide = () => { setRevealed(false); setRevealPasscode('') }
 
   return (
     <div className="flex-1 overflow-y-auto pb-6 lg:max-w-[950px] lg:mx-auto">
@@ -755,31 +626,11 @@ function BackupRecoveryPhrasePage() {
               <Card className="p-5 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-text-primary">Recovery Phrase</h3>
-                  <button onClick={() => setRevealed(false)} className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
+                  <button onClick={hide} className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
                     <EyeOff className="w-3.5 h-3.5" /> Hide
                   </button>
                 </div>
-                {(mnemonic || decryptedMnemonic) ? (
-                  <>
-                    <div className="grid grid-cols-3 gap-2">
-                      {words.map((word, i) => (
-                        <div key={i} className="bg-surface rounded-xl px-3 py-2.5 flex items-center gap-1.5">
-                          <span className="text-text-secondary text-xs w-4 flex-shrink-0">{i + 1}.</span>
-                          <span className="text-sm font-semibold text-text-primary">{word}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <button onClick={handleCopySeed}
-                      className="w-full flex items-center justify-center gap-2 py-3 bg-surface rounded-2xl text-sm font-medium text-text-primary border border-border">
-                      {copiedSeed ? <CheckCircle className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                      {copiedSeed ? 'Copied!' : 'Backup Recovery Phrase'}
-                    </button>
-                  </>
-                ) : (
-                  <div className="p-4 bg-surface rounded-2xl text-center">
-                    <p className="text-sm text-text-secondary">Recovery phrase not available</p>
-                  </div>
-                )}
+                {walletAddress && <WalletSecretFrame address={walletAddress} what="mnemonic" passcode={revealPasscode} />}
               </Card>
             )}
 
@@ -788,27 +639,11 @@ function BackupRecoveryPhrasePage() {
               <Card className="p-5 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="font-bold text-text-primary">Private Key</h3>
-                  <button onClick={() => setRevealed(false)} className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
+                  <button onClick={hide} className="flex items-center gap-1 text-xs text-text-secondary hover:text-text-primary">
                     <EyeOff className="w-3.5 h-3.5" /> Hide
                   </button>
                 </div>
-                {decryptedKey ? (
-                  <>
-                    <div className="bg-surface rounded-xl p-4 font-mono text-xs break-all">
-                      <span className="text-text-primary">{decryptedKey}</span>
-                    </div>
-                    <button onClick={handleCopyKey}
-                      className="w-full flex items-center justify-center gap-2 py-3 bg-surface rounded-2xl text-sm font-medium text-text-primary border border-border">
-                      {copiedKey ? <CheckCircle className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-                      {copiedKey ? 'Copied!' : 'Backup Private Key'}
-                    </button>
-                  </>
-                ) : (
-                  <div className="p-4 bg-surface rounded-2xl text-center">
-                    <p className="text-sm text-text-secondary">Private key not available</p>
-                    <p className="text-xs text-text-secondary mt-1">Go to Home screen first to unlock, then return here</p>
-                  </div>
-                )}
+                {walletAddress && <WalletSecretFrame address={walletAddress} what="privateKey" />}
               </Card>
             )}
 
@@ -911,8 +746,8 @@ export function EditProfilePage() {
     if (!displayName.trim()) { showToastMessage('Display name cannot be empty', 'error'); return }
     setSaving(true)
     try {
-      const { walletAddress: wa, privateKey } = useAuthStore.getState()
-      if (!wa || !privateKey) {
+      const { walletAddress: wa, signer } = useAuthStore.getState()
+      if (!wa || !signer) {
         showToastMessage('Wallet not unlocked - please unlock your wallet and try again', 'error')
         return
       }
@@ -923,15 +758,13 @@ export function EditProfilePage() {
       // all). buildProfileUpdateMessage's fields/order must stay identical
       // to the copy in api/profile.ts or the server's check will reject a
       // legitimate request.
-      const { privateKeyToAccount } = await import('viem/accounts')
 
       // Use server-side API to bypass RLS (wallet users have no Supabase Auth session)
       // Save CLEAN url to DB (no ?t= cache-buster) so other users get stable URL
       const cleanAvatarUrl = avatarUrl ? avatarUrl.split('?')[0] : avatarUrl
       const timestamp = Date.now()
       const message = buildProfileUpdateMessage(wa, timestamp, displayName.trim(), cleanAvatarUrl)
-      const account = privateKeyToAccount(privateKey as `0x${string}`)
-      const signature = await account.signMessage({ message })
+      const signature = await signer.signMessage({ message })
 
       const res = await fetch('/api/profile', {
         method: 'POST',

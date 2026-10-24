@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { User } from '@/types'
-import { cacheSessionPrivateKey, clearSessionPrivateKey } from '@/lib/security'
+import { clearSessionPrivateKey } from '@/lib/security'
+import type { WalletAccount } from '@/wallet'
 
 // ─── Storage key helpers ───────────────────────────────────────────────────────
 function walletKey(addr: string | null) {
@@ -97,8 +98,11 @@ interface AuthStore {
   isLocked: boolean
   lastActivityAt: number
   walletAddress: string | null
-  privateKey: string | null
-  mnemonic: string | null
+  /**
+   * The open wallet - signs through the wallet frame (src/wallet). null while
+   * locked. The app never holds the key itself; see docs/WALLET_FRAME.md.
+   */
+  signer: WalletAccount | null
   walletSource: 'create' | 'import-seed' | 'import-privkey' | 'social-auto' | null
   username: string | null
   loginType: 'social' | 'wallet' | null
@@ -110,7 +114,7 @@ interface AuthStore {
   setUser: (user: User) => void
   updateAvatar: (avatarUrl: string | null) => void
   updateDisplayName: (name: string) => void
-  setWallet: (address: string, privateKey: string, mnemonic?: string, source?: 'create' | 'import-seed' | 'import-privkey' | 'social-auto') => void
+  setWallet: (address: string, signer: WalletAccount | null, source?: 'create' | 'import-seed' | 'import-privkey' | 'social-auto') => void
   setUsername: (username: string) => void
   setLoginType: (type: 'social' | 'wallet') => void
   setBackupEmail: (email: string | null) => void
@@ -156,8 +160,7 @@ export const useAuthStore = create<AuthStore>()(
       isLocked: false,
       lastActivityAt: Date.now(),
       walletAddress: null,
-      privateKey: null,
-      mnemonic: null,
+      signer: null,
       walletSource: null,
       username: null,
       loginType: null,
@@ -176,53 +179,22 @@ export const useAuthStore = create<AuthStore>()(
         user: s.user ? { ...s.user, avatar: avatarUrl } : null,
       })),
       updateDisplayName: (name) => set((s) => ({ user: s.user ? { ...s.user, displayName: name } : null })),
-      setWallet: (address, privateKey, mnemonic, source) => {
+      setWallet: (address, signer, source) => {
         set((s) => ({
           walletAddress: address,
-          privateKey,
-          mnemonic: mnemonic !== undefined ? mnemonic : s.mnemonic,
+          signer,
           walletSource: source !== undefined ? source : (s.walletSource || 'create'),
         }))
-        // Mirror the decrypted key into sessionStorage - this is what lets a
-        // plain refresh skip the passcode prompt (see cacheSessionPrivateKey's
-        // own comment in lib/security.ts for the tradeoff). Widened (was
-        // import-privkey ONLY) to cover create/import-seed too: those wallet
-        // types used to get this same "instant refresh" property for free by
-        // persisting the raw mnemonic in plain text and re-deriving the key
-        // from it on every load - see the SECURITY FIX in this file's persist
-        // `migrate` above. Now that the mnemonic is no longer persisted in
-        // plaintext, this sessionStorage cache is what preserves the exact
-        // same "no passcode needed on a plain refresh, but a real gap -
-        // tab/browser close, offline - asks again" UX those wallets already
-        // had, using the identical, already-reviewed mechanism import-privkey
-        // wallets have relied on for this all along. social-auto is still
-        // deliberately excluded - see this function's own header comment
-        // and security.ts for why that wallet type never caches its key
-        // locally in ANY form.
-        const effectiveSource = source !== undefined ? source : get().walletSource
-        if (privateKey && effectiveSource !== 'social-auto') {
-          // cacheSessionPrivateKey is now async (device-wraps before writing
-          // sessionStorage); fire-and-forget from this sync setter.
-          void cacheSessionPrivateKey(address, privateKey)
-        }
-        // A real key means recovery is no longer needed - no matter which
-        // of the several paths got us here (mnemonic derive, local
-        // passcode-decrypt, the social-auto server-side vault fetch, or a
-        // fresh login/import). This is the single choke point every one of
-        // those funnels through.
+        // The key's session copy now lives in the wallet frame (sealed to the
+        // frame's origin), so a plain refresh still reopens without the
+        // passcode - nothing to cache here.
         //
-        // Previously walletRecoveryNeeded was only ever cleared inside
-        // restoreWallet.ts's OWN success path. That left a real gap: an
-        // early restorePrivateKey() call (e.g. fired on app mount, before
-        // Supabase's session had finished hydrating) could fail and flip
-        // the banner on, and the key could then become available a moment
-        // later through a DIFFERENT path that never calls
-        // restorePrivateKey() at all (e.g. PasscodeSetup unlocking
-        // directly) - nothing ever told the banner the wallet was fine
-        // after that. That's exactly the "couldn't restore your wallet"
-        // banner sitting on top of an already-working wallet (balance
-        // loaded, address showing, everything functional).
-        if (privateKey) {
+        // An open wallet means recovery is no longer needed - no matter which
+        // of the several paths got us here (frame session copy, passcode,
+        // passkey, Recovery QR, a fresh create/import). This is the single
+        // choke point every one of those funnels through; see restoreWallet.ts
+        // for why the banner must be cleared here and not only there.
+        if (signer) {
           useUIStore.getState().setWalletRecoveryNeeded(false)
         }
       },
@@ -309,6 +281,9 @@ export const useAuthStore = create<AuthStore>()(
         // logging out should mean the next login for ANY account on this
         // browser starts from a real passcode prompt, not a leftover cache.
         clearSessionPrivateKey(currentAddr)
+        // The frame's open key, session copy and (Google / email) device copy
+        // go too. Passcode copies stay, exactly as before.
+        import('@/wallet').then(({ forgetWallet }) => forgetWallet(currentAddr ?? undefined)).catch(() => {})
 
         // Clear ALL wallet-specific localStorage keys so next account starts clean
         try {
@@ -342,7 +317,7 @@ export const useAuthStore = create<AuthStore>()(
         // Clear auth state
         set(() => ({
           user: null, isAuthenticated: false, walletAddress: null,
-          privateKey: null, mnemonic: null, username: null,
+          signer: null, username: null,
           loginType: null, backupEmail: null, isLocked: false, walletSource: null,
           biometricEnabled: false,
         }))
@@ -352,8 +327,9 @@ export const useAuthStore = create<AuthStore>()(
       // PasscodeLockPage), so a locked app holds nothing usable.
       lock:   () => {
         const addr = get().walletAddress
-        set({ isLocked: true, privateKey: null })
+        set({ isLocked: true, signer: null })
         import('@/lib/security').then(({ clearSessionPrivateKey, forgetVerifiedPasscodes }) => { clearSessionPrivateKey(addr); forgetVerifiedPasscodes() }).catch(() => {})
+        import('@/wallet').then(({ lockWallet }) => lockWallet(addr ?? undefined)).catch(() => {})
       },
       unlock: () => set({ isLocked: false, lastActivityAt: Date.now() }),
       touchActivity: () => set({ lastActivityAt: Date.now() }),

@@ -416,7 +416,7 @@ export function SwapPage() {
   const shortPhone = useMediaQuery('(max-height: 700px)')
   const stickyCta = isDesktop || shortPhone
   const navigate  = useNavigate()
-  const privateKey = useAuthStore(s => s.privateKey)
+  const signer = useAuthStore(s => s.signer)
   const walletAddress = useAuthStore(s => s.walletAddress)
   const storedPasscode = useAuthStore(s => s.passcode)
   const { balance } = useWalletStore()
@@ -710,13 +710,13 @@ export function SwapPage() {
   // SECURITY FIX (transaction audit, 2026-09-17): this used to POST the raw
   // private key to api/swap-proxy so a Vercel serverless function could
   // sign there. Estimate/swap now run entirely client-side via
-  // swapService.ts (same AppKit + createEthersAdapterFromPrivateKey pattern
+  // swapService.ts (same AppKit + Circle adapter pattern
   // Multichain Claim/Transfer already run in the browser) - the key never
   // leaves this device. Signature/return shape unchanged so every call site
   // below (handleReview, the live-quote effects, handleConfirm) needed no
   // changes at all.
   const callProxy = useCallback(async (action: 'estimate' | 'swap', extraParams?: Record<string, any>): Promise<any> => {
-    // Read fresh from the store rather than the closed-over `privateKey`
+    // Read fresh from the store rather than the closed-over `signer`
     // value - this callback's identity (and therefore its closure) only
     // updates on the NEXT render after the store changes, but handleReview's
     // on-demand restore-then-continue (see its own comment) can populate the
@@ -724,8 +724,8 @@ export function SwapPage() {
     // same tick, before that re-render happens. Reading live state here is
     // what makes that actually work instead of silently using the stale
     // null it closed over.
-    const activePrivateKey = useAuthStore.getState().privateKey
-    if (!activePrivateKey) {
+    const activeSigner = useAuthStore.getState().signer
+    if (!activeSigner) {
       throw Object.assign(new Error('Wallet unavailable - unlock your wallet and try again.'), { isUncertain: false })
     }
 
@@ -756,12 +756,12 @@ export function SwapPage() {
 
     if (action === 'estimate') {
       return withTimeout(estimateSwapLocal({
-        privateKey: activePrivateKey, tokenIn: tokenInId, tokenOut: tokenOutId,
+        signer: activeSigner, tokenIn: tokenInId, tokenOut: tokenOutId,
         amountIn: amountInStr, slippageBps: slippage,
       }))
     }
     return withTimeout(executeSwapLocal({
-      privateKey: activePrivateKey, walletAddress: walletAddress ?? '',
+      signer: activeSigner, walletAddress: walletAddress ?? '',
       tokenIn: tokenInId, tokenOut: tokenOutId, amountIn: amountInStr, slippageBps: slippage,
       attemptId: extraParams?.attemptId, intentId: extraParams?.intentId,
       onProgress: extraParams?.onProgress,
@@ -808,18 +808,18 @@ export function SwapPage() {
     const amt = parseFloat(amountIn)
     if (!amt || amt <= 0 || tokenIn.id === tokenOut.id) return
     // Wallet not loaded into the store yet (e.g. this effect firing on
-    // initial mount, before useAuthStore hydrates privateKey/walletAddress).
-    // callProxy would otherwise send a request with an empty privateKey and
+    // initial mount, before useAuthStore hydrates signer/walletAddress).
+    // callProxy would otherwise send a request with an empty signer and
     // the server would correctly 400 with "Missing required fields" - wait
     // silently instead of surfacing that as a user-facing error; the caller
     // (the debounced-typing effect / keypad-close effect) re-fires this once
     // amountIn/tokenIn/tokenOut change again, and separately whenever
-    // privateKey itself becomes available (see the effect below).
+    // signer itself becomes available (see the effect below).
     // Read live: this callback is only rebuilt when the inputs change, so a
-    // closed-over privateKey stays null after the wallet loads and the
+    // closed-over signer stays null after the wallet loads and the
     // "retry once the wallet is ready" effect below silently did nothing.
     const auth = useAuthStore.getState()
-    if (!auth.privateKey || !auth.walletAddress) return
+    if (!auth.signer || !auth.walletAddress) return
     const myReqId = ++liveQuoteReqId.current
     setLiveQuoteLoading(true)
     try {
@@ -875,15 +875,15 @@ export function SwapPage() {
 
   // Retry the quote once the wallet finishes loading. Covers the case where
   // the person typed an amount (or the keypad-close/debounce effects fired)
-  // while privateKey/walletAddress were still empty - those calls were
+  // while signer/walletAddress were still empty - those calls were
   // skipped by runLiveQuote's own guard above, so nothing would otherwise
   // ever re-fetch once the wallet becomes ready.
   const hadWalletRef = useRef(false)
   useEffect(() => {
-    const hasWallet = Boolean(privateKey && walletAddress)
+    const hasWallet = Boolean(signer && walletAddress)
     if (hasWallet && !hadWalletRef.current && step === 'idle') runLiveQuote()
     hadWalletRef.current = hasWallet
-  }, [privateKey, walletAddress, step, runLiveQuote])
+  }, [signer, walletAddress, step, runLiveQuote])
 
   // BUG FIX (live report -- "entered amount, no quote/rate shown"): mobile
   // previously relied ENTIRELY on catching the keypad's open->closed
@@ -962,7 +962,7 @@ export function SwapPage() {
   const handleReview = async () => {
     const amt = parseFloat(amountIn)
     if (!amt || amt <= 0 || tokenIn.id === tokenOut.id) return
-    // BUG FIX (2026-09-03): this used to give up the INSTANT privateKey
+    // BUG FIX (2026-09-03): this used to give up the INSTANT signer
     // happened to be null, with zero attempt to actually restore it first -
     // so "wallet is still loading" showed even in the completely ordinary
     // case where restoration just hadn't finished yet (e.g. this is the
@@ -977,11 +977,11 @@ export function SwapPage() {
     // than a message that would never resolve on its own if the real issue
     // is that the wallet needs the passcode re-entered (see
     // WalletRecoveryBanner, which now offers exactly that inline).
-    if (!privateKey || !walletAddress) {
+    if (!signer || !walletAddress) {
       const { restorePrivateKey } = await import('@/lib/restoreWallet')
       await restorePrivateKey().catch(() => {})
       const fresh = useAuthStore.getState()
-      if (!fresh.privateKey || !fresh.walletAddress) {
+      if (!fresh.signer || !fresh.walletAddress) {
         setError('Your wallet needs to be unlocked - check the banner at the top of the app, or try again in a moment.')
         setStep('idle')
         return
@@ -1354,7 +1354,7 @@ export function SwapPage() {
   // the fetch itself): shown as loading, never as a grey "0" that then
   // turns into a spinner and back - and the rate line keeps its place.
   const validQuoteInput = parseFloat(amountIn || '0') > 0 && tokenIn.id !== tokenOut.id
-  const quotePending = isActive && validQuoteInput && !estimate && !error && !!privateKey && !!walletAddress
+  const quotePending = isActive && validQuoteInput && !estimate && !error && !!signer && !!walletAddress
   const quoteLoading = step === 'estimating' || liveQuoteLoading || quotePending
 
   // Gas on Arc is always paid in native USDC, no matter which token is

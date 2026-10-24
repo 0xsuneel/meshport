@@ -440,7 +440,7 @@ function ConversationPreview({ conv, isSelfChat, uname, userId }: {
   // before the wallet address finished loading, since nothing re-ran the
   // effect once the address actually became available.
   const walletAddress = useAuthStore((s) => s.walletAddress)
-  const walletKeyReady = useAuthStore((s) => !!s.privateKey)
+  const walletKeyReady = useAuthStore((s) => !!s.signer)
   useEffect(() => {
     if (!isEncryptedPayload(raw)) { setMsg(raw); return }
     const known = _plainByContent.get(raw)
@@ -2290,7 +2290,7 @@ export function ChatConversationPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const user = useAuthStore(s => s.user)
-  const privateKey = useAuthStore(s => s.privateKey)
+  const signer = useAuthStore(s => s.signer)
   const storedPasscode = useAuthStore(s => s.passcode)
   const { showToastMessage } = useUIStore()
   const { balance, setBalance } = useWalletStore()
@@ -2404,7 +2404,7 @@ export function ChatConversationPage() {
   const walletAddress = useAuthStore((s) => s.walletAddress)
   // The wallet key can unlock after the chat opens (passcode, restore) -
   // the conversation key is derived from it, so derive again then.
-  const walletKeyReady = useAuthStore((s) => !!s.privateKey)
+  const walletKeyReady = useAuthStore((s) => !!s.signer)
   // The key counts as final once it's found, or once it was looked up with
   // the wallet key available (then "no key" is the real answer). Until then
   // encrypted messages read "Decrypting…" instead of "unable to decrypt".
@@ -2430,7 +2430,7 @@ export function ChatConversationPage() {
     getConversationKey(walletAddress, otherUser.id).then(k => {
       if (cancelled) return
       setConvKey(k); setConvKeyFor(otherUser.id)
-      if (k || useAuthStore.getState().privateKey) setKeyFinalFor(otherUser.id)
+      if (k || useAuthStore.getState().signer) setKeyFinalFor(otherUser.id)
     })
     return () => { cancelled = true }
   }, [otherUser?.id, walletAddress, walletKeyReady, keyNonce])
@@ -4026,7 +4026,7 @@ export function ChatConversationPage() {
       // key warm in memory). `silent: true` so a wrong PIN doesn't flip on
       // the wallet-recovery banner before "Incorrect passcode" below even
       // shows.
-      if (!privateKey) {
+      if (!signer) {
         import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(payPassEntry || undefined, { silent: true })).catch(() => {})
       }
       const { verifyPasscode } = await import('@/lib/security')
@@ -4051,15 +4051,15 @@ export function ChatConversationPage() {
     setPayError(''); setPayPending(false); setPayStep('processing')
     payStartRef.current = performance.now()
 
-    let activePrivateKey = privateKey
-    if (!activePrivateKey) {
+    let activeSigner = signer
+    if (!activeSigner) {
       try {
         const { restorePrivateKey } = await import('@/lib/restoreWallet')
         await restorePrivateKey(payPassEntry || undefined)
-        activePrivateKey = useAuthStore.getState().privateKey
+        activeSigner = useAuthStore.getState().signer
       } catch {}
     }
-    if (!activePrivateKey) { setPayError("Couldn't access your wallet on this device. Sign out and re-import your wallet with your recovery phrase or private key to continue."); setPayStep('confirm'); chatPayInFlightRef.current = false; return }
+    if (!activeSigner) { setPayError("Couldn't access your wallet on this device. Sign out and re-import your wallet with your recovery phrase or private key to continue."); setPayStep('confirm'); chatPayInFlightRef.current = false; return }
 
     try {
       const { sendUSDC, sendEURC, sendCirBTC, getUSDCBalance, getEURCBalance, getCirBtcBalance } = await import('@/lib/arcService')
@@ -4074,10 +4074,10 @@ export function ChatConversationPage() {
         metadata: { toUsername: otherUser?.username || undefined, ...(billPay?.orderNumber ? { merchantOrder: billPay.orderNumber, merchantOrderKind: billPay.kind === 'bill' ? 'invoice' : 'request', merchantPersonal: billPay.kind === 'bill' ? undefined : billPay.kind === 'request' } : {}) },
       })).catch(() => {})
       const result = await (payToken === 'EURC'
-        ? sendEURC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey })
+        ? sendEURC({ signer: activeSigner, to: payTo, amount: numAmount, idempotencyKey })
         : payToken === 'cirBTC'
-        ? sendCirBTC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey })
-        : sendUSDC({ privateKey: activePrivateKey, to: payTo, amount: numAmount, idempotencyKey, memo: chatOrderMemo() })
+        ? sendCirBTC({ signer: activeSigner, to: payTo, amount: numAmount, idempotencyKey })
+        : sendUSDC({ signer: activeSigner, to: payTo, amount: numAmount, idempotencyKey, memo: chatOrderMemo() })
       ).catch((e: unknown) => { noteFailed(e); throw e })
 
       // The send now waits for the real receipt (waitForConfirmation in
@@ -4161,10 +4161,9 @@ export function ChatConversationPage() {
       })()
 
       try {
-        const { deriveAddressFromPrivateKey } = await import('@/lib/arc')
         // Fire-and-forget - only refreshes the displayed balance, no reason
         // to block the success screen on it.
-        deriveAddressFromPrivateKey(activePrivateKey).then((realAddr: string) => {
+        Promise.resolve(activeSigner.address).then((realAddr: string) => {
           if (payToken === 'EURC') {
             getEURCBalance(realAddr).then(b => setEurcBalance(b)).catch(() => {})
           } else if (payToken === 'cirBTC') {

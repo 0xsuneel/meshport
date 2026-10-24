@@ -117,8 +117,8 @@ export async function ensureAnonSession(): Promise<void> {
 // only signs when it isn't. Fires `meshport:session-bound` when it changed
 // something, so screens that loaded before the link can reload.
 let _bindInflight: Promise<boolean> | null = null
-export function syncAuthUidToProfile(userId: string, privateKey?: string | null, force = false): Promise<boolean> {
-  if (!userId || !privateKey) return Promise.resolve(false)
+export function syncAuthUidToProfile(userId: string, signer?: import('@/wallet').WalletAccount | null, force = false): Promise<boolean> {
+  if (!userId || !signer) return Promise.resolve(false)
   if (force) _linkedKey = null
   if (_bindInflight) return _bindInflight
   _bindInflight = (async () => {
@@ -134,10 +134,8 @@ export function syncAuthUidToProfile(userId: string, privateKey?: string | null,
       const { data: owns, error: ownsErr } = await supabase.rpc('session_owns_user', { p_user_id: userId })
       if (!ownsErr && owns === true) { _linkedKey = linkKey; return true }
 
-      const { privateKeyToAccount } = await import('viem/accounts')
-      const key = (privateKey.startsWith('0x') ? privateKey : '0x' + privateKey) as `0x${string}`
       const message = `MeshPort sign-in\nAccount: ${userId}\nSession: ${sessionId}\nTime: ${new Date().toISOString()}`
-      const signature = await privateKeyToAccount(key).signMessage({ message })
+      const signature = await signer.signMessage({ message })
       const { data, error } = await supabase.functions.invoke('bind-session', { body: { userId, message, signature } })
       if (error || !data?.ok) return false
       _linkedKey = linkKey
@@ -180,7 +178,7 @@ export async function invokeLinked(name: string, body: Record<string, unknown>) 
   try {
     const { useAuthStore } = await import('@/store')
     const st = useAuthStore.getState()
-    if (!(st.user?.id && st.privateKey && await syncAuthUidToProfile(st.user.id, st.privateKey, true))) return first
+    if (!(st.user?.id && st.signer && await syncAuthUidToProfile(st.user.id, st.signer, true))) return first
   } catch { return first }
   return supabase.functions.invoke(name, { body })
 }
@@ -194,7 +192,7 @@ export async function chatApiHeaders(): Promise<Record<string, string>> {
   try {
     const { useAuthStore } = await import('@/store')
     const st = useAuthStore.getState()
-    if (st.user?.id && st.privateKey) await syncAuthUidToProfile(st.user.id, st.privateKey)
+    if (st.user?.id && st.signer) await syncAuthUidToProfile(st.user.id, st.signer)
   } catch { /* best-effort */ }
   let token = ''
   try { token = (await supabase.auth.getSession()).data.session?.access_token || '' } catch { /* none */ }

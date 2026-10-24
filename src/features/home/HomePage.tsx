@@ -26,7 +26,6 @@ import { ChainScanSpinner, useScanningChain } from '@/components/ui/ChainScanSpi
 import { notifyPaymentReceived, notifyPaymentReceivedFromAddress, notifyBulkPaymentReceived } from '@/lib/notifications'
 import { markP2PNotificationRead } from '@/lib/p2pNotifications'
 import { P2P_ESCROW_CONTRACT_ADDRESS } from '@/lib/p2pEscrowContract'
-import { deriveAddressFromPrivateKey } from '@/lib/arc'
 import { getRemovedContacts, unblockIfNewerActivity } from '@/lib/removedContacts'
 import { searchUsersDb, getOrCreateConversation, fetchContactsDb, type DbUser } from '@/lib/supabase'
 import { filterServices } from '@/lib/searchServices'
@@ -2285,10 +2284,7 @@ export function HomePage() {
   const user = useAuthStore(s => s.user)
   const username = useAuthStore(s => s.username)
   const walletAddress = useAuthStore(s => s.walletAddress)
-  const privateKey = useAuthStore(s => s.privateKey)
-  const mnemonic = useAuthStore(s => s.mnemonic)
-  const walletSource = useAuthStore(s => s.walletSource)
-  const setWallet = useAuthStore(s => s.setWallet)
+  const signer = useAuthStore(s => s.signer)
   const { balance, setBalance } = useWalletStore()
   const { notifications, unreadCount, badgeLabel, addNotification } = useNotificationStore()
   const { showToastMessage } = useUIStore()
@@ -3311,10 +3307,10 @@ export function HomePage() {
   }, [walletAddress])
 
 
-  // ── Auto-restore private key ──────────────────────────────────────────────
+  // ── Auto-open the wallet ───────────────────────────────────────────────────
   useEffect(() => {
     const run = async () => {
-      if (!privateKey && (walletAddress || mnemonic)) {
+      if (!signer && walletAddress) {
         const { restorePrivateKey } = await import('@/lib/restoreWallet')
         await restorePrivateKey().catch(() => {})
       }
@@ -3328,20 +3324,15 @@ export function HomePage() {
     run()
   }, [walletAddress])
 
-  // ── Verify address matches private key ───────────────────────────────────
+  // ── Register the username for the open wallet ────────────────────────────
+  // The signer is opened by address in the wallet frame, which checks the key
+  // matches that address - so no address re-derivation is needed here.
   useEffect(() => {
-    if (!privateKey) return
-    deriveAddressFromPrivateKey(privateKey).then(viemAddress => {
-      if (walletAddress && walletAddress.toLowerCase() !== viemAddress.toLowerCase()) {
-        setWallet(viemAddress, privateKey, mnemonic || undefined, walletSource || undefined)
-      }
-      if (username && viemAddress) {
-        import('@/lib/usernameRegistry').then(({ registerUsername }) => {
-          registerUsername({ username, walletAddress: viemAddress, displayName: user?.displayName || username, email: user?.email })
-        })
-      }
+    if (!signer || !username) return
+    import('@/lib/usernameRegistry').then(({ registerUsername }) => {
+      registerUsername({ username, walletAddress: signer.address, displayName: user?.displayName || username, email: user?.email })
     }).catch(() => {})
-  }, [privateKey, walletAddress])
+  }, [signer, walletAddress])
 
   // ── Live balance polling ──────────────────────────────────────────────────
   // Both the USDC read and the EURC/cirBTC reads go through
@@ -3360,7 +3351,7 @@ export function HomePage() {
   //     from the 30s balance interval so the two never land on the same
   //     tick (previously they'd coincide every 60s: t=60,120,180…).
   useEffect(() => {
-    if (!walletAddress && !privateKey) return
+    if (!walletAddress && !signer) return
     const address = walletAddress || ''
     if (!address) return
     let cancelled = false

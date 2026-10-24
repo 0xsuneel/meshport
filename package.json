@@ -4,7 +4,9 @@
   "version": "57.0.0",
   "scripts": {
     "dev": "vite",
+    "dev:wallet": "vite --config vite.wallet.config.ts",
     "build": "vite build",
+    "build:wallet": "vite build --config vite.wallet.config.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
     "test": "vitest run",
     "test:watch": "vitest",

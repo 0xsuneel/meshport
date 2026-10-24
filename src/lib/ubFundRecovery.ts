@@ -43,6 +43,8 @@
  * ActivityService.ts already relies on.
  */
 
+import type { WalletAccount } from '@/wallet'
+
 const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000 // Circle's documented EVM removeFund timelock
 
 // Derive the Arc chain key and explorer base from env, matching ubClaim.ts.
@@ -55,15 +57,16 @@ const ARC_EXPLORER = (import.meta.env.VITE_NETWORK_ENV as string | undefined) ==
   ? 'https://arcscan.app'
   : 'https://testnet.arcscan.app'
 
-let _sdkModules: { AppKit: any; createEthersAdapterFromPrivateKey: any; JsonRpcProvider: any; FallbackProvider: any } | null = null
+let _sdkModules: { AppKit: any; JsonRpcProvider: any; FallbackProvider: any } | null = null
 async function loadSdk() {
   if (_sdkModules) return _sdkModules
-  const [{ AppKit }, { createEthersAdapterFromPrivateKey }, { JsonRpcProvider, FallbackProvider }] = await Promise.all([
+  // adapter-ethers-v6 is loaded (unused here) so createWalletAdapter finds it cached.
+  const [{ AppKit }, , { JsonRpcProvider, FallbackProvider }] = await Promise.all([
     import('@circle-fin/app-kit'),
     import('@circle-fin/adapter-ethers-v6'),
     import('ethers'),
   ])
-  _sdkModules = { AppKit, createEthersAdapterFromPrivateKey, JsonRpcProvider, FallbackProvider }
+  _sdkModules = { AppKit, JsonRpcProvider, FallbackProvider }
   return _sdkModules
 }
 
@@ -168,14 +171,15 @@ function landedNow(createdAt: string | null | undefined, metadata: Record<string
   }
 }
 
-async function getKitAndAdapter(privateKey: string, chain: string = ARC_CHAIN_KEY) {
-  const { AppKit, createEthersAdapterFromPrivateKey } = await loadSdk()
+async function getKitAndAdapter(signer: WalletAccount, chain: string = ARC_CHAIN_KEY) {
+  const { AppKit } = await loadSdk()
+  const { createWalletAdapter } = await import('@/wallet')
   const kit = new AppKit({ disableErrorReporting: true } as any)
   // Arc: pinned to MeshPort's Arc RPC list. Any other chain (a withdrawal of
   // Unified Balance held on e.g. Base): the SDK's own RPCs for that chain.
   const adapter = chain === ARC_CHAIN_KEY
-    ? createEthersAdapterFromPrivateKey({ privateKey, getProvider: async () => getArcProvider() })
-    : createEthersAdapterFromPrivateKey({ privateKey })
+    ? await createWalletAdapter({ account: signer, getProvider: async () => getArcProvider() })
+    : await createWalletAdapter({ account: signer })
   return { kit, adapter }
 }
 
@@ -189,19 +193,19 @@ async function getKitAndAdapter(privateKey: string, chain: string = ARC_CHAIN_KE
  */
 export async function initiateUBRecovery(params: {
   walletAddress: string
-  privateKey: string
+  signer: WalletAccount
   amount: string // human-readable decimal string, matching the deposited amount
   destinationChainLabel: string // for context in Activity - what the transfer was originally headed to
   chain?: string                // chain the Unified Balance sits on (default Arc)
   replaceRowId?: string         // a stuck-transfer row this withdrawal takes over
   throwOnError?: boolean
 }): Promise<boolean> {
-  const { walletAddress, privateKey, amount, destinationChainLabel } = params
+  const { walletAddress, signer, amount, destinationChainLabel } = params
   const chain = params.chain ?? ARC_CHAIN_KEY
   try {
     // Starting the withdrawal is an on-chain tx from the user's own wallet
     // on that chain (it can't be relayed); outside Arc it needs native gas there.
-    const { kit, adapter } = await getKitAndAdapter(privateKey, chain)
+    const { kit, adapter } = await getKitAndAdapter(signer, chain)
     const result: any = await kit.unifiedBalance.initiateRemoveFund({
       from: { adapter, chain: chain as any },
       amount,
@@ -266,15 +270,15 @@ export type UbCompleteResult = { completed: number; notReadyEtaMs?: number; erro
 // removeFund - the first paid out, the second failed with "No pending
 // withdrawal" and left the card stuck. Overlapping callers now share a run.
 let inFlight: Promise<UbCompleteResult> | null = null
-export function checkAndCompleteUBRecoveries(params: { walletAddress: string; privateKey: string }): Promise<UbCompleteResult> {
+export function checkAndCompleteUBRecoveries(params: { walletAddress: string; signer: WalletAccount }): Promise<UbCompleteResult> {
   if (!inFlight) inFlight = runUbCompletion(params).finally(() => { inFlight = null })
   return inFlight
 }
 
 const isArcRow = (row: any) => (row.metadata?.withdraw_chain ?? ARC_CHAIN_KEY) === ARC_CHAIN_KEY
 
-async function runUbCompletion(params: { walletAddress: string; privateKey: string }): Promise<UbCompleteResult> {
-  const { walletAddress, privateKey } = params
+async function runUbCompletion(params: { walletAddress: string; signer: WalletAccount }): Promise<UbCompleteResult> {
+  const { walletAddress, signer } = params
   const out: UbCompleteResult = { completed: 0 }
   try {
     const { supabase } = await import('@/lib/supabase')
@@ -327,7 +331,7 @@ async function runUbCompletion(params: { walletAddress: string; privateKey: stri
         out.notReadyEtaMs = onchain.etaMs
       } else if (onchain || arcRows.some(r => r.metadata?.eligible_at && r.metadata.eligible_at <= nowIso)) {
         try {
-          const { kit, adapter } = await getKitAndAdapter(privateKey, ARC_CHAIN_KEY)
+          const { kit, adapter } = await getKitAndAdapter(signer, ARC_CHAIN_KEY)
           const result: any = await kit.unifiedBalance.removeFund({ from: { adapter, chain: ARC_CHAIN_KEY as any }, token: 'USDC' })
           const hash: string = result?.txHash || result?.data?.txHash || ''
           const total = parseFloat(result?.amount) || onchain?.withdrawing || arcRows.reduce((a, r) => a + Number(r.amount), 0)
@@ -354,7 +358,7 @@ async function runUbCompletion(params: { walletAddress: string; privateKey: stri
       if (!eligibleAt || eligibleAt > nowIso) continue
       try {
         const chain: string = row.metadata?.withdraw_chain
-        const { kit, adapter } = await getKitAndAdapter(privateKey, chain)
+        const { kit, adapter } = await getKitAndAdapter(signer, chain)
         const result: any = await kit.unifiedBalance.removeFund({ from: { adapter, chain: chain as any }, token: 'USDC' })
         const hash: string = result?.txHash || result?.data?.txHash || ''
         const amount = parseFloat(result?.amount ?? row.amount) || Number(row.amount)
@@ -485,10 +489,10 @@ const APP_CHAIN: Record<string, string> = { Polygon_Amoy_Testnet: 'Polygon_Sepol
  * `available` = the Arc Unified Balance currently confirmed (caps the spend).
  */
 export async function resolveUbStuckTransfer(p: {
-  walletAddress: string; privateKey: string; item: UbStuckTransfer; mode: 'refund' | 'forward'; available: number
+  walletAddress: string; signer: WalletAccount; item: UbStuckTransfer; mode: 'refund' | 'forward'; available: number
 }): Promise<{ received: number; txHash?: string }> {
   const { item, mode } = p
-  const { kit, adapter } = await getKitAndAdapter(p.privateKey)
+  const { kit, adapter } = await getKitAndAdapter(p.signer)
   // Re-read the balance here rather than trusting the screen's copy, which
   // can be stale - e.g. read while Circle still held a failed delivery.
   const { getUnifiedBalances } = await import('@/lib/ubClaim')
@@ -502,9 +506,9 @@ export async function resolveUbStuckTransfer(p: {
   if (!toChain || !recipient) throw new Error('This transfer has no saved destination')
   // `adapter` above is pinned to Arc RPCs (it signs the Arc allocation). A
   // mint on the destination goes through MeshPort's relayer on that chain.
-  const { createEthersAdapterFromPrivateKey } = await loadSdk()
+  const { createWalletAdapter } = await import('@/wallet')
   const { relayedProviderFor } = await import('@/lib/relayedProvider')
-  const destAdapter = createEthersAdapterFromPrivateKey({ privateKey: p.privateKey, getProvider: async ({ chain }: any) => relayedProviderFor(chain) })
+  const destAdapter = await createWalletAdapter({ account: p.signer, getProvider: async ({ chain }: any) => relayedProviderFor(chain) })
   const out = await spendUnifiedTo({
     kit, adapter, destAdapter,
     fromChain: ARC_CHAIN_KEY, amount, toChain, recipient,

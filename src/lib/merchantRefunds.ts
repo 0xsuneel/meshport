@@ -22,7 +22,7 @@
 // the payment and records it. All refunds of a payment together never go
 // above the payment (checked here, by merchant-refund and in the database).
 import { createPublicClient, createWalletClient, encodeFunctionData, keccak256, toBytes, parseGwei, pad, type Hash, type Hex } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
+import type { WalletAccount } from '@/wallet'
 import { supabase } from '@/lib/supabase'
 import { arcTransport } from '@/lib/arc'
 import { ARC_CHAIN_INLINE, circleForwarderMintsTo } from '@/blockchain/chains'
@@ -143,7 +143,7 @@ async function arcFees(publicClient: FeeReader): Promise<{ maxFeePerGas: bigint;
  * refund is still recorded) and this throws REFUND_STILL_CONFIRMING - never
  * "failed" for a transaction that may yet succeed.
  */
-async function sendArcTx(account: ReturnType<typeof privateKeyToAccount>, to: Hex, data: Hex, value = 0n, onLate?: (hash: Hash) => void) {
+async function sendArcTx(account: WalletAccount, to: Hex, data: Hex, value = 0n, onLate?: (hash: Hash) => void) {
   const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 1000 })
   const walletClient = createWalletClient({ account, transport: arcTransport() })
   const [nonce, gas, fees] = await Promise.all([
@@ -190,7 +190,7 @@ export async function nextRefundNo(client: RefundReader, merchant: string, id: s
 /** Sends the refund from the merchant's wallet and records it. */
 export async function refundPayment(p: {
   /** An order payment's id, or "rcpt_<id>" for a payment on another chain without an order. */
-  paymentId: string; customer: string; amount: number; reason: string; privateKey: string
+  paymentId: string; customer: string; amount: number; reason: string; signer: WalletAccount
   route?: RefundRoute; chain?: string
   /** What can still go back on this payment (amount minus its refunds so far). */
   remaining?: number
@@ -200,7 +200,7 @@ export async function refundPayment(p: {
   if (p.remaining != null && p.amount > p.remaining + 1e-9) throw new Error(`You can refund up to $${p.remaining.toFixed(2)} more on this payment`)
   const target = p.paymentId.startsWith('rcpt_') ? { receiptId: p.paymentId.slice(5) } : { paymentId: p.paymentId }
   const refId = target.receiptId ?? target.paymentId!
-  const account = privateKeyToAccount(p.privateKey as Hex)
+  const account = p.signer
   const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }), pollingInterval: 250 })
   const balance = await publicClient.getBalance({ address: account.address }) // 18 decimals
   const reason = p.reason.slice(0, 140)
@@ -313,7 +313,7 @@ export async function chainUsdcBalance(chain: string, wallet: string): Promise<n
   } catch { return null }
 }
 
-async function transferOnChain(p: { chain: string; account: ReturnType<typeof privateKeyToAccount>; to: Hex; amount: number; target: { paymentId?: string; receiptId?: string } }): Promise<Hash> {
+async function transferOnChain(p: { chain: string; account: WalletAccount; to: Hex; amount: number; target: { paymentId?: string; receiptId?: string } }): Promise<Hash> {
   const { EXTERNAL_CHAINS } = await import('@/blockchain/chains')
   const cfg = EXTERNAL_CHAINS[p.chain]
   if (!cfg || typeof cfg.chainId !== 'number') throw new Error('Refunds on this chain are not available')

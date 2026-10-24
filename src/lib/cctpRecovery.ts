@@ -11,7 +11,7 @@
 //         that logic is unchanged; this file only lists its pending rows.
 
 import { createPublicClient, createWalletClient, http, type Hex } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
+import type { WalletAccount } from '@/wallet'
 import { supabase } from './supabase'
 import { describeFunctionsError } from './describeFunctionsError'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
@@ -181,7 +181,7 @@ const RECEIVE_MESSAGE_ABI = [{
  * wallet is minted by that wallet, which then needs a little native gas on
  * the destination. The key stays on this device.
  */
-export async function selfMintTransfer(id: string, privateKey: string): Promise<{ mintTxHash: string }> {
+export async function selfMintTransfer(id: string, signer: WalletAccount): Promise<{ mintTxHash: string }> {
   const d = await inspectCctp('transfer', id)
   if (d.state === 'already_minted') return { mintTxHash: d.destinationMintTxHash ?? '' }
   if (d.state !== 'ready_self_mint' || !d.message || !d.attestation || !d.messageTransmitter || !d.destinationChain) {
@@ -199,7 +199,7 @@ export async function selfMintTransfer(id: string, privateKey: string): Promise<
     nativeCurrency: { name: 'Native', symbol: 'ETH', decimals: 18 },
     rpcUrls: { default: { http: [cfg.rpcs[0]] } },
   } as const
-  const account = privateKeyToAccount(privateKey as Hex)
+  const account = signer
   // 1s, not viem's 4s default: the receipt wait below notices the block sooner.
   const publicClient = createPublicClient({ chain, transport: http(cfg.rpcs[0]), pollingInterval: 1000 })
 

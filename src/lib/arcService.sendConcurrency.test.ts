@@ -33,10 +33,8 @@ function delayed<T>(label: string, ticks: number, value: T): Promise<T> {
   })
 }
 
-vi.mock('viem/accounts', () => ({
-  // Signing is local now (relaySend); any hex stands in for the signed bytes.
-  privateKeyToAccount: () => ({ address: '0x1111111111111111111111111111111111111111', signTransaction: async () => '0x02abc0' }),
-}))
+// The wallet signer (src/wallet); any hex stands in for the signed bytes.
+const signer = { address: '0x1111111111111111111111111111111111111111', signTransaction: async () => '0x02abc0' } as any
 
 vi.mock('./arc', async () => {
   const actual = await vi.importActual<typeof import('./arc')>('./arc')
@@ -89,7 +87,7 @@ beforeEach(() => {
 
 describe('sendUSDC / sendEURC pre-broadcast concurrency', () => {
   it('sendUSDC starts balance/intent/gas together instead of one after another', async () => {
-    await sendUSDC({ privateKey: '0x' + '11'.repeat(32), to: '0x2222222222222222222222222222222222222222', amount: 1 })
+    await sendUSDC({ signer, to: '0x2222222222222222222222222222222222222222', amount: 1 })
 
     const starts = timeline.filter(e => e.startsWith('start:'))
     const firstEnd = timeline.findIndex(e => e.startsWith('end:'))
@@ -103,7 +101,7 @@ describe('sendUSDC / sendEURC pre-broadcast concurrency', () => {
   })
 
   it('sendEURC starts intent/gas together instead of one after another', async () => {
-    await sendEURC({ privateKey: '0x' + '11'.repeat(32), to: '0x2222222222222222222222222222222222222222', amount: 1 })
+    await sendEURC({ signer, to: '0x2222222222222222222222222222222222222222', amount: 1 })
 
     const starts = timeline.filter(e => e.startsWith('start:') && e !== 'start:balance')
     const firstEnd = timeline.findIndex(e => e.startsWith('end:'))
@@ -122,7 +120,7 @@ describe('sendCirBTC', () => {
   it('exists and shares the same concurrent pre-broadcast pattern as sendEURC', async () => {
     expect(typeof sendCirBTC).toBe('function')
 
-    await sendCirBTC({ privateKey: '0x' + '11'.repeat(32), to: '0x2222222222222222222222222222222222222222', amount: 1 })
+    await sendCirBTC({ signer, to: '0x2222222222222222222222222222222222222222', amount: 1 })
 
     const starts = timeline.filter(e => e.startsWith('start:') && e !== 'start:balance')
     const firstEnd = timeline.findIndex(e => e.startsWith('end:'))
@@ -139,7 +137,7 @@ describe('sendCirBTC', () => {
       return { success: true, attemptId: 'attempt-1', nonce: 7 } as any
     })
 
-    await sendCirBTC({ privateKey: '0x' + '11'.repeat(32), to: '0x2222222222222222222222222222222222222222', amount: 0.00025 })
+    await sendCirBTC({ signer, to: '0x2222222222222222222222222222222222222222', amount: 0.00025 })
 
     expect(capturedAmountAtomic).toBe('25000') // 0.00025 * 1e8
     spy.mockRestore()

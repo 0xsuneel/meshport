@@ -12,9 +12,8 @@ let direct: (body: any) => any = () => ({ result: HASH })
 let receipt: () => Promise<any> = async () => ({ status: 'success', blockNumber: 7n })
 const calls: string[] = []
 
-vi.mock('viem/accounts', () => ({
-  privateKeyToAccount: () => ({ address: '0x1111111111111111111111111111111111111111', signTransaction: async () => SIGNED }),
-}))
+// The wallet signer (src/wallet); in the app it signs in the wallet frame.
+const signer = { address: '0x1111111111111111111111111111111111111111', signTransaction: async () => SIGNED } as any
 vi.mock('./arc', async () => {
   const actual = await vi.importActual<typeof import('./arc')>('./arc')
   return {
@@ -37,7 +36,7 @@ vi.mock('viem', async () => {
 })
 
 import { sendUSDC } from './arcService'
-const send = (k: string) => sendUSDC({ privateKey: '0x' + '1'.repeat(64), to: '0x2222222222222222222222222222222222222222', amount: 1, idempotencyKey: k })
+const send = (k: string) => sendUSDC({ signer, to: '0x2222222222222222222222222222222222222222', amount: 1, idempotencyKey: k })
 const throwRpc = (code: number, message: string) => { throw Object.assign({ code, message }) }
 
 describe('relaySend (send through the server)', () => {

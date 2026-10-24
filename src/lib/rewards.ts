@@ -26,7 +26,7 @@
 
 import type { ActionIconName } from '@/components/ui/ActionIcon'
 import { createPublicClient, createWalletClient } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
+import type { WalletAccount } from '@/wallet'
 import { supabase } from './supabase'
 import { isBusinessAccountNow } from './merchant'
 import { trimTrailingZeros } from './utils'
@@ -303,12 +303,12 @@ export async function claimPointsAsUSDC(params: {
   userId: string
   username: string
   walletAddress: string
-  privateKey: string
+  signer: WalletAccount
   points: number
   /** Progress for the claim screen: called as each real step finishes. */
   onStep?: (step: 'check' | 'approve' | 'send') => void
 }): Promise<{ txHash: string | null; usdcReceived: number; error: string | null }> {
-  const { userId, username, walletAddress, privateKey, points } = params
+  const { userId, username, walletAddress, signer, points } = params
   const step = (s: 'check' | 'approve' | 'send') => { try { params.onStep?.(s) } catch { /* display only */ } }
 
   if (points < MIN_CLAIM_POINTS) {
@@ -380,7 +380,7 @@ export async function claimPointsAsUSDC(params: {
 
   // 4. Execute on-chain claim using exact Arc docs pattern
   // Arc docs: walletClient WITHOUT chain - chain passed inline to sendTransaction
-  const account = privateKeyToAccount(privateKey as `0x${string}`)
+  const account = signer
   const walletClient = createWalletClient({
     account,
     transport: arcTransport(),

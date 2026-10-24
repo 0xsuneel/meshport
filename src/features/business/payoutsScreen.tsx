@@ -26,7 +26,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { DESKTOP_QUERY } from '@/lib/motion'
 import { BusinessScreen, ScreenLevel, useScreenLevel, PrimaryBtn, GhostBtn, Skeleton, Field, TextInput, ChipSelect } from './ui'
 import { usePasscodeGate } from './passcodeGate'
-import { unlockKey } from './settlement'
+import { unlockSigner } from './settlement'
 import { SearchField } from '@/components/ui/SearchField'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -277,7 +277,7 @@ function RunScreen({ open, run: initial, onBack, onEdit }: { open: boolean; run:
     gate.ask('Pay staff', `${money(total)} to ${people(chosen.length)}`, async code => {
       setPhase({ kind: 'sending', status: 'Checking everyone can be paid…' })
       const recipients: BatchRecipient[] = chosen.map(r => ({ ...r.payee!, id: r.key, amount: Number(r.amount) }))
-      try { await unlockKey(code) } catch (e) { setPhase({ kind: 'failed', error: e instanceof Error ? e.message : 'Wallet is locked' }); return }
+      try { await unlockSigner(code) } catch (e) { setPhase({ kind: 'failed', error: e instanceof Error ? e.message : 'Wallet is locked' }); return }
       const prepared = prepareBatch(recipients)
       const refused = await findUnpayable(recipients)
       if (refused.size) {

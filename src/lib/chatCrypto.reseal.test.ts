@@ -36,7 +36,12 @@ function builder(table: string) {
 vi.mock('@/lib/supabase', () => ({ supabase: { from: (t: string) => builder(t) } }))
 vi.mock('@/lib/homeBootstrap', () => ({ bootPart: async () => undefined }))
 vi.mock('@/lib/security', () => ({ sealForDevice: async () => null, openFromDevice: async () => null }))
-vi.mock('@/store', () => ({ useAuthStore: { getState: () => ({ privateKey: ALICE_PK }) } }))
+// Alice's wallet is open; her chat seed comes from the wallet frame (stood in here).
+vi.mock('@/store', () => ({ useAuthStore: { getState: () => ({ signer: { address: privateKeyToAccount(ALICE_PK as `0x${string}`).address } }) } }))
+vi.mock('@/wallet', async () => {
+  const { deriveChatSeed } = await vi.importActual<typeof import('./chatIdentity')>('./chatIdentity')
+  return { chatSeed: async () => deriveChatSeed(ALICE_PK) }
+})
 
 import {
   deriveMyChatIdentity, makeChatKeys, encryptText, decryptText, encryptBlob, decryptBlob,

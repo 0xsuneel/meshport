@@ -347,22 +347,8 @@ const SESSION_PK_PREFIX = 'meshport_session_pk_'
 // when the page/tab unloads.
 const _sessionPkMemory = new Map<string, string>()
 
-export async function cacheSessionPrivateKey(walletAddress: string, privateKey: string): Promise<void> {
-  const key = walletAddress.toLowerCase()
-  _sessionPkMemory.set(key, privateKey)
-  // Write a device-wrapped copy to sessionStorage so a same-tab reload can
-  // recover without a passcode prompt.
-  try {
-    const wrapped = await wrapForDevice(privateKey)
-    sessionStorage.setItem(SESSION_PK_PREFIX + key, wrapped)
-  } catch {
-    // IndexedDB unavailable or no device key yet - write plain text as last
-    // resort, same as the original behaviour. The in-memory copy above still
-    // gives better safety within the current page load.
-    try { sessionStorage.setItem(SESSION_PK_PREFIX + key, privateKey) } catch {}
-  }
-}
-
+// The session copy is written by the wallet frame now (sealed to its own
+// origin); this module only reads / clears copies an older app version left.
 export async function getSessionPrivateKey(walletAddress: string): Promise<string | null> {
   const key = walletAddress.toLowerCase()
   // Fast path: in-memory hit.

@@ -69,14 +69,13 @@
 
 import { x25519 } from '@noble/curves/ed25519'
 import { sha256 } from '@noble/hashes/sha256'
+import { deriveChatSeed } from './chatIdentity'
 
 const AES_ALGO = { name: 'AES-GCM', length: 256 }
 const V1_PREFIX = 'e2e:v1:'
 const V2_PREFIX = 'e2e:v2:'
 const Q2_PREFIX = 'e2e:q2:' // sealed for the sender only, waiting for the recipient's key
 const MEDIA_V2_PREFIX = 'v2.'
-// Domain separation - this seed is only ever a chat identity.
-const CHAT_IDENTITY_INFO = new TextEncoder().encode('meshport-chat-identity-v2')
 const MSG_KEY_INFO = new TextEncoder().encode('meshport-chat-msgkey-v2')
 
 /** The placeholder shown for a message this device cannot open. */
@@ -114,15 +113,21 @@ function parsePublicKey(value: string | null | undefined): Uint8Array | null {
 
 /**
  * This wallet's chat identity (X25519). Pure: the same wallet key gives the
- * same identity on every device, every time.
+ * same identity on every device, every time. The app itself gets the seed
+ * from the wallet frame (wallet/index.ts chatSeed), which runs the same
+ * derivation (lib/chatIdentity.ts) next to the key.
  */
 export function deriveMyChatIdentity(walletPrivateKeyHex: string): { privateKey: Uint8Array; publicKey: Uint8Array } {
-  const walletKeyBytes = hexToBytes(walletPrivateKeyHex)
-  const combined = new Uint8Array(walletKeyBytes.length + CHAT_IDENTITY_INFO.length)
-  combined.set(walletKeyBytes, 0)
-  combined.set(CHAT_IDENTITY_INFO, walletKeyBytes.length)
-  const seed = sha256(combined)
+  const seed = deriveChatSeed(walletPrivateKeyHex)
   return { privateKey: seed, publicKey: x25519.getPublicKey(seed) }
+}
+
+/** The chat identity seed from the open wallet, or null while it's locked. */
+async function seedFromWallet(walletAddress: string): Promise<Uint8Array | null> {
+  const signer = (await import('@/store')).useAuthStore.getState().signer
+  if (!signer || signer.address.toLowerCase() !== walletAddress.toLowerCase()) return null
+  const { chatSeed } = await import('@/wallet')
+  return chatSeed(walletAddress).catch(() => null)
 }
 
 // ── This device's copy of the chat identity seed ───────────────────────────
@@ -170,9 +175,8 @@ export function clearChatSessionSeeds() {
 
 /** This wallet's chat seed: from the wallet key when unlocked, else this device's copy. */
 async function getMySeed(walletAddress: string): Promise<Uint8Array | null> {
-  const walletPrivateKey = (await import('@/store')).useAuthStore.getState().privateKey
-  if (walletPrivateKey) {
-    const seed = deriveMyChatIdentity(walletPrivateKey).privateKey
+  const seed = await seedFromWallet(walletAddress)
+  if (seed) {
     saveSeed(walletAddress, seed)
     return seed
   }
@@ -256,14 +260,13 @@ export async function ensureChatKeysReady(walletAddress: string, myUserId: strin
   try {
     // Publishing needs the wallet key itself: the chat key is only trusted
     // with the wallet's signature. Called again when the wallet unlocks.
-    const walletPrivateKey = (await import('@/store')).useAuthStore.getState().privateKey
-    if (!walletPrivateKey) return
-    const seed = deriveMyChatIdentity(walletPrivateKey).privateKey
+    const signer = (await import('@/store')).useAuthStore.getState().signer
+    if (!signer) return
+    const seed = await seedFromWallet(walletAddress)
+    if (!seed) return
     saveSeed(walletAddress, seed)
     const publicKeyStr = toBase64(x25519.getPublicKey(seed))
-    const { privateKeyToAccount } = await import('viem/accounts')
-    const pk = (walletPrivateKey.startsWith('0x') ? walletPrivateKey : '0x' + walletPrivateKey) as `0x${string}`
-    const sig = await privateKeyToAccount(pk).signMessage({ message: chatKeyStatement(walletAddress, publicKeyStr) })
+    const sig = await signer.signMessage({ message: chatKeyStatement(walletAddress, publicKeyStr) })
     const { supabase } = await import('@/lib/supabase')
     const { data: current } = await supabase.from('users').select('chat_public_key, chat_key_sig').eq('id', myUserId).maybeSingle()
     if (current?.chat_public_key === publicKeyStr && current?.chat_key_sig === sig) return

@@ -1,7 +1,9 @@
 # Self-custodial wallets
 
 Every MeshPort wallet is self-custodial. However you sign in, the wallet key is
-generated on your device, and MeshPort's servers never receive it.
+generated on your device, and MeshPort's servers never receive it. On the device
+it lives only in the **wallet frame**: a separate origin (`wallet.meshport.xyz`)
+that the app talks to but can't read. See [WALLET_FRAME.md](WALLET_FRAME.md).
 
 | Sign-in | Where the key is made | How another device opens it |
 |---|---|---|
@@ -12,30 +14,32 @@ generated on your device, and MeshPort's servers never receive it.
 ## Google and email accounts
 
 ```
- sign in ──► key generated on device ──► sealed on this device (browser device key)
+ sign in ──► key generated in the wallet frame ──► sealed on this device (frame's device key)
                                       ├─► passkey   (Face ID / fingerprint, synced by your OS)
                                       └─► Recovery QR (password only you know)
 ```
 
 1. **Sign in.** Google or a one-time email code proves who you are to Supabase
    Auth. That identifies the account; it does not open the wallet.
-2. **The key is created on the device** (`createLocalWallet`,
-   `src/lib/socialWallet.ts`).
-3. **This device keeps a sealed copy** — encrypted with a non-extractable
-   AES key that lives inside the browser (`sealForDevice`, `src/lib/security.ts`),
-   so reloads open the wallet straight away. Logout deletes it.
+2. **The key is created on the device**, inside the wallet frame
+   (`createWallet('social-auto')`, `src/wallet`).
+3. **This device keeps a sealed copy** in the frame's storage, encrypted with a
+   non-extractable AES key that belongs to the frame's origin
+   (`wallet-frame/src/vault.ts`), so reloads open the wallet straight away.
+   Logout deletes it.
 4. **Secure it** (`/auth/secure-wallet`):
    - **Passkey** — the WebAuthn PRF extension gives a secret that only your
      passkey can produce after Face ID / fingerprint. The key is wrapped with
-     `HKDF-SHA256(PRF) → AES-256-GCM` (`src/lib/walletPasskey.ts`). The server
-     stores only the credential id, the PRF salt and the ciphertext.
+     `HKDF-SHA256(PRF) → AES-256-GCM` inside the frame (`src/lib/passkeyWrap.ts`;
+     the ceremony is `src/lib/walletPasskey.ts`). The server stores only the
+     credential id, the PRF salt and the ciphertext.
    - **Recovery QR** — the key is sealed with a password you choose:
      `Argon2id (32 MiB, t=2, p=1) → AES-256-GCM`, with the whole header
-     authenticated (`src/lib/recoveryQr.ts`). The QR is printed as
+     authenticated (`src/lib/recoveryQr.ts`, run inside the frame). The QR is printed as
      `meshport-recovery:…`. MeshPort keeps only the date you made it.
 5. **New device.** After sign-in, the app asks for your passkey or your
-   Recovery QR (`/auth/recover-wallet`) and checks that the opened key matches
-   the account's wallet address before using it.
+   Recovery QR (`/auth/recover-wallet`); the frame opens it and checks that the
+   key matches the account's wallet address before using it.
 
 ## What MeshPort stores
 

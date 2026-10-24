@@ -9,7 +9,7 @@
  * function could build a signer from it. That broke the private-key-
  * never-leaves-the-device boundary every other feature already respects.
  * Multichain Claim/Transfer already run this exact AppKit +
- * createEthersAdapterFromPrivateKey pattern entirely in the browser (see
+ * Circle App Kit adapter pattern entirely in the browser (see
  * MultichainClaimPage.tsx's buildAdapter/loadSdk) - Swap moving here too
  * is not a new capability, just closing the one feature that hadn't been
  * migrated. The key never leaves this device now: signing happens
@@ -22,6 +22,7 @@
  * a private key.
  */
 import { ARC_NETWORK, arcRpcJson } from './arc'
+import type { WalletAccount } from '@/wallet'
 import { USDC_CONTRACT, EURC_CONTRACT, CIRBTC_CONTRACT } from './arcService'
 import { ARC_EXPLORER } from './chainExplorers'
 import { assertAccountUnlocked } from '@/lib/accountLockRule'
@@ -48,14 +49,14 @@ async function getSdkModules() {
   if (!_sdkModules) {
     const [
       { AppKit, isKitError, isRpcError, isNetworkError },
-      { createEthersAdapterFromPrivateKey },
+      , // adapter-ethers-v6: preloaded for createWalletAdapter (src/wallet)
       { JsonRpcProvider, Transaction },
     ] = await Promise.all([
       import('@circle-fin/app-kit'),
       import('@circle-fin/adapter-ethers-v6'),
       import('ethers'),
     ])
-    _sdkModules = { AppKit, isKitError, isRpcError, isNetworkError, createEthersAdapterFromPrivateKey, JsonRpcProvider, Transaction }
+    _sdkModules = { AppKit, isKitError, isRpcError, isNetworkError, JsonRpcProvider, Transaction }
   }
   return _sdkModules
 }
@@ -216,20 +217,19 @@ function buildArcForwardProvider(JsonRpcProvider: any, Transaction: any) {
   return new ArcForwardProvider()
 }
 
-// Adapter cache, keyed by a short, non-reversible tail of the private key -
-// same pattern MultichainClaimPage.tsx's buildAdapter/_providerCache
-// already uses. Avoids rebuilding the adapter on every call for the same
-// wallet within this session.
-let _adapterCache: { keyTail: string; adapter: any } | null = null
-async function getAdapter(privateKey: string) {
-  const keyTail = privateKey.slice(-8)
-  if (_adapterCache?.keyTail === keyTail) return _adapterCache.adapter
-  const { createEthersAdapterFromPrivateKey, JsonRpcProvider, Transaction } = await getSdkModules()
-  const adapter = createEthersAdapterFromPrivateKey({
-    privateKey,
+// Adapter cache, keyed by wallet address. Avoids rebuilding the adapter on
+// every call for the same wallet within this session. It signs through the
+// wallet frame (src/wallet) - no key here.
+let _adapterCache: { address: string; adapter: any } | null = null
+async function getAdapter(signer: WalletAccount) {
+  const address = signer.address.toLowerCase()
+  if (_adapterCache?.address === address) return _adapterCache.adapter
+  const [{ JsonRpcProvider, Transaction }, { createWalletAdapter }] = await Promise.all([getSdkModules(), import('@/wallet')])
+  const adapter = await createWalletAdapter({
+    account: signer,
     getProvider: () => buildArcForwardProvider(JsonRpcProvider, Transaction),
   })
-  _adapterCache = { keyTail, adapter }
+  _adapterCache = { address, adapter }
   return adapter
 }
 
@@ -371,12 +371,12 @@ async function recordCompletion(params: {
 }
 
 export async function estimateSwapLocal(params: {
-  privateKey: string
+  signer: WalletAccount
   tokenIn: string; tokenOut: string; amountIn: string; slippageBps: number
 }): Promise<{ estimatedOutput: any; stopLimit: any; fees: any[]; gasFees: any[] }> {
   const sdkMods = await getSdkModules()
   const kit = getKit(sdkMods.AppKit)
-  const adapter = await getAdapter(params.privateKey)
+  const adapter = await getAdapter(params.signer)
   const slip = Math.max(Number(params.slippageBps || 500), 300)
 
   const baseParams = {
@@ -420,7 +420,7 @@ async function settleSwapTx(): Promise<{ kind: 'not-sent' | 'unknown' } | { kind
 }
 
 type ExecuteSwapParams = {
-  privateKey: string
+  signer: WalletAccount
   walletAddress: string
   tokenIn: string; tokenOut: string; amountIn: string; slippageBps: number
   attemptId?: string | null; intentId?: string | null
@@ -445,7 +445,7 @@ export async function executeSwapLocal(params: ExecuteSwapParams): Promise<{ txH
 async function runSwap(params: ExecuteSwapParams): Promise<{ txHash: string; amountOut: string; explorerUrl: string }> {
   const sdkMods = await getSdkModules()
   const kit = getKit(sdkMods.AppKit)
-  const adapter = await getAdapter(params.privateKey)
+  const adapter = await getAdapter(params.signer)
 
   const parsedAmt = parseFloat(params.amountIn)
   // Same formatting api/swap-proxy.js used - toFixed(8) then trim trailing

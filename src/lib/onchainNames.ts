@@ -13,7 +13,6 @@
 // kept server-side and retried by the name-register sync job.
 
 import { supabase } from './supabase'
-import { getSessionPrivateKey } from './security'
 
 export type AccountKind = 'personal' | 'business'
 
@@ -76,8 +75,9 @@ export async function registerNameOnchain(p: {
   kind: AccountKind
   displayName?: string
 }): Promise<OnchainNameResult> {
-  const pk = await getSessionPrivateKey(p.walletAddress)
-  if (!pk) return { status: 'no-key' }
+  const { useAuthStore } = await import('@/store')
+  const account = useAuthStore.getState().signer
+  if (!account) return { status: 'no-key' }
 
   const { data: info, error: infoErr } = await supabase.functions.invoke('name-register', {
     body: { action: 'nonce', wallet: p.walletAddress },
@@ -86,8 +86,6 @@ export async function registerNameOnchain(p: {
 
   const displayName = (p.displayName ?? '').trim()
   const deadline = BigInt(Math.floor(Date.now() / 1000) + DEADLINE_SEC)
-  const { privateKeyToAccount } = await import('viem/accounts')
-  const account = privateKeyToAccount((pk.startsWith('0x') ? pk : '0x' + pk) as `0x${string}`)
   if (account.address.toLowerCase() !== p.walletAddress.toLowerCase()) return { status: 'no-key' }
 
   const signature = await account.signTypedData({

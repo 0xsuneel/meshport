@@ -629,15 +629,16 @@ function SplashRemover() {
 }
 
 export default function App() {
-  // Auto-restore the private key on app load / reload.
-  // privateKey is never persisted (security), but mnemonic is - so we can
-  // re-derive the key silently whenever the wallet is present.
+  // Open the wallet on app load / reload. The key lives in the wallet frame
+  // (src/wallet); its session / device copy reopens it without a prompt, so
+  // ask as soon as a wallet address is known. Mounting the frame here also
+  // warms it up before the first signature is needed.
   // NOTE: Auth store persist is async (createJSONStorage wraps localStorage in Promises),
-  // so walletAddress/mnemonic may be null on the first render. We subscribe to the
+  // so walletAddress may be null on the first render. We subscribe to the
   // auth store and restore as soon as walletAddress becomes available.
   useEffect(() => {
-    const tryRestore = (walletAddress: string | null, privateKey: string | null, mnemonic: string | null) => {
-      if (walletAddress && !privateKey && mnemonic && !useAuthStore.getState().isLocked) {
+    const tryRestore = (walletAddress: string | null, signer: unknown) => {
+      if (walletAddress && !signer && !useAuthStore.getState().isLocked) {
         import('./lib/restoreWallet').then(({ restorePrivateKey }) => {
           restorePrivateKey().then(ok => {
           }).catch(() => {})
@@ -647,11 +648,11 @@ export default function App() {
 
     // Try immediately (works if auth store was already rehydrated synchronously)
     const s = useAuthStore.getState()
-    tryRestore(s.walletAddress, s.privateKey, s.mnemonic)
+    tryRestore(s.walletAddress, s.signer)
 
     const unsub = useAuthStore.subscribe((state, prevState) => {
       if (state.walletAddress && !prevState.walletAddress) {
-        tryRestore(state.walletAddress, state.privateKey, state.mnemonic)
+        tryRestore(state.walletAddress, state.signer)
         unsub()
       }
     })
