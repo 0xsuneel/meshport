@@ -67,7 +67,7 @@ const engine = createMpcEngine({
   identityPub: import.meta.env.VITE_WALLET_MPC_SERVER_KEY as `0x${string}` | undefined,
   keygenOffload,
 })
-const METHODS = new Set<keyof MpcEngine>(['keygenBegin', 'keygenNext', 'keygenFinish', 'signBegin', 'signNext'])
+const METHODS = new Set<keyof MpcEngine>(['keygenBegin', 'keygenNext', 'keygenFinish', 'signBegin', 'signNext', 'benchmark'])
 
 self.onmessage = async (e: MessageEvent<{ id: number; method: keyof MpcEngine; args: unknown[] }>) => {
   const { id, method, args } = e.data ?? ({} as never)

@@ -7,7 +7,7 @@ import { copyToClipboard } from '@/lib/utils'
 import { arcTestnet } from '@/lib/chain'
 import { arcRpcJson, arcTransport, ARC_EXPLORER } from '@/lib/arc'
 import { relaySend } from '@/lib/arcService'
-import { createMpcWallet, getMpcWallet, mpcWalletAccount, walletStatus, withMpcTiming, type MpcTiming } from '@/wallet'
+import { createMpcWallet, getMpcWallet, mpcSpeedCheck, mpcWalletAccount, walletStatus, withMpcTiming, type MpcTiming } from '@/wallet'
 
 // ── Keyless wallet (testnet) ──────────────────────────────────────────────────
 // Profile → Support → Keyless wallet (testnet). A place to try the MPC wallet
@@ -16,6 +16,9 @@ import { createMpcWallet, getMpcWallet, mpcWalletAccount, walletStatus, withMpcT
 // one and only ever touches Arc testnet.
 
 type Phase = 'loading' | 'none' | 'elsewhere' | 'ready' | 'creating'
+
+// The speed check on a recent laptop (i5-13450HX, same module): 3.9-4.1 s.
+const SPEED_REFERENCE_MS = 4000
 
 const secs = (ms: number) => (ms / 1000).toFixed(1)
 const timingParts = (t: MpcTiming) => 'this phone ' + secs(t.phone) + ' s · MeshPort ' + secs(t.server) + ' s · network & loading ' + secs(t.other) + ' s'
@@ -37,6 +40,7 @@ export function MpcWalletLabPage() {
   const [txHash, setTxHash] = useState<Hex | null>(null)
   const [timing, setTiming] = useState<MpcTiming | null>(null)
   const [sendResult, setSendResult] = useState<string | null>(null)
+  const [speed, setSpeed] = useState<string | null>(null)
 
   const refreshBalance = useCallback(async (a: Hex) => {
     try {
@@ -76,6 +80,15 @@ export function MpcWalletLabPage() {
     } catch (e) {
       setError(errorText(e)); setPhase('none')
     }
+  }
+
+  async function speedCheck() {
+    setError(null); setSpeed('running')
+    try {
+      const r = await mpcSpeedCheck()
+      const ratio = r.ms / SPEED_REFERENCE_MS
+      setSpeed('This phone: ' + secs(r.ms) + ' s (' + ratio.toFixed(1) + 'x the laptop), ' + r.cores + ' cores')
+    } catch (e) { setSpeed(null); setError(errorText(e)) }
   }
 
   async function signTest() {
@@ -153,6 +166,18 @@ export function MpcWalletLabPage() {
               passkey is the next step.
             </p>
           </div>
+        </div>
+
+        <div className="bg-surface border border-border rounded-3xl p-5 space-y-2">
+          <p className="text-sm font-semibold text-text-primary">Speed check</p>
+          <p className="text-xs text-text-secondary">
+            Runs a complete key creation for all three parties on this phone alone - no network, no keys kept.
+            A recent laptop takes about {(SPEED_REFERENCE_MS / 1000).toFixed(1)} s.
+          </p>
+          <button className="btn-secondary w-full py-3 flex items-center justify-center gap-2" disabled={speed === 'running' || phase === 'creating' || busy !== null} onClick={speedCheck}>
+            {speed === 'running' ? <><Loader2 className="w-4 h-4 animate-spin" /> Measuring…</> : 'Run speed check'}
+          </button>
+          {speed && speed !== 'running' && <p className="text-sm text-text-primary">{speed}</p>}
         </div>
 
         {error && <p role="alert" className="text-sm text-danger px-1">{error}</p>}

@@ -10,7 +10,7 @@
 
 import { hashMessage, hashTypedData, keccak256, parseTransaction } from 'viem'
 import { PhoneKeygen, PhoneSign, type KeygenOffload, type ServerHello } from '@/wallet/mpc/phone'
-import type { EcdsaSig, Hex, KeyShare } from '@/wallet/mpc/protocol'
+import { PARTIES, keygenStart, keygenStep, type EcdsaSig, type Hex, type KeygenState, type KeyShare, type MpcMsg, type PartyNo } from '@/wallet/mpc/protocol'
 import type { Mpc } from '@/wallet/mpc/wasm'
 import type { MpcSignRequest } from '@/wallet/protocol'
 
@@ -45,6 +45,11 @@ export interface MpcEngine {
   /** The server's final { address }: both local shares must agree. */
   keygenFinish(session: string, address: Hex): Promise<{ address: Hex }>
   signBegin(share: KeyShare, request: MpcSignRequest): Promise<{ session: string; phonePub: Hex; with: number; hash: Hex }>
+  /**
+   * Speed check: a full 3-party key generation, all parties here, no network.
+   * Says how fast this device runs the MPC module (no keys are kept).
+   */
+  benchmark(): Promise<{ ms: number; cores: number }>
   /** sign-begin's reply → a box; sign-step's reply → the signature. */
   signNext(session: string, reply: { signId?: Hex; hash?: Hex; hello?: ServerHello; box: string }): Promise<{ box: string } | { signature: EcdsaSig }>
 }
@@ -111,6 +116,25 @@ export function createMpcEngine(opts: {
       const e = get(keygens, session)
       keygens.delete(session)
       return { address: e.k.finish({ address }).address }
+    },
+
+    async benchmark() {
+      const mpc = await opts.mpc()
+      const sid = `0x${id()}${id()}` as Hex
+      const start = performance.now()
+      let states = new Map<PartyNo, KeygenState>()
+      let mail: MpcMsg[] = []
+      for (const p of PARTIES) { const r = keygenStart(mpc, p, sid); states.set(p, r.state); mail.push(...r.out) }
+      while (states.size) {
+        const next = new Map<PartyNo, KeygenState>(), out: MpcMsg[] = []
+        for (const [p, st] of states) {
+          const r = keygenStep(mpc, st, mail.filter(m => m.to === p))
+          out.push(...r.out)
+          if (!r.done) next.set(p, r.state)
+        }
+        states = next; mail = out
+      }
+      return { ms: Math.round(performance.now() - start), cores: typeof navigator !== 'undefined' ? navigator.hardwareConcurrency ?? 0 : 0 }
     },
 
     async signBegin(share, request) {
