@@ -19,6 +19,8 @@ export default defineConfig({
         // code that must never be part of the Vite/browser bundle (see
         // docs/TRANSACTION_SERVICE_BOUNDARY.md) but is still unit-tested the
         // same way via the same vitest run.
-        include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'server/**/*.test.ts', 'wallet-frame/**/*.test.ts'],
+        include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'server/**/*.test.ts', 'wallet-frame/**/*.test.ts',
+      // The MPC signing service's logic is plain Web Crypto, so it runs here too.
+      'supabase/functions/wallet-mpc/**/*.test.ts'],
     },
 });
