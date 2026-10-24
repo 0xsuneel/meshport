@@ -5,6 +5,7 @@
 // agrees to co-sign is server/mpc/requests.ts; this file is HTTP, auth and
 // storage only. See docs/MPC_WALLET.md.
 //
+//   wallet         {}                            → { address | null }
 //   keygen-begin   { phonePub }                  → { sid, hello, box, token }
 //   keygen-step    { token, box }                → { box, token } | { address }
 //   sign-begin     { with, request, phonePub }   → { signId, hash, address, hello, box, token }
@@ -121,6 +122,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     switch (body.action) {
       // For setting VITE_WALLET_MPC_SERVER_KEY at build time; the frame never trusts this at run time.
       case 'identity': return res.status(200).json({ identityPub: svc.identityPub })
+      // This account's MPC wallet address, if it has one.
+      case 'wallet': return res.status(200).json({ address: (await repo.activeShare(uid))?.address ?? null })
       case 'keygen-begin':
         // The share is filed under the account's id; an anonymous session's id
         // is gone when the session resets, and the wallet with it.

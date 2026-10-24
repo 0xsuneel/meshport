@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, ChevronRight, Shield, Upload, Key,
-  User, HelpCircle, Info, FileText, LogOut, BookOpen, Copy, Check, Share2, Palette, Sun, Moon, Store, X,
+  User, HelpCircle, Info, FileText, LogOut, BookOpen, Copy, Check, Share2, Palette, Sun, Moon, Store, X, KeyRound,
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useAuthStore, useUIStore } from '@/store'
@@ -208,6 +208,7 @@ export function ProfilePage() {
 
   const supportSection = (
     <Section title="Support">
+      <MenuItem icon={<KeyRound className="w-5 h-5" />} label="Keyless wallet (testnet)" color="bg-warning/20 text-warning" onClick={() => navigate('/mpc-wallet')} />
       <MenuItem icon={<BookOpen className="w-5 h-5" />} label="MeshPort Feature Guide" color="bg-success/20 text-success" onClick={() => navigate('/feature-guide')} />
       <MenuItem icon={<HelpCircle className="w-5 h-5" />} label="Help & Support" color="bg-brand/20 text-brand-text" onClick={() => navigate('/help-support')} />
       <MenuItem icon={<Info className="w-5 h-5" />} label="About MeshPort" color="bg-accent/20 text-accent-text" onClick={() => navigate('/about')} />

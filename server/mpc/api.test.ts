@@ -104,6 +104,8 @@ describe('api/wallet-mpc (handler, end to end, with the frame\'s phone code)', (
     expect(shares).toHaveLength(1)
     expect(shares[0]).toMatchObject({ auth_uid: 'uid-ravi', address })
     expect((await call({ action: 'keygen-begin', phonePub: new PhoneKeygen(mpc, identityPub).phonePub })).status).toBe(409)
+    expect((await call({ action: 'wallet' })).json).toEqual({ address })
+    expect((await call({ action: 'wallet' }, 'tok-ana')).json).toEqual({ address: null })
   }, 120_000)
 
   it('pays over HTTP: the server hashes the transaction itself, logs it, and co-signs', async () => {

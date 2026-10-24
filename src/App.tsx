@@ -64,6 +64,7 @@ const FeatureGuidePage      = lazyRetry(() => import('./features/profile/Feature
 const AboutPage             = lazyRetry(() => import('./features/profile/AboutPage').then(m => ({ default: m.AboutPage })), 'AboutPage')
 const TermsPrivacyPage      = lazyRetry(() => import('./features/profile/TermsPrivacyPage').then(m => ({ default: m.TermsPrivacyPage })), 'TermsPrivacyPage')
 const HelpSupportPage       = lazyRetry(() => import('./features/profile/HelpSupportPage').then(m => ({ default: m.HelpSupportPage })), 'HelpSupportPage')
+const MpcWalletLabPage      = lazyRetry(() => import('./features/profile/MpcWalletLabPage').then(m => ({ default: m.MpcWalletLabPage })), 'MpcWalletLabPage')
 const SwapPage              = lazyRetry(() => import('./features/swap/SwapPage').then(m => ({ default: m.SwapPage })), 'SwapPage')
 const LoginPage             = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.LoginPage })), 'LoginPage')
 const GoogleAuthPage        = lazyRetry(() => import('./features/auth/AuthPages').then(m => ({ default: m.GoogleAuthPage })), 'GoogleAuthPage')
@@ -468,6 +469,7 @@ const router = createBrowserRouter([
           { path: 'about', element: <AboutPage /> },
           { path: 'terms-privacy', element: <TermsPrivacyPage /> },
           { path: 'help-support', element: <HelpSupportPage /> },
+          { path: 'mpc-wallet', element: <MpcWalletLabPage /> },
           { path: 'security', element: <SecurityPage /> },
           { path: 'appearance', element: <AppearancePage /> },
           { path: 'security/change-passcode', element: <ChangePasscodePage /> },
