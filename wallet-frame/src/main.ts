@@ -101,6 +101,10 @@ try {
 // ── MPC worker (mpcWorker.ts) ───────────────────────────────────────────────
 // MPC work runs in a worker so key generation never blocks the frame or the
 // app. Created on first use; replies are matched by id.
+// MPC shares opened this session (see 'mpc:sign-begin').
+const openMpcShares = new Map<string, KeyShare>()
+const dropOpenMpc = (address?: string) => { if (address) openMpcShares.delete(address.toLowerCase()); else openMpcShares.clear() }
+
 let mpcWorker: Worker | null = null
 const mpcPending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>()
 let mpcSeq = 0
@@ -242,9 +246,9 @@ const handlers: Handlers = {
     try { return { seed: bytesToHex(seed) } } finally { seed.fill(0) }
   },
 
-  async lock({ address }) { vault.lock(address); return { ok: true as const } },
+  async lock({ address }) { vault.lock(address); dropOpenMpc(address); return { ok: true as const } },
 
-  async forget({ address, everything }) { vault.forget(address, everything); return { ok: true as const } },
+  async forget({ address, everything }) { vault.forget(address, everything); dropOpenMpc(address); return { ok: true as const } },
 
   async 'passkey:begin'(request) {
     if (request.mode === 'create') {
@@ -279,7 +283,11 @@ const handlers: Handlers = {
   },
 
   async 'mpc:sign-begin'({ address, request }) {
-    const share = await vault.mpcShare(address)
+    // Opened once per session (decrypting and parsing ~300 KB each time adds up),
+    // kept in memory like an open key; lock / forget drop it.
+    const a = address.toLowerCase()
+    let share = openMpcShares.get(a)
+    if (!share) { share = await vault.mpcShare(address); openMpcShares.set(a, share) }
     return mpcCall('signBegin', share, request)
   },
 

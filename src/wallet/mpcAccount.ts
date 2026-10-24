@@ -30,8 +30,8 @@ const frame: MpcFrame = {
   keygenBegin: () => timed('phone', () => callWallet('mpc:keygen-begin', {})),
   keygenNext: (session, reply) => timed('phone', () => callWallet('mpc:keygen-next', { session, reply })),
   keygenFinish: (session, address) => timed('phone', () => callWallet('mpc:keygen-finish', { session, address })),
-  signBegin: (address, request) => callWallet('mpc:sign-begin', { address, request }),
-  signNext: (session, reply) => callWallet('mpc:sign-next', { session, reply }),
+  signBegin: (address, request) => timed('phone', () => callWallet('mpc:sign-begin', { address, request })),
+  signNext: (session, reply) => timed('phone', () => callWallet('mpc:sign-next', { session, reply })),
 }
 
 const post: MpcPost = async (body) => {
@@ -93,15 +93,21 @@ export async function getMpcWallet(): Promise<Hex | null> {
   return (await post({ action: 'wallet' })).address ?? null
 }
 
-/** Create the signed-in user's MPC wallet (Google / email sign-in required), and where the time went. */
-export async function createMpcWallet(): Promise<{ account: WalletAccount; timing: MpcTiming }> {
+/** Run `f` (MPC wallet work) and report where its time went. One at a time. */
+export async function withMpcTiming<T>(f: () => Promise<T>): Promise<{ value: T; timing: MpcTiming }> {
   const t = { total: 0, phone: 0, server: 0, other: 0 }
   timing = t
   const start = performance.now()
   try {
-    const account = mpcWalletAccount(await mpcSignup(frame, post))
+    const value = await f()
     t.total = performance.now() - start
     t.other = Math.max(0, t.total - t.phone - t.server)
-    return { account, timing: t }
+    return { value, timing: t }
   } finally { timing = null }
+}
+
+/** Create the signed-in user's MPC wallet (Google / email sign-in required), and where the time went. */
+export async function createMpcWallet(): Promise<{ account: WalletAccount; timing: MpcTiming }> {
+  const { value, timing: t } = await withMpcTiming(() => mpcSignup(frame, post))
+  return { account: mpcWalletAccount(value), timing: t }
 }
