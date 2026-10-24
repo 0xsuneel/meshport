@@ -188,6 +188,23 @@ describe('circleAccount (the Circle signer)', () => {
     expect(sent[2].typedData.message.v).toBe('1')
   })
 
+  it('two signatures at once both finish (the SDK holds one callback, so they queue)', async () => {
+    // Like the real SDK: one pending callback; a second execute() replaces the first's.
+    let pending: { id: string; cb: (e: unknown, r: unknown) => void } | null = null
+    const W = (await import('@circle-fin/w3s-pw-web-sdk')).W3SSdk.prototype as any
+    const original = W.execute
+    W.execute = function (id: string, cb: (e: unknown, r: unknown) => void) {
+      pending = { id, cb }
+      setTimeout(() => { if (pending?.id === id) { const p = pending; pending = null; p.cb(undefined, { data: { signature: '0xsig-' + id } }) } }, 5)
+    }
+    try {
+      replies = [() => [200, { challengeId: 'a' }], () => [200, { challengeId: 'b' }]]
+      const acct = circleAccount('0xcccccccccccccccccccccccccccccccccccccccc', 'uid-alice')
+      const both = await Promise.all([acct.signMessage({ message: 'one' }), acct.signMessage({ message: 'two' })])
+      expect(both.sort()).toEqual(['0xsig-a', '0xsig-b'])
+    } finally { W.execute = original }
+  })
+
   it('a refused challenge is an error, not a signature', async () => {
     replies = [() => [200, { challengeId: 'c1' }]]
     sdkExecute = () => ({ error: { code: 155701, message: 'User canceled' } })
