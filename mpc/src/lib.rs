@@ -1,6 +1,6 @@
 //! MeshPort MPC: 2-of-3 threshold ECDSA (DKLs23) for the wallet, as a
 //! stateless WebAssembly module shared by the wallet frame (browser) and the
-//! MeshPort signing service (Supabase Edge Function, Deno).
+//! MeshPort signing service (api/wallet-mpc.ts, Node).
 //!
 //! Parties: 1 = phone (wallet frame), 2 = MeshPort server, 3 = backup.
 //! Any two sign together; the private key is never assembled - not at key

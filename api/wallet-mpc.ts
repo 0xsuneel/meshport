@@ -5,10 +5,15 @@
 // agrees to co-sign is server/mpc/requests.ts; this file is HTTP, auth and
 // storage only. See docs/MPC_WALLET.md.
 //
-//   keygen-begin   {}                     → { sid, out, token }
-//   keygen-step    { token, msgs }        → { out, token } | { address }
-//   sign-begin     { with, request }      → { signId, hash, address, out, token }
-//   sign-step      { token, msgs }        → { out, token }
+//   keygen-begin   { phonePub }                  → { sid, hello, box, token }
+//   keygen-step    { token, box }                → { box, token } | { address }
+//   sign-begin     { with, request, phonePub }   → { signId, hash, address, hello, box, token }
+//   sign-step      { token, box }                → { box, token }
+//
+// Protocol messages travel only inside end-to-end boxes between the wallet
+// frame and this service (src/wallet/mpc/channel.ts); `hello` is this
+// service's session key signed by its identity key, which the frame pins.
+// Each (session, step) is accepted once (wallet_mpc_steps).
 //
 // Runs on Vercel rather than as a Supabase Edge Function: one key-generation
 // round needs ~1.8 s of CPU, close to Edge Functions' 2 s cap.
@@ -46,6 +51,15 @@ const repo: MpcRepo = {
     if (r.status === 409) return 'exists' // unique index: one live wallet per account
     if (!r.ok) throw new Error(`share save failed (${r.status})`)
     return 'saved'
+  },
+  async consumeStep(sessionId, step) {
+    const r = await rest('wallet_mpc_steps', {
+      method: 'POST', headers: { Prefer: 'return=minimal' },
+      body: JSON.stringify({ session_id: sessionId, step }),
+    })
+    if (r.status === 409) return false // primary key (session_id, step): already used
+    if (!r.ok) throw new Error(`step record failed (${r.status})`)
+    return true
   },
   async logSign(e) {
     const r = await rest('wallet_mpc_sign_log', {
@@ -93,7 +107,7 @@ function allow(uid: string): boolean {
   return true
 }
 
-const STATUS: Record<MpcServiceError['code'], number> = { 'bad-request': 400, 'no-wallet': 404, exists: 409, expired: 410, protocol: 422 }
+const STATUS: Record<MpcServiceError['code'], number> = { 'bad-request': 400, 'no-wallet': 404, exists: 409, replayed: 409, expired: 410, protocol: 422 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
@@ -104,14 +118,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const svc = await getService()
     switch (body.action) {
-      case 'keygen-begin': return res.status(200).json(await svc.keygenBegin(uid))
-      case 'keygen-step': return res.status(200).json(await svc.keygenStep(uid, String(body.token ?? ''), body.msgs))
+      // For setting VITE_WALLET_MPC_SERVER_KEY at build time; the frame never trusts this at run time.
+      case 'identity': return res.status(200).json({ identityPub: svc.identityPub })
+      case 'keygen-begin': return res.status(200).json(await svc.keygenBegin(uid, String(body.phonePub ?? '') as `0x${string}`))
+      case 'keygen-step': return res.status(200).json(await svc.keygenStep(uid, String(body.token ?? ''), String(body.box ?? '')))
       case 'sign-begin': {
         const withParty = Number(body.with)
         if (withParty !== PHONE && withParty !== BACKUP) return res.status(400).json({ error: 'with must be 1 (phone) or 3 (backup)' })
-        return res.status(200).json(await svc.signBegin(uid, { ...hashSignRequest(body.request), with: withParty }))
+        return res.status(200).json(await svc.signBegin(uid, { ...hashSignRequest(body.request), with: withParty }, String(body.phonePub ?? '') as `0x${string}`))
       }
-      case 'sign-step': return res.status(200).json(await svc.signStep(uid, String(body.token ?? ''), body.msgs))
+      case 'sign-step': return res.status(200).json(await svc.signStep(uid, String(body.token ?? ''), String(body.box ?? '')))
       default: return res.status(400).json({ error: 'Unknown action' })
     }
   } catch (e) {

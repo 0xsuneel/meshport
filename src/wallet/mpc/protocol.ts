@@ -182,3 +182,25 @@ export function signStep(mpc: Mpc, share: KeyShare, state: SignState, inbox: Mpc
 export function shareAddress(mpc: Mpc, share: KeyShare): Hex {
   return mpc.call<{ address: Hex }>('share_info', { share }).address
 }
+
+// ── Readiness ───────────────────────────────────────────────────────────────
+// Which messages a party needs, from every peer, before its next step. Lets
+// each side run every round it already can in one go, so a signup takes three
+// requests and a signature two.
+
+const NEEDS = {
+  keygen: { 1: ['frag'], 2: ['proof', 'bip2', 'zero2'], 3: ['zero3', 'mul', 'bip3'] },
+  sign: { 1: ['s1'], 2: ['s2'], 3: ['s3'] },
+} as const
+
+function hasAll(kinds: readonly string[], me: PartyNo, peers: readonly PartyNo[], inbox: MpcMsg[]): boolean {
+  return kinds.every(k => peers.every(p => inbox.some(m => m.to === me && m.from === p && m.kind === k)))
+}
+
+export function keygenReady(state: KeygenState, inbox: MpcMsg[]): boolean {
+  return hasAll(NEEDS.keygen[state.round], state.i, others(state.i), inbox)
+}
+
+export function signReady(state: SignState, inbox: MpcMsg[]): boolean {
+  return hasAll(NEEDS.sign[state.round], state.i, [state.with], inbox)
+}
