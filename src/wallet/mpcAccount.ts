@@ -93,6 +93,11 @@ export async function getMpcWallet(): Promise<Hex | null> {
   return (await post({ action: 'wallet' })).address ?? null
 }
 
+/** Speed check: how long this device takes for a full 3-party key generation (no network). */
+export function mpcSpeedCheck(): Promise<{ ms: number; cores: number }> {
+  return callWallet('mpc:benchmark', {})
+}
+
 /** Run `f` (MPC wallet work) and report where its time went. One at a time. */
 export async function withMpcTiming<T>(f: () => Promise<T>): Promise<{ value: T; timing: MpcTiming }> {
   const t = { total: 0, phone: 0, server: 0, other: 0 }

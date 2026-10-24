@@ -104,6 +104,8 @@ export interface WalletRpc {
   /** The frame hashes `request` itself and signs only that. */
   'mpc:sign-begin': [{ address: string; request: MpcSignRequest }, { session: string; phonePub: Hex; with: number; hash: Hex }]
   'mpc:sign-next': [{ session: string; reply: unknown }, { box: string } | { signature: { r: Hex; s: Hex; v: 27 | 28 } }]
+  /** Speed check: a full 3-party key generation inside the frame, no network, no keys kept. */
+  'mpc:benchmark': [Record<string, never>, { ms: number; cores: number }]
 }
 
 /** What an MPC wallet is asked to sign - never a bare hash. */

@@ -293,6 +293,8 @@ const handlers: Handlers = {
 
   async 'mpc:sign-next'({ session, reply }) { return mpcCall('signNext', String(session), reply) },
 
+  async 'mpc:benchmark'() { return mpcCall('benchmark') },
+
   async 'passkey:result'({ ticket }) {
     const c = ceremonies.get(ticket)
     if (!c) return { status: 'error' as const, message: 'This passkey request has expired - try again' }
