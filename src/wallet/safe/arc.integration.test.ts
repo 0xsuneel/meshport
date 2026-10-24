@@ -13,32 +13,34 @@ const RPC = process.env.ARC_RPC
 const maybe = RPC ? describe : describe.skip
 
 maybe('MeshPort Safe on Arc testnet (read-only simulation)', () => {
-  const client = createPublicClient({ transport: http(RPC) })
+  // Built on first use: describe.skip still collects this block when ARC_RPC is unset.
+  let cached: ReturnType<typeof createPublicClient> | undefined
+  const arc = () => (cached ??= createPublicClient({ transport: http(RPC) }))
 
   it('predicted Safe address = the address Safe\'s factory would create', async () => {
     // A throwaway passkey public key and wallet key - never funded, never used.
     const pub = p256.getPublicKey(p256.utils.randomPrivateKey(), false)
     const x = BigInt('0x' + Buffer.from(pub.slice(1, 33)).toString('hex'))
     const y = BigInt('0x' + Buffer.from(pub.slice(33, 65)).toString('hex'))
-    const passkeyOwner = await passkeySignerAddress(client as unknown as ChainReader, { x, y })
+    const passkeyOwner = await passkeySignerAddress(arc() as unknown as ChainReader, { x, y })
     const walletKey = privateKeyToAccount(generatePrivateKey()).address
     const cfg = meshportSafeConfig(passkeyOwner, walletKey)
 
-    const predicted = predictSafeAddress(cfg, await proxyCreationCode(client as unknown as ChainReader))
+    const predicted = predictSafeAddress(cfg, await proxyCreationCode(arc() as unknown as ChainReader))
     const { to, data } = createSafeCalldata(cfg)
-    const sim = await client.call({ to, data })
+    const sim = await arc().call({ to, data })
     const simulated = ('0x' + (sim.data ?? '').slice(-40)) as `0x${string}`
 
     expect(passkeyOwner).toMatch(/^0x[0-9a-fA-F]{40}$/)
     expect(simulated.toLowerCase()).toBe(predicted.toLowerCase())
     // Nothing exists there yet - this was only a simulation.
-    expect(await client.getCode({ address: predicted })).toBeUndefined()
+    expect(await arc().getCode({ address: predicted })).toBeUndefined()
   }, 30_000)
 
   it('the passkey signer factory answers for the Arc verifier config', async () => {
     const sameKey = { x: 1n, y: 2n }
-    const a = await passkeySignerAddress(client as unknown as ChainReader, sameKey)
-    const b = await passkeySignerAddress(client as unknown as ChainReader, sameKey)
+    const a = await passkeySignerAddress(arc() as unknown as ChainReader, sameKey)
+    const b = await passkeySignerAddress(arc() as unknown as ChainReader, sameKey)
     expect(a).toBe(b)
     expect(a).toMatch(/^0x[0-9a-fA-F]{40}$/)
   }, 30_000)
