@@ -85,13 +85,13 @@ function getService(): Promise<MpcService> {
   return service
 }
 
-async function callerUid(req: VercelRequest): Promise<string | null> {
+async function caller(req: VercelRequest): Promise<{ uid: string; anonymous: boolean } | null> {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
   if (!token || !SERVICE_KEY || !SUPABASE_URL) return null
   const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${token}` } })
   if (!r.ok) return null
-  const u = await r.json().catch(() => null) as { id?: string } | null
-  return u?.id ?? null
+  const u = await r.json().catch(() => null) as { id?: string; is_anonymous?: boolean } | null
+  return u?.id ? { uid: u.id, anonymous: u.is_anonymous === true } : null
 }
 
 // Per warm instance: 60 requests a minute per account (a signup is 4, a
@@ -111,8 +111,9 @@ const STATUS: Record<MpcServiceError['code'], number> = { 'bad-request': 400, 'n
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
-  const uid = await callerUid(req)
-  if (!uid) return res.status(401).json({ error: 'Sign in first' })
+  const who = await caller(req)
+  if (!who) return res.status(401).json({ error: 'Sign in first' })
+  const { uid } = who
   if (!allow(uid)) return res.status(429).json({ error: 'Too many requests - try again in a minute' })
   const body = (req.body ?? {}) as Record<string, any>
   try {
@@ -120,7 +121,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     switch (body.action) {
       // For setting VITE_WALLET_MPC_SERVER_KEY at build time; the frame never trusts this at run time.
       case 'identity': return res.status(200).json({ identityPub: svc.identityPub })
-      case 'keygen-begin': return res.status(200).json(await svc.keygenBegin(uid, String(body.phonePub ?? '') as `0x${string}`))
+      case 'keygen-begin':
+        // The share is filed under the account's id; an anonymous session's id
+        // is gone when the session resets, and the wallet with it.
+        if (who.anonymous) return res.status(403).json({ error: 'Sign in with Google or email to create this wallet' })
+        return res.status(200).json(await svc.keygenBegin(uid, String(body.phonePub ?? '') as `0x${string}`))
       case 'keygen-step': return res.status(200).json(await svc.keygenStep(uid, String(body.token ?? ''), String(body.box ?? '')))
       case 'sign-begin': {
         const withParty = Number(body.with)

@@ -9,7 +9,7 @@ import { PHONE, SERVER, type KeyShare } from '../../src/wallet/mpc/protocol'
 import { PhoneKeygen, PhoneSign } from '../../src/wallet/mpc/phone'
 
 const URL_ = 'https://fake.supabase.test'
-const SESSIONS: Record<string, string> = { 'tok-ravi': 'uid-ravi', 'tok-ana': 'uid-ana' }
+const SESSIONS: Record<string, string> = { 'tok-ravi': 'uid-ravi', 'tok-ana': 'uid-ana', 'tok-anon': 'uid-anon' }
 const shares: Array<{ auth_uid: string; address: string; share_ct: string }> = []
 const steps = new Set<string>()
 const signLog: Array<Record<string, unknown>> = []
@@ -20,7 +20,7 @@ function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Respon
   const auth = new Headers(init?.headers).get('Authorization') ?? ''
   if (url.pathname === '/auth/v1/user') {
     const uid = SESSIONS[auth.replace(/^Bearer /, '')]
-    return uid ? ok({ id: uid }) : ok({ msg: 'invalid' }, 401)
+    return uid ? ok({ id: uid, is_anonymous: uid === 'uid-anon' }) : ok({ msg: 'invalid' }, 401)
   }
   expect(auth).toBe('Bearer service-key') // the tables are only ever touched with the service key
   const body = init?.body ? JSON.parse(String(init.body)) : null
@@ -78,6 +78,12 @@ describe('api/wallet-mpc (handler, end to end, with the frame\'s phone code)', (
     const res = { status(s: number) { status = s; return res }, json() { return res } }
     await handler({ method: 'GET', headers: {} }, res)
     expect(status).toBe(405)
+  })
+
+  it('an anonymous session can not create a wallet (its id does not last)', async () => {
+    const r = await call({ action: 'keygen-begin', phonePub: new PhoneKeygen(mpc, identityPub).phonePub }, 'tok-anon')
+    expect(r.status).toBe(403)
+    expect(shares).toHaveLength(0)
   })
 
   it('signup over HTTP: three requests, only boxes cross the app, a sealed share stored', async () => {

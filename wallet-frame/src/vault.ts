@@ -21,6 +21,7 @@ import {
   encryptPrivateKey, decryptPrivateKey, sealForDevice, openFromDevice,
 } from '@/lib/security'
 import type { Hex, WalletKind, WalletStatus } from '@/wallet/protocol'
+import type { KeyShare } from '@/wallet/mpc/protocol'
 
 const P = 'mpw_'
 const SESSION = P + 'ss_'   // sessionStorage
@@ -122,6 +123,7 @@ export async function status(address: string): Promise<WalletStatus> {
     wordCount: words,
     lockedForMs: lockedForMs(a),
     bindingLost: !!pc && pc.startsWith('dv1:') && (await openFromDevice(pc)) == null,
+    mpc: !!get(ls(), MPC + a),
   }
 }
 
@@ -182,6 +184,36 @@ export async function openRecovered(address: string, privateKey: string): Promis
   await keepOpen(address, privateKey)
 }
 
+// ── MPC wallets (docs/MPC_WALLET.md) ────────────────────────────────────────
+// Not a key: this device's share of a 2-of-3 MPC key, sealed with the device
+// key like the device copy. Until the backup share is exported (to the user's
+// Google Drive or behind a passkey) it is kept here too - which, for now,
+// lets this device sign without MeshPort, as a plain key would.
+const MPC = P + 'mpc_'
+const MPC_BACKUP = P + 'mpcb_'
+
+/** Write and read back: a share is ~300 KB, and a full storage quota must not fail silently. */
+function putChecked(k: string, v: string) {
+  put(ls(), k, v)
+  if (get(ls(), k) !== v) throw new VaultError('invalid', "This browser couldn't save the wallet (storage is full or blocked)")
+}
+
+export async function storeMpc(address: string, phone: KeyShare, backup: KeyShare): Promise<void> {
+  const a = norm(address)
+  const [p, b] = await Promise.all([sealForDevice(JSON.stringify(phone)), sealForDevice(JSON.stringify(backup))])
+  if (!p || !b) throw new VaultError('invalid', "This browser can't keep a wallet (storage is blocked)")
+  putChecked(MPC + a, p)
+  putChecked(MPC_BACKUP + a, b)
+}
+
+export async function mpcShare(address: string, which: 'phone' | 'backup' = 'phone'): Promise<KeyShare> {
+  const sealed = get(ls(), (which === 'phone' ? MPC : MPC_BACKUP) + norm(address))
+  if (!sealed) throw new VaultError('not-found', 'No MPC wallet on this device')
+  const text = await openFromDevice(sealed)
+  if (!text) throw new VaultError('locked', "This device can't open its wallet share (site data was partly cleared)")
+  return JSON.parse(text) as KeyShare
+}
+
 export async function setPasscode(address: string, passcode: string, oldPasscode?: string): Promise<void> {
   const a = norm(address)
   const k = keyFor(address)
@@ -224,11 +256,15 @@ export function lock(address?: string) {
   }
 }
 
-/** Logout. `everything` also drops passcode copies and phrases (a full reset). */
+/**
+ * Logout. `everything` also drops passcode copies, phrases and MPC shares (a
+ * full reset). MPC shares survive a plain logout: until the backup share is
+ * exported, this device holds the only copy of it.
+ */
 export function forget(address?: string, everything = false) {
   lock(address)
   const s = ls()
-  const drop = everything ? [DEVICE, PASSCODE, PHRASE, WORDS, KIND, LOCKOUT] : [DEVICE]
+  const drop = everything ? [DEVICE, PASSCODE, PHRASE, WORDS, KIND, LOCKOUT, MPC, MPC_BACKUP] : [DEVICE]
   try {
     for (let i = (s?.length ?? 0) - 1; i >= 0; i--) {
       const k = s!.key(i)
