@@ -23,6 +23,7 @@ import * as keys from './keys'
 import { createRecoveryPayload, openRecoveryPayload, RecoveryError } from '@/lib/recoveryQr'
 import { wrapWithPrf, openWithPrf } from '@/lib/passkeyWrap'
 import { deriveChatSeed } from '@/lib/chatIdentity'
+import type { KeyShare } from '@/wallet/mpc/protocol'
 import * as vault from './vault'
 import { VaultError } from './vault'
 
@@ -96,6 +97,36 @@ try {
     }
   }
 } catch { /* no BroadcastChannel: passkeys are unavailable here */ }
+
+// ── MPC worker (mpcWorker.ts) ───────────────────────────────────────────────
+// MPC work runs in a worker so key generation never blocks the frame or the
+// app. Created on first use; replies are matched by id.
+let mpcWorker: Worker | null = null
+const mpcPending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>()
+let mpcSeq = 0
+
+function mpcCall<T>(method: string, ...args: unknown[]): Promise<T> {
+  if (!mpcWorker) {
+    mpcWorker = new Worker(new URL('./mpcWorker.ts', import.meta.url), { type: 'module' })
+    mpcWorker.onmessage = (e: MessageEvent<{ id: number; result?: unknown; error?: string }>) => {
+      const p = mpcPending.get(e.data.id)
+      if (!p) return
+      mpcPending.delete(e.data.id)
+      if (e.data.error !== undefined) p.reject(new RpcError('failed', e.data.error)); else p.resolve(e.data.result)
+    }
+    mpcWorker.onerror = () => {
+      for (const p of mpcPending.values()) p.reject(new RpcError('failed', 'The wallet engine stopped - try again'))
+      mpcPending.clear()
+      mpcWorker?.terminate()
+      mpcWorker = null
+    }
+  }
+  const id = ++mpcSeq
+  return new Promise<T>((resolve, reject) => {
+    mpcPending.set(id, { resolve, reject })
+    mpcWorker!.postMessage({ id, method, args })
+  })
+}
 
 // ── Handlers ────────────────────────────────────────────────────────────────
 type Handlers = { [M in WalletMethod]: (p: WalletParams<M>) => Promise<WalletResult<M>> }
@@ -227,6 +258,23 @@ const handlers: Handlers = {
     ceremonies.set(ticket, { request, expires: Date.now() + PASSKEY_TTL_MS, outcome: { status: 'pending' }, claimed: false })
     return { ticket }
   },
+
+  async 'mpc:keygen-begin'() { return mpcCall('keygenBegin') },
+
+  async 'mpc:keygen-next'({ session, reply }) { return mpcCall('keygenNext', String(session), reply) },
+
+  async 'mpc:keygen-finish'({ session, address }) {
+    const r = await mpcCall<{ address: Hex; phone: KeyShare; backup: KeyShare }>('keygenFinish', String(session), address)
+    await vault.storeMpc(r.address, r.phone, r.backup)
+    return { address: r.address } // the shares stay in this origin
+  },
+
+  async 'mpc:sign-begin'({ address, request }) {
+    const share = await vault.mpcShare(address)
+    return mpcCall('signBegin', share, request)
+  },
+
+  async 'mpc:sign-next'({ session, reply }) { return mpcCall('signNext', String(session), reply) },
 
   async 'passkey:result'({ ticket }) {
     const c = ceremonies.get(ticket)

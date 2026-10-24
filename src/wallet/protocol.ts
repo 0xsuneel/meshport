@@ -41,6 +41,8 @@ export interface WalletStatus {
    * (site data partly cleared): restore from the phrase / key.
    */
   bindingLost: boolean
+  /** An MPC wallet (docs/MPC_WALLET.md): this device holds its share(s), not a key. */
+  mpc: boolean
 }
 
 /** Unsigned EVM transaction as viem describes it (bigints survive postMessage). */
@@ -90,7 +92,25 @@ export interface WalletRpc {
   'passkey:begin': [PasskeyRequest, { ticket: string }]
   /** Poll a ceremony's outcome; a finished result is handed out once. */
   'passkey:result': [{ ticket: string }, PasskeyOutcome]
+  /**
+   * MPC wallet (docs/MPC_WALLET.md, src/wallet/mpcClient.ts). The app carries
+   * the signing service's replies in and the frame's boxes out; both are
+   * encrypted end to end between the frame and the service.
+   */
+  'mpc:keygen-begin': [Record<string, never>, { session: string; phonePub: Hex }]
+  'mpc:keygen-next': [{ session: string; reply: unknown }, { box: string }]
+  /** Checks the service's address against its own shares, then stores them. */
+  'mpc:keygen-finish': [{ session: string; address: Hex }, { address: Hex }]
+  /** The frame hashes `request` itself and signs only that. */
+  'mpc:sign-begin': [{ address: string; request: MpcSignRequest }, { session: string; phonePub: Hex; with: number; hash: Hex }]
+  'mpc:sign-next': [{ session: string; reply: unknown }, { box: string } | { signature: { r: Hex; s: Hex; v: 27 | 28 } }]
 }
+
+/** What an MPC wallet is asked to sign - never a bare hash. */
+export type MpcSignRequest =
+  | { kind: 'tx'; tx: Hex }
+  | { kind: 'message'; message: string | { raw: Hex } }
+  | { kind: 'typed'; typedData: Record<string, unknown> }
 
 export type PasskeyRequest =
   | { mode: 'create'; userId: string; userName: string }

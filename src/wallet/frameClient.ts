@@ -23,7 +23,9 @@ export class WalletFrameError extends Error {
 const READY_TIMEOUT_MS = 15_000
 const DEFAULT_TIMEOUT_MS = 30_000
 // Argon2id / PBKDF2(600k) run in the frame; give those room on slow phones.
-const SLOW_METHODS = new Set<WalletMethod>(['create', 'import', 'adopt', 'unlock', 'set-passcode', 'recovery:create', 'recovery:open', 'reveal:grant', 'passkey:begin'])
+const SLOW_METHODS = new Set<WalletMethod>(['create', 'import', 'adopt', 'unlock', 'set-passcode', 'recovery:create', 'recovery:open', 'reveal:grant', 'passkey:begin',
+  // MPC: loading the module, key generation (seconds of CPU on a phone), signing.
+  'mpc:keygen-begin', 'mpc:keygen-next', 'mpc:keygen-finish', 'mpc:sign-begin', 'mpc:sign-next'])
 
 let frame: HTMLIFrameElement | null = null
 let readyPromise: Promise<void> | null = null
