@@ -23,6 +23,18 @@ accounts on Arc testnet (`ARC-TESTNET`), users paying gas in USDC.
 - `supabase/migrations/20261025100000_circle_wallet_users.sql` - the link table
   (service role only). Not applied yet.
 
+## App
+
+- `src/wallet/circle.ts` - Circle's Web SDK (loaded only on Circle screens),
+  the Circle session per MeshPort account (refreshed once on expiry), Google
+  and email-code sign-in, and running challenges.
+- `src/features/profile/CircleWalletPage.tsx` - Profile → Circle wallet
+  (testnet): sign in, create the wallet, send a test payment (MeshPort
+  passcode / biometric, then Circle's confirmation). Also the page Google
+  returns to, `/wallet/circle-login`, kept outside the app's gates so the
+  sign-in result in the URL isn't lost.
+- `vercel.json` CSP allows Circle's frame, `https://pw-auth.circle.com`.
+
 ## Flow
 
 1. App gets a device token (`social-device-token` / `email-device-token`),
@@ -38,5 +50,6 @@ accounts on Arc testnet (`ARC-TESTNET`), users paying gas in USDC.
 | Where | What |
 |---|---|
 | Circle Console | Standard API key (testnet); App ID (Wallets → User Controlled → Configurator); Google OAuth client ID; SMTP for email OTP; confirmation UI on |
-| Vercel (app) | `CIRCLE_API_KEY` (set by the owner, never shared in chat); `VITE_CIRCLE_APP_ID` |
+| Vercel (app) | `CIRCLE_API_KEY` (set by the owner, never shared in chat); `VITE_CIRCLE_APP_ID`; `VITE_CIRCLE_GOOGLE_CLIENT_ID` |
+| Google OAuth client | Authorized redirect URI `https://meshport.xyz/wallet/circle-login` (same client as Supabase Google sign-in) |
 | Supabase | Apply the migration above |
