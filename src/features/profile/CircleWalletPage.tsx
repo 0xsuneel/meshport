@@ -15,8 +15,10 @@ import {
 // Profile → Support → Circle wallet (testnet). Circle user-controlled wallets
 // (docs/CIRCLE_WALLETS.md) before they replace anything: sign in to Circle
 // with Google or an email code, create the Arc wallet, send a test payment.
-// A payment asks for the MeshPort passcode / biometric first, then Circle's
-// own confirmation. Separate from the user's main wallet; Arc testnet only.
+// A payment is approved with the MeshPort passcode / biometric; Circle's own
+// confirmation screens are off (Circle Console → Configurator → Wallet
+// Security Settings), so the user is told that here. Separate from the
+// user's main wallet; Arc testnet only.
 
 type Phase = 'loading' | 'off' | 'meshport' | 'signin' | 'setup' | 'ready'
 type Account = { uid: string; email: string | null }
@@ -126,7 +128,7 @@ export function CircleWalletPage() {
     const started = performance.now()
     try {
       const { challengeId } = await call<{ challengeId: string }>(a, 'transfer', { to, amount, idempotencyKey: payKey.current })
-      setStatus('Confirm in Circle…')
+      setStatus('Approving…')
       await executeChallenge(a.uid, challengeId)
       payKey.current = crypto.randomUUID() // approved: the next payment is a new one
       setStatus('Sending…')
@@ -181,8 +183,8 @@ export function CircleWalletPage() {
             <p className="text-sm font-semibold text-text-primary">A wallet you can&apos;t lose</p>
             <p className="text-sm text-text-secondary leading-relaxed">
               Circle keeps this wallet&apos;s key, split so no single piece can sign. You open it by signing in with
-              Google or an email code - on a new phone too. Every payment needs your MeshPort passcode and your
-              confirmation in Circle&apos;s screen; MeshPort can&apos;t move your money.
+              Google or an email code - on a new phone too. You approve every payment here in MeshPort with your
+              passcode, Face ID or fingerprint; Circle doesn&apos;t show a second confirmation screen.
             </p>
             <p className="text-xs text-text-secondary leading-relaxed">A preview on Arc testnet, separate from your main wallet.</p>
           </div>
