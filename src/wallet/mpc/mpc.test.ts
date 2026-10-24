@@ -2,11 +2,11 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { keccak256, parseGwei, recoverTransactionAddress, serializeTransaction, toBytes, toHex, type Hex } from 'viem'
-import { loadMpc, MpcError, type Mpc } from './wasm.ts'
+import { loadMpc, MpcError, type Mpc } from './wasm'
 import {
   BACKUP, PARTIES, PHONE, SERVER, keygenStart, keygenStep, shareAddress, signStart, signStep,
   type KeyShare, type KeygenState, type MpcMsg, type PartyNo, type SignState,
-} from './protocol.ts'
+} from './protocol'
 
 const WASM = new URL('./meshport_mpc.wasm', import.meta.url)
 // Every state crosses a JSON round-trip, as the server's sealed state will.
@@ -123,18 +123,5 @@ describe('MPC wallet module (DKLs23 2-of-3, WebAssembly)', () => {
     // A step without the other party's message fails loudly.
     const { state } = signStart(mpc, shares[PHONE], SERVER, rand(), hash)
     expect(() => signStep(mpc, shares[PHONE], state, [])).toThrow(/missing s1 from party 2/)
-  })
-})
-
-describe('signing service copies (supabase/functions/_shared/mpc)', () => {
-  const read = (p: string) => readFileSync(new URL(p, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
-  it('wasm.ts and protocol.ts match the app versions (rerun mpc/build.sh)', () => {
-    for (const f of ['wasm.ts', 'protocol.ts']) expect(read(`../../../supabase/functions/_shared/mpc/${f}`)).toBe(read(`./${f}`))
-  })
-  it('the embedded module is the same .wasm', async () => {
-    const { MPC_WASM_BASE64, MPC_WASM_SHA256 } = await import('../../../supabase/functions/_shared/mpc/wasmBytes.ts')
-    const bytes = Buffer.from(MPC_WASM_BASE64, 'base64')
-    expect(createHash('sha256').update(bytes).digest('hex')).toBe(MPC_WASM_SHA256)
-    expect(bytes.equals(readFileSync(WASM))).toBe(true)
   })
 })

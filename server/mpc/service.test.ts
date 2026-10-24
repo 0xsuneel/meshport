@@ -1,13 +1,13 @@
-// supabase/functions/wallet-mpc/logic.test.ts - runs under vitest (pure Web Crypto).
+// server/mpc/service.test.ts
 import { describe, it, expect, beforeAll } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { keccak256, parseGwei, recoverTransactionAddress, serializeTransaction, toHex } from 'viem'
-import { loadMpc, type Mpc } from '../_shared/mpc/wasm.ts'
+import { loadMpc, type Mpc } from '../../src/wallet/mpc/wasm'
 import {
   BACKUP, PHONE, SERVER, keygenStart, keygenStep, signStart, signStep,
   type Hex, type KeyShare, type KeygenState, type MpcMsg, type PartyNo, type SignState,
-} from '../_shared/mpc/protocol.ts'
-import { createMpcService, MpcServiceError, STATE_TTL_MS, type MpcRepo, type MpcService } from './logic.ts'
+} from '../../src/wallet/mpc/protocol'
+import { createMpcService, MpcServiceError, STATE_TTL_MS, type MpcRepo, type MpcService } from './service'
 
 const json = <T>(v: T): T => JSON.parse(JSON.stringify(v)) // every HTTP body
 const rand = (n = 32) => toHex(crypto.getRandomValues(new Uint8Array(n)))
@@ -87,7 +87,7 @@ describe('wallet-mpc service (MeshPort = party 2)', () => {
   let ravi: { phone: KeyShare; backup: KeyShare; address: Hex }
 
   beforeAll(async () => {
-    mpc = await loadMpc(readFileSync(new URL('../../../src/wallet/mpc/meshport_mpc.wasm', import.meta.url)))
+    mpc = await loadMpc(readFileSync(new URL('../../src/wallet/mpc/meshport_mpc.wasm', import.meta.url)))
     repo = new MemoryRepo()
     svc = await createMpcService({ mpc, repo, secret: SECRET, now: () => clock })
     ravi = await signup('uid-ravi')

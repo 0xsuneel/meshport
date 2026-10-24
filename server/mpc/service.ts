@@ -1,23 +1,23 @@
-// supabase/functions/wallet-mpc/logic.ts
+// server/mpc/service.ts
 //
 // MeshPort's side (party 2) of the 2-of-3 MPC wallet: key generation with a
-// new user's phone, and co-signing with the phone. No HTTP and no database
-// here - index.ts supplies those - so this runs under Deno and vitest alike.
+// new user's phone, and co-signing with the phone or the backup share. No HTTP
+// and no database here - api/wallet-mpc.ts supplies those.
 //
 // Stateless between requests: a round's secret working state goes back to the
 // client sealed (AES-256-GCM, bound to the user and the session, 5 minutes).
 // The server's share is stored sealed with a different key, bound to the
 // user and the address. Both keys come from one server-only secret.
 //
-// The server only co-signs a hash it computed itself (index.ts, from the
+// The server only co-signs a hash it computed itself (requests.ts, from the
 // transaction or message the client sent), and that hash is sealed into the
 // session, so the client can't swap it between rounds.
 
-import type { Mpc } from '../_shared/mpc/wasm.ts'
+import type { Mpc } from '../../src/wallet/mpc/wasm'
 import {
   BACKUP, PHONE, SERVER, keygenStart, keygenStep, signStart, signStep,
   type Hex, type KeyShare, type KeygenState, type MpcMsg, type PartyNo, type SignState,
-} from '../_shared/mpc/protocol.ts'
+} from '../../src/wallet/mpc/protocol'
 
 export const STATE_TTL_MS = 5 * 60_000
 

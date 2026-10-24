@@ -34,6 +34,32 @@ message flow in `src/wallet/mpc/protocol.ts` stays the same.
   signing as steps; messages are `{ from, to, kind, body }`.
 - `src/wallet/mpc/meshport_mpc.wasm` (+ `.sha256`) - the built module,
   committed so the app builds without Rust. The test checks the hash.
+- `server/mpc/service.ts` - MeshPort's side (party 2): key generation and
+  co-signing. Stateless between requests: round state goes back to the client
+  sealed (AES-256-GCM, bound to user + session, 5 minutes); the server share
+  is sealed with a separate key bound to user + address.
+- `server/mpc/requests.ts` - what MeshPort co-signs: the client sends the
+  transaction, message or typed data (never a bare hash), the server hashes
+  it itself, testnet chains only, and logs it.
+- `api/wallet-mpc.ts` - the HTTP endpoint (Vercel). Not a Supabase Edge
+  Function: one key-generation round needs ~1.8 s of CPU, against Edge
+  Functions' 2 s cap.
+- `supabase/migrations/20261024140000_wallet_mpc.sql` - `wallet_mpc_shares`
+  and `wallet_mpc_sign_log`, service role only.
+
+## Configuration (before deploying)
+
+| Where | What |
+|---|---|
+| Vercel (app project) | `MPC_SECRET` - 32 random bytes as 64 hex characters. Losing it makes every stored server share unreadable; leaking it alone opens nothing without the database. |
+| Supabase | Apply the migration above. |
+
+## HTTP flow
+
+| Step | Requests | Server CPU |
+|---|---|---|
+| Signup (key generation) | 4: `keygen-begin`, `keygen-step` ×3 | ~1.5 s and ~1.8 s on the two heavy rounds |
+| Each signature | 2: `sign-begin`, `sign-step` | ~40-50 ms each |
 
 ## Rebuilding the module
 
