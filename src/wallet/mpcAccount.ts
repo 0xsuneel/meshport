@@ -13,10 +13,23 @@ import { plainTransaction, type WalletAccount } from './account'
 import { mpcSign, mpcSignup, type MpcFrame, type MpcPost } from './mpcClient'
 import type { EcdsaSig, Hex } from './mpc/protocol'
 
+/**
+ * Where a signup's time went, in ms: `phone` = the wallet frame computing,
+ * `server` = MeshPort computing (its Server-Timing), `other` = the rest
+ * (network, loading, waiting).
+ */
+export interface MpcTiming { total: number; phone: number; server: number; other: number }
+
+let timing: MpcTiming | null = null
+const timed = async <T>(key: 'phone', f: () => Promise<T>): Promise<T> => {
+  const t = performance.now()
+  try { return await f() } finally { if (timing) timing[key] += performance.now() - t }
+}
+
 const frame: MpcFrame = {
-  keygenBegin: () => callWallet('mpc:keygen-begin', {}),
-  keygenNext: (session, reply) => callWallet('mpc:keygen-next', { session, reply }),
-  keygenFinish: (session, address) => callWallet('mpc:keygen-finish', { session, address }),
+  keygenBegin: () => timed('phone', () => callWallet('mpc:keygen-begin', {})),
+  keygenNext: (session, reply) => timed('phone', () => callWallet('mpc:keygen-next', { session, reply })),
+  keygenFinish: (session, address) => timed('phone', () => callWallet('mpc:keygen-finish', { session, address })),
   signBegin: (address, request) => callWallet('mpc:sign-begin', { address, request }),
   signNext: (session, reply) => callWallet('mpc:sign-next', { session, reply }),
 }
@@ -24,6 +37,11 @@ const frame: MpcFrame = {
 const post: MpcPost = async (body) => {
   const { authApiHeaders } = await import('@/lib/supabase')
   const r = await fetch('/api/wallet-mpc', { method: 'POST', headers: await authApiHeaders(), body: JSON.stringify(body) })
+  if (timing) {
+    // Server-Timing: "auth;dur=…, init;dur=…, mpc;dur=…, total;dur=…" - the server's own time.
+    const total = /total;dur=(\d+)/.exec(r.headers.get('Server-Timing') ?? '')
+    if (total) timing.server += Number(total[1])
+  }
   const reply = await r.json().catch(() => ({}))
   if (!r.ok) throw new WalletFrameError('failed', reply?.error || `Wallet service error (${r.status})`)
   return reply
@@ -75,7 +93,15 @@ export async function getMpcWallet(): Promise<Hex | null> {
   return (await post({ action: 'wallet' })).address ?? null
 }
 
-/** Create the signed-in user's MPC wallet (Google / email sign-in required). */
-export async function createMpcWallet(): Promise<WalletAccount> {
-  return mpcWalletAccount(await mpcSignup(frame, post))
+/** Create the signed-in user's MPC wallet (Google / email sign-in required), and where the time went. */
+export async function createMpcWallet(): Promise<{ account: WalletAccount; timing: MpcTiming }> {
+  const t = { total: 0, phone: 0, server: 0, other: 0 }
+  timing = t
+  const start = performance.now()
+  try {
+    const account = mpcWalletAccount(await mpcSignup(frame, post))
+    t.total = performance.now() - start
+    t.other = Math.max(0, t.total - t.phone - t.server)
+    return { account, timing: t }
+  } finally { timing = null }
 }

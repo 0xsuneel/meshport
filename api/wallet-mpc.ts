@@ -112,35 +112,55 @@ const STATUS: Record<MpcServiceError['code'], number> = { 'bad-request': 400, 'n
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' })
-  const who = await caller(req)
-  if (!who) return res.status(401).json({ error: 'Sign in first' })
-  const { uid } = who
-  if (!allow(uid)) return res.status(429).json({ error: 'Too many requests - try again in a minute' })
+  // Where the time goes, for every request: Server-Timing (the app shows it)
+  // and one log line. No ids, tokens or boxes are logged.
+  const t0 = performance.now()
   const body = (req.body ?? {}) as Record<string, any>
+  const action = typeof body.action === 'string' ? body.action.slice(0, 20) : '?'
+  const ms = { auth: 0, init: 0, mpc: 0 }
+  const cold = service === null
+  const send = (status: number, payload: unknown) => {
+    const total = performance.now() - t0
+    const d = (n: number) => n.toFixed(0)
+    res.setHeader('Server-Timing', `auth;dur=${d(ms.auth)}, init;dur=${d(ms.init)}, mpc;dur=${d(ms.mpc)}, total;dur=${d(total)}`)
+    console.log(`[wallet-mpc] ${action} ${status} total=${d(total)}ms auth=${d(ms.auth)} init=${d(ms.init)} mpc=${d(ms.mpc)}${cold ? ' cold' : ''}`)
+    return res.status(status).json(payload)
+  }
+
+  let t = performance.now()
+  const who = await caller(req)
+  ms.auth = performance.now() - t
+  if (!who) return send(401, { error: 'Sign in first' })
+  const { uid } = who
+  if (!allow(uid)) return send(429, { error: 'Too many requests - try again in a minute' })
   try {
+    t = performance.now()
     const svc = await getService()
+    ms.init = performance.now() - t
+    t = performance.now()
+    const done = (payload: unknown) => { ms.mpc = performance.now() - t; return send(200, payload) }
     switch (body.action) {
       // For setting VITE_WALLET_MPC_SERVER_KEY at build time; the frame never trusts this at run time.
-      case 'identity': return res.status(200).json({ identityPub: svc.identityPub })
+      case 'identity': return done({ identityPub: svc.identityPub })
       // This account's MPC wallet address, if it has one.
-      case 'wallet': return res.status(200).json({ address: (await repo.activeShare(uid))?.address ?? null })
+      case 'wallet': return done({ address: (await repo.activeShare(uid))?.address ?? null })
       case 'keygen-begin':
         // The share is filed under the account's id; an anonymous session's id
         // is gone when the session resets, and the wallet with it.
-        if (who.anonymous) return res.status(403).json({ error: 'Sign in with Google or email to create this wallet' })
-        return res.status(200).json(await svc.keygenBegin(uid, String(body.phonePub ?? '') as `0x${string}`))
-      case 'keygen-step': return res.status(200).json(await svc.keygenStep(uid, String(body.token ?? ''), String(body.box ?? '')))
+        if (who.anonymous) return send(403, { error: 'Sign in with Google or email to create this wallet' })
+        return done(await svc.keygenBegin(uid, String(body.phonePub ?? '') as `0x${string}`))
+      case 'keygen-step': return done(await svc.keygenStep(uid, String(body.token ?? ''), String(body.box ?? '')))
       case 'sign-begin': {
         const withParty = Number(body.with)
-        if (withParty !== PHONE && withParty !== BACKUP) return res.status(400).json({ error: 'with must be 1 (phone) or 3 (backup)' })
-        return res.status(200).json(await svc.signBegin(uid, { ...hashSignRequest(body.request), with: withParty }, String(body.phonePub ?? '') as `0x${string}`))
+        if (withParty !== PHONE && withParty !== BACKUP) return send(400, { error: 'with must be 1 (phone) or 3 (backup)' })
+        return done(await svc.signBegin(uid, { ...hashSignRequest(body.request), with: withParty }, String(body.phonePub ?? '') as `0x${string}`))
       }
-      case 'sign-step': return res.status(200).json(await svc.signStep(uid, String(body.token ?? ''), String(body.box ?? '')))
-      default: return res.status(400).json({ error: 'Unknown action' })
+      case 'sign-step': return done(await svc.signStep(uid, String(body.token ?? ''), String(body.box ?? '')))
+      default: return send(400, { error: 'Unknown action' })
     }
   } catch (e) {
-    if (e instanceof MpcServiceError) return res.status(STATUS[e.code]).json({ error: e.message, code: e.code })
+    if (e instanceof MpcServiceError) return send(STATUS[e.code], { error: e.message, code: e.code })
     console.error('[wallet-mpc]', e instanceof Error ? e.message : e)
-    return res.status(500).json({ error: 'MPC wallet error' })
+    return send(500, { error: 'MPC wallet error' })
   }
 }

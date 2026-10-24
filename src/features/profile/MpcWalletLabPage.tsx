@@ -6,7 +6,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { copyToClipboard } from '@/lib/utils'
 import { arcTestnet } from '@/lib/chain'
 import { arcTransport, ARC_EXPLORER } from '@/lib/arc'
-import { createMpcWallet, getMpcWallet, mpcWalletAccount, walletStatus } from '@/wallet'
+import { createMpcWallet, getMpcWallet, mpcWalletAccount, walletStatus, type MpcTiming } from '@/wallet'
 
 // ── Keyless wallet (testnet) ──────────────────────────────────────────────────
 // Profile → Support → Keyless wallet (testnet). A place to try the MPC wallet
@@ -30,6 +30,7 @@ export function MpcWalletLabPage() {
   const [to, setTo] = useState('')
   const [amount, setAmount] = useState('0.01')
   const [txHash, setTxHash] = useState<Hex | null>(null)
+  const [timing, setTiming] = useState<MpcTiming | null>(null)
 
   const refreshBalance = useCallback(async (a: Hex) => {
     try {
@@ -61,7 +62,8 @@ export function MpcWalletLabPage() {
   async function create() {
     setError(null); setPhase('creating')
     try {
-      const account = await createMpcWallet()
+      const { account, timing: t } = await createMpcWallet()
+      setTiming(t)
       setAddress(account.address)
       setPhase('ready')
       refreshBalance(account.address)
@@ -160,6 +162,12 @@ export function MpcWalletLabPage() {
           <>
             <div className="bg-surface border border-border rounded-3xl p-5 space-y-3">
               <div className="flex items-center gap-2 text-success text-sm font-semibold"><ShieldCheck className="w-4 h-4" /> Keyless wallet ready</div>
+              {timing && (
+                <p className="text-xs text-text-secondary">
+                  Created in {(timing.total / 1000).toFixed(1)} s - this phone {(timing.phone / 1000).toFixed(1)} s ·
+                  MeshPort {(timing.server / 1000).toFixed(1)} s · network &amp; loading {(timing.other / 1000).toFixed(1)} s
+                </p>
+              )}
               <div className="flex items-start gap-2">
                 <p className="text-sm text-text-primary font-mono break-all flex-1">{address}</p>
                 <button className="back-btn" aria-label="Copy address" onClick={() => copyToClipboard(address)}><Copy className="w-4 h-4 text-text-secondary" /></button>
