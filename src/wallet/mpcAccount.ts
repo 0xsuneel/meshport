@@ -93,6 +93,11 @@ export async function getMpcWallet(): Promise<Hex | null> {
   return (await post({ action: 'wallet' })).address ?? null
 }
 
+/** Get the MPC wallet ready to sign (worker, module, share) - call when a screen that may sign opens. */
+export function mpcWarm(address?: string): Promise<void> {
+  return callWallet('mpc:warm', { address }).then(() => undefined, () => undefined)
+}
+
 /** Speed check: how long this device takes for a full 3-party key generation (no network). */
 export function mpcSpeedCheck(): Promise<{ ms: number; cores: number }> {
   return callWallet('mpc:benchmark', {})

@@ -52,3 +52,16 @@ describe('frame ↔ signing service channel', () => {
     await expect(verifyHello(other.pub, 'keygen', sid, phone.pub, server.pub, sig)).rejects.toBeInstanceOf(ChannelError)
   })
 })
+
+describe('box compression', () => {
+  it('deflates JSON before encryption, and still reads plain JSON from older builds', async () => {
+    const { packJson, unpackJson } = await import('./channel')
+    // Like an MPC message: bytes written as decimal numbers.
+    const msg = { body: Array.from(crypto.getRandomValues(new Uint8Array(50_000))) }
+    const packed = await packJson(msg)
+    expect(packed[0]).toBe(1)
+    expect(packed.length).toBeLessThan(JSON.stringify(msg).length / 2.5)
+    expect(await unpackJson(packed)).toEqual(msg)
+    expect(await unpackJson(new TextEncoder().encode(JSON.stringify(msg)))).toEqual(msg) // older, plain
+  })
+})

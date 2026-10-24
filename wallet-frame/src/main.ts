@@ -295,6 +295,15 @@ const handlers: Handlers = {
 
   async 'mpc:benchmark'() { return mpcCall('benchmark') },
 
+  async 'mpc:warm'({ address }) {
+    const ready = mpcCall<{ ok: true }>('warm')
+    if (address && !openMpcShares.has(address.toLowerCase())) {
+      const share = await vault.mpcShare(address).catch(() => null)
+      if (share) openMpcShares.set(address.toLowerCase(), share)
+    }
+    return ready
+  },
+
   async 'passkey:result'({ ticket }) {
     const c = ceremonies.get(ticket)
     if (!c) return { status: 'error' as const, message: 'This passkey request has expired - try again' }

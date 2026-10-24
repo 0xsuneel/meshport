@@ -50,6 +50,8 @@ export interface MpcEngine {
    * Says how fast this device runs the MPC module (no keys are kept).
    */
   benchmark(): Promise<{ ms: number; cores: number }>
+  /** Load and compile the module now, so the first signature doesn't wait for it. */
+  warm(): Promise<{ ok: true }>
   /** sign-begin's reply → a box; sign-step's reply → the signature. */
   signNext(session: string, reply: { signId?: Hex; hash?: Hex; hello?: ServerHello; box: string }): Promise<{ box: string } | { signature: EcdsaSig }>
 }
@@ -116,6 +118,11 @@ export function createMpcEngine(opts: {
       const e = get(keygens, session)
       keygens.delete(session)
       return { address: e.k.finish({ address }).address }
+    },
+
+    async warm() {
+      await opts.mpc()
+      return { ok: true as const }
     },
 
     async benchmark() {

@@ -7,7 +7,7 @@ import { copyToClipboard } from '@/lib/utils'
 import { arcTestnet } from '@/lib/chain'
 import { arcRpcJson, arcTransport, ARC_EXPLORER } from '@/lib/arc'
 import { relaySend } from '@/lib/arcService'
-import { createMpcWallet, getMpcWallet, mpcSpeedCheck, mpcWalletAccount, walletStatus, withMpcTiming, type MpcTiming } from '@/wallet'
+import { createMpcWallet, getMpcWallet, mpcSpeedCheck, mpcWalletAccount, mpcWarm, walletStatus, withMpcTiming, type MpcTiming } from '@/wallet'
 
 // ── Keyless wallet (testnet) ──────────────────────────────────────────────────
 // Profile → Support → Keyless wallet (testnet). A place to try the MPC wallet
@@ -61,7 +61,8 @@ export function MpcWalletLabPage() {
         const here = await walletStatus(a).then(s => s.mpc).catch(() => false)
         if (cancelled) return
         setPhase(here ? 'ready' : 'elsewhere')
-        if (here) refreshBalance(a)
+        // Load the signing engine now, so the first signature doesn't wait for it.
+        if (here) { refreshBalance(a); void mpcWarm(a) }
       } catch (e) {
         if (!cancelled) { setError(errorText(e)); setPhase('none') }
       }
