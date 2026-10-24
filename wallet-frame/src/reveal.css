@@ -11,3 +11,4 @@ main { padding: 12px; }
 .copy { width: 100%; border: 0; border-radius: 10px; padding: 10px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
 .error { color: var(--danger); margin: 0; }
 .muted { color: var(--muted); margin: 0; }
+.muted + .copy { margin-top: 12px; }

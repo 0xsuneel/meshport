@@ -77,3 +77,38 @@ describe('wallet frame transport', () => {
     expect(r!.msg.error.message).not.toContain('test test')
   })
 })
+
+describe('passkey ceremonies (passkey.html ↔ frame)', () => {
+  const challenge = ('0x' + 'ab'.repeat(32)) as `0x${string}`
+  // passkey.html's side of the same-origin channel.
+  async function page(ticket: string, outcome?: unknown) {
+    const { PASSKEY_CHANNEL } = await import('@/wallet/protocol')
+    const ch = new BroadcastChannel(PASSKEY_CHANNEL)
+    const reply = new Promise<any>(res => { ch.onmessage = (e) => { if (e.data?.type === 'request' && e.data.ticket === ticket) res(e.data) } })
+    ch.postMessage({ type: 'claim', ticket })
+    const got = await reply
+    if (outcome && got.request) ch.postMessage({ type: 'outcome', ticket, outcome })
+    await new Promise(r => setTimeout(r, 20))
+    ch.close()
+    return got
+  }
+
+  it('validates requests', async () => {
+    expect((await ask('passkey:begin', { mode: 'sign', credentialId: 'abc', challenge: '0x1234' }))!.msg.error.code).toBe('invalid')
+    expect((await ask('passkey:begin', { mode: 'create', userId: '', userName: 'a' }))!.msg.error.code).toBe('invalid')
+    expect((await ask('passkey:begin', { mode: 'export' }))!.msg.error.code).toBe('invalid')
+  })
+
+  it('hands the request to the first page only, and the outcome to the app once', async () => {
+    const { ticket } = (await ask('passkey:begin', { mode: 'sign', credentialId: 'abc', challenge, label: 'Pay 5 USDC' }))!.msg.result
+    expect(ticket).toMatch(/^0x[0-9a-f]{32}$/)
+    expect((await ask('passkey:result', { ticket }))!.msg.result).toEqual({ status: 'pending' })
+
+    const first = await page(ticket, { status: 'signed', signature: '0x1234' })
+    expect(first.request).toEqual({ mode: 'sign', credentialId: 'abc', challenge, label: 'Pay 5 USDC' })
+    expect((await page(ticket)).error).toBe('expired') // a second page can't take it over
+
+    expect((await ask('passkey:result', { ticket }))!.msg.result).toEqual({ status: 'signed', signature: '0x1234' })
+    expect((await ask('passkey:result', { ticket }))!.msg.result.status).toBe('error') // single use
+  })
+})
