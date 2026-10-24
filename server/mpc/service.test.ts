@@ -5,7 +5,8 @@ import { keccak256, parseGwei, recoverTransactionAddress, serializeTransaction, 
 import { loadMpc, type Mpc } from '../../src/wallet/mpc/wasm'
 import { PHONE, SERVER, type Hex, type KeyShare } from '../../src/wallet/mpc/protocol'
 import { ChannelError } from '../../src/wallet/mpc/channel'
-import { PhoneKeygen, PhoneSign } from '../../src/wallet/mpc/phone'
+import { PhoneKeygen, PhoneSign, type KeygenOffload } from '../../src/wallet/mpc/phone'
+import { keygenStep } from '../../src/wallet/mpc/protocol'
 import { createMpcService, STATE_TTL_MS, type MpcRepo, type MpcService } from './service'
 
 const json = <T>(v: T): T => JSON.parse(JSON.stringify(v)) // every HTTP body
@@ -37,8 +38,8 @@ let svc: MpcService
 const SECRET = crypto.getRandomValues(new Uint8Array(32))
 
 /** Signup as the wallet frame does it; counts the HTTP requests. */
-async function signup(uid: string) {
-  const phone = new PhoneKeygen(mpc, svc.identityPub)
+async function signup(uid: string, offload?: KeygenOffload) {
+  const phone = new PhoneKeygen(mpc, svc.identityPub, offload)
   let requests = 1
   const begin = json(await svc.keygenBegin(uid, phone.phonePub))
   let box = await phone.begin(begin)
@@ -84,6 +85,24 @@ describe('MPC signing service (MeshPort = party 2) with the wallet frame', () =>
     expect(row.shareCt).not.toContain('party_index') // encrypted, not the share JSON
     expect(row.shareCt.length).toBeGreaterThan(100_000)
   })
+
+  it('signup with the backup party offloaded (second core) gives a working wallet', async () => {
+    const calls: number[] = []
+    // As the frame's helper worker does it: a separate, asynchronous run of each step.
+    const offload: KeygenOffload = async (state, inbox) => {
+      calls.push(state.i)
+      await new Promise(r => setTimeout(r, 0))
+      return keygenStep(mpc, JSON.parse(JSON.stringify(state)), JSON.parse(JSON.stringify(inbox)))
+    }
+    const w = await signup('uid-offload', offload)
+    expect(w.requests).toBe(3)
+    expect(calls.length).toBe(3)            // every step of the backup party
+    expect(new Set(calls)).toEqual(new Set([3]))
+    const tx = arcTx(2)
+    const { sig } = await cosign('uid-offload', w.backup, keccak256(serializeTransaction(tx)))
+    const signed = serializeTransaction(tx, { r: sig.r, s: sig.s, yParity: sig.v - 27 })
+    expect((await recoverTransactionAddress({ serializedTransaction: signed })).toLowerCase()).toBe(w.address)
+  }, 120_000)
 
   it('a second signup for the same account is refused', async () => {
     await expect(svc.keygenBegin('uid-ravi', new PhoneKeygen(mpc, svc.identityPub).phonePub)).rejects.toMatchObject({ code: 'exists' })

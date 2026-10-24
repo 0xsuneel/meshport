@@ -20,6 +20,13 @@ export interface ServerHello { serverPub: Hex; sig: Hex }
 
 const LOCAL = [PHONE, BACKUP] as const
 
+/**
+ * Runs one key-generation step somewhere else - in the frame, a second Web
+ * Worker - so the backup party's work uses another CPU core while the phone
+ * party's runs here. Same inputs and output as keygenStep.
+ */
+export type KeygenOffload = (state: KeygenState, inbox: MpcMsg[]) => Promise<ReturnType<typeof keygenStep>>
+
 /** Signup. One instance per attempt; throw it away on any error. */
 export class PhoneKeygen {
   private eph = newEphemeral()
@@ -30,7 +37,8 @@ export class PhoneKeygen {
   private done = new Map<PartyNo, { share: KeyShare; address: Hex }>()
   private step = 0
 
-  constructor(private mpc: Mpc, private identityPub: Hex) {}
+  /** `offload`: where the backup party's steps run (default: here, after the phone's). */
+  constructor(private mpc: Mpc, private identityPub: Hex, private offload?: KeygenOffload) {}
 
   /** Send with keygen-begin. */
   get phonePub(): Hex { return this.eph.pub }
@@ -76,17 +84,22 @@ export class PhoneKeygen {
   private async run(sent: MpcMsg[]): Promise<string> {
     this.mail.push(...sent.filter(m => m.to !== SERVER))
     const toServer = sent.filter(m => m.to === SERVER)
-    let progressed = true
-    while (progressed) {
-      progressed = false
-      for (const p of LOCAL) {
-        const st = this.states.get(p)
-        if (!st || !keygenReady(st, this.mail)) continue
-        const r = keygenStep(this.mpc, st, this.mail)
+    for (;;) {
+      // Both local parties' next steps need only earlier rounds' messages, so
+      // they can run at the same time: the backup's goes to `offload` first,
+      // then the phone's runs here while it works.
+      const ready = LOCAL.filter(p => { const st = this.states.get(p); return !!st && keygenReady(st, this.mail) })
+      if (!ready.length) break
+      const inbox = [...this.mail]
+      const runs = [...ready].sort((a, b) => (a === BACKUP ? -1 : b === BACKUP ? 1 : 0)).map(p => {
+        const st = this.states.get(p)!
+        const r = p === BACKUP && this.offload ? this.offload(st, inbox) : Promise.resolve(keygenStep(this.mpc, st, inbox))
+        return r.then(res => [p, res] as const)
+      })
+      for (const [p, r] of await Promise.all(runs)) {
         this.mail.push(...r.out.filter(m => m.to !== SERVER))
         toServer.push(...r.out.filter(m => m.to === SERVER))
         if (r.done) { this.done.set(p, r.done); this.states.delete(p) } else this.states.set(p, r.state)
-        progressed = true
       }
     }
     this.step += 1
