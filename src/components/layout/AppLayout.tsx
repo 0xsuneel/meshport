@@ -157,7 +157,7 @@ export function AppLayout() {
     }
   }, [walletAddress])
 
-  const bindKey = useAuthStore(s => s.privateKey)
+  const bindKey = useAuthStore(s => s.signer)
   useEffect(() => {
     if (!userId || !bindKey) return
     syncAuthUidToProfile(userId, bindKey)
@@ -399,7 +399,7 @@ export function AppLayout() {
   // locked (reload, passcode not entered yet), and publishing only then left
   // accounts stuck with a missing or outdated chat key that nobody could
   // decrypt their messages with.
-  const walletUnlocked = useAuthStore(s => !!s.privateKey)
+  const walletUnlocked = useAuthStore(s => !!s.signer)
   useEffect(() => {
     if (!walletAddress || !chatUserId) return
     import('@/lib/chatCrypto').then(({ ensureChatKeysReady }) =>
@@ -435,22 +435,22 @@ export function AppLayout() {
   // pattern as the claim-recovery-scan above (mount + tab refocus) and for
   // the same reason: this is what makes the recovery "automatic" from the
   // user's side without needing a server that holds their key. Needs
-  // privateKey, not just walletAddress - removeFund() is a signed
+  // signer, not just walletAddress - removeFund() is a signed
   // transaction from the original depositing wallet, so this can only run
   // while the wallet is actually unlocked in this session.
-  const privateKey = useAuthStore(s => s.privateKey)
+  const signer = useAuthStore(s => s.signer)
   useEffect(() => {
-    if (!walletAddress || !privateKey) return
+    if (!walletAddress || !signer) return
     const runCheck = () => {
       import('@/lib/ubFundRecovery').then(({ checkAndCompleteUBRecoveries }) =>
-        checkAndCompleteUBRecoveries({ walletAddress, privateKey })
+        checkAndCompleteUBRecoveries({ walletAddress, signer })
       ).catch(() => { /* best-effort - will retry on next trigger */ })
     }
     runCheck()
     const onVisible = () => { if (document.visibilityState === 'visible') runCheck() }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [walletAddress, privateKey])
+  }, [walletAddress, signer])
 
   // ── Auto-finish Unified Balance claims (Bring Funds via UB) ────────────────
   // Sweeps confirmed Unified Balance on other chains into the Arc wallet -
@@ -458,7 +458,7 @@ export function AppLayout() {
   // every 90s while visible, so a claim left mid-way (page closed, phone
   // locked during the 15-min finality wait) still lands on Arc by itself.
   useEffect(() => {
-    if (!walletAddress || !privateKey) return
+    if (!walletAddress || !signer) return
     const run = () => {
       if (document.visibilityState !== 'visible') return
       // Very slow network: sending now could time out mid-way - the next
@@ -468,7 +468,7 @@ export function AppLayout() {
         // Merchants too: this only finishes money already on other chains
         // (Unified Balance). Customer payments sitting in the wallet on other
         // chains wait for the merchant's Claim All - nothing collects them.
-        const n = await autoFinishUbClaims({ walletAddress, privateKey })
+        const n = await autoFinishUbClaims({ walletAddress, signer })
         if (n > 0) {
           try {
             const { readUSDCBalanceOrThrow } = await import('@/lib/arcService')
@@ -483,7 +483,7 @@ export function AppLayout() {
     document.addEventListener('visibilitychange', onVisible)
     const offReconnect = onReconnect(run) // back online: finish claims now, not on the next tick
     return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVisible); offReconnect() }
-  }, [walletAddress, privateKey])
+  }, [walletAddress, signer])
 
   // ── Keep retrying wallet key restoration in the background ─────────────────
   // restorePrivateKey() (see lib/restoreWallet.ts) already retries a failed
@@ -494,7 +494,7 @@ export function AppLayout() {
   // no local mnemonic to fall back to), so a single bad moment on a weak
   // connection could leave the wallet permanently "not recovered" for the
   // rest of the session with no further attempt ever made. This keeps
-  // trying every 20s for as long as walletAddress exists but privateKey
+  // trying every 20s for as long as walletAddress exists but signer
   // doesn't - stops immediately once it succeeds (the interval callback's
   // own live check does this, nothing else needed beyond unmount cleanup).
   //
@@ -525,7 +525,7 @@ export function AppLayout() {
   // needs the passcode, the normal unlock flow asks - no banner from here).
   const navigateApp = useNavigate()
   useEffect(() => {
-    if (!walletAddress || useAuthStore.getState().privateKey) return
+    if (!walletAddress || useAuthStore.getState().signer) return
     import('@/lib/restoreWallet')
       .then(async ({ restorePrivateKey, needsSocialUnlock }) => {
         const ok = await restorePrivateKey(undefined, { silent: walletSource !== 'social-auto' })
@@ -536,9 +536,9 @@ export function AppLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walletAddress, walletSource])
   useEffect(() => {
-    if (!walletAddress || privateKey || walletSource !== 'social-auto') return
+    if (!walletAddress || signer || walletSource !== 'social-auto') return
     const interval = setInterval(() => {
-      const { walletAddress: addr, privateKey: key, walletSource: src } = useAuthStore.getState()
+      const { walletAddress: addr, signer: key, walletSource: src } = useAuthStore.getState()
       if (!addr || key || src !== 'social-auto') return // already restored (or logged out, or not social-auto) - nothing to do
       import('@/lib/restoreWallet').then(({ restorePrivateKey, needsSocialUnlock }) => {
         if (needsSocialUnlock()) return // only a tap (passkey / QR) can open it - nothing to retry
@@ -546,7 +546,7 @@ export function AppLayout() {
       }).catch(() => {})
     }, 20000)
     return () => clearInterval(interval)
-  }, [walletAddress, privateKey, walletSource])
+  }, [walletAddress, signer, walletSource])
 
   // Google / email wallets are self-custodial: until the account has a
   // passkey or a Recovery QR, losing this device would lose the wallet, so
@@ -558,7 +558,7 @@ export function AppLayout() {
   const [securedOk, setSecuredOk] = useState(() => !userId || knownSecured(userId))
   useEffect(() => { if (userId && knownSecured(userId)) setSecuredOk(true) }, [userId])
   useEffect(() => {
-    if (!isSocialWallet || !privateKey || !userId) return
+    if (!isSocialWallet || !signer || !userId) return
     let cancelled = false
     getWalletSecurityStatus(userId).then(status => {
       if (cancelled) return
@@ -567,11 +567,11 @@ export function AppLayout() {
     }).catch(() => { if (!cancelled) setSecuredOk(true) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSocialWallet, privateKey, userId])
+  }, [isSocialWallet, signer, userId])
   // Google / email account whose wallet isn't open yet (or not yet secured):
   // show no app page at all - not even Home - until it's unlocked with the
   // passkey / Recovery QR (or opened from this device's copy on a reload).
-  const holdForWallet = isSocialWallet && (!privateKey || !securedOk)
+  const holdForWallet = isSocialWallet && (!signer || !securedOk)
 
   // ── Real-time deposit detection - REMOVED, superseded by Phase 5/6 ─────────
   // This used to open a persistent Alchemy WebSocket to Arc
@@ -828,10 +828,13 @@ function DeviceKeyNotice() {
     setLost(false)
     if (!walletAddress || walletSource === 'social-auto') return
     let cancelled = false
-    import('@/lib/security').then(async ({ bindWalletToDevice, isDeviceBindingLost }) => {
+    // Old app-side copies (before the wallet frame) still get checked until
+    // they're moved; the frame reports its own device-sealed copy.
+    Promise.all([import('@/lib/security'), import('@/wallet')]).then(async ([{ bindWalletToDevice, isDeviceBindingLost }, { walletStatus }]) => {
       await bindWalletToDevice(walletAddress) // existing backed-up wallets get bound on open
-      const l = await isDeviceBindingLost(walletAddress)
-      if (!cancelled) setLost(l)
+      const legacyLost = await isDeviceBindingLost(walletAddress)
+      const frameLost = await walletStatus(walletAddress).then(s => s.bindingLost).catch(() => false)
+      if (!cancelled) setLost(legacyLost || frameLost)
     }).catch(() => {})
     return () => { cancelled = true }
   }, [walletAddress, walletSource])

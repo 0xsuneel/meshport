@@ -82,83 +82,10 @@ export async function arcRpcJson(body: unknown, timeoutMs = 10000): Promise<any>
 // second, separate seed-derivation function around risked exactly the
 // kind of silent mismatch this whole fix was for.
 
-// ─── Derive real EVM wallet from a BIP39 mnemonic via standard BIP32/BIP44 ────
-// (m/44'/60'/0'/0/0) - the same derivation path every mainstream wallet
-// (MetaMask, Rabby, Trust, etc.) uses for the first account of a seed
-// phrase. This REPLACES a previous implementation that took the first 32
-// bytes of the raw PBKDF2 seed directly as the private key - that produced
-// a technically-valid keypair, but a DIFFERENT address than any standard
-// wallet would derive from the exact same 12-word phrase. That meant a
-// MeshPort-generated mnemonic imported into MetaMask/Rabby (or vice versa)
-// silently landed on a different account, with no error to signal it -
-// only a mismatched address the user had to notice themselves. Using
-// ethers' HDNodeWallet here (ethers is already a project dependency) makes
-// every mnemonic this app generates or imports fully portable with every
-// other standard wallet, both directions.
-async function seedToWallet(mnemonic: string): Promise<{ privateKey: string; address: string }> {
-  const { HDNodeWallet, Mnemonic } = await import('ethers')
-  const mnemonicObj = Mnemonic.fromPhrase(mnemonic.trim().toLowerCase())
-  const hdNode = HDNodeWallet.fromMnemonic(mnemonicObj, "m/44'/60'/0'/0/0")
-  return { privateKey: hdNode.privateKey, address: hdNode.address }
-}
-
-// ─── Public: derive real EVM address from any private key ─────────────────────
-// This is the canonical address for a given key - always matches what viem uses
-export async function deriveAddressFromPrivateKey(privateKey: string): Promise<string> {
-  const { privateKeyToAccount } = await import('viem/accounts')
-  const key = (privateKey.startsWith('0x') ? privateKey : '0x' + privateKey) as `0x${string}`
-  const account = privateKeyToAccount(key)
-  return account.address
-}
-
-// ─── Public: generate new BIP39 wallet ────────────────────────────────────────
-// Used to build the mnemonic itself via a hand-rolled entropy→words bit-slice
-// against this repo's own BIP39_WORDLIST - which turned out to have only
-// 1915 of the required 2048 words (a corrupted/incomplete copy of the
-// standard list). That silently shifted which word each 11-bit chunk mapped
-// to, so a "valid-looking" 12-word mnemonic (all words defined, non-empty -
-// the only thing that custom wordlist could actually check) could still not
-// match the REAL BIP39 checksum. seedToWallet() below re-validates via
-// ethers' Mnemonic.fromPhrase() against ethers' own complete, correct
-// wordlist, which then correctly threw "invalid mnemonic checksum" - as an
-// uncaught rejection, since that call wasn't wrapped in try/catch. Now
-// building the mnemonic via ethers' own Mnemonic.fromEntropy() directly:
-// same entropy source, but checksummed against the one complete wordlist
-// everything else in this file already trusts, instead of a second,
-// independently-maintained copy that can drift out of sync.
-export async function generateWallet(): Promise<{ address: string; privateKey: string; mnemonic: string }> {
-  const { Mnemonic, HDNodeWallet } = await import('ethers')
-  const entropy = crypto.getRandomValues(new Uint8Array(16))
-  const mnemonicObj = Mnemonic.fromEntropy(entropy)
-  const hdNode = HDNodeWallet.fromMnemonic(mnemonicObj, "m/44'/60'/0'/0/0")
-  return { address: hdNode.address, privateKey: hdNode.privateKey, mnemonic: mnemonicObj.phrase }
-}
-
-// ─── Public: import from BIP39 mnemonic ───────────────────────────────────────
-export async function importFromMnemonic(mnemonic: string): Promise<{ address: string; privateKey: string } | null> {
-  const words = mnemonic.trim().split(/\s+/)
-  if (![12, 15, 18, 21, 24].includes(words.length)) return null
-  // ethers' Mnemonic.fromPhrase validates the real BIP39 checksum against
-  // the full standard wordlist - a strictly correct check our own
-  // wordlist file can't fully replicate - so an invalid/mistyped phrase
-  // now fails here explicitly instead of silently deriving *some*
-  // technically-valid-looking but wrong keypair.
-  try {
-    const result = await seedToWallet(words.join(' '))
-    return result
-  } catch { return null }
-}
-
-// ─── Public: import from private key (uses viem for real address) ─────────────
-export async function importFromPrivateKey(pk: string): Promise<{ address: string; privateKey: string } | null> {
-  try {
-    const key = (pk.startsWith('0x') ? pk.trim() : '0x' + pk.trim()) as `0x${string}`
-    if (!/^0x[0-9a-fA-F]{64}$/.test(key)) return null
-    const { privateKeyToAccount } = await import('viem/accounts')
-    const account = privateKeyToAccount(key)
-    return { address: account.address, privateKey: key }
-  } catch { return null }
-}
+// Wallet keys are made, imported and derived only inside the wallet frame
+// (wallet-frame/src/main.ts, src/wallet): m/44'/60'/0'/0/0 with a real BIP-39
+// checksum, so a MeshPort phrase opens the same account in MetaMask, Rabby,
+// Trust etc. and vice versa (wallet-frame/src/derivation.test.ts pins this).
 
 // ─── Validate mnemonic ────────────────────────────────────────────────────────
 export function validateMnemonic(mnemonic: string): { valid: boolean; invalidWords: string[]; wordCount: number } {

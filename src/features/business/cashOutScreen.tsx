@@ -21,7 +21,7 @@ import {
   CashOutAmountCard, CashOutPickRow, BuyerList, PayoutAccountList, PayoutAccountForm, CashOutTracker, CashOutChat, CashOutHistoryList,
   type PayoutMethod, type TradeStage, type CashOutHistoryStatus,
 } from './ui'
-import { unlockKey } from './settlement'
+import { unlockSigner } from './settlement'
 import { usePasscodeGate } from './passcodeGate'
 
 const money = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -109,7 +109,7 @@ export function CashOutScreen({ open, onBack }: { open: boolean; onBack: () => v
     gate.ask('Confirm cash out', `Lock ${money(value)} for ${inr(value * buyer.offer.pricePerUsdc)} to ${paymentMethodSummary(chosenAccount)}`, async code => {
       setBusy(true)
       try {
-        await unlockKey(code)
+        await unlockSigner(code)
         const t = await startCashOut({ buyer, userId: user.id, wallet, amountUsdc: value, account: chosenAccount })
         refreshBalancesAfterTx(wallet, { spent: value })
         setNames(m => new Map(m).set(t.buyerId, buyerName(buyer)))

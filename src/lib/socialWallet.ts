@@ -7,50 +7,17 @@
 //        ├─ passkeys (walletPasskey.ts)  - unlock on any device they sync to
 //        └─ Recovery QR (recoveryQr.ts) - unlock anywhere with the password
 //
-// The wallet key is made on the device and never sent to MeshPort. On THIS
-// device a copy is kept sealed with the browser's non-extractable device key
-// (security.ts sealForDevice), so a reload doesn't need Face ID or the QR -
-// the same layer the chat identity uses. Logout removes it.
+// The wallet key is made on the device, inside the wallet frame (src/wallet),
+// and never sent to MeshPort. The frame keeps THIS device's copy sealed with
+// its own non-extractable device key, so a reload doesn't need Face ID or the
+// QR; logout removes it. What's left here is the account's security status.
 
 import { supabase } from './supabase'
 
 const DEVICE_COPY_PREFIX = 'meshport_social_dv_'
 const SECURED_PREFIX = 'meshport_social_secured_'
 
-async function addressOf(privateKey: string): Promise<string> {
-  const { privateKeyToAccount } = await import('viem/accounts')
-  return privateKeyToAccount(privateKey as `0x${string}`).address
-}
-
-/** A brand-new wallet key, made on this device (never by MeshPort's servers). */
-export async function createLocalWallet(): Promise<{ address: string; privateKey: string }> {
-  const { generatePrivateKey } = await import('viem/accounts')
-  const privateKey = generatePrivateKey()
-  return { address: await addressOf(privateKey), privateKey }
-}
-
-/** Keep this device's sealed copy so a reload opens the wallet directly. */
-export async function saveDeviceCopy(walletAddress: string, privateKey: string): Promise<void> {
-  try {
-    const { sealForDevice } = await import('./security')
-    const sealed = await sealForDevice(privateKey)
-    if (sealed) localStorage.setItem(DEVICE_COPY_PREFIX + walletAddress.toLowerCase(), sealed)
-  } catch { /* storage blocked - the wallet then opens with the passkey / QR */ }
-}
-
-/** This device's copy of the wallet key, if it has one and it's this wallet's. */
-export async function loadDeviceCopy(walletAddress: string): Promise<string | null> {
-  try {
-    const sealed = localStorage.getItem(DEVICE_COPY_PREFIX + walletAddress.toLowerCase())
-    if (!sealed) return null
-    const { openFromDevice } = await import('./security')
-    const pk = await openFromDevice(sealed)
-    if (!pk) return null
-    return (await addressOf(pk)).toLowerCase() === walletAddress.toLowerCase() ? pk : null
-  } catch { return null }
-}
-
-/** Logout: forget every device copy and cached status. */
+/** Logout: forget the cached status (and any device copy left from before the wallet frame). */
 export function clearSocialDeviceState(): void {
   try {
     for (let i = localStorage.length - 1; i >= 0; i--) {

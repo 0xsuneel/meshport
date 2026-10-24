@@ -125,7 +125,7 @@ export function PasscodeSetupPage() {
         // Google / email accounts: the wallet opens only with the
         // passkey or Recovery QR on a new sign-in - go straight there.
         const st = useAuthStore.getState()
-        if (st.loginType === 'social' && st.walletSource === 'social-auto' && !st.privateKey) {
+        if (st.loginType === 'social' && st.walletSource === 'social-auto' && !st.signer) {
           navigateRef.current('/auth/recover-wallet', { replace: true })
           return
         }
@@ -322,9 +322,9 @@ export function PasscodeLockPage() {
       // Skip (or a cancelled OS prompt), and hasBiometricRegistered (via
       // canUseBiometric) for why this stops for good once actually
       // enabled. That pair already prevents repeat-nagging on its own, so
-      // this no longer also gates on privateKey being null.
+      // this no longer also gates on signer being null.
       //
-      // BUG FIX - it used to also require `!privateKey`, meant to detect a
+      // BUG FIX - it used to also require `!signer`, meant to detect a
       // genuine fresh login (key actually cleared, e.g. by logout()) vs a
       // routine re-lock (offline / browser closed) where the key stays in
       // memory. That worked by accident for import-privkey/social-auto,
@@ -332,7 +332,7 @@ export function PasscodeLockPage() {
       // still in flight when this runs - but for create/import-seed
       // wallets, App.tsx's mount-time restore derives the key from the
       // mnemonic synchronously, no network, and reliably finishes BEFORE
-      // the user is even done typing their unlock passcode. `privateKey`
+      // the user is even done typing their unlock passcode. `signer`
       // was therefore already populated here on every seed-phrase unlock,
       // permanently and silently skipping the offer for that wallet type
       // only - never for import-privkey or social-auto, which is exactly

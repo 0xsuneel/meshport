@@ -75,7 +75,6 @@ function SpeedTag({ fast, on }: { fast: boolean; on: boolean }) {
 interface SdkModules {
   AppKit: any
   KitError: any
-  createEthersAdapterFromPrivateKey: any
   JsonRpcProvider: any
   FallbackProvider: any
 }
@@ -91,12 +90,13 @@ async function loadSdkModules(): Promise<SdkModules> {
     return new Promise(res => _sdkCallbacks.push(() => res(_sdkModules!)))
   }
   _sdkLoading = true
-  const [{ AppKit, KitError }, { createEthersAdapterFromPrivateKey }, { JsonRpcProvider, FallbackProvider }] = await Promise.all([
+  // adapter-ethers-v6 is loaded (unused here) so createWalletAdapter finds it cached.
+  const [{ AppKit, KitError }, , { JsonRpcProvider, FallbackProvider }] = await Promise.all([
     import('@circle-fin/app-kit'),
     import('@circle-fin/adapter-ethers-v6'),
     import('ethers'),
   ])
-  _sdkModules = { AppKit, KitError, createEthersAdapterFromPrivateKey, JsonRpcProvider, FallbackProvider }
+  _sdkModules = { AppKit, KitError, JsonRpcProvider, FallbackProvider }
   _sdkLoading = false
   _sdkCallbacks.splice(0).forEach(cb => cb())   // wake up any waiters
   return _sdkModules
@@ -557,7 +557,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   }, [])
   const { balance } = useWalletStore()
   const storedPasscode = useAuthStore(s => s.passcode)
-  const privateKey = useAuthStore(s => s.privateKey)
+  const signer = useAuthStore(s => s.signer)
   const senderAddress = useAuthStore(s => s.walletAddress)
   const { showToastMessage } = useUIStore()
 
@@ -1249,23 +1249,24 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const fetchFeeEstimate = async (silent = false): Promise<FeeEstimate | null> => {
     if (!numAmount || !address || !senderAddress) return null
     const requestKey = feeRequestKey
-    // Use privateKey if available, otherwise try to restore from mnemonic
-    let activeKey = privateKey
+    // The open wallet if there is one, otherwise ask the wallet frame to open it
+    let activeKey = signer
     if (!activeKey) {
       try {
         const { restorePrivateKey } = await import('@/lib/restoreWallet')
         await restorePrivateKey(undefined)
-        activeKey = useAuthStore.getState().privateKey
+        activeKey = useAuthStore.getState().signer
       } catch {}
     }
     if (!activeKey) return null
     if (!silent) setFeeEstimate(f => ({ ...f, loading: true, error: '' }))
     try {
-      const { AppKit, createEthersAdapterFromPrivateKey, JsonRpcProvider, FallbackProvider } = await loadSdkModules()
+      const { AppKit, JsonRpcProvider, FallbackProvider } = await loadSdkModules()
+      const { createWalletAdapter } = await import('@/wallet')
 
       const kit = new AppKit({ disableErrorReporting: true } as any)
-      const adapter = createEthersAdapterFromPrivateKey({
-        privateKey: activeKey,
+      const adapter = await createWalletAdapter({
+        account: activeKey,
         getProvider: ({ chain: sdkChain }: any) => {
           const rpcUrl: string | undefined = sdkChain?.rpcEndpoints?.[0]
           // The SDK always hands us a single default endpoint for Arc
@@ -1574,12 +1575,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     // even start. Step 4 reuses this promise instead of decrypting a
     // second time; falls back to its own inline decrypt unchanged if this
     // one wasn't applicable (e.g. no encrypted key yet, no passcode set).
-    let earlyDecryptPromise: Promise<string | null> | null = null
-    if (!privateKey && storedPasscode && senderAddress && passEntry) {
-      earlyDecryptPromise = import('@/lib/security').then(({ getEncryptedKey, decryptPrivateKey }) => {
-        const encKey = getEncryptedKey(senderAddress)
-        return encKey ? decryptPrivateKey(encKey, passEntry) : null
-      }).catch(() => null)
+    // The wallet frame does the decrypt (src/wallet); restorePrivateKey is
+    // single-flight, so step 4 just awaits this same attempt.
+    let earlyDecryptPromise: Promise<boolean> | null = null
+    if (!signer && storedPasscode && senderAddress && passEntry) {
+      earlyDecryptPromise = import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(passEntry, { silent: true })).catch(() => false)
     }
 
     // ── 1. Passcode verification (only blocking work that MUST happen first) ──
@@ -1641,49 +1641,28 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
     // done before its transaction/attestation really is.
 
     try {
-      // ── 4. Resolve private key (may need PBKDF2 - happens during broadcasting view) ──
-      let activePrivateKey = privateKey
-
-      // Fast path: decrypt from localStorage encrypted key (no network).
-      // Reuse the speculative decrypt kicked off alongside verifyPasscode
-      // above when it applies, instead of paying for a second PBKDF2
-      // derive of the exact same passEntry/encrypted-key pair.
-      if (!activePrivateKey && earlyDecryptPromise) {
-        try {
-          const decoded = await earlyDecryptPromise
-          if (decoded) {
-            activePrivateKey = decoded
-            useAuthStore.getState().setWallet(senderAddress as any, decoded, undefined, undefined)
-          }
-        } catch {}
-      } else if (!activePrivateKey && storedPasscode && senderAddress && passEntry) {
-        try {
-          const { getEncryptedKey, decryptPrivateKey } = await import('@/lib/security')
-          const encKey = getEncryptedKey(senderAddress)
-          if (encKey) {
-            const decoded = await decryptPrivateKey(encKey, passEntry)
-            if (decoded) {
-              activePrivateKey = decoded
-              useAuthStore.getState().setWallet(senderAddress as any, decoded, undefined, undefined)
-            }
-          }
-        } catch {}
+      // ── 4. Open the wallet (PBKDF2 in the wallet frame - happens during broadcasting view) ──
+      let activeSigner = signer
+      if (!activeSigner && earlyDecryptPromise) {
+        await earlyDecryptPromise
+        activeSigner = useAuthStore.getState().signer
       }
 
-      // Slow path: mnemonic re-derive or Supabase fetch
-      if (!activePrivateKey) {
+      // Slow path: any other way the wallet frame can open it
+      if (!activeSigner) {
         const { restorePrivateKey } = await import('@/lib/restoreWallet')
         await restorePrivateKey(storedPasscode ? passEntry : undefined)
-        activePrivateKey = useAuthStore.getState().privateKey
+        activeSigner = useAuthStore.getState().signer
       }
-      if (!activePrivateKey) throw new Error('Wallet key unavailable. Lock and unlock the app.')
+      if (!activeSigner) throw new Error('Wallet key unavailable. Lock and unlock the app.')
 
       // ── 5. Load SDK modules (cached if pre-warmed) ────────────────────────
-      const { AppKit, KitError, createEthersAdapterFromPrivateKey, JsonRpcProvider, FallbackProvider } = await loadSdkModules()
+      const { AppKit, KitError, JsonRpcProvider, FallbackProvider } = await loadSdkModules()
+      const { createWalletAdapter } = await import('@/wallet')
 
       const kit = new AppKit({ disableErrorReporting: true } as any)
-      const adapter = createEthersAdapterFromPrivateKey({
-        privateKey: activePrivateKey,
+      const adapter = await createWalletAdapter({
+        account: activeSigner,
         getProvider: ({ chain: sdkChain }: any) => {
           const rpcUrl: string | undefined = sdkChain?.rpcEndpoints?.[0]
             || sdkChain?.rpcUrls?.default?.http?.[0]
@@ -2777,7 +2756,7 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       // setUbRecoveryInitiated() resolves still sees recovery as in-progress
       // and refuses to re-enter the deposit/spend path.
       if (chain.ub && ubDepositedAmountRef.current && !ubRecoveryStartedRef.current) {
-        const { walletAddress: wAddr, privateKey: pKey } = useAuthStore.getState()
+        const { walletAddress: wAddr, signer: pKey } = useAuthStore.getState()
         if (wAddr && pKey) {
           ubRecoveryStartedRef.current = true
           // Record where the money was going; the user then chooses in

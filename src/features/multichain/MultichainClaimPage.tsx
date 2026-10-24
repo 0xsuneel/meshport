@@ -38,6 +38,7 @@ import { EASE_OUT, MOBILE_TAB_FADE_Y, MOBILE_TAB_FADE_TRANSITION, type NavDirect
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { AmountField, quickAmounts } from '@/components/ui/AmountField'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
+import type { WalletAccount } from '@/wallet'
 import { supabase } from '@/lib/supabase'
 import { formatAmount, copyToClipboard, trimTrailingZeros } from '@/lib/utils'
 import { explorerTxUrl, arcExplorerTxUrl, ARC_CHAIN_KEY } from '@/lib/chainExplorers'
@@ -235,17 +236,18 @@ const UB_FEE_TOO_HIGH = 'Fee is more than this amount'
 const _arcProviderCache = new Map<string, any>()
 
 /** The claim adapter - for merchant auto-collect. */
-export async function buildClaimAdapter(privateKey: string) {
-  const { createEthersAdapterFromPrivateKey } = await import('@circle-fin/adapter-ethers-v6')
-  return buildAdapter(createEthersAdapterFromPrivateKey, privateKey)
+export async function buildClaimAdapter(signer: WalletAccount) {
+  return buildAdapter(signer)
 }
 
 // Non-Arc chains go through relayedProviderFor: the Gateway deposit (and
 // any Gateway/CCTP mint) is submitted by MeshPort's relayer, so the wallet
 // needs no gas there. Arc pays its own gas in USDC.
-async function buildAdapter(createFn: any, privateKey: string) {
-  return createFn({
-    privateKey,
+// Signs through the wallet frame (src/wallet) - same providers as before.
+async function buildAdapter(signer: WalletAccount) {
+  const { createWalletAdapter } = await import('@/wallet')
+  return createWalletAdapter({
+    account: signer,
     getProvider: async ({ chain }: { chain: any }) => {
       if (chain?.name !== 'Arc Testnet') return relayedProviderFor(chain)
       const rpcList = RPC_BY_CHAIN_NAME['Arc Testnet']
@@ -332,7 +334,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     return routerNavigate(to, opts)
   }) as ReturnType<typeof useNavigate>, [embedded, onClose, routerNavigate])
   const location      = useLocation()
-  const privateKey = useAuthStore(s => s.privateKey)
+  const signer = useAuthStore(s => s.signer)
   const walletAddress = useAuthStore(s => s.walletAddress)
   const storedPasscode = useAuthStore(s => s.passcode)
   const { balance, setBalance } = useWalletStore()
@@ -505,7 +507,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
   // turns these into the fees actually paid.
   const [claimFees,      setClaimFees]     = useState<Record<string, SignedClaimFee>>({})
   const notifiedClaimIdsRef = useRef<Set<string>>(new Set())
-  const sdkRef = useRef<{ AppKit: any; createEthersAdapterFromPrivateKey: any } | null>(null)
+  const sdkRef = useRef<{ AppKit: any } | null>(null)
 
   // ─── Success screen - same full-screen flash → hero-card takeover
   // SwapPage/PaySendPage use for a completed action, reused here so a
@@ -619,11 +621,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     Promise.all([
       import('@circle-fin/app-kit'),
       import('@circle-fin/adapter-ethers-v6'),
-    ]).then(([a, b]) => {
-      sdkRef.current = {
-        AppKit: a.AppKit,
-        createEthersAdapterFromPrivateKey: b.createEthersAdapterFromPrivateKey,
-      }
+    ]).then(([a]) => {
+      sdkRef.current = { AppKit: a.AppKit }
     }).catch(() => {})
   }, [])
 
@@ -872,10 +871,10 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
 
   const getKey = useCallback(async (passcode?: string) => {
     const s0 = (await import('@/store')).useAuthStore.getState()
-    let key = s0.privateKey, addr = s0.walletAddress
-    if (key && addr) return { key, addr }
+    let key = s0.signer, addr = s0.walletAddress
+    if (key && addr) return { signer: key, addr }
 
-    // privateKey is deliberately never persisted to disk (see store/index.ts
+    // The signer is deliberately never persisted to disk (see store/index.ts
     // partialize + App.tsx) - it's re-derived from the mnemonic, or for
     // social-auto accounts fetched fresh from the server, on every app
     // load/reload. That restore is async and, for the server-fetch path,
@@ -906,7 +905,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
         await restorePrivateKey(passcode)
       } catch {}
       const s1 = (await import('@/store')).useAuthStore.getState()
-      key = s1.privateKey; addr = s1.walletAddress
+      key = s1.signer; addr = s1.walletAddress
     }
 
     // Remaining fallback: addr itself not hydrated yet (auth store persist
@@ -916,17 +915,17 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     for (let i = 0; i < 20 && !(key && addr); i++) {
       await new Promise(r => setTimeout(r, 500))
       const s = (await import('@/store')).useAuthStore.getState()
-      key = s.privateKey; addr = s.walletAddress
+      key = s.signer; addr = s.walletAddress
     }
-    return (key && addr) ? { key, addr } : null
+    return (key && addr) ? { signer: key, addr } : null
   }, [])
 
   const loadSdk = useCallback(async () => {
-    const [{ AppKit }, { createEthersAdapterFromPrivateKey }] = await Promise.all([
+    const [{ AppKit }] = await Promise.all([
       import('@circle-fin/app-kit'),
       import('@circle-fin/adapter-ethers-v6'),
     ])
-    return { AppKit, createEthersAdapterFromPrivateKey }
+    return { AppKit }
   }, [])
 
   // ── Pre-claim fee estimate ───────────────────────────────────────────────
@@ -1268,9 +1267,9 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           // ── Unified Balance route (Gateway): deposit on source → spend to Arc ──
           const sdkId = toSdkChainId(chain.chainId)
           if (!merchantMode && (claimRoute === 'ub' || !isGaslessBridgeAvailable(chain.chainId)) && UB_CLAIM_CHAINS.has(sdkId)) {
-            const { AppKit, createEthersAdapterFromPrivateKey } = sdkRef.current ?? await loadSdk()
+            const { AppKit } = sdkRef.current ?? await loadSdk()
             const kit = new AppKit({ disableErrorReporting: true } as any)
-            const adapter = await buildAdapter(createEthersAdapterFromPrivateKey, wallet.key)
+            const adapter = await buildAdapter(wallet.signer)
             setUbClaimChains(prev => prev.includes(chain.chainId) ? prev : [...prev, chain.chainId])
             runUbClaim({
               kit, adapter, walletAddr: wallet.addr, sdkChainId: sdkId,
@@ -1334,7 +1333,7 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           // router (VITE_BRIDGE_ROUTERS) aren't offered.
           if (!isGaslessBridgeAvailable(chain.chainId)) throw new Error('Bring Funds is not available for this chain')
           const r = await bringFundsGasless({
-            chainId: chain.chainId, amountUsdc: claimAmount, privateKey: wallet.key, walletAddress: wallet.addr,
+            chainId: chain.chainId, amountUsdc: claimAmount, signer: wallet.signer, walletAddress: wallet.addr,
             // 'Getting fee…' / 'Signing…' → still authorizing; 'Submitting…'
             // means the authorization is signed and MeshPort's relayer is
             // sending the burn (it pays the gas in that transaction).
@@ -1452,12 +1451,12 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
     setUbFee(prev => ({ ...prev, loading: true, error: '', needsUnlock: false, forKey: ubFeeKey }))
     const t = setTimeout(async () => {
       try {
-        const { privateKey, walletAddress } = useAuthStore.getState()
+        const { signer, walletAddress } = useAuthStore.getState()
         // Never prompts here: without an unlocked key the fees are shown on the next screen.
-        if (!privateKey || !walletAddress) { if (!cancelled) setUbFee(prev => ({ ...prev, loading: false, needsUnlock: true })); return }
-        const { AppKit, createEthersAdapterFromPrivateKey } = sdkRef.current ?? await loadSdk()
+        if (!signer || !walletAddress) { if (!cancelled) setUbFee(prev => ({ ...prev, loading: false, needsUnlock: true })); return }
+        const { AppKit } = sdkRef.current ?? await loadSdk()
         const kit = new AppKit({ disableErrorReporting: true } as any)
-        const adapter = await buildAdapter(createEthersAdapterFromPrivateKey, privateKey)
+        const adapter = await buildAdapter(signer)
         const r = await estimateUbClaimFee({ kit, adapter, walletAddr: walletAddress, fromChain: selectedSdkId, amount: claimAmt })
         if (!cancelled) setUbFee({ approx: false, ...r, forKey: ubFeeKey, loading: false, error: '', needsUnlock: false })
       } catch (e: any) {

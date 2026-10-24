@@ -15,10 +15,9 @@ let receipt: () => Promise<{ status: string; blockNumber: bigint }> = async () =
 const sendTransaction = vi.fn(async (_args: unknown) =>
   '0xabc0000000000000000000000000000000000000000000000000000000000000')
 
-vi.mock('viem/accounts', () => ({
-  // Signing is local now (relaySend): the spy records what gets signed.
-  privateKeyToAccount: () => ({ address: SENDER, signTransaction: async (args: unknown) => { await sendTransaction(args); return '0x02abc0' } }),
-}))
+// The wallet signer (src/wallet) - signs in the wallet frame in the app;
+// here the spy records what gets signed.
+const signer = { address: SENDER, signTransaction: async (args: unknown) => { await sendTransaction(args); return '0x02abc0' } } as any
 
 vi.mock('./arc', async () => {
   const actual = await vi.importActual<typeof import('./arc')>('./arc')
@@ -47,7 +46,7 @@ describe('preparePayment', () => {
   it('reuses a matching early preflight instead of creating a second intent', async () => {
     preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 5, idempotencyKey: 'key-a' })
 
-    const res = await sendUSDC({ privateKey: '0x' + '1'.repeat(64), to: RECIPIENT, amount: 5, idempotencyKey: 'key-a' })
+    const res = await sendUSDC({ signer, to: RECIPIENT, amount: 5, idempotencyKey: 'key-a' })
 
     expect(createPayIntent).toHaveBeenCalledTimes(1)
     expect(sendTransaction).toHaveBeenCalledTimes(1)
@@ -57,21 +56,21 @@ describe('preparePayment', () => {
 
   it('ignores an early preflight made for different payment details', async () => {
     preparePayment({ token: 'USDC', from: SENDER, to: OTHER, amount: 5, idempotencyKey: 'key-b' })
-    await sendUSDC({ privateKey: '0x' + '1'.repeat(64), to: RECIPIENT, amount: 5, idempotencyKey: 'key-b' })
+    await sendUSDC({ signer, to: RECIPIENT, amount: 5, idempotencyKey: 'key-b' })
 
     expect(createPayIntent).toHaveBeenCalledTimes(2)
     expect(createPayIntent.mock.calls[1][0].recipientAddress).toBe(RECIPIENT)
   })
 
   it('falls back to a fresh preflight when none was prepared', async () => {
-    await sendUSDC({ privateKey: '0x' + '1'.repeat(64), to: RECIPIENT, amount: 2, idempotencyKey: 'key-c' })
+    await sendUSDC({ signer, to: RECIPIENT, amount: 2, idempotencyKey: 'key-c' })
     expect(createPayIntent).toHaveBeenCalledTimes(1)
     expect(sendTransaction).toHaveBeenCalledTimes(1)
   })
 })
 
 describe('send confirmation state', () => {
-  const send = (key: string) => sendUSDC({ privateKey: '0x' + '1'.repeat(64), to: RECIPIENT, amount: 1, idempotencyKey: key })
+  const send = (key: string) => sendUSDC({ signer, to: RECIPIENT, amount: 1, idempotencyKey: key })
 
   it('is success only once the receipt confirms', async () => {
     receipt = async () => ({ status: 'success', blockNumber: 9n })
@@ -104,7 +103,7 @@ describe('order payment memo', () => {
   it('order payment: the early preflight and the send both go through the Memo contract', async () => {
     const memo = { code: 'd73a434b15', label: 'ORD-00094' }
     preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 10, idempotencyKey: 'key-m', memo })
-    await sendUSDC({ privateKey: '0x' + '1'.repeat(64), to: RECIPIENT, amount: 10, idempotencyKey: 'key-m', memo })
+    await sendUSDC({ signer, to: RECIPIENT, amount: 10, idempotencyKey: 'key-m', memo })
 
     expect(createPayIntent).toHaveBeenCalledTimes(1)
     expect(createPayIntent.mock.calls[0][0].callTarget).toBe('0x5294E9927c3306DcBaDb03fe70b92e01cCede505')
@@ -117,7 +116,7 @@ describe('order payment memo', () => {
 
   it('an early preflight without the memo is not reused for an order payment', async () => {
     preparePayment({ token: 'USDC', from: SENDER, to: RECIPIENT, amount: 10, idempotencyKey: 'key-n' })
-    await sendUSDC({ privateKey: '0x' + '1'.repeat(64), to: RECIPIENT, amount: 10, idempotencyKey: 'key-n', memo: { code: 'abc', label: 'ORD-1' } })
+    await sendUSDC({ signer, to: RECIPIENT, amount: 10, idempotencyKey: 'key-n', memo: { code: 'abc', label: 'ORD-1' } })
     expect(createPayIntent).toHaveBeenCalledTimes(2)
     expect(createPayIntent.mock.calls[1][0].callTarget).toBe('0x5294E9927c3306DcBaDb03fe70b92e01cCede505')
   })

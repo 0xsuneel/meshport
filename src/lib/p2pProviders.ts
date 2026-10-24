@@ -124,12 +124,12 @@ const RealContractEscrowProvider: EscrowProvider = {
   async depositForOffer(offerId, amountUsdc, autoAccept) {
     try {
       const { useAuthStore } = await import('../store')
-      const { privateKey } = useAuthStore.getState()
-      if (!privateKey) return { success: false, message: "Couldn't access your wallet on this device to deposit escrow." }
+      const { signer } = useAuthStore.getState()
+      if (!signer) return { success: false, message: "Couldn't access your wallet on this device to deposit escrow." }
       const { depositToEscrow, depositToEscrowWithAutoAccept } = await import('./p2pEscrowContract')
       const txHash = autoAccept
-        ? await depositToEscrowWithAutoAccept(privateKey, offerId, amountUsdc, autoAccept.minAmount, autoAccept.maxAmount, autoAccept.operator)
-        : await depositToEscrow(privateKey, offerId, amountUsdc)
+        ? await depositToEscrowWithAutoAccept(signer, offerId, amountUsdc, autoAccept.minAmount, autoAccept.maxAmount, autoAccept.operator)
+        : await depositToEscrow(signer, offerId, amountUsdc)
       return { success: true, txHash, message: 'Escrow deposit confirmed on-chain.' }
     } catch (e: any) {
       return { success: false, message: e?.message ?? 'Escrow deposit failed - please try again.' }
@@ -138,10 +138,10 @@ const RealContractEscrowProvider: EscrowProvider = {
   async depositForTrade(tradeId, amountUsdc) {
     try {
       const { useAuthStore } = await import('../store')
-      const { privateKey } = useAuthStore.getState()
-      if (!privateKey) return { success: false, message: "Couldn't access your wallet on this device to deposit escrow." }
+      const { signer } = useAuthStore.getState()
+      if (!signer) return { success: false, message: "Couldn't access your wallet on this device to deposit escrow." }
       const { depositForTrade } = await import('./p2pEscrowContract')
-      const txHash = await depositForTrade(privateKey, tradeId, amountUsdc)
+      const txHash = await depositForTrade(signer, tradeId, amountUsdc)
       return { success: true, txHash, message: 'Escrow deposit confirmed on-chain.' }
     } catch (e: any) {
       return { success: false, message: e?.message ?? 'Escrow deposit failed - please try again.' }
@@ -159,15 +159,15 @@ const RealContractEscrowProvider: EscrowProvider = {
   async lockFunds(trade) {
     try {
       const { useAuthStore } = await import('../store')
-      const { privateKey } = useAuthStore.getState()
-      if (!privateKey) return { success: false, message: "Couldn't access your wallet on this device to register the trade." }
+      const { signer } = useAuthStore.getState()
+      if (!signer) return { success: false, message: "Couldn't access your wallet on this device to register the trade." }
       if (trade.offerType === 'buy') {
         const { registerTradeKeyedTradeOnChain } = await import('./p2pEscrowContract')
-        await registerTradeKeyedTradeOnChain(privateKey, trade.id, trade.buyerWallet, trade.amountUsdc)
+        await registerTradeKeyedTradeOnChain(signer, trade.id, trade.buyerWallet, trade.amountUsdc)
         return { success: true, message: 'Trade registered on-chain.' }
       }
       const { registerTradeOnChain } = await import('./p2pEscrowContract')
-      await registerTradeOnChain(privateKey, trade.offerId, trade.id, trade.buyerWallet, trade.amountUsdc)
+      await registerTradeOnChain(signer, trade.offerId, trade.id, trade.buyerWallet, trade.amountUsdc)
       return { success: true, message: 'Trade registered on-chain.' }
     } catch (e: any) {
       return { success: false, message: e?.message ?? 'Could not register this trade on-chain - please try again.' }
@@ -176,15 +176,15 @@ const RealContractEscrowProvider: EscrowProvider = {
   async release(trade) {
     try {
       const { useAuthStore } = await import('../store')
-      const { privateKey } = useAuthStore.getState()
-      if (!privateKey) return { success: false, message: "Couldn't access your wallet on this device to release funds." }
+      const { signer } = useAuthStore.getState()
+      if (!signer) return { success: false, message: "Couldn't access your wallet on this device to release funds." }
       if (trade.offerType === 'buy') {
         const { releaseTradeKeyedEscrow } = await import('./p2pEscrowContract')
-        const txHash = await releaseTradeKeyedEscrow(privateKey, trade.id)
+        const txHash = await releaseTradeKeyedEscrow(signer, trade.id)
         return { success: true, txHash, message: 'USDC released from escrow to buyer.' }
       }
       const { releaseFromEscrow } = await import('./p2pEscrowContract')
-      const txHash = await releaseFromEscrow(privateKey, trade.id)
+      const txHash = await releaseFromEscrow(signer, trade.id)
       return { success: true, txHash, message: 'USDC released from escrow to buyer.' }
     } catch (e: any) {
       return { success: false, message: e?.message ?? 'Release failed - please try again.' }
@@ -200,7 +200,7 @@ const RealContractEscrowProvider: EscrowProvider = {
     // trade-keyed bucket.
     try {
       const { useAuthStore } = await import('../store')
-      const { privateKey } = useAuthStore.getState()
+      const { signer } = useAuthStore.getState()
       // Whoever is cancelling might be the buyer OR the seller (both sides
       // can cancel - see P2PPage.tsx's handleCancel) - but only the actual
       // depositor's wallet can call withdrawRemaining on their own bucket
@@ -210,9 +210,9 @@ const RealContractEscrowProvider: EscrowProvider = {
       // different-account refund attempt should fail here, not silently
       // succeed. The seller (or an admin) refunding is the actual path
       // this needs to work reliably.
-      if (!privateKey) return { success: false, message: "Couldn't access a wallet on this device to process the refund." }
+      if (!signer) return { success: false, message: "Couldn't access a wallet on this device to process the refund." }
       const { refundTradeKeyedEscrow } = await import('./p2pEscrowContract')
-      const txHash = await refundTradeKeyedEscrow(privateKey, trade.id)
+      const txHash = await refundTradeKeyedEscrow(signer, trade.id)
       return { success: true, txHash, message: 'Escrowed USDC refunded to the seller.' }
     } catch (e: any) {
       // Genuinely non-fatal from the caller's point of view - cancelTrade()
@@ -245,8 +245,8 @@ const HonorSystemFallbackEscrowProvider: EscrowProvider = {
     try {
       const { sendUSDC } = await import('./arcService')
       const { useAuthStore } = await import('../store')
-      const { privateKey } = useAuthStore.getState()
-      if (!privateKey) return { success: false, message: "Couldn't access your wallet on this device to release funds." }
+      const { signer } = useAuthStore.getState()
+      if (!signer) return { success: false, message: "Couldn't access your wallet on this device to release funds." }
       // Idempotency key fixed per trade: a retried (or double-clicked)
       // release of the same trade replays the first send via pay-intent
       // instead of paying the buyer twice. The suffix only advances after
@@ -255,7 +255,7 @@ const HonorSystemFallbackEscrowProvider: EscrowProvider = {
       const failKey = `meshport_p2p_release_fail_${trade.id}`
       let failures = 0
       try { failures = Number(localStorage.getItem(failKey) || '0') || 0 } catch { /* storage unavailable */ }
-      const result = await sendUSDC({ privateKey, to: trade.buyerWallet, amount: trade.amountUsdc, idempotencyKey: `p2p-release-${trade.id}-${failures}` })
+      const result = await sendUSDC({ signer, to: trade.buyerWallet, amount: trade.amountUsdc, idempotencyKey: `p2p-release-${trade.id}-${failures}` })
       // A reverted send moved nothing - never report it as released.
       if (result.state === 'failed') {
         try { localStorage.setItem(failKey, String(failures + 1)) } catch { /* storage unavailable */ }

@@ -5,7 +5,6 @@ import { ScreenPush } from '@/components/ui/ScreenPush'
 import { EASE_OUT } from '@/lib/motion'
 import { CheckCircle, AlertTriangle } from 'lucide-react'
 import { useAuthStore, useWalletStore } from '@/store'
-import { generateWallet } from '@/lib/arc'
 
 export function AutoWalletPage() {
   const navigate = useNavigate()
@@ -35,26 +34,26 @@ export function AutoWalletPage() {
 
       if (isSocial) {
         // Google / email accounts - self-custodial. The wallet key is made
-        // HERE, on the device (src/lib/socialWallet.ts), never by MeshPort's
-        // servers, and is protected by the user's passkey and/or encrypted
-        // Recovery QR (they must set one up before using the wallet - see
-        // AppLayout's secure-wallet guard). Until then, this device keeps a
-        // copy sealed with its non-extractable device key so a reload
+        // on the device, inside the wallet frame (src/wallet), never by
+        // MeshPort's servers, and is protected by the user's passkey and/or
+        // encrypted Recovery QR (they must set one up before using the wallet
+        // - see AppLayout's secure-wallet guard). Until then, the frame keeps
+        // a copy sealed with its own non-extractable device key so a reload
         // doesn't lose it.
-        const { createLocalWallet, saveDeviceCopy } = await import('@/lib/socialWallet')
-        const wallet = await createLocalWallet()
-        await saveDeviceCopy(wallet.address, wallet.privateKey)
-        setWallet(wallet.address, wallet.privateKey, undefined, 'social-auto')
+        const { createWallet: createFrameWallet } = await import('@/wallet')
+        const signer = await createFrameWallet('social-auto')
+        setWallet(signer.address, signer, 'social-auto')
         setBalance(0)
-        setAddress(wallet.address)
+        setAddress(signer.address)
       } else {
         // create-wallet accounts: unchanged - generated locally, shown a
         // recovery phrase (elsewhere in the create-wallet flow, not here),
         // never sent to any server in any form.
-        const wallet = await generateWallet()
-        setWallet(wallet.address, wallet.privateKey, wallet.mnemonic, 'create')
+        const { createWallet: createFrameWallet } = await import('@/wallet')
+        const signer = await createFrameWallet('create')
+        setWallet(signer.address, signer, 'create')
         setBalance(0)
-        setAddress(wallet.address)
+        setAddress(signer.address)
       }
 
       setStep('done')

@@ -13,6 +13,7 @@
 // unlocking the wallet key on this device (the key never leaves it).
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { useAuthStore } from '@/store'
+import type { WalletAccount } from '@/wallet'
 import { useSettingsStore } from '@/store/settingsStore'
 import { readExternalBalances, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
 import { isGaslessBridgeAvailable } from '@/lib/gaslessBridge'
@@ -104,15 +105,15 @@ function runReducer(s: RunState, a: RunAction): RunState {
   }
 }
 
-export async function unlockKey(passcode?: string): Promise<string> {
-  let key = useAuthStore.getState().privateKey
-  if (!key) {
+export async function unlockSigner(passcode?: string): Promise<WalletAccount> {
+  let signer = useAuthStore.getState().signer
+  if (!signer) {
     const { restorePrivateKey } = await import('@/lib/restoreWallet')
     await restorePrivateKey(passcode, { silent: true }).catch(() => false)
-    key = useAuthStore.getState().privateKey
+    signer = useAuthStore.getState().signer
   }
-  if (!key) throw new Error('Wallet is locked - unlock MeshPort and try again')
-  return key
+  if (!signer) throw new Error('Wallet is locked - unlock MeshPort and try again')
+  return signer
 }
 
 export function useSettlement() {
@@ -148,10 +149,10 @@ export function useSettlement() {
     if (!list.length) return
     dispatch({ type: 'start', rows: list, only })
     try {
-      const key = await unlockKey(passcode)
+      const signer = await unlockSigner(passcode)
       const { merchantClaimAll } = await import('@/lib/ubClaim')
       const r = await merchantClaimAll({
-        walletAddress: wallet, privateKey: key,
+        walletAddress: wallet, signer,
         chains: list.map(c => ({ chainId: c.id, balance: c.balance })),
         onStep: s => dispatch({ type: 'row', id: s.chainId, patch:
           s.state === 'error' ? { stage: 'failed', message: s.msg }
@@ -173,11 +174,11 @@ export function useSettlement() {
     dispatch({ type: 'start', rows: [c] })
     try {
       if (c.balance < SINGLE_MIN) throw new Error(`Needs at least $${SINGLE_MIN.toFixed(2)} on ${c.label}`)
-      const key = await unlockKey(passcode)
+      const signer = await unlockSigner(passcode)
       const [{ bringFundsGasless }, { submitClaim }] = await Promise.all([import('@/lib/gaslessBridge'), import('@/lib/claimService')])
       const amount = Math.floor(c.balance * 1e6) / 1e6
       dispatch({ type: 'row', id: c.id, patch: { stage: 'sending', message: 'Signing…' } })
-      const r = await bringFundsGasless({ chainId: c.id, amountUsdc: amount, privateKey: key, walletAddress: wallet,
+      const r = await bringFundsGasless({ chainId: c.id, amountUsdc: amount, signer, walletAddress: wallet,
         onStatus: msg => dispatch({ type: 'row', id: c.id, patch: { stage: 'sending', message: msg } }) })
       notifyExternalBalanceChanged(c.id, wallet, { spent: amount })
       // The claim is the burned amount: MeshPort's fee was taken before the burn.

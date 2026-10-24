@@ -19,6 +19,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store'
+import type { WalletAccount } from '@/wallet'
 import {
   listRecoverable, inspectCctp, retryClaimRelay, requestReattest, selfMintTransfer,
   listPendingUbRecoveries, type RecoveryItem, type CctpDiagnosis,
@@ -149,21 +150,21 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
     setBusy(null)
   }
 
-  const getKey = async (): Promise<string> => {
-    let key = useAuthStore.getState().privateKey
-    if (!key) {
+  const getSigner = async (): Promise<WalletAccount> => {
+    let signer = useAuthStore.getState().signer
+    if (!signer) {
       const { restorePrivateKey } = await import('@/lib/restoreWallet')
-      if (await restorePrivateKey()) key = useAuthStore.getState().privateKey
+      if (await restorePrivateKey()) signer = useAuthStore.getState().signer
     }
-    if (!key) throw new Error("Couldn't unlock your wallet on this device.")
-    return key
+    if (!signer) throw new Error("Couldn't unlock your wallet on this device.")
+    return signer
   }
 
   const completeUb = async () => {
     setBusy('ub')
     try {
       const { checkAndCompleteUBRecoveries } = await import('@/lib/ubFundRecovery')
-      const r = await checkAndCompleteUBRecoveries({ walletAddress: walletAddress!, privateKey: await getKey() })
+      const r = await checkAndCompleteUBRecoveries({ walletAddress: walletAddress!, signer: await getSigner() })
       if (r.notReadyEtaMs != null) setResult(p => ({ ...p, ub: { error: `Not ready yet - Circle unlocks it on-chain in about ${fmtEta(r.notReadyEtaMs!)}.` } }))
       else if (r.error) setResult(p => ({ ...p, ub: { error: r.error } }))
       else if (r.completed > 0) setResult(p => ({ ...p, ub: {} }))
@@ -178,11 +179,11 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
     const key = `ubheld:${chain}`
     setBusy(key)
     try {
-      const [{ AppKit }, { createEthersAdapterFromPrivateKey }, { estimateUbClaimFee, finishHeldUbToArc }] = await Promise.all([
-        import('@circle-fin/app-kit'), import('@circle-fin/adapter-ethers-v6'), import('@/lib/ubClaim'),
+      const [{ AppKit }, { createWalletAdapter }, { estimateUbClaimFee, finishHeldUbToArc }] = await Promise.all([
+        import('@circle-fin/app-kit'), import('@/wallet'), import('@/lib/ubClaim'),
       ])
       const kit = new AppKit({ disableErrorReporting: true } as any)
-      const adapter = (createEthersAdapterFromPrivateKey as any)({ privateKey: await getKey() })
+      const adapter = await createWalletAdapter({ account: await getSigner() })
       // Say what Circle's fee takes before anything moves.
       const fee = await estimateUbClaimFee({ kit, adapter, walletAddr: walletAddress!, fromChain: chain, amount })
       const name = chain.replace(/_(Sepolia|Testnet|Fuji|Amoy_Testnet)$/, '').replace(/_/g, ' ')
@@ -205,11 +206,11 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
     const key = 'ubarc'
     setBusy(key)
     try {
-      const [{ AppKit }, { createEthersAdapterFromPrivateKey }, { spendUnifiedTo, recordUbClaim }] = await Promise.all([
-        import('@circle-fin/app-kit'), import('@circle-fin/adapter-ethers-v6'), import('@/lib/ubClaim'),
+      const [{ AppKit }, { createWalletAdapter }, { spendUnifiedTo, recordUbClaim }] = await Promise.all([
+        import('@circle-fin/app-kit'), import('@/wallet'), import('@/lib/ubClaim'),
       ])
       const kit = new AppKit({ disableErrorReporting: true } as any)
-      const adapter = (createEthersAdapterFromPrivateKey as any)({ privateKey: await getKey() })
+      const adapter = await createWalletAdapter({ account: await getSigner() })
       const out = await spendUnifiedTo({ kit, adapter, fromChain: ARC_CHAIN_KEY, amount: ubArc, toChain: ARC_CHAIN_KEY, recipient: walletAddress!, selfMint: true })
       // History: "Recovered via UB · Arc"
       await recordUbClaim({ walletAddr: walletAddress!, sdkChainId: ARC_CHAIN_KEY, received: out.received, claimedAmount: ubArc, arcTxHash: out.txHash, recovered: true })
@@ -225,11 +226,11 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
     const key = 'ubdust'
     setBusy(key)
     try {
-      const [{ AppKit }, { createEthersAdapterFromPrivateKey }, { spendDustToArc, recordUbClaim }] = await Promise.all([
-        import('@circle-fin/app-kit'), import('@circle-fin/adapter-ethers-v6'), import('@/lib/ubClaim'),
+      const [{ AppKit }, { createWalletAdapter }, { spendDustToArc, recordUbClaim }] = await Promise.all([
+        import('@circle-fin/app-kit'), import('@/wallet'), import('@/lib/ubClaim'),
       ])
       const kit = new AppKit({ disableErrorReporting: true } as any)
-      const adapter = (createEthersAdapterFromPrivateKey as any)({ privateKey: await getKey() })
+      const adapter = await createWalletAdapter({ account: await getSigner() })
       const total = ubDust.reduce((s, d) => s + d.amount, 0)
       const out = await spendDustToArc({ kit, adapter, walletAddr: walletAddress!, dust: ubDust })
       // History: "Recovered via UB · Unified Balance"
@@ -253,7 +254,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
     try {
       const { initiateUBRecovery } = await import('@/lib/ubFundRecovery')
       await initiateUBRecovery({
-        walletAddress: walletAddress!, privateKey: await getKey(), amount: p.amount.toFixed(6),
+        walletAddress: walletAddress!, signer: await getSigner(), amount: p.amount.toFixed(6),
         destinationChainLabel: p.label, chain: p.chain, replaceRowId: p.replaceRowId, throwOnError: true,
       })
       setResult(r => ({ ...r, [key]: { diag: { state: 'already_minted', detail: `Withdrawal started - ${p.amount.toFixed(2)} USDC returns to ${where} in 7 days.` } } }))
@@ -269,7 +270,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
     setBusy(key)
     try {
       const { resolveUbStuckTransfer } = await import('@/lib/ubFundRecovery')
-      const out = await resolveUbStuckTransfer({ walletAddress: walletAddress!, privateKey: await getKey(), item: t, mode, available: t.available })
+      const out = await resolveUbStuckTransfer({ walletAddress: walletAddress!, signer: await getSigner(), item: t, mode, available: t.available })
       const where = mode === 'refund' ? 'your Arc wallet' : `${t.destinationLabel}`
       setResult(p => ({ ...p, [key]: { diag: { state: 'already_minted', detail: `${out.received.toFixed(2)} USDC sent to ${where}` } } }))
       setTimeout(() => { void load() }, 1500)
@@ -357,7 +358,7 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
               {!inProgress && state === 'ready_relay' && (
                 actionBtn('Finish it now', () => retryClaimRelay(it.id))
               )}
-              {!inProgress && state === 'ready_self_mint' && actionBtn('Finish it now', async () => selfMintTransfer(it.id, await getKey()))}
+              {!inProgress && state === 'ready_self_mint' && actionBtn('Finish it now', async () => selfMintTransfer(it.id, await getSigner()))}
               {!inProgress && state === 'needs_reattest' && actionBtn('Request new attestation', () => requestReattest(it.kind, it.id))}
             </div>
           </div>

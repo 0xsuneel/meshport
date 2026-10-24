@@ -3,7 +3,7 @@
  * Implemented exactly per Arc docs: https://docs.arc.io/integrate/exchanges/withdrawals
  */
 import { createPublicClient, parseUnits, encodeFunctionData, parseGwei, getAddress, isAddress, keccak256 } from 'viem'
-import { privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts'
+import type { WalletAccount } from '@/wallet'
 import { arcTransport, arcRpcJson } from './arc'
 import { ARC, ARC_TOKENS, ARC_CHAIN_INLINE as REGISTRY_ARC_CHAIN_INLINE } from '@/blockchain/chains'
 import { isSlowNetwork } from './connectivity'
@@ -292,7 +292,7 @@ const RELAY_REJECTED = -32003
 const ALREADY_SENT = /already known|known transaction|already imported|nonce too low|replacement transaction underpriced/i
 
 export async function relaySend(
-  account: PrivateKeyAccount,
+  account: WalletAccount,
   tx: { to: `0x${string}`; value?: bigint; data?: `0x${string}`; gas: bigint; nonce: number },
   onSent: (hash: `0x${string}`) => void,
 ): Promise<{ txHash: `0x${string}`; state: SendResult['state']; blockNumber?: string }> {
@@ -353,7 +353,7 @@ function assertSendable(to: string, amount: number) {
 }
 
 export async function sendUSDC(params: {
-  privateKey: string
+  signer: WalletAccount
   to: string
   amount: number
   idempotencyKey?: string
@@ -361,7 +361,7 @@ export async function sendUSDC(params: {
   /** Paying a business order: attach it on-chain (Arc Memo contract). */
   memo?: OrderMemo | null
 }): Promise<SendResult> {
-  const account = privateKeyToAccount(params.privateKey as `0x${string}`)
+  const account = params.signer
   const senderAddress = account.address
 
 
@@ -545,13 +545,13 @@ export const CIRBTC_CONTRACT = ARC_TOKENS.cirBTC.contract
 
 // ─── Send EURC (ERC-20 transfer) ─────────────────────────────────────────────
 export async function sendEURC(params: {
-  privateKey: string
+  signer: WalletAccount
   to: string
   amount: number
   idempotencyKey?: string
   recipientUsername?: string | null
 }): Promise<SendResult> {
-  const account = privateKeyToAccount(params.privateKey as `0x${string}`)
+  const account = params.signer
   const senderAddress = account.address
 
 
@@ -667,13 +667,13 @@ export async function getCirBtcBalance(address: string): Promise<number> {
 // the Activity row as 'cirBTC'. See sendEURC's own comments for the full
 // reasoning behind each piece below; identical here.
 export async function sendCirBTC(params: {
-  privateKey: string
+  signer: WalletAccount
   to: string
   amount: number
   idempotencyKey?: string
   recipientUsername?: string | null
 }): Promise<SendResult> {
-  const account = privateKeyToAccount(params.privateKey as `0x${string}`)
+  const account = params.signer
   const senderAddress = account.address
 
   assertSendable(params.to, params.amount)

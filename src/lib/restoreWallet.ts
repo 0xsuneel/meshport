@@ -1,54 +1,37 @@
 /**
- * Wallet Private Key Restoration
+ * Wallet restoration - opening the wallet in the wallet frame.
  *
- * Two different recovery models live here, split by walletSource:
+ * The key lives only in the wallet frame (src/wallet, wallet-frame/) on its
+ * own origin; "restoring" means asking the frame to open it and putting the
+ * resulting signer (a WalletAccount - address + sign-through-the-frame) in
+ * the auth store. Recovery models are unchanged:
  *
  * create / import-seed / import-privkey - NO server-side fallback, by
  * design. MeshPort never stores these wallets' private key or recovery
- * phrase on its servers, in any form. Recovery only ever works from what's
- * available on THIS device, or from a recovery phrase/private key the user
- * re-enters themselves. That's the accepted tradeoff for these accounts.
- * This module's behavior for these wallet sources is UNCHANGED.
+ * phrase on its servers, in any form. The frame keeps a passcode-encrypted
+ * copy on this device; otherwise the user re-enters the phrase / key.
  *
- * social-auto (Google AND Email-OTP accounts, unified) - SELF-CUSTODIAL
- * since 2026-10-04. The key is made on the device (lib/socialWallet.ts)
- * and opens with the account's passkey (lib/walletPasskey.ts) or encrypted
- * Recovery QR (lib/recoveryQr.ts); MeshPort's servers hold no copy. This
- * device keeps a copy sealed with its non-extractable device key, so a
- * reload restores without a prompt. The app passcode is still an APP LOCK
- * ONLY for these accounts - it never encrypts the wallet.
+ * social-auto (Google AND Email-OTP accounts) - SELF-CUSTODIAL. The frame
+ * keeps a copy sealed to this browser; another device opens the wallet with
+ * the account's passkey (lib/walletPasskey.ts) or Recovery QR
+ * (lib/recoveryQr.ts). The app passcode is an APP LOCK ONLY for these.
  *
  * Priority order:
- * 1. Already in memory → done
- * 2a. Derive from mnemonic, IF it happens to already be in live memory -
- *    e.g. right after this same session created/imported the wallet. The
- *    mnemonic is NEVER persisted (see security.ts's encryptMnemonic /
- *    store/index.ts's persist `migrate` - it used to be, in plain text; a
- *    genuine security bug, since fixed), so after any real reload this
- *    step is naturally a no-op and falls through to 2b.
- * 2b. create / import-seed / import-privkey: session-cached decrypted key
- *    (sessionStorage, see cacheSessionPrivateKey in lib/security.ts) -
- *    lets a plain page refresh skip the passcode prompt within the same
- *    tab session. Cleared on logout and on 'offline', so it does NOT
- *    survive a real gap.
- * 3. create / import-seed / import-privkey: decrypt from this device's
- *    local encrypted key (needs the passcode that was used to encrypt it,
- *    which may not be the CURRENT passcode if the user just set a new one
- *    on a new device - that's fine, this step is just a fast path and is
- *    allowed to fail). Never attempted for social-auto - see above.
- * 4a. social-auto: this device's sealed copy.
- * 4b. Otherwise needsSocialUnlock() is true and AppLayout sends the user to
- *    the Unlock screen (passkey / Recovery QR), which needs a tap and so
- *    never runs from here.
+ * 1. Already open → done
+ * 2. Frame without a prompt: this tab's session copy, or (social-auto) the
+ *    device copy - a plain refresh skips the passcode.
+ * 3. Keys the app held before the frame existed (session copy, social
+ *    device copy, passcode copy) are handed to the frame once and deleted
+ *    from the app's origin (wallet/index.ts migrateLegacyKey).
+ * 4. create / import-*: the frame's passcode copy, with the passcode the
+ *    caller has (just typed / stashed). Never for social-auto.
+ * 5. social-auto with no copy here: needsSocialUnlock() → the Unlock screen
+ *    (passkey / Recovery QR), which needs a tap and so never runs from here.
  *
  * If none of these work, `walletRecoveryNeeded` is set on the UI store,
  * which drives a persistent, app-wide banner (see
  * components/layout/WalletRecoveryBanner.tsx) pointing the user at
- * ImportWalletPage to re-enter their recovery phrase manually - this only
- * matters for create/import accounts in practice, since social-auto
- * accounts have no recovery phrase to fall back to; if step 4 fails for a
- * social-auto account, it means the server-side vault itself is missing
- * or the session is invalid, not something the user can self-correct.
+ * ImportWalletPage to re-enter their recovery phrase manually.
  */
 import { useAuthStore, useUIStore } from '@/store'
 
@@ -131,112 +114,54 @@ export function getPendingRawPasscode(): string | null { return pendingRawPassco
 export function clearRawPasscode(): void { pendingRawPasscode = null }
 
 async function attemptRestore(rawPasscode?: string): Promise<boolean> {
-  const { walletAddress, privateKey, mnemonic, walletSource, setWallet } = useAuthStore.getState()
+  const { walletAddress, signer, walletSource, setWallet } = useAuthStore.getState()
 
-  if (privateKey) return true
+  if (signer) return true
   if (!walletAddress) return false
 
+  const wallet = await import('@/wallet')
+  const passcodes = (walletSource === 'social-auto' ? [] : [rawPasscode, pendingRawPasscode]).filter(Boolean) as string[]
 
-  // ── 1. Derive from mnemonic, if it's already in live memory ────────────────
-  // Only ever true within the same session that just created/imported this
-  // wallet - the mnemonic is never persisted (see this file's header
-  // comment), so it's `null` here after any real reload and this step is a
-  // no-op, falling through to step 2 below.
-  if (mnemonic) {
-    try {
-      const { importFromMnemonic } = await import('@/lib/arc')
-      const w = await importFromMnemonic(mnemonic)
-      if (w?.privateKey) {
-        setWallet(walletAddress, w.privateKey, mnemonic, walletSource || 'create')
-        return true
-      }
-    } catch {}
-  }
-
-  // ── 2. session-cached decrypted key (create / import-seed / import-privkey) ─
-  // Skips the passcode prompt for a plain refresh within the same tab
-  // session - see cacheSessionPrivateKey's comment in lib/security.ts.
-  // Cleared on logout and on the browser's 'offline' event (App.tsx), so a
-  // genuine gap (offline, then back) still falls through to step 3 below
-  // and asks for the passcode again.
-  //
-  // Widened (was import-privkey ONLY) - SECURITY FIX: create/import-seed
-  // wallets used to skip straight to step 1 above (re-deriving the key from
-  // the raw mnemonic, which used to be persisted in plain text - see
-  // store/index.ts's persist `migrate`/security.ts's encryptMnemonic for the
-  // full reasoning). Now that the mnemonic is never persisted unencrypted,
-  // step 1 naturally stops firing after any real reload (mnemonic is only
-  // ever in live memory, not rehydrated), so this session cache is what
-  // preserves the same "no passcode on a plain refresh" UX those wallets
-  // already had - setWallet (store/index.ts) now populates it for every
-  // non-social-auto source, not just import-privkey.
-  if (walletSource !== 'social-auto') {
-    try {
-      const { getSessionPrivateKey } = await import('@/lib/security')
-      const cached = await getSessionPrivateKey(walletAddress)
-      if (cached) {
-        // BUG FIX: this hardcoded 'import-privkey' as the 4th arg, which was
-        // a harmless no-op back when this branch only ever ran for
-        // import-privkey wallets, but silently CLOBBERED walletSource for a
-        // create/import-seed wallet the moment this branch was widened to
-        // cover them too. That matters beyond bookkeeping: ProfileSubPages'
-        // BackupRecoveryPhrasePage gates whether the recovery-phrase tab
-        // shows at all on walletSource - a real 'create' wallet restoring
-        // through this exact path would have looked like an import-privkey
-        // wallet (no seed phrase, ever) for the rest of that session.
-        // Preserve whatever walletSource genuinely already was instead.
-        setWallet(walletAddress, cached, mnemonic || undefined, walletSource || 'import-privkey')
-        return true
-      }
-    } catch {}
-  }
-
-  // ── 3. create / import-seed / import-privkey: this device's local encrypted key ─
-  // Never attempted for social-auto wallets - those never write a local
-  // passcode-encrypted copy in the first place (see step 4), because the
-  // passcode must never be part of how a social-auto wallet is encrypted.
-  if (walletSource !== 'social-auto') {
-    const passcodeOptions = [
-      rawPasscode,
-      pendingRawPasscode,
-    ].filter(Boolean) as string[]
-
-    if (passcodeOptions.length > 0) {
-      try {
-        const { getEncryptedKey, decryptPrivateKey } = await import('@/lib/security')
-        const encKey = getEncryptedKey(walletAddress)
-        if (encKey) {
-          for (const code of passcodeOptions) {
-            const key = await decryptPrivateKey(encKey, code)
-            if (key) {
-              setWallet(walletAddress, key, mnemonic || undefined, walletSource || 'import-privkey')
-              return true
-            }
-          }
-        }
-      } catch {}
-    }
-  }
-
-  // ── 4a. social-auto: this device's sealed copy (self-custodial) ────────────
-  // Google / email wallets are made and kept on the device now (see
-  // lib/socialWallet.ts). A reload opens the device-sealed copy; another
-  // device opens the wallet with the passkey or Recovery QR on the Unlock
-  // screen (/auth/recover-wallet) - those need a tap, so they never run from
-  // here.
-  if (walletSource === 'social-auto') {
-    const { loadDeviceCopy } = await import('@/lib/socialWallet')
-    const local = await loadDeviceCopy(walletAddress)
-    if (local) {
+  // ── 2. the frame's session / device copy - no prompt ──────────────────────
+  try {
+    const open = await wallet.unlockWallet(walletAddress)
+    if (open) {
       socialUnlockNeeded = false
-      setWallet(walletAddress, local, undefined, 'social-auto')
+      setWallet(walletAddress, open, walletSource || undefined)
+      // Finish moving an old app-side passcode copy once a passcode is known.
+      if (passcodes.length) void wallet.migrateLegacyKey(walletAddress, walletSource, passcodes).catch(() => {})
       return true
     }
+  } catch (e) {
+    // Frame unreachable (blocked, offline first load): nothing else can open
+    // the key either - the app no longer holds one.
+    console.warn('[Restore] wallet frame unavailable:', e)
+    return false
   }
 
-  // ── 4b. social-auto without a copy here: passkey or Recovery QR ──────────
-  // MeshPort's servers hold no copy of these wallets, so the only way in on
-  // this device is the Unlock screen (needs a tap - never run from here).
+  // ── 3. keys the app held before the frame existed ─────────────────────────
+  try {
+    const moved = await wallet.migrateLegacyKey(walletAddress, walletSource, passcodes)
+    if (moved) {
+      socialUnlockNeeded = false
+      setWallet(walletAddress, moved, walletSource || undefined)
+      return true
+    }
+  } catch (e) { console.warn('[Restore] moving the old key into the wallet frame failed:', e) }
+
+  // ── 4. create / import-*: the frame's passcode copy ───────────────────────
+  for (const code of passcodes) {
+    try {
+      const open = await wallet.unlockWallet(walletAddress, code)
+      if (open) { setWallet(walletAddress, open, walletSource || undefined); return true }
+    } catch (e) {
+      // Wrong passcode: try the next one. Locked out: stop - every further
+      // try only extends the wait.
+      if (e instanceof wallet.WalletFrameError && e.code === 'rate-limited') break
+    }
+  }
+
+  // ── 5. social-auto without a copy here: passkey or Recovery QR ────────────
   if (walletSource === 'social-auto') {
     socialUnlockNeeded = true
     return false

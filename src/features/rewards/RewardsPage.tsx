@@ -263,7 +263,7 @@ export function RewardsPage() {
   const user = useAuthStore(s => s.user)
   const username = useAuthStore(s => s.username)
   const walletAddress = useAuthStore(s => s.walletAddress)
-  const privateKey = useAuthStore(s => s.privateKey)
+  const signer = useAuthStore(s => s.signer)
   const navigate = useNavigate()
 
   const [totalPoints, setTotalPoints]       = useState(0)
@@ -354,15 +354,15 @@ export function RewardsPage() {
     if (!username)             { setClaimError('Username not set'); return }
     if (totalPoints < MIN_CLAIM_POINTS) { setClaimError(`Need at least ${MIN_CLAIM_POINTS} points to claim`); return }
 
-    let activePrivateKey = privateKey
-    if (!activePrivateKey) {
+    let activeSigner = signer
+    if (!activeSigner) {
       try {
         const { restorePrivateKey } = await import('@/lib/restoreWallet')
         await restorePrivateKey()
-        activePrivateKey = useAuthStore.getState().privateKey
+        activeSigner = useAuthStore.getState().signer
       } catch (e) { console.error('[Rewards] restore key failed:', e) }
     }
-    if (!activePrivateKey) { useAuthStore.getState().lock(); window.location.href = '/auth/lock'; return }
+    if (!activeSigner) { useAuthStore.getState().lock(); window.location.href = '/auth/lock'; return }
 
     const pointsToUse = Math.min(typedPoints, totalPoints, dailyRemaining, MAX_CLAIM_POINTS)
     if (pointsToUse < MIN_CLAIM_POINTS) {
@@ -381,7 +381,7 @@ export function RewardsPage() {
       userId,
       username: username.replace(/\.arc$/, ''),
       walletAddress,
-      privateKey: activePrivateKey,
+      signer: activeSigner,
       points: pointsToUse,
       onStep: s => {
         const now = Date.now(), took = now - last

@@ -15,6 +15,7 @@
 // finishes it later.
 
 // SDK chain ids that support Unified Balance deposits - see ubChains.ts.
+import type { WalletAccount } from '@/wallet'
 import { realTxHash } from './relayedProvider'
 import { UB_CLAIM_CHAINS } from './ubChains'
 import { FORWARDER_MINT_FAILING_SDK_CHAINS, forwarderMintFailing, noteForwarderMintFailed } from '@/blockchain/chains'
@@ -715,7 +716,7 @@ export type ClaimAllStep = { chainId: string; state: 'working' | 'done' | 'error
 let claimingAll = false
 
 export async function merchantClaimAll(p: {
-  walletAddress: string; privateKey: string
+  walletAddress: string; signer: WalletAccount
   /** App chain ids with their wallet balance. */
   chains: Array<{ chainId: string; balance: number }>
   onStep?: (s: ClaimAllStep) => void
@@ -735,7 +736,7 @@ export async function merchantClaimAll(p: {
       step(c.chainId, 'working', 'Signing…')
       try {
         const r = await bringFundsGasless({
-          chainId: c.chainId, amountUsdc: amount, privateKey: p.privateKey, walletAddress: p.walletAddress,
+          chainId: c.chainId, amountUsdc: amount, signer: p.signer, walletAddress: p.walletAddress,
           onStatus: msg => step(c.chainId, 'working', msg === 'Submitting…' || msg === 'Confirming…' ? 'MeshPort is sending the transfer…' : msg),
         })
         // The claim is the burned amount: MeshPort's fee was taken before the burn.
@@ -758,7 +759,7 @@ export async function merchantClaimAll(p: {
 }
 
 /** @deprecated Merchants collect with Claim All (merchantClaimAll). */
-export async function autoCollectMerchantPayments(_p: { walletAddress: string; privateKey: string; makeAdapter: () => Promise<any> }): Promise<number> {
+export async function autoCollectMerchantPayments(_p: { walletAddress: string; signer: WalletAccount; makeAdapter: () => Promise<any> }): Promise<number> {
   return 0
 }
 
@@ -788,7 +789,7 @@ export function autoFinishWorthIt(fee: { total: number; approx?: boolean; receiv
 
 let _sweepingSameTab = false
 
-export async function autoFinishUbClaims(p: { walletAddress: string; privateKey: string }): Promise<number> {
+export async function autoFinishUbClaims(p: { walletAddress: string; signer: WalletAccount }): Promise<number> {
   if (isAccountLockedNow()) return 0 // business not approved yet
   if (_sweepingSameTab) return 0
   const locks = typeof navigator !== 'undefined' ? (navigator as any).locks : undefined
@@ -803,19 +804,19 @@ export async function autoFinishUbClaims(p: { walletAddress: string; privateKey:
   return _runAutoFinish(p)
 }
 
-async function _runAutoFinish(p: { walletAddress: string; privateKey: string }): Promise<number> {
+async function _runAutoFinish(p: { walletAddress: string; signer: WalletAccount }): Promise<number> {
   _sweepingSameTab = true
   let finished = 0
   try {
-    const [{ AppKit }, { createEthersAdapterFromPrivateKey }] = await Promise.all([
-      import('@circle-fin/app-kit'), import('@circle-fin/adapter-ethers-v6'),
+    const [{ AppKit }, { createWalletAdapter }] = await Promise.all([
+      import('@circle-fin/app-kit'), import('@/wallet'),
     ])
     const kit = new AppKit({ disableErrorReporting: true } as any)
     const rows = await getUnifiedBalances(kit, p.walletAddress)
     const serverOwned = await serverOwnedChains(p.walletAddress)
     const ready = rows.filter(r => r.chain !== ARC_CHAIN_KEY && r.confirmed >= UB_MIN_SWEEP && !inFlight.has(r.chain) && !serverOwned.has(r.chain))
     if (ready.length === 0) return 0
-    const adapter = (createEthersAdapterFromPrivateKey as any)({ privateKey: p.privateKey })
+    const adapter = await createWalletAdapter({ account: p.signer })
     for (const r of ready) {
       if (inFlight.has(r.chain)) continue
       // Per-chain Web Lock mirrors what withChainLock does for manual claims -

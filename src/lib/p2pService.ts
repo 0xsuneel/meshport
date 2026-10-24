@@ -464,12 +464,12 @@ export async function updateOfferDetails(
   if (offer.autoAccept && (fields.min_amount !== offer.minAmount || fields.max_amount !== offer.maxAmount) && fields.min_amount !== undefined) {
     try {
       const { useAuthStore } = await import('../store')
-      const { privateKey } = useAuthStore.getState()
-      if (!privateKey) return { success: false, message: "Couldn't access your wallet on this device to update the ad's limits." }
+      const { signer } = useAuthStore.getState()
+      if (!signer) return { success: false, message: "Couldn't access your wallet on this device to update the ad's limits." }
       const { getAutoAcceptOperator, setAutoAcceptLimits } = await import('./p2pEscrowContract')
       const operator = await getAutoAcceptOperator()
       if (!operator) return { success: false, message: 'Could not update the limits right now - please try again.' }
-      await setAutoAcceptLimits(privateKey, offer.id, fields.min_amount as number, fields.max_amount as number, operator)
+      await setAutoAcceptLimits(signer, offer.id, fields.min_amount as number, fields.max_amount as number, operator)
     } catch (e: any) {
       return { success: false, message: `Could not update the limits on-chain: ${e?.message ?? 'please try again'}` }
     }
@@ -839,9 +839,9 @@ export async function cancelOfferAndWithdrawEscrow(offer: P2POffer, opts?: { adm
       }
       try {
         const { useAuthStore } = await import('../store')
-        const { privateKey } = useAuthStore.getState()
-        if (!privateKey) return { success: false, message: "Couldn't access your wallet on this device to withdraw escrow." }
-        const txHash = await withdrawRemainingFromEscrow(privateKey, offer.id)
+        const { signer } = useAuthStore.getState()
+        if (!signer) return { success: false, message: "Couldn't access your wallet on this device to withdraw escrow." }
+        const txHash = await withdrawRemainingFromEscrow(signer, offer.id)
         await fetch(`${SUPA_URL}/rest/v1/p2p_offers?id=eq.${offer.id}`, {
           method: 'PATCH', headers: { ...(await authHeaders()), 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
           body: JSON.stringify({ status: 'cancelled', escrow_withdraw_tx_hash: txHash, escrow_balance: 0, updated_at: new Date().toISOString() }),
@@ -1854,9 +1854,9 @@ async function freezeTradeOnChainBestEffort(tradeId: string): Promise<void> {
     const { isEscrowContractDeployed, freezeTradeOnChain } = await import('./p2pEscrowContract')
     if (!isEscrowContractDeployed()) return
     const { useAuthStore } = await import('../store')
-    const { privateKey } = useAuthStore.getState()
-    if (!privateKey) return
-    await freezeTradeOnChain(privateKey, tradeId)
+    const { signer } = useAuthStore.getState()
+    if (!signer) return
+    await freezeTradeOnChain(signer, tradeId)
   } catch (e) {
     console.error('[p2pService] on-chain freezeTrade failed (non-fatal, DB lock still applies):', e)
   }
@@ -1867,9 +1867,9 @@ async function unfreezeTradeOnChainBestEffort(tradeId: string): Promise<void> {
     const { isEscrowContractDeployed, unfreezeTradeOnChain } = await import('./p2pEscrowContract')
     if (!isEscrowContractDeployed()) return
     const { useAuthStore } = await import('../store')
-    const { privateKey } = useAuthStore.getState()
-    if (!privateKey) return
-    await unfreezeTradeOnChain(privateKey, tradeId)
+    const { signer } = useAuthStore.getState()
+    if (!signer) return
+    await unfreezeTradeOnChain(signer, tradeId)
   } catch (e) {
     console.error('[p2pService] on-chain unfreezeTrade failed (non-fatal):', e)
   }
@@ -1905,16 +1905,16 @@ async function releaseAbandonedSellReservation(trade: P2PTrade): Promise<boolean
     const { isEscrowContractDeployed, cancelTradeOnChain } = await import('./p2pEscrowContract')
     if (isEscrowContractDeployed()) {
       const { useAuthStore } = await import('../store')
-      const { privateKey, walletAddress } = useAuthStore.getState()
-      if (privateKey && walletAddress && walletAddress.toLowerCase() === trade.sellerWallet.toLowerCase()) {
-        await cancelTradeOnChain(privateKey, trade.id)
+      const { signer, walletAddress } = useAuthStore.getState()
+      if (signer && walletAddress && walletAddress.toLowerCase() === trade.sellerWallet.toLowerCase()) {
+        await cancelTradeOnChain(signer, trade.id)
         return true
       }
       // Escrow V3: the buyer cancels their own unpaid order gas-free (signed,
       // relayed) - no admin review needed.
       const { cancelTradeAsBuyerOnChain } = await import('./p2pEscrowContract')
-      if (privateKey && walletAddress && walletAddress.toLowerCase() === trade.buyerWallet.toLowerCase()) {
-        await cancelTradeAsBuyerOnChain(privateKey, trade.id)
+      if (signer && walletAddress && walletAddress.toLowerCase() === trade.buyerWallet.toLowerCase()) {
+        await cancelTradeAsBuyerOnChain(signer, trade.id)
         return true
       }
     }
@@ -2148,9 +2148,9 @@ export async function markPaymentSent(trade: P2PTrade): Promise<{ success: boole
   {
     const escrowMod = await import('./p2pEscrowContract')
     const { useAuthStore } = await import('@/store')
-    const pk = useAuthStore.getState().privateKey
-    if (!pk) return { success: false, message: 'Unlock your wallet and try again.' }
-    try { await escrowMod.markTradePaidOnChain(pk, trade.id) }
+    const signer = useAuthStore.getState().signer
+    if (!signer) return { success: false, message: 'Unlock your wallet and try again.' }
+    try { await escrowMod.markTradePaidOnChain(signer, trade.id) }
     catch (e: any) {
       return { success: false, message: /not active|only the trade's buyer/i.test(e?.message || '')
         ? "The seller's USDC isn't locked in escrow for this trade - don't send money. Open a dispute if you already paid."

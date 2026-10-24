@@ -28,7 +28,7 @@ import { listMyPayments, listMyIntents, isAskedOrder, listChainReceipts, subscri
 import { listStores, activeStoreId, setActiveStoreId, type Store } from '@/lib/businessTeam'
 import { StorePicker } from '@/features/merchant/StorePicker'
 import { useVoiceAlerts, setVoiceAlerts, speakPayment } from '@/lib/voiceAlerts'
-import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockKey } from './settlement'
+import { useSettlement, useSettlementHistory, chainLabel, claimStage, unlockSigner } from './settlement'
 import { listMyRefunds, subscribeMyRefunds, refundPayment, chainUsdcBalance, canRefundOnChain, checkRefundableSender, type SenderCheck, REFUND_REASONS, type MerchantRefund, type RefundRoute } from '@/lib/merchantRefunds'
 import { mergeSales } from '@/lib/businessSales'
 import { groupRefunds, refundedSum, remainingAfter, isFullyRefunded, canRefundMore, netPayments, MIN_REFUND } from '@/lib/refundTotals'
@@ -409,12 +409,12 @@ function OwnerBusinessPage() {
     if (!refundFor) return
     setRefundBusy(true); setRefundError(undefined)
     try {
-      const key = await unlockKey(passcode)
+      const signer = await unlockSigner(passcode)
       const reason = (refundNote.trim() ? `${refundReason}: ${refundNote.trim()}` : refundReason).slice(0, 140)
       const amount = Number(refundAmount)
       if (!(amount + 1e-9 >= MIN_REFUND) || amount > refundLeft + 1e-9) throw new Error(`Enter ${money(MIN_REFUND)} to ${money(refundLeft)}`)
       const route: RefundRoute = refundFor.chain === 'Arc_Testnet' ? 'arc' : refundDest === 'origin' ? 'origin' : 'chain'
-      await refundPayment({ paymentId: refundFor.id, customer: refundFor.from, amount, reason, privateKey: key, route, chain: refundFor.chain, remaining: refundLeft })
+      await refundPayment({ paymentId: refundFor.id, customer: refundFor.from, amount, reason, signer, route, chain: refundFor.chain, remaining: refundLeft })
       await loadRefunds()
       refreshArc(true)
       toast(`Refunded ${money(amount)} to ${who(refundFor)} on ${chainLabel(refundFor.chain)}`, 'success')

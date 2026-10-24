@@ -360,16 +360,16 @@ function ClaimAllCard({ chains, onClaimed }: { chains?: ClaimChain[]; onClaimed?
     else { setRunChains(list); setSteps({}) }
     setRunning(true); setScreenOpen(true)
     try {
-      let key = useAuthStore.getState().privateKey
-      if (!key) {
+      let signer = useAuthStore.getState().signer
+      if (!signer) {
         const { restorePrivateKey } = await import('@/lib/restoreWallet')
         await restorePrivateKey(passcode, { silent: true }).catch(() => false)
-        key = useAuthStore.getState().privateKey
+        signer = useAuthStore.getState().signer
       }
-      if (!key) throw new Error('Wallet unavailable - unlock MeshPort and try again')
+      if (!signer) throw new Error('Wallet unavailable - unlock MeshPort and try again')
       const { merchantClaimAll } = await import('@/lib/ubClaim')
       const r = await merchantClaimAll({
-        walletAddress, privateKey: key,
+        walletAddress, signer,
         chains: list.map(c => ({ chainId: c.chainId, balance: c.balance })),
         onStep: s => setSteps(prev => ({ ...prev, [s.chainId]: s })),
       })

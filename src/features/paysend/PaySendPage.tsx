@@ -95,7 +95,7 @@ export function PaySendPage() {
   const locationState = (location.state || {}) as { returnTo?: string; conversationId?: string; merchantView?: import('@/lib/merchantPay').PaymentView }
   const user = useAuthStore(s => s.user)
   const senderStoredAddress = useAuthStore(s => s.walletAddress)
-  const privateKey = useAuthStore(s => s.privateKey)
+  const signer = useAuthStore(s => s.signer)
   const storedPasscode = useAuthStore(s => s.passcode)
   const { balance, setBalance } = useWalletStore()
   const { sendRecipient, setSendRecipient, showToastMessage } = useUIStore()
@@ -850,7 +850,7 @@ export function PaySendPage() {
       // fails this speculative attempt and must not flip on the app-wide
       // "wallet recovery needed" banner before the passcode check below
       // even reports "Incorrect passcode".
-      if (!privateKey) {
+      if (!signer) {
         import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey(pin || undefined, { silent: true })).catch(() => {})
       }
       // PERF: start the send's preflight (server intent/nonce, gas, balance)
@@ -909,13 +909,13 @@ export function PaySendPage() {
     }
     setProcessStage('preparing')
 
-    let activePrivateKey = privateKey
-    if (!activePrivateKey) {
+    let activeSigner = signer
+    if (!activeSigner) {
       const { restorePrivateKey } = await import('@/lib/restoreWallet')
       const restored = await restorePrivateKey(pin || undefined)
-      if (restored) activePrivateKey = useAuthStore.getState().privateKey
+      if (restored) activeSigner = useAuthStore.getState().signer
     }
-    if (!activePrivateKey) { setTxError("Couldn't access your wallet on this device. Sign out and re-import your wallet with your recovery phrase or private key to continue."); setProcessStage('failed'); return }
+    if (!activeSigner) { setTxError("Couldn't access your wallet on this device. Sign out and re-import your wallet with your recovery phrase or private key to continue."); setProcessStage('failed'); return }
 
     const toAddr = recipient.walletAddress
     const senderAddr = senderStoredAddress || user?.walletAddress || ''
@@ -940,10 +940,10 @@ export function PaySendPage() {
         metadata: { toUsername: recipient?.isUsername ? recipient.display : undefined, ...(merchantPayCode ? { merchantOrder: merchantOrderNumber ?? undefined, merchantOrderKind: merchantOrderKind === 'bill' ? 'invoice' : 'request', merchantPersonal: merchantOrderKind === 'bill' ? undefined : merchantOrderKind === 'request', merchantVia: merchantOrderKind === 'shop' ? 'shop_qr' : undefined } : {}) },
       })
       const result = await (token === 'EURC'
-        ? sendEURC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
+        ? sendEURC({ signer: activeSigner, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
         : token === 'cirBTC' && arcMod.sendCirBTC
-        ? arcMod.sendCirBTC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
-        : sendUSDC({ privateKey: activePrivateKey, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername, memo: orderMemo('USDC') })
+        ? arcMod.sendCirBTC({ signer: activeSigner, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername })
+        : sendUSDC({ signer: activeSigner, to: toAddr, amount: numAmount, idempotencyKey, recipientUsername, memo: orderMemo('USDC') })
       ).catch((e: unknown) => { noteFailed(e); throw e })
 
       // The send now waits for the real receipt (see waitForConfirmation in
@@ -1061,11 +1061,10 @@ export function PaySendPage() {
       })()
 
       try {
-        const { deriveAddressFromPrivateKey } = await import('@/lib/arc')
         // Fire-and-forget - deriving the address then fetching the balance
         // is only for refreshing the displayed balance after send; no reason
         // to block the success screen on it.
-        deriveAddressFromPrivateKey(activePrivateKey).then((realAddr: string) => {
+        Promise.resolve(activeSigner.address).then((realAddr: string) => {
           // Balance drops at once, then the chain's figure replaces it
           // (retried while the chain still shows the old value).
           refreshBalancesAfterTx(realAddr, { spent: token === 'USDC' ? numAmount : 0 })

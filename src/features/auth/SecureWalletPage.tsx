@@ -15,6 +15,7 @@ import type React from 'react'
 import { useNavigate, useSearchParams, Navigate } from 'react-router-dom'
 import { KeyRound, QrCode, Check, ChevronRight, Camera, Upload, Loader2, ShieldCheck, Download, Wallet, Mail, Copy, ArrowLeft } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
+import type { WalletAccount } from '@/wallet'
 import { Card } from '@/components/ui/Card'
 
 const shortAddr = (a?: string | null) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '')
@@ -41,7 +42,7 @@ export function SecureWalletPage() {
   const userId = useAuthStore(s => s.user?.id)
   const username = useAuthStore(s => s.username)
   const walletAddress = useAuthStore(s => s.walletAddress)
-  const privateKey = useAuthStore(s => s.privateKey)
+  const signer = useAuthStore(s => s.signer)
   const [passkeys, setPasskeys] = useState<number | null>(null)
   const [qrAt, setQrAt] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -58,16 +59,16 @@ export function SecureWalletPage() {
   // Needs the unlocked wallet (it's what gets locked to the passkey / QR).
   // Redirected while rendering (see below), not after the first paint -
   // that showed this page for a few frames first.
-  const needsUnlock = !!walletAddress && !privateKey
+  const needsUnlock = !!walletAddress && !signer
 
   const secured = (passkeys ?? 0) > 0 || !!qrAt
 
   const setUpPasskey = async () => {
-    if (!userId || !walletAddress || !privateKey) return
+    if (!userId || !walletAddress || !signer) return
     setBusy(true)
     try {
       const { registerWalletPasskey } = await import('@/lib/walletPasskey')
-      await registerWalletPasskey({ userId, username: username ?? '', walletAddress, privateKey })
+      await registerWalletPasskey({ userId, username: username ?? '', walletAddress })
       showToastMessage('Passkey set up', 'success')
       await refresh()
     } catch (e: any) {
@@ -116,7 +117,7 @@ export function SecureWalletPage() {
               <p className="text-[13px] text-text-secondary leading-snug mt-0.5">Use your device passkey (Face ID / fingerprint) for fast and secure access. It syncs with your Apple or Google account.</p>
             </div>
           </div>
-          <SecondaryButton onClick={setUpPasskey} disabled={busy || !privateKey}>
+          <SecondaryButton onClick={setUpPasskey} disabled={busy || !signer}>
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
             {(passkeys ?? 0) > 0 ? 'Add Another Passkey' : 'Set Up Passkey'}
           </SecondaryButton>
@@ -133,7 +134,7 @@ export function SecureWalletPage() {
               <p className="text-[13px] text-text-secondary leading-snug mt-0.5">An encrypted backup that restores your wallet if your passkey is unavailable. Opens only with your recovery password.</p>
             </div>
           </div>
-          <SecondaryButton onClick={() => setMakingQr(true)} disabled={!privateKey}>
+          <SecondaryButton onClick={() => setMakingQr(true)} disabled={!signer}>
             <QrCode className="w-4 h-4" /> {qrAt ? 'Create New Recovery QR' : 'Create Recovery QR'}
           </SecondaryButton>
         </div>
@@ -155,7 +156,7 @@ function RecoveryQrCreator({ onBack, onDone }: { onBack: () => void; onDone: () 
   const userId = useAuthStore(s => s.user?.id)
   const username = useAuthStore(s => s.username)
   const walletAddress = useAuthStore(s => s.walletAddress)
-  const privateKey = useAuthStore(s => s.privateKey)
+  const signer = useAuthStore(s => s.signer)
   const [pw, setPw] = useState('')
   const [pw2, setPw2] = useState('')
   const [working, setWorking] = useState(false)
@@ -168,12 +169,16 @@ function RecoveryQrCreator({ onBack, onDone }: { onBack: () => void; onDone: () 
   }, [pw])
 
   const create = async () => {
-    if (!walletAddress || !privateKey || !userId) return
+    if (!walletAddress || !signer || !userId) return
     if (pw !== pw2) { showToastMessage("Passwords don't match", 'error'); return }
     setWorking(true)
     try {
-      const { createRecoveryPayload } = await import('@/lib/recoveryQr')
-      const payload = await createRecoveryPayload(privateKey, walletAddress, pw)
+      const { checkRecoveryPassword } = await import('@/lib/recoveryQr')
+      const weakPw = checkRecoveryPassword(pw)
+      if (weakPw) throw new Error(weakPw)
+      // Sealed inside the wallet frame - the key never comes to this page.
+      const { createRecoveryQr } = await import('@/wallet')
+      const payload = await createRecoveryQr(walletAddress, pw)
       setImageUrl(await renderRecoveryImage(payload, username ? `${username}.arc` : '', walletAddress))
       setPw(''); setPw2('')
     } catch (e: any) {
@@ -274,7 +279,7 @@ export function RecoverWalletPage() {
   const userId = useAuthStore(s => s.user?.id)
   const username = useAuthStore(s => s.username)
   const walletAddress = useAuthStore(s => s.walletAddress)
-  const privateKey = useAuthStore(s => s.privateKey)
+  const signer = useAuthStore(s => s.signer)
   const setWallet = useAuthStore(s => s.setWallet)
   const logout = useAuthStore(s => s.logout)
   const [hasPasskey, setHasPasskey] = useState<boolean | null>(null)
@@ -285,7 +290,7 @@ export function RecoverWalletPage() {
   const [error, setError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { if (privateKey) navigate('/', { replace: true }) }, [privateKey])
+  useEffect(() => { if (signer) navigate('/', { replace: true }) }, [signer])
   useEffect(() => {
     if (!userId) { setHasPasskey(true); return }
     // Never leave the page without buttons: if the check is slow, offer the
@@ -295,11 +300,10 @@ export function RecoverWalletPage() {
     return () => clearTimeout(t)
   }, [userId])
 
-  const finish = async (key: string, via: 'passkey' | 'qr') => {
+  // The frame has opened the key (and kept this device's sealed copy).
+  const finish = async (opened: WalletAccount, via: 'passkey' | 'qr') => {
     if (!walletAddress) return
-    const { saveDeviceCopy } = await import('@/lib/socialWallet')
-    await saveDeviceCopy(walletAddress, key)
-    setWallet(walletAddress, key, undefined, 'social-auto')
+    setWallet(walletAddress, opened, 'social-auto')
     showToastMessage('Wallet unlocked', 'success')
     // New device restored from the QR: offer a passkey for next time.
     navigate(via === 'qr' ? '/auth/secure-wallet?manage=1' : '/', { replace: true })
@@ -336,10 +340,10 @@ export function RecoverWalletPage() {
     if (!walletAddress) return
     setBusy(true); setError('')
     try {
-      const { openRecoveryPayload } = await import('@/lib/recoveryQr')
-      const { privateKey: key } = await openRecoveryPayload(qrText, pw, walletAddress)
+      const { openRecoveryQr } = await import('@/wallet')
+      const opened = await openRecoveryQr(walletAddress, qrText, pw)
       setPw('')
-      await finish(key, 'qr')
+      await finish(opened, 'qr')
     } catch (e: any) {
       setError(e?.message ?? "Couldn't open the Recovery QR")
     } finally { setBusy(false) }

@@ -15,7 +15,7 @@ import {
   createPublicClient, createWalletClient, encodeFunctionData, encodeAbiParameters, keccak256, toHex,
   custom, type Hash,
 } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
+import type { WalletAccount } from '@/wallet'
 import { arcTransport } from './arc'
 import { ARC_CHAIN_INLINE } from './arcService'
 
@@ -541,7 +541,7 @@ function isTransientRpcError(e: unknown): boolean {
   )
 }
 
-async function sendContractTx(privateKey: string, functionName: string, args: readonly unknown[], value: bigint = 0n): Promise<Hash> {
+async function sendContractTx(signer: WalletAccount, functionName: string, args: readonly unknown[], value: bigint = 0n): Promise<Hash> {
   if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
 
   const MAX_ATTEMPTS = 3 // 1 initial + 2 retries
@@ -549,7 +549,7 @@ async function sendContractTx(privateKey: string, functionName: string, args: re
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     if (attempt > 0) await sleepMs(1000 * attempt) // 1s, then 2s
     try {
-      return await sendContractTxOnce(privateKey, functionName, args, value)
+      return await sendContractTxOnce(signer, functionName, args, value)
     } catch (e) {
       lastErr = e
       if (!isTransientRpcError(e)) throw e // real revert/logic error - fail immediately, don't retry
@@ -574,7 +574,7 @@ async function sendContractTx(privateKey: string, functionName: string, args: re
  * finalizes in ~780ms, so the wait costs almost nothing when it succeeds.
  */
 async function sendAndConfirm(
-  account: ReturnType<typeof privateKeyToAccount>, functionName: string,
+  account: WalletAccount, functionName: string,
   tx: { data: `0x${string}`; value: bigint; gas: bigint; nonce: number },
 ): Promise<Hash> {
   const { relaySend, waitForConfirmation } = await import('./arcService')
@@ -594,9 +594,9 @@ async function sendAndConfirm(
   return hash
 }
 
-async function sendContractTxOnce(privateKey: string, functionName: string, args: readonly unknown[], value: bigint): Promise<Hash> {
+async function sendContractTxOnce(signer: WalletAccount, functionName: string, args: readonly unknown[], value: bigint): Promise<Hash> {
   if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
-  const account = privateKeyToAccount(privateKey as `0x${string}`)
+  const account = signer
   const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }) })
 
   const data = encodeFunctionData({ abi: ESCROW_ABI, functionName: functionName as any, args: args as any })
@@ -615,9 +615,9 @@ async function sendContractTxOnce(privateKey: string, functionName: string, args
 }
 
 /** Seller deposits USDC for their offer. Real on-chain transaction - the deposit IS the value sent with this call. */
-export async function depositToEscrow(privateKey: string, offerId: string, amountUsdc: number): Promise<Hash> {
+export async function depositToEscrow(signer: WalletAccount, offerId: string, amountUsdc: number): Promise<Hash> {
   // The contract files it under offerKeyFor(offerId, this wallet) by itself.
-  return sendContractTx(privateKey, 'deposit', [offerIdHash(offerId)], toNativeUnits(amountUsdc))
+  return sendContractTx(signer, 'deposit', [offerIdHash(offerId)], toNativeUnits(amountUsdc))
 }
 
 /**
@@ -630,8 +630,8 @@ export async function depositToEscrow(privateKey: string, offerId: string, amoun
  * passed in; using a trade's key here instead of an offer's is a valid,
  * intentional reuse, not a workaround.
  */
-export async function depositForTrade(privateKey: string, tradeId: string, amountUsdc: number): Promise<Hash> {
-  return sendContractTx(privateKey, 'deposit', [tradeKeyFor(tradeId)], toNativeUnits(amountUsdc))
+export async function depositForTrade(signer: WalletAccount, tradeId: string, amountUsdc: number): Promise<Hash> {
+  return sendContractTx(signer, 'deposit', [tradeKeyFor(tradeId)], toNativeUnits(amountUsdc))
 }
 
 /**
@@ -643,9 +643,9 @@ export async function depositForTrade(privateKey: string, tradeId: string, amoun
  * offer's creator - the person who wants to receive USDC - not whoever
  * accepted the offer and is depositing/releasing.
  */
-export async function registerTradeKeyedTradeOnChain(privateKey: string, tradeId: string, buyOfferCreatorAddress: string, amountUsdc: number): Promise<Hash> {
-  const depositor = privateKeyToAccount(privateKey as `0x${string}`).address
-  return sendContractTx(privateKey, 'registerTrade', [tradeKeyFor(tradeId), tradeBucketKeyFor(tradeId, depositor), buyOfferCreatorAddress as `0x${string}`, toNativeUnits(amountUsdc)])
+export async function registerTradeKeyedTradeOnChain(signer: WalletAccount, tradeId: string, buyOfferCreatorAddress: string, amountUsdc: number): Promise<Hash> {
+  const depositor = signer.address
+  return sendContractTx(signer, 'registerTrade', [tradeKeyFor(tradeId), tradeBucketKeyFor(tradeId, depositor), buyOfferCreatorAddress as `0x${string}`, toNativeUnits(amountUsdc)])
 }
 
 /**
@@ -653,14 +653,14 @@ export async function registerTradeKeyedTradeOnChain(privateKey: string, tradeId
  * own key via depositForTrade above) to the buyer. Trade must already be
  * registered (see registerTradeKeyedTradeOnChain).
  */
-export async function releaseTradeKeyedEscrow(privateKey: string, tradeId: string): Promise<Hash> {
-  return sendContractTx(privateKey, 'release', [tradeKeyFor(tradeId)])
+export async function releaseTradeKeyedEscrow(signer: WalletAccount, tradeId: string): Promise<Hash> {
+  return sendContractTx(signer, 'release', [tradeKeyFor(tradeId)])
 }
 
 /** Refunds a buy-offer trade's escrowed deposit back to the seller who deposited it (e.g. the trade was cancelled or expired). */
-export async function refundTradeKeyedEscrow(privateKey: string, tradeId: string): Promise<Hash> {
-  const depositor = privateKeyToAccount(privateKey as `0x${string}`).address
-  return sendContractTx(privateKey, 'withdrawRemaining', [tradeBucketKeyFor(tradeId, depositor)])
+export async function refundTradeKeyedEscrow(signer: WalletAccount, tradeId: string): Promise<Hash> {
+  const depositor = signer.address
+  return sendContractTx(signer, 'withdrawRemaining', [tradeBucketKeyFor(tradeId, depositor)])
 }
 
 /**
@@ -672,16 +672,16 @@ export async function refundTradeKeyedEscrow(privateKey: string, tradeId: string
  * p2pService.ts) - the seller is the only one who can call this for their
  * own offer, matching who's authorized to eventually release it.
  */
-export async function registerTradeOnChain(privateKey: string, offerId: string, tradeId: string, buyerAddress: string, amountUsdc: number): Promise<Hash> {
-  const sellerAddress = privateKeyToAccount(privateKey as `0x${string}`).address
-  return sendContractTx(privateKey, 'registerTrade', [
+export async function registerTradeOnChain(signer: WalletAccount, offerId: string, tradeId: string, buyerAddress: string, amountUsdc: number): Promise<Hash> {
+  const sellerAddress = signer.address
+  return sendContractTx(signer, 'registerTrade', [
     tradeKeyFor(tradeId), offerKeyFor(offerId, sellerAddress), buyerAddress as `0x${string}`, toNativeUnits(amountUsdc),
   ])
 }
 
 /** Normal-path release for a sell-offer trade - seller-only on-chain, no privileged approval. Trade must already be registered (see registerTradeOnChain). */
-export async function releaseFromEscrow(privateKey: string, tradeId: string): Promise<Hash> {
-  return sendContractTx(privateKey, 'release', [tradeKeyFor(tradeId)])
+export async function releaseFromEscrow(signer: WalletAccount, tradeId: string): Promise<Hash> {
+  return sendContractTx(signer, 'release', [tradeKeyFor(tradeId)])
 }
 
 /**
@@ -694,19 +694,19 @@ export async function releaseFromEscrow(privateKey: string, tradeId: string): Pr
  * dispute always takes priority). See P2PMeshportEscrowV3.sol's own
  * comment on cancelTrade() for the full reasoning.
  */
-export async function cancelTradeOnChain(privateKey: string, tradeId: string): Promise<Hash> {
-  return sendContractTx(privateKey, 'cancelTrade', [tradeKeyFor(tradeId)])
+export async function cancelTradeOnChain(signer: WalletAccount, tradeId: string): Promise<Hash> {
+  return sendContractTx(signer, 'cancelTrade', [tradeKeyFor(tradeId)])
 }
 
 /** Seller reclaims whatever's left in escrow for an offer (used when the offer itself is cancelled/paused). */
-export async function withdrawRemainingFromEscrow(privateKey: string, offerId: string): Promise<Hash> {
-  const sellerAddress = privateKeyToAccount(privateKey as `0x${string}`).address
-  return sendContractTx(privateKey, 'withdrawRemaining', [offerKeyFor(offerId, sellerAddress)])
+export async function withdrawRemainingFromEscrow(signer: WalletAccount, offerId: string): Promise<Hash> {
+  const sellerAddress = signer.address
+  return sendContractTx(signer, 'withdrawRemaining', [offerKeyFor(offerId, sellerAddress)])
 }
 
 /**
  * On-chain trade freeze/unfreeze - the contract-level backstop for a
- * dispute lock. `privateKey` here is whoever is calling this, signing with
+ * dispute lock. `signer` here is whoever is calling this, signing with
  * THEIR OWN on-device wallet key via useAuthStore.
  *
  * CORRECTED: freezeTrade/unfreezeTrade are gated by onlyPauser on
@@ -718,12 +718,12 @@ export async function withdrawRemainingFromEscrow(privateKey: string, offerId: s
  * MeshPort session's key, since the person acting as Pauser is not
  * necessarily the same person logged into the dashboard.
  */
-export async function freezeTradeOnChain(privateKey: string, tradeId: string): Promise<Hash> {
-  return sendContractTx(privateKey, 'freezeTrade', [tradeKeyFor(tradeId)])
+export async function freezeTradeOnChain(signer: WalletAccount, tradeId: string): Promise<Hash> {
+  return sendContractTx(signer, 'freezeTrade', [tradeKeyFor(tradeId)])
 }
 
-export async function unfreezeTradeOnChain(privateKey: string, tradeId: string): Promise<Hash> {
-  return sendContractTx(privateKey, 'unfreezeTrade', [tradeKeyFor(tradeId)])
+export async function unfreezeTradeOnChain(signer: WalletAccount, tradeId: string): Promise<Hash> {
+  return sendContractTx(signer, 'unfreezeTrade', [tradeKeyFor(tradeId)])
 }
 
 /**
@@ -776,7 +776,7 @@ export async function unpauseEscrowViaWallet(): Promise<Hash> {
 // ── Role manager multisig (2-of-3) ────────────────────────────────────────
 // Every Pauser/Investigator/Admin role change goes through this - see
 // P2PMeshportEscrowV3.sol's own comment on why admin alone no longer has
-// any direct role-granting power. `privateKey` here is always ONE role
+// any direct role-granting power. `signer` here is always ONE role
 // manager signer's own key, used transiently to sign exactly one
 // propose/confirm transaction - never persisted, never sent anywhere but
 // this one signed transaction. See the Role Managers admin panel section,
@@ -788,18 +788,18 @@ const ROLE_ACTION_INDEX: Record<RoleAction, number> = {
 }
 
 /** Step 1: the FIRST role manager signer proposes a change - this counts as their own confirmation (1 of 2 required). Returns the new proposal's id (read back via getRoleProposalCount, since the return value isn't directly recoverable from a plain sendTransaction - callers should read roleProposalCount() before and after). */
-export async function proposeRoleChange(privateKey: string, action: RoleAction, target: `0x${string}`): Promise<Hash> {
-  return sendContractTx(privateKey, 'proposeRoleChange', [ROLE_ACTION_INDEX[action], target])
+export async function proposeRoleChange(signer: WalletAccount, action: RoleAction, target: `0x${string}`): Promise<Hash> {
+  return sendContractTx(signer, 'proposeRoleChange', [ROLE_ACTION_INDEX[action], target])
 }
 
 /** Step 2: a DIFFERENT role manager signer confirms. Executes automatically the instant confirmations reach the 2-of-3 threshold - there is no separate "execute" call. */
-export async function confirmRoleChange(privateKey: string, proposalId: bigint): Promise<Hash> {
-  return sendContractTx(privateKey, 'confirmRoleChange', [proposalId])
+export async function confirmRoleChange(signer: WalletAccount, proposalId: bigint): Promise<Hash> {
+  return sendContractTx(signer, 'confirmRoleChange', [proposalId])
 }
 
 /** Any role manager signer who hasn't yet confirmed can cancel a still-pending proposal (e.g. a typo'd target address). */
-export async function cancelRoleProposal(privateKey: string, proposalId: bigint): Promise<Hash> {
-  return sendContractTx(privateKey, 'cancelRoleProposal', [proposalId])
+export async function cancelRoleProposal(signer: WalletAccount, proposalId: bigint): Promise<Hash> {
+  return sendContractTx(signer, 'cancelRoleProposal', [proposalId])
 }
 
 /**
@@ -807,7 +807,7 @@ export async function cancelRoleProposal(privateKey: string, proposalId: bigint)
  * RoleManagersPanel UI actually uses. Signs through the browser's
  * injected wallet extension instead of a pasted private key; see
  * sendContractTxViaInjectedWallet's own comment for the full security
- * reasoning. The privateKey-based versions above remain only for
+ * reasoning. The signer-based versions above remain only for
  * local/test tooling (e.g. the deploy script's optional bootstrap step),
  * never for the production admin panel.
  */
@@ -999,8 +999,8 @@ export async function getRoleManagerSigners(): Promise<string[]> {
  * wallet. This one step is unchanged from before - only WHO can nominate
  * (the role manager multisig, not admin unilaterally) changed.
  */
-export async function acceptAdmin(privateKey: string): Promise<Hash> {
-  return sendContractTx(privateKey, 'acceptAdmin', [])
+export async function acceptAdmin(signer: WalletAccount): Promise<Hash> {
+  return sendContractTx(signer, 'acceptAdmin', [])
 }
 
 /**
@@ -1191,7 +1191,7 @@ export async function getEscrowAdminAddress(): Promise<string | null> {
 // See P2PMeshportEscrowV3.sol's own header for the full sequence this
 // enforces on-chain: Pauser freezes -> Investigator investigates (records
 // an outcome, never moves funds) -> Admin resolves (moves funds for ONLY
-// that trade, using ONLY its stored data). `privateKey` throughout is
+// that trade, using ONLY its stored data). `signer` throughout is
 // always the operator's own manually-entered key for that specific role -
 // see the P2P Resolvers admin panel section, which asks Investigator/Admin
 // to paste and validate their own key rather than reusing whatever wallet
@@ -1390,11 +1390,11 @@ export async function getTradeOnChain(tradeId: string): Promise<OnChainTrade | n
 }
 
 /** PAUSER: freeze/unfreeze an entire offer (blocks new deposits/trade registrations, doesn't touch trades already registered before the freeze). */
-export async function freezeOfferOnChain(privateKey: string, offerId: string, sellerAddress: string): Promise<Hash> {
-  return sendContractTx(privateKey, 'freezeOffer', [offerKeyFor(offerId, sellerAddress)])
+export async function freezeOfferOnChain(signer: WalletAccount, offerId: string, sellerAddress: string): Promise<Hash> {
+  return sendContractTx(signer, 'freezeOffer', [offerKeyFor(offerId, sellerAddress)])
 }
-export async function unfreezeOfferOnChain(privateKey: string, offerId: string, sellerAddress: string): Promise<Hash> {
-  return sendContractTx(privateKey, 'unfreezeOffer', [offerKeyFor(offerId, sellerAddress)])
+export async function unfreezeOfferOnChain(signer: WalletAccount, offerId: string, sellerAddress: string): Promise<Hash> {
+  return sendContractTx(signer, 'unfreezeOffer', [offerKeyFor(offerId, sellerAddress)])
 }
 
 /** Wallet-signed (PREFERRED for the admin panel) - same reasoning as freezeTradeOnChainViaWallet's own comment above: Pauser is very likely not whoever is logged into this dashboard's own MeshPort session. */
@@ -1406,13 +1406,13 @@ export async function unfreezeOfferOnChainViaWallet(offerId: string, sellerAddre
 }
 
 /** INVESTIGATOR: investigate a FROZEN trade and record the recommended outcome. Does not move funds - see the file header. */
-export async function investigateTradeOnChain(privateKey: string, tradeId: string, approveRelease: boolean): Promise<Hash> {
-  return sendContractTx(privateKey, 'investigate', [tradeKeyFor(tradeId), approveRelease])
+export async function investigateTradeOnChain(signer: WalletAccount, tradeId: string, approveRelease: boolean): Promise<Hash> {
+  return sendContractTx(signer, 'investigate', [tradeKeyFor(tradeId), approveRelease])
 }
 
 /** ADMIN: resolve an already-INVESTIGATED trade - moves funds using ONLY that trade's stored buyer/amount/outcome. */
-export async function adminResolveTradeOnChain(privateKey: string, tradeId: string): Promise<Hash> {
-  return sendContractTx(privateKey, 'adminResolve', [tradeKeyFor(tradeId)])
+export async function adminResolveTradeOnChain(signer: WalletAccount, tradeId: string): Promise<Hash> {
+  return sendContractTx(signer, 'adminResolve', [tradeKeyFor(tradeId)])
 }
 
 // addInvestigatorOnChain/removeInvestigatorOnChain/addPauserOnChain used to
@@ -1529,7 +1529,7 @@ const MARK_PAID_ABI = [{
   inputs: [{ name: 'tradeKey', type: 'bytes32' }, { name: 'signature', type: 'bytes' }], outputs: [],
 }] as const
 
-export async function markTradePaidOnChain(privateKey: string, tradeId: string): Promise<string> {
+export async function markTradePaidOnChain(signer: WalletAccount, tradeId: string): Promise<string> {
   if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
   const { keccak256, encodeAbiParameters, toBytes, encodeFunctionData } = await import('viem')
   const key = tradeKeyFor(tradeId)
@@ -1538,7 +1538,7 @@ export async function markTradePaidOnChain(privateKey: string, tradeId: string):
     [{ type: 'address' }, { type: 'uint256' }, { type: 'bytes32' }, { type: 'bytes32' }],
     [CONTRACT_ADDRESS as `0x${string}`, 5042002n, keccak256(toBytes('MESHPORT_P2P_MARK_PAID')), key],
   ))
-  const signature = await privateKeyToAccount(privateKey as `0x${string}`).signMessage({ message: { raw: digest } })
+  const signature = await signer.signMessage({ message: { raw: digest } })
   const { authApiHeaders } = await import('./supabase')
   const r = await fetch('/api/bridge-relay', {
     method: 'POST', headers: await authApiHeaders(),
@@ -1584,9 +1584,9 @@ export function getAutoAcceptOperator(): Promise<string | null> {
   return operatorCache
 }
 
-async function sendAutoAcceptTx(privateKey: string, functionName: 'depositWithAutoAccept' | 'setAutoAccept', args: readonly unknown[], value = 0n): Promise<Hash> {
+async function sendAutoAcceptTx(signer: WalletAccount, functionName: 'depositWithAutoAccept' | 'setAutoAccept', args: readonly unknown[], value = 0n): Promise<Hash> {
   if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
-  const account = privateKeyToAccount(privateKey as `0x${string}`)
+  const account = signer
   const publicClient = createPublicClient({ transport: arcTransport({ retryCount: 3, timeout: 30000 }) })
   const data = encodeFunctionData({ abi: AUTO_ACCEPT_ABI, functionName, args: args as any })
   const [nonce, gasEstimate] = await Promise.all([
@@ -1597,15 +1597,15 @@ async function sendAutoAcceptTx(privateKey: string, functionName: 'depositWithAu
 }
 
 /** Sell ad on V3: deposit and turn on auto-accept for the ad's per-trade limits, one transaction. */
-export async function depositToEscrowWithAutoAccept(privateKey: string, offerId: string, amountUsdc: number, minTradeUsdc: number, maxTradeUsdc: number, operator: string): Promise<Hash> {
-  return sendAutoAcceptTx(privateKey, 'depositWithAutoAccept',
+export async function depositToEscrowWithAutoAccept(signer: WalletAccount, offerId: string, amountUsdc: number, minTradeUsdc: number, maxTradeUsdc: number, operator: string): Promise<Hash> {
+  return sendAutoAcceptTx(signer, 'depositWithAutoAccept',
     [offerIdHash(offerId), operator as `0x${string}`, toNativeUnits(minTradeUsdc), toNativeUnits(maxTradeUsdc)], toNativeUnits(amountUsdc))
 }
 
 /** The seller changed the ad's limits: keep the on-chain auto-accept limits the same. */
-export async function setAutoAcceptLimits(privateKey: string, offerId: string, minTradeUsdc: number, maxTradeUsdc: number, operator: string): Promise<Hash> {
-  const sellerAddress = privateKeyToAccount(privateKey as `0x${string}`).address
-  return sendAutoAcceptTx(privateKey, 'setAutoAccept',
+export async function setAutoAcceptLimits(signer: WalletAccount, offerId: string, minTradeUsdc: number, maxTradeUsdc: number, operator: string): Promise<Hash> {
+  const sellerAddress = signer.address
+  return sendAutoAcceptTx(signer, 'setAutoAccept',
     [offerKeyFor(offerId, sellerAddress), operator as `0x${string}`, toNativeUnits(minTradeUsdc), toNativeUnits(maxTradeUsdc)])
 }
 
@@ -1634,7 +1634,7 @@ export async function registerTradeViaOperator(offerId: string, sellerAddress: s
 }
 
 /** Buyer cancels an unpaid order gas-free: signs cancelDigest(tradeKey), the relayer submits it. */
-export async function cancelTradeAsBuyerOnChain(privateKey: string, tradeId: string): Promise<string> {
+export async function cancelTradeAsBuyerOnChain(signer: WalletAccount, tradeId: string): Promise<string> {
   if (!CONTRACT_ADDRESS) throw new Error('P2P escrow contract is not configured (VITE_P2P_ESCROW_CONTRACT unset)')
   const { keccak256, encodeAbiParameters, toBytes } = await import('viem')
   const key = tradeKeyFor(tradeId)
@@ -1643,6 +1643,6 @@ export async function cancelTradeAsBuyerOnChain(privateKey: string, tradeId: str
     [{ type: 'address' }, { type: 'uint256' }, { type: 'bytes32' }, { type: 'bytes32' }],
     [CONTRACT_ADDRESS as `0x${string}`, 5042002n, keccak256(toBytes('MESHPORT_P2P_CANCEL')), key],
   ))
-  const signature = await privateKeyToAccount(privateKey as `0x${string}`).signMessage({ message: { raw: digest } })
+  const signature = await signer.signMessage({ message: { raw: digest } })
   return relayEscrowCall(encodeFunctionData({ abi: AUTO_ACCEPT_ABI, functionName: 'cancelTradeFor', args: [key, signature] }), 'Could not cancel the order on-chain')
 }

@@ -22,6 +22,7 @@
 // JSON like {"Base_Sepolia":"0x…"}); Bring Funds then keeps its current flow.
 
 import { encodeAbiParameters, keccak256, toHex, pad, getAddress, type Hex } from 'viem'
+import type { WalletAccount } from '@/wallet'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 import { assertAccountUnlocked } from '@/lib/accountLockRule'
 
@@ -151,7 +152,7 @@ export async function quoteGaslessBridge(chainId: string, amountUsdc: number): P
 export async function bringFundsGasless(p: {
   chainId: string
   amountUsdc: number
-  privateKey: string
+  signer: WalletAccount
   walletAddress: string
   onStatus?: (msg: string) => void
 }): Promise<{ txHash: Hex; fee: number; maxFee: number }> {
@@ -164,8 +165,7 @@ export async function bringFundsGasless(p: {
   p.onStatus?.('Getting fee…')
   const { quote, fee, maxFee } = await fetchCheckedQuote(p.chainId, total)
 
-  const { privateKeyToAccount } = await import('viem/accounts')
-  const account = privateKeyToAccount((p.privateKey.startsWith('0x') ? p.privateKey : `0x${p.privateKey}`) as Hex)
+  const account = p.signer
   if (account.address.toLowerCase() !== p.walletAddress.toLowerCase()) throw new Error('Wallet key does not match this account')
 
   const params: BridgeParams = {

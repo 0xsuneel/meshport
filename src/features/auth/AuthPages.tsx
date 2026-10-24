@@ -16,14 +16,16 @@ import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
 import { clearSocialDeviceState } from '@/lib/socialWallet'
 import { useAuthStore, useWalletStore, useUIStore } from '@/store'
-import { generateWallet, importFromMnemonic, importFromPrivateKey, validateMnemonic } from '@/lib/arc'
+import { validateMnemonic } from '@/lib/arc'
+import { createWallet, importWallet, walletStatus, checkRecoveryWords, setWalletPasscode, lockWallet, WalletFrameError, type WalletAccount } from '@/wallet'
+import { WalletSecretFrame } from '@/components/wallet/WalletSecretFrame'
 import { copySensitiveToClipboard } from '@/lib/utils'
 import {
   supabase, upsertUserProfile,
   isUsernameTakenDb, getUserByWalletAddress, ensureAnonSession, resolveAccountForSession, lookupAccountByWallet,
   type DbUser,
 } from '@/lib/supabase'
-import {encryptPrivateKey, storeEncryptedKey, encryptMnemonic, storeEncryptedMnemonic, markWalletBackedUp} from '@/lib/security'
+import { markWalletBackedUp } from '@/lib/security'
 import { LoadingDots } from '@/components/ui/LoadingDots'
 import {
   getSignupKind, getChosenKind, getAuthMode, setAuthIntent, clearAuthIntent, registerNameOnchain, type AccountKind,
@@ -713,11 +715,13 @@ export function CreateWalletPage() {
   const { showToastMessage } = useUIStore()
   const [step, setStep] = useState<'generate' | 'backup' | 'confirm' | 'success'>('generate')
   const createDir = useStepDirection(step, ['generate', 'backup', 'confirm', 'success'] as const)
-  const [walletData, setWalletData] = useState<{ address: string; privateKey: string; mnemonic: string } | null>(null)
+  // The new wallet lives in the wallet frame (src/wallet): this page only
+  // holds its address. The phrase is shown by the frame itself
+  // (WalletSecretFrame) and the confirm words are checked there.
+  const [walletData, setWalletData] = useState<{ address: string; signer: WalletAccount; wordCount: number } | null>(null)
   const [loading, setLoading] = useState(false)
   const [confirmWords, setConfirmWords] = useState<string[]>(['', '', ''])
   const [confirmError, setConfirmError] = useState('')
-  const [copied, setCopied] = useState(false)
   // Three random positions, picked per wallet and only revealed on the verify
   // screen - one fixed, highlighted word could be noted without saving the rest.
   const [verifyIdx, setVerifyIdx] = useState<number[]>([])
@@ -725,21 +729,30 @@ export function CreateWalletPage() {
 
   const handleGenerate = async () => {
     setLoading(true)
-    const w = await generateWallet()
-    setVerifyIdx(pickVerifyIndexes(w.mnemonic.split(' ').length))
-    setConfirmWords(['', '', ''])
-    setWalletData(w); setLoading(false); setStep('backup')
+    try {
+      const signer = await createWallet('create')
+      const { wordCount } = await walletStatus(signer.address)
+      setVerifyIdx(pickVerifyIndexes(wordCount || 12))
+      setConfirmWords(['', '', ''])
+      setWalletData({ address: signer.address, signer, wordCount: wordCount || 12 }); setStep('backup')
+    } catch (e) {
+      showToastMessage(e instanceof Error ? e.message : "Couldn't create a wallet", 'error')
+    } finally { setLoading(false) }
   }
 
   const handleConfirm = async () => {
     if (!walletData) return
-    const words = walletData.mnemonic.split(' ')
-    const wrong = verifyIdx.filter((wi, i) => confirmWords[i].trim().toLowerCase() !== words[wi].toLowerCase())
-    if (wrong.length) {
+    const answers: Record<number, string> = {}
+    verifyIdx.forEach((wi, i) => { answers[wi] = confirmWords[i] })
+    let check: { ok: boolean; wrong: number[] }
+    try { check = await checkRecoveryWords(walletData.address, answers) }
+    catch (e) { setConfirmError(e instanceof Error ? e.message : "Couldn't check the words"); return }
+    if (!check.ok) {
+      const wrong = check.wrong.length ? check.wrong : verifyIdx
       setConfirmError(`${wrong.map(wi => `Word #${wi + 1}`).join(', ')} ${wrong.length > 1 ? 'are' : 'is'} incorrect. Check your backup.`); return
     }
     setConfirmError('')
-    setWallet(walletData.address, walletData.privateKey, walletData.mnemonic, 'create')
+    setWallet(walletData.address, walletData.signer, 'create')
     setBalance(0)
     // Create the local user id FIRST if needed - this used to run AFTER the
     // cloud-save check below, which meant `user` (captured from this
@@ -769,25 +782,12 @@ export function CreateWalletPage() {
     const rawPasscode = getPendingRawPasscode()
     if (rawPasscode) {
       try {
-        const encrypted = await encryptPrivateKey(walletData.privateKey, rawPasscode)
-        // Local device storage only. No server-side copy of this, or of the
-        // mnemonic, is ever saved - by design, not omission. See the
-        // removed cloud-save code this replaced: private keys and recovery
-        // phrases never leave this device now, in any form. The tradeoff is
-        // real and intentional - if this device's storage and the user's
-        // own saved recovery phrase are both lost, this wallet is
-        // unrecoverable. There is no server-side fallback left to catch
-        // that case.
-        storeEncryptedKey(walletData.address, encrypted)
-        // SECURITY FIX: the mnemonic used to be persisted in plain text via
-        // useAuthStore's own Zustand persist (see store/index.ts) - this is
-        // the encrypted replacement, same AES-GCM/passcode-derived scheme
-        // as the private key right above, stored under its own localStorage
-        // key (security.ts's storeEncryptedMnemonic). Read back on-demand
-        // by BackupRecoveryPhrasePage (ProfileSubPages.tsx) when the user
-        // explicitly reveals their recovery phrase again later.
-        const encryptedMnemonic = await encryptMnemonic(walletData.mnemonic, rawPasscode)
-        storeEncryptedMnemonic(walletData.address, encryptedMnemonic)
+        // Local device storage only - in the wallet frame's origin. No
+        // server-side copy of the key or the phrase is ever saved, by design:
+        // if this device's storage and the user's own saved recovery phrase
+        // are both lost, this wallet is unrecoverable. The frame keeps both
+        // passcode-encrypted (and device-sealed) for BackupRecoveryPhrasePage.
+        await setWalletPasscode(walletData.address, rawPasscode)
         // The word check on the previous screen proved the phrase was saved.
         await markWalletBackedUp(walletData.address)
       } catch (e) { console.warn('[Wallet] Local key backup failed:', e) }
@@ -837,21 +837,8 @@ export function CreateWalletPage() {
               <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
               <p className="text-sm text-warning">Never share this. Anyone with it controls your wallet. Avoid taking a screenshot - write it down instead.</p>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              {walletData.mnemonic.split(' ').map((word, i) => (
-                <div key={i} className={`rounded-xl px-3 py-2.5 flex items-center gap-1.5 bg-surface border border-border ${!word || word === 'undefined' ? 'border border-danger/50' : ''}`}>
-                  <span className="text-text-secondary text-xs">{i + 1}.</span>
-                  <span className={`text-sm font-semibold ${!word || word === 'undefined' ? 'text-danger' : 'text-text-primary'}`}>
-                    {(!word || word === 'undefined') ? 'error' : word}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <button onClick={async () => { const ok = await copySensitiveToClipboard(walletData.mnemonic); setCopied(true); showToastMessage(ok ? 'Recovery phrase copied' : 'Could not copy phrase', ok ? 'success' : 'error'); setTimeout(() => setCopied(false), 2000) }}
-              className="w-full flex items-center justify-center gap-2 py-3 bg-surface rounded-2xl text-sm font-medium text-text-primary border border-border">
-              {copied ? <CheckCircle className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-              {copied ? 'Copied!' : 'Copy All 12 Words'}
-            </button>
+            {/* Rendered by the wallet frame - the phrase never enters the app. */}
+            <WalletSecretFrame address={walletData.address} what="mnemonic" height={walletData.wordCount > 12 ? 360 : 260} />
             <Button fullWidth onClick={() => { setConfirmWords(['', '', '']); setConfirmError(''); setStep('confirm') }}>I've Written It Down →</Button>
           </motion.div>
         )}
@@ -921,7 +908,7 @@ export function ImportWalletPage() {
   // wallet yet - existingWalletAddress is null/empty there, so the import
   // proceeds exactly as it always has, no extra step, no warning.
   const [mismatch, setMismatch] = useState<{
-    result: { address: string; privateKey: string; mnemonic?: string }
+    result: { address: string; signer: WalletAccount }
     walletSource: 'import-seed' | 'import-privkey'
   } | null>(null)
 
@@ -929,27 +916,41 @@ export function ImportWalletPage() {
   // src/lib/accountRules.ts). Nothing is saved until the person picks an option.
   const [blocked, setBlocked] = useState<{
     decision: BlockedDecision
-    result: { address: string; privateKey: string; mnemonic?: string }
+    result: { address: string; signer: WalletAccount }
     walletSource: 'import-seed' | 'import-privkey'
   } | null>(null)
+
+  // The typed phrase / key went into the wallet frame, open only in memory
+  // and this tab's session copy. Backing out closes it again.
+  const discardImport = (r: { address: string } | null | undefined) => { if (r) void lockWallet(r.address) }
 
   // No inline guards - handled entirely by RequireNoWallet in App.tsx router
 
   const handleImport = async () => {
     setError(''); setLoading(true)
-    let result: { address: string; privateKey: string } | null = null
+    let secret = ''
     if (method === 'mnemonic') {
       const v = validateMnemonic(input)
       if (!v.valid) { setError(!([12,15,18,21,24].includes(v.wordCount)) ? `Need 12 words, got ${v.wordCount}.` : `Invalid characters in words: ${v.invalidWords.slice(0,3).join(', ')} - use only letters`); setLoading(false); return }
-      result = await importFromMnemonic(input.trim())
-      if (result) { (result as any).mnemonic = input.trim() }  // Store the mnemonic that was imported
+      secret = input.trim()
     } else {
       const cleaned = input.trim().replace(/^0x/, '')
       if (!/^[0-9a-fA-F]{64}$/.test(cleaned)) { setError('Private key must be 64 hex characters.'); setLoading(false); return }
-      result = await importFromPrivateKey('0x' + cleaned)
+      secret = '0x' + cleaned
     }
-    if (!result) { setError('Could not import wallet. Check your input.'); setLoading(false); return }
     const walletSource = method === 'mnemonic' ? 'import-seed' : 'import-privkey'
+    // Handed straight to the wallet frame, which checks it (real BIP-39
+    // checksum, same m/44'/60'/0'/0/0 path as always) and keeps it. The
+    // input is cleared at once so the secret doesn't linger in this page.
+    let result: { address: string; signer: WalletAccount } | null = null
+    try {
+      const signer = await importWallet(walletSource, secret)
+      result = { address: signer.address, signer }
+      setInput('')
+    } catch (e) {
+      setError(e instanceof WalletFrameError && e.code === 'invalid' ? e.message : 'Could not import wallet. Check your input.')
+      setLoading(false); return
+    } finally { secret = '' }
 
     // Only checked when an existing wallet is actually present on this
     // account - see the state comment above for why this never affects a
@@ -976,7 +977,7 @@ export function ImportWalletPage() {
   // just factored out so it can run either immediately (no existing wallet,
   // or the imported address already matches it) or after explicit
   // confirmation from the mismatch warning below.
-  const finishImport = async (result: { address: string; privateKey: string; mnemonic?: string }, walletSource: 'import-seed' | 'import-privkey') => {
+  const finishImport = async (result: { address: string; signer: WalletAccount }, walletSource: 'import-seed' | 'import-privkey') => {
     setLoading(true)
     // If no authenticated user yet (self-custody flow from LoginPage), create a local user
     // so isAuthenticated=true and AuthGuard lets them into the app
@@ -998,31 +999,20 @@ export function ImportWalletPage() {
     // (see authHeaders()), which RLS correctly refuses for anything actually
     // scoped to a specific user.
     try { await ensureAnonSession() } catch (e) { console.warn('[Wallet] ensureAnonSession failed:', e) }
-    setWallet(result.address, result.privateKey, result.mnemonic, walletSource)
+    setWallet(result.address, result.signer, walletSource)
     setBalance(0)
         // Use RAW passcode from the in-memory stash
     const { getPendingRawPasscode: getPendingRawPasscodeImport } = await import('@/lib/restoreWallet')
     const rawPasscodeImport = getPendingRawPasscodeImport()
     if (rawPasscodeImport) {
       try {
-        const e = await encryptPrivateKey(result.privateKey, rawPasscodeImport)
-        // Local device storage only - no server-side copy, ever, of the
-        // private key or (for seed imports) the mnemonic. This is the
-        // wallet type that matters most for this design: private-key-only
-        // imports have no mnemonic at all, so this local copy - and
-        // whatever the user has independently saved of their own key - is
-        // now the *only* thing standing between them and permanent loss if
-        // this device's storage is ever cleared. That's the accepted
-        // tradeoff for genuinely never collecting this server-side.
-        storeEncryptedKey(result.address, e)
-        // SECURITY FIX: same encrypted-at-rest treatment as CreateWalletPage
-        // - see its own comment for the full reasoning. `result.mnemonic`
-        // is only ever set for the mnemonic import method (see handleImport
-        // above), so this naturally no-ops for a private-key-only import.
-        if (result.mnemonic) {
-          const encryptedMnemonic = await encryptMnemonic(result.mnemonic, rawPasscodeImport)
-          storeEncryptedMnemonic(result.address, encryptedMnemonic)
-        }
+        // Local device storage only (the wallet frame's origin) - no
+        // server-side copy, ever, of the private key or (for seed imports)
+        // the phrase. Private-key-only imports have no phrase at all, so this
+        // local copy - and whatever the user has independently saved of
+        // their own key - is the *only* thing standing between them and
+        // permanent loss if this device's storage is ever cleared.
+        await setWalletPasscode(result.address, rawPasscodeImport)
         // Imported → the owner already holds the phrase / key they typed in.
         await markWalletBackedUp(result.address)
       } catch {}
@@ -1052,7 +1042,7 @@ export function ImportWalletPage() {
           setAuthIntent('login', decision.existing)
           void finishImport(blocked.result, blocked.walletSource)
         }}
-        onBack={() => { setBlocked(null); setInput('') }}
+        onBack={() => { discardImport(blocked.result); setBlocked(null); setInput('') }}
       />
     )
   }
@@ -1090,7 +1080,7 @@ export function ImportWalletPage() {
           )}
           <div className="flex flex-col gap-2">
             <button
-              onClick={() => setMismatch(null)}
+              onClick={() => { discardImport(mismatch.result); setMismatch(null) }}
               className="w-full py-3 bg-brand rounded-2xl text-sm font-bold text-white"
             >
               Cancel - check my input again
