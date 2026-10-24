@@ -261,12 +261,21 @@ const handlers: Handlers = {
 
   async 'mpc:keygen-begin'() { return mpcCall('keygenBegin') },
 
-  async 'mpc:keygen-next'({ session, reply }) { return mpcCall('keygenNext', String(session), reply) },
+  async 'mpc:keygen-next'({ session, reply }) {
+    const r = await mpcCall<{ box: string; shares?: { address: Hex; phone: KeyShare; backup: KeyShare } }>('keygenNext', String(session), reply)
+    // The phone's shares exist before its last box goes out: store them first,
+    // so a failed store stops signup before the server saves its share.
+    if (r.shares) await vault.storeMpc(r.shares.address, r.shares.phone, r.shares.backup)
+    return { box: r.box } // the shares stay in this origin
+  },
 
   async 'mpc:keygen-finish'({ session, address }) {
-    const r = await mpcCall<{ address: Hex; phone: KeyShare; backup: KeyShare }>('keygenFinish', String(session), address)
-    await vault.storeMpc(r.address, r.phone, r.backup)
-    return { address: r.address } // the shares stay in this origin
+    try {
+      return await mpcCall<{ address: Hex }>('keygenFinish', String(session), address)
+    } catch (e) {
+      vault.forgetMpc(address) // the server finished with another wallet: these shares are useless
+      throw e
+    }
   },
 
   async 'mpc:sign-begin'({ address, request }) {
