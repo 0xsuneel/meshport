@@ -23,8 +23,9 @@ export const SAFE = {
   /** Solidity P-256 verifier, used if the precompile is ever unavailable. */
   fclP256Verifier: '0xA86e0054C51E4894D88762a017ECc5E5235f5DBA',
   /**
-   * Spending limits per delegate - v1.0.0. NOT yet on Arc: it must be deployed
-   * (deterministically, Safe's own bytecode) before first use. Arc only has
+   * Spending limits per delegate - v1.0.0. Deployed on Arc testnet through
+   * Safe's singleton factory with Safe's own deployment bytes (tx 0x54dc739f…,
+   * runtime code identical to Ethereum / Gnosis / Sepolia). Arc also has
    * v0.1.1 at 0xAA46724893dedD72658219405185Fb0Fc91e091C, whose uint16 transfer
    * nonce can overflow and allow replaying past transfers (fixed in 1.0.0,
    * safe-modules PR #520) - never use that one for a payments wallet.
