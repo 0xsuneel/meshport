@@ -1,0 +1,7 @@
+# WebAssembly only: use RustCrypto's 32-bit arithmetic backends (k256 field
+# 10x26, crypto-bigint u32 limbs). cpubits promotes wasm32 to 64-bit by
+# default, but wasm32 has no 64x64->128 multiply, so every limb product became
+# a call to the software routine __multi3 - 45% of key-generation CPU in a
+# profile. See docs/MPC_WALLET.md ("Performance").
+[target.wasm32-wasip1]
+rustflags = ["--cfg", 'cpubits="32"']

@@ -90,3 +90,18 @@ npx vitest run src/wallet/mpc
 | Share size (JSON) | ~300 KB |
 
 Phones are slower; key generation runs once, in the background at signup.
+
+## Performance
+
+Key generation was profiled (Node `--cpu-prof`, `mpc` built with
+`--profile profiling`). 45% of its CPU went to `__multi3`, the software routine
+for 64x64→128-bit multiplication: RustCrypto's `cpubits` treats wasm32 as a
+64-bit target, but wasm32 has no wide multiply. `mpc/.cargo/config.toml` sets
+`cpubits="32"` for the WebAssembly build, selecting the 32-bit field and
+bigint backends (k256 `field_10x26`): **3.1 s → 1.3 s per party**, same
+results (all signature tests pass unchanged).
+
+What remains is the protocol's own work: the oblivious-transfer setup
+(`MulReceiver::init_phase`) and proof checks, i.e. curve arithmetic and
+SHA-256. WebAssembly SIMD would save ~10% more but needs iOS 16.4+, so it is
+left off.
