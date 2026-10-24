@@ -54,6 +54,8 @@ const NewsPage              = lazyRetry(() => import('./features/news/NewsPage')
 const NewsArticlePage       = lazyRetry(() => import('./features/news/NewsArticlePage').then(m => ({ default: m.NewsArticlePage })), 'NewsArticlePage')
 const BulkPayoutPage        = lazyRetry(() => import('./features/bulkpayout/BulkPayoutPage').then(m => ({ default: m.BulkPayoutPage })), 'BulkPayoutPage')
 const ProfilePage           = lazyRetry(() => import('./features/profile/ProfilePage').then(m => ({ default: m.ProfilePage })), 'ProfilePage')
+const CircleWalletPage      = lazyRetry(() => import('./features/profile/CircleWalletPage').then(m => ({ default: m.CircleWalletPage })), 'CircleWalletPage')
+const CircleLoginReturnPage = lazyRetry(() => import('./features/profile/CircleWalletPage').then(m => ({ default: m.CircleLoginReturnPage })), 'CircleLoginReturnPage')
 const SecurityPage          = lazyRetry(() => import('./features/profile/ProfileSubPages').then(m => ({ default: m.SecurityPage })), 'SecurityPage')
 const AppearancePage        = lazyRetry(() => import('./features/profile/ProfileSubPages').then(m => ({ default: m.AppearancePage })), 'AppearancePage')
 const BackupPage            = lazyRetry(() => import('./features/profile/ProfileSubPages').then(m => ({ default: m.BackupPage })), 'BackupPage')
@@ -409,6 +411,9 @@ const router = createBrowserRouter([
   { path: '/privacy', element: <AuthShell><TermsPrivacyPage /></AuthShell> },
   // Public Feature Guide - linked from the landing page, no account needed.
   { path: '/guide',   element: <div className="fixed inset-0 flex flex-col bg-bg"><FeatureGuidePage isPublic /></div> },
+  // Google sends Circle sign-ins back here (src/wallet/circle.ts): outside
+  // the app's gates, which could redirect away and lose the result in the URL.
+  { path: '/wallet/circle-login', element: <CircleLoginReturnPage /> },
 
   // ── Admin Control Panel ──────────────────────────────────────────────────────
   { path: ADMIN_PATH, element: <Navigate to={`${ADMIN_PATH}/login`} replace /> },
@@ -510,6 +515,7 @@ const router = createBrowserRouter([
       { path: 'p2p/my-offers',              element: <Unlocked title="P2P"><P2PMyOffersPage /></Unlocked> },
       { path: 'p2p/my-trades',              element: <Unlocked title="P2P"><P2PMyTradesPage /></Unlocked> },
       { path: 'p2p/history',                element: <Unlocked title="P2P"><P2PHistoryPage /></Unlocked> },
+      { path: 'circle-wallet',              element: <Unlocked title="Circle wallet"><CircleWalletPage /></Unlocked> },
       { path: 'swap',                        element: <Unlocked title="Swap"><FeatureGate feature="swap_enabled"><SwapPage /></FeatureGate></Unlocked> },
       { path: 'activity/:id',               element: <TransactionDetailPage /> },
     ],
