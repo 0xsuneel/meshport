@@ -51,11 +51,16 @@ let handler: (req: any, res: any) => Promise<unknown>
 let mpc: Mpc
 let identityPub: Hex
 
-async function call(body: unknown, token = 'tok-ravi'): Promise<{ status: number; json: any }> {
-  let status = 0, json: unknown
-  const res = { status(s: number) { status = s; return res }, json(j: unknown) { json = JSON.parse(JSON.stringify(j)); return res } }
+async function call(body: unknown, token = 'tok-ravi'): Promise<{ status: number; json: any; timing: string }> {
+  let status = 0, json: unknown, timing = ''
+  const res = {
+    status(s: number) { status = s; return res },
+    json(j: unknown) { json = JSON.parse(JSON.stringify(j)); return res },
+    setHeader(name: string, value: string) { if (name === 'Server-Timing') timing = value; return res },
+  }
   await handler({ method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.parse(JSON.stringify(body)) }, res)
-  return { status, json }
+  expect(timing).toMatch(/^auth;dur=\d+, init;dur=\d+, mpc;dur=\d+, total;dur=\d+$/) // every reply says where its time went
+  return { status, json, timing }
 }
 
 describe('api/wallet-mpc (handler, end to end, with the frame\'s phone code)', () => {
