@@ -106,6 +106,8 @@ export interface WalletRpc {
   'mpc:sign-next': [{ session: string; reply: unknown }, { box: string } | { signature: { r: Hex; s: Hex; v: 27 | 28 } }]
   /** Speed check: a full 3-party key generation inside the frame, no network, no keys kept. */
   'mpc:benchmark': [Record<string, never>, { ms: number; cores: number }]
+  /** Start the MPC worker, compile the module and open this wallet's share, ahead of the first signature. */
+  'mpc:warm': [{ address?: string }, { ok: true }]
 }
 
 /** What an MPC wallet is asked to sign - never a bare hash. */

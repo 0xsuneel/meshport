@@ -18,7 +18,7 @@ import {
   BACKUP, PHONE, SERVER, keygenReady, keygenStart, keygenStep, signReady, signStart, signStep,
   type Hex, type KeyShare, type KeygenState, type MpcMsg, type PartyNo, type SignState,
 } from '../../src/wallet/mpc/protocol'
-import { identityFromSeed, newEphemeral, openChannel, signHello, type SessionKind } from '../../src/wallet/mpc/channel'
+import { identityFromSeed, newEphemeral, openChannel, packJson, signHello, unpackJson, type SessionKind } from '../../src/wallet/mpc/channel'
 
 export const STATE_TTL_MS = 5 * 60_000
 
@@ -90,7 +90,7 @@ async function deriveKey(secret: Uint8Array, label: string): Promise<CryptoKey> 
 
 async function seal(key: CryptoKey, aad: string, value: unknown): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12))
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: enc.encode(aad) }, key, enc.encode(JSON.stringify(value))))
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: enc.encode(aad) }, key, new Uint8Array(await packJson(value))))
   const out = new Uint8Array(12 + ct.length)
   out.set(iv); out.set(ct, 12)
   return bytesToB64(out)
@@ -100,7 +100,7 @@ async function open<T>(key: CryptoKey, aad: string, token: string): Promise<T> {
   try {
     const raw = fromB64(token)
     const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.subarray(0, 12), additionalData: enc.encode(aad) }, key, raw.subarray(12))
-    return JSON.parse(dec.decode(pt)) as T
+    return await unpackJson<T>(new Uint8Array(pt))
   } catch {
     throw new MpcServiceError('bad-request', 'This request is not valid for your session')
   }

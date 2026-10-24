@@ -10,7 +10,7 @@ import type { PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from '.
 
 export { walletAccount, isWalletAccount, toEthersSigner, createWalletAdapter, type WalletAccount } from './account'
 export { WalletFrameError, walletOrigin, walletReady } from './frameClient'
-export { createMpcWallet, getMpcWallet, mpcSpeedCheck, mpcWalletAccount, withMpcTiming, type MpcTiming } from './mpcAccount'
+export { createMpcWallet, getMpcWallet, mpcSpeedCheck, mpcWalletAccount, mpcWarm, withMpcTiming, type MpcTiming } from './mpcAccount'
 export type { PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
 
 export function walletStatus(address: string): Promise<WalletStatus> {

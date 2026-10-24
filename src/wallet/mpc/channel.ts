@@ -41,6 +41,37 @@ function b64(b: Uint8Array): string {
 }
 const unb64 = (s: string) => Uint8Array.from(atob(s), c => c.charCodeAt(0))
 
+// ── Compression ─────────────────────────────────────────────────────────────
+// MPC messages and states are JSON in which every byte is a decimal number -
+// ~3.6x their size - and once encrypted nothing on the way can compress them.
+// So they're deflated before encryption. The first plaintext byte says which:
+// PACKED (deflate-raw) or '[' / '{' (plain JSON, from older builds), so frame
+// and server versions can differ during a deploy.
+const PACKED = 0x01
+
+async function pipe(bytes: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
+  const out = new Response(new Blob([new Uint8Array(bytes)]).stream().pipeThrough(stream))
+  return new Uint8Array(await out.arrayBuffer())
+}
+
+/** JSON → bytes to encrypt (deflated, marked). */
+export async function packJson(value: unknown): Promise<Uint8Array> {
+  const raw = enc.encode(JSON.stringify(value))
+  if (typeof CompressionStream === 'undefined') return raw
+  const z = await pipe(raw, new CompressionStream('deflate-raw'))
+  const out = new Uint8Array(z.length + 1)
+  out[0] = PACKED; out.set(z, 1)
+  return out
+}
+
+/** Decrypted bytes → JSON, packed or plain. */
+export async function unpackJson<T>(bytes: Uint8Array): Promise<T> {
+  const text = bytes[0] === PACKED
+    ? dec.decode(await pipe(bytes.subarray(1), new DecompressionStream('deflate-raw')))
+    : dec.decode(bytes)
+  return JSON.parse(text) as T
+}
+
 /** A fresh ECDH key for one session. `pub` is compressed (33 bytes). */
 export function newEphemeral(): { priv: Hex; pub: Hex } {
   const priv = p256.utils.randomPrivateKey()
@@ -101,7 +132,8 @@ export async function openChannel(role: Role, myPriv: Hex, theirPub: Hex, kind: 
   return {
     async seal(msgs, step) {
       const iv = crypto.getRandomValues(new Uint8Array(12))
-      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad(sendDir, step) }, sendKey, enc.encode(JSON.stringify(msgs))))
+      const plain = await packJson(msgs)
+      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: aad(sendDir, step) }, sendKey, new Uint8Array(plain)))
       const out = new Uint8Array(12 + ct.length)
       out.set(iv); out.set(ct, 12)
       return b64(out)
@@ -110,7 +142,7 @@ export async function openChannel(role: Role, myPriv: Hex, theirPub: Hex, kind: 
       try {
         const raw = unb64(box)
         const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: raw.subarray(0, 12), additionalData: aad(recvDir, step) }, recvKey, raw.subarray(12))
-        const msgs = JSON.parse(dec.decode(pt))
+        const msgs = await unpackJson<unknown>(new Uint8Array(pt))
         if (!Array.isArray(msgs)) throw new Error('not a list')
         return msgs as MpcMsg[]
       } catch {
