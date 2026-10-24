@@ -22,8 +22,16 @@ export const SAFE = {
   webAuthnSignerFactory: '0x1d31F259eE307358a26dFb23EB365939E8641195',
   /** Solidity P-256 verifier, used if the precompile is ever unavailable. */
   fclP256Verifier: '0xA86e0054C51E4894D88762a017ECc5E5235f5DBA',
-  /** Spending limits per delegate (the version deployed on Arc). */
-  allowanceModule: '0xAA46724893dedD72658219405185Fb0Fc91e091C',
+  /**
+   * Spending limits per delegate - v1.0.0. NOT yet on Arc: it must be deployed
+   * (deterministically, Safe's own bytecode) before first use. Arc only has
+   * v0.1.1 at 0xAA46724893dedD72658219405185Fb0Fc91e091C, whose uint16 transfer
+   * nonce can overflow and allow replaying past transfers (fixed in 1.0.0,
+   * safe-modules PR #520) - never use that one for a payments wallet.
+   */
+  allowanceModule: '0x691f59471Bfd2B7d639DCF74671a2d648ED1E331',
+  /** Batches the first-use configuration (delegatecalled). Code hash verified on Arc. */
+  multiSendCallOnly: '0x9641d764fc13c8B624c04430C7356C1C7C8102e2',
   /** Candide social recovery (guardians + delay), formally verified by Safe. */
   socialRecoveryModule: '0x4Aa5Bf7D840aC607cb5BD3249e6Af6FC86C04897',
   entryPointV07: '0x0000000071727De22E5E9d8BAf0edAc6f37da032',
@@ -31,3 +39,9 @@ export const SAFE = {
 
 /** Arc's RIP-7212 P-256 precompile (verified: valid sig → 1). */
 export const ARC_P256_PRECOMPILE = 0x100n
+
+/** Arc's ERC-20 view of native USDC (6 decimals). Allowances are set on this. */
+export const ARC_USDC_ERC20: Hex = '0x3600000000000000000000000000000000000000'
+
+/** Fixed in the deployed SocialRecoveryModule (immutable constructor arg). */
+export const RECOVERY_PERIOD_SECONDS = 14 * 24 * 60 * 60
