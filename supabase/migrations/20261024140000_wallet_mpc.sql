@@ -1,10 +1,10 @@
 -- MPC wallet (testnet): MeshPort's share of each user's 2-of-3 wallet key,
 -- and a log of every hash MeshPort agreed to co-sign. See docs/MPC_WALLET.md.
 --
--- Only the wallet-mpc Edge Function (service role) touches these tables: RLS
+-- Only the signing service, api/wallet-mpc.ts (service role), touches these tables: RLS
 -- is on and forced with no policies, and anon / authenticated get nothing.
--- share_ct is sealed by the function (AES-256-GCM, key derived from the
--- MPC_SECRET function secret, bound to the user and the address), so a dump
+-- share_ct is sealed by that service (AES-256-GCM, key derived from its
+-- MPC_SECRET environment secret, bound to the user and the address), so a dump
 -- of this table alone opens nothing - and a share alone can't sign anyway.
 
 create table if not exists public.wallet_mpc_shares (

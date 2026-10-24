@@ -13,9 +13,9 @@
 // Parties: 1 = phone (wallet frame), 2 = MeshPort server, 3 = backup. At
 // signup the phone plays parties 1 and 3 and exports 3's share as the backup.
 
-// Self-contained with .ts imports: the signing service (Deno) runs this same
-// file from supabase/functions/_shared/mpc/ (copied by mpc/build.sh).
-import type { Mpc } from './wasm.ts'
+// Self-contained: the signing service (server/mpc, api/wallet-mpc.ts) runs
+// this same file, so it imports nothing from the rest of the app.
+import type { Mpc } from './wasm'
 
 export type Hex = `0x${string}`
 
