@@ -275,14 +275,29 @@ export async function emailLogin(uid: string, email: string): Promise<void> {
 
 export interface ChallengeOutcome { status?: string; type?: string; signature?: Hex; signedTransaction?: Hex }
 
-/** Run a challenge in Circle's SDK (no screen while Confirmation UIs are off). */
-export async function executeChallenge(uid: string, challengeId: string): Promise<ChallengeOutcome> {
+// Circle's SDK runs one challenge at a time: one frame, one callback - a
+// second execute() replaces the first one's callback, which then never
+// finishes (a payment screen waiting forever). Challenges queue here.
+let challengeQueue: Promise<unknown> = Promise.resolve()
+const CHALLENGE_TIMEOUT_MS = 60_000
+
+/** Run a challenge in Circle's SDK (no screen while Confirmation UIs are off), one at a time. */
+export function executeChallenge(uid: string, challengeId: string): Promise<ChallengeOutcome> {
+  const run = () => runChallenge(uid, challengeId)
+  const next = challengeQueue.then(run, run)
+  challengeQueue = next.catch(() => {})
+  return next
+}
+
+async function runChallenge(uid: string, challengeId: string): Promise<ChallengeOutcome> {
   const s = loadCircleSession(uid)
   if (!s) throw new CircleError(401, 'session', 'Sign in to your Circle wallet')
   const w = await sdk()
   w.setAuthentication({ userToken: s.userToken, encryptionKey: s.encryptionKey })
   return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new CircleError(504, 'challenge', 'Circle did not answer - try again')), CHALLENGE_TIMEOUT_MS)
     w.execute(challengeId, (error, result) => {
+      clearTimeout(timer)
       if (error) {
         const e = error as { code?: number; message?: string }
         reject(new CircleError(400, e.code === 155104 ? 'session' : 'challenge', e.message || 'Not approved'))
