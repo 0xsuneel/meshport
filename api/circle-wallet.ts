@@ -1,24 +1,22 @@
 // api/circle-wallet.ts - MeshPort's backend for Circle user-controlled wallets.
 //
-// One POST endpoint, JSON body { action, ... }; the caller must be signed in to
-// MeshPort (Supabase session, not anonymous). Actions that act for a Circle
-// user also take that user's Circle session (`userToken`), which stays in the
-// browser; server/circle/service.ts checks it belongs to this account.
+// One POST endpoint, JSON body { action, ... }. social-device-token starts a
+// Google sign-in, so it needs no MeshPort session (limited per IP); every
+// other action needs one (Supabase, not anonymous). Actions that act for a
+// Circle user also take that user's Circle session (`userToken`), which stays
+// in the browser; server/circle/service.ts checks it belongs to this account.
 //
 //   social-device-token  { deviceId }                          → { deviceToken, deviceEncryptionKey }
 //   email-device-token   { deviceId }                          → { deviceToken, deviceEncryptionKey, otpToken }
 //                         (always this MeshPort account's email)
 //   refresh              { userToken, refreshToken, deviceId } → { userToken, encryptionKey, refreshToken }
-//   link                 { userToken }                         → { circleUserId, walletId, address }
-//   initialize           { userToken }                         → { challengeId } | { initialized: true }
+//   link                 { userToken }                         → { circleUserId }
+//   initialize           { userToken }                         → { challengeId } | { ready: true }
 //   wallet               { userToken }                         → { walletId, address, blockchain }
-//   balances             { userToken }                         → { balances }
-//   transfer             { userToken, to, amount, symbol?, idempotencyKey? } → { challengeId, idempotencyKey }
-//   contract             { userToken, contractAddress, callData, amount?, idempotencyKey? } → { challengeId, idempotencyKey }
+//   sign-transaction     { userToken, transaction }            → { challengeId }  (the app broadcasts)
 //   sign-message         { userToken, message, encodedByHex? } → { challengeId }
 //   sign-typed           { userToken, typedData }              → { challengeId }
-//   challenge            { userToken, challengeId }            → { status, type, transactionIds, … }
-//   transaction          { userToken, id }                     → { state, txHash, … }
+//   challenge            { userToken, challengeId }            → { status, type, … }
 //
 // Env: CIRCLE_API_KEY (Circle Console standard key, PREFIX:ID:SECRET),
 // SUPABASE_URL, SUPABASE_SERVICE_KEY / SUPABASE_SERVICE_ROLE_KEY.
@@ -36,10 +34,10 @@ async function rest(pathAndQuery: string, init?: RequestInit): Promise<Response>
 
 const repo: CircleRepo = {
   async link(authUid) {
-    const r = await rest(`circle_wallet_users?auth_uid=eq.${encodeURIComponent(authUid)}&select=circle_user_id,wallet_id,address`)
+    const r = await rest(`circle_wallet_users?auth_uid=eq.${encodeURIComponent(authUid)}&select=circle_user_id,wallet_id,address,blockchain`)
     if (!r.ok) throw new Error(`link lookup failed (${r.status})`)
-    const rows = await r.json() as Array<{ circle_user_id: string; wallet_id: string | null; address: string | null }>
-    return rows[0] ? { circleUserId: rows[0].circle_user_id, walletId: rows[0].wallet_id, address: rows[0].address } : null
+    const rows = await r.json() as Array<{ circle_user_id: string; wallet_id: string | null; address: string | null; blockchain: string | null }>
+    return rows[0] ? { circleUserId: rows[0].circle_user_id, walletId: rows[0].wallet_id, address: rows[0].address, blockchain: rows[0].blockchain } : null
   },
   async saveLink(authUid, circleUserId) {
     const r = await rest('circle_wallet_users', {
@@ -50,10 +48,10 @@ const repo: CircleRepo = {
     if (!r.ok) throw new Error(`link save failed (${r.status})`)
     return 'saved'
   },
-  async saveWallet(authUid, walletId, address) {
+  async saveWallet(authUid, walletId, address, blockchain) {
     const r = await rest(`circle_wallet_users?auth_uid=eq.${encodeURIComponent(authUid)}`, {
       method: 'PATCH', headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({ wallet_id: walletId, address, updated_at: new Date().toISOString() }),
+      body: JSON.stringify({ wallet_id: walletId, address, blockchain, updated_at: new Date().toISOString() }),
     })
     if (!r.ok) throw new Error(`wallet save failed (${r.status})`)
   },
@@ -77,17 +75,19 @@ async function caller(req: VercelRequest): Promise<{ uid: string; email: string 
   return u?.id ? { uid: u.id, email: u.email ?? null, anonymous: u.is_anonymous === true } : null
 }
 
-// Per warm instance: 120 requests a minute per account.
+// Per warm instance: 120 requests a minute per account; 10 sign-in starts a
+// minute per IP (before anyone is signed in).
 const recent = new Map<string, number[]>()
-function allow(uid: string): boolean {
+function allow(key: string, max = 120): boolean {
   const now = Date.now()
-  const hits = (recent.get(uid) ?? []).filter(t => now - t < 60_000)
-  if (hits.length >= 120) return false
+  const hits = (recent.get(key) ?? []).filter(t => now - t < 60_000)
+  if (hits.length >= max) return false
   hits.push(now)
-  recent.set(uid, hits)
+  recent.set(key, hits)
   if (recent.size > 5000) recent.delete(recent.keys().next().value!)
   return true
 }
+const clientIp = (req: VercelRequest) => String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown'
 
 const STATUS: Record<CircleWalletError['code'], number> = {
   'bad-request': 400, session: 401, 'not-linked': 404, 'linked-elsewhere': 409, 'no-wallet': 404, circle: 502,
@@ -103,6 +103,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(status).json(payload)
   }
 
+  if (body.action === 'social-device-token') {
+    if (!allow('ip:' + clientIp(req), 10)) return send(429, { error: 'Too many sign-in attempts - try again in a minute' })
+    try { return send(200, await getService().socialDeviceToken(body.deviceId)) } catch (e) {
+      if (e instanceof CircleWalletError) return send(STATUS[e.code], { error: e.message, code: e.code })
+      console.error('[circle-wallet]', e instanceof Error ? e.message : e)
+      return send(500, { error: 'Wallet service error' })
+    }
+  }
+
   const who = await caller(req)
   if (!who) return send(401, { error: 'Sign in to MeshPort first', code: 'meshport-session' })
   // A wallet hangs off the account's id; an anonymous session's id doesn't last.
@@ -114,19 +123,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const uid = who.uid
     const t = body.userToken
     switch (body.action) {
-      case 'social-device-token': return send(200, await svc.socialDeviceToken(body.deviceId))
       case 'email-device-token': return send(200, await svc.emailDeviceToken(body.deviceId, who.email))
       case 'refresh': return send(200, await svc.refresh(t, body.refreshToken, body.deviceId))
       case 'link': return send(200, await svc.link(uid, t))
       case 'initialize': return send(200, await svc.initialize(uid, t))
       case 'wallet': return send(200, await svc.wallet(uid, t))
-      case 'balances': return send(200, await svc.balances(uid, t))
-      case 'transfer': return send(200, await svc.transfer(uid, t, body))
-      case 'contract': return send(200, await svc.contractExecution(uid, t, body))
+      case 'sign-transaction': return send(200, await svc.signTransaction(uid, t, body))
       case 'sign-message': return send(200, await svc.signMessage(uid, t, body))
       case 'sign-typed': return send(200, await svc.signTypedData(uid, t, body))
       case 'challenge': return send(200, await svc.challenge(uid, t, body.challengeId))
-      case 'transaction': return send(200, await svc.transaction(uid, t, body.id))
       default: return send(400, { error: 'Unknown action' })
     }
   } catch (e) {
