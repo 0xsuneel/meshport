@@ -1,9 +1,12 @@
 // server/circle/service.ts
 //
-// MeshPort's backend for Circle User-Controlled Wallets (EOA on Arc testnet).
-// Users sign in to MeshPort as before (Supabase) and to Circle with Circle's
-// own Google login or email OTP; every action is approved by the user in
-// Circle's SDK (a challenge). This file never sees keys, PINs or OTP codes.
+// MeshPort's backend for Circle User-Controlled Wallets. The wallet is a
+// generic EVM EOA (EVM-TESTNET): Circle signs, MeshPort broadcasts through
+// its own relay exactly like the app's other wallets - Circle only offers
+// "sign, don't send" for generic EVM wallets. Users sign in to Circle with
+// Google (the same Google sign-in as MeshPort) or an email code; every
+// signature is a challenge the app runs in Circle's SDK. This file never sees
+// keys or OTP codes.
 //
 // Identity: one MeshPort account is linked to exactly one Circle user. Every
 // call that acts for a user checks that the Circle session (X-User-Token)
@@ -14,7 +17,7 @@
 import { getAddress, isAddress } from 'viem'
 import { CIRCLE_ERR, CircleApiError, type CircleClient } from './client'
 
-export const CIRCLE_CHAIN = 'ARC-TESTNET'
+export const CIRCLE_CHAIN = 'EVM-TESTNET'
 const SESSION_CACHE_MS = 5 * 60_000
 
 export type CircleWalletErrorCode =
@@ -22,35 +25,28 @@ export type CircleWalletErrorCode =
   | 'session'          // Circle session missing, expired or not this account's: sign in to Circle again
   | 'not-linked'       // no Circle user linked to this MeshPort account yet
   | 'linked-elsewhere' // this Circle login belongs to a different MeshPort account (or vice versa)
-  | 'no-wallet'        // the Circle user has no Arc wallet yet: initialize first
+  | 'no-wallet'        // the Circle user has no EVM wallet yet: initialize first
   | 'circle'           // Circle refused or failed
 
 export class CircleWalletError extends Error {
   constructor(public code: CircleWalletErrorCode, message: string) { super(message) }
 }
 
-export interface CircleLink { circleUserId: string; walletId: string | null; address: string | null }
+export interface CircleLink { circleUserId: string; walletId: string | null; address: string | null; blockchain: string | null }
 
 export interface CircleRepo {
   /** The Circle user (and wallet) linked to this MeshPort account, if any. */
   link(authUid: string): Promise<CircleLink | null>
   /** Link a Circle user; 'taken' if that Circle user is linked to another account. */
   saveLink(authUid: string, circleUserId: string): Promise<'saved' | 'taken'>
-  saveWallet(authUid: string, walletId: string, address: string): Promise<void>
+  saveWallet(authUid: string, walletId: string, address: string, blockchain: string): Promise<void>
 }
-
-export interface TokenBalance { symbol: string; amount: string; tokenId: string; isNative: boolean; tokenAddress: string | null; decimals: number | null }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const AMOUNT = /^(?:0|[1-9]\d{0,17})(?:\.\d{1,18})?$/
 const HEX = /^0x(?:[0-9a-fA-F]{2})*$/
+const QUANTITY = /^(?:0x[0-9a-fA-F]{1,64}|\d{1,78})$/
 
 const bad = (m: string): never => { throw new CircleWalletError('bad-request', m) }
-const uuidOr = (v: unknown, what: string): string => {
-  if (v === undefined || v === null || v === '') return crypto.randomUUID()
-  if (typeof v !== 'string' || !UUID.test(v)) bad(`${what} must be a UUID`)
-  return v as string
-}
 const needUuid = (v: unknown, what: string): string => {
   if (typeof v !== 'string' || !UUID.test(v)) bad(`${what} must be a UUID`)
   return v as string
@@ -62,6 +58,44 @@ const needDevice = (v: unknown): string => {
 const needToken = (v: unknown): string => {
   if (typeof v !== 'string' || v.length < 20 || v.length > 8000) throw new CircleWalletError('session', 'Sign in to your Circle wallet again')
   return v as string
+}
+/** A quantity (number, decimal or hex string) as 0x-hex, or undefined. */
+const quantity = (v: unknown, what: string): string | undefined => {
+  if (v === undefined || v === null) return undefined
+  const s = typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? String(v) : v
+  if (typeof s !== 'string' || !QUANTITY.test(s)) bad(`${what} must be a non-negative integer`)
+  return '0x' + BigInt(s as string).toString(16)
+}
+
+/**
+ * The EIP-1559 JSON Circle signs, from an EVM transaction request. A legacy
+ * gasPrice becomes maxFeePerGas = maxPriorityFeePerGas = gasPrice (Circle
+ * only signs EIP-1559).
+ */
+export function circleTransaction(tx: unknown): string {
+  if (!tx || typeof tx !== 'object') bad('transaction is missing')
+  const t = tx as Record<string, unknown>
+  if (t.type !== undefined && t.type !== 'eip1559' && t.type !== 'legacy' && t.type !== 2 && t.type !== '0x2') bad('Only EIP-1559 transactions can be signed')
+  const chainId = Number(t.chainId)
+  if (!Number.isSafeInteger(chainId) || chainId <= 0) bad('chainId is missing')
+  if (t.to !== undefined && t.to !== null && (typeof t.to !== 'string' || !isAddress(t.to))) bad('to is not an address')
+  if (t.data !== undefined && t.data !== null && (typeof t.data !== 'string' || !HEX.test(t.data))) bad('data must be hex')
+  const nonce = quantity(t.nonce, 'nonce')
+  const gas = quantity(t.gas, 'gas')
+  if (nonce === undefined || gas === undefined) bad('nonce and gas are required')
+  const gasPrice = quantity(t.gasPrice, 'gasPrice')
+  const maxFeePerGas = quantity(t.maxFeePerGas, 'maxFeePerGas') ?? gasPrice
+  const maxPriorityFeePerGas = quantity(t.maxPriorityFeePerGas, 'maxPriorityFeePerGas') ?? gasPrice
+  if (maxFeePerGas === undefined || maxPriorityFeePerGas === undefined) bad('fees are required')
+  const out: Record<string, unknown> = {
+    ...(t.to ? { to: getAddress(t.to as string) } : {}),
+    nonce, value: quantity(t.value, 'value') ?? '0x0',
+    ...(t.data && t.data !== '0x' ? { data: t.data } : {}),
+    chainId, gas, maxFeePerGas, maxPriorityFeePerGas,
+  }
+  const json = JSON.stringify(out)
+  if (json.length > 200_000) bad('transaction is too large')
+  return json
 }
 
 async function tokenKey(userToken: string): Promise<string> {
@@ -108,42 +142,34 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
     return link
   }
 
-  async function walletOf(authUid: string, userToken: unknown): Promise<{ link: CircleLink; walletId: string; address: string }> {
-    const link = await linked(authUid, userToken)
-    if (link.walletId && link.address) return { link, walletId: link.walletId, address: link.address }
-    const w = await findWallet(authUid, userToken as string)
-    return { link, ...w }
-  }
+  type Wallet = { id: string; address: string; blockchain: string; state: string; accountType?: string; createDate: string }
 
-  async function findWallet(authUid: string, userToken: string): Promise<{ walletId: string; address: string }> {
-    const r = await call(() => circle.request<{ wallets?: Array<{ id: string; address: string; blockchain: string; state: string; accountType?: string; createDate: string }> }>(
-      'GET', '/v1/w3s/wallets', { userToken, query: { blockchain: CIRCLE_CHAIN } }))
+  async function liveWallet(userToken: string): Promise<Wallet | null> {
+    const r = await call(() => circle.request<{ wallets?: Wallet[] }>('GET', '/v1/w3s/wallets', { userToken, query: { blockchain: CIRCLE_CHAIN } }))
     const live = (r.wallets ?? [])
       .filter(w => w.blockchain === CIRCLE_CHAIN && w.state === 'LIVE' && w.accountType === 'EOA')
       .sort((a, b) => a.createDate.localeCompare(b.createDate))
-    if (!live.length) throw new CircleWalletError('no-wallet', 'Your Circle wallet is not set up yet')
-    const address = getAddress(live[0].address)
-    await repo.saveWallet(authUid, live[0].id, address)
-    return { walletId: live[0].id, address }
+    return live[0] ?? null
   }
 
-  async function balancesOf(userToken: string, walletId: string): Promise<TokenBalance[]> {
-    const r = await call(() => circle.request<{ tokenBalances?: Array<{ amount: string; token: { id: string; symbol?: string; isNative: boolean; tokenAddress?: string; decimals?: number } }> }>(
-      'GET', `/v1/w3s/wallets/${walletId}/balances`, { userToken, query: { includeAll: 'true' } }))
-    return (r.tokenBalances ?? []).map(b => ({
-      symbol: b.token.symbol ?? '', amount: b.amount, tokenId: b.token.id, isNative: b.token.isNative,
-      tokenAddress: b.token.tokenAddress ?? null, decimals: b.token.decimals ?? null,
-    }))
+  async function walletOf(authUid: string, userToken: unknown): Promise<{ walletId: string; address: string }> {
+    const link = await linked(authUid, userToken)
+    if (link.walletId && link.address && link.blockchain === CIRCLE_CHAIN) return { walletId: link.walletId, address: link.address }
+    const w = await liveWallet(userToken as string)
+    if (!w) throw new CircleWalletError('no-wallet', 'Your Circle wallet is not set up yet')
+    const address = getAddress(w.address)
+    await repo.saveWallet(authUid, w.id, address, CIRCLE_CHAIN)
+    return { walletId: w.id, address }
   }
 
   return {
-    /** For Circle's Web SDK Google login (performLogin): device credentials for this browser. */
+    /** For a Google sign-in: device credentials for this browser. Needs no MeshPort session (it starts the sign-in). */
     async socialDeviceToken(deviceId: unknown) {
       return call(() => circle.request<{ deviceToken: string; deviceEncryptionKey?: string }>('POST', '/v1/w3s/users/social/token',
         { body: { idempotencyKey: crypto.randomUUID(), deviceId: needDevice(deviceId) } }))
     },
 
-    /** For Circle's email OTP login: always the MeshPort account's own email, never one from the request. */
+    /** For Circle's email-code sign-in: always the MeshPort account's own email, never one from the request. */
     async emailDeviceToken(deviceId: unknown, accountEmail: string | null) {
       if (!accountEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(accountEmail)) bad('This MeshPort account has no email address')
       return call(() => circle.request<{ deviceToken: string; deviceEncryptionKey?: string; otpToken?: string }>('POST', '/v1/w3s/users/email/token',
@@ -162,73 +188,50 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
       const existing = await repo.link(authUid)
       if (existing) {
         if (existing.circleUserId !== circleUserId) throw new CircleWalletError('linked-elsewhere', 'This MeshPort account uses a different Circle sign-in')
-        return { circleUserId, walletId: existing.walletId, address: existing.address }
+        return { circleUserId }
       }
       if (await repo.saveLink(authUid, circleUserId) === 'taken') {
         throw new CircleWalletError('linked-elsewhere', 'This Circle sign-in belongs to a different MeshPort account')
       }
-      return { circleUserId, walletId: null, address: null }
+      return { circleUserId }
     },
 
-    /** First use: a challenge that creates the user's Arc EOA wallet; { initialized } if it exists already. */
-    async initialize(authUid: string, userToken: unknown): Promise<{ challengeId: string } | { initialized: true }> {
+    /**
+     * A challenge that creates the user's EVM wallet, or { ready } if it
+     * exists. A user Circle set up before (e.g. with an Arc-only wallet) gets
+     * the EVM wallet added instead of a second set-up.
+     */
+    async initialize(authUid: string, userToken: unknown): Promise<{ challengeId: string } | { ready: true }> {
       await linked(authUid, userToken)
+      const token = userToken as string
       try {
         const r = await circle.request<{ challengeId: string }>('POST', '/v1/w3s/user/initialize', {
-          userToken: userToken as string,
-          body: { idempotencyKey: crypto.randomUUID(), accountType: 'EOA', blockchains: [CIRCLE_CHAIN] },
+          userToken: token, body: { idempotencyKey: crypto.randomUUID(), accountType: 'EOA', blockchains: [CIRCLE_CHAIN] },
         })
         return { challengeId: r.challengeId }
       } catch (e) {
-        if (e instanceof CircleApiError && e.code === CIRCLE_ERR.userWasInitialized) return { initialized: true }
-        return call(() => Promise.reject(e))
+        if (!(e instanceof CircleApiError && e.code === CIRCLE_ERR.userWasInitialized)) return call(() => Promise.reject(e))
       }
+      if (await liveWallet(token)) return { ready: true }
+      const r = await call(() => circle.request<{ challengeId: string }>('POST', '/v1/w3s/user/wallets', {
+        userToken: token, body: { idempotencyKey: crypto.randomUUID(), accountType: 'EOA', blockchains: [CIRCLE_CHAIN] },
+      }))
+      return { challengeId: r.challengeId }
     },
 
-    /** The account's Arc wallet (looked up at Circle once, then remembered). */
+    /** The account's wallet (looked up at Circle once, then remembered). */
     async wallet(authUid: string, userToken: unknown) {
       const { walletId, address } = await walletOf(authUid, userToken)
       return { walletId, address, blockchain: CIRCLE_CHAIN }
     },
 
-    async balances(authUid: string, userToken: unknown) {
+    /** A challenge to sign an EVM transaction; the app broadcasts the result itself. */
+    async signTransaction(authUid: string, userToken: unknown, req: { transaction?: unknown }) {
+      const transaction = circleTransaction(req.transaction)
       const { walletId } = await walletOf(authUid, userToken)
-      return { balances: await balancesOf(userToken as string, walletId) }
-    },
-
-    /** A transfer challenge; the user approves it in Circle's SDK. Retrying with the same idempotencyKey never sends twice. */
-    async transfer(authUid: string, userToken: unknown, req: { to?: unknown; amount?: unknown; symbol?: unknown; idempotencyKey?: unknown }) {
-      if (typeof req.to !== 'string' || !isAddress(req.to)) bad('Enter a valid 0x address to send to')
-      if (typeof req.amount !== 'string' || !AMOUNT.test(req.amount) || /^0(?:\.0+)?$/.test(req.amount)) bad('Enter an amount above 0, like 1.50')
-      const symbol = typeof req.symbol === 'string' && req.symbol ? req.symbol.toUpperCase() : 'USDC'
-      const idempotencyKey = uuidOr(req.idempotencyKey, 'idempotencyKey')
-      const { walletId } = await walletOf(authUid, userToken)
-      const token = (await balancesOf(userToken as string, walletId)).find(b => b.symbol.toUpperCase() === symbol)
-      if (!token) bad(`No ${symbol} in this wallet`)
-      const decimals = token!.decimals
-      if (decimals !== null && ((req.amount as string).split('.')[1]?.length ?? 0) > decimals) bad(`${symbol} has at most ${decimals} decimals`)
-      const r = await call(() => circle.request<{ challengeId: string }>('POST', '/v1/w3s/user/transactions/transfer', {
-        userToken: userToken as string,
-        body: { idempotencyKey, walletId, destinationAddress: getAddress(req.to as string), amounts: [req.amount as string], tokenId: token!.tokenId, feeLevel: 'MEDIUM' },
+      return call(() => circle.request<{ challengeId: string }>('POST', '/v1/w3s/user/sign/transaction', {
+        userToken: userToken as string, body: { walletId, transaction },
       }))
-      return { challengeId: r.challengeId, idempotencyKey }
-    },
-
-    /** A contract call challenge (swap, bridge, escrow…): raw calldata, approved in Circle's SDK. */
-    async contractExecution(authUid: string, userToken: unknown, req: { contractAddress?: unknown; callData?: unknown; amount?: unknown; idempotencyKey?: unknown }) {
-      if (typeof req.contractAddress !== 'string' || !isAddress(req.contractAddress)) bad('contractAddress is not an address')
-      if (typeof req.callData !== 'string' || !HEX.test(req.callData) || req.callData.length < 10) bad('callData must be hex calldata')
-      if (req.amount !== undefined && (typeof req.amount !== 'string' || !AMOUNT.test(req.amount))) bad('amount must be a decimal string')
-      const idempotencyKey = uuidOr(req.idempotencyKey, 'idempotencyKey')
-      const { walletId } = await walletOf(authUid, userToken)
-      const r = await call(() => circle.request<{ challengeId: string }>('POST', '/v1/w3s/user/transactions/contractExecution', {
-        userToken: userToken as string,
-        body: {
-          idempotencyKey, walletId, contractAddress: getAddress(req.contractAddress as string), callData: req.callData as string,
-          ...(req.amount ? { amount: req.amount as string } : {}), feeLevel: 'MEDIUM',
-        },
-      }))
-      return { challengeId: r.challengeId, idempotencyKey }
     },
 
     async signMessage(authUid: string, userToken: unknown, req: { message?: unknown; encodedByHex?: unknown }) {
@@ -251,23 +254,13 @@ export function createCircleWalletService(opts: { circle: CircleClient; repo: Ci
       }))
     },
 
-    /** A challenge's status (after the user acts in Circle's SDK). */
+    /** A challenge's status (after the app runs it in Circle's SDK). */
     async challenge(authUid: string, userToken: unknown, id: unknown) {
       await linked(authUid, userToken)
       const r = await call(() => circle.request<{ challenge: { id: string; status: string; type: string; correlationIds?: string[]; errorCode?: number; errorMessage?: string } }>(
         'GET', `/v1/w3s/user/challenges/${needUuid(id, 'challengeId')}`, { userToken: userToken as string }))
       const c = r.challenge
-      return { id: c.id, status: c.status, type: c.type, transactionIds: c.correlationIds ?? [], errorCode: c.errorCode ?? null, errorMessage: c.errorMessage ?? null }
-    },
-
-    /** A transaction's state and hash - only for this account's own wallet. */
-    async transaction(authUid: string, userToken: unknown, id: unknown) {
-      const { walletId } = await walletOf(authUid, userToken)
-      const r = await call(() => circle.request<{ transaction?: { id: string; state: string; txHash?: string; walletId?: string; errorReason?: string; operation?: string } }>(
-        'GET', `/v1/w3s/transactions/${needUuid(id, 'transaction id')}`, { userToken: userToken as string }))
-      const t = r.transaction
-      if (!t || (t.walletId && t.walletId !== walletId)) throw new CircleWalletError('bad-request', 'No such transaction for this wallet')
-      return { id: t.id, state: t.state, txHash: t.txHash ?? null, operation: t.operation ?? null, errorReason: t.errorReason ?? null }
+      return { id: c.id, status: c.status, type: c.type, errorCode: c.errorCode ?? null, errorMessage: c.errorMessage ?? null }
     },
   }
 }

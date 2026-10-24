@@ -119,6 +119,15 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
   if (signer) return true
   if (!walletAddress) return false
 
+  // ── 1. a Circle wallet: Circle keeps the key; this browser keeps the
+  // Circle session. Without it the user signs in to Circle again.
+  if (walletSource === 'circle') {
+    const { restoreCircleAccount } = await import('@/wallet/circle')
+    const account = await restoreCircleAccount(walletAddress).catch(() => null)
+    if (account) setWallet(walletAddress, account, 'circle')
+    return !!account
+  }
+
   const wallet = await import('@/wallet')
   const passcodes = (walletSource === 'social-auto' ? [] : [rawPasscode, pendingRawPasscode]).filter(Boolean) as string[]
 

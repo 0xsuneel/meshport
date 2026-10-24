@@ -32,7 +32,27 @@ export function AutoWalletPage() {
     try {
       const isSocial = loginType === 'social'
 
-      if (isSocial) {
+      // Google accounts get a Circle wallet (src/wallet/circle.ts): Circle
+      // keeps the key, MeshPort's passcode / biometric approves every
+      // signature. The Circle sign-in normally happened with the MeshPort
+      // Google sign-in; if it didn't finish, Google is asked once more and
+      // the user comes back here. Email accounts keep the frame wallet until
+      // Circle's email codes are switched on.
+      const circle = isSocial ? await import('@/wallet/circle') : null
+      const session = circle?.circleConfigured()
+        ? (await (await import('@/lib/supabase')).supabase.auth.getSession()).data.session
+        : null
+      const googleUid = session && !session.user.is_anonymous && session.user.app_metadata?.provider === 'google' ? session.user.id : null
+      if (circle && googleUid) {
+        if (!circle.loadCircleSession(googleUid)) {
+          await circle.startGoogleSignIn({ meshport: false, uid: googleUid, returnTo: '/auth/auto-wallet' })
+          return // the page leaves for Google
+        }
+        const addr = await circle.ensureCircleWallet(googleUid)
+        setWallet(addr, circle.circleAccount(addr, googleUid), 'circle')
+        setBalance(0)
+        setAddress(addr)
+      } else if (isSocial) {
         // Google / email accounts - self-custodial. The wallet key is made
         // on the device, inside the wallet frame (src/wallet), never by
         // MeshPort's servers, and is protected by the user's passkey and/or

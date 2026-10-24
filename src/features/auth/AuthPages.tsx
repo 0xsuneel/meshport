@@ -173,6 +173,9 @@ function AccountKindPicker({ mode, onChoose, onSwitchMode }: {
 export function LoginPage() {
   const navigate = useNavigate()
   const [agreed, setAgreed] = useState(false)
+  // Circle's SDK and this browser's device id load while the user reads the
+  // screen, so "Continue with Google" leaves for Google without waiting.
+  useEffect(() => { void import('@/wallet/circle').then(c => c.warmCircle()).catch(() => {}) }, [])
   // First screen: Create account or Log in, and Personal or Business.
   const [mode, setMode] = useState<AuthMode>(() => getAuthMode())
   const [kind, setKind] = useState<AccountKind | null>(() => getChosenKind())
@@ -186,6 +189,14 @@ export function LoginPage() {
 
   const handleGoogleLogin = async () => {
     if (!agreed) return
+    // With Circle wallets on, one Google screen signs in to MeshPort and the
+    // Circle wallet together (src/wallet/circle.ts); Google sends the user to
+    // /wallet/circle-login, which then continues at /auth/google below.
+    const circle = await import('@/wallet/circle')
+    if (circle.circleGoogleConfigured()) {
+      try { await circle.startGoogleSignIn({ meshport: true }); return }
+      catch (e) { console.error('[Auth] Google + Circle sign-in could not start; plain Google sign-in instead:', e) }
+    }
     // signInWithOAuth redirects the whole page to Google, then back to
     // /auth/callback once the OAuth flow completes - the actual account
     // lookup/creation logic lives there (AuthCallbackPage below), not
@@ -392,6 +403,10 @@ export function GoogleAuthPage() {
         return
       }
       const existing = resolved.kind === 'existing' ? resolved.user : null
+      // An account whose wallet is its Circle wallet opens with the Circle signer.
+      const circleSigner = existing?.wallet_address
+        ? await import('@/wallet/circle').then(c => c.circleSignerFor(supaUser.id, existing.wallet_address!)).catch(() => null)
+        : null
 
       const enterExisting = () => {
         if (!existing) return
@@ -407,7 +422,8 @@ export function GoogleAuthPage() {
         // walletSource: 'social-auto' is set here (not just walletAddress) so
         // restoreWallet.ts knows this account is eligible for the server-side
         // key backup fallback if this device has no local key material.
-        if (existing.wallet_address) useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: 'social-auto' })
+        if (existing.wallet_address) useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: circleSigner ? 'circle' : 'social-auto' })
+        if (circleSigner && existing.wallet_address) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
         // A new sign-in always unlocks the wallet with the passkey or
         // Recovery QR - never a copy left on this device from before.
         clearSocialDeviceState()
@@ -541,6 +557,10 @@ export function EmailOTPPage() {
       return
     }
     const existing = resolved.kind === 'existing' ? resolved.user : null
+    // An account whose wallet is its Circle wallet opens with the Circle signer.
+    const circleSigner = existing?.wallet_address
+      ? await import('@/wallet/circle').then(c => c.circleSignerFor(supaUser.id, existing.wallet_address!)).catch(() => null)
+      : null
 
     const enterExisting = () => {
       if (!existing) return
@@ -557,7 +577,8 @@ export function EmailOTPPage() {
       if (existing.wallet_address) {
         // Same reasoning as GoogleAuthPage above - tag walletSource so the
         // server-side key backup fallback is reachable on a fresh device.
-        useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: 'social-auto' })
+        useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: circleSigner ? 'circle' : 'social-auto' })
+        if (circleSigner) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
       }
       setLoading(false)
       showToastMessage(`Welcome back, ${existing.username || existing.display_name}! 👋`, 'success')

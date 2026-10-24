@@ -1,14 +1,31 @@
 # Circle user-controlled wallets
 
-MeshPort is moving every wallet to Circle user-controlled wallets: EOA
-accounts on Arc testnet (`ARC-TESTNET`), users paying gas in USDC.
+New MeshPort accounts made with Google get a Circle user-controlled wallet as
+their MeshPort wallet: a generic EVM EOA (`EVM-TESTNET`, the same address on
+every EVM chain, Arc included). Circle signs; MeshPort broadcasts through its
+own relay, exactly like the app's other wallets. Existing accounts keep their
+wallet until they are moved over (a separate, approved plan).
 
 | | |
 |---|---|
-| Sign in to MeshPort | as today (Supabase) |
-| Sign in to the wallet | Circle's own Google login or email OTP, in Circle's Web SDK |
-| Approve a transaction | MeshPort passcode / biometric only; Circle's confirmation UIs are off (Configurator → Wallet Security Settings), and the screen tells users so |
-| Keys | Circle (2-of-2 MPC, both nodes Circle-hosted); MeshPort never sees keys, PINs or OTPs |
+| Sign in | MeshPort's "Continue with Google": one Google screen signs in to MeshPort (Supabase `signInWithIdToken`) and the Circle wallet (Circle's Web SDK) |
+| Approve a signature | MeshPort passcode / biometric only; Circle's Confirmation UIs are off (Configurator → Wallet Security Settings), and the Circle wallet screen tells users so |
+| Keys | Circle (MPC, Circle-hosted); MeshPort never sees keys or codes |
+| Email accounts | Keep the frame wallet for now; Circle's email codes need SMTP in Circle Console |
+
+## One Google sign-in for both
+
+MeshPort builds the Google request itself (`startGoogleSignIn`,
+`src/wallet/circle.ts`) with a one-time nonce: Google gets `sha256(raw)`,
+Supabase gets `raw` (it checks the hash), and Circle's SDK finds the hashed
+value where it keeps its own (`localStorage` `state` / `nonce` /
+`socialLoginProvider` - `@circle-fin/w3s-pw-web-sdk` 1.1.11, pinned). Google
+returns to `/wallet/circle-login`, which signs in to Supabase, lets the SDK
+check the same token with Circle, links the Circle user, and continues at
+`/auth/google` as before. Supabase's own URL detection skips that page
+(`detectSessionInUrl` in `src/lib/supabase.ts`). If MeshPort can't use the
+token, the page falls back to the classic Supabase Google sign-in; if only
+Circle fails, the MeshPort sign-in still goes on and the wallet asks again.
 
 ## Backend
 
@@ -16,40 +33,37 @@ accounts on Arc testnet (`ARC-TESTNET`), users paying gas in USDC.
   a user's Circle session travels as `X-User-Token`.
 - `server/circle/service.ts` - one MeshPort account ↔ one Circle user. Every
   call checks the Circle session belongs to the account's linked Circle user;
-  the wallet acted on comes from that link, never from the request. Email OTP
-  always goes to the MeshPort account's own email. Transfers keep a client
-  idempotency key so a retry never sends twice.
+  the wallet acted on comes from that link, never from the request. Signs
+  EIP-1559 transactions (legacy `gasPrice` becomes both fees), messages and
+  typed data. Email codes always go to the MeshPort account's own email.
 - `api/circle-wallet.ts` - the HTTP endpoint (actions listed at the top).
-- `supabase/migrations/20261025100000_circle_wallet_users.sql` - the link table
-  (service role only). Not applied yet.
+  `social-device-token` starts a sign-in, so it needs no MeshPort session
+  (10 a minute per IP); everything else does.
+- `supabase/migrations/20261025100000_circle_wallet_users.sql`,
+  `20261025110000_circle_wallet_users_blockchain.sql` - the link table
+  (service role only) and which chain code the remembered wallet is on.
 
 ## App
 
-- `src/wallet/circle.ts` - Circle's Web SDK (loaded only on Circle screens),
-  the Circle session per MeshPort account (refreshed once on expiry), Google
-  and email-code sign-in, and running challenges.
-- `src/features/profile/CircleWalletPage.tsx` - Profile → Circle wallet
-  (testnet): sign in, create the wallet, send a test payment (MeshPort
-  passcode / biometric, then Circle's confirmation). Also the page Google
-  returns to, `/wallet/circle-login`, kept outside the app's gates so the
-  sign-in result in the URL isn't lost.
+- `src/wallet/circle.ts` - sign-in, the Circle session per MeshPort account
+  (refreshed once on expiry), `ensureCircleWallet`, and `circleAccount`: a
+  `WalletAccount` whose signatures are Circle challenges run headless in the
+  SDK. Pay, Swap, Bridge, P2P use it like any wallet.
+- `src/features/auth/AutoWalletPage.tsx` - new Google accounts get the Circle
+  wallet (`walletSource: 'circle'`).
+- `src/features/auth/AuthPages.tsx` - returning accounts whose wallet is their
+  Circle wallet open with the Circle signer.
+- `src/lib/restoreWallet.ts` - after a reload a Circle wallet reopens from the
+  Circle session.
+- `src/features/profile/CircleWalletPage.tsx` - Profile → Circle wallet: status,
+  Circle sign-in on this device, sign out; and the Google return page.
 - `vercel.json` CSP allows Circle's frame, `https://pw-auth.circle.com`.
-
-## Flow
-
-1. App gets a device token (`social-device-token` / `email-device-token`),
-   then Circle's Web SDK logs the user in → `userToken`, `encryptionKey`.
-2. `link` ties that Circle user to the MeshPort account (first time).
-3. First use: `initialize` → challenge → Circle's SDK `execute(challengeId)`
-   creates the Arc wallet; `wallet` then finds and remembers it.
-4. Pay: MeshPort passcode / biometric → `transfer` → challenge (no Circle
-   screen) → `challenge` / `transaction` for status.
 
 ## Configuration
 
 | Where | What |
 |---|---|
-| Circle Console | Standard API key (testnet); App ID (Wallets → User Controlled → Configurator); Google OAuth client ID; SMTP for email OTP; Confirmation UIs off |
+| Circle Console (Testnet) | Standard API key; App ID; Google Client ID under Social Logins; Confirmation UIs **off**; SMTP when email accounts move over |
 | Vercel (app) | `CIRCLE_API_KEY` (set by the owner, never shared in chat); `VITE_CIRCLE_APP_ID`; `VITE_CIRCLE_GOOGLE_CLIENT_ID` |
-| Google OAuth client | Authorized redirect URI `https://meshport.xyz/wallet/circle-login` (same client as Supabase Google sign-in) |
-| Supabase | Apply the migration above |
+| Google OAuth client | The Supabase client; redirect URI `https://meshport.xyz/wallet/circle-login` |
+| Supabase | Google provider with that client ID (ID-token sign-in); both migrations above |
