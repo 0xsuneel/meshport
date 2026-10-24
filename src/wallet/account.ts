@@ -75,7 +75,7 @@ let signerClass: Promise<any> | null = null
 
 function ethersSignerClass(): Promise<any> {
   if (signerClass) return signerClass
-  signerClass = import('ethers').then(({ AbstractSigner, Transaction, TypedDataEncoder, hexlify, resolveAddress }) => {
+  signerClass = import('ethers').then(({ AbstractSigner, Transaction, TypedDataEncoder, copyRequest, hexlify, resolveAddress }) => {
     class FrameSigner extends AbstractSigner {
       constructor(readonly account: WalletAccount, provider?: any) { super(provider ?? null) }
 
@@ -84,7 +84,9 @@ function ethersSignerClass(): Promise<any> {
       async getAddress() { return this.account.address }
 
       async signTransaction(tx: any): Promise<string> {
-        const req = { ...tx }
+        // copyRequest, as ethers' Wallet does: sendTransaction passes a Transaction
+        // instance, whose fields are getters that a spread would drop.
+        const req: any = copyRequest(tx)
         if (req.from) {
           const from = await resolveAddress(req.from, this.provider)
           if (from.toLowerCase() !== this.account.address.toLowerCase()) throw new Error('Transaction from a different address')

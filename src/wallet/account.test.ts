@@ -55,6 +55,20 @@ describe('wallet account (signs through the frame)', () => {
     expect(await signer.getAddress()).toBe(keyAccount.address)
   })
 
+  it('as an ethers Signer: signs the Transaction object ethers.sendTransaction passes (Circle App Kit path)', async () => {
+    // AbstractSigner.sendTransaction hands signTransaction a Transaction
+    // instance, whose fields are getters - a spread copy of it is empty.
+    const signer = await toEthersSigner(account)
+    const wallet = new Wallet(pk)
+    const tx = Transaction.from({ type: 2, chainId: 5042002, nonce: 3, to: '0x2222222222222222222222222222222222222222', value: 5n, gasLimit: 90000n, maxFeePerGas: 30n, maxPriorityFeePerGas: 2n, data: '0x095ea7b3' })
+    const ours = await signer.signTransaction(tx)
+    expect(ours).toBe(await wallet.signTransaction(tx))
+    const back = Transaction.from(ours)
+    expect(back.chainId).toBe(5042002n)
+    expect(back.to).toBe('0x2222222222222222222222222222222222222222')
+    expect(back.data).toBe('0x095ea7b3')
+  })
+
   it('as an ethers Signer: messages and EIP-712 (e.g. USDC permit) match ethers Wallet', async () => {
     const signer = await toEthersSigner(account)
     const wallet = new Wallet(pk)
