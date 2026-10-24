@@ -14,9 +14,10 @@
 import { generateMnemonic, english, privateKeyToAccount, generatePrivateKey } from 'viem/accounts'
 import { bytesToHex } from 'viem'
 import {
-  WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION, REVEAL_CHANNEL,
+  WALLET_MESSAGE_TAG, WALLET_PROTOCOL_VERSION, REVEAL_CHANNEL, PASSKEY_CHANNEL,
   isWalletMessage, parseOrigins,
   type Hex, type WalletMethod, type WalletParams, type WalletResult, type WalletResponse, type WalletErrorCode,
+  type PasskeyRequest, type PasskeyOutcome,
 } from '@/wallet/protocol'
 import * as keys from './keys'
 import { createRecoveryPayload, openRecoveryPayload, RecoveryError } from '@/lib/recoveryQr'
@@ -69,6 +70,32 @@ function newTicket(secret: string, what: 'mnemonic' | 'privateKey'): string {
   tickets.set(ticket, { secret, what, expires: Date.now() + REVEAL_TTL_MS })
   return ticket
 }
+
+// ── Passkey ceremonies (passkey.html) ───────────────────────────────────────
+// The app asks for a ceremony and gets a ticket; passkey.html (same origin,
+// visible, where the person taps) fetches the request from here over a
+// BroadcastChannel - never from its URL - runs WebAuthn and reports back.
+// The outcome (a public key or a Safe-format signature, nothing secret) is
+// handed to the app once.
+const PASSKEY_TTL_MS = 3 * 60_000
+const ceremonies = new Map<string, { request: PasskeyRequest; expires: number; outcome: PasskeyOutcome; claimed: boolean }>()
+try {
+  const channel = new BroadcastChannel(PASSKEY_CHANNEL)
+  channel.onmessage = (e) => {
+    const d = (e.data ?? {}) as { type?: string; ticket?: string; outcome?: PasskeyOutcome }
+    if (typeof d.ticket !== 'string') return
+    const c = ceremonies.get(d.ticket)
+    if (!c) return // another tab's frame holds it
+    if (d.type === 'claim') {
+      // One page per ticket: the first passkey.html to claim it runs it.
+      if (c.claimed || c.expires < Date.now()) { channel.postMessage({ type: 'request', ticket: d.ticket, error: 'expired' }); return }
+      c.claimed = true
+      channel.postMessage({ type: 'request', ticket: d.ticket, request: c.request })
+    } else if (d.type === 'outcome' && c.claimed && c.outcome.status === 'pending' && d.outcome && d.outcome.status !== 'pending') {
+      c.outcome = d.outcome
+    }
+  }
+} catch { /* no BroadcastChannel: passkeys are unavailable here */ }
 
 // ── Handlers ────────────────────────────────────────────────────────────────
 type Handlers = { [M in WalletMethod]: (p: WalletParams<M>) => Promise<WalletResult<M>> }
@@ -187,6 +214,27 @@ const handlers: Handlers = {
   async lock({ address }) { vault.lock(address); return { ok: true as const } },
 
   async forget({ address, everything }) { vault.forget(address, everything); return { ok: true as const } },
+
+  async 'passkey:begin'(request) {
+    if (request.mode === 'create') {
+      if (!request.userId || !request.userName) throw new RpcError('invalid', 'A passkey needs an account id and name')
+    } else if (request.mode === 'sign') {
+      if (!/^0x[0-9a-fA-F]{64}$/.test(request.challenge)) throw new RpcError('invalid', 'Passkey challenge must be a 32-byte hash')
+      if (!request.credentialId) throw new RpcError('invalid', 'Which passkey should sign?')
+    } else throw new RpcError('invalid', 'Unknown passkey request')
+    for (const [t, c] of ceremonies) if (c.expires < Date.now()) ceremonies.delete(t)
+    const ticket = bytesToHex(crypto.getRandomValues(new Uint8Array(16)))
+    ceremonies.set(ticket, { request, expires: Date.now() + PASSKEY_TTL_MS, outcome: { status: 'pending' }, claimed: false })
+    return { ticket }
+  },
+
+  async 'passkey:result'({ ticket }) {
+    const c = ceremonies.get(ticket)
+    if (!c) return { status: 'error' as const, message: 'This passkey request has expired - try again' }
+    if (c.outcome.status !== 'pending') { ceremonies.delete(ticket); return c.outcome }
+    if (c.expires < Date.now()) { ceremonies.delete(ticket); return { status: 'error' as const, message: 'Timed out waiting for Face ID - try again' } }
+    return c.outcome
+  },
 }
 
 // ── Transport ───────────────────────────────────────────────────────────────
@@ -198,7 +246,7 @@ window.addEventListener('message', async (e: MessageEvent) => {
   if (!ALLOWED_PARENTS.has(e.origin)) return
   if (e.source !== window.parent || window.parent === window) return
   if (!isWalletMessage(e.data)) return
-  const { id, method, params } = e.data as { id: string; method: WalletMethod; params: unknown }
+  const { id, method, params } = e.data as unknown as { id: string; method: WalletMethod; params: unknown }
   const handler = Object.prototype.hasOwnProperty.call(handlers, method) ? (handlers as any)[method] : null
   if (!handler) { reply(e.source, e.origin, { id, error: { code: 'unsupported', message: `Unknown request ${String(method)}` } }); return }
   try {

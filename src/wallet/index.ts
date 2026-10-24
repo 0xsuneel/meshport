@@ -6,11 +6,11 @@
 
 import { callWallet, WalletFrameError, walletOrigin } from './frameClient'
 import { walletAccount, type WalletAccount } from './account'
-import type { WalletKind, WalletStatus } from './protocol'
+import type { PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
 
 export { walletAccount, isWalletAccount, toEthersSigner, createWalletAdapter, type WalletAccount } from './account'
 export { WalletFrameError, walletOrigin, walletReady } from './frameClient'
-export type { WalletKind, WalletStatus } from './protocol'
+export type { PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
 
 export function walletStatus(address: string): Promise<WalletStatus> {
   return callWallet('status', { address })
@@ -80,6 +80,27 @@ export function wrapWithPasskey(address: string, prf: Uint8Array, salt: Uint8Arr
 export async function openWithPasskey(address: string, p: { prf: Uint8Array; salt: Uint8Array; ct: Uint8Array; iv: Uint8Array }): Promise<WalletAccount> {
   await callWallet('passkey:open', { address, ...p })
   return walletAccount(address)
+}
+
+// ── Wallet passkey (Safe owner) ──────────────────────────────────────────────
+/**
+ * Start a passkey ceremony in the frame: create the Safe's passkey owner, or
+ * sign a 32-byte hash with it. Returns the URL for a visible iframe
+ * (components/wallet/WalletPasskeyFrame.tsx) and the ticket to wait on.
+ */
+export async function beginPasskey(request: PasskeyRequest, theme: 'dark' | 'light' = 'dark'): Promise<{ ticket: string; url: string }> {
+  const { ticket } = await callWallet('passkey:begin', request)
+  return { ticket, url: `${walletOrigin()}/passkey.html#t=${ticket}&theme=${theme}` }
+}
+
+/** Wait for the ceremony's outcome (the frame hands it out once). */
+export async function awaitPasskey(ticket: string, opts: { signal?: AbortSignal; intervalMs?: number } = {}): Promise<Exclude<PasskeyOutcome, { status: 'pending' }>> {
+  for (;;) {
+    if (opts.signal?.aborted) return { status: 'error', message: 'Cancelled' }
+    const outcome = await callWallet('passkey:result', { ticket })
+    if (outcome.status !== 'pending') return outcome
+    await new Promise(r => setTimeout(r, opts.intervalMs ?? 500))
+  }
 }
 
 // ── Moving keys the app used to hold ────────────────────────────────────────

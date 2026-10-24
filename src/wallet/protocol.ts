@@ -82,7 +82,28 @@ export interface WalletRpc {
   lock: [{ address?: string }, { ok: true }]
   /** Logout: also delete this browser's sealed device copy. Passcode copies stay. */
   forget: [{ address?: string; everything?: boolean }, { ok: true }]
+  /**
+   * Start a passkey ceremony. The app then shows passkey.html#t=<ticket> in a
+   * visible iframe; the person taps there (browsers only allow WebAuthn in a
+   * cross-origin frame after a tap inside it). Single use, 3 minutes.
+   */
+  'passkey:begin': [PasskeyRequest, { ticket: string }]
+  /** Poll a ceremony's outcome; a finished result is handed out once. */
+  'passkey:result': [{ ticket: string }, PasskeyOutcome]
 }
+
+export type PasskeyRequest =
+  | { mode: 'create'; userId: string; userName: string }
+  | { mode: 'sign'; credentialId: string; challenge: Hex; label?: string }
+
+export type PasskeyOutcome =
+  | { status: 'pending' }
+  | { status: 'created'; credentialId: string; x: Hex; y: Hex }
+  | { status: 'signed'; signature: Hex }
+  | { status: 'error'; message: string }
+
+/** passkey.html ↔ frame, over a same-origin BroadcastChannel (never the app). */
+export const PASSKEY_CHANNEL = 'meshport-wallet-passkey'
 
 export type WalletMethod = keyof WalletRpc
 export type WalletParams<M extends WalletMethod> = WalletRpc[M][0]

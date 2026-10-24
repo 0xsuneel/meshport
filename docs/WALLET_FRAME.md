@@ -40,11 +40,23 @@ material:
 | `mnemonic:check` | ok + wrong word positions (never the words) |
 | `chat:seed` | the chat identity seed, a separate, domain-separated key |
 | `reveal:grant` | a one-time ticket for `reveal.html` |
+| `passkey:begin`, `passkey:result` | a ceremony ticket for `passkey.html`; then a passkey public key or a Safe-format signature |
 
 Secrets are shown only by `wallet-frame/reveal.html` inside a visible
 iframe (`components/wallet/WalletSecretFrame.tsx`). It redeems a two-minute,
 single-use ticket from the hidden frame over a same-origin
 `BroadcastChannel`. Copy-to-clipboard happens inside the frame too.
+
+The Safe wallet's passkey owner works the same way: `wallet-frame/passkey.html`
+in a visible iframe (`components/wallet/WalletPasskeyFrame.tsx`, with
+`allow="publickey-credentials-create; publickey-credentials-get"`). Browsers
+only run WebAuthn in a cross-origin frame after a tap inside it, so the
+person taps the page's button. The page claims the ceremony from the hidden
+frame (first claim only, three minutes) and sends back the outcome; the app
+polls `passkey:result`, which hands it out once. The passkey's RP ID is
+`VITE_WALLET_RP_ID` (the app's site, e.g. `meshport.xyz`), or the frame's
+host in development. For now the page signs the hash the app asks for; a
+frame-rendered summary of the transaction comes with the confirmation screen.
 
 ## Boundary checks
 
