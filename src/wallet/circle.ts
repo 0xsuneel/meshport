@@ -140,8 +140,9 @@ export function warmCircle(): void {
 function loginResult(error: unknown, result: unknown): CircleSession {
   const r = result as { userToken?: string; encryptionKey?: string; refreshToken?: string } | undefined
   if (error || !r?.userToken || !r.encryptionKey) {
-    const m = (error as { message?: string } | undefined)?.message
-    throw new CircleError(401, 'login', m || 'Circle sign-in did not finish')
+    const e = error as { code?: number; message?: string } | undefined
+    const m = e?.message || 'Circle sign-in did not finish'
+    throw new CircleError(401, 'login', e?.code ? `${m} (${e.code})` : m)
   }
   return { userToken: r.userToken, encryptionKey: r.encryptionKey, refreshToken: r.refreshToken }
 }
@@ -205,6 +206,13 @@ function circleLogin(p: Pending): Promise<CircleSession> {
  * MeshPort first when it's the MeshPort sign-in (a Circle hiccup then doesn't
  * stop it - the wallet asks again later), then to Circle. Where to go next.
  */
+/** Where the pending Google sign-in goes back to (for a "Back" after a failure). */
+export function pendingSignInReturn(): string {
+  const p = read<Pending>(PENDING_KEY)
+  if (!p) return '/auth'
+  return p.meshport ? '/auth' : p.returnTo.startsWith('/') && !p.returnTo.startsWith('//') ? p.returnTo : '/'
+}
+
 export async function finishGoogleSignIn(): Promise<{ returnTo: string; circleError?: string }> {
   const p = read<Pending>(PENDING_KEY)
   write(PENDING_KEY, null)
@@ -238,6 +246,9 @@ export async function finishGoogleSignIn(): Promise<{ returnTo: string; circleEr
     await finishLogin(uid!, await circle)
     return { returnTo: safeReturn }
   } catch (e) {
+    // Saved to client_errors (no tokens in it) - a failed Circle sign-in
+    // is otherwise only visible in the user's browser.
+    void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[circle sign-in] ${e instanceof Error ? e.message : String(e)}`))).catch(() => {})
     if (!p.meshport) throw e
     console.warn('[circle] wallet sign-in failed; MeshPort sign-in continues', e)
     return { returnTo: safeReturn, circleError: e instanceof Error ? e.message : 'Circle sign-in failed' }

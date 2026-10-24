@@ -45,6 +45,14 @@ export function AutoWalletPage() {
       const googleUid = session && !session.user.is_anonymous && session.user.app_metadata?.provider === 'google' ? session.user.id : null
       if (circle && googleUid) {
         if (!circle.loadCircleSession(googleUid)) {
+          // Ask Google once on its own; if Circle still has no session after
+          // that, say so here (Try Again) instead of going round again.
+          let asked = false
+          try { asked = sessionStorage.getItem('mp.circle.walletSignIn') === googleUid; sessionStorage.setItem('mp.circle.walletSignIn', googleUid) } catch { /* storage blocked */ }
+          if (asked) {
+            try { sessionStorage.removeItem('mp.circle.walletSignIn') } catch { /* storage blocked */ }
+            throw new Error("Couldn't sign in to your Circle wallet. Try again.")
+          }
           await circle.startGoogleSignIn({ meshport: false, uid: googleUid, returnTo: '/auth/auto-wallet' })
           return // the page leaves for Google
         }
