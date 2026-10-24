@@ -68,3 +68,8 @@ create index if not exists wallet_mpc_steps_created_idx
 alter table public.wallet_mpc_steps enable row level security;
 alter table public.wallet_mpc_steps force row level security;
 revoke all on public.wallet_mpc_steps from anon, authenticated;
+
+-- The identity sequences get Supabase's default grants; their values would
+-- tell anyone how many MPC wallets and signatures exist.
+revoke all on sequence public.wallet_mpc_shares_id_seq from anon, authenticated;
+revoke all on sequence public.wallet_mpc_sign_log_id_seq from anon, authenticated;
