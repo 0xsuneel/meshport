@@ -70,6 +70,11 @@ export function mpcWalletAccount(address: string): WalletAccount {
   return account
 }
 
+/** The signed-in account's MPC wallet address, or null. */
+export async function getMpcWallet(): Promise<Hex | null> {
+  return (await post({ action: 'wallet' })).address ?? null
+}
+
 /** Create the signed-in user's MPC wallet (Google / email sign-in required). */
 export async function createMpcWallet(): Promise<WalletAccount> {
   return mpcWalletAccount(await mpcSignup(frame, post))
