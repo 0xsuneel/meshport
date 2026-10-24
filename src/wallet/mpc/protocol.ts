@@ -13,8 +13,11 @@
 // Parties: 1 = phone (wallet frame), 2 = MeshPort server, 3 = backup. At
 // signup the phone plays parties 1 and 3 and exports 3's share as the backup.
 
-import type { Mpc } from './wasm'
-import type { Hex } from '../protocol'
+// Self-contained with .ts imports: the signing service (Deno) runs this same
+// file from supabase/functions/_shared/mpc/ (copied by mpc/build.sh).
+import type { Mpc } from './wasm.ts'
+
+export type Hex = `0x${string}`
 
 export const PHONE = 1, SERVER = 2, BACKUP = 3
 export const PARTIES = [PHONE, SERVER, BACKUP] as const
