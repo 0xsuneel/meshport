@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Copy, ExternalLink, KeyRound, Loader2, ShieldCheck } from 'lucide-react'
-import { createPublicClient, createWalletClient, formatEther, isAddress, parseEther, verifyMessage, type Hex } from 'viem'
+import { createPublicClient, formatEther, isAddress, parseEther, verifyMessage, type Hex } from 'viem'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { copyToClipboard } from '@/lib/utils'
 import { arcTestnet } from '@/lib/chain'
-import { arcTransport, ARC_EXPLORER } from '@/lib/arc'
-import { createMpcWallet, getMpcWallet, mpcWalletAccount, walletStatus, type MpcTiming } from '@/wallet'
+import { arcRpcJson, arcTransport, ARC_EXPLORER } from '@/lib/arc'
+import { relaySend } from '@/lib/arcService'
+import { createMpcWallet, getMpcWallet, mpcWalletAccount, walletStatus, withMpcTiming, type MpcTiming } from '@/wallet'
 
 // ── Keyless wallet (testnet) ──────────────────────────────────────────────────
 // Profile → Support → Keyless wallet (testnet). A place to try the MPC wallet
@@ -15,6 +16,10 @@ import { createMpcWallet, getMpcWallet, mpcWalletAccount, walletStatus, type Mpc
 // one and only ever touches Arc testnet.
 
 type Phase = 'loading' | 'none' | 'elsewhere' | 'ready' | 'creating'
+
+const secs = (ms: number) => (ms / 1000).toFixed(1)
+const timingParts = (t: MpcTiming) => 'this phone ' + secs(t.phone) + ' s · MeshPort ' + secs(t.server) + ' s · network & loading ' + secs(t.other) + ' s'
+const timingText = (label: string, t: MpcTiming) => label + ' in ' + secs(t.total) + ' s - ' + timingParts(t)
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : 'Something went wrong') || 'Something went wrong'
 
@@ -31,6 +36,7 @@ export function MpcWalletLabPage() {
   const [amount, setAmount] = useState('0.01')
   const [txHash, setTxHash] = useState<Hex | null>(null)
   const [timing, setTiming] = useState<MpcTiming | null>(null)
+  const [sendResult, setSendResult] = useState<string | null>(null)
 
   const refreshBalance = useCallback(async (a: Hex) => {
     try {
@@ -77,25 +83,41 @@ export function MpcWalletLabPage() {
     setError(null); setSignResult(null); setBusy('sign')
     try {
       const message = `MeshPort keyless wallet test ${new Date().toISOString()}`
-      const signature = await mpcWalletAccount(address).signMessage({ message })
+      const { value: signature, timing: t } = await withMpcTiming(() => mpcWalletAccount(address).signMessage({ message }))
       const ok = await verifyMessage({ address, message, signature })
-      setSignResult(ok ? 'Signature checks out: it was made by this wallet.' : 'The signature did not verify.')
+      setSignResult(ok ? `Signature checks out: it was made by this wallet. ${timingText('Signed', t)}` : 'The signature did not verify.')
     } catch (e) { setError(errorText(e)) } finally { setBusy(null) }
   }
 
   async function send() {
     if (!address) return
-    setError(null); setTxHash(null)
+    setError(null); setTxHash(null); setSendResult(null)
     if (!isAddress(to)) { setError('Enter a valid 0x address to send to'); return }
     let value: bigint
     try { value = parseEther(amount) } catch { setError('Enter an amount like 0.01'); return }
     if (value <= 0n) { setError('Enter an amount above 0'); return }
     setBusy('send')
     try {
-      const wallet = createWalletClient({ account: mpcWalletAccount(address), chain: arcTestnet, transport: arcTransport() })
-      const hash = await wallet.sendTransaction({ to: to as Hex, value } as unknown as Parameters<typeof wallet.sendTransaction>[0])
-      setTxHash(hash)
-      await createPublicClient({ chain: arcTestnet, transport: arcTransport() }).waitForTransactionReceipt({ hash, timeout: 60_000 }).catch(() => null)
+      // MeshPort's fast path (as Pay uses it): fixed Arc fees, then one request
+      // that broadcasts to every Arc node and waits for the receipt server-side.
+      const started = performance.now()
+      const nonce = Number(BigInt((await arcRpcJson({ jsonrpc: '2.0', id: 1, method: 'eth_getTransactionCount', params: [address, 'pending'] })).result))
+      let signing: MpcTiming | null = null
+      const account = mpcWalletAccount(address)
+      const signed = {
+        ...account,
+        signTransaction: async (tx: Parameters<typeof account.signTransaction>[0]) => {
+          const { value: raw, timing: t } = await withMpcTiming(() => account.signTransaction(tx))
+          signing = t
+          return raw
+        },
+      } as typeof account
+      const sent = await relaySend(signed, { to: to as Hex, value, gas: 21_000n, nonce }, h => setTxHash(h))
+      setTxHash(sent.txHash)
+      const total = (performance.now() - started) / 1000
+      const outcome = sent.state === 'success' ? 'Confirmed' : sent.state === 'failed' ? 'Failed on-chain' : 'Sent'
+      const s = signing as MpcTiming | null
+      setSendResult(`${outcome} in ${total.toFixed(1)} s` + (s ? ` - signing ${secs(s.total)} s (${timingParts(s)})` : ''))
       refreshBalance(address)
     } catch (e) { setError(errorText(e)) } finally { setBusy(null) }
   }
@@ -164,8 +186,7 @@ export function MpcWalletLabPage() {
               <div className="flex items-center gap-2 text-success text-sm font-semibold"><ShieldCheck className="w-4 h-4" /> Keyless wallet ready</div>
               {timing && (
                 <p className="text-xs text-text-secondary">
-                  Created in {(timing.total / 1000).toFixed(1)} s - this phone {(timing.phone / 1000).toFixed(1)} s ·
-                  MeshPort {(timing.server / 1000).toFixed(1)} s · network &amp; loading {(timing.other / 1000).toFixed(1)} s
+                  {timingText('Created', timing)}
                 </p>
               )}
               <div className="flex items-start gap-2">
@@ -195,9 +216,10 @@ export function MpcWalletLabPage() {
               </button>
               {txHash && (
                 <a href={`${ARC_EXPLORER}/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm text-accent-text break-all">
-                  Sent - view on ArcScan <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
+                  View on ArcScan <ExternalLink className="w-3.5 h-3.5 flex-shrink-0" />
                 </a>
               )}
+              {sendResult && <p className="text-xs text-text-secondary">{sendResult}</p>}
             </div>
           </>
         )}
