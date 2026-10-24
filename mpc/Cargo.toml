@@ -1,0 +1,26 @@
+[package]
+name = "meshport-mpc"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "MeshPort 2-of-3 threshold ECDSA (DKLs23) as a stateless WebAssembly module"
+license = "UNLICENSED"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# DKLs23 threshold ECDSA (0xCarbon, Apache-2.0 OR MIT). Not yet independently
+# audited - testnet only until an audit (see docs/MPC_WALLET.md).
+dkls23 = { version = "=0.6.2", default-features = false, features = ["secp256k1", "serde"] }
+k256 = { version = "=0.14.0", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
