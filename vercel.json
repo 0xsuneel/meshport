@@ -14,10 +14,6 @@
     },
     "api/arc-rpc.js": {
       "maxDuration": 30
-    },
-    "api/wallet-mpc.ts": {
-      "maxDuration": 30,
-      "includeFiles": "src/wallet/mpc/meshport_mpc.wasm"
     }
   },
   "rewrites": [

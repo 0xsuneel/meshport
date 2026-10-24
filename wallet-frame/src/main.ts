@@ -23,7 +23,6 @@ import * as keys from './keys'
 import { createRecoveryPayload, openRecoveryPayload, RecoveryError } from '@/lib/recoveryQr'
 import { wrapWithPrf, openWithPrf } from '@/lib/passkeyWrap'
 import { deriveChatSeed } from '@/lib/chatIdentity'
-import type { KeyShare } from '@/wallet/mpc/protocol'
 import * as vault from './vault'
 import { VaultError } from './vault'
 
@@ -97,40 +96,6 @@ try {
     }
   }
 } catch { /* no BroadcastChannel: passkeys are unavailable here */ }
-
-// ── MPC worker (mpcWorker.ts) ───────────────────────────────────────────────
-// MPC work runs in a worker so key generation never blocks the frame or the
-// app. Created on first use; replies are matched by id.
-// MPC shares opened this session (see 'mpc:sign-begin').
-const openMpcShares = new Map<string, KeyShare>()
-const dropOpenMpc = (address?: string) => { if (address) openMpcShares.delete(address.toLowerCase()); else openMpcShares.clear() }
-
-let mpcWorker: Worker | null = null
-const mpcPending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>()
-let mpcSeq = 0
-
-function mpcCall<T>(method: string, ...args: unknown[]): Promise<T> {
-  if (!mpcWorker) {
-    mpcWorker = new Worker(new URL('./mpcWorker.ts', import.meta.url), { type: 'module' })
-    mpcWorker.onmessage = (e: MessageEvent<{ id: number; result?: unknown; error?: string }>) => {
-      const p = mpcPending.get(e.data.id)
-      if (!p) return
-      mpcPending.delete(e.data.id)
-      if (e.data.error !== undefined) p.reject(new RpcError('failed', e.data.error)); else p.resolve(e.data.result)
-    }
-    mpcWorker.onerror = () => {
-      for (const p of mpcPending.values()) p.reject(new RpcError('failed', 'The wallet engine stopped - try again'))
-      mpcPending.clear()
-      mpcWorker?.terminate()
-      mpcWorker = null
-    }
-  }
-  const id = ++mpcSeq
-  return new Promise<T>((resolve, reject) => {
-    mpcPending.set(id, { resolve, reject })
-    mpcWorker!.postMessage({ id, method, args })
-  })
-}
 
 // ── Handlers ────────────────────────────────────────────────────────────────
 type Handlers = { [M in WalletMethod]: (p: WalletParams<M>) => Promise<WalletResult<M>> }
@@ -246,9 +211,9 @@ const handlers: Handlers = {
     try { return { seed: bytesToHex(seed) } } finally { seed.fill(0) }
   },
 
-  async lock({ address }) { vault.lock(address); dropOpenMpc(address); return { ok: true as const } },
+  async lock({ address }) { vault.lock(address); return { ok: true as const } },
 
-  async forget({ address, everything }) { vault.forget(address, everything); dropOpenMpc(address); return { ok: true as const } },
+  async forget({ address, everything }) { vault.forget(address, everything); return { ok: true as const } },
 
   async 'passkey:begin'(request) {
     if (request.mode === 'create') {
@@ -261,47 +226,6 @@ const handlers: Handlers = {
     const ticket = bytesToHex(crypto.getRandomValues(new Uint8Array(16)))
     ceremonies.set(ticket, { request, expires: Date.now() + PASSKEY_TTL_MS, outcome: { status: 'pending' }, claimed: false })
     return { ticket }
-  },
-
-  async 'mpc:keygen-begin'() { return mpcCall('keygenBegin') },
-
-  async 'mpc:keygen-next'({ session, reply }) {
-    const r = await mpcCall<{ box: string; shares?: { address: Hex; phone: KeyShare; backup: KeyShare } }>('keygenNext', String(session), reply)
-    // The phone's shares exist before its last box goes out: store them first,
-    // so a failed store stops signup before the server saves its share.
-    if (r.shares) await vault.storeMpc(r.shares.address, r.shares.phone, r.shares.backup)
-    return { box: r.box } // the shares stay in this origin
-  },
-
-  async 'mpc:keygen-finish'({ session, address }) {
-    try {
-      return await mpcCall<{ address: Hex }>('keygenFinish', String(session), address)
-    } catch (e) {
-      vault.forgetMpc(address) // the server finished with another wallet: these shares are useless
-      throw e
-    }
-  },
-
-  async 'mpc:sign-begin'({ address, request }) {
-    // Opened once per session (decrypting and parsing ~300 KB each time adds up),
-    // kept in memory like an open key; lock / forget drop it.
-    const a = address.toLowerCase()
-    let share = openMpcShares.get(a)
-    if (!share) { share = await vault.mpcShare(address); openMpcShares.set(a, share) }
-    return mpcCall('signBegin', share, request)
-  },
-
-  async 'mpc:sign-next'({ session, reply }) { return mpcCall('signNext', String(session), reply) },
-
-  async 'mpc:benchmark'() { return mpcCall('benchmark') },
-
-  async 'mpc:warm'({ address }) {
-    const ready = mpcCall<{ ok: true }>('warm')
-    if (address && !openMpcShares.has(address.toLowerCase())) {
-      const share = await vault.mpcShare(address).catch(() => null)
-      if (share) openMpcShares.set(address.toLowerCase(), share)
-    }
-    return ready
   },
 
   async 'passkey:result'({ ticket }) {

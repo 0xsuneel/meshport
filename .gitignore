@@ -43,6 +43,3 @@ coverage/
 # deep-research notes and reports
 research_notes/
 reports/
-
-# Rust build output for the MPC module (mpc/build.sh copies the .wasm into src/wallet/mpc/)
-mpc/target/
