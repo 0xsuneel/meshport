@@ -9,7 +9,7 @@
 // the same, and PhoneSign refuses if the two disagree.
 
 import { hashMessage, hashTypedData, keccak256, parseTransaction } from 'viem'
-import { PhoneKeygen, PhoneSign, type ServerHello } from '@/wallet/mpc/phone'
+import { PhoneKeygen, PhoneSign, type KeygenOffload, type ServerHello } from '@/wallet/mpc/phone'
 import type { EcdsaSig, Hex, KeyShare } from '@/wallet/mpc/protocol'
 import type { Mpc } from '@/wallet/mpc/wasm'
 import type { MpcSignRequest } from '@/wallet/protocol'
@@ -44,7 +44,13 @@ export interface MpcEngine {
   signNext(session: string, reply: { signId?: Hex; hash?: Hex; hello?: ServerHello; box: string }): Promise<{ box: string } | { signature: EcdsaSig }>
 }
 
-export function createMpcEngine(opts: { mpc: () => Promise<Mpc>; identityPub: Hex | null | undefined; now?: () => number }): MpcEngine {
+export function createMpcEngine(opts: {
+  mpc: () => Promise<Mpc>
+  identityPub: Hex | null | undefined
+  /** Where the backup party's signup steps run - another core (mpcWorker.ts). */
+  keygenOffload?: () => KeygenOffload | undefined
+  now?: () => number
+}): MpcEngine {
   const now = opts.now ?? Date.now
   const keygens = new Map<string, { k: PhoneKeygen; started: boolean; exp: number }>()
   const signs = new Map<string, { s: PhoneSign; started: boolean; exp: number }>()
@@ -74,7 +80,7 @@ export function createMpcEngine(opts: { mpc: () => Promise<Mpc>; identityPub: He
 
   return {
     async keygenBegin() {
-      const k = new PhoneKeygen(await opts.mpc(), identity())
+      const k = new PhoneKeygen(await opts.mpc(), identity(), opts.keygenOffload?.())
       const session = id()
       prune()
       keygens.set(session, { k, started: false, exp: now() + MPC_SESSION_TTL_MS })
