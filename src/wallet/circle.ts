@@ -175,8 +175,11 @@ export async function startGoogleSignIn(opts: { meshport: true } | { meshport: f
   const rawNonce = randomHex(32)
   const nonce = await sha256Hex(rawNonce)
   const state = crypto.randomUUID()
-  // Where Circle's SDK looks for them when Google sends the user back.
-  writeRaw('socialLoginProvider', 'GOOGLE'); writeRaw('state', state); writeRaw('nonce', nonce)
+  // Where Circle's SDK looks for them when Google sends the user back - the
+  // provider exactly as the SDK spells it ("Google"; anything else and it
+  // never checks the sign-in with Circle).
+  const { SocialLoginProvider } = await import('@circle-fin/w3s-pw-web-sdk/dist/src/types')
+  writeRaw('socialLoginProvider', SocialLoginProvider.GOOGLE); writeRaw('state', state); writeRaw('nonce', nonce)
   write(PENDING_KEY, {
     meshport: opts.meshport, uid: opts.meshport === false ? opts.uid : undefined, rawNonce,
     deviceToken: t.deviceToken, deviceEncryptionKey: t.deviceEncryptionKey,

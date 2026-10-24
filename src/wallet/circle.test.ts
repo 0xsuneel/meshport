@@ -20,6 +20,7 @@ vi.mock('./account', () => ({ plainTransaction: (tx: Record<string, unknown>) =>
 let sdkLoginResult: { error?: unknown; result?: unknown } = { result: { userToken: 'ut-google', encryptionKey: 'ek-google', refreshToken: 'rt-google' } }
 let sdkExecute: (id: string) => { error?: unknown; result?: unknown } = () => ({ result: { status: 'COMPLETE', data: { signature: '0xsig' } } })
 let sdkAuth: unknown = null
+vi.mock('@circle-fin/w3s-pw-web-sdk/dist/src/types', async () => vi.importActual('@circle-fin/w3s-pw-web-sdk/dist/src/types'))
 vi.mock('@circle-fin/w3s-pw-web-sdk', () => ({
   W3SSdk: class {
     constructor(_c: unknown, onLogin?: (e: unknown, r: unknown) => void) { if (onLogin) queueMicrotask(() => onLogin(sdkLoginResult.error, sdkLoginResult.result)) }
@@ -115,7 +116,7 @@ describe('Google sign-in for MeshPort and Circle at once', () => {
     expect(url.origin + url.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth')
     expect(url.searchParams.get('redirect_uri')).toBe('https://meshport.xyz/wallet/circle-login')
     expect(url.searchParams.get('response_type')).toBe('id_token token')
-    expect(store.get('socialLoginProvider')).toBe('GOOGLE')
+    expect(store.get('socialLoginProvider')).toBe('Google') // the SDK's own spelling, or it never checks with Circle
     expect(store.get('state')).toBe(url.searchParams.get('state'))
     expect(store.get('nonce')).toBe(url.searchParams.get('nonce'))
     const raw = JSON.parse(store.get('mp.circle.pendingLogin')!).rawNonce
