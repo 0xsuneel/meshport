@@ -15,10 +15,30 @@ export const SOLANA_CHAIN = 'Solana_Devnet'
 export const isSolanaChain = (chainId: string | null | undefined) => chainId === SOLANA_CHAIN
 
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+const ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
-/** A plausible Solana address (base58, 32-44 characters). */
+/** Bytes a base58 string decodes to (leading '1's are zero bytes). */
+export function base58Length(s: string): number {
+  let bytes: number[] = []
+  for (const ch of s) {
+    let carry = ALPHABET.indexOf(ch)
+    if (carry < 0) return -1
+    for (let i = 0; i < bytes.length; i++) { carry += bytes[i] * 58; bytes[i] = carry & 0xff; carry >>= 8 }
+    while (carry > 0) { bytes.push(carry & 0xff); carry >>= 8 }
+  }
+  let zeros = 0
+  while (zeros < s.length && s[zeros] === '1') zeros++
+  return zeros + bytes.length
+}
+
+/**
+ * A Solana address: base58 that decodes to exactly 32 bytes. Addresses are
+ * case-sensitive - the same letters in another case are a different (usually
+ * invalid) key, so a lowercased address fails here.
+ */
 export function isSolanaAddress(s: string): boolean {
-  return BASE58.test(s.trim())
+  const v = s.trim()
+  return BASE58.test(v) && base58Length(v) === 32
 }
 
 export function solanaExplorerUrl(kind: 'address' | 'tx', id: string): string {

@@ -15,6 +15,7 @@ const ARC_CHAIN_KEY = (import.meta.env.VITE_NETWORK_ENV as string | undefined) =
 // Every action checks the chain first, so a transfer that already arrived is
 // simply marked completed - nothing can be minted twice.
 
+import { isSolanaAddress } from '@/lib/solana'
 import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -414,9 +415,16 @@ export function RecoveryPanel({ showHeader = false }: { showHeader?: boolean }) 
               </div>
             ) : (
             <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+              {/* A Solana destination that isn't a real address (e.g. lowercased) can never be delivered to. */}
+              {t.destinationLabel === 'Solana' && t.destinationAddress && !isSolanaAddress(t.destinationAddress) ? (
+                <div style={{ flexBasis: '100%', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.45 }}>
+                  This Solana address isn&apos;t valid (Solana addresses are case-sensitive), so it can&apos;t be sent there. Send it back to your wallet, then transfer again with the exact address.
+                </div>
+              ) : (
               <button style={{ ...btn, flex: 1 }} disabled={isBusy} onClick={() => void resolveStuck(t, 'forward')}>
                 {isBusy ? 'Sending…' : `Send to ${t.destinationLabel}`}
               </button>
+              )}
               <button style={{ ...btn, flex: 1 }} disabled={isBusy} onClick={() => void resolveStuck(t, 'refund')}>
                 {isBusy ? 'Sending…' : 'Send back to my wallet'}
               </button>
