@@ -31,14 +31,32 @@ export interface PrivyBridge {
   signTransaction(tx: Record<string, unknown>, address: string): Promise<Hex>
   signMessage(message: string | { raw: Hex }, address: string): Promise<Hex>
   signTypedData(typedData: Record<string, unknown>, address: string): Promise<Hex>
+  /** Addresses of this user's Privy embedded Solana wallets (docs/SOLANA.md). */
+  solanaWallets: string[]
+  createSolanaWallet(): Promise<string>
+  /** Sign a serialized Solana transaction (wire format); returns the signed bytes. */
+  signSolanaTransaction(transaction: Uint8Array, address: string): Promise<Uint8Array>
 }
 
 let bridge: PrivyBridge | null = null
 const waiters = new Set<() => void>()
+const listeners = new Set<() => void>()
 
 export function setPrivyBridge(b: PrivyBridge | null): void {
   bridge = b
   for (const w of [...waiters]) w()
+  for (const l of [...listeners]) l()
+}
+
+/** Call `listener` whenever Privy's state changes (screens following the Solana address). */
+export function onPrivyChange(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => { listeners.delete(listener) }
+}
+
+/** This account's Privy Solana address, once Privy is signed in and has one. */
+export function privySolanaAddress(): string | null {
+  return bridge?.ready && bridge.authenticated ? bridge.solanaWallets[0] ?? null : null
 }
 
 /** The bridge once Privy is ready and the user is signed in to it (and `test` holds). */
@@ -58,6 +76,12 @@ function whenBridge(test: (b: PrivyBridge) => boolean, timeoutMs: number): Promi
 export async function ensurePrivyWallet(timeoutMs = 30_000): Promise<Hex> {
   const b = await whenBridge(() => true, timeoutMs)
   return (b.wallets[0] ?? await b.createWallet()) as Hex
+}
+
+/** This account's Privy Solana address, creating the Solana wallet the first time. */
+export async function ensurePrivySolanaWallet(timeoutMs = 30_000): Promise<string> {
+  const b = await whenBridge(() => true, timeoutMs)
+  return b.solanaWallets[0] ?? await b.createSolanaWallet()
 }
 
 /** The Privy signer for `address`, when it is this account's Privy wallet. */

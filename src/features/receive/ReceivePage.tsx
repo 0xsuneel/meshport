@@ -10,6 +10,7 @@ import { shopFrom } from '@/lib/orderLabels'
 import { RequestQrPanel } from './RequestQrPanel'
 import { useAuthStore, useUIStore } from '@/store'
 import { shortenAddress, copyToClipboard, formatAmount } from '@/lib/utils'
+import { SolanaReceiveCard } from './SolanaReceiveCard'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { drawMeshportQr } from '@/lib/qrLogo'
 import { QrCard, QrInfoBox } from '@/features/business/ui/QrCard'
@@ -315,6 +316,7 @@ export function ReceivePage() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
             {qrCardSection}
             {shareButtonSection && <div style={{ width: '100%', maxWidth: 340 }}>{shareButtonSection}</div>}
+            {!shopQr && <SolanaReceiveCard />}
           </div>
         </div>
       ) : (
@@ -323,6 +325,7 @@ export function ReceivePage() {
             {qrCardSection}
             {copyFieldsSection}
             {shareButtonSection}
+            {!shopQr && <div className="flex justify-center"><SolanaReceiveCard /></div>}
           </div>
         </div>
       )}

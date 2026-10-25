@@ -18,6 +18,9 @@ function fakeBridge(over: Partial<Bridge> = {}): Bridge & { calls: unknown[][] }
     signTransaction: async (tx, a) => { calls.push(['tx', tx, a]); return '0x02signed' },
     signMessage: async (m, a) => { calls.push(['msg', m, a]); return '0xsig' },
     signTypedData: async (t, a) => { calls.push(['typed', t, a]); return '0xtyped' },
+    solanaWallets: [],
+    createSolanaWallet: async () => { calls.push(['create-solana']); return 'SoLanaAddr1111111111111111111111111111111111' },
+    signSolanaTransaction: async (t, a) => { calls.push(['sol-tx', t, a]); return t },
     ...over,
   }
 }
@@ -91,5 +94,27 @@ describe('wallet set-up and reopening', () => {
   it('reopens a Privy wallet once Privy lists it', async () => {
     setPrivyBridge(fakeBridge())
     expect((await restorePrivyAccount(ADDR))?.address).toBe(ADDR)
+  })
+})
+
+describe('Solana wallet', () => {
+  it('privySolanaAddress follows Privy and listeners hear about it', () => {
+    let heard = 0
+    const off = privy.onPrivyChange(() => { heard++ })
+    expect(privy.privySolanaAddress()).toBeNull()
+    setPrivyBridge(fakeBridge({ solanaWallets: ['So1anaWa11et111111111111111111111111111111'] }))
+    expect(privy.privySolanaAddress()).toBe('So1anaWa11et111111111111111111111111111111')
+    setPrivyBridge(fakeBridge({ authenticated: false, solanaWallets: ['So1anaWa11et111111111111111111111111111111'] }))
+    expect(privy.privySolanaAddress()).toBeNull() // not until Privy is signed in
+    off()
+    expect(heard).toBe(2)
+  })
+
+  it('ensurePrivySolanaWallet returns the existing wallet, or creates one', async () => {
+    setPrivyBridge(fakeBridge({ solanaWallets: ['So1anaWa11et111111111111111111111111111111'] }))
+    expect(await privy.ensurePrivySolanaWallet()).toBe('So1anaWa11et111111111111111111111111111111')
+    const b = fakeBridge(); setPrivyBridge(b)
+    expect(await privy.ensurePrivySolanaWallet()).toBe('SoLanaAddr1111111111111111111111111111111111')
+    expect(b.calls).toEqual([['create-solana']])
   })
 })

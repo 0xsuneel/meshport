@@ -6,12 +6,17 @@
 // src/wallet/privy.ts a bridge to create wallets and sign. Privy's own
 // confirmation modals are off: the app's passcode / biometric is the approval.
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   PrivyProvider, usePrivy, useWallets, useCreateWallet, useSignTransaction, useSignMessage, useSignTypedData,
   useSubscribeToJwtAuthWithFlag,
 } from '@privy-io/react-auth'
+import {
+  useWallets as useSolanaWallets, useCreateWallet as useCreateSolanaWallet, useSignTransaction as useSignSolanaTransaction,
+} from '@privy-io/react-auth/solana'
+import { createSolanaRpc, createSolanaRpcSubscriptions } from '@solana/kit'
 import { defineChain, type Chain, type Hex } from 'viem'
+import { SOLANA_RPC } from '@/lib/solana'
 import { supabase } from '@/lib/supabase'
 import { arcTestnet } from '@/lib/chain'
 import { EXTERNAL_CHAINS } from '@/blockchain/chains'
@@ -51,12 +56,25 @@ function PrivyBridgeSync() {
   const { signTypedData } = useSignTypedData()
   const embedded = wallets.filter(w => w.walletClientType === 'privy')
   const addresses = embedded.map(w => w.address).join(',')
+  // Solana (docs/SOLANA.md): Privy's own embedded wallets only, not external ones.
+  const { wallets: solanaWallets } = useSolanaWallets()
+  const { createWallet: createSolanaWallet } = useCreateSolanaWallet()
+  const { signTransaction: signSolanaTransaction } = useSignSolanaTransaction()
+  const solanaEmbedded = solanaWallets.filter(w => (w.standardWallet as { isPrivyWallet?: boolean }).isPrivyWallet === true)
+  const solanaAddresses = solanaEmbedded.map(w => w.address).join(',')
 
   useEffect(() => {
     const quiet = { uiOptions: { showWalletUIs: false } }
     setPrivyBridge({
       ready, authenticated,
       wallets: addresses ? addresses.split(',') : [],
+      solanaWallets: solanaAddresses ? solanaAddresses.split(',') : [],
+      createSolanaWallet: async () => (await createSolanaWallet()).wallet.address,
+      signSolanaTransaction: async (transaction, address) => {
+        const w = solanaEmbedded.find(x => x.address === address)
+        if (!w) throw new Error('Solana wallet not open')
+        return (await signSolanaTransaction({ transaction, wallet: w, chain: 'solana:devnet', options: { uiOptions: { showWalletUIs: false } } })).signedTransaction
+      },
       createWallet: async () => (await createWallet()).address,
       signTransaction: async (tx, address) => (await signTransaction(tx as never, { ...quiet, address })).signature as Hex,
       signMessage: async (message, address) => {
@@ -69,7 +87,19 @@ function PrivyBridgeSync() {
       signTypedData: async (typedData, address) => (await signTypedData(typedData as never, { ...quiet, address })).signature as Hex,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, authenticated, addresses])
+  }, [ready, authenticated, addresses, solanaAddresses])
+  // A Privy account gets its Solana wallet once its Arc wallet exists - new
+  // and existing accounts alike, once per session at most.
+  const solanaAsked = useRef(false)
+  useEffect(() => {
+    if (!ready || !authenticated || !addresses || solanaAddresses || solanaAsked.current) return
+    if (useAuthStore.getState().walletSource !== 'privy') return
+    solanaAsked.current = true
+    createSolanaWallet().catch(e => {
+      void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[privy solana wallet] ${e instanceof Error ? e.message : String(e)}`))).catch(() => {})
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, authenticated, addresses, solanaAddresses])
   // Privy can finish signing in after the app has stopped waiting for it
   // (a slow phone, a cold start): attach the wallet whenever it does, so a
   // Privy account is never left without its wallet for the session.
@@ -89,9 +119,17 @@ export default function PrivyRoot() {
     <PrivyProvider
       appId={privyAppId()}
       config={{
-        embeddedWallets: { ethereum: { createOnLogin: 'off' }, showWalletUIs: false },
+        embeddedWallets: { ethereum: { createOnLogin: 'off' }, solana: { createOnLogin: 'off' }, showWalletUIs: false },
         defaultChain: arcTestnet,
         supportedChains: SUPPORTED_CHAINS,
+        solana: {
+          rpcs: {
+            'solana:devnet': {
+              rpc: createSolanaRpc(SOLANA_RPC),
+              rpcSubscriptions: createSolanaRpcSubscriptions(SOLANA_RPC.replace('https://', 'wss://')),
+            },
+          },
+        },
       }}
     >
       <PrivyBridgeSync />
