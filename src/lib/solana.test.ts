@@ -31,3 +31,23 @@ describe('solana helpers', () => {
     await expect(getSolanaUsdcBalance('0xnot-solana')).rejects.toThrow(/Solana address/)
   })
 })
+
+describe('Solana address check (case-sensitive, 32 bytes)', () => {
+  it('rejects a lowercased address - it decodes to 33 bytes, not a key (the 2026-10-25 stuck transfer)', async () => {
+    const { isSolanaAddress, base58Length } = await import('./solana')
+    expect(base58Length('hw3tstejceksqsw9ymcjcrqms8xaapha2zqpwcmxidfb')).toBe(33)
+    expect(isSolanaAddress('hw3tstejceksqsw9ymcjcrqms8xaapha2zqpwcmxidfb')).toBe(false)
+    expect(isSolanaAddress('9CpKA758hD933rs3kRf2ntNoLkEgR5JErGrge5yp6B7T')).toBe(true)
+    expect(isSolanaAddress('9cpka758hd933rs3krf2ntnolkegr5jergrge5yp6b7t')).toBe(false)
+    expect(isSolanaAddress('11111111111111111111111111111111')).toBe(true) // system program: 32 zero bytes
+  })
+  it('matches @solana/kit on random keys', async () => {
+    const { isSolanaAddress } = await import('./solana')
+    const { getBase58Decoder } = await import('@solana/kit')
+    for (let i = 0; i < 200; i++) {
+      const key = crypto.getRandomValues(new Uint8Array(32))
+      if (i % 7 === 0) key[0] = 0 // leading zero bytes → leading '1'
+      expect(isSolanaAddress(getBase58Decoder().decode(key))).toBe(true)
+    }
+  })
+})

@@ -30,6 +30,8 @@ import { useSettingsStore } from '@/store/settingsStore'
 import { isChainEnabledForTransfer, resolveChainMechanism, resolveAvailableMechanisms } from '@/lib/featureFilters'
 import { explorerTxUrl, arcExplorerTxUrl } from '@/lib/chainExplorers'
 import { ARC_RPCS, ARC_NETWORK } from '@/lib/arc'
+import { isSolanaAddress } from '@/lib/solana'
+import { useSolanaWallet } from '@/wallet/useSolanaWallet'
 import { circleForwarderMintsTo, noteForwarderMintFailed } from '@/lib/chainRpcs'
 import { gatewaySelfMintsTo, forwarderMintRetry, getUnifiedBalances, UB_MIN_SWEEP } from '@/lib/ubClaim'
 import { relayedProviderFor, realTxHash } from '@/lib/relayedProvider'
@@ -476,7 +478,8 @@ const SPEEDS = [
 type SpeedId = typeof SPEEDS[number]['id']
 
 function isEVMAddress(v: string) { return /^0x[0-9a-fA-F]{40}$/.test(v) }
-function isSolanaAddress(v: string) { return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) }
+/** Looks like base58 but isn't a 32-byte key - usually a mistyped or lowercased address. */
+function looksLikeBrokenSolanaAddress(v: string) { return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(v) && !isSolanaAddress(v) }
 /** The address fits the chain: a Solana address for Solana, an EVM one for every other chain. */
 function addressFitsChain(v: string, sdk: string) { return sdk === 'Solana_Devnet' ? isSolanaAddress(v) : isEVMAddress(v) }
 
@@ -567,6 +570,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   const storedPasscode = useAuthStore(s => s.passcode)
   const signer = useAuthStore(s => s.signer)
   const senderAddress = useAuthStore(s => s.walletAddress)
+  // This account's own Solana address ("Use my address" when Solana is picked).
+  const mySolanaAddress = useSolanaWallet().address
   const { showToastMessage } = useUIStore()
 
   const [step, setStep] = useState<MCStep>('form')
@@ -1217,6 +1222,9 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       }
       setAddrHint({ type: 'ok', text: '◎ Solana address - will receive on Solana' }); return
     }
+    if (looksLikeBrokenSolanaAddress(val)) {
+      setAddrHint({ type: 'error', text: '⚠ Not a valid Solana address - they are case-sensitive, paste it exactly' }); return
+    }
     if (val.startsWith('0x') && val.length < 42) { setAddrHint({ type: 'warn', text: `Address: ${val.length}/42 characters` }); return }
     if (val.length > 10) { setAddrHint({ type: 'error', text: '⚠ Invalid address format' }); return }
     setAddrHint({ type: '', text: 'Keep typing…' })
@@ -1238,6 +1246,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
   // all, so Continue only needs to know the typed amount/address are sane.
   const formValid = addressFitsChain(address, chain.sdk) && numAmount >= MIN_AMOUNT && numAmount <= balance
   const canContinue = formValid
+  // Confirm only against a usable quote. Unified Balance deposits first and
+  // can only send against a live quote - a stand-in (approx) one, or none,
+  // used to let the deposit go through and then strand the USDC in Unified
+  // Balance when the send could never be priced.
+  const quoteUsable = !feeEstimate.error && feeEstimate.receiverGets > 0 && !(chain.ub && feeEstimate.approx)
 
   // If a silent background refresh (see the Review polling effect below)
   // finds the forwarder fee moved meaningfully since the last time it was
@@ -1668,12 +1681,22 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
       }
 
       // Slow path: any other way the wallet frame can open it
+      const restoreStarted = Date.now()
       if (!activeSigner) {
         const { restorePrivateKey } = await import('@/lib/restoreWallet')
         await restorePrivateKey(storedPasscode ? passEntry : undefined)
         activeSigner = useAuthStore.getState().signer
       }
-      if (!activeSigner) throw new Error('Wallet key unavailable. Lock and unlock the app.')
+      if (!activeSigner) {
+        // Logged with what's needed to tell why (client_errors): which kind of
+        // wallet, how long opening it took, and whether Privy was up.
+        const s = useAuthStore.getState()
+        const privyUp = await import('@/wallet/privy').then(m => !!m.privySolanaAddress() || m.privyConfigured()).catch(() => false)
+        import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(
+          `[transfer no signer] source=${s.walletSource} restoreMs=${Date.now() - restoreStarted} hadEarly=${!!earlyDecryptPromise} passcode=${!!storedPasscode} privy=${privyUp} chain=${chain.sdk}`,
+        ))).catch(() => {})
+        throw new Error('Wallet key unavailable. Lock and unlock the app.')
+      }
 
       // ── 5. Load SDK modules (cached if pre-warmed) ────────────────────────
       const { AppKit, KitError, JsonRpcProvider, FallbackProvider } = await loadSdkModules()
@@ -1755,6 +1778,14 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
               `Insufficient USDC balance to cover the transfer plus Arc network gas. ` +
               `Available: ${trimTrailingZeros(balance.toFixed(4))} USDC.`
             )
+          }
+
+          // The send leg must be priceable BEFORE anything moves: a deposit
+          // whose spend can't be quoted (e.g. a recipient Circle rejects)
+          // would sit in Unified Balance until recovered by hand.
+          const preDeposit = await fetchFeeEstimate(true)
+          if (!preDeposit || preDeposit.approx || preDeposit.receiverGets <= 0) {
+            throw new Error(`Couldn't get a live fee for ${chain.name} right now - nothing was moved. Try again in a moment.`)
           }
 
           const depositResult: any = await kit.unifiedBalance.deposit({
@@ -3093,8 +3124,8 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         </button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, minHeight: 32 }}>
-        {senderAddress && address.toLowerCase() !== senderAddress.toLowerCase() && (
-          <button onClick={() => handleAddressChange(senderAddress)} style={{ height: 32, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand-text)' }}>
+        {(() => { const mine = chain.sdk === 'Solana_Devnet' ? mySolanaAddress : senderAddress; return !!mine && address !== mine && address.toLowerCase() !== (chain.sdk === 'Solana_Devnet' ? '' : mine.toLowerCase()) })() && (
+          <button onClick={() => handleAddressChange((chain.sdk === 'Solana_Devnet' ? mySolanaAddress : senderAddress)!)} style={{ height: 32, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--brand-text)' }}>
             Use my address
           </button>
         )}
@@ -3760,12 +3791,12 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
                   Back
                 </button>
                 <button
-                  disabled={feeEstimate.loading}
-                  onClick={() => { if (feeEstimate.loading) return; setFeeChangedNotice(''); setStep('confirm'); setPassEntry(''); setPassError('') }}
+                  disabled={feeEstimate.loading || !quoteUsable}
+                  onClick={() => { if (feeEstimate.loading || !quoteUsable) return; setFeeChangedNotice(''); setStep('confirm'); setPassEntry(''); setPassError('') }}
                   className="text-white active:scale-[.98] transition-transform disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
                   style={{ flex: 1, padding: '14px 0', borderRadius: 16, fontSize: 15, fontWeight: 700, cursor: 'pointer',
                     background:'var(--brand)', border: '1px solid color-mix(in srgb, black 12%, transparent)', boxShadow: feeEstimate.loading ? 'none' : 'var(--shadow-2)'}}>
-                  {feeEstimate.loading ? 'Fetching fees…' : 'Confirm & Transfer'}
+                  {feeEstimate.loading ? 'Fetching fees…' : !quoteUsable ? 'Can’t send right now' : 'Confirm & Transfer'}
                 </button>
               </div>
             </div>

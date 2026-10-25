@@ -13,7 +13,7 @@
 // wallet login), rate-limited per account and per IP. Env: SOLANA_FEE_PAYER_SECRET (base58,
 // 64-byte secret key; sensitive), SUPABASE_URL, SUPABASE_SERVICE_KEY.
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getBase64EncodedWireTransaction, getSignatureFromTransaction } from '@solana/kit'
+import { getBase58Encoder, getBase64EncodedWireTransaction, getSignatureFromTransaction } from '@solana/kit'
 import { checkFeePayerTransaction, coSign, FeePayerError, feePayerKeys, openUsdcAccountTransaction, usdcTokenAccount } from '../server/solana/feePayer'
 
 const SOLANA_RPC = 'https://api.devnet.solana.com'
@@ -84,7 +84,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const body = (req.body ?? {}) as { transaction?: unknown; openAccount?: unknown }
   if (typeof body.openAccount === 'string') {
-    if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(body.openAccount)) return send(400, { error: 'Not a Solana address' })
+    // base58 of exactly 32 bytes (a lowercased address decodes to another length)
+    let ok = false
+    try { ok = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(body.openAccount) && getBase58Encoder().encode(body.openAccount).length === 32 } catch { /* not base58 */ }
+    if (!ok) return send(400, { error: 'Not a valid Solana address' })
     // Opening an account costs MeshPort its rent (~0.002 SOL): 30 a day per account and per IP.
     if (!allow('od:' + who.uid, 30, 86_400_000) || !allow('oi:' + clientIp(req), 30, 86_400_000)) {
       return send(429, { error: 'Too many new Solana accounts today - try again tomorrow' })
