@@ -142,3 +142,16 @@ describe('a Privy request that never answers', () => {
 
   })
 })
+
+describe('opening a known Privy wallet after the app resumes', () => {
+  it('waits for the wallet list that fills in after sign-in (it used to give up at 1.5 s)', async () => {
+    vi.useFakeTimers()
+    setPrivyBridge(fakeBridge({ wallets: [] }))            // signed in, list still empty
+    const quick = restorePrivyAccount(ADDR)                    // sign-in check: 1.5 s
+    const known = restorePrivyAccount(ADDR, 30_000, 20_000)    // known Privy account
+    await vi.advanceTimersByTimeAsync(3_000)
+    setPrivyBridge(fakeBridge({ wallets: [ADDR] }))           // the wallet arrives 3 s later
+    expect(await quick).toBeNull()
+    expect((await known)?.address.toLowerCase()).toBe(ADDR)
+  })
+})

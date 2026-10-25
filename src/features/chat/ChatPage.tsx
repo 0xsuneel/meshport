@@ -4059,7 +4059,7 @@ export function ChatConversationPage() {
         activeSigner = useAuthStore.getState().signer
       } catch {}
     }
-    if (!activeSigner) { setPayError("Couldn't access your wallet on this device. Sign out and re-import your wallet with your recovery phrase or private key to continue."); setPayStep('confirm'); chatPayInFlightRef.current = false; return }
+    if (!activeSigner) { const { walletUnavailableMessage } = await import('@/lib/restoreWallet'); setPayError(walletUnavailableMessage()); setPayStep('confirm'); chatPayInFlightRef.current = false; return }
 
     try {
       const { sendUSDC, sendEURC, sendCirBTC, getUSDCBalance, getEURCBalance, getCirBtcBalance } = await import('@/lib/arcService')
