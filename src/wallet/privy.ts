@@ -33,6 +33,8 @@ export interface PrivyBridge {
   signTypedData(typedData: Record<string, unknown>, address: string): Promise<Hex>
   /** Addresses of this user's Privy embedded Solana wallets (docs/SOLANA.md). */
   solanaWallets: string[]
+  /** Privy has loaded the Solana wallets (before that an empty list means nothing). */
+  solanaReady: boolean
   createSolanaWallet(): Promise<string>
   /** Sign a serialized Solana transaction (wire format); returns the signed bytes. */
   signSolanaTransaction(transaction: Uint8Array, address: string): Promise<Uint8Array>
@@ -86,7 +88,8 @@ export async function privySignSolana(wire: Uint8Array, address: string, timeout
 
 /** This account's Privy Solana address, creating the Solana wallet the first time. */
 export async function ensurePrivySolanaWallet(timeoutMs = 30_000): Promise<string> {
-  const b = await whenBridge(() => true, timeoutMs)
+  // Wait for Privy's Solana list: an empty list before it has loaded isn't "none".
+  const b = await whenBridge(x => x.solanaReady, timeoutMs)
   return b.solanaWallets[0] ?? await b.createSolanaWallet()
 }
 
@@ -132,23 +135,44 @@ export function jsonTypedData(t: { domain?: unknown; types?: unknown; primaryTyp
 // A signature that fails or takes over 2 s is saved to client_errors (no
 // message contents), so slow or failing signing can be seen without a screen.
 // Split into waiting for Privy to be signed in and ready, and Privy signing.
+// A Privy request that never answers used to hold a screen forever (a bulk
+// payout sat on "Restoring wallet signer…" / signing with nothing logged).
+// It is reported while still waiting, then given up on - safe, because
+// nothing is broadcast without the signature, so a late one is never used.
+export const PRIVY_STILL_WAITING_MS = 20_000
+export const PRIVY_GIVE_UP_MS = 90_000
+export const PRIVY_NO_ANSWER = "Your wallet didn't respond - nothing was sent. Try again."
+
 async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b: PrivyBridge) => Promise<T>): Promise<T> {
   const started = performance.now()
-  let opened = started
+  let opened = 0
   const s = (ms: number) => (ms / 1000).toFixed(1)
-  const parts = () => `waiting for Privy ${s(opened - started)} s, signing ${s(performance.now() - opened)} s`
+  const parts = () => opened
+    ? `waiting for Privy ${s(opened - started)} s, signing ${s(performance.now() - opened)} s`
+    : `waiting for Privy ${s(performance.now() - started)} s, not signing yet`
   const report = (text: string) => void import('@/lib/errorReport')
     .then(r => r.reportClientError('rejection', new Error(`[privy ${what}] ${text}`))).catch(() => {})
+  let watchdog: ReturnType<typeof setTimeout> | undefined
+  let giveUp: ReturnType<typeof setTimeout> | undefined
   try {
-    const b = await open()
-    opened = performance.now()
-    const out = await sign(b)
+    watchdog = setTimeout(() => report(`still waiting after ${s(PRIVY_STILL_WAITING_MS)} s (${parts()})`), PRIVY_STILL_WAITING_MS)
+    const noAnswer = new Promise<never>((_, reject) => {
+      giveUp = setTimeout(() => reject(new Error(PRIVY_NO_ANSWER)), PRIVY_GIVE_UP_MS)
+    })
+    const out = await Promise.race([(async () => {
+      const b = await open()
+      opened = performance.now()
+      return sign(b)
+    })(), noAnswer])
     const ms = performance.now() - started
     if (ms > 2_000) report(`slow: ${s(ms)} s (${parts()})`)
     return out
   } catch (e) {
     report(`failed after ${s(performance.now() - started)} s (${parts()}): ${e instanceof Error ? e.message : String(e)}`)
     throw e
+  } finally {
+    clearTimeout(watchdog)
+    clearTimeout(giveUp)
   }
 }
 

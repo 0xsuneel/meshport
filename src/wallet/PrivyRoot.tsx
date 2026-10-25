@@ -48,7 +48,7 @@ function PrivyBridgeSync() {
     getExternalJwt: async () => (await supabase.auth.getSession()).data.session?.access_token,
   })
 
-  const { ready, authenticated } = usePrivy()
+  const { ready, authenticated, user } = usePrivy()
   const { wallets } = useWallets()
   const { createWallet } = useCreateWallet()
   const { signTransaction } = useSignTransaction()
@@ -57,7 +57,12 @@ function PrivyBridgeSync() {
   const embedded = wallets.filter(w => w.walletClientType === 'privy')
   const addresses = embedded.map(w => w.address).join(',')
   // Solana (docs/SOLANA.md): Privy's own embedded wallets only, not external ones.
-  const { wallets: solanaWallets } = useSolanaWallets()
+  // Privy loads the Solana wallets after the Ethereum ones: until `solanaReady`
+  // an empty list doesn't mean "none" (creating one then fails with "User
+  // already has an embedded wallet"). The account's linked wallets say too.
+  const { ready: solanaListReady, wallets: solanaWallets } = useSolanaWallets()
+  const hasSolanaAccount = !!(user?.linkedAccounts as Array<{ type?: string; chainType?: string; walletClientType?: string }> | undefined)
+    ?.some(a => a.type === 'wallet' && a.chainType === 'solana' && a.walletClientType === 'privy')
   const { createWallet: createSolanaWallet } = useCreateSolanaWallet()
   const { signTransaction: signSolanaTransaction } = useSignSolanaTransaction()
   const solanaEmbedded = solanaWallets.filter(w => (w.standardWallet as { isPrivyWallet?: boolean }).isPrivyWallet === true)
@@ -69,6 +74,7 @@ function PrivyBridgeSync() {
       ready, authenticated,
       wallets: addresses ? addresses.split(',') : [],
       solanaWallets: solanaAddresses ? solanaAddresses.split(',') : [],
+      solanaReady: solanaListReady,
       createSolanaWallet: async () => (await createSolanaWallet()).wallet.address,
       signSolanaTransaction: async (transaction, address) => {
         const w = solanaEmbedded.find(x => x.address === address)
@@ -87,19 +93,20 @@ function PrivyBridgeSync() {
       signTypedData: async (typedData, address) => (await signTypedData(typedData as never, { ...quiet, address })).signature as Hex,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, authenticated, addresses, solanaAddresses])
+  }, [ready, authenticated, addresses, solanaAddresses, solanaListReady])
   // A Privy account gets its Solana wallet once its Arc wallet exists - new
-  // and existing accounts alike, once per session at most.
+  // and existing accounts alike, once per session at most - and only once
+  // Privy has loaded its Solana wallets and the account has none.
   const solanaAsked = useRef(false)
   useEffect(() => {
-    if (!ready || !authenticated || !addresses || solanaAddresses || solanaAsked.current) return
+    if (!ready || !authenticated || !addresses || !solanaListReady || solanaAddresses || hasSolanaAccount || solanaAsked.current) return
     if (useAuthStore.getState().walletSource !== 'privy') return
     solanaAsked.current = true
     createSolanaWallet().catch(e => {
       void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[privy solana wallet] ${e instanceof Error ? e.message : String(e)}`))).catch(() => {})
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, authenticated, addresses, solanaAddresses])
+  }, [ready, authenticated, addresses, solanaAddresses, solanaListReady, hasSolanaAccount])
   // Privy can finish signing in after the app has stopped waiting for it
   // (a slow phone, a cold start): attach the wallet whenever it does, so a
   // Privy account is never left without its wallet for the session.

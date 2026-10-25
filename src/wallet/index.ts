@@ -12,6 +12,16 @@ export { walletAccount, isWalletAccount, toEthersSigner, createWalletAdapter, ty
 export { WalletFrameError, walletOrigin, walletReady } from './frameClient'
 export type { PasskeyOutcome, PasskeyRequest, WalletKind, WalletStatus } from './protocol'
 
+/**
+ * Wallets whose key is in the wallet frame (created / imported, and the old
+ * social-auto ones). Privy (Google / email) and Circle wallets keep it with
+ * their provider: frame-key features (passcode re-encryption, device copy,
+ * recovery phrase) don't apply to them.
+ */
+export function keyInWalletFrame(walletSource: string | null | undefined): boolean {
+  return walletSource !== 'privy' && walletSource !== 'circle'
+}
+
 export function walletStatus(address: string): Promise<WalletStatus> {
   return callWallet('status', { address })
 }
