@@ -7,7 +7,7 @@ same MeshPort sign-in, same passcode / biometric. Plan:
 | Phase | Status |
 |---|---|
 | 1. Solana wallet, address and USDC balance (Receive) | Done |
-| 2. Fee payer (`/api/solana-fee-payer`, co-signs only USDC transfers and CCTP v2 burns) | Next |
+| 2. Fee payer (`/api/solana-fee-payer`, co-signs only USDC transfers and opening USDC accounts; CCTP v2 burns added in phase 4) | Done; fee payer `63yAuT3Do4GbQDCVxRX79G1zCXg7FDGn9JEhkU5LhrdA` |
 | 3. Send USDC on Solana | |
 | 4. Bridge Arc ↔ Solana over CCTP v2 (Arc → Solana via the Forwarding Service) | |
 
