@@ -403,6 +403,10 @@ export function GoogleAuthPage() {
         return
       }
       const existing = resolved.kind === 'existing' ? resolved.user : null
+      // An account whose wallet is its Privy wallet opens with the Privy signer.
+      const privySigner = existing?.wallet_address
+        ? await import('@/wallet/privy').then(p => p.restorePrivyAccount(existing.wallet_address!, 10_000)).catch(() => null)
+        : null
       // An account whose wallet is its Circle wallet opens with the Circle signer.
       const circleSigner = existing?.wallet_address
         ? await import('@/wallet/circle').then(c => c.circleSignerFor(supaUser.id, existing.wallet_address!)).catch(() => null)
@@ -422,8 +426,9 @@ export function GoogleAuthPage() {
         // walletSource: 'social-auto' is set here (not just walletAddress) so
         // restoreWallet.ts knows this account is eligible for the server-side
         // key backup fallback if this device has no local key material.
-        if (existing.wallet_address) useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: circleSigner ? 'circle' : 'social-auto' })
-        if (circleSigner && existing.wallet_address) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
+        if (existing.wallet_address) useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: privySigner ? 'privy' : circleSigner ? 'circle' : 'social-auto' })
+        if (privySigner && existing.wallet_address) useAuthStore.getState().setWallet(existing.wallet_address, privySigner, 'privy')
+        else if (circleSigner && existing.wallet_address) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
         // A new sign-in always unlocks the wallet with the passkey or
         // Recovery QR - never a copy left on this device from before.
         clearSocialDeviceState()
@@ -557,6 +562,10 @@ export function EmailOTPPage() {
       return
     }
     const existing = resolved.kind === 'existing' ? resolved.user : null
+    // An account whose wallet is its Privy wallet opens with the Privy signer.
+    const privySigner = existing?.wallet_address
+      ? await import('@/wallet/privy').then(p => p.restorePrivyAccount(existing.wallet_address!, 10_000)).catch(() => null)
+      : null
     // An account whose wallet is its Circle wallet opens with the Circle signer.
     const circleSigner = existing?.wallet_address
       ? await import('@/wallet/circle').then(c => c.circleSignerFor(supaUser.id, existing.wallet_address!)).catch(() => null)
@@ -577,8 +586,9 @@ export function EmailOTPPage() {
       if (existing.wallet_address) {
         // Same reasoning as GoogleAuthPage above - tag walletSource so the
         // server-side key backup fallback is reachable on a fresh device.
-        useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: circleSigner ? 'circle' : 'social-auto' })
-        if (circleSigner) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
+        useAuthStore.setState({ walletAddress: existing.wallet_address, walletSource: privySigner ? 'privy' : circleSigner ? 'circle' : 'social-auto' })
+        if (privySigner) useAuthStore.getState().setWallet(existing.wallet_address, privySigner, 'privy')
+        else if (circleSigner) useAuthStore.getState().setWallet(existing.wallet_address, circleSigner, 'circle')
       }
       setLoading(false)
       showToastMessage(`Welcome back, ${existing.username || existing.display_name}! 👋`, 'success')

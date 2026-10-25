@@ -91,6 +91,7 @@ import { PayPage } from './features/pay/PayPage'
 import { useSettingsStore } from './store/settingsStore'
 import { FeatureGate } from './components/admin/FeatureGate'
 import { RequireUnlockedAccount as Unlocked } from './components/LockedFeature'
+import { PrivyGate } from './wallet/PrivyGate'
 
 function LegacyMultichainRedirect({ tab }: { tab: 'transfer' | 'bring' }) {
   const location = useLocation()
@@ -882,6 +883,8 @@ export default function App() {
         <RouterProvider router={router} future={{ v7_startTransition: true }} />
         <SplashRemover />
         <OfflineBanner />
+        {/* Privy wallets for Google / email accounts (src/wallet/privy.ts) */}
+        <PrivyGate />
       </Suspense>
     </QueryClientProvider>
   )
