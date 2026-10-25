@@ -16,7 +16,7 @@ import { useAuthStore } from '@/store'
 import type { WalletAccount } from '@/wallet'
 import { useSettingsStore } from '@/store/settingsStore'
 import { readExternalBalances, readExternalChainBalance, notifyExternalBalanceChanged, EXTERNAL_BALANCE_EVENT } from '@/blockchain/BlockchainManager'
-import { isGaslessBridgeAvailable } from '@/lib/gaslessBridge'
+import { canBringOverCctp } from '@/lib/gaslessBridge'
 import { chainLogoSrc } from '@/lib/chainLogos'
 import { subscribeToClaim, subscribeToWalletClaims, type Claim, type ClaimStatus } from '@/lib/claimService'
 import { lastClaimAllAt, CLAIM_ALL_COOLDOWN_MS, CLAIM_ALL_MIN_CHAIN } from '@/lib/ubClaim'
@@ -26,6 +26,7 @@ const NAMES: Record<string, string> = {
   Arc_Testnet: 'Arc', Ethereum_Sepolia: 'Ethereum', Base_Sepolia: 'Base', Arbitrum_Sepolia: 'Arbitrum', Optimism_Sepolia: 'Optimism',
   Polygon_Sepolia: 'Polygon', Avalanche_Fuji: 'Avalanche', HyperEVM_Testnet: 'HyperEVM', Sei_Testnet: 'Sei', Unichain_Sepolia: 'Unichain',
   Linea_Sepolia: 'Linea', World_Chain_Sepolia: 'World Chain', Sonic_Testnet: 'Sonic', Codex_Testnet: 'Codex', Ink_Testnet: 'Ink', Plume_Testnet: 'Plume',
+  Solana_Devnet: 'Solana',
 }
 export const chainLabel = (id: string) => NAMES[id] ?? id.replace(/_(Sepolia|Testnet|Fuji)$/, '').replace(/_/g, ' ')
 
@@ -73,7 +74,7 @@ function useChainFunds() {
 
   // Every CCTP chain that was checked, $0 ones included (shown dimmed).
   const allChains = useMemo<ChainFunds[] | undefined>(() => balances === null ? undefined
-    : Object.entries(balances).filter(([id]) => isGaslessBridgeAvailable(id))
+    : Object.entries(balances).filter(([id]) => canBringOverCctp(id))
       .map(([id, balance]) => ({ id, label: chainLabel(id), logo: chainLogoSrc(id), balance }))
       .sort((a, b) => b.balance - a.balance || a.label.localeCompare(b.label)), [balances])
   const chains = useMemo(() => allChains?.filter(c => c.balance > 0), [allChains])

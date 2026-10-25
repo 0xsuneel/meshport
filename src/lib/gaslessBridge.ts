@@ -79,6 +79,15 @@ export function isGaslessBridgeAvailable(chainId: string): boolean {
   return !!gaslessRouter(chainId)
 }
 
+/**
+ * Bring Funds / Business collect can move this chain to Arc over CCTP:
+ * an EVM chain with MeshPort's router, or Solana - not EVM, so no router;
+ * MeshPort's Solana fee payer does that job there (lib/solanaBridge.ts).
+ */
+export function canBringOverCctp(chainId: string): boolean {
+  return isGaslessBridgeAvailable(chainId) || chainId === 'Solana_Devnet'
+}
+
 export interface BridgeParams {
   token: Hex
   destinationDomain: number

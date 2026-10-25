@@ -421,9 +421,10 @@ const ALL_CHAINS = [
   { id: 'arb',       name: 'Arbitrum',    testnet: 'Arbitrum Sepolia',    sdk: 'Arbitrum_Sepolia',      emoji: '🔷', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(27,74,221,0.15)',  tc: '#60a5fa', ub: true,  popular: true,  layer: 'L2' },
   { id: 'pol',       name: 'Polygon',     testnet: 'Polygon PoS Amoy',    sdk: 'Polygon_Amoy_Testnet',  emoji: '⬡',  gasToken: 'POL',  minGas: 0.01,  time: '<10s',  bg: 'rgba(130,71,229,0.15)', tc: '#a78bfa', ub: true,  popular: true,  layer: 'L2' },
   { id: 'op',        name: 'Optimism',    testnet: 'OP Sepolia',          sdk: 'Optimism_Sepolia',      emoji: '🔴', gasToken: 'ETH',  minGas: 0.0001, time: '<10s', bg: 'rgba(255,4,32,0.12)',   tc: '#f87171', ub: true,  popular: true,  layer: 'L2' },
-  // Not EVM: recipient is a Solana address; Circle's forwarder mints there and
-  // MeshPort opens the recipient's USDC account first (lib/solanaBridge.ts).
-  { id: 'sol',       name: 'Solana',      testnet: 'Solana Devnet',       sdk: 'Solana_Devnet',         emoji: '◎',  gasToken: 'SOL',  minGas: 0,     time: '<30s',  bg: 'rgba(153,69,255,0.15)', tc: '#a78bfa', ub: false, popular: true,  layer: 'L1' },
+  // Not EVM: recipient is a Solana address. Both routes (Unified Balance and
+  // CCTP) mint there through Circle's forwarder, and MeshPort opens the
+  // recipient's USDC account first (lib/solanaBridge.ts).
+  { id: 'sol',       name: 'Solana',      testnet: 'Solana Devnet',       sdk: 'Solana_Devnet',         emoji: '◎',  gasToken: 'SOL',  minGas: 0,     time: '<30s',  bg: 'rgba(153,69,255,0.15)', tc: '#a78bfa', ub: true,  popular: true,  layer: 'L1' },
   { id: 'avax',      name: 'Avalanche',   testnet: 'Avalanche Fuji',      sdk: 'Avalanche_Fuji',        emoji: '🔺', gasToken: 'AVAX', minGas: 0.01,  time: '<15s',  bg: 'rgba(232,65,66,0.12)',  tc: '#f87171', ub: true,  popular: true,  layer: 'L1' },
   { id: 'hyperevm',  name: 'HyperEVM',    testnet: 'HyperEVM Testnet',    sdk: 'HyperEVM_Testnet',      emoji: '⚡', gasToken: 'HYPE', minGas: 0.01,  time: '<10s',  bg: 'rgba(250,204,21,0.12)', tc: '#fbbf24', ub: true,  popular: false, layer: 'L2' },
   { id: 'sei',       name: 'Sei',         testnet: 'Sei Testnet',         sdk: 'Sei_Testnet',           emoji: '🌊', gasToken: 'SEI',  minGas: 0.1,   time: '<10s',  bg: 'rgba(157,34,53,0.15)',  tc: '#22d3ee', ub: true,  popular: false, layer: 'L1' },
@@ -1833,6 +1834,11 @@ export function MultichainTransferPage({ embedded = false, onClose, onFocusChang
         // cheap/stable routes keep exactly the same protection they had),
         // capped so a single very-high-fee chain can't eat an unreasonable
         // chunk of the transfer.
+        // Solana: Circle's forwarder mints into the recipient's USDC account - MeshPort opens it first.
+        if (chain.sdk === 'Solana_Devnet') {
+          const { ensureSolanaUsdcAccount } = await import('@/lib/solanaBridge')
+          await ensureSolanaUsdcAccount(address)
+        }
         const spendFeeEstimate = freshEstimate.spendOverhead
         const spendAmount = ubSpendAmount(targetDepositAmount, spendFeeEstimate, ubArcDustRef.current)
         const spendParams = {

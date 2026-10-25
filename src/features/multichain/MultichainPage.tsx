@@ -14,7 +14,7 @@ function InlineSpinner() {
   return <div style={{ padding: 32, display: 'flex', justifyContent: 'center' }}><div style={{ width: 22, height: 22, borderRadius: '50%', border: '2px solid var(--brand)', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }}/></div>
 }
 import { UB_CLAIM_CHAINS } from '@/lib/ubClaim'
-import { isGaslessBridgeAvailable } from '@/lib/gaslessBridge'
+import { canBringOverCctp } from '@/lib/gaslessBridge'
 import { useMerchant, useBusinessTab, isMerchantClaim } from '@/lib/merchant'
 import { BusinessMoney } from '@/features/merchant/BusinessMoney'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -50,7 +50,7 @@ const CHAIN_LABELS: Record<string, string> = {
   Linea_Sepolia: 'Linea', Ink_Testnet: 'Ink', Monad_Testnet: 'Monad',
   Morph_Testnet: 'Morph', Pharos_Testnet: 'Pharos', Plume_Testnet: 'Plume',
   XDC_Apothem: 'XDC', Codex_Testnet: 'Codex', Edge_Testnet: 'Edge',
-  Injective_Testnet: 'Injective',
+  Injective_Testnet: 'Injective', Solana_Devnet: 'Solana',
 }
 
 type TabType = 'all' | 'pending' | 'success' | 'failed'
@@ -895,8 +895,8 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
   // Unified Balance. Merchants: CCTP chains only - MeshPort's relayer pays
   // the gas, same as anyone's CCTP claim.
   const bringRows = isMerchant
-    ? allChainRows.filter(c => isGaslessBridgeAvailable(c.id))
-    : allChainRows.filter(c => isGaslessBridgeAvailable(c.id) || isUbChain(c.id))
+    ? allChainRows.filter(c => canBringOverCctp(c.id))
+    : allChainRows.filter(c => canBringOverCctp(c.id) || isUbChain(c.id))
 
   // Desktop has no Activity tab (the list is always on the right), so a
   // link that opens the Hub on Activity lands on Transfer Funds instead.
@@ -1264,7 +1264,7 @@ export function MultichainPage({ mode = 'hub' }: { mode?: 'hub' | 'chains' } = {
               ) : bringRows.map(c => {
                 const has = c.balance >= DUST_USDC
                 const ub = !isMerchant && isUbChain(c.id)
-                const cctp = isGaslessBridgeAvailable(c.id)
+                const cctp = canBringOverCctp(c.id)
                 return (
                   <button key={c.id} disabled={!has}
                     onClick={() => setClaimChain(c.id)}
