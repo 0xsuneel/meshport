@@ -85,6 +85,37 @@ function privyTransaction(tx: TransactionSerializable): Record<string, unknown> 
   return out
 }
 
+/** Typed data as JSON can carry it: Privy sends it to its servers, and
+ *  JSON has no BigInt (swap permits carry uint256 values as BigInts). EIP-712
+ *  takes integers as decimal strings; a domain chainId stays a number. */
+export function jsonTypedData(t: { domain?: unknown; types?: unknown; primaryType?: unknown; message?: unknown }): Record<string, unknown> {
+  const plain = (v: unknown): unknown =>
+    typeof v === 'bigint' ? v.toString()
+    : Array.isArray(v) ? v.map(plain)
+    : v && typeof v === 'object' && !(v instanceof Uint8Array) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, plain(x)]))
+    : v instanceof Uint8Array ? bytesToHex(v) : v
+  const domain = plain(t.domain ?? {}) as Record<string, unknown>
+  if (domain.chainId !== undefined) domain.chainId = Number(domain.chainId)
+  return { domain, types: t.types, primaryType: t.primaryType, message: plain(t.message) }
+}
+
+// A signature that fails or takes over 2 s is saved to client_errors (no
+// message contents), so slow or failing signing can be seen without a screen.
+async function timed<T>(what: string, f: () => Promise<T>): Promise<T> {
+  const started = performance.now()
+  const report = (text: string) => void import('@/lib/errorReport')
+    .then(r => r.reportClientError('rejection', new Error(`[privy ${what}] ${text}`))).catch(() => {})
+  try {
+    const out = await f()
+    const ms = performance.now() - started
+    if (ms > 2_000) report(`slow: ${(ms / 1000).toFixed(1)} s`)
+    return out
+  } catch (e) {
+    report(`failed after ${((performance.now() - started) / 1000).toFixed(1)} s: ${e instanceof Error ? e.message : String(e)}`)
+    throw e
+  }
+}
+
 const accounts = new Map<string, WalletAccount>()
 
 export function privyAccount(address: string): WalletAccount {
@@ -96,14 +127,14 @@ export function privyAccount(address: string): WalletAccount {
     address: address as Hex,
     async signMessage({ message }) {
       const m = typeof message === 'string' ? message : { raw: typeof message.raw === 'string' ? message.raw : bytesToHex(message.raw) }
-      return (await open()).signMessage(m, address)
+      return timed('signMessage', async () => (await open()).signMessage(m, address))
     },
     async signTransaction(transaction) {
-      return (await open()).signTransaction(privyTransaction(transaction), address)
+      return timed('signTransaction', async () => (await open()).signTransaction(privyTransaction(transaction), address))
     },
     async signTypedData(typedData) {
       const { domain, types, primaryType, message } = typedData as TypedDataDefinition
-      return (await open()).signTypedData({ domain, types, primaryType, message } as Record<string, unknown>, address)
+      return timed('signTypedData', async () => (await open()).signTypedData(jsonTypedData({ domain, types, primaryType, message }), address))
     },
   })
   const account = Object.assign(base, { meshportWallet: true as const, privyWallet: true as const }) as WalletAccount

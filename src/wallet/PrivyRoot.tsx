@@ -14,7 +14,8 @@ import {
 import type { Hex } from 'viem'
 import { supabase } from '@/lib/supabase'
 import { arcTestnet } from '@/lib/chain'
-import { privyAppId, setPrivyBridge } from './privy'
+import { useAuthStore } from '@/store'
+import { privyAccount, privyAppId, setPrivyBridge } from './privy'
 import { useSupabaseSession } from './PrivyGate'
 
 function PrivyBridgeSync() {
@@ -52,6 +53,16 @@ function PrivyBridgeSync() {
       signTypedData: async (typedData, address) => (await signTypedData(typedData as never, { ...quiet, address })).signature as Hex,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, authenticated, addresses])
+  // Privy can finish signing in after the app has stopped waiting for it
+  // (a slow phone, a cold start): attach the wallet whenever it does, so a
+  // Privy account is never left without its wallet for the session.
+  useEffect(() => {
+    if (!ready || !authenticated || !addresses) return
+    const { walletAddress, walletSource, signer, setWallet } = useAuthStore.getState()
+    if (walletSource !== 'privy' || signer || !walletAddress) return
+    if (!addresses.toLowerCase().split(',').includes(walletAddress.toLowerCase())) return
+    setWallet(walletAddress, privyAccount(walletAddress), 'privy')
   }, [ready, authenticated, addresses])
   useEffect(() => () => setPrivyBridge(null), [])
   return null

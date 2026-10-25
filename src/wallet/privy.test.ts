@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.stubEnv('VITE_PRIVY_APP_ID', 'test-app-id')
 const privy = await import('./privy')
-const { setPrivyBridge, privyAccount, ensurePrivyWallet, restorePrivyAccount } = privy
+const { setPrivyBridge, privyAccount, ensurePrivyWallet, restorePrivyAccount, jsonTypedData } = privy
 
 const ADDR = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 type Bridge = Parameters<typeof setPrivyBridge>[0] & object
@@ -52,6 +52,23 @@ describe('privyAccount (the Privy signer)', () => {
     const p = privyAccount(ADDR).signMessage({ message: 'later' })
     setPrivyBridge({ ...b, authenticated: true })
     expect(await p).toBe('0xsig')
+  })
+})
+
+describe('typed data for Privy (swap permits)', () => {
+  it('BigInts become decimal strings, nested too; the domain chainId stays a number; it survives JSON', async () => {
+    const td = jsonTypedData({
+      domain: { name: 'Permit2', chainId: 5042002n, verifyingContract: '0x000000000022D473030F116dDEE9F6B43aC78BA3' },
+      types: { PermitSingle: [{ name: 'details', type: 'PermitDetails' }] }, primaryType: 'PermitSingle',
+      message: { details: { amount: 1461501637330902918203684832716283019655932542975n, nonces: [1n, 2n] }, sigDeadline: 1792905000n },
+    })
+    expect(td.domain).toEqual({ name: 'Permit2', chainId: 5042002, verifyingContract: '0x000000000022D473030F116dDEE9F6B43aC78BA3' })
+    expect(td.message).toEqual({ details: { amount: '1461501637330902918203684832716283019655932542975', nonces: ['1', '2'] }, sigDeadline: '1792905000' })
+    expect(() => JSON.stringify(td)).not.toThrow()
+
+    const b = fakeBridge(); setPrivyBridge(b)
+    await privyAccount(ADDR).signTypedData({ domain: { chainId: 1 }, types: { A: [{ name: 'v', type: 'uint256' }] }, primaryType: 'A', message: { v: 10n ** 30n } })
+    expect(b.calls[0][1]).toMatchObject({ message: { v: '1000000000000000000000000000000' } })
   })
 })
 
