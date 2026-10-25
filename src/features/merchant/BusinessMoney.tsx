@@ -25,7 +25,9 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { ClaimAllScreen, type ClaimAllChain } from './ClaimAllScreen'
 import { lastClaimAllAt, CLAIM_ALL_COOLDOWN_MS, CLAIM_ALL_MIN_CHAIN, type ClaimAllStep } from '@/lib/ubClaim'
 import { merchantQrChain, MERCHANT_QR_EXTERNAL } from '@/lib/merchantQr'
-import { ChainPicker, WalletPaymentDetails } from './MerchantQrPanel'
+import { ChainPicker, WalletPaymentDetails, useOrderSolanaUri } from './MerchantQrPanel'
+import { SOLANA_PAY_OPTION } from '@/lib/solanaPay'
+import { useSolanaWallet } from '@/wallet/useSolanaWallet'
 import { SkeletonRows } from '@/components/ui/Skeleton'
 import { ReceiptPopup } from '@/components/ui/ReceiptPopup'
 import { ScreenPush } from '@/components/ui/ScreenPush'
@@ -491,8 +493,16 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
   const [qrChain, setQrChain] = useState(MERCHANT_QR_EXTERNAL[0].id)
   const dueNow = intent ? Math.max(0, Math.round((intent.amount - intent.received) * 1e6) / 1e6) : 0
   const shownChain = qrMode === 'wallet' ? qrChain : 'Arc_Testnet'
+  // Solana: a Solana Pay request (address, amount due, the order's
+  // reference) - Solana wallets open it directly. Offered once this
+  // account's Solana address is known.
+  const mySolana = useSolanaWallet().address
+  const onSolana = qrMode === 'wallet' && qrChain === SOLANA_PAY_OPTION.id
+  const qrChainLabel = qrChain === SOLANA_PAY_OPTION.id ? SOLANA_PAY_OPTION.label : merchantQrChain(qrChain).label
+  const solanaUri = useOrderSolanaUri(onSolana && intent ? { code, orderNumber: intent.orderNumber } : null, dueNow, mySolana)
+  const chainLink = orderChainPayLink(code, intent?.orderNumber, qrChain)
   const qrValue = !walletAddress || !(dueNow > 0) ? link
-    : qrMode === 'wallet' ? orderChainPayLink(code, intent?.orderNumber, qrChain)
+    : qrMode === 'wallet' ? (onSolana ? (solanaUri || chainLink) : chainLink)
     : link
 
   useEffect(() => {
@@ -502,7 +512,7 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
 
   const message = !intent ? link
     : qrMode === 'wallet' && walletAddress
-    ? `Pay $${formatAmount(dueNow)} USDC on ${merchantQrChain(qrChain).label} · ${orderTitle(orderKindOf(intent), orderLabel(intent))}\n${qrValue}`
+    ? `Pay $${formatAmount(dueNow)} USDC on ${qrChainLabel} · ${orderTitle(orderKindOf(intent), orderLabel(intent))}\n${chainLink}`
     : `${orderTitle(orderKindOf(intent), orderLabel(intent))}: $${formatAmount(intent.amount)} USDC${intent.note ? ` · ${intent.note}` : ''}\n${link}`
 
   const copy = (text: string, what: string) =>
@@ -512,14 +522,14 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
   // order number; the shared text carries the link.
   const qrImage = async (): Promise<File | null> => {
     if (!intent) return null
-    const chain = merchantQrChain(qrChain).label
+    const chain = qrChainLabel
     return qrCardFile({
       data: qrValue,
       subtitle: orderTitle(orderKindOf(intent), orderLabel(intent)),
       amount: `$${formatAmount(qrMode === 'wallet' ? dueNow : intent.amount)} USDC`,
       tag: qrMode === 'wallet' ? `${chain} · USDC` : 'USDC · any network',
       caption: qrMode === 'wallet' ? `Pay on ${chain} - the amount fills in` : 'Scan to pay - the amount is fixed',
-    }, `payment-${orderDisplay(intent)}-${merchantQrChain(shownChain).label.toLowerCase()}.png`)
+    }, `payment-${orderDisplay(intent)}-${(qrMode === 'wallet' ? qrChainLabel : merchantQrChain(shownChain).label).toLowerCase()}.png`)
   }
 
   const share = async () => {
@@ -645,14 +655,14 @@ function RequestDetail({ code, intent, payments, onBack, onChanged }: {
                 </button>
               ))}
             </div>
-            {qrMode === 'wallet' && <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}><ChainPicker value={qrChain} onChange={setQrChain} /></div>}
+            {qrMode === 'wallet' && <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}><ChainPicker value={qrChain} onChange={setQrChain} extra={mySolana ? [SOLANA_PAY_OPTION] : []} /></div>}
             <QrCard subtitle={intent ? `${orderTitle(orderKindOf(intent), orderLabel(intent))} · $${formatAmount(intent.amount)}` : undefined}
-              tag={qrMode === 'wallet' ? `${merchantQrChain(qrChain).label} · USDC` : undefined}
-              caption={qrMode === 'wallet' ? `Pay on ${merchantQrChain(qrChain).label} - the amount fills in` : 'Scan to pay - the amount is fixed'}>
+              tag={qrMode === 'wallet' ? `${qrChainLabel} · USDC` : undefined}
+              caption={qrMode === 'wallet' ? `Pay on ${qrChainLabel} - the amount fills in` : 'Scan to pay - the amount is fixed'}>
               <canvas ref={canvasRef} width={232} height={232} style={{ display: 'block' }} />
             </QrCard>
             {qrMode === 'wallet' && walletAddress && dueNow > 0
-              ? <WalletPaymentDetails chainId={qrChain} to={walletAddress} amount={dueNow} />
+              ? <WalletPaymentDetails chainId={qrChain} to={(onSolana ? mySolana : walletAddress) ?? walletAddress} amount={dueNow} />
               : <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', maxWidth: 320, lineHeight: 1.45 }}>
                   Scan with MeshPort or any wallet app (MetaMask, OKX, Trust, Coinbase…) - the amount and order are fixed; wallets get Arc, the address and the amount filled in.
                 </div>}

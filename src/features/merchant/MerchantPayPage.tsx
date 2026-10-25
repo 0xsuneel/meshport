@@ -15,6 +15,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { CheckCircle2, Clock, XCircle, ChevronRight, Home } from 'lucide-react'
 import { useAuthStore, useWalletStore } from '@/store'
 import { WalletPayPanel } from '@/features/pay/WalletPayPanel'
+import { SolanaPayPanel } from '@/features/pay/SolanaPayPanel'
+import { SOLANA_PAY_OPTION } from '@/lib/solanaPay'
 import { formatAmount } from '@/lib/utils'
 import {
   watchPayment, STATUS_LABEL, orderPaySendUrl, isOrderPayable, ARC_PAY_CHAIN, expiryText, type PaymentView,
@@ -67,9 +69,12 @@ export function MerchantPayPage() {
   // settles those to Arc; a person brings them to Arc from the Multichain Hub).
   const [netId, setNetId] = useState('Arc_Testnet')
   const [netMenu, setNetMenu] = useState(false)
-  const net = merchantQrChain(netId)
-  const netOptions = [MERCHANT_QR_CHAINS[0], ...MERCHANT_QR_EXTERNAL]
-    .filter(c => c.native || view?.chains?.some(v => v.id === c.id))
+  // Solana: offered when the payee has a Solana address (merchant-pay lists it).
+  const solanaTo = view?.merchantSolana && view.chains?.some(v => v.id === SOLANA_PAY_OPTION.id) ? view.merchantSolana : null
+  const onSolana = (wantChain || netId) === SOLANA_PAY_OPTION.id && !!solanaTo
+  const net = onSolana ? { ...SOLANA_PAY_OPTION } : merchantQrChain(netId)
+  const netOptions = [...[MERCHANT_QR_CHAINS[0], ...MERCHANT_QR_EXTERNAL]
+    .filter(c => c.native || view?.chains?.some(v => v.id === c.id)), ...(solanaTo ? [SOLANA_PAY_OPTION] : [])]
     .map(c => ({ id: c.id, label: c.label,
       icon: <img decoding="async" src={c.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} /> }))
   const pickedChain = wantChain || netId
@@ -204,8 +209,9 @@ export function MerchantPayPage() {
                 </p>
               </div>
             )}
-            {(!isAuthenticated || chainOnly) && remaining > 0 && (
-              <WalletPayPanel key={payChain.id} to={view.merchantWallet} amount={remaining} code={view.code} orderNumber={view.orderNumber} chain={payChain} onPaid={() => setWalletPaid(true)} />
+            {(!isAuthenticated || chainOnly) && remaining > 0 && (onSolana && solanaTo
+              ? <SolanaPayPanel key="solana" to={solanaTo} amount={remaining} code={view.code} orderNumber={view.orderNumber} label={view.merchantName ?? undefined} onPaid={() => setWalletPaid(true)} />
+              : <WalletPayPanel key={payChain.id} to={view.merchantWallet} amount={remaining} code={view.code} orderNumber={view.orderNumber} chain={payChain} onPaid={() => setWalletPaid(true)} />
             )}
             {/* MeshPort pays on Arc only. */}
             {!walletPaid && !chainOnly && onArc && <button onClick={payWithMeshPort} disabled={isAuthenticated && arcBalance < remaining}

@@ -109,7 +109,7 @@ export const CHAIN_CCTP_OVERRIDE_FEATURE_MAP: Record<string, string> = {
 
 // Chains whose CCTP route is ON until an admin row says otherwise. Solana
 // (added after the seed) starts with both routes, as the live UB chains are
-// set (supabase/migrations/20261025090000_solana_routes_seed.sql).
+// set (supabase/migrations/20261025120000_solana_routes_seed.sql).
 const CCTP_DEFAULT_ON = new Set(['sol'])
 
 // Resolves the EFFECTIVE mechanism for a chain that statically supports UB

@@ -178,7 +178,12 @@ function publicView(i: any, payments: any[]) {
     taxPercent: Number(i.tax_percent ?? 0),
     createdAt: i.created_at, expiresAt: i.expires_at, paidAt: i.paid_at, dueDate: i.due_date ?? null,
     completedByMerchant: !!i.completed_by_merchant, completedNote: i.completed_note ?? null,
-    chains: Object.entries(PAY_CHAINS).map(([id, c]) => ({ id, label: c.label, chainId: c.chainId, usdc: c.usdc, route: c.route })),
+    chains: [
+      ...Object.entries(PAY_CHAINS).map(([id, c]) => ({ id, label: c.label, chainId: c.chainId, usdc: c.usdc, route: c.route })),
+      // Solana when the payee has a Solana address: pay there with a Solana Pay QR.
+      ...(i._merchant_solana ? [{ id: SOLANA_CHAIN, label: SOLANA_PAY_CHAIN.label, chainId: 0, usdc: SOLANA_USDC_MINT, route: SOLANA_PAY_CHAIN.route }] : []),
+    ],
+    merchantSolana: i._merchant_solana ?? null,
     payments: payments.map(p => ({ chain: p.source_chain, amount: Number(p.amount), status: p.status, txHash: p.tx_hash, method: p.method, late: !!p.late, createdAt: p.created_at })),
   }
 }
@@ -189,6 +194,10 @@ async function loadIntent(code: string) {
     const { data: u } = await db.from('users').select('username, avatar_url').eq('id', data.merchant_user_id).maybeSingle()
     ;(data as any)._merchant_username = u?.username ?? null
     ;(data as any)._merchant_avatar = u?.avatar_url ?? null
+    // Its Solana address, when it has one (a separate read: an error here -
+    // e.g. the column not added yet - only means no Solana option).
+    const { data: s, error: sErr } = await db.from('users').select('solana_address').eq('id', data.merchant_user_id).maybeSingle()
+    ;(data as any)._merchant_solana = !sErr && s?.solana_address ? String(s.solana_address) : null
   }
   // The store (branch) it's for, shown with the business name on the pay page
   // and link previews: the order's own store, else the business's main store.
@@ -246,6 +255,64 @@ function usdcToMerchant(receipt: any, usdc: string, to: string, chainId: string)
   return sum(usdc.toLowerCase(), TRANSFER_TOPIC, 6)
 }
 
+// ── Solana (docs/SOLANA.md) ─────────────────────────────────────────────
+// Not EVM, so not in PAY_CHAINS (receipts, logs, block cursors): a Solana
+// payment is read from its transaction - the USDC that reached the payee's
+// USDC account (token balances before / after) - and is tied to an order by
+// its Solana Pay reference, a key derived from the order code that the
+// payer's wallet adds to the transfer (solana:…&reference=…). The pay page
+// and this function derive the same key (src/lib/solanaPay.ts).
+export const SOLANA_CHAIN = 'Solana_Devnet'
+const SOLANA_USDC_MINT = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'
+const SOLANA_RPCS = ['https://api.devnet.solana.com']
+const SOLANA_PAY_CHAIN: ChainDef = { label: 'Solana', chainId: 0, usdc: SOLANA_USDC_MINT, rpcs: SOLANA_RPCS, route: 'ub' }
+const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+function base58(bytes: Uint8Array): string {
+  const digits: number[] = []
+  for (const byte of bytes) {
+    let carry = byte
+    for (let k = 0; k < digits.length; k++) { carry += digits[k] << 8; digits[k] = carry % 58; carry = (carry / 58) | 0 }
+    while (carry > 0) { digits.push(carry % 58); carry = (carry / 58) | 0 }
+  }
+  let out = ''
+  for (const b of bytes) { if (b !== 0) break; out += '1' }
+  for (let k = digits.length - 1; k >= 0; k--) out += B58[digits[k]]
+  return out
+}
+export const isSolanaSignature = (s: string) => /^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(s)
+/** The order's Solana Pay reference: base58(sha256("meshport-pay-ref:" + code)). */
+export async function solanaReference(code: string): Promise<string> {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('meshport-pay-ref:' + code.toLowerCase()))
+  return base58(new Uint8Array(h))
+}
+type SolanaRead = { pending: true } | { error: string } | { amount: number; from: string | null; minedAt: number; namesOrder: boolean }
+/** USDC that reached `payee`'s USDC account in this Solana transaction. */
+async function readSolanaPayment(signature: string, payee: string, reference: string): Promise<SolanaRead> {
+  const t = await rpc(SOLANA_RPCS, 'getTransaction', [signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0, commitment: 'confirmed' }]).catch(() => null)
+  if (!t) return { pending: true }
+  if (t.meta?.err) return { error: 'The transaction failed on-chain.' }
+  const delta = new Map<number, { owner: string; atomic: bigint }>()
+  const add = (rows: any[] | undefined, sign: 1n | -1n) => {
+    for (const r of rows ?? []) {
+      if (r?.mint !== SOLANA_USDC_MINT || !r?.owner) continue
+      const cur = delta.get(r.accountIndex) ?? { owner: String(r.owner), atomic: 0n }
+      try { cur.atomic += sign * BigInt(r.uiTokenAmount?.amount ?? '0') } catch { continue }
+      delta.set(r.accountIndex, cur)
+    }
+  }
+  add(t.meta?.postTokenBalances, 1n)
+  add(t.meta?.preTokenBalances, -1n)
+  let toPayee = 0n
+  let from: string | null = null
+  let biggestOut = 0n
+  for (const { owner, atomic } of delta.values()) {
+    if (owner === payee) toPayee += atomic
+    else if (atomic < biggestOut) { biggestOut = atomic; from = owner }
+  }
+  const keys: string[] = (t.transaction?.message?.accountKeys ?? []).map((k: any) => String(k?.pubkey ?? k))
+  return { amount: Number(toPayee) / 1e6, from, minedAt: t.blockTime ? t.blockTime * 1000 : 0, namesOrder: keys.includes(reference) }
+}
+
 // ── Incoming payment screening ───────────────────────────────────────────
 // Two independent checks on the paying address, run in parallel:
 //   1. USDC's own blocklist (FiatToken isBlacklisted(address) → bool) on the
@@ -271,6 +338,7 @@ const CIRCLE_CHAIN: Record<string, string> = {
   Polygon_Sepolia:  'MATIC-AMOY',
   Avalanche_Fuji:   'AVAX-FUJI',
   Unichain_Sepolia: 'UNI-SEPOLIA',
+  Solana_Devnet:    'SOL-DEVNET',
 }
 const circleChainFor = (chainId: string) => CIRCLE_CHAIN[chainId] ?? 'ETH-SEPOLIA'
 
@@ -298,6 +366,8 @@ async function screenWithCircle(chainId: string, addr: string): Promise<ScreenFl
 }
 
 async function screenSender(chainId: string, from: string | null): Promise<ScreenFlag | null> {
+  // Solana: Circle's screening only (USDC's blocklist read below is an EVM call).
+  if (chainId === SOLANA_CHAIN) return from ? screenWithCircle(chainId, from) : null
   const chain = PAY_CHAINS[chainId]
   if (!chain || !from || !/^0x[0-9a-f]{40}$/i.test(from) || /^0x0{40}$/i.test(from)) return null
   const key = `${chainId}:${from.toLowerCase()}`
@@ -339,13 +409,18 @@ type MatchedBy = 'customer' | 'merchant' | 'watcher'
 
 type RecordOpts = { minedAt?: number }
 async function recordPayment(req: Request | null, i: any, chainId: string, txHash: string, who: Awaited<ReturnType<typeof caller>>, order: OrderCheck, matchedBy: MatchedBy = 'customer', opts: RecordOpts = {}) {
-  const chain = PAY_CHAINS[chainId]
+  const isSol = chainId === SOLANA_CHAIN
+  const chain = isSol ? SOLANA_PAY_CHAIN : PAY_CHAINS[chainId]
   if (!chain) return { error: "This network isn't supported for this payment.", status: 400 }
+  // Solana pays the merchant's own Solana address (users.solana_address).
+  const solPayee: string | null = isSol ? (i._merchant_solana ?? null) : null
+  if (isSol && !solPayee) return { error: `${i.merchant_name ?? 'This business'} can't receive on Solana yet.`, status: 400 }
   // Personal requests can be paid on another chain too: the USDC lands in the
   // requester's own wallet there (same address), shows in their Multichain
   // Hub, and they bring it to Arc - the order is paid on arrival either way.
-  if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) return { error: 'Invalid transaction', status: 400 }
-  const tx = txHash.toLowerCase()
+  if (isSol ? !isSolanaSignature(txHash) : !/^0x[0-9a-fA-F]{64}$/.test(txHash)) return { error: 'Invalid transaction', status: 400 }
+  // Solana signatures are case-sensitive (base58): kept as they are.
+  const tx = isSol ? txHash : txHash.toLowerCase()
 
   // Already counted (idempotent: same answer, never a second credit).
   // (Per merchant: one tx can pay two different merchants.)
@@ -368,26 +443,41 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   if (order.amount != null && Math.abs(order.amount - due) > 0.000001) {
     return { error: `Amount doesn't match ${orderName(i)} - $${due.toFixed(2)} USDC is due.`, status: 409 }
   }
-  const receipt = await rpc(chain.rpcs, 'eth_getTransactionReceipt', [tx]).catch(() => null)
-  if (!receipt) return { pending: true }
-  if (receipt.status !== '0x1') return { error: 'The transaction failed on-chain.', status: 409 }
-  // Other chains: credited once the block is deep enough (the watcher only
-  // scans that deep already).
-  const depth = confirmationsFor(chainId)
-  if (depth > 0 && matchedBy !== 'watcher') {
-    const head = parseInt(await rpc(chain.rpcs, 'eth_blockNumber', []).catch(() => '0x0'), 16)
-    if (!(head - parseInt(receipt.blockNumber, 16) >= depth)) return { pending: true }
+  let receipt: any = null
+  let amount = 0
+  let from: string | null = null
+  // Solana: read at 'confirmed'; named this order with its Solana Pay reference.
+  let solNamesOrder = false
+  let solMinedAt = 0
+  if (isSol) {
+    const r = await readSolanaPayment(tx, solPayee!, await solanaReference(String(i.code)))
+    if ('pending' in r) return { pending: true }
+    if ('error' in r) return { error: r.error, status: 409 }
+    ;({ amount, from } = r)
+    solNamesOrder = r.namesOrder
+    solMinedAt = r.minedAt
+  } else {
+    receipt = await rpc(chain.rpcs, 'eth_getTransactionReceipt', [tx]).catch(() => null)
+    if (!receipt) return { pending: true }
+    if (receipt.status !== '0x1') return { error: 'The transaction failed on-chain.', status: 409 }
+    // Other chains: credited once the block is deep enough (the watcher only
+    // scans that deep already).
+    const depth = confirmationsFor(chainId)
+    if (depth > 0 && matchedBy !== 'watcher') {
+      const head = parseInt(await rpc(chain.rpcs, 'eth_blockNumber', []).catch(() => '0x0'), 16)
+      if (!(head - parseInt(receipt.blockNumber, 16) >= depth)) return { pending: true }
+    }
+    ;({ amount, from } = usdcToMerchant(receipt, chain.usdc, i.merchant_wallet, chainId))
   }
-  const { amount, from } = usdcToMerchant(receipt, chain.usdc, i.merchant_wallet, chainId)
   if (!(amount > 0) || !from) return { error: `This transaction didn't send USDC to ${i.merchant_name ?? 'the business'} on ${chain.label}.`, status: 409 }
   if (order.amount != null && amount + 0.000001 < order.amount) {
     return { error: `This transaction sent $${amount} USDC, but ${orderName(i)} is for $${order.amount} USDC.`, status: 409 }
   }
 
   // When the transfer was mined (for the customer checks and "late").
-  let minedAtCache = opts.minedAt ?? 0
+  let minedAtCache = opts.minedAt ?? solMinedAt
   const blockTime = async () => {
-    if (!minedAtCache) {
+    if (!minedAtCache && receipt) {
       const block = await rpc(chain.rpcs, 'eth_getBlockByNumber', [receipt.blockNumber, false]).catch(() => null)
       minedAtCache = block?.timestamp ? parseInt(block.timestamp, 16) * 1000 : 0
     }
@@ -398,7 +488,15 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   // really for this order - otherwise anyone could point an order at someone
   // else's (or an old) transfer into the merchant's wallet and get it marked paid.
   // (Merchant 'verify'/'assign' and the watcher are trusted paths.)
-  if (matchedBy === 'customer') {
+  if (matchedBy === 'customer' && isSol) {
+    // Solana: only a payment that names this order (its Solana Pay
+    // reference) is confirmed here - the payer's Solana wallet isn't tied
+    // to a MeshPort session. Anything else waits for the merchant to verify.
+    if (!solNamesOrder) return { pending: true }
+    const createdAt = new Date(i.created_at).getTime()
+    if (!solMinedAt) return { pending: true }
+    if (solMinedAt + 60_000 < createdAt) return { error: 'This transaction was sent before the order was created.', status: 409 }
+  } else if (matchedBy === 'customer') {
     if (who?.wallet && who.wallet !== from) return { error: "This transaction wasn't sent from your wallet.", status: 409 }
     if (i.customer_wallet && String(i.customer_wallet).toLowerCase() !== from) return { error: "This transaction wasn't sent by this order's customer.", status: 409 }
     if (!who?.wallet && order.amount == null) return { error: 'Amount is required to confirm this payment.', status: 400 }
@@ -423,7 +521,12 @@ async function recordPayment(req: Request | null, i: any, chainId: string, txHas
   let customerUserId: string | null = null
   let customerUsername: string | null = null
   if (who?.wallet && who.wallet === from) { customerUserId = who.userId; customerUsername = who.username }
-  else {
+  else if (isSol) {
+    // A MeshPort account whose Solana address sent it (several possible: first).
+    const { data: us } = await db.from('users').select('id, username').eq('solana_address', from).limit(1)
+    const u = us?.[0]
+    if (u) { customerUserId = String(u.id); customerUsername = u.username ?? null }
+  } else {
     const { data: u } = await db.from('users').select('id, username').ilike('wallet_address', from).maybeSingle()
     if (u) { customerUserId = String(u.id); customerUsername = u.username ?? null }
   }
@@ -606,6 +709,46 @@ const BUSY_CHAINS = new Set(['Arc_Testnet', 'Ethereum_Sepolia', 'Base_Sepolia', 
 const WATCH_GROUPS: Array<(chainId: string) => boolean> = [id => BUSY_CHAINS.has(id), id => !BUSY_CHAINS.has(id)]
 
 /** `pick`: only these chains this pass (default: all). */
+// Solana: each open order whose payee has a Solana address is looked up by
+// its Solana Pay reference (getSignaturesForAddress) - the wallet put that
+// key in the payment, so a hit is this order's payment. Public devnet RPC
+// is rate-limited: at most SOLANA_WATCH_MAX orders per pass, oldest first,
+// rotating through the rest on later passes.
+const SOLANA_WATCH_MAX = 25
+const SOLANA_PASS_MS = 15_000
+let solanaRotate = 0
+async function watchSolana() {
+  const { data: open } = await db.from('merchant_payment_intents').select('*')
+    .in('status', ['pending', 'partially_paid', 'expired', 'cancelled'])
+    .gt('created_at', new Date(Date.now() - 2 * 86400_000).toISOString())
+    .order('created_at', { ascending: true })
+  const dayAgo = Date.now() - LATE_WINDOW_MS
+  const live = (open ?? []).filter((i: any) => i.merchant_user_id && (i.status === 'cancelled'
+    ? new Date(i.updated_at ?? i.created_at).getTime() > dayAgo
+    : !i.expires_at || new Date(i.expires_at).getTime() > dayAgo))
+  if (!live.length) return { scanned: 0, matched: 0 }
+  const ids = [...new Set(live.map((i: any) => i.merchant_user_id))]
+  const { data: us, error } = await db.from('users').select('id, solana_address').in('id', ids).not('solana_address', 'is', null)
+  if (error) return { scanned: 0, matched: 0 } // column not added yet
+  const sol = new Map((us ?? []).map((u: any) => [String(u.id), String(u.solana_address)]))
+  const candidates = live.filter((i: any) => sol.has(String(i.merchant_user_id)))
+  const start = solanaRotate % Math.max(1, candidates.length)
+  const batch = [...candidates.slice(start), ...candidates.slice(0, start)].slice(0, SOLANA_WATCH_MAX)
+  solanaRotate += batch.length
+  let matched = 0
+  for (const i of batch) {
+    const ref = await solanaReference(String(i.code))
+    const sigs = await rpc(SOLANA_RPCS, 'getSignaturesForAddress', [ref, { limit: 10, commitment: 'confirmed' }], WATCH_RPC_TIMEOUT_MS).catch(() => null)
+    for (const s of Array.isArray(sigs) ? sigs : []) {
+      if (s?.err || !s?.signature) continue
+      const intent = { ...i, _merchant_solana: sol.get(String(i.merchant_user_id)) }
+      const out: any = await recordPayment(null, intent, SOLANA_CHAIN, String(s.signature), null, { orderNumber: null, amount: null }, 'watcher').catch((e: unknown) => ({ error: errText(e) }))
+      if (out?.ok && !out.duplicate) matched++
+    }
+  }
+  return { scanned: batch.length, matched }
+}
+
 async function watchDeposits(pick?: (chainId: string) => boolean) {
   const runStart = Date.now()
   // Open orders, plus orders that expired or were cancelled within the last
@@ -929,12 +1072,17 @@ Deno.serve(async (req: Request) => {
       try {
         const end = callStart + WATCH_LOOP_MS
         // Each group writes only its own chains' cursors.
-        await Promise.all(WATCH_GROUPS.map(async inGroup => {
+        // Solana runs beside them on its own, slower pass (rate-limited RPC).
+        const groups: Array<{ run: () => Promise<unknown>; every: number; tag: string }> = [
+          ...WATCH_GROUPS.map(inGroup => ({ run: () => watchDeposits(inGroup), every: WATCH_PASS_MS, tag: 'watch' })),
+          { run: () => watchSolana(), every: SOLANA_PASS_MS, tag: 'watch-solana' },
+        ]
+        await Promise.all(groups.map(async g => {
           for (;;) {
             const t0 = Date.now()
-            try { await watchDeposits(inGroup) }
-            catch (e) { console.error('[merchant-pay/watch]', e instanceof Error ? e.message : e) }
-            const wait = Math.max(0, WATCH_PASS_MS - (Date.now() - t0))
+            try { await g.run() }
+            catch (e) { console.error(`[merchant-pay/${g.tag}]`, e instanceof Error ? e.message : e) }
+            const wait = Math.max(0, g.every - (Date.now() - t0))
             if (Date.now() + wait >= end) break
             if (wait) await new Promise(r => setTimeout(r, wait))
           }
