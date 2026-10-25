@@ -58,6 +58,18 @@ let inFlightRestore: Promise<boolean> | null = null
 // mistyped 6-digit PIN the user is about to retry. A genuine failure from
 // a normal (non-silent) call elsewhere still sets the banner exactly as
 // before.
+/**
+ * What to tell someone whose wallet didn't open. Google / email (Privy)
+ * accounts have no recovery phrase to re-import: their wallet comes back
+ * with the sign-in.
+ */
+export function walletUnavailableMessage(): string {
+  const src = useAuthStore.getState().walletSource
+  return src === 'privy' || src === 'social-auto'
+    ? "Your wallet didn't open - nothing was sent. Check your connection and try again; if it keeps happening, sign out and sign in again with Google / email."
+    : "Couldn't access your wallet on this device. Sign out and re-import your wallet with your recovery phrase or private key to continue."
+}
+
 export async function restorePrivateKey(rawPasscode?: string, opts?: { silent?: boolean }): Promise<boolean> {
   if (inFlightRestore) return inFlightRestore
 
@@ -118,9 +130,16 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
   // ── 1. a Privy wallet: Privy keeps the key in its secure hardware and opens
   // it for this signed-in account (src/wallet/privy.ts).
   if (walletSource === 'privy') {
-    const { restorePrivyAccount } = await import('@/wallet/privy')
-    const account = await restorePrivyAccount(walletAddress)
+    const { restorePrivyAccount, privyState } = await import('@/wallet/privy')
+    const started = Date.now()
+    // A known Privy account: wait for Privy to sign in and list the wallet.
+    const account = await restorePrivyAccount(walletAddress, 30_000, 20_000)
     if (account) setWallet(walletAddress, account, 'privy')
+    else {
+      // Why it didn't open (client_errors): loaded? signed in? listed?
+      void import('@/lib/errorReport').then(r => r.reportClientError('rejection',
+        new Error(`[privy restore] no wallet after ${((Date.now() - started) / 1000).toFixed(1)} s: ${privyState(walletAddress)} online=${typeof navigator === 'undefined' || navigator.onLine}`))).catch(() => {})
+    }
     return !!account
   }
 

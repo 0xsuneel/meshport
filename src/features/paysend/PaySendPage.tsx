@@ -915,7 +915,7 @@ export function PaySendPage() {
       const restored = await restorePrivateKey(pin || undefined)
       if (restored) activeSigner = useAuthStore.getState().signer
     }
-    if (!activeSigner) { setTxError("Couldn't access your wallet on this device. Sign out and re-import your wallet with your recovery phrase or private key to continue."); setProcessStage('failed'); return }
+    if (!activeSigner) { const { walletUnavailableMessage } = await import('@/lib/restoreWallet'); setTxError(walletUnavailableMessage()); setProcessStage('failed'); return }
 
     const toAddr = recipient.walletAddress
     const senderAddr = senderStoredAddress || user?.walletAddress || ''

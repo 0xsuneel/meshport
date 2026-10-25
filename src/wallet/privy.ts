@@ -94,13 +94,26 @@ export async function ensurePrivySolanaWallet(timeoutMs = 30_000): Promise<strin
 }
 
 /** The Privy signer for `address`, when it is this account's Privy wallet. */
-export async function restorePrivyAccount(address: string, timeoutMs = 15_000): Promise<WalletAccount | null> {
+/** Privy's state right now, for diagnostics (no addresses). */
+export function privyState(address?: string): string {
+  if (!bridge) return 'privy not loaded'
+  const mine = !!address && bridge.wallets.some(w => w.toLowerCase() === address.toLowerCase())
+  return `ready=${bridge.ready} authenticated=${bridge.authenticated} wallets=${bridge.wallets.length} listed=${mine}`
+}
+
+/**
+ * Open `address` as a Privy wallet. `listWaitMs`: how long to wait for it in
+ * Privy's wallet list once signed in. Short (1.5 s) when we're only finding
+ * out whether an account is a Privy one at all (sign-in); long for an
+ * account already known to be Privy - after the app resumes, Privy's list
+ * fills in a few seconds after it signs in, and giving up early showed
+ * "Couldn't access your wallet" while the wallet was on its way.
+ */
+export async function restorePrivyAccount(address: string, timeoutMs = 15_000, listWaitMs = 1_500): Promise<WalletAccount | null> {
   if (!privyConfigured()) return null
   const mine = (b: PrivyBridge) => b.wallets.some(w => w.toLowerCase() === address.toLowerCase())
-  // Signed in to Privy first; then a moment for the wallet list - an account
-  // whose wallet is not a Privy wallet is told so in ~1.5 s, not the full wait.
   try { await whenBridge(() => true, timeoutMs) } catch { return null }
-  try { await whenBridge(mine, 1_500) } catch { return null }
+  try { await whenBridge(mine, listWaitMs) } catch { return null }
   return privyAccount(address)
 }
 
