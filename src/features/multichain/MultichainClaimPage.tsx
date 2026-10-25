@@ -1344,10 +1344,11 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
           // ── Solana (lib/solanaBridge.ts) ──
           // The account's Solana wallet signs one burn with Circle's
           // forwarding hook; MeshPort pays the SOL fee and Circle mints on
-          // Arc. Followed through Circle (Iris) by the burn's signature.
+          // Arc. Then the same as a gasless bring: a claim that claim-worker
+          // follows to the mint (Activity "Bring", notification, Recover).
           if (isSolanaChain(chain.chainId)) {
-            const [{ bringSolanaToArc }, { getSolanaAddress, signSolanaTransaction }, { fetchCctpProgress: progressOf }] = await Promise.all([
-              import('@/lib/solanaBridge'), import('@/wallet/solana'), import('@/lib/cctpTracker'),
+            const [{ bringSolanaToArc }, { getSolanaAddress, signSolanaTransaction }] = await Promise.all([
+              import('@/lib/solanaBridge'), import('@/wallet/solana'),
             ])
             setChain(chain.chainId, 'approving', 'Signing the USDC transfer…', 25)
             const r = await bringSolanaToArc({
@@ -1359,28 +1360,8 @@ export function MultichainClaimPage({ embedded = false, onClose, initialChain, i
             setIsSubmitted(true)
             setChain(chain.chainId, 'attesting', 'Burn confirmed - Circle processing…', 65, { txHash: r.signature })
             notifyExternalBalanceChanged(chain.chainId, wallet.addr, { spent: claimAmount })
-            import('@/lib/ActivityService').then(({ Activity }) => Activity.bridge({
-              walletAddress: wallet.addr, txHash: r.signature, amount: claimAmount,
-              sourceChain: chain.chainId, destinationChain: ARC_CHAIN_KEY, destinationAddress: wallet.addr,
-            })).catch(() => {})
-            // Circle's Forwarding Service mints on Arc; follow it until it lands.
-            void (async () => {
-              for (let i = 0; i < 200; i++) {
-                await new Promise(res => setTimeout(res, 4000))
-                const p = await progressOf(chain.chainId, r.signature)
-                if (!p) continue
-                if (p.stage === 'minting') setChain(chain.chainId, 'minting', 'Circle is minting on Arc…', 85, { txHash: r.signature })
-                if (p.stage === 'error') { setChain(chain.chainId, 'error', p.msg ?? 'Circle could not deliver this transfer', 0, { txHash: r.signature }); return }
-                if (p.stage === 'done') {
-                  setChain(chain.chainId, 'done', 'Arrived on Arc', 100, { txHash: r.signature, mintTxHash: p.mintTxHash })
-                  setConfirmPhase(phase => (phase === 'processing' || phase === 'submitted' || phase === 'tracking') ? 'done' : phase)
-                  refreshBalancesAfterTx(wallet.addr)
-                  refreshScope({ kind: 'external', wallet: wallet.addr, chains: [chain.chainId] })
-                  notifyExternalBalanceChanged(chain.chainId, wallet.addr)
-                  return
-                }
-              }
-            })()
+            // No MeshPort fee: the whole amount was burned (Circle's fee comes out on Arc).
+            handOffBurn(chain.chainId, r.signature, claimAmount, 0)
             return { chainId: chain.chainId, amount: claimAmount }
           }
 

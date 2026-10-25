@@ -737,13 +737,13 @@ export async function merchantClaimAll(p: {
       step(c.chainId, 'working', 'Signing…')
       try {
         // Solana: one burn signed by the account's Solana wallet, MeshPort
-        // pays the SOL; Circle's forwarder mints on Arc (no claims row -
-        // claim-worker reads EVM chains only).
+        // pays the SOL; Circle's forwarder mints on Arc; a claim like the rest.
         if (c.chainId === 'Solana_Devnet') {
           const { bringAccountSolanaToArc } = await import('./solanaBridge')
-          await bringAccountSolanaToArc(p.walletAddress, amount)
+          const r = await bringAccountSolanaToArc(p.walletAddress, amount)
+          const claim = await submitClaim({ walletAddress: p.walletAddress, sourceChain: c.chainId, amount, txHash: r.signature, meshportFee: 0 })
           out.cctp += amount
-          step(c.chainId, 'done', 'On its way to Arc · about a minute')
+          step(c.chainId, 'done', 'On its way to Arc · about a minute', claim.claimId)
           continue
         }
         const r = await bringFundsGasless({
