@@ -406,6 +406,13 @@ export function AppLayout() {
     ).catch(() => { /* best-effort - retried on the next unlock / session bind */ })
   }, [walletAddress, chatUserId, boundTick, walletUnlocked])
 
+  // Its Solana address on the users row, so payment links / request QRs can
+  // offer Solana (wallet/solana.ts). Needs the wallet open (frame-derived key).
+  useEffect(() => {
+    if (!walletAddress || !chatUserId || !walletUnlocked) return
+    import('@/wallet/solana').then(({ publishSolanaAddress }) => publishSolanaAddress(chatUserId)).catch(() => { /* retried next unlock */ })
+  }, [walletAddress, chatUserId, boundTick, walletUnlocked])
+
   // Messages this user sent before the recipient had a chat key are sealed
   // for the sender only (e2e:q2). Hand them over as soon as the recipient
   // has signed in: now, on unlock, and every 2 minutes while the app is open.

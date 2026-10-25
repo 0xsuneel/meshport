@@ -71,3 +71,22 @@ export async function signSolanaTransaction(wire: Uint8Array): Promise<Uint8Arra
   }
   throw new Error('This account has no Solana wallet')
 }
+
+const published = new Set<string>()
+/**
+ * Store this account's Solana address on its users row (users.solana_address),
+ * so its payment links and request QRs can offer Solana. Once per session;
+ * a missing column (migration not applied yet) is ignored.
+ */
+export async function publishSolanaAddress(userId: string): Promise<void> {
+  const address = await getSolanaAddress()
+  const key = `${userId}:${address}`
+  if (published.has(key)) return
+  const { supabase } = await import('@/lib/supabase')
+  const { data } = await supabase.from('users').select('solana_address').eq('id', userId).maybeSingle()
+  if ((data as { solana_address?: string | null } | null)?.solana_address !== address) {
+    const { error } = await supabase.from('users').update({ solana_address: address }).eq('id', userId)
+    if (error) return
+  }
+  published.add(key)
+}

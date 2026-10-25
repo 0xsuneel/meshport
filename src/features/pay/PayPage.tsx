@@ -8,6 +8,8 @@ import { Avatar } from '@/components/ui/Avatar'
 import { copyToClipboard } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { WalletPayPanel } from './WalletPayPanel'
+import { SolanaPayPanel } from './SolanaPayPanel'
+import { SOLANA_PAY_OPTION } from '@/lib/solanaPay'
 import { TokenLogo } from '@/components/ui/TokenLogo'
 import { ShopPayPage } from './ShopPayPage'
 import { getShopInfo, type ShopInfo } from '@/lib/shop'
@@ -88,11 +90,22 @@ export function PayPage() {
   // settles them to Arc.
   const [netId, setNetId] = useState('Arc_Testnet')
   const [netMenu, setNetMenu] = useState(false)
-  const net = merchantQrChain(netId)
-  const onArc = !personal || !!net.native
+  // The recipient's Solana address (users.solana_address), read on its own so
+  // a lookup error only means no Solana option.
+  const [recipientSolana, setRecipientSolana] = useState<string | null>(null)
+  useEffect(() => {
+    const id = recipient?.id
+    if (!id || !personal) { setRecipientSolana(null); return }
+    import('@/lib/supabase').then(({ supabase }) => supabase.from('users').select('solana_address').eq('id', id).maybeSingle())
+      .then(({ data, error }) => setRecipientSolana(!error && (data as { solana_address?: string | null } | null)?.solana_address || null))
+      .catch(() => setRecipientSolana(null))
+  }, [recipient?.id, personal])
+  const onSolana = netId === SOLANA_PAY_OPTION.id && !!recipientSolana
+  const net = onSolana ? { ...SOLANA_PAY_OPTION, native: false, chainId: 0, usdc: null as string | null } : merchantQrChain(netId)
+  const onArc = !personal || (!onSolana && !!net.native)
   const payChain: PayChain = net.native ? ARC_PAY_CHAIN
     : { id: net.id, label: net.label, chainId: net.chainId, usdc: net.usdc ?? '', route: 'ub' }
-  const netOptions = [MERCHANT_QR_CHAINS[0], ...MERCHANT_QR_EXTERNAL].map(c => ({
+  const netOptions = [...[MERCHANT_QR_CHAINS[0], ...MERCHANT_QR_EXTERNAL], ...(recipientSolana ? [SOLANA_PAY_OPTION] : [])].map(c => ({
     id: c.id, label: c.label,
     icon: <img decoding="async" src={c.logo} alt="" width={22} height={22} style={{ borderRadius: '50%' }} onError={e => { (e.currentTarget as HTMLImageElement).src = '/logos/chains/_fallback.svg' }} />,
   }))
@@ -231,8 +244,9 @@ export function PayPage() {
             </p>
           </div>
         )}
-        {!isAuthenticated && recipient.wallet_address && token === 'USDC' && (
-          <WalletPayPanel key={personal ? netId : 'arc'} to={recipient.wallet_address} amount={requestedAmount ? Number(requestedAmount) : null} chain={personal ? payChain : undefined} />
+        {!isAuthenticated && recipient.wallet_address && token === 'USDC' && (personal && onSolana && recipientSolana
+          ? <SolanaPayPanel key="solana" to={recipientSolana} amount={requestedAmount ? Number(requestedAmount) : null} label={displayName} />
+          : <WalletPayPanel key={personal ? netId : 'arc'} to={recipient.wallet_address} amount={requestedAmount ? Number(requestedAmount) : null} chain={personal ? payChain : undefined} />
         )}
 
         {/* Pay button - Option C. MeshPort pays on Arc only, so it's left out

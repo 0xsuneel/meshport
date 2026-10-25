@@ -46,6 +46,8 @@ export type PaymentView = {
   orderNumber: string | null
   merchantName: string | null
   merchantWallet: string
+  /** The payee's Solana address, when it has one: the request can be paid on Solana. */
+  merchantSolana?: string | null
   merchantUsername: string | null
   merchantAvatar: string | null
   amount: number

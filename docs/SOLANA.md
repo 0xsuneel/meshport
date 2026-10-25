@@ -32,10 +32,29 @@ burns of USDC **to Arc with Circle's forwarding hook**; MeshPort's key may
 appear only as fee / rent payer. Any signed-in session; 10/min, 100/h per
 account, 30/min per IP; opening accounts 30/day per account and per IP.
 
+## Payment links, requests and bills on Solana
+
+- Each account's Solana address is stored on its users row
+  (`users.solana_address`, migration 20261025130000; written by the app after
+  unlock - `publishSolanaAddress`).
+- Pay pages (`/paylink/r/:code`, a business's Personal QR) offer Solana when
+  the payee has one: a Solana Pay QR / "Open in Solana wallet"
+  (`solana:<to>?amount=&spl-token=<USDC>&reference=<key>`, `lib/solanaPay.ts`,
+  `SolanaPayPanel`). Merchant QR and Business Money offer Solana in the network
+  picker; the QR is the Solana Pay request.
+- The reference = base58(sha256("meshport-pay-ref:" + order code)) - the same
+  in the app and in `merchant-pay` (checked: identical output). The payer's
+  wallet adds it to the transfer, so the payment names its order.
+- `merchant-pay`: Solana is not in PAY_CHAINS (EVM). A Solana payment is read
+  from its transaction (USDC token balances before/after for the payee's
+  Solana address), confirmed for a customer only when it carries the order's
+  reference, and found by the watcher (getSignaturesForAddress(reference),
+  every 15 s, 25 orders a pass). Signatures are kept case-sensitive. Circle
+  screening runs as SOL-DEVNET. A plain send without the reference: the
+  business verifies it by pasting the signature.
+
 ## Not yet
 
-- Store QR payments on Solana: MeshPort's payment watcher (Supabase edge
-  functions) reads EVM chains only.
 - Solana brings don't create `claims` rows (claim-submit lowercases hashes;
   claim-worker is EVM): they are followed on the device, and Circle's
   forwarder finishes them either way.

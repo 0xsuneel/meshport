@@ -14,6 +14,9 @@ import {
   createPaymentRequest, watchPayment, orderLabel, STATUS_LABEL, orderChainPayLink,
   type MerchantIntent, type PaymentView, orderKindOf, orderTitle, orderDisplay } from '@/lib/merchantPay'
 import { MERCHANT_QR_EXTERNAL, MERCHANT_QR_NETWORK_NAME, merchantQrChain } from '@/lib/merchantQr'
+import { SOLANA_PAY_OPTION, solanaPayUri, solanaReference } from '@/lib/solanaPay'
+import { SOLANA_USDC_MINT } from '@/lib/solana'
+import { useSolanaWallet } from '@/wallet/useSolanaWallet'
 import { drawMeshportQr } from '@/lib/qrLogo'
 import { AmountHero } from '@/components/ui/AmountHero'
 
@@ -21,10 +24,10 @@ import { AmountHero } from '@/components/ui/AmountHero'
 const box: React.CSSProperties = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, boxShadow: 'var(--shadow-1)' }
 const label: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }
 
-export function ChainPicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+export function ChainPicker({ value, onChange, extra = [] }: { value: string; onChange: (id: string) => void; extra?: Array<{ id: string; label: string; logo: string }> }) {
   return (
     <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2, scrollbarWidth: 'none' }}>
-      {MERCHANT_QR_EXTERNAL.map(c => {
+      {[...MERCHANT_QR_EXTERNAL, ...extra].map(c => {
         const on = c.id === value
         return (
           <button key={c.id} type="button" onClick={() => onChange(c.id)}
@@ -44,6 +47,11 @@ export function ChainPicker({ value, onChange }: { value: string; onChange: (id:
 
 /** How to scan + the payment written out, for wallets that ignore the QR's details. */
 export function WalletPaymentDetails({ chainId, to, amount }: { chainId: string; to: string; amount: number }) {
+  if (chainId === SOLANA_PAY_OPTION.id) return <SolanaPaymentDetails to={to} amount={amount} />
+  return <EvmPaymentDetails chainId={chainId} to={to} amount={amount} />
+}
+
+function EvmPaymentDetails({ chainId, to, amount }: { chainId: string; to: string; amount: number }) {
   const { showToastMessage } = useUIStore()
   const c = merchantQrChain(chainId)
   const net = MERCHANT_QR_NETWORK_NAME[c.id] ?? c.label
@@ -73,6 +81,47 @@ export function WalletPaymentDetails({ chainId, to, amount }: { chainId: string;
   )
 }
 
+/** The Solana payment written out (the Solana Pay QR is above it). */
+function SolanaPaymentDetails({ to, amount }: { to: string; amount: number }) {
+  const { showToastMessage } = useUIStore()
+  const copy = async (v: string, what: string) => { const ok = await copyToClipboard(v); showToastMessage(ok ? `${what} copied` : 'Could not copy', ok ? 'success' : 'error') }
+  const row = (k: string, v: string, copyVal?: string) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+      <span style={{ color: 'var(--text-secondary)', width: 64, flexShrink: 0 }}>{k}</span>
+      <span style={{ flex: 1, minWidth: 0, color: 'var(--text-primary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</span>
+      {copyVal && (
+        <button type="button" onClick={() => copy(copyVal, k)} aria-label={`Copy ${k}`}
+          style={{ flexShrink: 0, background: 'none', border: 'none', padding: 2, cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex' }}><Copy size={13} /></button>
+      )}
+    </div>
+  )
+  return (
+    <div style={{ width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', textAlign: 'center', lineHeight: 1.45 }}>
+        Scan with a Solana wallet (Phantom, Solflare, Backpack) - it opens the payment with the address and exact amount filled in, linked to this order.
+      </div>
+      <div style={{ padding: '9px 11px', borderRadius: 12, background: 'color-mix(in srgb, var(--text-primary) 4%, transparent)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {row('Network', 'Solana Devnet')}
+        {row('Token', `USDC · ${SOLANA_USDC_MINT.slice(0, 6)}…${SOLANA_USDC_MINT.slice(-4)}`, SOLANA_USDC_MINT)}
+        {row('To', `${to.slice(0, 8)}…${to.slice(-6)}`, to)}
+        {row('Amount', `${formatAmount(amount)} USDC (exact)`, String(amount))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The QR value for an order on Solana: a Solana Pay request (address, exact
+ * amount, the order's reference) that Solana wallets open directly. '' until
+ * the reference is ready, or when there is no Solana address.
+ */
+export function useOrderSolanaUri(order: { code: string; orderNumber?: string | null } | null, amount: number, to: string | null, label = 'MeshPort'): string {
+  const [ref, setRef] = useState<{ code: string; ref: string } | null>(null)
+  useEffect(() => { if (order?.code) solanaReference(order.code).then(r => setRef({ code: order.code, ref: r })).catch(() => setRef(null)) }, [order?.code])
+  if (!order || !to || !(amount > 0) || ref?.code !== order.code) return ''
+  return solanaPayUri({ to, amount, reference: ref.ref, label, message: order.orderNumber ? `Order ${order.orderNumber}` : undefined })
+}
+
 export function MerchantQrPanel() {
   const { showToastMessage } = useUIStore()
   const walletAddress = useAuthStore(s => s.walletAddress)
@@ -84,13 +133,19 @@ export function MerchantQrPanel() {
   const [live, setLive] = useState<PaymentView | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  const c = merchantQrChain(chain)
+  // Solana: offered once this account's Solana address is known.
+  const mySolana = useSolanaWallet().address
+  const isSolana = chain === SOLANA_PAY_OPTION.id
+  const c = isSolana ? { ...SOLANA_PAY_OPTION, chainId: 0, usdc: SOLANA_USDC_MINT } : merchantQrChain(chain)
   // The order page for this network: a wallet app's scanner opens it in the
   // wallet's browser, which adds/switches to the network and fills in the
   // address and amount (WalletPayPanel). MeshPort's scanner opens the order.
   // Not an EIP-681 URI: OKX and Trust reject those for test networks
   // ("QR code is incorrect or not supported"), while every wallet opens a link.
-  const uri = order ? orderChainPayLink(order.code, order.orderNumber, chain) : ''
+  // Solana: a Solana Pay request instead - Solana wallets open it directly.
+  const link = order ? orderChainPayLink(order.code, order.orderNumber, chain) : ''
+  const solanaUri = useOrderSolanaUri(isSolana ? order : null, order?.amount ?? 0, mySolana)
+  const uri = isSolana ? solanaUri : link
 
   useEffect(() => {
     if (!uri || !canvasRef.current) return
@@ -140,7 +195,7 @@ export function MerchantQrPanel() {
   const share = async () => {
     if (!order) return
     const f = await qrFile().catch(() => null)
-    const text = `Pay $${formatAmount(order.amount)} USDC on ${c.label} · ${orderTitle(orderKindOf(order), orderLabel(order))}\n${uri}`
+    const text = `Pay $${formatAmount(order.amount)} USDC on ${c.label} · ${orderTitle(orderKindOf(order), orderLabel(order))}\n${link}`
     try {
       if (f && navigator.canShare?.({ files: [f] })) { await navigator.share({ files: [f], title: 'Payment QR', text }); return }
       if (navigator.share) { await navigator.share({ title: 'Payment QR', text }); return }
@@ -165,7 +220,7 @@ export function MerchantQrPanel() {
           </div>
         </div>
 
-        {!paid && !closed && <ChainPicker value={chain} onChange={setChain} />}
+        {!paid && !closed && <ChainPicker value={chain} onChange={setChain} extra={mySolana ? [SOLANA_PAY_OPTION] : []} />}
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <div style={{ position: 'relative', background: '#fff', padding: 6, borderRadius: 14, opacity: paid || closed ? 0.35 : 1 }}>
@@ -177,8 +232,8 @@ export function MerchantQrPanel() {
             {paid ? <CheckCircle2 size={14} /> : <Clock size={14} />}
             {paid ? 'Payment received' : closed ? STATUS_LABEL[st] : st === 'pending' ? `Waiting for payment on ${c.label}` : STATUS_LABEL[st]}
           </div>
-          {!paid && !closed && walletAddress && (
-            <WalletPaymentDetails chainId={chain} to={walletAddress} amount={order.amount} />
+          {!paid && !closed && (isSolana ? mySolana : walletAddress) && (
+            <WalletPaymentDetails chainId={chain} to={(isSolana ? mySolana : walletAddress)!} amount={order.amount} />
           )}
         </div>
 
@@ -186,7 +241,7 @@ export function MerchantQrPanel() {
           <button onClick={save} style={ghost}><Download size={15} /> Save QR</button>
           <button onClick={share} style={ghost}><Share2 size={15} /> Share</button>
           {/* The order's pay link for this network (the address has its own copy above). */}
-          <button onClick={async () => { const ok = !!uri && await copyToClipboard(uri); showToastMessage(ok ? 'Payment link copied' : 'Could not copy', ok ? 'success' : 'error') }} style={ghost}><Copy size={15} /> Copy link</button>
+          <button onClick={async () => { const ok = !!link && await copyToClipboard(link); showToastMessage(ok ? 'Payment link copied' : 'Could not copy', ok ? 'success' : 'error') }} style={ghost}><Copy size={15} /> Copy link</button>
         </div>
         <button onClick={reset} style={{ ...primary }}><Plus size={16} /> New payment QR</button>
       </div>
@@ -200,7 +255,7 @@ export function MerchantQrPanel() {
 
       <div>
         <div style={label}>Network</div>
-        <ChainPicker value={chain} onChange={setChain} />
+        <ChainPicker value={chain} onChange={setChain} extra={mySolana ? [SOLANA_PAY_OPTION] : []} />
       </div>
 
       <div>
