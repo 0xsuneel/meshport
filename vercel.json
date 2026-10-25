@@ -9,6 +9,9 @@
     "api/swap-proxy.js": {
       "maxDuration": 60
     },
+    "api/solana-fee-payer.ts": {
+      "maxDuration": 30
+    },
     "api/bridge-relay.ts": {
       "maxDuration": 60
     },
