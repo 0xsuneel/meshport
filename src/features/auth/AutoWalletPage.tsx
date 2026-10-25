@@ -32,34 +32,24 @@ export function AutoWalletPage() {
     try {
       const isSocial = loginType === 'social'
 
-      // Google accounts get a Circle wallet (src/wallet/circle.ts): Circle
-      // keeps the key, MeshPort's passcode / biometric approves every
-      // signature. The Circle sign-in normally happened with the MeshPort
-      // Google sign-in; if it didn't finish, Google is asked once more and
-      // the user comes back here. Email accounts keep the frame wallet until
-      // Circle's email codes are switched on.
-      const circle = isSocial ? await import('@/wallet/circle') : null
-      const session = circle?.circleConfigured()
-        ? (await (await import('@/lib/supabase')).supabase.auth.getSession()).data.session
+      // Google / email accounts get a Privy wallet (src/wallet/privy.ts):
+      // Privy keeps the key in its secure hardware and opens it with the
+      // MeshPort sign-in - nothing to back up, any device. The app's passcode /
+      // biometric approves every signature.
+      // If Privy can't open a wallet (not set up, unreachable), the account
+      // gets the frame wallet below instead of being stuck here; the reason
+      // is saved to client_errors.
+      const privy = isSocial ? await import('@/wallet/privy') : null
+      const privyAddr = privy?.privyConfigured()
+        ? await privy.ensurePrivyWallet(20_000).catch(e => {
+            void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[privy wallet] ${e instanceof Error ? e.message : String(e)}`))).catch(() => {})
+            return null
+          })
         : null
-      const googleUid = session && !session.user.is_anonymous && session.user.app_metadata?.provider === 'google' ? session.user.id : null
-      if (circle && googleUid) {
-        if (!circle.loadCircleSession(googleUid)) {
-          // Ask Google once on its own; if Circle still has no session after
-          // that, say so here (Try Again) instead of going round again.
-          let asked = false
-          try { asked = sessionStorage.getItem('mp.circle.walletSignIn') === googleUid; sessionStorage.setItem('mp.circle.walletSignIn', googleUid) } catch { /* storage blocked */ }
-          if (asked) {
-            try { sessionStorage.removeItem('mp.circle.walletSignIn') } catch { /* storage blocked */ }
-            throw new Error("Couldn't sign in to your Circle wallet. Try again.")
-          }
-          await circle.startGoogleSignIn({ meshport: false, uid: googleUid, returnTo: '/auth/auto-wallet' })
-          return // the page leaves for Google
-        }
-        const addr = await circle.ensureCircleWallet(googleUid)
-        setWallet(addr, circle.circleAccount(addr, googleUid), 'circle')
+      if (privy && privyAddr) {
+        setWallet(privyAddr, privy.privyAccount(privyAddr), 'privy')
         setBalance(0)
-        setAddress(addr)
+        setAddress(privyAddr)
       } else if (isSocial) {
         // Google / email accounts - self-custodial. The wallet key is made
         // on the device, inside the wallet frame (src/wallet), never by

@@ -103,7 +103,7 @@ interface AuthStore {
    * locked. The app never holds the key itself; see docs/WALLET_FRAME.md.
    */
   signer: WalletAccount | null
-  walletSource: 'create' | 'import-seed' | 'import-privkey' | 'social-auto' | 'circle' | null
+  walletSource: 'create' | 'import-seed' | 'import-privkey' | 'social-auto' | 'circle' | 'privy' | null
   username: string | null
   loginType: 'social' | 'wallet' | null
   backupEmail: string | null
@@ -114,7 +114,7 @@ interface AuthStore {
   setUser: (user: User) => void
   updateAvatar: (avatarUrl: string | null) => void
   updateDisplayName: (name: string) => void
-  setWallet: (address: string, signer: WalletAccount | null, source?: 'create' | 'import-seed' | 'import-privkey' | 'social-auto' | 'circle') => void
+  setWallet: (address: string, signer: WalletAccount | null, source?: 'create' | 'import-seed' | 'import-privkey' | 'social-auto' | 'circle' | 'privy') => void
   setUsername: (username: string) => void
   setLoginType: (type: 'social' | 'wallet') => void
   setBackupEmail: (email: string | null) => void

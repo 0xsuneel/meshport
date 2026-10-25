@@ -119,7 +119,16 @@ async function attemptRestore(rawPasscode?: string): Promise<boolean> {
   if (signer) return true
   if (!walletAddress) return false
 
-  // ── 1. a Circle wallet: Circle keeps the key; this browser keeps the
+  // ── 1. a Privy wallet: Privy keeps the key in its secure hardware and opens
+  // it for this signed-in account (src/wallet/privy.ts).
+  if (walletSource === 'privy') {
+    const { restorePrivyAccount } = await import('@/wallet/privy')
+    const account = await restorePrivyAccount(walletAddress)
+    if (account) setWallet(walletAddress, account, 'privy')
+    return !!account
+  }
+
+  // ── 1b. a Circle wallet (switched off): Circle keeps the key; this browser keeps the
   // Circle session. Without it the user signs in to Circle again.
   if (walletSource === 'circle') {
     const { restoreCircleAccount } = await import('@/wallet/circle')
