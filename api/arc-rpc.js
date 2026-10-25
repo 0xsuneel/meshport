@@ -308,15 +308,24 @@ async function raceOnce(body) {
   const MAX_CONCURRENT_RACES = 3
   const ordered = orderEndpoints().slice(0, MAX_CONCURRENT_RACES)
 
+  // Once the race is settled the other attempts are cancelled. Left running,
+  // they outlived the response: Vercel freezes the function between
+  // requests, so on the next request their 5 s timers had long expired, they
+  // "timed out" at once, and healthy endpoints were quarantined - until every
+  // endpoint was, and callers saw the service as unavailable. A cancelled
+  // attempt is not a failure: nothing is recorded for it.
+  const settled = new AbortController()
+
   const attempts = ordered.map((url, i) => (async () => {
     if (i > 0) await sleep(i * STAGGER_MS)
+    if (settled.signal.aborted) throw Object.assign(new Error('race settled'), { cancelled: true })
     const startedAt = Date.now()
     try {
       const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
+        signal: AbortSignal.any([settled.signal, AbortSignal.timeout(RPC_TIMEOUT_MS)]),
       })
       if (!r.ok) throw new Error(`HTTP ${r.status} from ${label(url)}`)
       const json = await r.json()
@@ -355,6 +364,7 @@ async function raceOnce(body) {
       return json
     } catch (e) {
       if (e?.headLag || e?.nullResult) throw e
+      if (settled.signal.aborted) throw Object.assign(new Error('race settled'), { cancelled: true })
       recordFailure(url)
       console.error(`[arc-rpc] ${label(url)} failed: ${e?.message ?? e} (quarantined ${Math.round((getStats(url).quarantinedUntil - Date.now()) / 1000)}s)`)
       throw e
@@ -386,6 +396,7 @@ async function raceOnce(body) {
     throw real || errs[0] || aggErr || new Error('All Arc RPC endpoints failed')
   } finally {
     if (nullTimer) clearTimeout(nullTimer)
+    settled.abort()
   }
 }
 

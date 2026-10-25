@@ -11,12 +11,28 @@ import {
   PrivyProvider, usePrivy, useWallets, useCreateWallet, useSignTransaction, useSignMessage, useSignTypedData,
   useSubscribeToJwtAuthWithFlag,
 } from '@privy-io/react-auth'
-import type { Hex } from 'viem'
+import { defineChain, type Chain, type Hex } from 'viem'
 import { supabase } from '@/lib/supabase'
 import { arcTestnet } from '@/lib/chain'
+import { EXTERNAL_CHAINS } from '@/blockchain/chains'
 import { useAuthStore } from '@/store'
 import { privyAccount, privyAppId, setPrivyBridge } from './privy'
 import { useSupabaseSession } from './PrivyGate'
+
+// Privy signs only on chains it is told about: Arc plus every other chain in
+// MeshPort's registry with a verified chain id (Multichain transfers and
+// bridges sign there). Privy's own screens are off, so the native-currency
+// label is never shown; the RPCs are the registry's.
+const SUPPORTED_CHAINS: [Chain, ...Chain[]] = [
+  arcTestnet,
+  ...Object.entries(EXTERNAL_CHAINS)
+    .filter(([, c]) => c.chainId && c.chainId !== arcTestnet.id)
+    .map(([key, c]) => defineChain({
+      id: c.chainId!, name: key.replace(/_/g, ' '), testnet: true,
+      nativeCurrency: { name: 'Native', symbol: 'ETH', decimals: 18 },
+      rpcUrls: { default: { http: c.rpcs } },
+    })),
+]
 
 function PrivyBridgeSync() {
   const { session, loading } = useSupabaseSession()
@@ -75,7 +91,7 @@ export default function PrivyRoot() {
       config={{
         embeddedWallets: { ethereum: { createOnLogin: 'off' }, showWalletUIs: false },
         defaultChain: arcTestnet,
-        supportedChains: [arcTestnet],
+        supportedChains: SUPPORTED_CHAINS,
       }}
     >
       <PrivyBridgeSync />
