@@ -214,3 +214,43 @@ export function privyAccount(address: string): WalletAccount {
   accounts.set(key, account)
   return account
 }
+
+// ── Chat identity (end-to-end encrypted chat) ───────────────────────────────
+// Created / imported wallets derive the chat seed from the wallet key in the
+// frame (lib/chatIdentity.ts); a Privy wallet's key is with Privy, so the
+// seed comes from its signature over a fixed statement instead:
+//   seed = sha256(signature ‖ "meshport-chat-identity-v2")
+// Only usable when Privy signs deterministically (RFC 6979) - otherwise the
+// chat key would change and older messages couldn't be read. Checked by
+// signing twice: different signatures → no seed (chat stays as before) and
+// it's reported. Once per session per wallet.
+export const CHAT_SEED_STATEMENT = (address: string) =>
+  `MeshPort chat key\n\nThis signature creates the key for your encrypted chats. It moves no funds and costs nothing.\n\nWallet: ${address.toLowerCase()}\nVersion: 2`
+
+const chatSeeds = new Map<string, Promise<Uint8Array>>()
+export function privyChatSeed(address: string): Promise<Uint8Array> {
+  const key = address.toLowerCase()
+  let p = chatSeeds.get(key)
+  if (!p) {
+    p = (async () => {
+      const account = privyAccount(address)
+      const message = CHAT_SEED_STATEMENT(address)
+      const first = await account.signMessage({ message })
+      const second = await account.signMessage({ message })
+      if (first.toLowerCase() !== second.toLowerCase()) {
+        void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error('[privy chat seed] signatures differ - chat key not derived'))).catch(() => {})
+        throw new Error('This wallet cannot make a stable chat key')
+      }
+      const { sha256 } = await import('@noble/hashes/sha256')
+      const sig = first.slice(2)
+      const info = new TextEncoder().encode('meshport-chat-identity-v2')
+      const bytes = new Uint8Array(sig.length / 2 + info.length)
+      for (let i = 0; i < sig.length / 2; i++) bytes[i] = parseInt(sig.slice(i * 2, i * 2 + 2), 16)
+      bytes.set(info, sig.length / 2)
+      return sha256(bytes)
+    })()
+    chatSeeds.set(key, p)
+    p.catch(() => chatSeeds.delete(key))
+  }
+  return p.then(s => new Uint8Array(s)) // a copy: callers may zero it
+}
