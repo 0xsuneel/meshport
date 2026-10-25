@@ -64,7 +64,12 @@ const CCTP_DOMAINS: Record<string, number> = {
   Injective_Testnet:   29,
   Morph_Testnet:       30,
   Pharos_Testnet:      31,
+  // Not EVM (docs/SOLANA.md): the burn is a Solana signature, kept in its
+  // own case; Circle's forwarder mints on Arc like the gasless EVM brings.
+  Solana_Devnet:       5,
 }
+const SOLANA_RPC = 'https://api.devnet.solana.com'
+const isSolanaSource = (chainId: string) => chainId === 'Solana_Devnet'
 const ARC_RPCS = [
   ...(CONFIGURED_ARC_RPC_URL ? [CONFIGURED_ARC_RPC_URL] : []),
   ...(DRPC_KEY ? [`https://lb.drpc.live/arc-testnet/${DRPC_KEY}`] : []), // dRPC authenticated (higher limits)
@@ -473,7 +478,27 @@ async function updateClaim(supabase: SupabaseClient, claimId: string, patch: Rec
     throw error
   }
 }
+/** A Solana burn: landed (confirmed), failed, or not seen yet (null). */
+async function solanaBurnStatus(signature: string): Promise<'ok' | 'failed' | null> {
+  try {
+    const res = await fetch(SOLANA_RPC, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000),
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getSignatureStatuses', params: [[signature], { searchTransactionHistory: true }] }),
+    })
+    const s = (await res.json().catch(() => null))?.result?.value?.[0]
+    if (!s) return null
+    if (s.err) return 'failed'
+    return s.confirmationStatus === 'confirmed' || s.confirmationStatus === 'finalized' ? 'ok' : null
+  } catch { return null }
+}
 async function bridgeFunds(supabase: SupabaseClient, claim: Claim) {
+  if (isSolanaSource(claim.source_chain)) {
+    const st = await solanaBurnStatus(claim.tx_hash)
+    if (!st) return
+    if (st === 'failed') { await markFailed(supabase, claim, 'Burn transaction failed on Solana'); return }
+    await updateClaim(supabase, claim.id, { status: 'bridging', bridge_tx_hash: claim.tx_hash, bridging_at: new Date().toISOString() })
+    return
+  }
   const receipt = await getTransactionReceipt(claim.source_chain, claim.tx_hash)
   if (!receipt) return
   if (receipt.status === '0x0') {
@@ -733,7 +758,7 @@ async function notifyClaimComplete(supabase: SupabaseClient, claim: Claim, amoun
     const { data: m } = await supabase.from('merchant_applications').select('status')
       .eq('wallet_address', claim.wallet_address.toLowerCase()).eq('status', 'approved').limit(1)
     const merchant = (m?.length ?? 0) > 0
-    const chainLabel = (claim.source_chain || '').replace(/_Sepolia|_Testnet|_Fuji/g, '').replace(/_/g, ' ')
+    const chainLabel = (claim.source_chain || '').replace(/_Sepolia|_Testnet|_Fuji|_Devnet/g, '').replace(/_/g, ' ')
     await fetch(`${APP_BASE_URL}/api/push?action=send-internal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${PUSH_INTERNAL_SECRET}` },
@@ -772,7 +797,10 @@ async function recordClaimActivity(supabase: SupabaseClient, claim: Claim, statu
         source_chain:      claim.source_chain,
         destination_chain: 'Arc_Testnet',
         status,
-        explorer_url:      `${base}/tx/${txHash}`,
+        // Solana signatures are case-sensitive: the link uses the original.
+        explorer_url:      isSolanaSource(claim.source_chain)
+          ? `https://explorer.solana.com/tx/${claim.tx_hash}?cluster=devnet`
+          : `${base}/tx/${txHash}`,
         metadata:          { claimed_amount: claim.amount, ...(claim.meshport_fee != null ? { meshport_fee: Number(claim.meshport_fee) } : {}) },
       }, { onConflict: 'tx_hash,wallet_address', ignoreDuplicates: true })
     if (error) console.error(`[claim-worker] recordClaimActivity failed for ${claim.id}:`, error.message)

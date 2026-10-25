@@ -179,6 +179,7 @@ const CCTP_DOMAIN_TO_CHAIN: Record<number, string> = {
   29: 'Injective_Testnet',
   30: 'Morph_Testnet',
   31: 'Pharos_Testnet',
+  5:  'Solana_Devnet',
 }
 
 // Inlined rather than imported from _shared/chains.ts - matching this

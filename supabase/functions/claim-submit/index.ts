@@ -70,7 +70,10 @@ Deno.serve(async (req: Request) => {
   // Without this, a claim's tx_hash here could differ only in case from the
   // matching activity row, silently breaking the cross-reference the UI uses
   // to show live claim status (MultichainPage.tsx claimStatusByTxHash lookup).
-  const txHash         = (body?.txHash ?? '').toString().trim().toLowerCase()
+  // Solana (docs/SOLANA.md): a base58 signature is case-sensitive - Circle's
+  // Iris lookup by it fails lowercased - so it is kept as sent.
+  const rawTx          = (body?.txHash ?? '').toString().trim()
+  const txHash         = sourceChain === 'Solana_Devnet' && /^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(rawTx) ? rawTx : rawTx.toLowerCase()
 
   if (!walletAddress || !sourceChain || !txHash || !Number.isFinite(amount) || amount <= 0) {
     return json({ success: false, error: 'walletAddress, sourceChain, amount and txHash are required' }, 400)

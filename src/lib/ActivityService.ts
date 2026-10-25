@@ -176,7 +176,8 @@ export async function saveActivity(p: SaveParams): Promise<boolean> {
     token_address:        p.tokenAddress ?? null,
     source_chain:         p.sourceChain ?? null,
     destination_chain:    p.destinationChain ?? null,
-    counterparty_address: p.counterpartyAddress?.toLowerCase() ?? null,
+    // EVM addresses lowercased; a Solana (base58) address is case-sensitive.
+    counterparty_address: p.counterpartyAddress ? (p.counterpartyAddress.startsWith('0x') ? p.counterpartyAddress.toLowerCase() : p.counterpartyAddress) : null,
     status:               p.status ?? 'completed',
     explorer_url:         p.explorerUrl || (p.txHash && !p.txHash.startsWith('fail_') ? explorerUrl(p.txHash, p.sourceChain) : null),
     metadata:             p.metadata ?? {},
