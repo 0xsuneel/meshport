@@ -66,22 +66,6 @@ export async function revealUrl(address: string, what: 'mnemonic' | 'privateKey'
   return `${walletOrigin()}/reveal.html#t=${ticket}&theme=${opts.theme ?? 'dark'}`
 }
 
-// ── Recovery QR / passkey (lib/recoveryQr.ts, lib/walletPasskey.ts) ─────────
-export async function createRecoveryQr(address: string, password: string): Promise<string> {
-  return (await callWallet('recovery:create', { address, password })).payload
-}
-export async function openRecoveryQr(address: string, payload: string, password: string): Promise<WalletAccount> {
-  await callWallet('recovery:open', { address, payload, password })
-  return walletAccount(address)
-}
-export function wrapWithPasskey(address: string, prf: Uint8Array, salt: Uint8Array) {
-  return callWallet('passkey:wrap', { address, prf, salt })
-}
-export async function openWithPasskey(address: string, p: { prf: Uint8Array; salt: Uint8Array; ct: Uint8Array; iv: Uint8Array }): Promise<WalletAccount> {
-  await callWallet('passkey:open', { address, ...p })
-  return walletAccount(address)
-}
-
 // ── Wallet passkey (Safe owner) ──────────────────────────────────────────────
 /**
  * Start a passkey ceremony in the frame: create the Safe's passkey owner, or

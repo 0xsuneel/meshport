@@ -20,7 +20,6 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useVisibleFrame, useFrameScrollGuard, visibleFrame } from '@/hooks/useVisibleViewportHeight'
 import { useKeyboardOpen } from '@/hooks/useKeyboardOpen'
 import { supabase, syncAuthUidToProfile } from '@/lib/supabase'
-import { getWalletSecurityStatus, knownSecured } from '@/lib/socialWallet'
 import { notifyClaimArrived } from '@/lib/bridgeTracker'
 import { notifyPaymentReceived, notifyPaymentReceivedFromAddress } from '@/lib/notifications'
 import { shadowEventBus, syncCoordinator } from '@/blockchain/shadowEventBus'
@@ -523,15 +522,10 @@ export function AppLayout() {
   // encrypted messages and shows them locked. Social accounts restore from
   // the server; other wallets from this tab's session cache (silent: if that
   // needs the passcode, the normal unlock flow asks - no banner from here).
-  const navigateApp = useNavigate()
   useEffect(() => {
     if (!walletAddress || useAuthStore.getState().signer) return
     import('@/lib/restoreWallet')
-      .then(async ({ restorePrivateKey, needsSocialUnlock }) => {
-        const ok = await restorePrivateKey(undefined, { silent: walletSource !== 'social-auto' })
-        // Google / email wallet that isn't on this device: passkey or Recovery QR.
-        if (!ok && walletSource === 'social-auto' && needsSocialUnlock()) navigateApp('/auth/recover-wallet', { replace: true })
-      })
+      .then(({ restorePrivateKey }) => restorePrivateKey(undefined, { silent: walletSource !== 'social-auto' }))
       .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [walletAddress, walletSource])
@@ -540,38 +534,10 @@ export function AppLayout() {
     const interval = setInterval(() => {
       const { walletAddress: addr, signer: key, walletSource: src } = useAuthStore.getState()
       if (!addr || key || src !== 'social-auto') return // already restored (or logged out, or not social-auto) - nothing to do
-      import('@/lib/restoreWallet').then(({ restorePrivateKey, needsSocialUnlock }) => {
-        if (needsSocialUnlock()) return // only a tap (passkey / QR) can open it - nothing to retry
-        return restorePrivateKey()
-      }).catch(() => {})
+      import('@/lib/restoreWallet').then(({ restorePrivateKey }) => restorePrivateKey()).catch(() => {})
     }, 20000)
     return () => clearInterval(interval)
   }, [walletAddress, signer, walletSource])
-
-  // Google / email wallets are self-custodial: until the account has a
-  // passkey or a Recovery QR, losing this device would lose the wallet, so
-  // the user sets one up before using the app.
-  const loginTypeApp = useAuthStore(s => s.loginType)
-  const isSocialWallet = loginTypeApp === 'social' && walletSource === 'social-auto' && !!walletAddress
-  // Whether this account is known to have a passkey / Recovery QR - known at
-  // once on this device after the first check, so returning visits don't wait.
-  const [securedOk, setSecuredOk] = useState(() => !userId || knownSecured(userId))
-  useEffect(() => { if (userId && knownSecured(userId)) setSecuredOk(true) }, [userId])
-  useEffect(() => {
-    if (!isSocialWallet || !signer || !userId) return
-    let cancelled = false
-    getWalletSecurityStatus(userId).then(status => {
-      if (cancelled) return
-      if (status && !status.secured) { navigateApp('/auth/secure-wallet', { replace: true }); return }
-      setSecuredOk(true) // secured, or offline (never lock someone out over a failed check)
-    }).catch(() => { if (!cancelled) setSecuredOk(true) })
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSocialWallet, signer, userId])
-  // Google / email account whose wallet isn't open yet (or not yet secured):
-  // show no app page at all - not even Home - until it's unlocked with the
-  // passkey / Recovery QR (or opened from this device's copy on a reload).
-  const holdForWallet = isSocialWallet && (!signer || !securedOk)
 
   // ── Real-time deposit detection - REMOVED, superseded by Phase 5/6 ─────────
   // This used to open a persistent Alchemy WebSocket to Arc
@@ -725,11 +691,9 @@ export function AppLayout() {
               if the wrong ancestor was the one actually scrolling, the
               header just scrolled away with everything else). */}
           <div data-desktop-content="" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            {holdForWallet ? null : (
-              <PageTransition locationKey={desktopPageKey(location.pathname)}>
-                <Outlet key={reloadKey} />
-              </PageTransition>
-            )}
+            <PageTransition locationKey={desktopPageKey(location.pathname)}>
+              <Outlet key={reloadKey} />
+            </PageTransition>
           </div>
         </div>
         <Toast />
@@ -796,13 +760,11 @@ export function AppLayout() {
         overflow: 'hidden',
       }}>
         <div data-no-scroll="" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', paddingBottom: navVisible ? 'calc(65px + env(safe-area-inset-bottom, 0px))' : 0, minHeight: 0 }}>
-          {holdForWallet ? null : (
-            <PageTransition locationKey={location.pathname}>
-              <Outlet key={reloadKey} />
-            </PageTransition>
-          )}
+          <PageTransition locationKey={location.pathname}>
+            <Outlet key={reloadKey} />
+          </PageTransition>
         </div>
-        {navVisible && !navHidden && !holdForWallet && <BottomNav />}
+        {navVisible && !navHidden && <BottomNav />}
         <Toast />
         <PushPermissionBanner />
         <DeviceKeyNotice />

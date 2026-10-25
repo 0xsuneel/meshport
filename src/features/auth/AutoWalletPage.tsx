@@ -16,13 +16,6 @@ export function AutoWalletPage() {
   const [step, setStep] = useState<'creating' | 'done'>('creating')
   const [address, setAddress] = useState('')
   const [error, setError] = useState('')
-  // How many times generation has failed in a row - after a couple of
-  // failures, offer the manual create/import screen as an explicit,
-  // clearly-labeled CHOICE rather than something the user gets silently
-  // swept into. Social accounts almost never actually need this escape
-  // hatch (retrying a transient server error usually just works), but it
-  // exists so nobody gets permanently stuck if wallet setup keeps failing.
-  const [failureCount, setFailureCount] = useState(0)
 
   useEffect(() => { createWallet() }, [])
 
@@ -32,37 +25,22 @@ export function AutoWalletPage() {
     try {
       const isSocial = loginType === 'social'
 
-      // Google / email accounts get a Privy wallet (src/wallet/privy.ts):
-      // Privy keeps the key in its secure hardware and opens it with the
-      // MeshPort sign-in - nothing to back up, any device. The app's passcode /
-      // biometric approves every signature.
-      // If Privy can't open a wallet (not set up, unreachable), the account
-      // gets the frame wallet below instead of being stuck here; the reason
-      // is saved to client_errors.
-      const privy = isSocial ? await import('@/wallet/privy') : null
-      const privyAddr = privy?.privyConfigured()
-        ? await privy.ensurePrivyWallet(20_000).catch(e => {
-            void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[privy wallet] ${e instanceof Error ? e.message : String(e)}`))).catch(() => {})
-            return null
-          })
-        : null
-      if (privy && privyAddr) {
+      if (isSocial) {
+        // Google / email accounts get a Privy wallet (src/wallet/privy.ts):
+        // Privy keeps the key in its secure hardware and opens it with the
+        // MeshPort sign-in - nothing to back up, any device. The app's
+        // passcode / biometric approves every signature. If Privy can't open
+        // one, this screen's error + Try Again (a device-only wallet would have
+        // no way back on another phone); the reason goes to client_errors.
+        const privy = await import('@/wallet/privy')
+        if (!privy.privyConfigured()) throw new Error('Wallets are not available right now. Please try again later.')
+        const privyAddr = await privy.ensurePrivyWallet(30_000).catch(e => {
+          void import('@/lib/errorReport').then(r => r.reportClientError('rejection', new Error(`[privy wallet] ${e instanceof Error ? e.message : String(e)}`))).catch(() => {})
+          throw new Error("Couldn't set up your wallet. Check your connection and try again.")
+        })
         setWallet(privyAddr, privy.privyAccount(privyAddr), 'privy')
         setBalance(0)
         setAddress(privyAddr)
-      } else if (isSocial) {
-        // Google / email accounts - self-custodial. The wallet key is made
-        // on the device, inside the wallet frame (src/wallet), never by
-        // MeshPort's servers, and is protected by the user's passkey and/or
-        // encrypted Recovery QR (they must set one up before using the wallet
-        // - see AppLayout's secure-wallet guard). Until then, the frame keeps
-        // a copy sealed with its own non-extractable device key so a reload
-        // doesn't lose it.
-        const { createWallet: createFrameWallet } = await import('@/wallet')
-        const signer = await createFrameWallet('social-auto')
-        setWallet(signer.address, signer, 'social-auto')
-        setBalance(0)
-        setAddress(signer.address)
       } else {
         // create-wallet accounts: unchanged - generated locally, shown a
         // recovery phrase (elsewhere in the create-wallet flow, not here),
@@ -87,11 +65,8 @@ export function AutoWalletPage() {
       // chose Google/Email login; bouncing them to "create or import a
       // wallet" (options they never asked for, that don't apply to their
       // account type) was confusing and unexplained. Retrying in place
-      // covers the common case (a transient error); the manual-setup
-      // link only appears, and is only ever reached, by the user's own
-      // explicit click after repeated failures - never automatically.
+      // covers the common case (a transient error).
       setError(message)
-      setFailureCount(c => c + 1)
     }
   }
 
@@ -117,14 +92,6 @@ export function AutoWalletPage() {
             >
               Try Again
             </button>
-            {failureCount >= 2 && loginType === 'social' && (
-              <button
-                onClick={() => navigate('/auth/wallet-setup', { replace: true })}
-                className="w-full py-2 text-xs text-text-secondary underline"
-              >
-                Set up a wallet manually instead
-              </button>
-            )}
           </div>
         </div>
       ) : step === 'creating' ? (
