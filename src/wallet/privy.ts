@@ -101,17 +101,23 @@ export function jsonTypedData(t: { domain?: unknown; types?: unknown; primaryTyp
 
 // A signature that fails or takes over 2 s is saved to client_errors (no
 // message contents), so slow or failing signing can be seen without a screen.
-async function timed<T>(what: string, f: () => Promise<T>): Promise<T> {
+// Split into waiting for Privy to be signed in and ready, and Privy signing.
+async function timed<T>(what: string, open: () => Promise<PrivyBridge>, sign: (b: PrivyBridge) => Promise<T>): Promise<T> {
   const started = performance.now()
+  let opened = started
+  const s = (ms: number) => (ms / 1000).toFixed(1)
+  const parts = () => `waiting for Privy ${s(opened - started)} s, signing ${s(performance.now() - opened)} s`
   const report = (text: string) => void import('@/lib/errorReport')
     .then(r => r.reportClientError('rejection', new Error(`[privy ${what}] ${text}`))).catch(() => {})
   try {
-    const out = await f()
+    const b = await open()
+    opened = performance.now()
+    const out = await sign(b)
     const ms = performance.now() - started
-    if (ms > 2_000) report(`slow: ${(ms / 1000).toFixed(1)} s`)
+    if (ms > 2_000) report(`slow: ${s(ms)} s (${parts()})`)
     return out
   } catch (e) {
-    report(`failed after ${((performance.now() - started) / 1000).toFixed(1)} s: ${e instanceof Error ? e.message : String(e)}`)
+    report(`failed after ${s(performance.now() - started)} s (${parts()}): ${e instanceof Error ? e.message : String(e)}`)
     throw e
   }
 }
@@ -127,14 +133,14 @@ export function privyAccount(address: string): WalletAccount {
     address: address as Hex,
     async signMessage({ message }) {
       const m = typeof message === 'string' ? message : { raw: typeof message.raw === 'string' ? message.raw : bytesToHex(message.raw) }
-      return timed('signMessage', async () => (await open()).signMessage(m, address))
+      return timed('signMessage', open, b => b.signMessage(m, address))
     },
     async signTransaction(transaction) {
-      return timed('signTransaction', async () => (await open()).signTransaction(privyTransaction(transaction), address))
+      return timed('signTransaction', open, b => b.signTransaction(privyTransaction(transaction), address))
     },
     async signTypedData(typedData) {
       const { domain, types, primaryType, message } = typedData as TypedDataDefinition
-      return timed('signTypedData', async () => (await open()).signTypedData(jsonTypedData({ domain, types, primaryType, message }), address))
+      return timed('signTypedData', open, b => b.signTypedData(jsonTypedData({ domain, types, primaryType, message }), address))
     },
   })
   const account = Object.assign(base, { meshportWallet: true as const, privyWallet: true as const }) as WalletAccount
